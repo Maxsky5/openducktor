@@ -86,8 +86,8 @@ export function useTaskOperations({
       successDescription: string;
       failureTitle: string;
     }): Promise<void> => {
-      const repoPath = requireActiveRepo(activeRepo);
       try {
+        const repoPath = requireActiveRepo(activeRepo);
         await options.run(repoPath);
         await Promise.all([
           appQueryClient.invalidateQueries({
@@ -152,10 +152,9 @@ export function useTaskOperations({
 
   const syncPullRequests = useCallback(
     async (taskId: string): Promise<void> => {
-      const repoPath = requireActiveRepo(activeRepo);
-
       setDetectingPullRequestTaskId(taskId);
       try {
+        const repoPath = requireActiveRepo(activeRepo);
         const result = await host.taskPullRequestDetect(repoPath, taskId);
         if (result.outcome === "linked") {
           await Promise.all([
@@ -192,18 +191,16 @@ export function useTaskOperations({
     async (taskId: string): Promise<void> => {
       setUnlinkingPullRequestTaskId(taskId);
       try {
-        try {
-          await runTaskMutation({
-            run: async (repoPath) => {
-              await host.taskPullRequestUnlink(repoPath, taskId);
-            },
-            successTitle: "Pull request unlinked",
-            successDescription: taskId,
-            failureTitle: "Failed to unlink pull request",
-          });
-        } catch {
-          return;
-        }
+        await runTaskMutation({
+          run: async (repoPath) => {
+            await host.taskPullRequestUnlink(repoPath, taskId);
+          },
+          successTitle: "Pull request unlinked",
+          successDescription: taskId,
+          failureTitle: "Failed to unlink pull request",
+        }).catch(() => {
+          // runTaskMutation already surfaced the actionable error to the user.
+        });
       } finally {
         setUnlinkingPullRequestTaskId((currentTaskId) =>
           currentTaskId === taskId ? null : currentTaskId,

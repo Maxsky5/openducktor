@@ -69,7 +69,7 @@ impl AppService {
         let sessions = self.agent_sessions_list(repo_path.as_str(), task_id)?;
         let latest_builder_session = sessions
             .into_iter()
-            .filter(|session| session.role == "build")
+            .filter(|session| TaskAgentRole::parse(session.role.trim()) == Some(TaskAgentRole::Build))
             .max_by(|left, right| {
                 session_sort_key(left)
                     .cmp(&session_sort_key(right))
@@ -103,46 +103,90 @@ fn session_sort_key(session: &AgentSessionDocument) -> (&str, &str) {
     )
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TaskAgentRole {
+    Spec,
+    Planner,
+    Build,
+    Qa,
+}
+
+impl TaskAgentRole {
+    fn parse(raw_role: &str) -> Option<Self> {
+        match raw_role {
+            "spec" => Some(Self::Spec),
+            "planner" => Some(Self::Planner),
+            "build" => Some(Self::Build),
+            "qa" => Some(Self::Qa),
+            _ => None,
+        }
+    }
+}
+
 fn validate_task_agent_session(
     service: &AppService,
     repo_path: &str,
     session: &AgentSessionDocument,
 ) -> Result<()> {
-    let role = session.role.trim();
-    if !matches!(role, "spec" | "planner" | "build" | "qa") {
-        return Err(anyhow!(
+    TaskAgentRole::parse(session.role.trim()).ok_or_else(|| {
+        anyhow!(
             "Agent session role must be one of spec, planner, build, or qa. Received: {}",
             session.role
-        ));
-    }
+        )
+    })?;
 
     let working_directory = session.working_directory.trim();
     if working_directory.is_empty() {
         return Err(anyhow!("Agent session workingDirectory is required"));
     }
 
-    let normalized_repo = normalize_path_for_comparison(repo_path);
-    let normalized_working_directory = normalize_path_for_comparison(working_directory);
-    if normalized_working_directory.starts_with(&normalized_repo) {
+    let canonical_repo = canonicalize_existing_path(
+        repo_path,
+        "Repository path for agent session validation must exist and be accessible",
+    )?;
+    let canonical_working_directory = canonicalize_existing_path(
+        working_directory,
+        "Agent session workingDirectory must exist and be accessible",
+    )?;
+    if canonical_working_directory.starts_with(&canonical_repo) {
         return Ok(());
     }
 
     let effective_worktree_base_path = service
         .workspace_list()?
         .into_iter()
-        .find(|workspace| normalize_path_for_comparison(workspace.path.as_str()) == normalized_repo)
+        .find(|workspace| {
+            try_canonicalize_existing_path(workspace.path.as_str())
+                .is_some_and(|workspace_path| workspace_path == canonical_repo)
+        })
         .and_then(|workspace| workspace.effective_worktree_base_path);
 
     if let Some(worktree_base_path) = effective_worktree_base_path {
-        let normalized_worktree_base_path = normalize_path_for_comparison(&worktree_base_path);
-        if normalized_working_directory.starts_with(&normalized_worktree_base_path) {
-            return Ok(());
+        if let Some(canonical_worktree_base_path) =
+            try_canonicalize_existing_path(&worktree_base_path)
+        {
+            if canonical_working_directory.starts_with(&canonical_worktree_base_path) {
+                return Ok(());
+            }
         }
     }
 
     Err(anyhow!(
         "Agent session workingDirectory must stay inside repository {repo_path} or its effective worktree base. Received: {working_directory}"
     ))
+}
+
+fn canonicalize_existing_path(path: &str, error_message: &str) -> Result<PathBuf> {
+    fs::canonicalize(path.trim()).with_context(|| format!("{error_message}: {}", path.trim()))
+}
+
+fn try_canonicalize_existing_path(path: &str) -> Option<PathBuf> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    fs::canonicalize(trimmed).ok()
 }
 
 fn normalize_path_for_comparison(path: &str) -> PathBuf {

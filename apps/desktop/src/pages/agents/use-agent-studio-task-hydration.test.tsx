@@ -157,6 +157,7 @@ describe("useAgentStudioTaskHydration", () => {
     try {
       await harness.mount();
       await harness.waitFor(() => loadAgentSessions.mock.calls.length === 1);
+      expect(harness.getLatest().isActiveTaskHydrationFailed).toBe(true);
       expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(true);
       expect(harness.getLatest().isActiveSessionHistoryHydrated).toBe(false);
       expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(false);

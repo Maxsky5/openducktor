@@ -552,6 +552,42 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("syncPullRequests reports missing workspace selection without rethrowing", async () => {
+    const taskPullRequestDetect = mock(async () => {
+      throw new Error("taskPullRequestDetect should not be called without an active workspace");
+    });
+    const toastError = mock(() => "");
+    const originalTaskPullRequestDetect = host.taskPullRequestDetect;
+    const originalToastError = toast.error;
+    host.taskPullRequestDetect = taskPullRequestDetect;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      activeRepo: null,
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: null,
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.syncPullRequests("A");
+      });
+
+      expect(taskPullRequestDetect).not.toHaveBeenCalled();
+      expect(toastError).toHaveBeenCalledWith("Failed to detect pull request", {
+        description: "Select a workspace first.",
+      });
+    } finally {
+      await harness.unmount();
+      host.taskPullRequestDetect = originalTaskPullRequestDetect;
+      toast.error = originalToastError;
+    }
+  });
+
   test("unlinkPullRequest reports unlink errors without rethrowing", async () => {
     const taskPullRequestUnlink = mock(async () => {
       throw new Error("unlink failed");

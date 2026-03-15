@@ -1430,6 +1430,8 @@ fn qa_rejected_rejects_non_ai_review_tasks() {
 #[test]
 fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
     let repo_path = "/tmp/odt-repo-sessions";
+    fs::create_dir_all(repo_path)?;
+    init_git_repo(Path::new(repo_path))?;
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![],
         vec![],
@@ -1439,20 +1441,21 @@ fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
             revision: None,
         },
     );
+    service.workspace_add(repo_path)?;
     {
         let mut state = task_state.lock().expect("task lock poisoned");
-        state.agent_sessions = vec![make_session("task-1", "session-1")];
+        let mut existing_session = make_session("task-1", "session-1");
+        existing_session.working_directory = repo_path.to_string();
+        state.agent_sessions = vec![existing_session];
     }
 
     let sessions = service.agent_sessions_list(repo_path, "task-1")?;
     assert_eq!(sessions.len(), 1);
     assert_eq!(sessions[0].session_id, "session-1");
 
-    let upserted = service.agent_session_upsert(
-        repo_path,
-        "task-1",
-        make_session("wrong-task", "session-2"),
-    )?;
+    let mut upsert_session = make_session("wrong-task", "session-2");
+    upsert_session.working_directory = repo_path.to_string();
+    let upserted = service.agent_session_upsert(repo_path, "task-1", upsert_session)?;
     assert!(upserted);
 
     let task_state = task_state.lock().expect("task lock poisoned");
@@ -1493,6 +1496,48 @@ fn agent_session_upsert_rejects_working_directory_outside_repo_and_worktree_base
     let error = service
         .agent_session_upsert(repo_path.as_str(), "task-1", session)
         .expect_err("upsert should reject working directories outside repo/worktree base");
+
+    assert!(error.to_string().contains("must stay inside repository"));
+    assert!(task_state
+        .lock()
+        .expect("task lock poisoned")
+        .upserted_sessions
+        .is_empty());
+    Ok(())
+}
+
+#[test]
+fn agent_session_upsert_rejects_parent_directory_traversal_working_directory() -> Result<()> {
+    let repo_root = unique_temp_path("session-upsert-parent-traversal");
+    let repo = repo_root.join("repo");
+    let external = repo_root.join("external");
+    init_git_repo(&repo)?;
+    fs::create_dir_all(&external)?;
+
+    let config_store = AppConfigStore::from_path(repo_root.join("config.json"));
+    let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+
+    let mut session = make_session("task-1", "session-parent-traversal");
+    session.working_directory = repo
+        .join("..")
+        .join("external")
+        .to_string_lossy()
+        .to_string();
+
+    let error = service
+        .agent_session_upsert(repo_path.as_str(), "task-1", session)
+        .expect_err("upsert should reject lexical traversal outside the repo");
 
     assert!(error.to_string().contains("must stay inside repository"));
     assert!(task_state
@@ -1577,13 +1622,13 @@ fn agent_session_upsert_rejects_unknown_role() -> Result<()> {
         .agent_session_upsert(repo_path.as_str(), "task-1", session)
         .expect_err("upsert should reject unknown agent session roles");
 
-    assert!(error.to_string().contains("role must be one of spec, planner, build, or qa"));
-    assert!(
-        task_state
-            .lock()
-            .expect("task lock poisoned")
-            .upserted_sessions
-            .is_empty()
-    );
+    assert!(error
+        .to_string()
+        .contains("role must be one of spec, planner, build, or qa"));
+    assert!(task_state
+        .lock()
+        .expect("task lock poisoned")
+        .upserted_sessions
+        .is_empty());
     Ok(())
 }

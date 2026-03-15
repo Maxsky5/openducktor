@@ -110,6 +110,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
 
     expect(mapped.core.role).toBe("planner");
     expect(mapped.core.contextSwitchVersion).toBe(4);
+    expect(mapped.core.isSessionHistoryHydrationFailed).toBe(false);
     expect(mapped.taskTabs.onCreateTab).toBe(onCreateTab);
     expect(mapped.taskTabs.onCloseTab).toBe(onCloseTab);
     expect(mapped.documents.planDoc.markdown).toBe("# doc");
@@ -186,6 +187,18 @@ describe("buildAgentStudioPageModelsArgs", () => {
     });
 
     expect(failed.core.isTaskHydrating).toBe(false);
+  });
+
+  test("forwards explicit session history hydration failures into page-model core", () => {
+    const failed = buildAgentStudioPageModelsArgs({
+      ...baseArgs,
+      view: {
+        ...baseArgs.view,
+        isViewSessionHistoryHydrationFailed: true,
+      },
+    });
+
+    expect(failed.core.isSessionHistoryHydrationFailed).toBe(true);
   });
 
   test("derives contextSessionsLength from the sessions context size", () => {

@@ -180,6 +180,7 @@ export const buildAgentStudioPageModelsArgs = ({
         view.viewTaskId && !view.isActiveTaskHydrated && !view.isActiveTaskHydrationFailed,
       ),
       isSessionHistoryHydrating: view.isViewSessionHistoryHydrating,
+      isSessionHistoryHydrationFailed: view.isViewSessionHistoryHydrationFailed,
       contextSwitchVersion: view.contextSwitchVersion,
     },
     taskTabs,

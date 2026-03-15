@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { errorMessage } from "@/lib/errors";
 import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 
 type UseAgentStudioTaskHydrationParams = {
@@ -87,10 +88,13 @@ export function useAgentStudioTaskHydration({
           [hydrationKey]: "hydrated",
         }));
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) {
           return;
         }
+        console.warn(
+          `Failed to hydrate task session context for ${activeTaskId}: ${errorMessage(error)}`,
+        );
         setTaskHydrationStatusByRepoKey((current) => ({
           ...current,
           [hydrationKey]: "failed",
@@ -151,10 +155,22 @@ export function useAgentStudioTaskHydration({
           [sessionHydrationKey]: "hydrated",
         }));
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) {
           return;
         }
+        console.warn(
+          `Failed to hydrate session history for ${activeSessionId}: ${errorMessage(error)}`,
+        );
+        setTaskHydrationStatusByRepoKey((current) => {
+          if (current[taskHydrationKey] === "hydrated") {
+            return current;
+          }
+          return {
+            ...current,
+            [taskHydrationKey]: "failed",
+          };
+        });
         setSessionHistoryStatusByRepoKey((current) => {
           return {
             ...current,
