@@ -8,6 +8,11 @@ Use it to answer:
 - where to change code safely,
 - what runtime path a user action follows.
 
+Current scope note:
+
+- The only supported runtime today is OpenCode (`opencode`).
+- OpenDucktor is currently macOS-first and early-stage.
+
 ## Layer Map
 | Layer | Primary modules | Owns | Must not own |
 |---|---|---|---|

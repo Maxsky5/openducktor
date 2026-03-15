@@ -1,0 +1,89 @@
+name: Bug report
+description: Report a reproducible defect in OpenDucktor.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug.
+
+        Before filing, please confirm:
+        - the issue is reproducible
+        - you reviewed the current README and CONTRIBUTING guide
+        - this is not a security vulnerability requiring private reporting
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is wrong?
+      placeholder: A clear, short description of the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide a minimal, deterministic reproduction.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS
+        - Windows
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: app_mode
+    attributes:
+      label: App mode
+      description: For example `tauri:dev`, packaged app, or browser dev mode.
+      placeholder: bun run tauri:dev
+  - type: textarea
+    id: tooling
+    attributes:
+      label: Tooling versions
+      description: Include Bun, Rust, `bd`, `opencode`, and OS version if relevant.
+      placeholder: |
+        Bun:
+        Rust:
+        bd:
+        opencode:
+        macOS:
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste relevant logs or attach screenshots.
+      render: shell
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I verified this is not a security issue requiring private reporting.
+          required: true
+        - label: I searched for existing issues before opening this report.
+          required: true

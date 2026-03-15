@@ -10,6 +10,8 @@
     "tauri": "cd apps/desktop && bun run tauri",
     "tauri:dev": "cd apps/desktop && bun run tauri:dev",
     "tauri:build": "cd apps/desktop && bun run tauri:build",
+    "check:rust": "cd apps/desktop/src-tauri && cargo check",
+    "test:rust": "cd apps/desktop/src-tauri && cargo test",
     "build": "bun run --workspaces build",
     "typecheck": "bun run --workspaces typecheck",
     "test": "bun run --workspaces test",

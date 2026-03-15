@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security policy
+    url: https://github.com/Maxsky5/openducktor/blob/main/SECURITY.md
+    about: Please read this before reporting a potential vulnerability.
+  - name: Contribution guide
+    url: https://github.com/Maxsky5/openducktor/blob/main/CONTRIBUTING.md
+    about: Read the project constraints and contribution expectations first.

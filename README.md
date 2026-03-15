@@ -1,165 +1,134 @@
-# OpenDucktor V1
+# OpenDucktor
 
-OpenDucktor is a macOS-first Tauri v2 desktop app with a Bun monorepo, React frontend, and Rust host runtime.
+OpenDucktor is a desktop app for AI-assisted software delivery. It combines a Tauri v2 host, a React frontend, a Rust application layer, and Beads as the task source of truth to orchestrate spec, planning, build, and QA workflows around real repository work.
 
-## Monorepo Layout
+## Status
 
-- `apps/desktop`: React + Vite desktop frontend and Tauri host.
-- `packages/contracts`: Shared runtime schemas and DTO contracts.
-- `packages/core`: Hexagonal domain services and ports.
-- `packages/adapters-opencode-sdk`: `AgentEnginePort` adapter.
-- `packages/adapters-tauri-host`: Frontend IPC client adapter.
+OpenDucktor is still very early.
 
-## Hexagonal Boundaries
+- The repository is public so the work can be inspected, discussed, and improved in the open.
+- It is not production-ready yet.
+- Breaking changes should be expected.
+- Setup is still manual in places, and contributor ergonomics are still being improved.
 
-Replaceable ports:
+If you want to follow the project, treat the current codebase as an active prototype rather than a stable product.
 
-- `AgentEnginePort` in `packages/core/src/ports/agent-engine.ts`
-- `TaskStore` trait in `apps/desktop/src-tauri/crates/host-domain/src/store.rs` (re-exported by `apps/desktop/src-tauri/crates/host-domain/src/lib.rs`)
+## Current Scope
 
-Current adapters:
+- Platform support today: macOS only.
+- Planned later: Windows and Linux, after the project reaches a first stable version.
+- Supported task backend: Beads.
+- Supported agent runtime today: OpenCode (`opencode`) only.
+- Next planned runtime: Codex.
+- Runtime policy: OpenDucktor will support open-source agent runtimes only.
+- Explicitly out of scope: Claude Code.
 
-- Opencode adapter: `packages/adapters-opencode-sdk/src/index.ts`
-- Beads adapter: `apps/desktop/src-tauri/crates/host-infra-beads/src/lib.rs`
+## What OpenDucktor Does
 
-## Architecture Docs
+OpenDucktor is built around a workflow where tasks live in Beads and agent work stays connected to those tasks.
 
-- End-to-end architecture and runtime data flow: [docs/architecture-overview.md](docs/architecture-overview.md)
-- Agent orchestrator internals: [docs/agent-orchestrator-module-map.md](docs/agent-orchestrator-module-map.md)
-- Workflow lifecycle/status contract: [docs/task-workflow-status-model.md](docs/task-workflow-status-model.md)
-- Workflow actions: [docs/task-workflow-actions.md](docs/task-workflow-actions.md)
-- Workflow transition matrix: [docs/task-workflow-transition-matrix.md](docs/task-workflow-transition-matrix.md)
+- Beads is the lifecycle source of truth.
+- OpenDucktor manages spec, plan, build, and QA workflows on top of that task model.
+- Agent-authored documents are stored as task metadata instead of being scattered across ad hoc files.
+- The desktop app coordinates repository checks, runtime startup, task transitions, and local workflow tooling.
 
-## Home Config
+## Repository Layout
 
-OpenDucktor stores config at:
+- `apps/desktop`: React + Vite frontend and Tauri desktop app.
+- `apps/desktop/src-tauri`: Rust host application and infrastructure crates.
+- `packages/contracts`: Shared TypeScript contracts and schemas.
+- `packages/core`: Core domain services and ports.
+- `packages/adapters-opencode-sdk`: OpenCode runtime adapter for the TypeScript agent engine boundary.
+- `packages/adapters-tauri-host`: Frontend adapter for typed Tauri IPC.
+- `packages/openducktor-mcp`: MCP server exposing the `odt_*` workflow tools.
+- `docs/`: architecture, workflow, runtime, and security documentation.
+
+## Running Locally
+
+### Prerequisites
+
+OpenDucktor currently targets local macOS development.
+
+- Bun `1.3.5`
+- Rust stable toolchain
+- Xcode Command Line Tools
+- `git`
+- `gh`
+- `bd` (Beads CLI)
+- `opencode` (OpenCode CLI/runtime)
+
+OpenDucktor resolves `opencode` from `PATH` first, then falls back to `~/.opencode/bin/opencode`. You can also override the binary path with `OPENDUCKTOR_OPENCODE_BINARY`.
+
+### Install Dependencies
+
+```sh
+bun install
+```
+
+### Start The Desktop App
+
+```sh
+bun run tauri:dev
+```
+
+### Start in Browser Mode (allow agents to test what they are doing)
+
+```sh
+bun run browser:dev
+```
+
+### Useful Checks
+
+```sh
+bun run lint
+bun run typecheck
+bun run test
+bun run build
+bun run check:rust
+bun run test:rust
+```
+
+### Local Data And Config
+
+OpenDucktor stores local config at:
 
 - `~/.openducktor/config.json`
 
-Example:
+Beads storage is managed centrally per repository in:
 
-```json
-{
-  "version": 1,
-  "activeRepo": "/abs/path/repo-a",
-  "repos": {
-    "/abs/path/repo-a": {
-      "worktreeBasePath": "/abs/path/outside/repo-a",
-      "branchPrefix": "obp",
-      "trustedHooks": true,
-      "hooks": {
-        "preStart": ["bun install --frozen-lockfile"],
-        "postComplete": ["bun run test", "bun run lint"]
-      }
-    }
-  },
-  "recentRepos": ["/abs/path/repo-a"],
-  "scheduler": {
-    "softGuardrails": {
-      "cpuHighWatermarkPercent": 85,
-      "minFreeMemoryMb": 2048,
-      "backoffSeconds": 30
-    }
-  }
-}
-```
+- `~/.openducktor/beads/`
 
-## Beads Storage Policy (V1)
+The app initializes and uses a central Beads directory for each repository. Existing repo-local `.beads` folders are not the V1 source of truth.
 
-Beads storage is centrally managed per repository and is not user-configurable in V1.
+## Contributing
 
-- Base directory: `~/.openducktor/beads/`
-- Per repo store: `~/.openducktor/beads/<repo-id>/.beads`
-- `repo-id`: `<slug>-<short-hash>` derived from canonical absolute repo path
+Contributions are welcome, but this repository is still changing quickly. Before spending time on a large change, open an issue or start a discussion so the direction is aligned first.
 
-Behavior:
+Short version:
 
-- On repository add/select, OpenDucktor auto-initializes Beads if needed.
-- OpenDucktor always sets `BEADS_DIR` for `bd` commands.
-- Existing repo-local `.beads` is ignored in V1 (no migration yet).
+1. Fork the repo and create a branch.
+2. Install the required local tooling, including `bd` and `opencode`.
+3. Make the smallest coherent change that solves one problem.
+4. Add or update tests for touched behavior.
+5. Run the relevant checks before opening a pull request.
+6. Use Conventional Commits for commit messages.
 
-## Planner Rules
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the contributor workflow and expectations.
 
-Spec markdown is canonical in Beads task `description`.
+## Documentation
 
-Required sections:
+Start here:
 
-1. `Purpose`
-2. `Problem`
-3. `Goals`
-4. `Non-goals`
-5. `Scope`
-6. `API / Interfaces`
-7. `Risks`
-8. `Test Plan`
+- [docs/README.md](docs/README.md)
 
-Task document commands are `spec_get`, `set_spec`, `spec_save_document`, `plan_get`, `set_plan`, and `plan_save_document`.
+Key references:
 
-## Commands
+- [docs/architecture-overview.md](docs/architecture-overview.md)
+- [docs/runtime-integration-guide.md](docs/runtime-integration-guide.md)
+- [docs/task-workflow-status-model.md](docs/task-workflow-status-model.md)
+- [docs/task-workflow-actions.md](docs/task-workflow-actions.md)
+- [docs/task-workflow-transition-matrix.md](docs/task-workflow-transition-matrix.md)
 
-```bash
-bun install
-bun run typecheck
-bun run build
-bun run test
-bun run deps:check
-bun run deps:audit:hono
-bun run deps:unused
-bun run deps:outdated
+## License
 
-# frontend (browser only)
-bun run --filter @openducktor/desktop dev
-
-# tauri CLI/version
-bun run tauri -- --version
-
-# desktop app (frontend + rust host)
-bun run tauri:dev
-
-# tauri host rust check only
-cd apps/desktop/src-tauri && cargo check
-```
-
-## Dependency Hygiene
-
-- All-in-one blocking hygiene check: `bun run deps:check`
-- Included unused dependency check: `bun run deps:unused:deps`
-- Included high/critical advisory gate: `bun run deps:audit:high`
-- Included targeted vulnerability check (Hono GHSA-`xh87-mx6m-69f3`): `bun run deps:audit:hono`
-- Non-blocking unused export report: `bun run deps:unused`
-- Outdated dependency report: `bun run deps:outdated`
-- Automated update PRs: `.github/dependabot.yml`
-- Dedicated CI automation: `.github/workflows/dependency-hygiene.yml`
-- Review and upgrade cadence: `docs/dependency-hygiene.md`
-- MCP runtime transport and threat assumptions: `docs/mcp-runtime-security.md`
-
-## IPC Commands (Implemented)
-
-- Runtime/system:
-  - `system_check`, `runtime_check`, `beads_check`
-- Workspace/config:
-  - `workspace_list`, `workspace_add`, `workspace_select`
-  - `workspace_update_repo_config`, `workspace_save_repo_settings`, `workspace_update_repo_hooks`
-  - `workspace_prepare_trusted_hooks_challenge`, `workspace_get_repo_config`, `workspace_set_trusted_hooks`
-- Git:
-  - `git_get_branches`, `git_get_current_branch`, `git_switch_branch`
-  - `git_create_worktree`, `git_remove_worktree`, `git_push_branch`
-- Tasks:
-  - `tasks_list`, `task_create`, `task_update`, `task_delete`
-  - `task_transition`, `task_defer`, `task_resume_deferred`
-- Documents/workflow:
-  - `spec_get`, `task_metadata_get`, `set_spec`, `spec_save_document`
-  - `plan_get`, `set_plan`, `plan_save_document`
-  - `qa_get_report`, `qa_approved`, `qa_rejected`
-  - `build_start`, `build_respond`, `build_stop`, `build_cleanup`
-  - `build_blocked`, `build_resumed`, `build_completed`
-  - `human_request_changes`, `human_approve`
-- Runs/runtimes:
-  - `runs_list`
-  - `runtime_definitions_list`, `runtime_list`, `runtime_start`, `runtime_stop`, `runtime_ensure`
-- Agent sessions:
-  - `agent_sessions_list`, `agent_session_upsert`
-- Theme:
-  - `get_theme`, `set_theme`
-
-Run events emit on `openducktor://run-event`.
+This repository is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
