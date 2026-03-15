@@ -8,6 +8,7 @@ type TaskDetailsMarkdownContentProps = {
 };
 
 const LARGE_MARKDOWN_DEFER_THRESHOLD = 2000;
+const LABELED_CODE_FENCE_PATTERN = /^[ \t]{0,3}(?:```|~~~)[ \t]*[^\s`~]/im;
 
 type TaskDetailsRenderedMarkdownProps = {
   markdown: string;
@@ -62,9 +63,9 @@ function DeferredTaskDetailsMarkdown({
   if (!isMarkdownReady) {
     return (
       <div className="space-y-2 rounded-lg border border-border bg-muted p-3">
-        <div className="h-3 w-4/5 animate-pulse rounded bg-secondary" />
-        <div className="h-3 w-full animate-pulse rounded bg-secondary" />
-        <div className="h-3 w-3/4 animate-pulse rounded bg-secondary" />
+        <div className="h-3 w-4/5 animate-pulse rounded bg-border" />
+        <div className="h-3 w-full animate-pulse rounded bg-border" />
+        <div className="h-3 w-3/4 animate-pulse rounded bg-border" />
       </div>
     );
   }
@@ -82,7 +83,7 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
   active,
 }: TaskDetailsMarkdownContentProps): ReactElement {
   const hasContent = /\S/.test(markdown);
-  const hasLabeledCodeFence = markdown.includes("```") && /```[a-z0-9_-]+/i.test(markdown);
+  const hasLabeledCodeFence = LABELED_CODE_FENCE_PATTERN.test(markdown);
   const shouldDeferMarkdown = hasContent && markdown.length >= LARGE_MARKDOWN_DEFER_THRESHOLD;
 
   if (!hasContent) {

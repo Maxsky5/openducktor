@@ -273,19 +273,31 @@ function useAgentStudioReadiness({
     : null;
 
   const agentStudioReady = Boolean(activeRepo && healthyRuntimeDefinition);
-  const agentStudioBlockedReason = !activeRepo
-    ? "Select a repository to use Agent Studio."
-    : runtimeDefinitionsError
-      ? runtimeDefinitionsError
-      : isLoadingRuntimeDefinitions
-        ? "Loading runtime definitions..."
-        : isLoadingChecks
-          ? "Checking runtime and OpenDucktor MCP health..."
-          : (blockedRuntimeHealth?.runtimeError ??
-            blockedRuntimeHealth?.mcpError ??
-            (runtimeDefinitions.length === 0
-              ? "No agent runtimes are available."
-              : "No configured runtime is ready for Agent Studio."));
+  const agentStudioBlockedReason = (() => {
+    if (agentStudioReady) {
+      return null;
+    }
+    if (!activeRepo) {
+      return "Select a repository to use Agent Studio.";
+    }
+    if (runtimeDefinitionsError) {
+      return runtimeDefinitionsError;
+    }
+    if (isLoadingRuntimeDefinitions) {
+      return "Loading runtime definitions...";
+    }
+    if (isLoadingChecks) {
+      return "Checking runtime and OpenDucktor MCP health...";
+    }
+
+    return (
+      blockedRuntimeHealth?.runtimeError ??
+      blockedRuntimeHealth?.mcpError ??
+      (runtimeDefinitions.length === 0
+        ? "No agent runtimes are available."
+        : "No configured runtime is ready for Agent Studio.")
+    );
+  })();
 
   return {
     agentStudioReady,

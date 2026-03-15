@@ -75,6 +75,7 @@ const repositoryGitSectionUiReducer = (
       return {
         ...state,
         detectionMessage: null,
+        isDetecting: false,
         isManualConfigOpen: action.hasSelectedRepoPath ? !action.hasRepositoryCoordinates : false,
       };
     case "set_manual_config_open":
@@ -117,6 +118,8 @@ export function RepositoryGitSection({
   onUpdateSelectedRepoConfig,
 }: RepositoryGitSectionProps): ReactElement {
   const attemptedAutoDetectByRepoRef = useRef<Set<string>>(new Set());
+  const activeDetectionSequenceRef = useRef(0);
+  const activeRepoPathRef = useRef<string | null>(selectedRepoPath);
   const [uiState, dispatchUiState] = useReducer(
     repositoryGitSectionUiReducer,
     INITIAL_REPOSITORY_GIT_SECTION_UI_STATE,
@@ -207,9 +210,17 @@ export function RepositoryGitSection({
         return;
       }
 
+      const detectionSequence = activeDetectionSequenceRef.current + 1;
+      activeDetectionSequenceRef.current = detectionSequence;
       dispatchUiState({ type: "detection_started" });
       try {
         const detected = await onDetectGithubRepository();
+        if (
+          detectionSequence !== activeDetectionSequenceRef.current ||
+          activeRepoPathRef.current !== selectedRepoPath
+        ) {
+          return;
+        }
         if (!detected) {
           dispatchUiState({
             type: "set_detection_result",
@@ -231,6 +242,12 @@ export function RepositoryGitSection({
           name: detected.name,
         });
       } catch (error) {
+        if (
+          detectionSequence !== activeDetectionSequenceRef.current ||
+          activeRepoPathRef.current !== selectedRepoPath
+        ) {
+          return;
+        }
         const reason = error instanceof Error ? error.message : "Detection failed.";
         dispatchUiState({
           type: "set_detection_result",
@@ -238,13 +255,23 @@ export function RepositoryGitSection({
           ...(manual ? { isManualConfigOpen: true } : {}),
         });
       } finally {
-        dispatchUiState({ type: "detection_finished" });
+        if (detectionSequence === activeDetectionSequenceRef.current) {
+          dispatchUiState({ type: "detection_finished" });
+        }
       }
     },
-    [hasRepositoryCoordinates, isDetecting, onDetectGithubRepository, selectedRepoConfig],
+    [
+      hasRepositoryCoordinates,
+      isDetecting,
+      onDetectGithubRepository,
+      selectedRepoConfig,
+      selectedRepoPath,
+    ],
   );
 
   useEffect(() => {
+    activeRepoPathRef.current = selectedRepoPath;
+    activeDetectionSequenceRef.current += 1;
     dispatchUiState({
       type: "reset_for_repo",
       hasSelectedRepoPath: selectedRepoPath != null,

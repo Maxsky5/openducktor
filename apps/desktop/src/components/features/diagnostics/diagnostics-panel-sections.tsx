@@ -1,5 +1,5 @@
 import { AlertTriangle } from "lucide-react";
-import { Fragment, type ReactElement } from "react";
+import type { ReactElement } from "react";
 import { DiagnosticsKeyValueRow } from "./diagnostics-key-value-row";
 import type { DiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsSection } from "./diagnostics-section";
@@ -56,12 +56,15 @@ function DiagnosticsPanelSectionView({ section }: DiagnosticsPanelSectionViewPro
 }
 
 export function DiagnosticsPanelSections({ model }: DiagnosticsPanelSectionsProps): ReactElement {
+  const sectionEntries = buildRenderEntries(
+    model.sections,
+    (section) => `${section.title}:${section.badge ?? ""}`,
+  );
+
   return (
     <div className="space-y-3">
-      {model.sections.map((section) => (
-        <Fragment key={section.title}>
-          <DiagnosticsPanelSectionView section={section} />
-        </Fragment>
+      {sectionEntries.map(({ item: section, key }) => (
+        <DiagnosticsPanelSectionView key={key} section={section} />
       ))}
     </div>
   );

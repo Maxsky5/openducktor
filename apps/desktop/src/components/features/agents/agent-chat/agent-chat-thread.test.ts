@@ -1,7 +1,7 @@
-import { describe, expect, test } from "bun:test";
-import { createElement, createRef } from "react";
+import { afterEach, describe, expect, test } from "bun:test";
+import { createElement, createRef, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { act, create } from "react-test-renderer";
+import TestRenderer, { act } from "react-test-renderer";
 import {
   buildMessage,
   buildPermissionRequest,
@@ -49,7 +49,117 @@ const baseModel = {
   onMessagesWheel: () => {},
 } as const;
 
+const flush = async (): Promise<void> => {
+  await Promise.resolve();
+  await Promise.resolve();
+};
+
+const getGlobalWindow = (): unknown => {
+  const globalWithWindow = globalThis as { window?: unknown };
+  return globalWithWindow.window;
+};
+
+const setGlobalWindow = (value: unknown): void => {
+  const globalWithWindow = globalThis as { window?: unknown };
+  if (typeof value === "undefined") {
+    delete globalWithWindow.window;
+    return;
+  }
+  globalWithWindow.window = value;
+};
+
+const getGlobalResizeObserver = (): typeof ResizeObserver | undefined => {
+  return (globalThis as typeof globalThis & { ResizeObserver?: typeof ResizeObserver })
+    .ResizeObserver;
+};
+
+const setGlobalResizeObserver = (value: typeof ResizeObserver | undefined): void => {
+  const globalWithResizeObserver = globalThis as typeof globalThis & {
+    ResizeObserver?: typeof ResizeObserver;
+  };
+  if (typeof value === "undefined") {
+    delete globalWithResizeObserver.ResizeObserver;
+    return;
+  }
+  globalWithResizeObserver.ResizeObserver = value;
+};
+
+const createThreadNodeMock = (element: ReactElement): HTMLDivElement => {
+  const props = (element.props ?? {}) as Record<string, unknown>;
+  const className = typeof props.className === "string" ? props.className : "";
+  const isMessagesContainer = className.includes("overflow-y-auto");
+  const rowKey = typeof props["data-row-key"] === "string" ? props["data-row-key"] : null;
+  const dataIndex =
+    typeof props["data-index"] === "number" || typeof props["data-index"] === "string"
+      ? String(props["data-index"])
+      : null;
+  const height = isMessagesContainer ? 320 : 48;
+  const width = isMessagesContainer ? 960 : 720;
+  const ownerDocument = {
+    defaultView: getGlobalWindow() ?? null,
+  };
+
+  return {
+    dataset: {},
+    ownerDocument,
+    style: {},
+    clientHeight: height,
+    offsetHeight: height,
+    offsetWidth: width,
+    scrollHeight: 2_000,
+    scrollTop: 0,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    getAttribute: (name: string) => {
+      if (name === "data-row-key") {
+        return rowKey;
+      }
+      if (name === "data-index") {
+        return dataIndex;
+      }
+      return null;
+    },
+    getBoundingClientRect: () =>
+      ({
+        bottom: height,
+        height,
+        left: 0,
+        right: width,
+        top: 0,
+        width,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect,
+    scrollTo: () => {},
+  } as unknown as HTMLDivElement;
+};
+
+const buildLongSession = (sessionId: string) => {
+  const messages = Array.from({ length: 45 }, (_, index) =>
+    buildMessage("user", `Message ${index + 1}`, {
+      id: `message-${index + 1}`,
+    }),
+  );
+
+  return buildSession({
+    sessionId,
+    messages,
+    status: "idle",
+    pendingQuestions: [],
+    pendingPermissions: [],
+  });
+};
+
 describe("AgentChatThread", () => {
+  const originalWindow = getGlobalWindow();
+  const originalResizeObserver = getGlobalResizeObserver();
+
+  afterEach(() => {
+    setGlobalWindow(originalWindow);
+    setGlobalResizeObserver(originalResizeObserver);
+  });
+
   test("renders empty state when no session is active", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
@@ -305,9 +415,9 @@ describe("AgentChatThread", () => {
       session,
     };
 
-    let renderer!: ReturnType<typeof create>;
+    let renderer!: TestRenderer.ReactTestRenderer;
     act(() => {
-      renderer = create(
+      renderer = TestRenderer.create(
         createElement(AgentChatThread, {
           model,
         }),
@@ -333,6 +443,80 @@ describe("AgentChatThread", () => {
     expect(JSON.stringify(renderer.toJSON())).toContain("Message 46");
     act(() => {
       renderer.unmount();
+    });
+  });
+
+  test("keeps static measurement fallback rows mounted for long sessions when window is unavailable and refreshes them on session switch", async () => {
+    setGlobalWindow(undefined);
+    const session = buildLongSession("session-static-a");
+
+    const rendererRef: { current: TestRenderer.ReactTestRenderer | null } = { current: null };
+    await act(async () => {
+      rendererRef.current = TestRenderer.create(
+        createElement(AgentChatThread, {
+          model: {
+            ...baseModel,
+            session,
+          },
+        }),
+        {
+          createNodeMock: createThreadNodeMock,
+        },
+      );
+      await flush();
+    });
+
+    const mountedRenderer = rendererRef.current;
+    if (!mountedRenderer) {
+      throw new Error("Expected renderer");
+    }
+
+    const staticRows = mountedRenderer.root.findAll(
+      (node: { props: Record<string, unknown> }) =>
+        node.props.className === "agent-chat-row-motion" &&
+        typeof node.props["data-row-key"] === "string",
+    );
+    const virtualizedRows = mountedRenderer.root.findAll(
+      (node: { props: Record<string, unknown> }) =>
+        typeof node.props["data-index"] !== "undefined" &&
+        typeof node.props["data-row-key"] === "string",
+    );
+
+    expect(staticRows).toHaveLength(session.messages.length);
+    expect(virtualizedRows).toHaveLength(0);
+    expect(
+      staticRows.every((node: { props: Record<string, unknown> }) =>
+        String(node.props["data-row-key"]).startsWith("session-static-a:"),
+      ),
+    ).toBe(true);
+
+    await act(async () => {
+      mountedRenderer.update(
+        createElement(AgentChatThread, {
+          model: {
+            ...baseModel,
+            session: buildLongSession("session-static-b"),
+          },
+        }),
+      );
+      await flush();
+    });
+
+    const switchedStaticRows = mountedRenderer.root.findAll(
+      (node: { props: Record<string, unknown> }) =>
+        node.props.className === "agent-chat-row-motion" &&
+        typeof node.props["data-row-key"] === "string",
+    );
+    expect(switchedStaticRows).toHaveLength(session.messages.length);
+    expect(
+      switchedStaticRows.every((node: { props: Record<string, unknown> }) =>
+        String(node.props["data-row-key"]).startsWith("session-static-b:"),
+      ),
+    ).toBe(true);
+
+    await act(async () => {
+      mountedRenderer.unmount();
+      await flush();
     });
   });
 });
