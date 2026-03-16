@@ -1,5 +1,5 @@
 import { AlertTriangle, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import { type ReactElement, useMemo, useRef } from "react";
+import { type ReactElement, useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
@@ -9,7 +9,9 @@ import type { AgentChatVirtualRow } from "./agent-chat-thread-virtualization";
 import { AgentSessionPermissionCard } from "./agent-session-permission-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
+import { ScrollToBottomButton } from "./scroll-to-bottom-button";
 import { useAgentChatAutoScroll } from "./use-agent-chat-auto-scroll";
+import { isNearBottom, scrollMessagesContainerToBottom } from "./use-agent-chat-layout";
 import { useAgentChatLoadingOverlay } from "./use-agent-chat-loading-overlay";
 import { useAgentChatRowMotion } from "./use-agent-chat-row-motion";
 import { useAgentChatVirtualization } from "./use-agent-chat-virtualization";
@@ -88,6 +90,21 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     onMessagesTouchMove,
     onMessagesWheel,
   } = model;
+
+  const [isUserNearBottom, setIsUserNearBottom] = useState(true);
+
+  const handleMessagesScroll = useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      const container = event.currentTarget;
+      setIsUserNearBottom(isNearBottom(container));
+      onMessagesScroll(event);
+    },
+    [onMessagesScroll],
+  );
+
+  const handleScrollToBottom = useCallback(() => {
+    scrollMessagesContainerToBottom(messagesContainerRef.current);
+  }, [messagesContainerRef]);
 
   const {
     activeSessionId,
@@ -195,7 +212,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         ref={messagesContainerRef}
         className="relative min-h-0 flex-1 space-y-1 overflow-y-auto p-4 pb-6"
         onPointerDown={onMessagesPointerDown}
-        onScroll={onMessagesScroll}
+        onScroll={handleMessagesScroll}
         onTouchMove={onMessagesTouchMove}
         onWheel={onMessagesWheel}
       >
@@ -316,6 +333,10 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
             Preparing chat...
           </div>
         </div>
+      ) : null}
+
+      {session ? (
+        <ScrollToBottomButton visible={!isUserNearBottom} onClick={handleScrollToBottom} />
       ) : null}
 
       {session ? (
