@@ -160,7 +160,13 @@ const mountHarness = async (
 };
 
 const mockIntersectionObservers: TriggerableIntersectionObserver[] = [];
-const mockResizeObserverCallbacks = new Set<ResizeObserverCallback>();
+type MockResizeObserverController = {
+  callback: ResizeObserverCallback;
+  observer: ResizeObserver;
+  observedElements: Set<Element>;
+};
+
+const mockResizeObserverControllers = new Set<MockResizeObserverController>();
 
 class MockIntersectionObserver implements TriggerableIntersectionObserver {
   readonly root: Element | Document | null;
@@ -222,27 +228,48 @@ class MockIntersectionObserver implements TriggerableIntersectionObserver {
 
 class MockResizeObserver implements ResizeObserver {
   private readonly callback: ResizeObserverCallback;
+  private readonly observedElements = new Set<Element>();
 
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback;
+    mockResizeObserverControllers.add({
+      callback,
+      observer: this,
+      observedElements: this.observedElements,
+    });
   }
 
   disconnect(): void {
-    mockResizeObserverCallbacks.delete(this.callback);
+    this.observedElements.clear();
   }
 
-  observe(_target: Element): void {
-    mockResizeObserverCallbacks.add(this.callback);
+  observe(target: Element): void {
+    this.observedElements.add(target);
   }
 
-  unobserve(_target: Element): void {
-    mockResizeObserverCallbacks.delete(this.callback);
+  unobserve(target: Element): void {
+    this.observedElements.delete(target);
   }
 }
 
 const triggerResizeObservers = (): void => {
-  for (const callback of [...mockResizeObserverCallbacks]) {
-    callback([], {} as ResizeObserver);
+  for (const controller of [...mockResizeObserverControllers]) {
+    if (controller.observedElements.size === 0) {
+      continue;
+    }
+
+    controller.callback(
+      Array.from(controller.observedElements).map((target) => {
+        return {
+          borderBoxSize: [] as ResizeObserverSize[],
+          contentBoxSize: [] as ResizeObserverSize[],
+          contentRect: {} as DOMRectReadOnly,
+          devicePixelContentBoxSize: [] as ResizeObserverSize[],
+          target,
+        } satisfies ResizeObserverEntry;
+      }),
+      controller.observer,
+    );
   }
 };
 
@@ -255,7 +282,7 @@ describe("useAgentChatWindow", () => {
 
   beforeEach(() => {
     mockIntersectionObservers.length = 0;
-    mockResizeObserverCallbacks.clear();
+    mockResizeObserverControllers.clear();
     globalThis.IntersectionObserver =
       MockIntersectionObserver as unknown as typeof IntersectionObserver;
     globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
@@ -686,6 +713,38 @@ describe("useAgentChatWindow", () => {
     expect(result.isNearTop).toBe(false);
 
     await harness.unmount();
+  });
+
+  test("mock resize observers only unobserve the requested target", () => {
+    const callback = mock(
+      (_entries: ResizeObserverEntry[], _observer: ResizeObserver) => undefined,
+    );
+    const observer = new MockResizeObserver(callback);
+    const firstTarget = createMessagesContainer() as unknown as Element;
+    const secondTarget = createMessagesContent() as unknown as Element;
+
+    observer.observe(firstTarget);
+    observer.observe(secondTarget);
+    observer.unobserve(firstTarget);
+
+    triggerResizeObservers();
+
+    expect(callback).toHaveBeenCalledTimes(1);
+    const firstCall = callback.mock.calls[0] as [ResizeObserverEntry[], ResizeObserver] | undefined;
+    if (!firstCall) {
+      throw new Error("Expected resize observer callback call");
+    }
+
+    const entries = firstCall[0];
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.target).toBe(secondTarget);
+
+    observer.disconnect();
+    callback.mockClear();
+
+    triggerResizeObservers();
+
+    expect(callback).not.toHaveBeenCalled();
   });
 
   test("clamps the window when the row count decreases", async () => {
