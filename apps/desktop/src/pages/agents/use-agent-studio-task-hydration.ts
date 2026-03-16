@@ -94,9 +94,10 @@ export function useAgentStudioTaskHydration({
     let cancelled = false;
     void loadAgentSessions(activeTaskId)
       .then(() => {
-        if (cancelled) {
-          return;
-        }
+        // Always update the hydration state, even if cancelled.
+        // This prevents the retry mechanism from re-triggering an infinite loop
+        // when loadAgentSessions completed successfully but the effect was cancelled
+        // by a React re-render before .then() ran.
         setHydratedTasksByRepoAndTask((current) => {
           if (current[hydrationKey] === true) {
             return current;
@@ -106,6 +107,9 @@ export function useAgentStudioTaskHydration({
             [hydrationKey]: true,
           };
         });
+        if (cancelled) {
+          return;
+        }
         setTaskHydrationStatusByRepoKey((current) => ({
           ...current,
           [hydrationKey]: "hydrated",
@@ -171,9 +175,11 @@ export function useAgentStudioTaskHydration({
       hydrateHistoryForSessionId: activeSessionId,
     })
       .then(() => {
-        if (cancelled) {
-          return;
-        }
+        // Always mark hydration as complete in refs/state, even if cancelled.
+        // This prevents the retry mechanism from re-triggering an infinite loop
+        // when the promise resolved successfully but the effect was cancelled
+        // due to a React re-render (e.g., from state updates inside loadAgentSessions).
+        hydratedSessionHistoriesByRepoRef.current.add(sessionHydrationKey);
         setHydratedTasksByRepoAndTask((current) => {
           if (current[taskHydrationKey] === true) {
             return current;
@@ -183,11 +189,13 @@ export function useAgentStudioTaskHydration({
             [taskHydrationKey]: true,
           };
         });
+        if (cancelled) {
+          return;
+        }
         setTaskHydrationStatusByRepoKey((current) => ({
           ...current,
           [taskHydrationKey]: "hydrated",
         }));
-        hydratedSessionHistoriesByRepoRef.current.add(sessionHydrationKey);
         setSessionHistoryStatusByRepoKey((current) => ({
           ...current,
           [sessionHydrationKey]: "hydrated",

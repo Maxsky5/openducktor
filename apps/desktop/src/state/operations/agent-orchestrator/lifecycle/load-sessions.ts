@@ -178,7 +178,6 @@ export const createLoadAgentSessions = ({
         })
         .map((record) => record.sessionId),
     );
-
     if (!shouldHydrateRequestedSession) {
       return;
     }
