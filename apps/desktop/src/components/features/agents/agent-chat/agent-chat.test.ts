@@ -32,12 +32,7 @@ const buildModel = () => ({
     todoPanelCollapsed: false,
     onToggleTodoPanel: () => {},
     todoPanelBottomOffset: 120,
-    isPinnedToBottom: true,
     messagesContainerRef: createRef<HTMLDivElement>(),
-    onMessagesPointerDown: () => {},
-    onMessagesScroll: () => {},
-    onMessagesTouchMove: () => {},
-    onMessagesWheel: () => {},
   },
   composer: {
     taskId: "task-1",

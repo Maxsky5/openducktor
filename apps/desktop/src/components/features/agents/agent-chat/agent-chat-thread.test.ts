@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { createElement, createRef, type ReactElement } from "react";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import TestRenderer, { act } from "react-test-renderer";
 import {
@@ -41,102 +41,52 @@ const baseModel = {
   todoPanelCollapsed: false,
   onToggleTodoPanel: () => {},
   todoPanelBottomOffset: 120,
-  isPinnedToBottom: true,
   messagesContainerRef: createRef<HTMLDivElement>(),
-  onMessagesPointerDown: () => {},
-  onMessagesScroll: () => {},
-  onMessagesTouchMove: () => {},
-  onMessagesWheel: () => {},
 } as const;
 
 const flush = async (): Promise<void> => {
   await Promise.resolve();
   await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 };
 
 const getGlobalWindow = (): unknown => {
-  const globalWithWindow = globalThis as { window?: unknown };
-  return globalWithWindow.window;
+  return (globalThis as { window?: unknown }).window;
 };
 
 const setGlobalWindow = (value: unknown): void => {
-  const globalWithWindow = globalThis as { window?: unknown };
+  const target = globalThis as { window?: unknown };
   if (typeof value === "undefined") {
-    delete globalWithWindow.window;
+    delete target.window;
     return;
   }
-  globalWithWindow.window = value;
+
+  target.window = value;
 };
 
-const getGlobalResizeObserver = (): typeof ResizeObserver | undefined => {
-  return (globalThis as typeof globalThis & { ResizeObserver?: typeof ResizeObserver })
-    .ResizeObserver;
-};
-
-const setGlobalResizeObserver = (value: typeof ResizeObserver | undefined): void => {
-  const globalWithResizeObserver = globalThis as typeof globalThis & {
-    ResizeObserver?: typeof ResizeObserver;
-  };
-  if (typeof value === "undefined") {
-    delete globalWithResizeObserver.ResizeObserver;
-    return;
-  }
-  globalWithResizeObserver.ResizeObserver = value;
-};
-
-const createThreadNodeMock = (element: ReactElement): HTMLDivElement => {
-  const props = (element.props ?? {}) as Record<string, unknown>;
-  const className = typeof props.className === "string" ? props.className : "";
-  const isMessagesContainer = className.includes("overflow-y-auto");
-  const rowKey = typeof props["data-row-key"] === "string" ? props["data-row-key"] : null;
-  const dataIndex =
-    typeof props["data-index"] === "number" || typeof props["data-index"] === "string"
-      ? String(props["data-index"])
-      : null;
-  const height = isMessagesContainer ? 320 : 48;
-  const width = isMessagesContainer ? 960 : 720;
-  const ownerDocument = {
-    defaultView: getGlobalWindow() ?? null,
-  };
-
+const createContainer = () => {
   return {
-    dataset: {},
-    ownerDocument,
-    style: {},
-    clientHeight: height,
-    offsetHeight: height,
-    offsetWidth: width,
+    addEventListener: mock(() => {}),
+    clientHeight: 320,
+    removeEventListener: mock(() => {}),
     scrollHeight: 2_000,
-    scrollTop: 0,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    getAttribute: (name: string) => {
-      if (name === "data-row-key") {
-        return rowKey;
-      }
-      if (name === "data-index") {
-        return dataIndex;
-      }
-      return null;
-    },
-    getBoundingClientRect: () =>
-      ({
-        bottom: height,
-        height,
-        left: 0,
-        right: width,
-        top: 0,
-        width,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      }) as DOMRect,
-    scrollTo: () => {},
+    scrollTo: mock(() => {}),
+    scrollTop: 1_680,
   } as unknown as HTMLDivElement;
 };
 
-const buildLongSession = (sessionId: string) => {
-  const messages = Array.from({ length: 45 }, (_, index) =>
+type ScrollContainerMock = {
+  addEventListener: ReturnType<typeof mock>;
+  clientHeight: number;
+  removeEventListener: ReturnType<typeof mock>;
+  scrollHeight: number;
+  scrollTo: ReturnType<typeof mock>;
+  scrollTop: number;
+};
+
+const buildLongSession = (sessionId: string, count = 80) => {
+  const messages = Array.from({ length: count }, (_, index) =>
     buildMessage("user", `Message ${index + 1}`, {
       id: `message-${index + 1}`,
     }),
@@ -153,11 +103,47 @@ const buildLongSession = (sessionId: string) => {
 
 describe("AgentChatThread", () => {
   const originalWindow = getGlobalWindow();
-  const originalResizeObserver = getGlobalResizeObserver();
+  const originalIntersectionObserver = globalThis.IntersectionObserver;
+  const originalMatchMedia = globalThis.matchMedia;
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+
+  beforeEach(() => {
+    globalThis.matchMedia = ((query: string) =>
+      ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as MediaQueryList) as typeof matchMedia;
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      callback(16);
+      return 1;
+    }) as typeof requestAnimationFrame;
+    globalThis.cancelAnimationFrame = (() => {}) as typeof cancelAnimationFrame;
+    globalThis.IntersectionObserver = class MockIntersectionObserver {
+      disconnect(): void {}
+
+      observe(): void {}
+
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+
+      unobserve(): void {}
+    } as unknown as typeof IntersectionObserver;
+  });
 
   afterEach(() => {
     setGlobalWindow(originalWindow);
-    setGlobalResizeObserver(originalResizeObserver);
+    globalThis.IntersectionObserver = originalIntersectionObserver;
+    globalThis.matchMedia = originalMatchMedia;
+    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
   test("renders empty state when no session is active", () => {
@@ -212,7 +198,7 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Loading session history...");
   });
 
-  test("renders blank transcript area when session has messages but all were filtered (e.g., thinking-only with showThinkingMessages=false)", () => {
+  test("renders blank transcript area when session has messages but all were filtered", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
@@ -346,8 +332,8 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Reject");
   });
 
-  test("keeps pending question and permission cards mounted for long virtualized sessions", () => {
-    const longMessages = Array.from({ length: 45 }, (_, index) =>
+  test("keeps pending question and permission cards mounted for long sessions", () => {
+    const longMessages = Array.from({ length: 80 }, (_, index) =>
       buildMessage("assistant", `Message ${index + 1}`, {
         id: `message-${index + 1}`,
       }),
@@ -366,11 +352,10 @@ describe("AgentChatThread", () => {
       }),
     );
 
-    expect(html).toContain("Message 45");
+    expect(html).toContain("Message 80");
     expect(html).toContain("Input needed");
     expect(html).toContain("Permission request");
-    expect(html).toContain("flow-root");
-    expect(html).not.toContain("padding-bottom");
+    expect(html).toContain("hide-scrollbar");
   });
 
   test("renders floating todo panel for active todo items", () => {
@@ -403,65 +388,107 @@ describe("AgentChatThread", () => {
     expect(html).toContain("overflow-y-auto");
   });
 
-  test("refreshes virtualized rows when message array mutates without changing session identity", () => {
-    const messages = Array.from({ length: 45 }, (_, index) =>
-      buildMessage("assistant", `Message ${index + 1}`, {
+  test("refreshes rendered rows when the session gains new visible rows", async () => {
+    const messages = Array.from({ length: 80 }, (_, index) =>
+      buildMessage("user", `Message ${index + 1}`, {
         id: `message-${index + 1}`,
       }),
     );
     const session = buildSession({ messages });
     const model = {
       ...baseModel,
+      messagesContainerRef: { current: createContainer() },
       session,
     };
 
     let renderer!: TestRenderer.ReactTestRenderer;
-    act(() => {
+    await act(async () => {
       renderer = TestRenderer.create(
         createElement(AgentChatThread, {
           model,
         }),
       );
+      await flush();
     });
 
-    expect(JSON.stringify(renderer.toJSON())).toContain("Message 45");
+    expect(JSON.stringify(renderer.toJSON())).toContain("Message 80");
 
-    session.messages.push(
-      buildMessage("assistant", "Message 46", {
-        id: "message-46",
-      }),
-    );
+    const nextSession = buildSession({
+      sessionId: session.sessionId,
+      messages: Array.from({ length: 81 }, (_, index) =>
+        buildMessage("user", `Message ${index + 1}`, {
+          id: `message-${index + 1}`,
+        }),
+      ),
+      pendingQuestions: [],
+      pendingPermissions: [],
+      status: "idle",
+    });
 
-    act(() => {
+    await act(async () => {
       renderer.update(
         createElement(AgentChatThread, {
-          model,
+          model: {
+            ...model,
+            session: nextSession,
+          },
         }),
       );
+      await flush();
     });
 
-    expect(JSON.stringify(renderer.toJSON())).toContain("Message 46");
-    act(() => {
+    const nextJson = JSON.stringify(renderer.toJSON());
+    expect(nextJson).toContain("Message 81");
+    expect(nextJson).not.toContain("Message 21");
+    await act(async () => {
       renderer.unmount();
+      await flush();
     });
   });
 
-  test("keeps static measurement fallback rows mounted for long sessions when window is unavailable and refreshes them on session switch", async () => {
-    setGlobalWindow(undefined);
-    const session = buildLongSession("session-static-a");
+  test("shows loading overlay while session context is switching", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...baseModel,
+          isSessionViewLoading: true,
+          session: buildSession({
+            sessionId: "session-loading",
+            messages: [buildMessage("assistant", "Loading", { id: "assistant-1" })],
+          }),
+        },
+      }),
+    );
 
+    expect(html).toContain("Preparing chat...");
+  });
+
+  test("renders native scroll controls for top and bottom navigation", async () => {
+    setGlobalWindow(globalThis);
     const rendererRef: { current: TestRenderer.ReactTestRenderer | null } = { current: null };
+    const messagesContainerNodeRef: { current: ScrollContainerMock | null } = { current: null };
+
+    const createNodeMock = (element: React.ReactElement): HTMLDivElement => {
+      const props = (element.props ?? {}) as Record<string, unknown>;
+      const className = typeof props.className === "string" ? props.className : "";
+      const isMessagesContainer = className.includes("hide-scrollbar");
+      const node = createContainer();
+      if (isMessagesContainer) {
+        messagesContainerNodeRef.current = node as unknown as ScrollContainerMock;
+      }
+      return node;
+    };
+
     await act(async () => {
       rendererRef.current = TestRenderer.create(
         createElement(AgentChatThread, {
           model: {
             ...baseModel,
-            session,
+            messagesContainerRef: createRef<HTMLDivElement>(),
+            session: buildLongSession("session-scroll", 80),
           },
         }),
-        {
-          createNodeMock: createThreadNodeMock,
-        },
+        { createNodeMock },
       );
       await flush();
     });
@@ -471,48 +498,42 @@ describe("AgentChatThread", () => {
       throw new Error("Expected renderer");
     }
 
-    const staticRows = mountedRenderer.root.findAll(
-      (node: { props: Record<string, unknown> }) =>
-        node.props.className === "agent-chat-row-motion" &&
-        typeof node.props["data-row-key"] === "string",
+    const buttons = mountedRenderer.root.findAllByType("button");
+    const scrollToTopButton = buttons.find(
+      (button) => button.props["aria-label"] === "Scroll to top",
     );
-    const virtualizedRows = mountedRenderer.root.findAll(
-      (node: { props: Record<string, unknown> }) =>
-        typeof node.props["data-index"] !== "undefined" &&
-        typeof node.props["data-row-key"] === "string",
+    const scrollToBottomButton = buttons.find(
+      (button) => button.props["aria-label"] === "Scroll to bottom",
     );
 
-    expect(staticRows).toHaveLength(session.messages.length);
-    expect(virtualizedRows).toHaveLength(0);
-    expect(
-      staticRows.every((node: { props: Record<string, unknown> }) =>
-        String(node.props["data-row-key"]).startsWith("session-static-a:"),
-      ),
-    ).toBe(true);
+    expect(scrollToTopButton).toBeDefined();
+    expect(scrollToBottomButton).toBeDefined();
 
     await act(async () => {
-      mountedRenderer.update(
-        createElement(AgentChatThread, {
-          model: {
-            ...baseModel,
-            session: buildLongSession("session-static-b"),
-          },
-        }),
-      );
+      scrollToTopButton?.props.onClick();
       await flush();
     });
 
-    const switchedStaticRows = mountedRenderer.root.findAll(
-      (node: { props: Record<string, unknown> }) =>
-        node.props.className === "agent-chat-row-motion" &&
-        typeof node.props["data-row-key"] === "string",
-    );
-    expect(switchedStaticRows).toHaveLength(session.messages.length);
-    expect(
-      switchedStaticRows.every((node: { props: Record<string, unknown> }) =>
-        String(node.props["data-row-key"]).startsWith("session-static-b:"),
-      ),
-    ).toBe(true);
+    const containerNode = messagesContainerNodeRef.current;
+    if (!containerNode) {
+      throw new Error("Expected messages container node");
+    }
+    const scrollToMock = containerNode.scrollTo;
+
+    expect(scrollToMock).toHaveBeenCalledWith({
+      top: 0,
+      behavior: "auto",
+    });
+
+    await act(async () => {
+      scrollToBottomButton?.props.onClick();
+      await flush();
+    });
+
+    expect(scrollToMock).toHaveBeenCalledWith({
+      top: 2_000,
+      behavior: "auto",
+    });
 
     await act(async () => {
       mountedRenderer.unmount();

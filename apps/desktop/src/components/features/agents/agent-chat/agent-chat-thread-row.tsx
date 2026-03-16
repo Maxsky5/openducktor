@@ -3,11 +3,11 @@ import { assertNever } from "@/lib/assert-never";
 import { cn } from "@/lib/utils";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
-import type { AgentChatVirtualRow } from "./agent-chat-thread-virtualization";
+import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
 
-type AgentChatVirtualRowProps = {
-  row: AgentChatVirtualRow;
+type AgentChatWindowRowProps = {
+  row: AgentChatWindowRow;
   sessionAgentColors: Record<string, string>;
   sessionRole: AgentSessionState["role"] | null;
   sessionSelectedModel: AgentSessionState["selectedModel"] | null;
@@ -20,7 +20,7 @@ export function AgentChatThreadRow({
   sessionRole,
   sessionSelectedModel,
   sessionWorkingDirectory,
-}: AgentChatVirtualRowProps): ReactElement {
+}: AgentChatWindowRowProps): ReactElement {
   switch (row.kind) {
     case "turn_duration": {
       return <AgentTurnDurationSeparator durationMs={row.durationMs} />;
