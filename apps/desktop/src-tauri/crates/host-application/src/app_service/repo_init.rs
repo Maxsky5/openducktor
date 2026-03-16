@@ -8,7 +8,7 @@ impl AppService {
             .to_string()
     }
 
-    pub fn ensure_repo_authorized(&self, repo_path: &str) -> Result<String> {
+    pub fn resolve_authorized_repo_path(&self, repo_path: &str) -> Result<String> {
         let repo_key = Self::repo_key(repo_path);
         if !self.enforce_repo_allowlist {
             return Ok(repo_key);
@@ -25,7 +25,7 @@ impl AppService {
     }
 
     pub(super) fn resolve_initialized_repo_path(&self, repo_path: &str) -> Result<String> {
-        let repo_key = self.ensure_repo_authorized(repo_path)?;
+        let repo_key = self.resolve_authorized_repo_path(repo_path)?;
         {
             let cache = self
                 .initialized_repos

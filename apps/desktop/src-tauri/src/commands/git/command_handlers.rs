@@ -55,7 +55,7 @@ pub async fn git_get_current_branch(
 ) -> Result<host_domain::GitCurrentBranch, String> {
     let _ = state
         .service
-        .ensure_repo_authorized(&repo_path)
+        .resolve_authorized_repo_path(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
     let service = state.service.clone();
@@ -138,7 +138,7 @@ pub async fn git_push_branch(
 ) -> Result<host_domain::GitPushResult, String> {
     let _ = state
         .service
-        .ensure_repo_authorized(&repo_path)
+        .resolve_authorized_repo_path(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
 
@@ -167,7 +167,7 @@ pub async fn git_get_status(
 ) -> Result<Vec<host_domain::GitFileStatus>, String> {
     let _ = state
         .service
-        .ensure_repo_authorized(&repo_path)
+        .resolve_authorized_repo_path(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
     let service = state.service.clone();
@@ -187,7 +187,7 @@ pub async fn git_get_diff(
 ) -> Result<Vec<host_domain::GitFileDiff>, String> {
     let _ = state
         .service
-        .ensure_repo_authorized(&repo_path)
+        .resolve_authorized_repo_path(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
     let service = state.service.clone();
@@ -209,7 +209,7 @@ pub async fn git_commits_ahead_behind(
 ) -> Result<host_domain::GitAheadBehind, String> {
     let _ = state
         .service
-        .ensure_repo_authorized(&repo_path)
+        .resolve_authorized_repo_path(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
     let service = state.service.clone();
@@ -235,7 +235,7 @@ pub async fn git_get_worktree_status(
 
     let _ = state
         .service
-        .ensure_repo_authorized(&repo_path)
+        .resolve_authorized_repo_path(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
     let service = state.service.clone();
@@ -291,7 +291,7 @@ pub async fn git_get_worktree_status_summary(
 
     let _ = state
         .service
-        .ensure_repo_authorized(&repo_path)
+        .resolve_authorized_repo_path(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
     let service = state.service.clone();
@@ -355,7 +355,7 @@ pub async fn git_commit_all(
 
     let _ = state
         .service
-        .ensure_repo_authorized(&repo_path)
+        .resolve_authorized_repo_path(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
 
@@ -379,7 +379,7 @@ pub async fn git_pull_branch(
 ) -> Result<host_domain::GitPullResult, String> {
     let _ = state
         .service
-        .ensure_repo_authorized(&repo_path)
+        .resolve_authorized_repo_path(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
 
@@ -407,7 +407,7 @@ pub async fn git_rebase_branch(
 
     let _ = state
         .service
-        .ensure_repo_authorized(&repo_path)
+        .resolve_authorized_repo_path(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
 
@@ -431,7 +431,7 @@ pub async fn git_rebase_abort(
 ) -> Result<host_domain::GitRebaseAbortResult, String> {
     let _ = state
         .service
-        .ensure_repo_authorized(&repo_path)
+        .resolve_authorized_repo_path(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
 

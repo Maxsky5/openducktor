@@ -38,7 +38,7 @@ use crate::app_service::{
 };
 
 #[test]
-fn git_get_branches_initializes_repo_and_returns_git_data() -> Result<()> {
+fn git_get_branches_returns_git_data_without_task_store_initialization() -> Result<()> {
     let repo_path = "/tmp/odt-repo";
     let expected = vec![
         GitBranch {
@@ -66,7 +66,7 @@ fn git_get_branches_initializes_repo_and_returns_git_data() -> Result<()> {
     assert_eq!(branches, expected);
 
     let task_state = task_state.lock().expect("task lock poisoned");
-    assert_eq!(task_state.ensure_calls, vec![repo_path.to_string()]);
+    assert!(task_state.ensure_calls.is_empty());
     drop(task_state);
 
     let git_state = git_state.lock().expect("git lock poisoned");
@@ -80,7 +80,7 @@ fn git_get_branches_initializes_repo_and_returns_git_data() -> Result<()> {
 }
 
 #[test]
-fn git_get_current_branch_uses_repo_init_cache() -> Result<()> {
+fn git_get_current_branch_does_not_touch_task_store_initialization() -> Result<()> {
     let repo_path = "/tmp/odt-repo-cache";
     let (service, task_state, git_state) = build_service_with_git_state(
         vec![],
@@ -98,7 +98,7 @@ fn git_get_current_branch_uses_repo_init_cache() -> Result<()> {
     assert_eq!(second.name.as_deref(), Some("feature/demo"));
 
     let task_state = task_state.lock().expect("task lock poisoned");
-    assert_eq!(task_state.ensure_calls.len(), 1);
+    assert!(task_state.ensure_calls.is_empty());
     drop(task_state);
 
     let git_state = git_state.lock().expect("git lock poisoned");
@@ -113,6 +113,35 @@ fn git_get_current_branch_uses_repo_init_cache() -> Result<()> {
             }
         ]
     );
+    Ok(())
+}
+
+#[test]
+fn git_branch_reads_do_not_fail_when_task_store_initialization_is_broken() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-branch-read";
+    let expected = vec![GitBranch {
+        name: "main".to_string(),
+        is_current: true,
+        is_remote: false,
+    }];
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![],
+        expected.clone(),
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    task_state.lock().expect("task lock poisoned").ensure_error =
+        Some("beads init failed".to_string());
+
+    let branches = service.git_get_branches(repo_path)?;
+    let current = service.git_get_current_branch(repo_path)?;
+
+    assert_eq!(branches, expected);
+    assert_eq!(current.name.as_deref(), Some("main"));
     Ok(())
 }
 
@@ -161,7 +190,7 @@ fn git_create_worktree_rejects_empty_path() {
     assert!(error.to_string().contains("worktree path cannot be empty"));
 
     let task_state = task_state.lock().expect("task lock poisoned");
-    assert_eq!(task_state.ensure_calls, vec![repo_path.to_string()]);
+    assert!(task_state.ensure_calls.is_empty());
     drop(task_state);
 
     let git_state = git_state.lock().expect("git lock poisoned");

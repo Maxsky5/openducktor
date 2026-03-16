@@ -649,7 +649,7 @@ fn resolve_authorized_working_dir(
 ) -> Result<String, HeadlessCommandError> {
     state
         .service
-        .ensure_repo_authorized(repo_path)
+        .resolve_authorized_repo_path(repo_path)
         .map_err(request_error)?;
     resolve_working_dir(repo_path, working_dir).map_err(request_error)
 }

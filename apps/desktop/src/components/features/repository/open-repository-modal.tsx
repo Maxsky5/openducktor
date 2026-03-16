@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { errorMessage } from "@/lib/errors";
 import { pickRepositoryDirectory } from "@/lib/repo-directory";
 import { workspaceLabelFromPath } from "@/lib/workspace-label";
 import { useWorkspaceState } from "@/state";
@@ -47,7 +48,7 @@ export function OpenRepositoryModal({
       await addWorkspace(path);
       onOpenChange(false);
     } catch (reason) {
-      setError((reason as Error).message);
+      setError(errorMessage(reason));
     } finally {
       setIsPickingRepo(false);
     }
@@ -61,7 +62,7 @@ export function OpenRepositoryModal({
       }
       onOpenChange(false);
     } catch (reason) {
-      setError((reason as Error).message);
+      setError(errorMessage(reason));
     }
   };
 
