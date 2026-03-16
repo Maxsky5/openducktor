@@ -1,22 +1,8 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import {
-  type PointerEvent,
-  type TouchEvent,
-  type UIEvent,
-  useCallback,
-  useMemo,
-  useRef,
-  useState,
-  type WheelEvent,
-} from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
-import {
-  CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET,
-  CHAT_PROGRAMMATIC_AUTOSCROLL_TOLERANCE_PX,
-  isNearBottom,
-  useAgentChatLayout,
-} from "@/components/features/agents/agent-chat/use-agent-chat-layout";
+import { useAgentChatLayout } from "@/components/features/agents/agent-chat/use-agent-chat-layout";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -165,72 +151,12 @@ export function useAgentStudioPageModels({
     messagesContainerRef,
     composerFormRef,
     composerTextareaRef,
-    isPinnedToBottom,
-    setIsPinnedToBottom,
     todoPanelBottomOffset,
     resizeComposerTextarea,
   } = useAgentChatLayout({
     input: composer.input,
     activeSessionId: threadSession?.sessionId ?? null,
   });
-  const pendingUserScrollIntentRef = useRef(false);
-
-  const markPendingUserScrollIntent = useCallback((): void => {
-    pendingUserScrollIntentRef.current = true;
-  }, []);
-
-  const handleMessagesScroll = useCallback(
-    (event: UIEvent<HTMLDivElement>): void => {
-      const marker = event.currentTarget.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET];
-      if (typeof marker === "string") {
-        const expectedScrollTop = Number(marker);
-        delete event.currentTarget.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET];
-        if (
-          Number.isFinite(expectedScrollTop) &&
-          Math.abs(event.currentTarget.scrollTop - expectedScrollTop) <=
-            CHAT_PROGRAMMATIC_AUTOSCROLL_TOLERANCE_PX
-        ) {
-          setIsPinnedToBottom(true);
-          return;
-        }
-      }
-
-      if (isNearBottom(event.currentTarget)) {
-        pendingUserScrollIntentRef.current = false;
-        setIsPinnedToBottom(true);
-        return;
-      }
-
-      if (!pendingUserScrollIntentRef.current) {
-        return;
-      }
-
-      pendingUserScrollIntentRef.current = false;
-      setIsPinnedToBottom(false);
-    },
-    [setIsPinnedToBottom],
-  );
-
-  const handleMessagesPointerDown = useCallback(
-    (_event: PointerEvent<HTMLDivElement>): void => {
-      markPendingUserScrollIntent();
-    },
-    [markPendingUserScrollIntent],
-  );
-
-  const handleMessagesTouchMove = useCallback(
-    (_event: TouchEvent<HTMLDivElement>): void => {
-      markPendingUserScrollIntent();
-    },
-    [markPendingUserScrollIntent],
-  );
-
-  const handleMessagesWheel = useCallback(
-    (_event: WheelEvent<HTMLDivElement>): void => {
-      markPendingUserScrollIntent();
-    },
-    [markPendingUserScrollIntent],
-  );
 
   const agentStudioTaskTabsModel = useMemo(
     () =>
@@ -428,21 +354,9 @@ export function useAgentStudioPageModels({
 
   const threadScrollContext = useMemo<AgentStudioThreadScrollContext>(
     () => ({
-      isPinnedToBottom,
       messagesContainerRef,
-      onMessagesPointerDown: handleMessagesPointerDown,
-      onMessagesScroll: handleMessagesScroll,
-      onMessagesTouchMove: handleMessagesTouchMove,
-      onMessagesWheel: handleMessagesWheel,
     }),
-    [
-      handleMessagesPointerDown,
-      handleMessagesScroll,
-      handleMessagesTouchMove,
-      handleMessagesWheel,
-      isPinnedToBottom,
-      messagesContainerRef,
-    ],
+    [messagesContainerRef],
   );
 
   const agentChatThreadModel = useAgentStudioThreadModel({
