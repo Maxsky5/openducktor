@@ -85,7 +85,7 @@ export function useAgentChatWindow({
   const isUpdatingRef = useRef(false);
   const prevScrollHeightRef = useRef<number | null>(null);
   const shouldCompensateScrollRef = useRef(false);
-  const prevSessionIdRef = useRef<string | null>(activeSessionId);
+  const prevSessionIdRef = useRef<string | null>(null);
   const prevIsSessionViewLoadingRef = useRef(isSessionViewLoading);
   const prevRowCountRef = useRef(rowCount);
   const isPinnedToBottomRef = useRef(true);
@@ -334,6 +334,33 @@ export function useAgentChatWindow({
     });
   });
 
+  const syncBottomIfPinned = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    if (pendingScrollRequestRef.current?.target === "bottom" || suppressSentinelsRef.current) {
+      return;
+    }
+
+    if (isBottomAutoFollowAnimationRef.current) {
+      setIsNearBottom(true);
+      return;
+    }
+
+    if (!isPinnedToBottomRef.current) {
+      return;
+    }
+
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: "auto",
+    });
+    setIsNearBottom(true);
+    setIsNearTop(false);
+  }, [messagesContainerRef]);
+
   useEffect(() => {
     const container = messagesContainerRef.current;
     const content = messagesContentRef.current;
@@ -349,9 +376,8 @@ export function useAgentChatWindow({
 
     const syncAfterResize = () => {
       contentResizeFrameRef.current = null;
-      const nextContainer = messagesContainerRef.current;
       const nextContent = messagesContentRef.current;
-      if (!nextContainer || !nextContent) {
+      if (!nextContent) {
         return;
       }
 
@@ -362,25 +388,7 @@ export function useAgentChatWindow({
         return;
       }
 
-      if (pendingScrollRequestRef.current?.target === "bottom" || suppressSentinelsRef.current) {
-        return;
-      }
-
-      if (isBottomAutoFollowAnimationRef.current) {
-        setIsNearBottom(true);
-        return;
-      }
-
-      if (!isPinnedToBottomRef.current) {
-        return;
-      }
-
-      nextContainer.scrollTo({
-        top: nextContainer.scrollHeight,
-        behavior: "auto",
-      });
-      setIsNearBottom(true);
-      setIsNearTop(false);
+      syncBottomIfPinned();
     };
 
     const scheduleResizeSync = () => {
@@ -410,7 +418,7 @@ export function useAgentChatWindow({
         contentResizeFrameRef.current = null;
       }
     };
-  }, [messagesContainerRef, messagesContentRef]);
+  }, [messagesContainerRef, messagesContentRef, syncBottomIfPinned]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -438,25 +446,7 @@ export function useAgentChatWindow({
         return;
       }
 
-      if (pendingScrollRequestRef.current?.target === "bottom" || suppressSentinelsRef.current) {
-        return;
-      }
-
-      if (isBottomAutoFollowAnimationRef.current) {
-        setIsNearBottom(true);
-        return;
-      }
-
-      if (!isPinnedToBottomRef.current) {
-        return;
-      }
-
-      nextContainer.scrollTo({
-        top: nextContainer.scrollHeight,
-        behavior: "auto",
-      });
-      setIsNearBottom(true);
-      setIsNearTop(false);
+      syncBottomIfPinned();
     };
 
     const scheduleResizeSync = () => {
@@ -486,7 +476,7 @@ export function useAgentChatWindow({
         containerResizeFrameRef.current = null;
       }
     };
-  }, [messagesContainerRef]);
+  }, [messagesContainerRef, syncBottomIfPinned]);
 
   const shiftWindowUp = useCallback(() => {
     if (isUpdatingRef.current || rowCount === 0 || suppressSentinelsRef.current) {
@@ -628,9 +618,12 @@ export function useAgentChatWindow({
         container.scrollHeight - container.scrollTop - container.clientHeight <=
         CHAT_SCROLL_EDGE_THRESHOLD_PX;
       const nearTop = container.scrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
-      setIsNearBottom(nearBottom);
+
+      const isEffectivelyPinned = isBottomAutoFollowAnimationRef.current || nearBottom;
+
+      setIsNearBottom(isEffectivelyPinned);
       setIsNearTop(nearTop && windowRange.start === 0);
-      isPinnedToBottomRef.current = nearBottom;
+      isPinnedToBottomRef.current = isEffectivelyPinned;
     };
 
     handleScroll();

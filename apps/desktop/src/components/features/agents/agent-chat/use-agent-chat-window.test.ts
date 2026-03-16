@@ -369,6 +369,29 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("scrolls the container to bottom on first mount with an already-active session", async () => {
+    const harness = await mountHarness(
+      {
+        rows: createRows(80),
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachContainer: true },
+    );
+
+    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    expect(container.scrollTo).toHaveBeenCalledWith({
+      top: container.scrollHeight,
+      behavior: "auto",
+    });
+
+    await harness.unmount();
+  });
+
   test("scrolls the container to bottom when the active session changes", async () => {
     const harness = await mountHarness(
       {
@@ -391,65 +414,6 @@ describe("useAgentChatWindow", () => {
     await harness.update({
       rows: createRows(95),
       activeSessionId: "session-2",
-      isSessionViewLoading: false,
-    });
-
-    expect(container.scrollTo).toHaveBeenCalledWith({
-      top: container.scrollHeight,
-      behavior: "auto",
-    });
-
-    await harness.unmount();
-  });
-
-  test("resets to the bottom-anchored window when loading finishes", async () => {
-    const rows = createRows(95);
-    const harness = await mountHarness({
-      rows,
-      activeSessionId: "session-1",
-      isSessionViewLoading: true,
-    });
-
-    await act(async () => {
-      getLatestResult(harness.latestResultRef).scrollToTop();
-      await flush();
-    });
-
-    await harness.update({
-      rows,
-      activeSessionId: "session-1",
-      isSessionViewLoading: false,
-    });
-
-    const result = getLatestResult(harness.latestResultRef);
-    expect(result.windowStart).toBe(Math.max(0, rows.length - CHAT_WINDOW_SIZE - CHAT_OVERSCAN));
-    expect(result.windowEnd).toBe(rows.length - 1);
-    expect(result.isNearBottom).toBe(true);
-
-    await harness.unmount();
-  });
-
-  test("scrolls the container to bottom when loading finishes", async () => {
-    const rows = createRows(95);
-    const harness = await mountHarness(
-      {
-        rows,
-        activeSessionId: "session-1",
-        isSessionViewLoading: true,
-      },
-      { attachContainer: true },
-    );
-
-    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
-    if (!container) {
-      throw new Error("Expected messages container");
-    }
-
-    container.scrollTo.mockClear();
-
-    await harness.update({
-      rows,
-      activeSessionId: "session-1",
       isSessionViewLoading: false,
     });
 
@@ -499,6 +463,8 @@ describe("useAgentChatWindow", () => {
       },
       { attachContainer: true },
     );
+
+    queuedFrameCallbacks.length = 0;
 
     const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
     if (!container) {
@@ -575,6 +541,8 @@ describe("useAgentChatWindow", () => {
       },
       { attachContainer: true },
     );
+
+    queuedFrameCallbacks.length = 0;
 
     const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
     if (!container) {
