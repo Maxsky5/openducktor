@@ -12,10 +12,6 @@ import { useAgentChatLoadingOverlay } from "./use-agent-chat-loading-overlay";
 type OverlayHookProps = {
   sessionId: string | null;
   isSessionViewLoading: boolean;
-  hasRenderableSessionRows: boolean;
-  hasSessionHistory: boolean;
-  isPreparingVirtualization: boolean;
-  isJumpingToLatest: boolean;
 };
 
 const flush = async (): Promise<void> => {
@@ -24,7 +20,7 @@ const flush = async (): Promise<void> => {
 };
 
 describe("useAgentChatLoadingOverlay", () => {
-  test("keeps the overlay visible through the full session-display pipeline", async () => {
+  test("keeps the overlay visible until session loading settles", async () => {
     const latestVisibleRef: { current: boolean | null } = { current: null };
 
     const Harness = (props: OverlayHookProps): null => {
@@ -38,10 +34,6 @@ describe("useAgentChatLoadingOverlay", () => {
         createElement(Harness, {
           sessionId: "session-1",
           isSessionViewLoading: true,
-          hasRenderableSessionRows: false,
-          hasSessionHistory: false,
-          isPreparingVirtualization: false,
-          isJumpingToLatest: false,
         }),
       );
       await flush();
@@ -54,42 +46,6 @@ describe("useAgentChatLoadingOverlay", () => {
         createElement(Harness, {
           sessionId: "session-1",
           isSessionViewLoading: false,
-          hasRenderableSessionRows: false,
-          hasSessionHistory: false,
-          isPreparingVirtualization: true,
-          isJumpingToLatest: false,
-        }),
-      );
-      await flush();
-    });
-
-    expect(latestVisibleRef.current).toBe(true);
-
-    await act(async () => {
-      renderer?.update(
-        createElement(Harness, {
-          sessionId: "session-1",
-          isSessionViewLoading: false,
-          hasRenderableSessionRows: false,
-          hasSessionHistory: false,
-          isPreparingVirtualization: false,
-          isJumpingToLatest: true,
-        }),
-      );
-      await flush();
-    });
-
-    expect(latestVisibleRef.current).toBe(true);
-
-    await act(async () => {
-      renderer?.update(
-        createElement(Harness, {
-          sessionId: "session-1",
-          isSessionViewLoading: false,
-          hasRenderableSessionRows: true,
-          hasSessionHistory: true,
-          isPreparingVirtualization: false,
-          isJumpingToLatest: false,
         }),
       );
       await flush();
@@ -103,7 +59,7 @@ describe("useAgentChatLoadingOverlay", () => {
     });
   });
 
-  test("does not re-show the overlay for later non-initial same-session jumps", async () => {
+  test("does not re-show the overlay for same-session steady state updates", async () => {
     const latestVisibleRef: { current: boolean | null } = { current: null };
 
     const Harness = (props: OverlayHookProps): null => {
@@ -117,10 +73,6 @@ describe("useAgentChatLoadingOverlay", () => {
         createElement(Harness, {
           sessionId: "session-1",
           isSessionViewLoading: false,
-          hasRenderableSessionRows: true,
-          hasSessionHistory: true,
-          isPreparingVirtualization: false,
-          isJumpingToLatest: false,
         }),
       );
       await flush();
@@ -133,10 +85,6 @@ describe("useAgentChatLoadingOverlay", () => {
         createElement(Harness, {
           sessionId: "session-1",
           isSessionViewLoading: false,
-          hasRenderableSessionRows: true,
-          hasSessionHistory: true,
-          isPreparingVirtualization: false,
-          isJumpingToLatest: true,
         }),
       );
       await flush();
@@ -164,10 +112,6 @@ describe("useAgentChatLoadingOverlay", () => {
         createElement(Harness, {
           sessionId: "session-1",
           isSessionViewLoading: false,
-          hasRenderableSessionRows: true,
-          hasSessionHistory: true,
-          isPreparingVirtualization: false,
-          isJumpingToLatest: false,
         }),
       );
       await flush();
@@ -180,63 +124,24 @@ describe("useAgentChatLoadingOverlay", () => {
         createElement(Harness, {
           sessionId: "session-2",
           isSessionViewLoading: true,
-          hasRenderableSessionRows: false,
-          hasSessionHistory: false,
-          isPreparingVirtualization: false,
-          isJumpingToLatest: false,
         }),
       );
       await flush();
     });
 
     expect(latestVisibleRef.current).toBe(true);
-
-    await act(async () => {
-      renderer?.unmount();
-      await flush();
-    });
-  });
-
-  test("shows the overlay immediately when the selected session changes before rows are ready", async () => {
-    const latestVisibleRef: { current: boolean | null } = { current: null };
-
-    const Harness = (props: OverlayHookProps): null => {
-      latestVisibleRef.current = useAgentChatLoadingOverlay(props);
-      return null;
-    };
-
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
-    await act(async () => {
-      renderer = TestRenderer.create(
-        createElement(Harness, {
-          sessionId: "session-1",
-          isSessionViewLoading: false,
-          hasRenderableSessionRows: true,
-          hasSessionHistory: true,
-          isPreparingVirtualization: false,
-          isJumpingToLatest: false,
-        }),
-      );
-      await flush();
-    });
-
-    expect(latestVisibleRef.current).toBe(false);
 
     await act(async () => {
       renderer?.update(
         createElement(Harness, {
           sessionId: "session-2",
           isSessionViewLoading: false,
-          hasRenderableSessionRows: false,
-          hasSessionHistory: false,
-          isPreparingVirtualization: false,
-          isJumpingToLatest: false,
         }),
       );
       await flush();
     });
 
-    expect(latestVisibleRef.current).toBe(true);
+    expect(latestVisibleRef.current).toBe(false);
 
     await act(async () => {
       renderer?.unmount();

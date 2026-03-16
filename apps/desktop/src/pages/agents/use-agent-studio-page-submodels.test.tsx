@@ -47,12 +47,7 @@ const createHookArgs = (showThinkingMessages = false): HookArgs => ({
     todoPanelBottomOffset: 0,
   },
   scroll: {
-    isPinnedToBottom: true,
     messagesContainerRef: createRef<HTMLDivElement>(),
-    onMessagesPointerDown: () => {},
-    onMessagesScroll: () => {},
-    onMessagesTouchMove: () => {},
-    onMessagesWheel: () => {},
   },
 });
 

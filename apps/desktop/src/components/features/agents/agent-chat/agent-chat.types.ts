@@ -1,12 +1,6 @@
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import type { LucideIcon } from "lucide-react";
-import type {
-  PointerEventHandler,
-  RefObject,
-  TouchEventHandler,
-  UIEvent,
-  WheelEventHandler,
-} from "react";
+import type { RefObject } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
@@ -41,12 +35,7 @@ export type AgentChatThreadModel = {
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
   todoPanelBottomOffset: number;
-  isPinnedToBottom: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
-  onMessagesPointerDown: PointerEventHandler<HTMLDivElement>;
-  onMessagesScroll: (event: UIEvent<HTMLDivElement>) => void;
-  onMessagesTouchMove: TouchEventHandler<HTMLDivElement>;
-  onMessagesWheel: WheelEventHandler<HTMLDivElement>;
 };
 
 export type AgentChatComposerModel = {

@@ -1,18 +1,22 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import {
-  CHAT_AUTOSCROLL_THRESHOLD_PX,
-  CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET,
   COMPOSER_TEXTAREA_MAX_HEIGHT_PX,
   COMPOSER_TEXTAREA_MIN_HEIGHT_PX,
   computeComposerTextareaLayout,
   computeTodoPanelBottomOffset,
-  isNearBottom,
   resizeComposerTextareaElement,
-  scrollMessagesContainerToBottom,
   useAgentChatLayout,
 } from "./use-agent-chat-layout";
+
+type LayoutHookState = {
+  messagesContainerRef: { current: HTMLDivElement | null };
+  composerFormRef: { current: HTMLFormElement | null };
+  composerTextareaRef: { current: HTMLTextAreaElement | null };
+  todoPanelBottomOffset: number;
+  resizeComposerTextarea: () => void;
+};
 
 (
   globalThis as typeof globalThis & {
@@ -25,24 +29,6 @@ const originalResizeObserver = globalThis.ResizeObserver;
 describe("use-agent-chat-layout helpers", () => {
   afterEach(() => {
     globalThis.ResizeObserver = originalResizeObserver;
-  });
-
-  test("detects pinned-to-bottom with threshold", () => {
-    const element = {
-      scrollHeight: 1_000,
-      scrollTop: 1_000 - 400 - CHAT_AUTOSCROLL_THRESHOLD_PX + 1,
-      clientHeight: 400,
-    };
-    expect(isNearBottom(element)).toBe(true);
-  });
-
-  test("marks not-pinned when distance exceeds threshold", () => {
-    const element = {
-      scrollHeight: 1_000,
-      scrollTop: 1_000 - 400 - CHAT_AUTOSCROLL_THRESHOLD_PX - 10,
-      clientHeight: 400,
-    };
-    expect(isNearBottom(element)).toBe(false);
   });
 
   test("clamps textarea layout to minimum height", () => {
@@ -62,32 +48,6 @@ describe("use-agent-chat-layout helpers", () => {
   test("anchors todo panel with a fixed offset from the thread bottom", () => {
     expect(computeTodoPanelBottomOffset(40)).toBe(12);
     expect(computeTodoPanelBottomOffset(180)).toBe(12);
-  });
-
-  test("scrollMessagesContainerToBottom repins the latest rows after layout changes", () => {
-    const container = {
-      dataset: {},
-      clientHeight: 320,
-      scrollHeight: 960,
-      scrollTop: 40,
-    } as unknown as HTMLDivElement;
-    const scrollTo = mock((first?: ScrollToOptions | number, second?: number) => {
-      if (typeof first === "number") {
-        container.scrollTop = second ?? container.scrollTop;
-        return;
-      }
-      container.scrollTop = first?.top ?? container.scrollTop;
-    });
-    container.scrollTo = scrollTo;
-
-    scrollMessagesContainerToBottom(container);
-
-    expect(scrollTo).toHaveBeenCalledWith({
-      top: 640,
-      behavior: "auto",
-    });
-    expect(container.scrollTop).toBe(640);
-    expect(container.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET]).toBe("640");
   });
 
   test("resizeComposerTextareaElement avoids transient collapse when the target height is unchanged", () => {
@@ -124,48 +84,50 @@ describe("use-agent-chat-layout helpers", () => {
     expect(styleState.overflowY).toBe("hidden");
   });
 
-  test("repins when active session changes", async () => {
-    let latest: unknown = null;
+  test("returns stable refs and offset state for the layout hook", async () => {
+    const latestRef: { current: LayoutHookState | null } = { current: null };
 
-    const Harness = ({ activeSessionId }: { activeSessionId: string | null }) => {
-      latest = useAgentChatLayout({
-        input: "",
-        activeSessionId,
-      });
+    const Harness = ({
+      activeSessionId,
+      input,
+    }: {
+      activeSessionId: string | null;
+      input: string;
+    }) => {
+      latestRef.current = useAgentChatLayout({ activeSessionId, input });
       return null;
     };
 
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(createElement(Harness, { activeSessionId: "session-1" }));
+      renderer = TestRenderer.create(
+        createElement(Harness, { activeSessionId: "session-1", input: "" }),
+      );
       await Promise.resolve();
     });
 
-    await act(async () => {
-      const state = latest as ReturnType<typeof useAgentChatLayout> | null;
-      if (!state) {
-        throw new Error("Hook state unavailable");
-      }
-      state.setIsPinnedToBottom(false);
-      await Promise.resolve();
-    });
-
-    const stateAfterPinUpdate = latest as ReturnType<typeof useAgentChatLayout> | null;
-    if (!stateAfterPinUpdate) {
+    const initialState = latestRef.current;
+    if (!initialState) {
       throw new Error("Hook state unavailable");
     }
-    expect(stateAfterPinUpdate.isPinnedToBottom).toBe(false);
+
+    expect(initialState.todoPanelBottomOffset).toBe(12);
+    expect(initialState.messagesContainerRef.current).toBeNull();
+    expect(initialState.composerFormRef.current).toBeNull();
+    expect(initialState.composerTextareaRef.current).toBeNull();
+    expect(typeof initialState.resizeComposerTextarea).toBe("function");
 
     await act(async () => {
-      renderer.update(createElement(Harness, { activeSessionId: "session-2" }));
+      renderer.update(createElement(Harness, { activeSessionId: "session-2", input: "draft" }));
       await Promise.resolve();
     });
 
-    const stateAfterSessionSwitch = latest as ReturnType<typeof useAgentChatLayout> | null;
-    if (!stateAfterSessionSwitch) {
+    const updatedState = latestRef.current;
+    if (!updatedState) {
       throw new Error("Hook state unavailable");
     }
-    expect(stateAfterSessionSwitch.isPinnedToBottom).toBe(true);
+
+    expect(updatedState.todoPanelBottomOffset).toBe(12);
 
     await act(async () => {
       renderer.unmount();

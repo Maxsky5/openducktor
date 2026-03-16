@@ -205,14 +205,13 @@ describe("useAgentStudioTaskHydration", () => {
     }
   });
 
-  test("retries task hydration after a cancelled in-flight load clears its pending state", async () => {
+  test("marks task as hydrated even when cancelled in-flight load completes successfully", async () => {
     const firstTaskLoad = createDeferred<void>();
-    const secondTaskLoad = createDeferred<void>();
     let taskOneLoadCount = 0;
     const loadAgentSessions = mock(async (taskId: string) => {
       if (taskId === "task-1") {
         taskOneLoadCount += 1;
-        return taskOneLoadCount === 1 ? firstTaskLoad.promise : secondTaskLoad.promise;
+        return firstTaskLoad.promise;
       }
     });
     const harness = createHookHarness(createBaseArgs({ loadAgentSessions }));
@@ -221,6 +220,7 @@ describe("useAgentStudioTaskHydration", () => {
       await harness.mount();
       await harness.waitFor(() => loadAgentSessions.mock.calls.length === 1);
 
+      // Switch away to task-2 — this cancels the in-flight task-1 load
       await harness.update(
         createBaseArgs({
           activeTaskId: "task-2",
@@ -229,26 +229,23 @@ describe("useAgentStudioTaskHydration", () => {
       );
       await harness.waitFor(() => loadAgentSessions.mock.calls.length === 2);
 
+      // Switch back to task-1 — the cancelled load hasn't resolved yet
       await harness.update(createBaseArgs({ loadAgentSessions }));
       expect(loadAgentSessions.mock.calls.length).toBe(2);
 
+      // Resolve the first (cancelled) load — it should still mark task-1 as hydrated
       await harness.run(async () => {
         firstTaskLoad.resolve(undefined);
         await firstTaskLoad.promise;
       });
 
-      await harness.waitFor(() => loadAgentSessions.mock.calls.length === 3);
-
-      await harness.run(async () => {
-        secondTaskLoad.resolve(undefined);
-        await secondTaskLoad.promise;
-      });
-
+      // The cancelled-but-successful load marks hydration complete — no retry needed
       await harness.waitFor((state) => state.hydratedTasksByRepoAndTask["/repo-a:task-1"] === true);
       expect(harness.getLatest().isActiveTaskHydrationFailed).toBe(false);
+      // No 3rd call needed — the cancelled load's success was recognized
+      expect(taskOneLoadCount).toBe(1);
     } finally {
       firstTaskLoad.resolve(undefined);
-      secondTaskLoad.resolve(undefined);
       await harness.unmount();
     }
   });

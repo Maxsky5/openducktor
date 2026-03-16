@@ -1,13 +1,13 @@
 import type { RefCallback } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
-const AGENT_CHAT_ROW_MOTION_DURATION_MS = 1_000;
-const AGENT_CHAT_ROW_MOTION_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
-const AGENT_CHAT_ROW_ENTRY_OFFSET_PX = 32;
+const AGENT_CHAT_ROW_MOTION_DURATION_MS = 1000;
+const AGENT_CHAT_ROW_MOTION_EASING = "linear";
 
 type UseAgentChatRowMotionInput = {
   activeSessionId: string | null;
   rowKeys: string[];
+  windowStart: number;
 };
 
 type UseAgentChatRowMotionResult = {
@@ -17,11 +17,13 @@ type UseAgentChatRowMotionResult = {
 export function useAgentChatRowMotion({
   activeSessionId,
   rowKeys,
+  windowStart,
 }: UseAgentChatRowMotionInput): UseAgentChatRowMotionResult {
   const rowElementByKeyRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const refCallbackByKeyRef = useRef<Map<string, RefCallback<HTMLDivElement>>>(new Map());
   const seenRowKeysBySessionRef = useRef<Record<string, Set<string>>>({});
   const animationByRowKeyRef = useRef<Map<string, Animation>>(new Map());
+  const previousWindowStartBySessionRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     return () => {
@@ -32,6 +34,7 @@ export function useAgentChatRowMotion({
       rowElementByKeyRef.current.clear();
       refCallbackByKeyRef.current.clear();
       seenRowKeysBySessionRef.current = {};
+      previousWindowStartBySessionRef.current = {};
     };
   }, []);
 
@@ -54,7 +57,7 @@ export function useAgentChatRowMotion({
         existingAnimation.cancel();
       }
 
-      element.style.willChange = "transform, opacity";
+      element.style.willChange = "opacity";
       const animation = element.animate(keyframes, {
         duration: AGENT_CHAT_ROW_MOTION_DURATION_MS,
         easing: AGENT_CHAT_ROW_MOTION_EASING,
@@ -99,8 +102,14 @@ export function useAgentChatRowMotion({
     const seenRowKeys = seenRowKeysBySessionRef.current[activeSessionId];
     if (!seenRowKeys) {
       seenRowKeysBySessionRef.current[activeSessionId] = new Set(rowKeys);
+      previousWindowStartBySessionRef.current[activeSessionId] = windowStart;
       return;
     }
+
+    const previousWindowStart =
+      previousWindowStartBySessionRef.current[activeSessionId] ?? windowStart;
+    const isPrependingHistory = windowStart < previousWindowStart;
+    previousWindowStartBySessionRef.current[activeSessionId] = windowStart;
 
     const activeRowKeySet = new Set(rowKeys);
     for (const rowKey of animationByRowKeyRef.current.keys()) {
@@ -123,19 +132,13 @@ export function useAgentChatRowMotion({
       }
 
       seenRowKeys.add(rowKey);
-      if (reduceMotion) {
+      if (reduceMotion || isPrependingHistory) {
         continue;
       }
 
-      playAnimation(rowKey, element, [
-        {
-          opacity: 0,
-          transform: `translate3d(0, ${AGENT_CHAT_ROW_ENTRY_OFFSET_PX}px, 0)`,
-        },
-        { opacity: 1, transform: "translate3d(0, 0, 0)" },
-      ]);
+      playAnimation(rowKey, element, [{ opacity: 0 }, { opacity: 1 }]);
     }
-  }, [activeSessionId, playAnimation, rowKeys]);
+  }, [activeSessionId, playAnimation, rowKeys, windowStart]);
 
   return {
     registerRowElement,

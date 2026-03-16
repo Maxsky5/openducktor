@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buildMessage } from "./agent-chat-test-fixtures";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
-import type { AgentChatVirtualRow } from "./agent-chat-thread-virtualization";
+import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 
 const baseProps = {
   sessionAgentColors: {},
@@ -44,7 +44,7 @@ describe("AgentChatThreadRow", () => {
       renderToStaticMarkup(
         createElement(AgentChatThreadRow, {
           ...baseProps,
-          row: { kind: "unexpected", key: "broken" } as unknown as AgentChatVirtualRow,
+          row: { kind: "unexpected", key: "broken" } as unknown as AgentChatWindowRow,
         }),
       );
 

@@ -1,6 +1,4 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
-import type { UIEvent } from "react";
-import { CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET } from "@/components/features/agents/agent-chat/use-agent-chat-layout";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -432,38 +430,6 @@ describe("useAgentStudioPageModels", () => {
     );
     expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(true);
 
-    await harness.unmount();
-  });
-
-  test("treats mismatched marked scroll events as real user scrolls and unpins the thread", async () => {
-    const session = createSession("session-1", "external-1");
-    const harness = createHookHarness(
-      createHookArgs({
-        core: {
-          activeSession: session,
-          sessionsForTask: [session],
-        },
-      }),
-    );
-
-    await harness.mount();
-    expect(harness.getLatest().agentChatModel.thread.isPinnedToBottom).toBe(true);
-
-    await harness.run((state) => {
-      state.agentChatModel.thread.onMessagesWheel({} as never);
-      state.agentChatModel.thread.onMessagesScroll({
-        currentTarget: {
-          clientHeight: 320,
-          dataset: {
-            [CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET]: "640",
-          },
-          scrollHeight: 1_000,
-          scrollTop: 500,
-        },
-      } as unknown as UIEvent<HTMLDivElement>);
-    });
-
-    expect(harness.getLatest().agentChatModel.thread.isPinnedToBottom).toBe(false);
     await harness.unmount();
   });
 

@@ -253,12 +253,7 @@ describe("agents-page-view-model", () => {
       todoPanelCollapsed: false,
       onToggleTodoPanel,
       todoPanelBottomOffset: 12,
-      isPinnedToBottom: true,
       messagesContainerRef: { current: null },
-      onMessagesPointerDown: () => {},
-      onMessagesScroll: () => {},
-      onMessagesTouchMove: () => {},
-      onMessagesWheel: () => {},
       input: "message",
       isReadOnly: false,
       readOnlyReason: null,
@@ -285,7 +280,6 @@ describe("agents-page-view-model", () => {
 
     expect(model.thread.taskSelected).toBe(false);
     expect(model.thread.showThinkingMessages).toBe(true);
-    expect(model.thread.isPinnedToBottom).toBe(true);
     expect(model.composer.contextUsage).toEqual({ totalTokens: 10, contextWindow: 100 });
 
     model.thread.onRefreshChecks();

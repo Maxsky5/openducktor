@@ -2,15 +2,12 @@ import { describe, expect, test } from "bun:test";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { buildMessage, buildModelSelection, buildSession } from "./agent-chat-test-fixtures";
 import {
-  buildAgentChatVirtualRows,
-  buildAgentChatVirtualRowsSignature,
-  buildVirtualRowLayout,
-  findVirtualWindowRange,
-  getVirtualWindowEdgeOffsets,
-  normalizeVirtualWindowRange,
-  resolveAgentChatVirtualRowGapPx,
-  resolveAgentChatVirtualRowSize,
-} from "./agent-chat-thread-virtualization";
+  buildAgentChatWindowRows,
+  CHAT_OVERSCAN,
+  CHAT_SHIFT_SIZE,
+  CHAT_WINDOW_SIZE,
+  getAgentChatWindowRowsKey,
+} from "./agent-chat-thread-windowing";
 
 const createMessageIdentityResolver = (): ((message: AgentChatMessage) => number) => {
   const tokenByMessage = new WeakMap<AgentChatMessage, number>();
@@ -29,8 +26,14 @@ const createMessageIdentityResolver = (): ((message: AgentChatMessage) => number
   };
 };
 
-describe("agent-chat-thread virtualization helpers", () => {
-  test("buildAgentChatVirtualRows keeps message order without synthetic draft rows", () => {
+describe("agent-chat-thread windowing helpers", () => {
+  test("exports the native windowing constants", () => {
+    expect(CHAT_WINDOW_SIZE).toBe(50);
+    expect(CHAT_OVERSCAN).toBe(10);
+    expect(CHAT_SHIFT_SIZE).toBe(20);
+  });
+
+  test("buildAgentChatWindowRows keeps message order without synthetic draft rows", () => {
     const session = buildSession({
       messages: [
         buildMessage("assistant", "Done", {
@@ -48,7 +51,7 @@ describe("agent-chat-thread virtualization helpers", () => {
       pendingQuestions: [],
     });
 
-    const rows = buildAgentChatVirtualRows(session, { showThinkingMessages: true });
+    const rows = buildAgentChatWindowRows(session, { showThinkingMessages: true });
 
     expect(rows.map((row) => row.key)).toEqual([
       "session-1:assistant-1:duration",
@@ -58,7 +61,7 @@ describe("agent-chat-thread virtualization helpers", () => {
     expect(rows.map((row) => row.kind)).toEqual(["turn_duration", "message", "message"]);
   });
 
-  test("buildAgentChatVirtualRows keeps row keys distinct across sessions with repeated message ids", () => {
+  test("buildAgentChatWindowRows keeps row keys distinct across sessions with repeated message ids", () => {
     const firstSession = buildSession({
       runtimeKind: "opencode",
       sessionId: "session-a",
@@ -72,10 +75,10 @@ describe("agent-chat-thread virtualization helpers", () => {
       pendingQuestions: [],
     });
 
-    const firstKeys = buildAgentChatVirtualRows(firstSession, { showThinkingMessages: true }).map(
+    const firstKeys = buildAgentChatWindowRows(firstSession, { showThinkingMessages: true }).map(
       (row) => row.key,
     );
-    const secondKeys = buildAgentChatVirtualRows(secondSession, { showThinkingMessages: true }).map(
+    const secondKeys = buildAgentChatWindowRows(secondSession, { showThinkingMessages: true }).map(
       (row) => row.key,
     );
 
@@ -84,7 +87,7 @@ describe("agent-chat-thread virtualization helpers", () => {
     expect(firstKeys).not.toContain("session-b:message-1");
   });
 
-  test("buildAgentChatVirtualRowsSignature stays stable for non-row session updates", () => {
+  test("getAgentChatWindowRowsKey stays stable for non-row session updates", () => {
     const messages = [buildMessage("assistant", "Message 1", { id: "message-1" })];
     const baseSession = buildSession({
       messages,
@@ -98,12 +101,12 @@ describe("agent-chat-thread virtualization helpers", () => {
     };
     const resolveMessageIdentityToken = createMessageIdentityResolver();
 
-    const baselineSignature = buildAgentChatVirtualRowsSignature(
+    const baselineSignature = getAgentChatWindowRowsKey(
       baseSession,
       true,
       resolveMessageIdentityToken,
     );
-    const updatedSignature = buildAgentChatVirtualRowsSignature(
+    const updatedSignature = getAgentChatWindowRowsKey(
       updatedSession,
       true,
       resolveMessageIdentityToken,
@@ -112,47 +115,31 @@ describe("agent-chat-thread virtualization helpers", () => {
     expect(updatedSignature).toBe(baselineSignature);
   });
 
-  test("buildAgentChatVirtualRowsSignature changes when messages are appended in place", () => {
+  test("getAgentChatWindowRowsKey changes when messages are appended in place", () => {
     const messages = [buildMessage("assistant", "Message 1", { id: "message-1" })];
     const session = buildSession({ messages });
     const resolveMessageIdentityToken = createMessageIdentityResolver();
 
-    const previousSignature = buildAgentChatVirtualRowsSignature(
-      session,
-      true,
-      resolveMessageIdentityToken,
-    );
+    const previousSignature = getAgentChatWindowRowsKey(session, true, resolveMessageIdentityToken);
     messages.push(buildMessage("assistant", "Message 2", { id: "message-2" }));
-    const nextSignature = buildAgentChatVirtualRowsSignature(
-      session,
-      true,
-      resolveMessageIdentityToken,
-    );
+    const nextSignature = getAgentChatWindowRowsKey(session, true, resolveMessageIdentityToken);
 
     expect(nextSignature).not.toBe(previousSignature);
   });
 
-  test("buildAgentChatVirtualRowsSignature changes when a message object is replaced in place", () => {
+  test("getAgentChatWindowRowsKey changes when a message object is replaced in place", () => {
     const messages = [buildMessage("assistant", "Message 1", { id: "message-1" })];
     const session = buildSession({ messages });
     const resolveMessageIdentityToken = createMessageIdentityResolver();
 
-    const previousSignature = buildAgentChatVirtualRowsSignature(
-      session,
-      true,
-      resolveMessageIdentityToken,
-    );
+    const previousSignature = getAgentChatWindowRowsKey(session, true, resolveMessageIdentityToken);
     messages[0] = buildMessage("assistant", "Message 1 updated", { id: "message-1" });
-    const nextSignature = buildAgentChatVirtualRowsSignature(
-      session,
-      true,
-      resolveMessageIdentityToken,
-    );
+    const nextSignature = getAgentChatWindowRowsKey(session, true, resolveMessageIdentityToken);
 
     expect(nextSignature).not.toBe(previousSignature);
   });
 
-  test("buildAgentChatVirtualRowsSignature changes when assistant duration mutates in place", () => {
+  test("getAgentChatWindowRowsKey changes when assistant duration mutates in place", () => {
     const messages = [
       buildMessage("assistant", "Message 1", {
         id: "message-1",
@@ -166,31 +153,20 @@ describe("agent-chat-thread virtualization helpers", () => {
     ];
     const session = buildSession({ messages });
     const resolveMessageIdentityToken = createMessageIdentityResolver();
-    const previousSignature = buildAgentChatVirtualRowsSignature(
-      session,
-      true,
-      resolveMessageIdentityToken,
-    );
+    const previousSignature = getAgentChatWindowRowsKey(session, true, resolveMessageIdentityToken);
 
     const assistantMessage = messages[0];
-    if (!assistantMessage) {
-      throw new Error("Expected assistant message");
-    }
-    expect(assistantMessage.meta?.kind).toBe("assistant");
-    if (assistantMessage.meta?.kind !== "assistant") {
+    if (!assistantMessage || assistantMessage.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message metadata");
     }
+
     assistantMessage.meta.durationMs = 2_400;
 
-    const nextSignature = buildAgentChatVirtualRowsSignature(
-      session,
-      true,
-      resolveMessageIdentityToken,
-    );
+    const nextSignature = getAgentChatWindowRowsKey(session, true, resolveMessageIdentityToken);
     expect(nextSignature).not.toBe(previousSignature);
   });
 
-  test("buildAgentChatVirtualRows omits reasoning rows when showThinkingMessages is false", () => {
+  test("buildAgentChatWindowRows omits reasoning rows when showThinkingMessages is false", () => {
     const session = buildSession({
       messages: [
         buildMessage("user", "Question", { id: "user-1" }),
@@ -200,8 +176,8 @@ describe("agent-chat-thread virtualization helpers", () => {
       pendingQuestions: [],
     });
 
-    const visibleRows = buildAgentChatVirtualRows(session, { showThinkingMessages: true });
-    const hiddenRows = buildAgentChatVirtualRows(session, { showThinkingMessages: false });
+    const visibleRows = buildAgentChatWindowRows(session, { showThinkingMessages: true });
+    const hiddenRows = buildAgentChatWindowRows(session, { showThinkingMessages: false });
 
     expect(visibleRows.map((row) => row.key)).toEqual([
       "session-1:user-1",
@@ -219,7 +195,7 @@ describe("agent-chat-thread virtualization helpers", () => {
     ).toBe(false);
   });
 
-  test("buildAgentChatVirtualRowsSignature changes when showThinkingMessages flips", () => {
+  test("getAgentChatWindowRowsKey changes when showThinkingMessages flips", () => {
     const session = buildSession({
       messages: [
         buildMessage("thinking", "Reasoning", { id: "thinking-1" }),
@@ -228,21 +204,13 @@ describe("agent-chat-thread virtualization helpers", () => {
     });
     const resolveMessageIdentityToken = createMessageIdentityResolver();
 
-    const visibleSignature = buildAgentChatVirtualRowsSignature(
-      session,
-      true,
-      resolveMessageIdentityToken,
-    );
-    const hiddenSignature = buildAgentChatVirtualRowsSignature(
-      session,
-      false,
-      resolveMessageIdentityToken,
-    );
+    const visibleSignature = getAgentChatWindowRowsKey(session, true, resolveMessageIdentityToken);
+    const hiddenSignature = getAgentChatWindowRowsKey(session, false, resolveMessageIdentityToken);
 
     expect(hiddenSignature).not.toBe(visibleSignature);
   });
 
-  test("buildAgentChatVirtualRows does not append synthetic thinking rows", () => {
+  test("buildAgentChatWindowRows does not append synthetic thinking rows", () => {
     const session = buildSession({
       messages: [],
       draftAssistantText: "",
@@ -250,19 +218,12 @@ describe("agent-chat-thread virtualization helpers", () => {
       status: "running",
     });
 
-    const rows = buildAgentChatVirtualRows(session, { showThinkingMessages: true });
+    const rows = buildAgentChatWindowRows(session, { showThinkingMessages: true });
 
     expect(rows).toEqual([]);
   });
 
-  test("row size helpers include the virtual gap for every row except the last", () => {
-    expect(resolveAgentChatVirtualRowGapPx(0, 3)).toBe(4);
-    expect(resolveAgentChatVirtualRowGapPx(2, 3)).toBe(0);
-    expect(resolveAgentChatVirtualRowSize({ index: 0, rowCount: 3, rowHeight: 80 })).toBe(84);
-    expect(resolveAgentChatVirtualRowSize({ index: 2, rowCount: 3, rowHeight: 80 })).toBe(80);
-  });
-
-  test("buildAgentChatVirtualRows skips turn duration rows for non-final assistant messages", () => {
+  test("buildAgentChatWindowRows skips turn duration rows for non-final assistant messages", () => {
     const session = buildSession({
       messages: [
         buildMessage("assistant", "Working", {
@@ -279,53 +240,9 @@ describe("agent-chat-thread virtualization helpers", () => {
       pendingQuestions: [],
     });
 
-    const rows = buildAgentChatVirtualRows(session, { showThinkingMessages: true });
+    const rows = buildAgentChatWindowRows(session, { showThinkingMessages: true });
 
     expect(rows.map((row) => row.kind)).toEqual(["message"]);
     expect(rows[0]?.key).toBe("session-1:assistant-live");
-  });
-
-  test("range and spacer helpers compute visible window boundaries", () => {
-    const layout = buildVirtualRowLayout({
-      itemHeights: [100, 120, 140, 160],
-      gapPx: 4,
-    });
-
-    const range = findVirtualWindowRange({
-      itemOffsets: layout.itemOffsets,
-      itemHeights: [100, 120, 140, 160],
-      totalHeight: layout.totalHeight,
-      viewportStart: 110,
-      viewportEnd: 280,
-    });
-
-    expect(range).toEqual({ startIndex: 1, endIndex: 2 });
-
-    const spacers = getVirtualWindowEdgeOffsets({
-      range,
-      itemOffsets: layout.itemOffsets,
-      itemHeights: [100, 120, 140, 160],
-      totalHeight: layout.totalHeight,
-    });
-
-    expect(spacers).toEqual({
-      topSpacerHeight: 104,
-      bottomSpacerHeight: 164,
-    });
-  });
-
-  test("normalizeVirtualWindowRange clamps stale ranges to valid row bounds", () => {
-    expect(normalizeVirtualWindowRange({ startIndex: 500, endIndex: 520 }, 45)).toEqual({
-      startIndex: 44,
-      endIndex: 44,
-    });
-    expect(normalizeVirtualWindowRange({ startIndex: 0, endIndex: -1 }, 10)).toEqual({
-      startIndex: 0,
-      endIndex: 0,
-    });
-    expect(normalizeVirtualWindowRange({ startIndex: 0, endIndex: -1 }, 0)).toEqual({
-      startIndex: 0,
-      endIndex: -1,
-    });
   });
 });

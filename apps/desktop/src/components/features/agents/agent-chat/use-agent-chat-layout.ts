@@ -1,19 +1,7 @@
-import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-export const CHAT_AUTOSCROLL_THRESHOLD_PX = 48;
 export const COMPOSER_TEXTAREA_MIN_HEIGHT_PX = 44;
 export const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 220;
-export const CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET = "odtAutoscrolling";
-export const CHAT_PROGRAMMATIC_AUTOSCROLL_TOLERANCE_PX = 1;
-
-type ScrollableElement = Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">;
-
-export const isNearBottom = (element: ScrollableElement): boolean => {
-  return (
-    element.scrollHeight - element.scrollTop - element.clientHeight <= CHAT_AUTOSCROLL_THRESHOLD_PX
-  );
-};
 
 export const computeComposerTextareaLayout = (
   scrollHeight: number,
@@ -63,71 +51,26 @@ export const computeTodoPanelBottomOffset = (_composerFormHeight: number): numbe
   return 12;
 };
 
-export const scrollMessagesContainerToBottom = (
-  container: Pick<
-    HTMLDivElement,
-    "dataset" | "scrollHeight" | "clientHeight" | "scrollTop" | "scrollTo"
-  > | null,
-): void => {
-  if (!container) {
-    return;
-  }
-
-  const nextTop = Math.max(0, container.scrollHeight - container.clientHeight);
-  container.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET] = String(nextTop);
-  container.scrollTo({
-    top: nextTop,
-    behavior: "auto",
-  });
-};
-
-const adjustMessagesContainerScrollBy = (
-  container: Pick<
-    HTMLDivElement,
-    "dataset" | "scrollHeight" | "clientHeight" | "scrollTop" | "scrollTo"
-  > | null,
-  deltaPx: number,
-): void => {
-  if (!container || !Number.isFinite(deltaPx) || deltaPx === 0) {
-    return;
-  }
-
-  const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
-  const nextTop = Math.min(Math.max(container.scrollTop + deltaPx, 0), maxScrollTop);
-  container.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET] = String(nextTop);
-  container.scrollTo({
-    top: nextTop,
-    behavior: "auto",
-  });
-};
-
 type UseAgentChatLayoutInput = {
   input: string;
   activeSessionId: string | null;
 };
 
 type UseAgentChatLayoutResult = {
-  messagesContainerRef: RefObject<HTMLDivElement | null>;
-  composerFormRef: RefObject<HTMLFormElement | null>;
-  composerTextareaRef: RefObject<HTMLTextAreaElement | null>;
-  isPinnedToBottom: boolean;
-  setIsPinnedToBottom: Dispatch<SetStateAction<boolean>>;
+  messagesContainerRef: React.RefObject<HTMLDivElement | null>;
+  composerFormRef: React.RefObject<HTMLFormElement | null>;
+  composerTextareaRef: React.RefObject<HTMLTextAreaElement | null>;
   todoPanelBottomOffset: number;
   resizeComposerTextarea: () => void;
 };
 
 export const useAgentChatLayout = ({
   input,
-  activeSessionId,
+  activeSessionId: _activeSessionId,
 }: UseAgentChatLayoutInput): UseAgentChatLayoutResult => {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const previousSessionIdRef = useRef<string | null>(activeSessionId);
-  const previousComposerFormHeightRef = useRef<number | null>(null);
-  const shouldRepinAfterComposerResizeRef = useRef(false);
-  const composerRepinRafRef = useRef<number | null>(null);
-  const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
   const [composerFormHeight, setComposerFormHeight] = useState(0);
 
   const resizeComposerTextarea = useCallback((): void => {
@@ -135,25 +78,9 @@ export const useAgentChatLayout = ({
     if (!textarea) {
       return;
     }
-    const previousTextareaHeight = readComposerTextareaHeight(textarea);
-    shouldRepinAfterComposerResizeRef.current = isPinnedToBottom;
-    const resizeResult = resizeComposerTextareaElement(textarea);
-    const nextTextareaHeight = readComposerTextareaHeight(textarea);
-    if (
-      isPinnedToBottom &&
-      (Math.abs(nextTextareaHeight - previousTextareaHeight) > 0.5 ||
-        resizeResult.overflowY === "auto") &&
-      typeof window !== "undefined"
-    ) {
-      if (composerRepinRafRef.current !== null) {
-        window.cancelAnimationFrame(composerRepinRafRef.current);
-      }
-      composerRepinRafRef.current = window.requestAnimationFrame(() => {
-        composerRepinRafRef.current = null;
-        scrollMessagesContainerToBottom(messagesContainerRef.current);
-      });
-    }
-  }, [isPinnedToBottom]);
+
+    resizeComposerTextareaElement(textarea);
+  }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Input string is an explicit resize trigger.
   useLayoutEffect(() => {
@@ -185,55 +112,10 @@ export const useAgentChatLayout = ({
     };
   }, []);
 
-  useLayoutEffect(() => {
-    const previousComposerFormHeight = previousComposerFormHeightRef.current;
-    previousComposerFormHeightRef.current = composerFormHeight;
-    if (previousComposerFormHeight === null || previousComposerFormHeight === composerFormHeight) {
-      return;
-    }
-
-    const shouldRepinAfterComposerResize = shouldRepinAfterComposerResizeRef.current;
-    shouldRepinAfterComposerResizeRef.current = false;
-    if (!shouldRepinAfterComposerResize || typeof window === "undefined") {
-      return;
-    }
-
-    if (composerRepinRafRef.current !== null) {
-      window.cancelAnimationFrame(composerRepinRafRef.current);
-      composerRepinRafRef.current = null;
-    }
-
-    const composerHeightDelta = composerFormHeight - previousComposerFormHeight;
-    adjustMessagesContainerScrollBy(messagesContainerRef.current, composerHeightDelta);
-  }, [composerFormHeight]);
-
-  useEffect(() => {
-    if (previousSessionIdRef.current === activeSessionId) {
-      return;
-    }
-    previousSessionIdRef.current = activeSessionId;
-    shouldRepinAfterComposerResizeRef.current = false;
-    if (composerRepinRafRef.current !== null && typeof window !== "undefined") {
-      window.cancelAnimationFrame(composerRepinRafRef.current);
-      composerRepinRafRef.current = null;
-    }
-    setIsPinnedToBottom(true);
-  }, [activeSessionId]);
-
-  useEffect(() => {
-    return () => {
-      if (composerRepinRafRef.current !== null && typeof window !== "undefined") {
-        window.cancelAnimationFrame(composerRepinRafRef.current);
-      }
-    };
-  }, []);
-
   return {
     messagesContainerRef,
     composerFormRef,
     composerTextareaRef,
-    isPinnedToBottom,
-    setIsPinnedToBottom,
     todoPanelBottomOffset: computeTodoPanelBottomOffset(composerFormHeight),
     resizeComposerTextarea,
   };
