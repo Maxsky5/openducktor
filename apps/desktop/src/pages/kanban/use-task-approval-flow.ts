@@ -15,7 +15,7 @@ import {
   loadSpecDocumentFromQuery,
 } from "@/state/queries/documents";
 import { loadTaskApprovalContextFromQuery } from "@/state/queries/task-approval";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { TaskApprovalModalModel } from "./kanban-page-model-types";
 
 type ApprovalState = {
@@ -37,7 +37,7 @@ type UseTaskApprovalFlowArgs = {
   activeRepo: string | null;
   tasks: TaskCard[];
   sessions: AgentSessionState[];
-  loadAgentSessions: (taskId: string) => Promise<void>;
+  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   forkAgentSession: (input: { parentSessionId: string }) => Promise<string>;
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
   refreshTasks: () => Promise<void>;
@@ -168,50 +168,62 @@ export function useTaskApprovalFlow({
 
   const waitForLoadedParentSession = useCallback(
     async (taskId: string, sessionId: string): Promise<AgentSessionState> => {
-      await loadAgentSessions(taskId);
+      await loadAgentSessions(taskId, {
+        hydrateHistoryForSessionId: sessionId,
+      });
       for (let attempt = 0; attempt < 20; attempt += 1) {
         const parentSession = sessionsRef.current.find((entry) => entry.sessionId === sessionId);
-        if (parentSession) {
+        if (
+          parentSession &&
+          parentSession.runtimeEndpoint.trim().length > 0 &&
+          parentSession.workingDirectory.trim().length > 0
+        ) {
           return parentSession;
         }
         await delay(50);
       }
-      throw new Error("Failed to load the parent Builder session for pull request drafting.");
+      throw new Error("Failed to reconnect the parent Builder session for pull request drafting.");
     },
     [loadAgentSessions],
   );
 
-  const waitForForkedAssistantReply = useCallback(async (sessionId: string): Promise<string> => {
-    const baselineAssistantCount =
-      sessionsRef.current
-        .find((entry) => entry.sessionId === sessionId)
-        ?.messages.filter((message) => message.role === "assistant").length ?? 0;
+  const waitForForkedAssistantReply = useCallback(
+    async (sessionId: string, baselineAssistantCount: number): Promise<string> => {
+      const isSettledSessionStatus = (status: AgentSessionState["status"]): boolean =>
+        status === "idle" || status === "stopped";
 
-    for (let attempt = 0; attempt < 240; attempt += 1) {
-      const session = sessionsRef.current.find((entry) => entry.sessionId === sessionId);
-      if (!session) {
-        throw new Error(
-          "Forked Builder session disappeared before the pull request draft completed.",
+      for (let attempt = 0; attempt < 240; attempt += 1) {
+        const session = sessionsRef.current.find((entry) => entry.sessionId === sessionId);
+        if (!session) {
+          throw new Error(
+            "Forked Builder session disappeared before the pull request draft completed.",
+          );
+        }
+        if (session.status === "error") {
+          throw new Error(
+            "The forked Builder session failed while generating the pull request draft.",
+          );
+        }
+
+        const assistantMessages = session.messages.filter(
+          (message) => message.role === "assistant",
         );
-      }
-      if (session.status === "error") {
-        throw new Error(
-          "The forked Builder session failed while generating the pull request draft.",
-        );
-      }
+        if (
+          assistantMessages.length > baselineAssistantCount &&
+          isSettledSessionStatus(session.status)
+        ) {
+          return assistantMessages.at(-1)?.content ?? "";
+        }
 
-      const assistantMessages = session.messages.filter((message) => message.role === "assistant");
-      if (session.status === "idle" && assistantMessages.length > baselineAssistantCount) {
-        return assistantMessages.at(-1)?.content ?? "";
+        await delay(500);
       }
 
-      await delay(500);
-    }
-
-    throw new Error(
-      "Timed out while waiting for the forked Builder session to generate the pull request draft.",
-    );
-  }, []);
+      throw new Error(
+        "Timed out while waiting for the forked Builder session to generate the pull request draft.",
+      );
+    },
+    [],
+  );
 
   const createPullRequestWithAi = useCallback(
     async (currentState: ApprovalState) => {
@@ -241,6 +253,9 @@ export function useTaskApprovalFlow({
         throw new Error(`Task not found: ${currentState.taskId}`);
       }
 
+      const baselineAssistantCount = parentSession.messages.filter(
+        (message) => message.role === "assistant",
+      ).length;
       const forkedSessionId = await forkAgentSession({
         parentSessionId: parentSession.sessionId,
       });
@@ -263,7 +278,7 @@ export function useTaskApprovalFlow({
 
       await sendAgentMessage(forkedSessionId, prompt);
       const generated = parseGeneratedPullRequest(
-        await waitForForkedAssistantReply(forkedSessionId),
+        await waitForForkedAssistantReply(forkedSessionId, baselineAssistantCount),
       );
       const pullRequest = await host.taskPullRequestUpsert(
         activeRepo,

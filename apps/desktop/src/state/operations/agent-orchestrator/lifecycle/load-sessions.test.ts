@@ -118,16 +118,31 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(state["session-1"]?.status).toBe("stopped");
   });
 
-  test("does not eagerly hydrate session history without an explicit target session", async () => {
+  test("does not eagerly hydrate session history or runtime connections without an explicit target session", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
     let historyLoads = 0;
+    let runLoads = 0;
     const setSessionsById = (
       updater:
         | Record<string, AgentSessionState>
         | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
     ) => {
       state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [sessionId]: updater(current),
+      };
       sessionsRef.current = state;
     };
 
@@ -144,7 +159,7 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
-      updateSession: () => {},
+      updateSession,
       loadSessionTodos: async () => {},
       loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
@@ -152,6 +167,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const hostModule = await import("../../host");
     const originalList = hostModule.host.agentSessionsList;
+    const originalRunsList = hostModule.host.runsList;
     hostModule.host.agentSessionsList = async () => [
       {
         runtimeKind: "opencode",
@@ -166,16 +182,23 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo",
       },
     ];
+    hostModule.host.runsList = async () => {
+      runLoads += 1;
+      return [];
+    };
 
     try {
       await loadAgentSessions("task-1");
     } finally {
       hostModule.host.agentSessionsList = originalList;
+      hostModule.host.runsList = originalRunsList;
     }
 
     expect(Object.keys(state)).toContain("session-1");
     expect(historyLoads).toBe(0);
+    expect(runLoads).toBe(0);
     expect(state["session-1"]?.messages).toEqual([]);
+    expect(state["session-1"]?.runtimeEndpoint).toBe("");
   });
 
   test("hydrates requested session through its persisted runtime kind when endpoint is missing", async () => {
@@ -435,6 +458,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const hostModule = await import("../../host");
     const originalList = hostModule.host.agentSessionsList;
+    const originalRuntimeList = hostModule.host.runtimeList;
     hostModule.host.agentSessionsList = async () => [
       {
         runtimeKind: "opencode",
@@ -449,11 +473,28 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo",
       },
     ];
+    hostModule.host.runtimeList = async () => [
+      {
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        repoPath: "/tmp/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/tmp/repo",
+        runtimeRoute: {
+          type: "local_http" as const,
+          endpoint: "http://127.0.0.1:4555",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      },
+    ];
 
     try {
       await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" });
     } finally {
       hostModule.host.agentSessionsList = originalList;
+      hostModule.host.runtimeList = originalRuntimeList;
     }
 
     expect(todoLoads).toBe(1);

@@ -5,12 +5,22 @@ import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 
+let subscribedRunListener: ((payload: unknown) => void) | null = null;
+
 mock.module("@/lib/host-client", () => ({
   createHostClient: () =>
     createTauriHostClient(async () => {
       throw new Error("Tauri runtime not available. Run inside the desktop shell.");
     }),
-  subscribeRunEvents: async () => () => {},
+  hostClient: createTauriHostClient(async () => {
+    throw new Error("Tauri runtime not available. Run inside the desktop shell.");
+  }),
+  subscribeRunEvents: async (listener: (payload: unknown) => void) => {
+    subscribedRunListener = listener;
+    return () => {
+      subscribedRunListener = null;
+    };
+  },
 }));
 
 const reactActEnvironment = globalThis as typeof globalThis & {
@@ -39,6 +49,76 @@ const createDeferred = <T,>() => {
 };
 
 describe("useAppLifecycle", () => {
+  test("refreshes active repo task data when a run completion event arrives", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const refreshTaskData = mock(async (_repoPath: string) => {});
+    const setRunCompletionSignal = mock((_runId: string, _eventType) => {});
+
+    const Harness = ({ args }: { args: HookArgs }): ReactElement | null => {
+      useAppLifecycle(args);
+      return null;
+    };
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(Harness, {
+          args: {
+            activeRepo: "/repo",
+            setEvents: mock((_updater) => {}),
+            setRunCompletionSignal,
+            refreshWorkspaces: mock(async () => {}),
+            refreshBranches: mock(async () => {}),
+            refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+            refreshBeadsCheckForRepo: mock(async () => ({
+              beadsOk: true,
+              beadsPath: "/repo/.beads",
+              beadsError: null,
+            })),
+            refreshRepoRuntimeHealthForRepo: mock(async () => ({})),
+            runtimeKinds: ["opencode"],
+            refreshTaskData,
+            clearTaskData: mock(() => {}),
+            clearBranchData: mock(() => {}),
+            clearActiveBeadsCheck: mock(() => {}),
+            clearActiveRepoRuntimeHealth: mock(() => {}),
+            setIsLoadingTasks: mock((_value: boolean) => {}),
+            setIsLoadingChecks: mock((_value: boolean) => {}),
+            hasRuntimeCheck: mock(() => true),
+            hasCachedBeadsCheck: mock((_repoPath: string) => true),
+            hasCachedRepoRuntimeHealth: mock((_repoPath: string, _runtimeKinds) => true),
+          } satisfies HookArgs,
+        }),
+      );
+    });
+    await flush();
+
+    refreshTaskData.mockClear();
+    if (!subscribedRunListener) {
+      throw new Error("Expected run event listener to be registered");
+    }
+
+    await act(async () => {
+      subscribedRunListener?.({
+        type: "run_finished",
+        runId: "run-1",
+        message: "done",
+        timestamp: "2026-03-15T10:00:00.000Z",
+        success: true,
+      });
+      await flush();
+    });
+
+    expect(setRunCompletionSignal).toHaveBeenCalledWith("run-1", "run_finished");
+    expect(refreshTaskData).toHaveBeenCalledWith("/repo");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   test("clears task loading as soon as the repo task load finishes", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];

@@ -164,16 +164,26 @@ export const createLoadAgentSessions = ({
       return;
     }
 
-    const recordsToHydrate = persisted.filter((record) => {
-      if (shouldHydrateRequestedSession && record.sessionId !== requestedSessionId) {
-        return false;
-      }
-      if (!shouldHydrateRequestedSession) {
-        return false;
-      }
-      const existingSession = sessionsRef.current[record.sessionId];
-      return !existingSession || existingSession.messages.length === 0;
-    });
+    const historyHydrationSessionIds = new Set(
+      persisted
+        .filter((record) => {
+          if (shouldHydrateRequestedSession && record.sessionId !== requestedSessionId) {
+            return false;
+          }
+          if (!shouldHydrateRequestedSession) {
+            return false;
+          }
+          const existingSession = sessionsRef.current[record.sessionId];
+          return !existingSession || existingSession.messages.length === 0;
+        })
+        .map((record) => record.sessionId),
+    );
+
+    if (!shouldHydrateRequestedSession) {
+      return;
+    }
+
+    const recordsToHydrate = persisted.filter((record) => record.sessionId === requestedSessionId);
 
     if (recordsToHydrate.length === 0) {
       if (!shouldHydrateRequestedSession) {
@@ -398,16 +408,30 @@ export const createLoadAgentSessions = ({
         return;
       }
 
-      const existingSession = sessionsRef.current[record.sessionId];
+      const shouldHydrateHistory = historyHydrationSessionIds.has(record.sessionId);
       const workingDirectory = record.workingDirectory;
       const runtimeResolution = await resolveHydrationRuntime(record);
       if (!runtimeResolution.ok) {
-        throw new Error(runtimeResolution.reason);
+        if (shouldHydrateHistory) {
+          throw new Error(runtimeResolution.reason);
+        }
+        updateSession(
+          record.sessionId,
+          (current) => ({
+            ...current,
+            runtimeKind: readPersistedRuntimeKind(record),
+            runtimeEndpoint: "",
+            workingDirectory,
+            promptOverrides: repoPromptOverrides,
+          }),
+          { persist: false },
+        );
+        return;
       }
       const { runtimeKind, runtimeConnection, runtimeEndpoint } = runtimeResolution;
       const externalSessionId = record.externalSessionId ?? record.sessionId;
       const resolvedScenario = record.scenario ?? defaultScenarioForRole(record.role);
-      if (existingSession && existingSession.messages.length > 0) {
+      if (!shouldHydrateHistory) {
         if (isStaleRepoOperation()) {
           return;
         }
@@ -422,13 +446,17 @@ export const createLoadAgentSessions = ({
           }),
           { persist: false },
         );
-        warmPersistedSession(
-          record.sessionId,
-          runtimeKind,
-          runtimeConnection,
-          externalSessionId,
-          record.role,
-        );
+        if (shouldHydrateRequestedSession && record.sessionId === requestedSessionId) {
+          const requestedSession = sessionsRef.current[record.sessionId];
+          warmPersistedSession(
+            record.sessionId,
+            runtimeKind,
+            runtimeConnection,
+            externalSessionId,
+            record.role,
+            !requestedSession?.modelCatalog && !requestedSession?.isLoadingModelCatalog,
+          );
+        }
         return;
       }
 
