@@ -65,7 +65,6 @@ const MARKDOWN_PACKAGE_PREFIXES = [
   "unist-",
   "vfile",
 ];
-const VIRTUAL_VENDOR_PACKAGES = new Set(["@tanstack/react-virtual", "@tanstack/virtual-core"]);
 const KEEP_NATIVE_SPLITS = [
   "@shikijs/",
   "shiki",
@@ -103,7 +102,9 @@ function getVendorChunkName(id: string): string | undefined {
 
   if (
     KEEP_NATIVE_SPLITS.some((packagePrefix) =>
-      packagePrefix.endsWith("/") ? packageName.startsWith(packagePrefix) : packageName === packagePrefix,
+      packagePrefix.endsWith("/")
+        ? packageName.startsWith(packagePrefix)
+        : packageName === packagePrefix,
     )
   ) {
     return undefined;
@@ -132,8 +133,8 @@ function getVendorChunkName(id: string): string | undefined {
   ) {
     return "vendor-markdown";
   }
-  if (VIRTUAL_VENDOR_PACKAGES.has(packageName) || packageName.startsWith("@tanstack/")) {
-    return "vendor-virtual";
+  if (packageName === "@tanstack/react-query") {
+    return "vendor-query";
   }
 
   return "vendor-misc";
