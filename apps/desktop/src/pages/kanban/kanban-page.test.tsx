@@ -288,6 +288,9 @@ const waitForMockCall = async (
       await Promise.resolve();
     });
   }
+  throw new Error(
+    `Timed out waiting for mock calls: expected >= ${minCalls}, received ${fn.mock.calls.length}, attempts=${maxAttempts}`,
+  );
 };
 
 describe("KanbanPage session start modal flow", () => {

@@ -297,6 +297,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
             const Icon = entry.icon;
             const isSelected = selectedRole === entry.role;
             const shouldSpinInProgress = entry.state.liveSession === "running";
+            const nextStep = workflowSteps[index + 1] ?? null;
             return (
               <div key={entry.role} className="flex min-w-0 items-center gap-2">
                 <Button
@@ -336,18 +337,11 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                     <AlertTriangle className="size-3.5" />
                   ) : null}
                 </Button>
-                {index < workflowSteps.length - 1 ? (
+                {nextStep ? (
                   <ChevronRight
                     className={cn(
                       "size-4 shrink-0",
-                      workflowConnectorClassName(
-                        workflowSteps[index + 1]?.state ?? {
-                          tone: "blocked",
-                          availability: "blocked",
-                          completion: "not_started",
-                          liveSession: "none",
-                        },
-                      ),
+                      workflowConnectorClassName(nextStep.state),
                     )}
                   />
                 ) : null}
