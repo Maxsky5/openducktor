@@ -62,20 +62,36 @@ impl AppService {
         let (gh_auth_ok, gh_auth_login, gh_auth_error) = if gh_ok {
             probe_github_auth_status()
         } else {
-            (false, None, Some("gh not found in PATH".to_string()))
+            (
+                false,
+                None,
+                Some(
+                    "gh not found in bundled locations, standard install locations, or PATH"
+                        .to_string(),
+                ),
+            )
         };
         let opencode_binary = resolve_opencode_binary_path();
         let opencode_ok = opencode_binary.is_some();
 
         let mut errors = Vec::new();
         if !git_ok {
-            errors.push("git not found in PATH".to_string());
+            errors.push(
+                "git not found in bundled locations, standard install locations, or PATH"
+                    .to_string(),
+            );
         }
         if !gh_ok {
-            errors.push("gh not found in PATH".to_string());
+            errors.push(
+                "gh not found in bundled locations, standard install locations, or PATH"
+                    .to_string(),
+            );
         }
         if !opencode_ok {
-            errors.push("opencode not found in PATH".to_string());
+            errors.push(
+                "opencode not found in bundled locations, standard install locations, PATH, or ~/.opencode/bin"
+                    .to_string(),
+            );
         }
 
         RuntimeCheck {
@@ -96,7 +112,10 @@ impl AppService {
                         format!("installed ({binary})")
                     }
                 }),
-                error: (!opencode_ok).then(|| "opencode not found in PATH".to_string()),
+                error: (!opencode_ok).then(|| {
+                    "opencode not found in bundled locations, standard install locations, PATH, or ~/.opencode/bin"
+                        .to_string()
+                }),
             }],
             errors,
         }
@@ -132,7 +151,10 @@ impl AppService {
             return Ok(BeadsCheck {
                 beads_ok: false,
                 beads_path: None,
-                beads_error: Some("bd not found in PATH".to_string()),
+                beads_error: Some(
+                    "bd not found in bundled locations, standard install locations, or PATH"
+                        .to_string(),
+                ),
             });
         }
 
@@ -149,14 +171,14 @@ impl AppService {
                     Err(error) => Ok(BeadsCheck {
                         beads_ok: false,
                         beads_path: Some(path_string),
-                        beads_error: Some(error.to_string()),
+                        beads_error: Some(format!("{error:#}")),
                     }),
                 }
             }
             Err(error) => Ok(BeadsCheck {
                 beads_ok: false,
                 beads_path: None,
-                beads_error: Some(error.to_string()),
+                beads_error: Some(format!("{error:#}")),
             }),
         }
     }
@@ -191,14 +213,12 @@ impl AppService {
 
     pub fn workspace_add(&self, repo_path: &str) -> Result<WorkspaceRecord> {
         let workspace = self.config_store.add_workspace(repo_path)?;
-        self.ensure_repo_initialized(repo_path)?;
         self.auto_detect_git_provider_for_repo(repo_path)?;
         Ok(workspace)
     }
 
     pub fn workspace_select(&self, repo_path: &str) -> Result<WorkspaceRecord> {
         let workspace = self.config_store.select_workspace(repo_path)?;
-        self.ensure_repo_initialized(repo_path)?;
         self.auto_detect_git_provider_for_repo(repo_path)?;
         Ok(workspace)
     }
@@ -309,12 +329,12 @@ impl AppService {
     }
 
     pub fn git_get_branches(&self, repo_path: &str) -> Result<Vec<GitBranch>> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         self.git_port.get_branches(Path::new(&repo_path))
     }
 
     pub fn git_get_current_branch(&self, repo_path: &str) -> Result<GitCurrentBranch> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         self.git_port.get_current_branch(Path::new(&repo_path))
     }
 
@@ -324,7 +344,7 @@ impl AppService {
         branch: &str,
         create: bool,
     ) -> Result<GitCurrentBranch> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         self.git_port
             .switch_branch(Path::new(&repo_path), branch, create)
     }
@@ -336,7 +356,7 @@ impl AppService {
         branch: &str,
         create_branch: bool,
     ) -> Result<GitWorktreeSummary> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         let worktree = worktree_path.trim();
         if worktree.is_empty() {
             return Err(anyhow!("worktree path cannot be empty"));
@@ -361,7 +381,7 @@ impl AppService {
         worktree_path: &str,
         force: bool,
     ) -> Result<bool> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         let worktree = worktree_path.trim();
         if worktree.is_empty() {
             return Err(anyhow!("worktree path cannot be empty"));
@@ -384,7 +404,7 @@ impl AppService {
         branch: &str,
         force: bool,
     ) -> Result<bool> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         let branch = branch.trim();
         if branch.is_empty() {
             return Err(anyhow!("branch cannot be empty"));
@@ -404,7 +424,7 @@ impl AppService {
         set_upstream: bool,
         force_with_lease: bool,
     ) -> Result<GitPushResult> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         let execution_path = resolve_execution_path(repo_path.as_str(), working_dir);
         let remote = remote
             .map(str::trim)
@@ -424,7 +444,7 @@ impl AppService {
         repo_path: &str,
         request: GitPullRequest,
     ) -> Result<GitPullResult> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         let execution_path =
             resolve_execution_path(repo_path.as_str(), request.working_dir.as_deref());
         self.git_port
@@ -436,7 +456,7 @@ impl AppService {
         repo_path: &str,
         request: GitCommitAllRequest,
     ) -> Result<GitCommitAllResult> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         let execution_path =
             resolve_execution_path(repo_path.as_str(), request.working_dir.as_deref());
         let message = request.message.trim();
@@ -458,7 +478,7 @@ impl AppService {
         repo_path: &str,
         request: GitRebaseBranchRequest,
     ) -> Result<GitRebaseBranchResult> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         let execution_path =
             resolve_execution_path(repo_path.as_str(), request.working_dir.as_deref());
         let target_branch = request.target_branch.trim();
@@ -480,7 +500,7 @@ impl AppService {
         repo_path: &str,
         request: GitRebaseAbortRequest,
     ) -> Result<GitRebaseAbortResult> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         let execution_path =
             resolve_execution_path(repo_path.as_str(), request.working_dir.as_deref());
 
@@ -493,7 +513,7 @@ impl AppService {
     }
 
     pub fn git_get_status(&self, repo_path: &str) -> Result<Vec<GitFileStatus>> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         self.git_port.get_status(Path::new(&repo_path))
     }
 
@@ -502,7 +522,7 @@ impl AppService {
         repo_path: &str,
         target_branch: Option<&str>,
     ) -> Result<Vec<GitFileDiff>> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         self.git_port.get_diff(Path::new(&repo_path), target_branch)
     }
 
@@ -511,7 +531,7 @@ impl AppService {
         repo_path: &str,
         target_branch: &str,
     ) -> Result<GitAheadBehind> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         self.git_port
             .commits_ahead_behind(Path::new(&repo_path), target_branch)
     }
@@ -573,7 +593,9 @@ fn parse_github_auth_login(output: &str) -> Option<String> {
 mod tests {
     use super::super::CachedRuntimeCheck;
     use super::RUNTIME_CHECK_CACHE_TTL;
-    use crate::app_service::test_support::build_service_with_state;
+    use crate::app_service::test_support::{
+        build_service_with_state, init_git_repo, unique_temp_path,
+    };
     use host_domain::{GitPushResult, RuntimeCheck, RuntimeHealth};
     use host_infra_system::ChatSettings;
     use std::time::{Duration, Instant};
@@ -782,5 +804,65 @@ mod tests {
         assert!(!chat.show_thinking_messages);
         assert!(repos.is_empty());
         assert!(global_prompt_overrides.is_empty());
+    }
+
+    #[test]
+    fn workspace_add_persists_selection_without_beads_initialization() {
+        let (service, task_state, _git_state) = build_service_with_state(vec![]);
+        let repo_path = unique_temp_path("workspace-add-without-beads-init");
+        init_git_repo(&repo_path).expect("git repo should initialize");
+
+        {
+            let mut state = task_state.lock().expect("task state lock poisoned");
+            state.ensure_error = Some("beads init failed".to_string());
+        }
+
+        let workspace = service
+            .workspace_add(repo_path.to_string_lossy().as_ref())
+            .expect("workspace add should not fail on beads init");
+
+        assert!(workspace.is_active);
+        assert_eq!(
+            workspace.path,
+            repo_path
+                .canonicalize()
+                .expect("canonical repo path")
+                .to_string_lossy()
+        );
+
+        let state = task_state.lock().expect("task state lock poisoned");
+        assert!(
+            state.ensure_calls.is_empty(),
+            "workspace add should not initialize beads"
+        );
+    }
+
+    #[test]
+    fn workspace_select_persists_selection_without_beads_initialization() {
+        let (service, task_state, _git_state) = build_service_with_state(vec![]);
+        let repo_path = unique_temp_path("workspace-select-without-beads-init");
+        init_git_repo(&repo_path).expect("git repo should initialize");
+
+        service
+            .workspace_add(repo_path.to_string_lossy().as_ref())
+            .expect("workspace add should succeed");
+
+        {
+            let mut state = task_state.lock().expect("task state lock poisoned");
+            state.ensure_error = Some("beads init failed".to_string());
+            state.ensure_calls.clear();
+        }
+
+        let workspace = service
+            .workspace_select(repo_path.to_string_lossy().as_ref())
+            .expect("workspace select should not fail on beads init");
+
+        assert!(workspace.is_active);
+
+        let state = task_state.lock().expect("task state lock poisoned");
+        assert!(
+            state.ensure_calls.is_empty(),
+            "workspace select should not initialize beads"
+        );
     }
 }

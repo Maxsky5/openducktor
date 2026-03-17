@@ -33,8 +33,8 @@ pub(crate) fn spawn_opencode_server(
 
 #[cfg(test)]
 pub(crate) use mcp_config::{
-    build_opencode_config_content, default_mcp_workspace_root, parse_mcp_command_json,
-    resolve_mcp_command,
+    build_opencode_config_content, default_mcp_workspace_root, find_openducktor_workspace_root,
+    parse_mcp_command_json, resolve_mcp_command,
 };
 #[cfg(test)]
 pub(crate) use process_lifecycle::is_orphaned_opencode_server_process;

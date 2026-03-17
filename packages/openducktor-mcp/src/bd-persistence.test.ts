@@ -11,6 +11,7 @@ type FakeClientState = {
 const createClient = (
   handlers: {
     runBdJson: (args: string[]) => Promise<unknown>;
+    updateTask?: (args: string[]) => Promise<unknown>;
     ensureInitialized?: () => Promise<void>;
   },
   state: FakeClientState,
@@ -18,6 +19,13 @@ const createClient = (
   return {
     runBdJson: async (args: string[]) => {
       state.calls.push([...args]);
+      return handlers.runBdJson(args);
+    },
+    updateTask: async (args: string[]) => {
+      state.calls.push([...args]);
+      if (handlers.updateTask) {
+        return handlers.updateTask(args);
+      }
       return handlers.runBdJson(args);
     },
     ensureInitialized: async () => {

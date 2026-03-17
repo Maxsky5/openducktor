@@ -8,7 +8,7 @@
     "dev:browser": "VITE_ODT_APP_MODE=browser VITE_ODT_BROWSER_BACKEND_URL=http://127.0.0.1:14327 vite",
     "tauri": "tauri",
     "tauri:dev": "tauri dev -- --bin openducktor-desktop",
-    "tauri:build": "tauri build",
+    "tauri:build": "bun run scripts/tauri-build.ts",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",

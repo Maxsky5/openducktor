@@ -234,7 +234,13 @@ mock.module("@/state", () => ({
     humanApproveTask: humanApproveTaskMock,
     humanRequestChangesTask: humanRequestChangesTaskMock,
   }),
-  useChecksState: () => ({}),
+  useChecksState: () => ({
+    beadsCheck: {
+      beadsOk: true,
+      beadsPath: "/tmp/beads.db",
+      beadsError: null,
+    },
+  }),
   useDelegationState: () => ({}),
   useSpecState: () => ({}),
 }));

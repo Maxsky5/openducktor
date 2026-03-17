@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+#[cfg(test)]
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
@@ -43,6 +44,7 @@ impl BeadsTaskStore {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn verify_repo_initialized(
         &self,
         repo_path: &Path,
@@ -51,7 +53,7 @@ impl BeadsTaskStore {
         let beads_dir_env = beads_dir.to_string_lossy().to_string();
         let (ok, stdout, stderr) = self.command_runner.run_allow_failure_with_env(
             "bd",
-            &["--no-daemon", "where", "--json"],
+            &["where", "--json"],
             Some(repo_path),
             &[("BEADS_DIR", beads_dir_env.as_str())],
         )?;
@@ -85,6 +87,15 @@ impl BeadsTaskStore {
                 repo_path.display()
             )
         })?;
+        Ok(())
+    }
+
+    pub(crate) fn ensure_dolt_server_running(&self, repo_path: &Path) -> Result<()> {
+        // `bd dolt start` is the official warm-up path and remains cheap when the
+        // server is already running, which keeps later task operations off the
+        // slow auto-start path.
+        self.run_bd(repo_path, &["dolt", "start"])
+            .with_context(|| format!("Failed to start Dolt server for {}", repo_path.display()))?;
         Ok(())
     }
 }

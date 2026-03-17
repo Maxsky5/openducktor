@@ -105,7 +105,7 @@ impl AppService {
 
     pub fn runs_list(&self, repo_path: Option<&str>) -> Result<Vec<RunSummary>> {
         let repo_key_filter = repo_path
-            .map(|path| self.ensure_repo_authorized(path))
+            .map(|path| self.resolve_authorized_repo_path(path))
             .transpose()?;
         let allowlisted_repo_keys = if repo_key_filter.is_none() && self.enforce_repo_allowlist {
             Some(
@@ -147,7 +147,7 @@ impl AppService {
         runtime_kind: AgentRuntimeKind,
         repo_path: &str,
     ) -> Result<RuntimeInstanceSummary> {
-        let repo_key = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_key = self.resolve_authorized_repo_path(repo_path)?;
         let repo_path = repo_key.as_str();
 
         {

@@ -227,11 +227,9 @@ class MockIntersectionObserver implements TriggerableIntersectionObserver {
 }
 
 class MockResizeObserver implements ResizeObserver {
-  private readonly callback: ResizeObserverCallback;
   private readonly observedElements = new Set<Element>();
 
   constructor(callback: ResizeObserverCallback) {
-    this.callback = callback;
     mockResizeObserverControllers.add({
       callback,
       observer: this,

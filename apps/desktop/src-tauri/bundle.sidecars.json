@@ -1,0 +1,5 @@
+{
+  "bundle": {
+    "externalBin": ["binaries/bd", "binaries/dolt", "binaries/openducktor-mcp"]
+  }
+}

@@ -96,6 +96,42 @@ fn opencode_workspace_runtime_ensure_list_and_stop_flow() -> Result<()> {
 }
 
 #[test]
+fn opencode_workspace_runtime_ensure_does_not_require_task_store_initialization() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("runtime-workspace-without-beads-init");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _opencode_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        fake_opencode.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+
+    let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    task_state.lock().expect("task lock poisoned").ensure_error = Some("init failed".to_string());
+
+    let runtime = service.runtime_ensure("opencode", repo_path.as_str())?;
+    assert_eq!(runtime.repo_path, repo_path);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
 fn opencode_workspace_runtime_ensure_cleans_up_spawned_child_when_runtime_lock_is_poisoned(
 ) -> Result<()> {
     let _env_lock = lock_env();

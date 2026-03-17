@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
-use host_infra_system::{command_exists, resolve_central_beads_dir};
+use host_infra_system::{resolve_central_beads_dir, resolve_command_path};
 use serde_json::json;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub(crate) fn parse_mcp_command_json(raw: &str) -> Result<Vec<String>> {
     let parsed: serde_json::Value =
@@ -30,6 +30,21 @@ pub(crate) fn parse_mcp_command_json(raw: &str) -> Result<Vec<String>> {
     Ok(command)
 }
 
+fn is_workspace_root_candidate(path: &Path) -> bool {
+    path.join("bun.lock").is_file()
+        && path.join("package.json").is_file()
+        && path.join("apps").is_dir()
+        && path.join("packages").is_dir()
+}
+
+pub(crate) fn find_openducktor_workspace_root(start: &Path) -> Result<PathBuf> {
+    start
+        .ancestors()
+        .find(|candidate| is_workspace_root_candidate(candidate))
+        .map(Path::to_path_buf)
+        .ok_or_else(|| anyhow!("Unable to resolve OpenDucktor workspace root from manifest path"))
+}
+
 pub(crate) fn default_mcp_workspace_root() -> Result<String> {
     let from_env = std::env::var("OPENDUCKTOR_WORKSPACE_ROOT")
         .ok()
@@ -40,9 +55,7 @@ pub(crate) fn default_mcp_workspace_root() -> Result<String> {
     }
 
     let compiled_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let root = compiled_path.ancestors().nth(5).ok_or_else(|| {
-        anyhow!("Unable to resolve OpenDucktor workspace root from manifest path")
-    })?;
+    let root = find_openducktor_workspace_root(compiled_path)?;
     Ok(root.to_string_lossy().to_string())
 }
 
@@ -51,15 +64,15 @@ pub(crate) fn resolve_mcp_command() -> Result<Vec<String>> {
         return parse_mcp_command_json(raw.as_str());
     }
 
-    if command_exists("openducktor-mcp") {
-        return Ok(vec!["openducktor-mcp".to_string()]);
+    if let Some(mcp_binary) = resolve_command_path("openducktor-mcp")? {
+        return Ok(vec![mcp_binary]);
     }
 
-    if !command_exists("bun") {
+    let Some(bun_binary) = resolve_command_path("bun")? else {
         return Err(anyhow!(
-            "Missing MCP runner. Install `openducktor-mcp` on PATH or install bun for workspace fallback."
+            "Missing MCP runner. Package the openducktor-mcp sidecar or install bun for the workspace fallback."
         ));
-    }
+    };
 
     let workspace_root = default_mcp_workspace_root()?;
     let direct_entrypoint = Path::new(&workspace_root)
@@ -70,13 +83,13 @@ pub(crate) fn resolve_mcp_command() -> Result<Vec<String>> {
 
     if direct_entrypoint.exists() {
         return Ok(vec![
-            "bun".to_string(),
+            bun_binary.clone(),
             direct_entrypoint.to_string_lossy().to_string(),
         ]);
     }
 
     Ok(vec![
-        "bun".to_string(),
+        bun_binary,
         "run".to_string(),
         "--silent".to_string(),
         "--cwd".to_string(),

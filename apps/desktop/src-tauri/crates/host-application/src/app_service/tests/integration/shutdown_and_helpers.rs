@@ -27,9 +27,9 @@ use crate::app_service::test_support::{
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
-    parse_mcp_command_json, read_opencode_process_registry, read_opencode_version,
-    resolve_mcp_command, resolve_opencode_binary_path, terminate_child_process,
-    terminate_process_by_pid, validate_parent_relationships_for_update,
+    find_openducktor_workspace_root, parse_mcp_command_json, read_opencode_process_registry,
+    read_opencode_version, resolve_mcp_command, resolve_opencode_binary_path,
+    terminate_child_process, terminate_process_by_pid, validate_parent_relationships_for_update,
     with_locked_opencode_process_registry, AgentRuntimeProcess, OpencodeProcessRegistryInstance,
     RunProcess, RuntimeCleanupTarget, TrackedOpencodeProcessGuard,
     OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
@@ -548,6 +548,26 @@ fn resolve_opencode_binary_path_uses_home_fallback_when_override_and_path_missin
 }
 
 #[test]
+fn find_openducktor_workspace_root_uses_workspace_markers_instead_of_fixed_depth() -> Result<()> {
+    let root = unique_temp_path("workspace-root-discovery");
+    let nested_manifest = root.join("apps").join("desktop").join("src-tauri");
+    fs::create_dir_all(root.join("apps"))?;
+    fs::create_dir_all(root.join("packages"))?;
+    fs::create_dir_all(&nested_manifest)?;
+    fs::write(root.join("bun.lock"), "")?;
+    fs::write(
+        root.join("package.json"),
+        r#"{"name":"openducktor","private":true}"#,
+    )?;
+
+    let resolved = find_openducktor_workspace_root(&nested_manifest)?;
+    assert_eq!(resolved, root);
+
+    let _ = fs::remove_dir_all(resolved);
+    Ok(())
+}
+
+#[test]
 fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("mcp-command-fallbacks");
@@ -567,15 +587,24 @@ fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
         let path = format!("{}:/usr/bin:/bin", cli_bin.to_string_lossy());
         let _path_guard = set_env_var("PATH", path.as_str());
         let command = resolve_mcp_command()?;
-        assert_eq!(command, vec!["openducktor-mcp".to_string()]);
+        assert_eq!(
+            command,
+            vec![cli_bin
+                .join("openducktor-mcp")
+                .to_string_lossy()
+                .to_string()]
+        );
     }
 
     {
         let _workspace_guard = remove_env_var("OPENDUCKTOR_WORKSPACE_ROOT");
         let path = format!("{}:/usr/bin:/bin", empty_bin.to_string_lossy());
         let _path_guard = set_env_var("PATH", path.as_str());
+        let _bun_override_guard = set_env_var("OPENDUCKTOR_BUN_PATH", "/tmp/odt-missing-bun");
         let error = resolve_mcp_command().expect_err("missing mcp + bun should fail");
-        assert!(error.to_string().contains("Missing MCP runner"));
+        assert!(error
+            .to_string()
+            .contains("Configured command override OPENDUCKTOR_BUN_PATH points to a missing file"));
     }
 
     let workspace_direct = root.join("workspace-direct");
@@ -602,7 +631,7 @@ fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
         assert_eq!(
             command,
             vec![
-                "bun".to_string(),
+                bun_bin.join("bun").to_string_lossy().to_string(),
                 direct_entrypoint.to_string_lossy().to_string()
             ]
         );
@@ -621,7 +650,7 @@ fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
         assert_eq!(
             command,
             vec![
-                "bun".to_string(),
+                bun_bin.join("bun").to_string_lossy().to_string(),
                 "run".to_string(),
                 "--silent".to_string(),
                 "--cwd".to_string(),

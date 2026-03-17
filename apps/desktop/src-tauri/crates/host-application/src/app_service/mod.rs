@@ -80,8 +80,9 @@ pub(crate) use workflow_rules::{
 
 #[cfg(test)]
 pub(crate) use opencode_runtime::{
-    build_opencode_config_content, default_mcp_workspace_root, is_orphaned_opencode_server_process,
-    parse_mcp_command_json, resolve_mcp_command, wait_for_local_server,
+    build_opencode_config_content, default_mcp_workspace_root, find_openducktor_workspace_root,
+    is_orphaned_opencode_server_process, parse_mcp_command_json, resolve_mcp_command,
+    wait_for_local_server,
 };
 #[cfg(test)]
 pub(crate) use workflow_rules::allows_transition;

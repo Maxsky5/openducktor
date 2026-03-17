@@ -62,6 +62,20 @@ bun run build                # build all workspaces
 
 Rust host: `cd apps/desktop/src-tauri && cargo check` / `cargo test`
 
+Prefer the root Bun wrappers for routine Rust verification when they exist:
+
+```sh
+bun run check:rust          # cargo check for the Tauri workspace
+bun run test:rust           # cargo test for the Tauri workspace
+```
+
+Use raw `cargo` commands directly for checks that do not yet have Bun wrappers, such as:
+
+```sh
+cd apps/desktop/src-tauri && cargo fmt --all --check
+cd apps/desktop/src-tauri && cargo clippy --workspace --all-targets -- -D warnings
+```
+
 Package-level targets for focused iteration:
 
 ```sh

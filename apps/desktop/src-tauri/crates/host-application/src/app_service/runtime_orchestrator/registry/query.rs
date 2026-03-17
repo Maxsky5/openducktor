@@ -10,7 +10,7 @@ impl AppService {
         repo_path: Option<&str>,
     ) -> Result<Vec<RuntimeInstanceSummary>> {
         let repo_key_filter = repo_path
-            .map(|path| self.ensure_repo_authorized(path))
+            .map(|path| self.resolve_authorized_repo_path(path))
             .transpose()?;
         let allowlisted_repo_keys = if repo_key_filter.is_none() && self.enforce_repo_allowlist {
             Some(

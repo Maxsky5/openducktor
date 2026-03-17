@@ -9,6 +9,8 @@ import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { prependRunEvent, shouldLoadChecks } from "./app-lifecycle-model";
 
+const BEADS_PREPARATION_TOAST_DELAY_MS = 1_000;
+
 type UseAppLifecycleArgs = {
   activeRepo: string | null;
   setEvents: Dispatch<SetStateAction<RunEvent[]>>;
@@ -38,6 +40,7 @@ type UseAppLifecycleArgs = {
   hasRuntimeCheck: () => boolean;
   hasCachedBeadsCheck: (repoPath: string) => boolean;
   hasCachedRepoRuntimeHealth: (repoPath: string, runtimeKinds: RuntimeKind[]) => boolean;
+  beadsPreparationToastDelayMs?: number;
 };
 
 export function useAppLifecycle({
@@ -60,6 +63,7 @@ export function useAppLifecycle({
   hasRuntimeCheck,
   hasCachedBeadsCheck,
   hasCachedRepoRuntimeHealth,
+  beadsPreparationToastDelayMs = BEADS_PREPARATION_TOAST_DELAY_MS,
 }: UseAppLifecycleArgs): void {
   const repoLoadVersionRef = useRef(0);
   const activeRepoRef = useRef(activeRepo);
@@ -150,26 +154,76 @@ export function useAppLifecycle({
         hasCachedRepoRuntimeHealth: hasCachedRepoRuntimeHealth(activeRepo, runtimeKinds),
       }),
     );
+    let beadsPreparationToastId: string | number | null = null;
+    let beadsPreparationToastShown = false;
+    let beadsPreparationTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const clearBeadsPreparationTimer = (): void => {
+      if (beadsPreparationTimer !== null) {
+        clearTimeout(beadsPreparationTimer);
+        beadsPreparationTimer = null;
+      }
+    };
+
+    const dismissBeadsPreparationToast = (): void => {
+      if (beadsPreparationToastId !== null) {
+        toast.dismiss(beadsPreparationToastId);
+        beadsPreparationToastId = null;
+      }
+      beadsPreparationToastShown = false;
+    };
 
     const taskLoadPromise = (async () => {
-      const beads = await refreshBeadsCheckForRepo(activeRepo, false);
-      if (!beads.beadsOk) {
-        throw new Error(beads.beadsError ?? "Beads store is not initialized for this repository.");
-      }
+      beadsPreparationTimer = setTimeout(() => {
+        if (repoLoadVersionRef.current !== loadVersion || activeRepoRef.current !== activeRepo) {
+          return;
+        }
+        beadsPreparationToastShown = true;
+        beadsPreparationToastId = toast.loading("Preparing Beads database", {
+          description: "OpenDucktor is initializing the Beads task store for this repository.",
+        });
+      }, beadsPreparationToastDelayMs);
 
-      await refreshTaskData(activeRepo);
+      try {
+        const beads = await refreshBeadsCheckForRepo(activeRepo, false);
+        clearBeadsPreparationTimer();
+
+        if (!beads.beadsOk) {
+          throw new Error(
+            beads.beadsError ?? "Beads store is not initialized for this repository.",
+          );
+        }
+
+        if (
+          beadsPreparationToastShown &&
+          repoLoadVersionRef.current === loadVersion &&
+          activeRepoRef.current === activeRepo
+        ) {
+          dismissBeadsPreparationToast();
+          toast.success("Beads database ready", {
+            description: "The task store is ready for this repository.",
+          });
+        }
+
+        await refreshTaskData(activeRepo);
+      } finally {
+        clearBeadsPreparationTimer();
+        dismissBeadsPreparationToast();
+      }
     })();
     const runtimeCheckPromise = refreshRuntimeCheck(false);
     const runtimeHealthPromise = refreshRepoRuntimeHealthForRepo(activeRepo, false);
     const branchesPromise = refreshBranches(false);
 
-    void taskLoadPromise.finally(() => {
+    const finalizeTaskLoading = (): void => {
       if (repoLoadVersionRef.current !== loadVersion) {
         return;
       }
 
       setIsLoadingTasks(false);
-    });
+    };
+
+    void taskLoadPromise.then(finalizeTaskLoading, finalizeTaskLoading);
 
     Promise.allSettled([
       taskLoadPromise,
@@ -225,8 +279,14 @@ export function useAppLifecycle({
 
         setIsLoadingChecks(false);
       });
+
+    return () => {
+      clearBeadsPreparationTimer();
+      dismissBeadsPreparationToast();
+    };
   }, [
     activeRepo,
+    beadsPreparationToastDelayMs,
     clearBranchData,
     clearActiveBeadsCheck,
     clearActiveRepoRuntimeHealth,

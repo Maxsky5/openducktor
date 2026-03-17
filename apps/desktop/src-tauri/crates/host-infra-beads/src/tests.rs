@@ -34,7 +34,6 @@ struct RecordedCall {
     kind: CallKind,
     program: String,
     args: Vec<String>,
-    cwd: Option<PathBuf>,
     env: Vec<(String, String)>,
 }
 
@@ -86,7 +85,7 @@ impl MockCommandRunner {
         kind: CallKind,
         program: &str,
         args: &[&str],
-        cwd: Option<&Path>,
+        _cwd: Option<&Path>,
         env: &[(&str, &str)],
     ) {
         self.calls
@@ -96,7 +95,6 @@ impl MockCommandRunner {
                 kind,
                 program: program.to_string(),
                 args: args.iter().map(|entry| (*entry).to_string()).collect(),
-                cwd: cwd.map(Path::to_path_buf),
                 env: env
                     .iter()
                     .map(|(key, value)| ((*key).to_string(), (*value).to_string()))
@@ -366,7 +364,7 @@ fn show_task_uses_id_flag_when_loading_issue() -> Result<()> {
     assert_eq!(calls.len(), 1);
     assert_eq!(
         calls[0].args,
-        vec!["--no-daemon", "show", "--id", "task-1", "--json"]
+        vec!["show", "--id", "task-1", "--json"]
             .into_iter()
             .map(str::to_string)
             .collect::<Vec<_>>()
@@ -592,103 +590,111 @@ fn metadata_parsing_benchmark_scaffold() {
 #[test]
 fn ensure_repo_initialized_skips_init_when_store_is_ready() -> Result<()> {
     let repo = RepoFixture::new("init-ready");
-    let runner = MockCommandRunner::with_steps(vec![
-        MockStep::AllowFailureWithEnv(Ok((
-            true,
-            r#"{"path":"/tmp/central/.beads"}"#.to_string(),
-            String::new(),
-        ))),
-        MockStep::WithEnv(Ok("ok".to_string())),
-    ]);
+    let beads_dir = resolve_central_beads_dir(repo.path())?;
+    fs::create_dir_all(beads_dir.join("dolt")).expect("dolt directory should be writable");
+    let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(
+        "Dolt server started".to_string()
+    ))]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
     store.ensure_repo_initialized(repo.path())?;
     assert_eq!(runner.remaining_steps(), 0);
 
     let calls = runner.take_calls();
-    assert_eq!(calls.len(), 2);
-    assert_eq!(calls[0].kind, CallKind::AllowFailureWithEnv);
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].kind, CallKind::WithEnv);
     assert_eq!(
         calls[0].args,
-        vec!["--no-daemon", "where", "--json"]
+        vec!["dolt", "start"]
             .into_iter()
             .map(str::to_string)
             .collect::<Vec<_>>()
     );
-    assert_eq!(calls[1].kind, CallKind::WithEnv);
-    assert_eq!(
-        calls[1].args,
-        vec![
-            "--no-daemon",
-            "config",
-            "set",
-            "status.custom",
-            CUSTOM_STATUS_VALUES
-        ]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>()
-    );
-    assert_eq!(calls[0].program, "bd");
-    assert_eq!(calls[0].cwd.as_deref(), Some(repo.path()));
     assert_beads_env(&calls[0]);
-    assert_beads_env(&calls[1]);
     Ok(())
 }
 
 #[test]
-fn ensure_repo_initialized_runs_init_then_uses_cache_when_database_exists() -> Result<()> {
+fn ensure_repo_initialized_runs_init_then_uses_cache_when_store_exists() -> Result<()> {
     let repo = RepoFixture::new("init-path");
     let runner = MockCommandRunner::with_steps(vec![
-        MockStep::AllowFailureWithEnv(Ok((false, String::new(), "not initialized".to_string()))),
         MockStep::AllowFailureWithEnv(Ok((true, String::new(), String::new()))),
-        MockStep::AllowFailureWithEnv(Ok((
-            true,
-            r#"{"path":"/tmp/central/.beads"}"#.to_string(),
-            String::new(),
-        ))),
-        MockStep::WithEnv(Ok("ok".to_string())),
+        MockStep::WithEnv(Ok("Dolt server started".to_string())),
     ]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
     store.ensure_repo_initialized(repo.path())?;
 
     let beads_dir = resolve_central_beads_dir(repo.path())?;
-    fs::create_dir_all(&beads_dir)?;
-    fs::write(beads_dir.join("beads.db"), "cached").expect("beads.db should be writable");
+    fs::create_dir_all(beads_dir.join("dolt")).expect("dolt directory should be writable");
 
     store.ensure_repo_initialized(repo.path())?;
     assert_eq!(runner.remaining_steps(), 0);
 
     let calls = runner.take_calls();
-    assert_eq!(calls.len(), 4);
+    assert_eq!(calls.len(), 2);
     let expected_slug = compute_repo_slug(repo.path());
+    assert_eq!(calls[0].kind, CallKind::AllowFailureWithEnv);
     assert_eq!(
-        calls[1].args,
+        calls[0].args,
         vec![
-            "--no-daemon",
             "init",
             "--quiet",
             "--skip-hooks",
-            "--skip-merge-driver",
             "--prefix",
-            expected_slug.as_str(),
+            expected_slug.as_str()
         ]
         .into_iter()
         .map(str::to_string)
         .collect::<Vec<_>>()
+    );
+    assert_beads_env(&calls[0]);
+    assert_eq!(calls[1].kind, CallKind::WithEnv);
+    assert_eq!(
+        calls[1].args,
+        vec!["dolt", "start"]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
     );
     assert_beads_env(&calls[1]);
     Ok(())
 }
 
 #[test]
+fn ensure_repo_initialized_skips_reinit_after_restart_when_dolt_store_exists() -> Result<()> {
+    let repo = RepoFixture::new("init-restart-dolt");
+    let beads_dir = resolve_central_beads_dir(repo.path())?;
+    fs::create_dir_all(beads_dir.join("dolt")).expect("dolt directory should be writable");
+    let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(
+        "Dolt server started".to_string()
+    ))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    store.ensure_repo_initialized(repo.path())?;
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].kind, CallKind::WithEnv);
+    assert_eq!(
+        calls[0].args,
+        vec!["dolt", "start"]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    );
+    assert_beads_env(&calls[0]);
+    Ok(())
+}
+
+#[test]
 fn ensure_repo_initialized_returns_error_when_init_fails() {
     let repo = RepoFixture::new("init-fails");
-    let runner = MockCommandRunner::with_steps(vec![
-        MockStep::AllowFailureWithEnv(Ok((false, String::new(), "where failed".to_string()))),
-        MockStep::AllowFailureWithEnv(Ok((false, String::new(), "permission denied".to_string()))),
-    ]);
+    let runner = MockCommandRunner::with_steps(vec![MockStep::AllowFailureWithEnv(Ok((
+        false,
+        String::new(),
+        "permission denied".to_string(),
+    )))]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
 
     let error = store
@@ -699,19 +705,19 @@ fn ensure_repo_initialized_returns_error_when_init_fails() {
 }
 
 #[test]
-fn ensure_repo_initialized_errors_when_verification_is_still_not_ready() {
-    let repo = RepoFixture::new("init-malformed");
-    let runner = MockCommandRunner::with_steps(vec![
-        MockStep::AllowFailureWithEnv(Ok((false, String::new(), "missing".to_string()))),
-        MockStep::AllowFailureWithEnv(Ok((true, String::new(), String::new()))),
-        MockStep::AllowFailureWithEnv(Ok((true, "{}".to_string(), String::new()))),
-    ]);
+fn ensure_repo_initialized_returns_error_when_dolt_start_fails() {
+    let repo = RepoFixture::new("dolt-start-fails");
+    let beads_dir = resolve_central_beads_dir(repo.path()).expect("expected beads dir");
+    fs::create_dir_all(beads_dir.join("dolt")).expect("dolt directory should be writable");
+    let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Err(
+        "port already in use".to_string()
+    ))]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
 
     let error = store
         .ensure_repo_initialized(repo.path())
-        .expect_err("init should fail when store remains unready");
-    assert!(error.to_string().contains("store is not ready"));
+        .expect_err("dolt start should fail");
+    assert!(error.to_string().contains("Failed to start Dolt server"));
 }
 
 #[test]
@@ -798,7 +804,7 @@ fn list_tasks_filters_events_and_populates_subtask_ids() -> Result<()> {
     assert_eq!(calls.len(), 1);
     assert_eq!(
         calls[0].args,
-        vec!["--no-daemon", "list", "--all", "--limit", "0", "--json"]
+        vec!["list", "--all", "--limit", "0", "--json"]
             .into_iter()
             .map(str::to_string)
             .collect::<Vec<_>>()
@@ -821,7 +827,7 @@ fn list_tasks_uses_short_lived_repo_cache() -> Result<()> {
 
     let calls = runner.take_calls();
     assert_eq!(calls.len(), 1);
-    assert_eq!(calls[0].args[1], "list");
+    assert_eq!(calls[0].args[0], "list");
     Ok(())
 }
 
@@ -881,7 +887,7 @@ fn list_tasks_cache_is_invalidated_after_update_mutation() -> Result<()> {
     let calls = runner.take_calls();
     let list_calls = calls
         .iter()
-        .filter(|call| call.args.get(1).map(String::as_str) == Some("list"))
+        .filter(|call| call.args.first().map(String::as_str) == Some("list"))
         .count();
     assert_eq!(list_calls, 2);
     Ok(())
@@ -934,7 +940,7 @@ fn list_tasks_cache_is_invalidated_after_metadata_mutation() -> Result<()> {
     let calls = runner.take_calls();
     let list_calls = calls
         .iter()
-        .filter(|call| call.args.get(1).map(String::as_str) == Some("list"))
+        .filter(|call| call.args.first().map(String::as_str) == Some("list"))
         .count();
     assert_eq!(list_calls, 2);
     Ok(())
@@ -969,7 +975,7 @@ fn list_tasks_cache_expires_after_ttl() -> Result<()> {
     let calls = runner.take_calls();
     let list_calls = calls
         .iter()
-        .filter(|call| call.args.get(1).map(String::as_str) == Some("list"))
+        .filter(|call| call.args.first().map(String::as_str) == Some("list"))
         .count();
     assert_eq!(list_calls, 2);
     Ok(())
@@ -1019,7 +1025,7 @@ fn list_tasks_cache_is_invalidated_after_create_mutation() -> Result<()> {
     let calls = runner.take_calls();
     let list_calls = calls
         .iter()
-        .filter(|call| call.args.get(1).map(String::as_str) == Some("list"))
+        .filter(|call| call.args.first().map(String::as_str) == Some("list"))
         .count();
     assert_eq!(list_calls, 2);
     Ok(())
@@ -1049,7 +1055,7 @@ fn list_tasks_cache_is_invalidated_after_delete_mutation() -> Result<()> {
     let calls = runner.take_calls();
     let list_calls = calls
         .iter()
-        .filter(|call| call.args.get(1).map(String::as_str) == Some("list"))
+        .filter(|call| call.args.first().map(String::as_str) == Some("list"))
         .count();
     assert_eq!(list_calls, 2);
     Ok(())
@@ -1076,7 +1082,7 @@ fn stale_generation_cache_writes_are_ignored() -> Result<()> {
 
     let calls = runner.take_calls();
     assert_eq!(calls.len(), 1);
-    assert_eq!(calls[0].args[1], "list");
+    assert_eq!(calls[0].args[0], "list");
     Ok(())
 }
 
@@ -1126,7 +1132,6 @@ fn create_task_normalizes_payload_and_persists_qa_flag() -> Result<()> {
     assert_eq!(
         calls[0].args,
         vec![
-            "--no-daemon",
             "create",
             "Build API",
             "--type",
@@ -1150,7 +1155,7 @@ fn create_task_normalizes_payload_and_persists_qa_flag() -> Result<()> {
         metadata_root["openducktor"]["qaRequired"],
         Value::Bool(false)
     );
-    assert_eq!(calls[1].args[1], "update");
+    assert_eq!(calls[1].args[0], "update");
     assert!(calls[1].args.iter().any(|arg| arg == "--"));
     assert!(calls[1].args.windows(2).any(|pair| {
         pair.first().map(String::as_str) == Some("--json")
@@ -1216,7 +1221,6 @@ fn update_task_updates_cli_fields_and_qa_metadata() -> Result<()> {
     assert_eq!(
         calls[0].args,
         vec![
-            "--no-daemon",
             "update",
             "--title",
             "Renamed",
@@ -1298,8 +1302,8 @@ fn update_task_can_update_only_ai_review_metadata() -> Result<()> {
 
     let calls = runner.take_calls();
     assert_eq!(calls.len(), 3);
-    assert_eq!(calls[0].args[1], "show");
-    assert_eq!(calls[1].args[1], "update");
+    assert_eq!(calls[0].args[0], "show");
+    assert_eq!(calls[1].args[0], "update");
     let metadata_root = metadata_from_call(&calls[1]);
     assert_eq!(
         metadata_root["openducktor"]["qaRequired"],
@@ -1588,6 +1592,7 @@ fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<
         })),
     );
     let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok("ok".to_string())),
         MockStep::WithEnv(Ok(json!([current]).to_string())),
         MockStep::WithEnv(Ok(updated.to_string())),
         MockStep::WithEnv(Ok(json!([updated]).to_string())),
@@ -1604,8 +1609,15 @@ fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<
     assert_eq!(task.status, TaskStatus::HumanReview);
 
     let calls = runner.take_calls();
-    assert_eq!(calls.len(), 3);
-    let update_call = &calls[1];
+    assert_eq!(calls.len(), 4);
+    assert_eq!(
+        calls[0].args,
+        vec!["config", "set", "status.custom", CUSTOM_STATUS_VALUES]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    );
+    let update_call = &calls[2];
     assert!(update_call.args.iter().any(|entry| entry == "--status"));
     assert!(update_call.args.iter().any(|entry| entry == "human_review"));
 

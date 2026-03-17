@@ -329,7 +329,7 @@ impl AppService {
     }
 
     pub fn auto_detect_git_provider_for_repo(&self, repo_path: &str) -> Result<()> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         let mut repo_config = self
             .workspace_get_repo_config_optional(repo_path.as_str())?
             .unwrap_or_default();
@@ -364,7 +364,7 @@ impl AppService {
         &self,
         repo_path: &str,
     ) -> Result<Option<host_infra_system::GitProviderRepository>> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         let provider = github_provider();
         let detected = provider.detect_repository(Path::new(&repo_path))?;
         Ok(detected.map(|repository| to_config_repository(&repository)))
