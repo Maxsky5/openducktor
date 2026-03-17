@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, extname, resolve } from "node:path";
@@ -107,7 +107,7 @@ export const resolveBundledCommandPath = (
 ): string | null => {
   for (const candidateName of bundledCommandCandidates(command, platform, pathExt)) {
     const sibling = resolve(dirname(executablePath), candidateName);
-    if (existsSync(sibling)) {
+    if (existsSync(sibling) && statSync(sibling).isFile()) {
       return sibling;
     }
   }
@@ -122,7 +122,7 @@ export const resolveCommandExecutable = (command: string): string => {
   const overrideName = commandEnvOverrideName(command);
   const explicit = normalizeOptionalInput(process.env[overrideName]);
   if (explicit) {
-    if (!existsSync(explicit)) {
+    if (!existsSync(explicit) || !statSync(explicit).isFile()) {
       throw new Error(
         `Configured command override ${overrideName} points to a missing file: ${explicit}`,
       );

@@ -4,6 +4,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+const PREPARE_SIDECARS_ENV: &str = "OPENDUCKTOR_PREPARE_SIDECARS";
+
 fn copy_sidecar_binary(source: &Path, destination: &Path) -> std::io::Result<()> {
     if let Some(parent) = destination.parent() {
         fs::create_dir_all(parent)?;
@@ -310,13 +312,30 @@ fn prepare_mcp_sidecar(manifest_dir: &Path, target_triple: &str) -> Result<(), S
     Ok(())
 }
 
+fn should_prepare_sidecars() -> bool {
+    println!("cargo:rerun-if-env-changed={PREPARE_SIDECARS_ENV}");
+    matches!(
+        env::var(PREPARE_SIDECARS_ENV)
+            .ok()
+            .as_deref()
+            .map(str::trim)
+            .map(str::to_ascii_lowercase)
+            .as_deref(),
+        Some("1" | "true")
+    )
+}
+
 fn main() {
     let manifest_dir =
         PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("missing CARGO_MANIFEST_DIR"));
     let target_triple = env::var("TARGET").expect("missing TARGET environment variable");
 
-    prepare_bd_sidecar().expect("failed to prepare Beads sidecar");
-    prepare_dolt_sidecar().expect("failed to prepare Dolt sidecar");
-    prepare_mcp_sidecar(&manifest_dir, &target_triple).expect("failed to prepare MCP sidecar");
+    // Sidecars are only needed for packaged desktop bundles. Cargo check/clippy/test
+    // should compile the Tauri crate without requiring packaged runtime binaries.
+    if should_prepare_sidecars() {
+        prepare_bd_sidecar().expect("failed to prepare Beads sidecar");
+        prepare_dolt_sidecar().expect("failed to prepare Dolt sidecar");
+        prepare_mcp_sidecar(&manifest_dir, &target_triple).expect("failed to prepare MCP sidecar");
+    }
     tauri_build::build()
 }

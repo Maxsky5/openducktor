@@ -459,9 +459,10 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock should be after unix epoch")
             .as_nanos();
+        let program = format!("bd-override-{nonce}");
         let root = std::env::temp_dir().join(format!("odt-command-override-{nonce}"));
         fs::create_dir_all(&root).expect("temp dir should be created");
-        let script = root.join("fake-bd");
+        let script = root.join(format!("fake-{program}"));
         fs::write(&script, "#!/bin/sh\nprintf 'override-ok'").expect("script should be writable");
         #[cfg(unix)]
         {
@@ -474,9 +475,10 @@ mod tests {
             fs::set_permissions(&script, permissions).expect("script should be executable");
         }
 
-        let env_name = command_env_override_name("bd");
+        let env_name = command_env_override_name(program.as_str());
         std::env::set_var(&env_name, &script);
-        let output = run_command("bd", &[], None).expect("override command should execute");
+        let output =
+            run_command(program.as_str(), &[], None).expect("override command should execute");
         std::env::remove_var(&env_name);
 
         assert_eq!(output, "override-ok");
@@ -485,10 +487,16 @@ mod tests {
 
     #[test]
     fn explicit_command_override_reports_invalid_path() {
-        let env_name = command_env_override_name("bd");
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        let program = format!("bd-missing-{nonce}");
+        let env_name = command_env_override_name(program.as_str());
         std::env::set_var(&env_name, "/tmp/odt-missing-command-override");
 
-        let error = explicit_command_override("bd").expect_err("invalid override should fail");
+        let error =
+            explicit_command_override(program.as_str()).expect_err("invalid override should fail");
         std::env::remove_var(&env_name);
 
         assert!(error.to_string().contains("Configured command override"));

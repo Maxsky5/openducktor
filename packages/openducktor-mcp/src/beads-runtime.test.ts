@@ -78,4 +78,15 @@ describe("beads runtime command resolution", () => {
       "Configured command override OPENDUCKTOR_BD_PATH points to a missing file",
     );
   });
+
+  test("resolveCommandExecutable rejects explicit override directories", () => {
+    const root = mkdtempSync(join(tmpdir(), "odt-mcp-override-dir-"));
+    process.env[commandEnvOverrideName("bd")] = root;
+
+    expect(() => resolveCommandExecutable("bd")).toThrow(
+      "Configured command override OPENDUCKTOR_BD_PATH points to a missing file",
+    );
+
+    rmSync(root, { recursive: true, force: true });
+  });
 });
