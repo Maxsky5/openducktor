@@ -193,6 +193,7 @@ describe("AgentStudioHeader", () => {
       createElement(AgentStudioHeader, {
         model: {
           ...buildModel(),
+          selectedRole: "qa",
           workflowSteps: [
             {
               role: "spec" as const,
@@ -262,6 +263,7 @@ describe("AgentStudioHeader", () => {
       createElement(AgentStudioHeader, {
         model: {
           ...buildModel(),
+          selectedRole: "qa",
           workflowSteps: [
             {
               role: "qa" as const,
@@ -289,6 +291,7 @@ describe("AgentStudioHeader", () => {
       createElement(AgentStudioHeader, {
         model: {
           ...buildModel(),
+          selectedRole: "qa",
           workflowSteps: [
             {
               role: "qa" as const,
@@ -341,6 +344,33 @@ describe("AgentStudioHeader", () => {
     expect(html).toContain("border-destructive-border");
   });
 
+  test("renders failed workflow step without session as actionable startup failure", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          workflowSteps: [
+            {
+              role: "planner" as const,
+              label: "Planner",
+              icon: roleIcon(1),
+              state: {
+                tone: "failed" as const,
+                availability: "blocked" as const,
+                completion: "not_started" as const,
+                liveSession: "none" as const,
+              },
+              sessionId: null,
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).toContain('title="Step failed before a session could start"');
+    expect(html).not.toContain('title="Blocked by workflow state"');
+  });
+
   test("uses neutral rejection copy for rejected review steps", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
@@ -366,6 +396,9 @@ describe("AgentStudioHeader", () => {
 
     expect(html).toContain('title="Latest review rejected this task"');
     expect(html).not.toContain("Latest QA review rejected this task");
+    expect(html).toContain("border-rejected-border");
+    expect(html).toContain("bg-rejected-surface");
+    expect(html).toContain("text-rejected-muted");
   });
 
   test("throws for invalid workflow tones instead of masking them as blocked", () => {

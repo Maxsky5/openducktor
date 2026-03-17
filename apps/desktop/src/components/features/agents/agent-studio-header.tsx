@@ -79,7 +79,7 @@ const WORKFLOW_STEP_CLASSES: Record<AgentWorkflowStepState["tone"], string> = {
   available: "border-input bg-card text-foreground",
   optional: "border-input bg-card text-foreground",
   rejected:
-    "border-rose-300 bg-rose-50 text-rose-700 shadow-sm dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
+    "border-rejected-border bg-rejected-surface text-rejected-muted shadow-sm hover:bg-rejected-surface",
   waiting_input:
     "border-warning-border bg-warning-surface hover:bg-warning-surface text-warning-muted shadow-sm",
   failed:
@@ -92,7 +92,7 @@ const WORKFLOW_CONNECTOR_CLASSES: Record<AgentWorkflowStepState["tone"], string>
   in_progress: "text-info-ring",
   available: "text-muted-foreground/40",
   optional: "text-muted-foreground/40",
-  rejected: "text-rose-500",
+  rejected: "text-rejected-ring",
   waiting_input: "text-warning-ring",
   failed: "text-destructive-ring",
   blocked: "text-muted-foreground/20",
@@ -103,7 +103,7 @@ const WORKFLOW_SELECTION_CLASSES: Record<AgentWorkflowStepState["tone"], string>
   in_progress: "ring-2 ring-offset-2 ring-offset-card ring-info-ring",
   available: "ring-2 ring-offset-2 ring-offset-card ring-muted-foreground/50",
   optional: "ring-2 ring-offset-2 ring-offset-card ring-muted-foreground/50",
-  rejected: "ring-2 ring-offset-2 ring-offset-card ring-rose-400",
+  rejected: "ring-2 ring-offset-2 ring-offset-card ring-rejected-ring",
   waiting_input: "ring-2 ring-offset-2 ring-offset-card ring-warning-ring",
   failed: "ring-2 ring-offset-2 ring-offset-card ring-destructive-ring",
   blocked: "ring-2 ring-offset-2 ring-offset-card ring-warning-ring",
@@ -146,6 +146,12 @@ const workflowStepHint = (entry: AgentWorkflowStep): string => {
   }
   if (entry.state.liveSession === "error") {
     return "Latest session failed";
+  }
+  if (entry.state.tone === "failed") {
+    if (entry.sessionId) {
+      return "Open latest failed session for this role";
+    }
+    return "Step failed before a session could start";
   }
   if (entry.state.completion === "rejected") {
     return "Latest review rejected this task";

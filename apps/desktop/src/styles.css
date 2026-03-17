@@ -41,6 +41,11 @@
   --destructive-border: oklch(0.835 0.065 13.793); /* ~rose-200 */
   --destructive-muted: oklch(0.505 0.175 15.216); /* ~rose-700 */
   --destructive-accent: oklch(0.586 0.237 15.439); /* ~rose-500 */
+  --rejected-surface: oklch(0.969 0.015 12.422); /* ~rose-50 */
+  --rejected-surface-foreground: oklch(0.258 0.092 16.935); /* ~rose-900 */
+  --rejected-border: oklch(0.747 0.146 18.625); /* ~rose-300 */
+  --rejected-muted: oklch(0.505 0.175 15.216); /* ~rose-700 */
+  --rejected-ring: oklch(0.712 0.169 22.216); /* ~rose-400 */
 
   /* success = emerald */
   --success-surface: oklch(0.962 0.044 166.961); /* ~emerald-50 */
@@ -133,6 +138,11 @@
   --destructive-border: oklch(0.396 0.141 13.233); /* ~rose-800 */
   --destructive-muted: oklch(0.636 0.166 16.439); /* ~rose-400 */
   --destructive-accent: oklch(0.586 0.237 15.439); /* ~rose-500 */
+  --rejected-surface: oklch(0.203 0.054 13.58 / 0.4); /* ~rose-950/40 */
+  --rejected-surface-foreground: oklch(0.835 0.065 13.793); /* ~rose-200 */
+  --rejected-border: oklch(0.396 0.141 13.233); /* ~rose-800 */
+  --rejected-muted: oklch(0.724 0.128 16.467); /* ~rose-300 */
+  --rejected-ring: oklch(0.586 0.237 15.439); /* ~rose-500 */
 
   --success-surface: oklch(0.3 0.08 157 / 0.55); /* richer emerald on dark bg */
   --success-surface-foreground: oklch(0.87 0.1 163.647); /* ~emerald-100 */
@@ -210,6 +220,11 @@
   --color-destructive-border: var(--destructive-border);
   --color-destructive-muted: var(--destructive-muted);
   --color-destructive-accent: var(--destructive-accent);
+  --color-rejected-surface: var(--rejected-surface);
+  --color-rejected-surface-foreground: var(--rejected-surface-foreground);
+  --color-rejected-border: var(--rejected-border);
+  --color-rejected-muted: var(--rejected-muted);
+  --color-rejected-ring: var(--rejected-ring);
   --color-success-surface: var(--success-surface);
   --color-success-surface-foreground: var(--success-surface-foreground);
   --color-success-border: var(--success-border);
