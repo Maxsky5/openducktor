@@ -57,6 +57,9 @@ impl BeadsTaskStore {
         )?;
 
         if !stdout.trim().is_empty() {
+            // Treat malformed JSON as a hard failure: the CLI contract for
+            // `bd where --json` is broken in that case, so attempting repair
+            // would mask an unexpected protocol error.
             let payload: Value = serde_json::from_str(&stdout)
                 .context("Failed to parse `bd where --json` output")?;
             if payload.get("path").and_then(Value::as_str).is_some() {
