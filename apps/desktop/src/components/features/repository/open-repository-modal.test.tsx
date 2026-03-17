@@ -31,22 +31,26 @@ mock.module("@/state", () => ({
 mock.module("@/components/ui/button", () => ({
   Button: ({
     children,
-    onClick,
-    disabled,
+    ...props
   }: {
     children: ReactNode;
-    onClick?: () => void;
-    disabled?: boolean;
-  }) => createElement("button", { onClick, disabled, type: "button" }, children),
+    [key: string]: unknown;
+  }) => createElement("button", { type: "button", ...props }, children),
 }));
 
 mock.module("@/components/ui/dialog", () => ({
-  Dialog: ({ children }: { children: ReactNode }) => createElement("div", {}, children),
-  DialogContent: ({ children }: { children: ReactNode }) => createElement("div", {}, children),
-  DialogDescription: ({ children }: { children: ReactNode }) => createElement("p", {}, children),
-  DialogFooter: ({ children }: { children: ReactNode }) => createElement("div", {}, children),
-  DialogHeader: ({ children }: { children: ReactNode }) => createElement("div", {}, children),
-  DialogTitle: ({ children }: { children: ReactNode }) => createElement("h2", {}, children),
+  Dialog: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+    createElement("div", props, children),
+  DialogContent: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+    createElement("div", props, children),
+  DialogDescription: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+    createElement("p", props, children),
+  DialogFooter: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+    createElement("div", props, children),
+  DialogHeader: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+    createElement("div", props, children),
+  DialogTitle: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+    createElement("h2", props, children),
 }));
 
 describe("OpenRepositoryModal", () => {
