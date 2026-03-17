@@ -112,7 +112,8 @@ export function useSessionStartModalState({
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
   const [selection, setSelection] = useState<AgentModelSelection | null>(null);
-  const [requestedRuntimeKind, setRequestedRuntimeKind] = useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
+  const [requestedRuntimeKind, setRequestedRuntimeKind] =
+    useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
   const activeRole = intent?.role ?? null;
   const runtimeOptions = useMemo(
     () => toAgentRuntimeOptions(runtimeDefinitions),
