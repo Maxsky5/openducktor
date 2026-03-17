@@ -1,13 +1,6 @@
 import type { IssueType, RunSummary, TaskCard } from "@openducktor/contracts";
 import type { LucideIcon } from "lucide-react";
-import {
-  AlertTriangle,
-  Bug,
-  CheckSquare,
-  Layers3,
-  PlayCircle,
-  Sparkles,
-} from "lucide-react";
+import { AlertTriangle, Bug, CheckSquare, Layers3, PlayCircle, Sparkles } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { assertNever } from "@/lib/assert-never";
@@ -109,10 +102,7 @@ const toPriorityLevel = (priority: number): PriorityLevel => {
 const getPriorityStyle = (priority: number): (typeof PRIORITY_STYLES)[PriorityLevel] =>
   PRIORITY_STYLES[toPriorityLevel(priority)];
 
-export type VisibleKanbanRunState = Extract<
-  RunSummary["state"],
-  "blocked" | "failed"
->;
+export type VisibleKanbanRunState = Extract<RunSummary["state"], "blocked" | "failed">;
 
 const runStateLabel = (value: VisibleKanbanRunState): string => {
   switch (value) {

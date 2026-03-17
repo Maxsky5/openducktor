@@ -1,47 +1,14 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { QueryClient } from "@tanstack/react-query";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { assertAgentKickoffScenario } from "@openducktor/core";
+import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { kickoffPromptForScenario } from "@/features/session-start";
-import {
-  resolveBuildRequestChangesScenario,
-  type BuildRequestChangesScenario as RequestChangesBuildScenario,
-} from "@/lib/build-scenarios";
+import { resolveBuildWorkingDirectoryOverride } from "@/lib/build-worktree-overrides";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { renderSessionStartedToastAction } from "./session-started-toast-action";
-
-export const toPromptTaskContext = (task: TaskCard | undefined) => {
-  if (!task) {
-    return {};
-  }
-
-  return {
-    title: task.title,
-    issueType: task.issueType,
-    status: task.status,
-    qaRequired: task.aiReviewEnabled,
-    description: task.description,
-  };
-};
-
-export const resolveRequestChangesScenario = (
-  task: TaskCard | undefined,
-): RequestChangesBuildScenario => {
-  return resolveBuildRequestChangesScenario(task);
-};
-
-export const buildHumanReviewMessage = (
-  task: TaskCard | undefined,
-  taskId: string,
-  scenario: RequestChangesBuildScenario,
-): string => {
-  return kickoffPromptForScenario("build", scenario, taskId, {
-    task: toPromptTaskContext(task),
-  });
-};
 
 type StartKanbanSessionFlowInput = {
   activeRepo: string | null;
@@ -74,6 +41,12 @@ export const startKanbanSessionFlow = async ({
   openSessionInAgentStudio,
   sendAgentMessage,
 }: StartKanbanSessionFlowInput): Promise<void> => {
+  const workingDirectoryOverride = await resolveBuildWorkingDirectoryOverride({
+    activeRepo,
+    taskId: intent.taskId,
+    role: intent.role,
+    scenario: intent.scenario,
+  });
   const sessionId = await startAgentSession({
     taskId: intent.taskId,
     role: intent.role,
@@ -82,6 +55,7 @@ export const startKanbanSessionFlow = async ({
     sendKickoff: false,
     startMode: intent.startMode,
     requireModelReady: true,
+    ...(workingDirectoryOverride ? { workingDirectoryOverride } : {}),
   });
 
   if (selection) {
@@ -144,7 +118,16 @@ export const startKanbanSessionFlow = async ({
     const kickoffScenario = assertAgentKickoffScenario(intent.scenario);
     return kickoffPromptForScenario(intent.role, kickoffScenario, intent.taskId, {
       overrides: promptOverrides ?? {},
-      task: toPromptTaskContext(intentTask),
+      task:
+        intentTask === undefined
+          ? {}
+          : {
+              title: intentTask.title,
+              issueType: intentTask.issueType,
+              status: intentTask.status,
+              qaRequired: intentTask.aiReviewEnabled,
+              description: intentTask.description,
+            },
     });
   };
 

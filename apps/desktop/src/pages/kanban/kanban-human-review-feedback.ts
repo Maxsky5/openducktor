@@ -1,47 +1,8 @@
-import type { TaskCard } from "@openducktor/contracts";
 import { toast } from "sonner";
-import type { BuildRequestChangesScenario } from "@/lib/build-scenarios";
+import { NEW_BUILDER_SESSION_TARGET } from "@/features/human-review-feedback/human-review-feedback-state";
+import type { HumanReviewFeedbackState } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type {
-  HumanReviewFeedbackModalModel,
-  KanbanSessionStartIntent,
-} from "./kanban-page-model-types";
-import {
-  buildHumanReviewMessage,
-  resolveRequestChangesScenario,
-} from "./kanban-session-start-actions";
-
-export const NEW_BUILDER_SESSION_TARGET = "new_session";
-
-export type HumanReviewFeedbackState = {
-  taskId: string;
-  scenario: BuildRequestChangesScenario;
-  message: string;
-  builderSessions: AgentSessionState[];
-  selectedTarget: string;
-};
-
-export type PendingHumanReviewHydration = {
-  taskId: string;
-  baselineSessions: AgentSessionState[];
-};
-
-export const createHumanReviewFeedbackState = (
-  tasks: TaskCard[],
-  taskId: string,
-  builderSessions: AgentSessionState[],
-): HumanReviewFeedbackState => {
-  const task = tasks.find((entry) => entry.id === taskId);
-  const scenario = resolveRequestChangesScenario(task);
-
-  return {
-    taskId,
-    scenario,
-    message: buildHumanReviewMessage(task, taskId, scenario),
-    builderSessions,
-    selectedTarget: builderSessions[0]?.sessionId ?? NEW_BUILDER_SESSION_TARGET,
-  };
-};
+import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 
 type ConfirmHumanReviewFeedbackFlowInput = {
   state: HumanReviewFeedbackState;
@@ -108,54 +69,4 @@ export const confirmHumanReviewFeedbackFlow = async ({
   } catch {
     toast.error("Changes requested, but feedback message failed.");
   }
-};
-
-type BuildHumanReviewFeedbackModalModelInput = {
-  state: HumanReviewFeedbackState;
-  isSubmitting: boolean;
-  onDismiss: () => void;
-  onTargetChange: (selectedTarget: string) => void;
-  onMessageChange: (message: string) => void;
-  onConfirm: () => void;
-};
-
-export const buildHumanReviewFeedbackModalModel = ({
-  state,
-  isSubmitting,
-  onDismiss,
-  onTargetChange,
-  onMessageChange,
-  onConfirm,
-}: BuildHumanReviewFeedbackModalModelInput): HumanReviewFeedbackModalModel => {
-  const targetOptions = [
-    {
-      value: NEW_BUILDER_SESSION_TARGET,
-      label: "Start a new builder session",
-      description:
-        "Open session setup, pick the model, then send this feedback as the first message.",
-    },
-    ...state.builderSessions.map((session, index) => ({
-      value: session.sessionId,
-      label: `Builder session ${session.sessionId.slice(0, 8)}`,
-      description: `Started ${new Date(session.startedAt).toLocaleString()} (${session.status}).`,
-      ...(index === 0 ? { secondaryLabel: "Latest" } : {}),
-    })),
-  ];
-
-  return {
-    open: true,
-    taskId: state.taskId,
-    selectedTarget: state.selectedTarget,
-    targetOptions,
-    message: state.message,
-    isSubmitting,
-    onOpenChange: (nextOpen: boolean) => {
-      if (!nextOpen) {
-        onDismiss();
-      }
-    },
-    onTargetChange,
-    onMessageChange,
-    onConfirm,
-  };
 };

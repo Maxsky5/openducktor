@@ -82,14 +82,14 @@ export type RunSummary = z.infer<typeof runSummarySchema>;
 export const runtimeInstanceSummaryRoleSchema = z.literal("workspace");
 export type RuntimeInstanceSummaryRole = z.infer<typeof runtimeInstanceSummaryRoleSchema>;
 
-export const qaReviewTargetSourceSchema = z.enum(["active_build_run", "builder_session"]);
-export type QaReviewTargetSource = z.infer<typeof qaReviewTargetSourceSchema>;
+export const buildContinuationTargetSourceSchema = z.enum(["active_build_run", "builder_session"]);
+export type BuildContinuationTargetSource = z.infer<typeof buildContinuationTargetSourceSchema>;
 
-export const qaReviewTargetSchema = z.object({
+export const buildContinuationTargetSchema = z.object({
   workingDirectory: z.string().trim().min(1),
-  source: qaReviewTargetSourceSchema,
+  source: buildContinuationTargetSourceSchema,
 });
-export type QaReviewTarget = z.infer<typeof qaReviewTargetSchema>;
+export type BuildContinuationTarget = z.infer<typeof buildContinuationTargetSchema>;
 
 export const runtimeInstanceSummarySchema = z.object({
   kind: runtimeKindSchema,

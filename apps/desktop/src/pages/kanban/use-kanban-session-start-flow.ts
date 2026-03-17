@@ -1,27 +1,27 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { useQueryClient } from "@tanstack/react-query";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
+import {
+  buildHumanReviewFeedbackModalModel,
+  createHumanReviewFeedbackState,
+} from "@/features/human-review-feedback/human-review-feedback-state";
+import type {
+  HumanReviewFeedbackModalModel,
+  HumanReviewFeedbackState,
+  PendingHumanReviewHydration,
+} from "@/features/human-review-feedback/human-review-feedback-types";
 import { firstScenario, useSessionStartModalCoordinator } from "@/features/session-start";
 import { roleDefaultSelectionFor } from "@/features/session-start/session-start-selection";
 import { resolveBuildContinuationScenario } from "@/lib/build-scenarios";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
-import {
-  buildHumanReviewFeedbackModalModel,
-  confirmHumanReviewFeedbackFlow,
-  createHumanReviewFeedbackState,
-  type HumanReviewFeedbackState,
-  type PendingHumanReviewHydration,
-} from "./kanban-human-review-feedback";
-import type {
-  HumanReviewFeedbackModalModel,
-  KanbanSessionStartIntent,
-} from "./kanban-page-model-types";
+import { confirmHumanReviewFeedbackFlow } from "./kanban-human-review-feedback";
+import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { startKanbanSessionFlow } from "./kanban-session-start-actions";
 
 type UseKanbanSessionStartFlowArgs = {

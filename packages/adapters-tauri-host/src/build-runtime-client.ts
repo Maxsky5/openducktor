@@ -1,10 +1,10 @@
 import {
   type BeadsCheck,
+  type BuildContinuationTarget,
   beadsCheckSchema,
+  buildContinuationTargetSchema,
   gitMergeMethodSchema,
   pullRequestSchema,
-  type QaReviewTarget,
-  qaReviewTargetSchema,
   type RunSummary,
   type RuntimeCheck,
   type RuntimeDescriptor,
@@ -64,16 +64,16 @@ export const runtimeDefinitionsList = async (invokeFn: InvokeFn): Promise<Runtim
   return parseArray(runtimeDescriptorSchema, payload, "runtime_definitions_list");
 };
 
-export const qaReviewTargetGet = async (
+export const buildContinuationTargetGet = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
-): Promise<QaReviewTarget> => {
-  const payload = await invokeFn("qa_review_target_get", {
+): Promise<BuildContinuationTarget> => {
+  const payload = await invokeFn("build_continuation_target_get", {
     repoPath,
     taskId,
   });
-  return qaReviewTargetSchema.parse(payload);
+  return buildContinuationTargetSchema.parse(payload);
 };
 
 export const runtimeStop = async (
@@ -301,8 +301,11 @@ export class TauriAgentClient {
     return runtimeDefinitionsList(this.invokeFn);
   }
 
-  async qaReviewTargetGet(repoPath: string, taskId: string): Promise<QaReviewTarget> {
-    return qaReviewTargetGet(this.invokeFn, repoPath, taskId);
+  async buildContinuationTargetGet(
+    repoPath: string,
+    taskId: string,
+  ): Promise<BuildContinuationTarget> {
+    return buildContinuationTargetGet(this.invokeFn, repoPath, taskId);
   }
 
   async runtimeStop(runtimeId: string): Promise<{ ok: boolean }> {

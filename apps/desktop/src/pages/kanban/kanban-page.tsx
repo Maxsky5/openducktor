@@ -4,7 +4,7 @@ import {
   TaskDetailsSheetController,
   type TaskDetailsSheetControllerHandle,
 } from "@/components/features/task-details/task-details-sheet-controller";
-import { HumanReviewFeedbackModal } from "./human-review-feedback-modal";
+import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
 import { KanbanPageContent } from "./kanban-page-content";
 import { KanbanPageHeader } from "./kanban-page-header";
 import { KanbanSessionStartModal } from "./kanban-session-start-modal";

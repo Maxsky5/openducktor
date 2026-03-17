@@ -1,12 +1,12 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { useQueryClient } from "@tanstack/react-query";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { assertAgentKickoffScenario } from "@openducktor/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import { toast } from "sonner";
 import type { NewSessionStartRequest } from "@/features/session-start";
+import { resolveBuildWorkingDirectoryOverride } from "@/lib/build-worktree-overrides";
 import { errorMessage } from "@/lib/errors";
-import { host } from "@/state/operations/host";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { runOrchestratorSideEffect } from "../../state/operations/agent-orchestrator/support/async-side-effects";
@@ -136,10 +136,12 @@ export function useAgentStudioFreshSessionCreation({
       previousSelection: QueryUpdate;
     }): Promise<string | undefined> => {
       try {
-        const workingDirectoryOverride =
-          params.nextRole === "build" && params.nextScenario === "build_after_qa_rejected"
-            ? (await host.qaReviewTargetGet(activeRepo ?? "", taskId)).workingDirectory
-            : null;
+        const workingDirectoryOverride = await resolveBuildWorkingDirectoryOverride({
+          activeRepo,
+          taskId,
+          role: params.nextRole,
+          scenario: params.nextScenario,
+        });
         return await startAgentSession({
           taskId,
           role: params.nextRole,

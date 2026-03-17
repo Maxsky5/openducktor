@@ -8,9 +8,9 @@ import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { SCENARIO_LABELS } from "./agents-page-constants";
 import {
-  buildRoleSessionSummaryMap,
   buildLatestSessionByRoleMap,
   buildRoleEnabledMapForTask,
+  buildRoleSessionSummaryMap,
   buildSessionCreateOptions,
   buildSessionSelectorGroups,
   buildWorkflowStateByRole,

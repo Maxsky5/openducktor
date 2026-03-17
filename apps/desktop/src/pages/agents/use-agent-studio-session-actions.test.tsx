@@ -49,6 +49,8 @@ const createBaseArgs = (): HookArgs => {
     startAgentSession: async () => "session-new",
     sendAgentMessage: async () => {},
     updateAgentSessionModel: () => {},
+    loadAgentSessions: async () => {},
+    humanRequestChangesTask: async () => {},
     answerAgentQuestion: async () => {},
     updateQuery: () => {},
   };

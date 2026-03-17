@@ -21,6 +21,7 @@ import {
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import { useAgentStudioDiffData } from "@/features/agent-studio-git";
+import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
 import { normalizeTargetBranch, UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
@@ -93,18 +94,21 @@ function AgentsPageWorkspace({
 
 type AgentsPageModalContentProps = {
   rebaseConflictModal: ReactNode;
+  humanReviewFeedbackModal: ReactNode;
   sessionStartModal: ReactNode;
   taskDetailsSheet: ReactElement;
 };
 
 function AgentsPageModalContent({
   rebaseConflictModal,
+  humanReviewFeedbackModal,
   sessionStartModal,
   taskDetailsSheet,
 }: AgentsPageModalContentProps): ReactElement {
   return (
     <>
       {rebaseConflictModal}
+      {humanReviewFeedbackModal}
       {sessionStartModal}
       {taskDetailsSheet}
     </>
@@ -127,6 +131,7 @@ type AgentsPageContentProps = {
   isRightPanelVisible: boolean;
   rightPanelModel: ComponentProps<typeof AgentStudioRightPanel>["model"] | null;
   rebaseConflictModal: ReactNode;
+  humanReviewFeedbackModal: ReactNode;
   sessionStartModal: ReactNode;
   taskDetailsSheet: ReactElement;
 };
@@ -147,6 +152,7 @@ function AgentsPageContent({
   isRightPanelVisible,
   rightPanelModel,
   rebaseConflictModal,
+  humanReviewFeedbackModal,
   sessionStartModal,
   taskDetailsSheet,
 }: AgentsPageContentProps): ReactElement {
@@ -180,6 +186,7 @@ function AgentsPageContent({
       modalContent={
         <AgentsPageModalContent
           rebaseConflictModal={rebaseConflictModal}
+          humanReviewFeedbackModal={humanReviewFeedbackModal}
           sessionStartModal={sessionStartModal}
           taskDetailsSheet={taskDetailsSheet}
         />
@@ -460,6 +467,8 @@ type BuildAgentsPageOrchestrationContextsArgs = {
   sendAgentMessage: AgentStudioOrchestrationActionsContext["sendAgentMessage"];
   stopAgentSession: AgentStudioOrchestrationActionsContext["stopAgentSession"];
   updateAgentSessionModel: AgentStudioOrchestrationActionsContext["updateAgentSessionModel"];
+  loadAgentSessions: AgentStudioOrchestrationActionsContext["loadAgentSessions"];
+  humanRequestChangesTask: AgentStudioOrchestrationActionsContext["humanRequestChangesTask"];
   replyAgentPermission: AgentStudioOrchestrationActionsContext["replyAgentPermission"];
   answerAgentQuestion: AgentStudioOrchestrationActionsContext["answerAgentQuestion"];
   requestNewSessionStart: AgentStudioOrchestrationActionsContext["requestNewSessionStart"];
@@ -497,6 +506,8 @@ function buildAgentsPageOrchestrationContexts({
   sendAgentMessage,
   stopAgentSession,
   updateAgentSessionModel,
+  loadAgentSessions,
+  humanRequestChangesTask,
   replyAgentPermission,
   answerAgentQuestion,
   requestNewSessionStart,
@@ -542,6 +553,8 @@ function buildAgentsPageOrchestrationContexts({
       sendAgentMessage,
       stopAgentSession,
       updateAgentSessionModel,
+      loadAgentSessions,
+      humanRequestChangesTask,
       replyAgentPermission,
       answerAgentQuestion,
       ...(requestNewSessionStart ? { requestNewSessionStart } : {}),
@@ -561,6 +574,7 @@ export function AgentsPage(): ReactElement {
     runs,
     syncPullRequests,
     unlinkPullRequest,
+    humanRequestChangesTask,
     detectingPullRequestTaskId,
     unlinkingPullRequestTaskId,
   } = useTasksState();
@@ -706,6 +720,8 @@ export function AgentsPage(): ReactElement {
       sendAgentMessage,
       stopAgentSession,
       updateAgentSessionModel,
+      loadAgentSessions,
+      humanRequestChangesTask,
       replyAgentPermission,
       answerAgentQuestion,
       requestNewSessionStart,
@@ -765,6 +781,9 @@ export function AgentsPage(): ReactElement {
       onResolve={resolvePendingSessionStart}
     />
   ) : null;
+  const humanReviewFeedbackModal = (
+    <HumanReviewFeedbackModal model={orchestration.humanReviewFeedbackModal} />
+  );
   const taskDetailsSheet = (
     <TaskDetailsSheetController
       ref={taskDetailsSheetRef}
@@ -795,6 +814,7 @@ export function AgentsPage(): ReactElement {
         isRightPanelVisible={isRightPanelVisible}
         rightPanelModel={rightPanelModel}
         rebaseConflictModal={rebaseConflictModal}
+        humanReviewFeedbackModal={humanReviewFeedbackModal}
         sessionStartModal={sessionStartModal}
         taskDetailsSheet={taskDetailsSheet}
       />

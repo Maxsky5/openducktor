@@ -529,8 +529,8 @@ describe("agent-orchestrator-runtime", () => {
   });
 
   test("uses the active build run runtime for qa when the review target matches it", async () => {
-    const originalQaReviewTargetGet = host.qaReviewTargetGet;
-    host.qaReviewTargetGet = async () => ({
+    const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
+    host.buildContinuationTargetGet = async () => ({
       workingDirectory: "/tmp/repo/worktree",
       source: "active_build_run",
     });
@@ -554,14 +554,14 @@ describe("agent-orchestrator-runtime", () => {
         workingDirectory: "/tmp/repo/worktree",
       });
     } finally {
-      host.qaReviewTargetGet = originalQaReviewTargetGet;
+      host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
     }
   });
 
   test("uses the shared repo runtime for qa when only a persisted builder worktree exists", async () => {
-    const originalQaReviewTargetGet = host.qaReviewTargetGet;
+    const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
     const originalRepoRuntimeEnsure = host.runtimeEnsure;
-    host.qaReviewTargetGet = async () => ({
+    host.buildContinuationTargetGet = async () => ({
       workingDirectory: "/tmp/repo/worktrees/task-1",
       source: "builder_session",
     });
@@ -599,7 +599,7 @@ describe("agent-orchestrator-runtime", () => {
         workingDirectory: "/tmp/repo/worktrees/task-1",
       });
     } finally {
-      host.qaReviewTargetGet = originalQaReviewTargetGet;
+      host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
       host.runtimeEnsure = originalRepoRuntimeEnsure;
     }
   });

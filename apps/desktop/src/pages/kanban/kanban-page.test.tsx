@@ -43,6 +43,10 @@ const workspaceGetSettingsSnapshotMock = mock(async () => ({
   repos: {},
   globalPromptOverrides: {} as RepoPromptOverrides,
 }));
+const buildContinuationTargetGetMock = mock(async () => ({
+  workingDirectory: "/repo/worktrees/task-1",
+  source: "builder_session" as const,
+}));
 
 let latestKanbanColumnProps: Record<string, unknown> | null = null;
 let latestHumanReviewFeedbackModalModel: Record<string, unknown> | null = null;
@@ -166,6 +170,7 @@ mock.module("@/state/operations/host", () => ({
   host: {
     workspaceGetRepoConfig: workspaceGetRepoConfigMock,
     workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
+    buildContinuationTargetGet: buildContinuationTargetGetMock,
   },
 }));
 
@@ -194,7 +199,7 @@ mock.module("./kanban-session-start-modal", () => ({
   },
 }));
 
-mock.module("./human-review-feedback-modal", () => ({
+mock.module("@/features/human-review-feedback/human-review-feedback-modal", () => ({
   HumanReviewFeedbackModal: ({
     model,
   }: {
@@ -267,7 +272,10 @@ const renderPage = async (): Promise<ReactTestRenderer> => {
   return renderer;
 };
 
-const waitForMockCall = async (fn: { mock: { calls: unknown[][] } }, minCalls = 1): Promise<void> => {
+const waitForMockCall = async (
+  fn: { mock: { calls: unknown[][] } },
+  minCalls = 1,
+): Promise<void> => {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     if (fn.mock.calls.length >= minCalls) {
       return;
@@ -338,6 +346,7 @@ describe("KanbanPage session start modal flow", () => {
     toastErrorMock.mockClear();
     workspaceGetRepoConfigMock.mockClear();
     workspaceGetSettingsSnapshotMock.mockClear();
+    buildContinuationTargetGetMock.mockClear();
     workspaceGetRepoConfigMock.mockImplementation(async () => createRepoConfigFixture());
     workspaceGetSettingsSnapshotMock.mockImplementation(async () => ({
       theme: "light" as const,
@@ -795,6 +804,7 @@ describe("KanbanPage session start modal flow", () => {
         role: "build",
         scenario: "build_after_human_request_changes",
         startMode: "fresh",
+        workingDirectoryOverride: "/repo/worktrees/task-1",
       }),
     );
     expect(humanRequestChangesTaskMock).toHaveBeenCalledWith(
@@ -928,6 +938,7 @@ describe("KanbanPage session start modal flow", () => {
         role: "build",
         scenario: "build_after_qa_rejected",
         startMode: "fresh",
+        workingDirectoryOverride: "/repo/worktrees/task-1",
       }),
     );
     expect(humanRequestChangesTaskMock).toHaveBeenCalledWith(

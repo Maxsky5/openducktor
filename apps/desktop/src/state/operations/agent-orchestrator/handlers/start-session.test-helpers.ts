@@ -2,8 +2,8 @@ import type { StartSessionDependencies } from "./start-session";
 
 export type FlatStartSessionDependencies = StartSessionDependencies["repo"] &
   StartSessionDependencies["session"] &
-  Omit<StartSessionDependencies["runtime"], "resolveQaReviewTarget"> &
-  Partial<Pick<StartSessionDependencies["runtime"], "resolveQaReviewTarget">> &
+  Omit<StartSessionDependencies["runtime"], "resolveBuildContinuationTarget"> &
+  Partial<Pick<StartSessionDependencies["runtime"], "resolveBuildContinuationTarget">> &
   StartSessionDependencies["task"] &
   StartSessionDependencies["model"];
 
@@ -26,7 +26,8 @@ export const toStartSessionDependencies = (
     },
     runtime: {
       adapter: deps.adapter,
-      resolveQaReviewTarget: deps.resolveQaReviewTarget ?? (async () => "/tmp/repo/worktree"),
+      resolveBuildContinuationTarget:
+        deps.resolveBuildContinuationTarget ?? (async () => "/tmp/repo/worktree"),
       ensureRuntime: deps.ensureRuntime,
     },
     task: {

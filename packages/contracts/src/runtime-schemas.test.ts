@@ -2,6 +2,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   agentSessionRecordSchema,
+  buildContinuationTargetSchema,
+  buildContinuationTargetSourceSchema,
   gitBranchSchema,
   gitCommitAllRequestSchema,
   gitCommitAllResultSchema,
@@ -17,8 +19,6 @@ import {
   gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  qaReviewTargetSchema,
-  qaReviewTargetSourceSchema,
   repoConfigSchema,
   runEventSchema,
   runtimeInstanceSummaryRoleSchema,
@@ -513,9 +513,9 @@ describe("runtime schemas", () => {
   test("agent runtime role schemas and qa review target schema enforce boundaries", () => {
     expect(runtimeInstanceSummaryRoleSchema.parse("workspace")).toBe("workspace");
     expect(() => runtimeInstanceSummaryRoleSchema.parse("planner")).toThrow();
-    expect(qaReviewTargetSourceSchema.parse("active_build_run")).toBe("active_build_run");
+    expect(buildContinuationTargetSourceSchema.parse("active_build_run")).toBe("active_build_run");
     expect(
-      qaReviewTargetSchema.parse({
+      buildContinuationTargetSchema.parse({
         workingDirectory: "/repo/worktrees/task-1",
         source: "builder_session",
       }),
@@ -524,7 +524,7 @@ describe("runtime schemas", () => {
       source: "builder_session",
     });
     expect(() =>
-      qaReviewTargetSchema.parse({
+      buildContinuationTargetSchema.parse({
         workingDirectory: "   ",
         source: "active_build_run",
       }),

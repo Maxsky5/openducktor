@@ -28,7 +28,7 @@ type RunningTaskSession = Pick<
 
 const toVisibleKanbanRunState = (
   runState: RunSummary["state"] | undefined,
-  hasActiveSessions: boolean,
+  _hasActiveSessions: boolean,
 ): VisibleKanbanRunState | undefined => {
   if (!runState) {
     return undefined;

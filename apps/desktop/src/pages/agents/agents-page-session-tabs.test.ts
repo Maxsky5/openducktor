@@ -3,10 +3,10 @@ import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-te
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
-  buildRoleSessionSummaryMap,
   buildLatestSessionByRoleMap,
   buildLatestSessionByTaskMap,
   buildRoleEnabledMapForTask,
+  buildRoleSessionSummaryMap,
   buildSessionCreateOptions,
   buildSessionSelectorGroups,
   buildTaskTabs,

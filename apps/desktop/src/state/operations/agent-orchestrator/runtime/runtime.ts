@@ -1,5 +1,5 @@
 import type {
-  QaReviewTarget,
+  BuildContinuationTarget,
   RepoPromptOverrides,
   RunSummary,
   RuntimeKind,
@@ -95,11 +95,11 @@ export const loadRepoPromptOverrides = async (repoPath: string): Promise<RepoPro
   return loadEffectivePromptOverrides(repoPath);
 };
 
-export const loadQaReviewTarget = async (
+export const loadBuildContinuationTarget = async (
   repoPath: string,
   taskId: string,
-): Promise<QaReviewTarget> => {
-  return host.qaReviewTargetGet(repoPath, taskId);
+): Promise<BuildContinuationTarget> => {
+  return host.buildContinuationTargetGet(repoPath, taskId);
 };
 
 export const loadRepoDefaultRuntimeKind = async (
@@ -206,7 +206,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
     if (role === "qa") {
       const workingDirectory =
         workingDirectoryOverride ||
-        (await host.qaReviewTargetGet(repoPath, taskId)).workingDirectory;
+        (await host.buildContinuationTargetGet(repoPath, taskId)).workingDirectory;
       const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
       const matchingRun = runsRef.current.find(
         (entry) =>

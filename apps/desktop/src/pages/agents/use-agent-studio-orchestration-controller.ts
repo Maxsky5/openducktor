@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
+import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { RequestNewSessionStart } from "@/features/session-start";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
@@ -58,6 +59,8 @@ export type AgentStudioOrchestrationActionsContext = {
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   stopAgentSession: AgentStateContextValue["stopAgentSession"];
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
+  loadAgentSessions: AgentStateContextValue["loadAgentSessions"];
+  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   replyAgentPermission: AgentStateContextValue["replyAgentPermission"];
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
   requestNewSessionStart?: RequestNewSessionStart;
@@ -75,6 +78,7 @@ type UseAgentStudioOrchestrationControllerResult = {
   repoSettings: RepoSettingsInput | null;
   chatSettingsLoadError: Error | null;
   retryChatSettingsLoad: () => void;
+  humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   activeTabValue: string;
   agentStudioTaskTabsModel: AgentStudioTaskTabsModel;
   agentStudioHeaderModel: ReturnType<typeof useAgentStudioPageModels>["agentStudioHeaderModel"];
@@ -232,6 +236,8 @@ export function useAgentStudioOrchestrationController({
     sendAgentMessage,
     stopAgentSession,
     updateAgentSessionModel,
+    loadAgentSessions,
+    humanRequestChangesTask,
     replyAgentPermission,
     answerAgentQuestion,
     requestNewSessionStart,
@@ -271,6 +277,7 @@ export function useAgentStudioOrchestrationController({
 
   const {
     isStarting,
+    humanReviewFeedbackModal,
     isSending,
     isSubmittingQuestionByRequestId,
     isSessionWorking,
@@ -299,6 +306,8 @@ export function useAgentStudioOrchestrationController({
     startAgentSession,
     sendAgentMessage,
     updateAgentSessionModel,
+    loadAgentSessions,
+    humanRequestChangesTask,
     answerAgentQuestion,
     updateQuery,
     onContextSwitchIntent,
@@ -402,6 +411,7 @@ export function useAgentStudioOrchestrationController({
     repoSettings,
     chatSettingsLoadError,
     retryChatSettingsLoad,
+    humanReviewFeedbackModal,
     activeTabValue,
     agentStudioTaskTabsModel,
     agentStudioHeaderModel,

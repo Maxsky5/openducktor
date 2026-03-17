@@ -15,6 +15,8 @@ import type {
   AgentWorkflowState,
   AgentWorkflows,
   BeadsCheck,
+  BuildContinuationTarget,
+  BuildContinuationTargetSource,
   ChatSettings,
   CommitsAheadBehind,
   FileDiff,
@@ -40,8 +42,6 @@ import type {
   PlanSubtaskIssueType,
   PlanSubtaskPriority,
   QaReportVerdict,
-  QaReviewTarget,
-  QaReviewTargetSource,
   QaWorkflowVerdict,
   RepoAgentDefaults,
   RepoConfig,
@@ -82,8 +82,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentKickoffScenarioValues",
   "agentToolNameSchema",
   "agentToolNameValues",
-  "qaReviewTargetSchema",
-  "qaReviewTargetSourceSchema",
+  "buildContinuationTargetSchema",
+  "buildContinuationTargetSourceSchema",
   "runtimeInstanceSummarySchema",
   "runtimeInstanceSummaryRoleSchema",
   "agentPromptOverrideSchema",
@@ -207,8 +207,8 @@ type ExportedTypeContract = {
   AgentScenario: AgentScenario;
   RuntimeInstanceSummary: RuntimeInstanceSummary;
   RuntimeInstanceSummaryRole: RuntimeInstanceSummaryRole;
-  QaReviewTarget: QaReviewTarget;
-  QaReviewTargetSource: QaReviewTargetSource;
+  BuildContinuationTarget: BuildContinuationTarget;
+  BuildContinuationTargetSource: BuildContinuationTargetSource;
   AgentSessionModelSelection: AgentSessionModelSelection;
   AgentSessionTodoPayloadRecord: AgentSessionTodoPayloadRecord;
   AgentSessionRecord: AgentSessionRecord;

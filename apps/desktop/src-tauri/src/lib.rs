@@ -325,7 +325,7 @@ fn startup_phase_command_registration(
         runs_list,
         runtime_definitions_list,
         runtime_list,
-        qa_review_target_get,
+        build_continuation_target_get,
         runtime_stop,
         runtime_ensure,
         agent_sessions_list,

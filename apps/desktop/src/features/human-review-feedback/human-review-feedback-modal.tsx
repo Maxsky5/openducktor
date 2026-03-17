@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { HumanReviewFeedbackModalModel } from "./kanban-page-model-types";
+import type { HumanReviewFeedbackModalModel } from "./human-review-feedback-types";
 
 export function HumanReviewFeedbackModal({
   model,
