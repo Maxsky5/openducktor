@@ -10,6 +10,7 @@ import {
 } from "./beads-runtime";
 
 const originalExecPath = process.execPath;
+const tempDirs: string[] = [];
 
 const setExecPath = (value: string): void => {
   Object.defineProperty(process, "execPath", {
@@ -22,11 +23,15 @@ const setExecPath = (value: string): void => {
 afterEach(() => {
   setExecPath(originalExecPath);
   delete process.env[commandEnvOverrideName("bd")];
+  for (const dir of tempDirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 describe("beads runtime command resolution", () => {
   test("resolveBundledCommandPath uses sibling executable next to current binary", () => {
     const root = mkdtempSync(join(tmpdir(), "odt-mcp-bundled-"));
+    tempDirs.push(root);
     const executableDir = join(root, "MacOS");
     mkdirSync(executableDir, { recursive: true });
     const fakeExecPath = join(executableDir, "openducktor-mcp");
@@ -36,12 +41,11 @@ describe("beads runtime command resolution", () => {
     setExecPath(fakeExecPath);
 
     expect(resolveBundledCommandPath("bd")).toBe(fakeBdPath);
-
-    rmSync(root, { recursive: true, force: true });
   });
 
   test("resolveBundledCommandPath checks Windows executable suffixes for bundled sidecars", () => {
     const root = mkdtempSync(join(tmpdir(), "odt-mcp-bundled-win-"));
+    tempDirs.push(root);
     const executableDir = join(root, "bin");
     mkdirSync(executableDir, { recursive: true });
     const fakeExecPath = join(executableDir, "openducktor-mcp.exe");
@@ -55,20 +59,17 @@ describe("beads runtime command resolution", () => {
       "bd.exe",
       "bd.cmd",
     ]);
-
-    rmSync(root, { recursive: true, force: true });
   });
 
   test("resolveCommandExecutable prefers explicit override", () => {
     const root = mkdtempSync(join(tmpdir(), "odt-mcp-override-"));
+    tempDirs.push(root);
     const binaryPath = join(root, "bd-override");
     writeFileSync(binaryPath, "#!/bin/sh\nexit 0\n");
     chmodSync(binaryPath, 0o755);
     process.env[commandEnvOverrideName("bd")] = binaryPath;
 
     expect(resolveCommandExecutable("bd")).toBe(binaryPath);
-
-    rmSync(root, { recursive: true, force: true });
   });
 
   test("resolveCommandExecutable rejects invalid explicit override", () => {
@@ -81,12 +82,32 @@ describe("beads runtime command resolution", () => {
 
   test("resolveCommandExecutable rejects explicit override directories", () => {
     const root = mkdtempSync(join(tmpdir(), "odt-mcp-override-dir-"));
+    tempDirs.push(root);
     process.env[commandEnvOverrideName("bd")] = root;
 
     expect(() => resolveCommandExecutable("bd")).toThrow(
       "Configured command override OPENDUCKTOR_BD_PATH points to a missing file",
     );
+  });
 
-    rmSync(root, { recursive: true, force: true });
+  test("resolveCommandExecutable returns path-containing commands unchanged", () => {
+    expect(resolveCommandExecutable("/usr/local/bin/bd")).toBe("/usr/local/bin/bd");
+    expect(resolveCommandExecutable("./bd")).toBe("./bd");
+  });
+
+  test("bundledCommandCandidates keeps explicit Windows extensions unchanged", () => {
+    expect(bundledCommandCandidates("bd.exe", "win32", ".EXE;.CMD")).toEqual(["bd.exe"]);
+  });
+
+  test("resolveCommandExecutable falls back to bare command when no bundled path exists", () => {
+    const root = mkdtempSync(join(tmpdir(), "odt-mcp-no-bundled-"));
+    tempDirs.push(root);
+    const executableDir = join(root, "bin");
+    mkdirSync(executableDir, { recursive: true });
+    const fakeExecPath = join(executableDir, "openducktor-mcp");
+    writeFileSync(fakeExecPath, "");
+    setExecPath(fakeExecPath);
+
+    expect(resolveCommandExecutable("bd")).toBe("bd");
   });
 });

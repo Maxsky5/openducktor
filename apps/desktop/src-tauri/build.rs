@@ -76,6 +76,14 @@ fn command_file_name(program: &str) -> OsString {
     }
 }
 
+fn staged_sidecar_name(program: &str, target_triple: &str) -> OsString {
+    let mut file_name = OsString::from(format!("{program}-{target_triple}"));
+    if target_triple.contains("windows") {
+        file_name.push(".exe");
+    }
+    file_name
+}
+
 fn path_entries_from_env() -> Vec<PathBuf> {
     env::var_os("PATH")
         .as_ref()
@@ -184,7 +192,7 @@ fn prepare_sidecar_binary(
 ) -> Result<(), String> {
     let sidecar_path = manifest_dir
         .join("binaries")
-        .join(format!("{program}-{target_triple}"));
+        .join(staged_sidecar_name(program, target_triple));
     println!("cargo:rerun-if-env-changed={env_var}");
 
     let source = resolve_binary_source(program, env_var).map_err(|source_error| {
@@ -235,7 +243,7 @@ fn prepare_mcp_sidecar(manifest_dir: &Path, target_triple: &str) -> Result<(), S
     let entrypoint = package_dir.join("src").join("index.ts");
     let sidecar_path = manifest_dir
         .join("binaries")
-        .join(format!("openducktor-mcp-{target_triple}"));
+        .join(staged_sidecar_name("openducktor-mcp", target_triple));
 
     if !entrypoint.is_file() {
         return Err(format!(
@@ -245,6 +253,14 @@ fn prepare_mcp_sidecar(manifest_dir: &Path, target_triple: &str) -> Result<(), S
     }
 
     println!("cargo:rerun-if-env-changed=PATH");
+    println!(
+        "cargo:rerun-if-changed={}",
+        workspace_root.join("package.json").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        workspace_root.join("bun.lock").display()
+    );
     println!(
         "cargo:rerun-if-changed={}",
         package_dir.join("package.json").display()
