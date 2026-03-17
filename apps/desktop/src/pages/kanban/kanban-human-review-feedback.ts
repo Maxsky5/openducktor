@@ -1,5 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { toast } from "sonner";
+import type { BuildRequestChangesScenario } from "@/lib/build-scenarios";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type {
   HumanReviewFeedbackModalModel,
@@ -7,7 +8,6 @@ import type {
 } from "./kanban-page-model-types";
 import {
   buildHumanReviewMessage,
-  type RequestChangesBuildScenario,
   resolveRequestChangesScenario,
 } from "./kanban-session-start-actions";
 
@@ -15,7 +15,7 @@ export const NEW_BUILDER_SESSION_TARGET = "new_session";
 
 export type HumanReviewFeedbackState = {
   taskId: string;
-  scenario: RequestChangesBuildScenario;
+  scenario: BuildRequestChangesScenario;
   message: string;
   builderSessions: AgentSessionState[];
   selectedTarget: string;

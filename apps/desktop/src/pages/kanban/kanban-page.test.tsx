@@ -267,6 +267,18 @@ const renderPage = async (): Promise<ReactTestRenderer> => {
   return renderer;
 };
 
+const waitForMockCall = async (fn: { mock: { calls: unknown[][] } }, minCalls = 1): Promise<void> => {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    if (fn.mock.calls.length >= minCalls) {
+      return;
+    }
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+};
+
 describe("KanbanPage session start modal flow", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
@@ -392,7 +404,9 @@ describe("KanbanPage session start modal flow", () => {
     await act(async () => {
       (latestSessionStartModalModel?.onConfirm as (runInBackground: boolean) => void)(true);
       await Promise.resolve();
+      await Promise.resolve();
     });
+    await waitForMockCall(sendAgentMessageMock);
 
     expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
     expect(updateAgentSessionModelMock).toHaveBeenCalledTimes(1);
@@ -936,6 +950,25 @@ describe("KanbanPage session start modal flow", () => {
     expect(latestSessionStartModalModel).toBeNull();
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(latestLocation).toContain("/agents?task=TASK-123");
+    expect(latestLocation).toContain("scenario=build_implementation_start");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("build action routes human review tasks into the human-changes builder scenario", async () => {
+    currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onBuild as (taskId: string) => void)("TASK-123");
+    });
+
+    expect(latestSessionStartModalModel).toBeNull();
+    expect(startAgentSessionMock).not.toHaveBeenCalled();
+    expect(latestLocation).toContain("/agents?task=TASK-123");
+    expect(latestLocation).toContain("scenario=build_after_human_request_changes");
 
     await act(async () => {
       renderer.unmount();

@@ -6,8 +6,7 @@ import {
   type BuildAgentKickoffPromptInput,
   buildAgentKickoffPrompt,
 } from "@openducktor/core";
-
-const hasMarkdown = (value: string): boolean => value.trim().length > 0;
+import { resolveBuildContinuationScenario } from "@/lib/build-scenarios";
 
 export const inferScenario = (
   role: AgentRole,
@@ -28,15 +27,8 @@ export const inferScenario = (
     return "qa_review";
   }
 
-  if (hasMarkdown(docs.qaMarkdown) && task.status === "in_progress") {
-    return "build_after_qa_rejected";
-  }
-
-  if (task.status === "in_progress" && !hasMarkdown(docs.qaMarkdown)) {
-    return "build_after_human_request_changes";
-  }
-
-  return "build_implementation_start";
+  void docs;
+  return resolveBuildContinuationScenario(task);
 };
 
 export const kickoffPrompt = (

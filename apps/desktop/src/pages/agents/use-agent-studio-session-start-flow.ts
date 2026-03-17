@@ -1,4 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
+import { useQueryClient } from "@tanstack/react-query";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { assertAgentKickoffScenario } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -63,6 +64,7 @@ export function useAgentStudioSessionStartFlow({
   startScenarioKickoff: () => Promise<void>;
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
+  const queryClient = useQueryClient();
   const [isStarting, setIsStarting] = useState(false);
 
   const previousRepoForSessionRefs = useRef<string | null>(activeRepo);
@@ -128,7 +130,9 @@ export function useAgentStudioSessionStartFlow({
       return;
     }
 
-    const promptOverrides = activeRepo ? await loadEffectivePromptOverrides(activeRepo) : undefined;
+    const promptOverrides = activeRepo
+      ? await loadEffectivePromptOverrides(activeRepo, queryClient)
+      : undefined;
     await sendAgentMessage(
       sessionId,
       kickoffPromptForScenario(role, kickoffScenario, taskId, {
@@ -155,6 +159,7 @@ export function useAgentStudioSessionStartFlow({
     sendAgentMessage,
     startSession,
     taskId,
+    queryClient,
   ]);
 
   const { handleCreateSession } = useAgentStudioFreshSessionCreation({

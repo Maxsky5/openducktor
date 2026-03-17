@@ -1,4 +1,5 @@
 import type { TaskApprovalContext, TaskCard } from "@openducktor/contracts";
+import { useQueryClient } from "@tanstack/react-query";
 import { buildAgentMessagePrompt } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -85,6 +86,7 @@ export function useTaskApprovalFlow({
     },
   ) => void;
 } {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<ApprovalState | null>(INITIAL_STATE);
   const sessionsRef = useRef(sessions);
   const approvalRequestVersionRef = useRef(0);
@@ -244,7 +246,7 @@ export function useTaskApprovalFlow({
       );
       const [task, overrides, spec, plan, qa] = await Promise.all([
         Promise.resolve(tasks.find((entry) => entry.id === currentState.taskId) ?? null),
-        loadEffectivePromptOverrides(activeRepo),
+        loadEffectivePromptOverrides(activeRepo, queryClient),
         loadSpecDocumentFromQuery(appQueryClient, activeRepo, currentState.taskId),
         loadPlanDocumentFromQuery(appQueryClient, activeRepo, currentState.taskId),
         loadQaReportDocumentFromQuery(appQueryClient, activeRepo, currentState.taskId),
@@ -291,6 +293,7 @@ export function useTaskApprovalFlow({
     [
       activeRepo,
       forkAgentSession,
+      queryClient,
       sendAgentMessage,
       tasks,
       waitForForkedAssistantReply,

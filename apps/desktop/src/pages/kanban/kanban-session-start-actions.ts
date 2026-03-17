@@ -1,16 +1,17 @@
 import type { TaskCard } from "@openducktor/contracts";
+import type { QueryClient } from "@tanstack/react-query";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { assertAgentKickoffScenario } from "@openducktor/core";
 import { toast } from "sonner";
 import { kickoffPromptForScenario } from "@/features/session-start";
+import {
+  resolveBuildRequestChangesScenario,
+  type BuildRequestChangesScenario as RequestChangesBuildScenario,
+} from "@/lib/build-scenarios";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { renderSessionStartedToastAction } from "./session-started-toast-action";
-
-export type RequestChangesBuildScenario =
-  | "build_after_human_request_changes"
-  | "build_after_qa_rejected";
 
 export const toPromptTaskContext = (task: TaskCard | undefined) => {
   if (!task) {
@@ -29,9 +30,7 @@ export const toPromptTaskContext = (task: TaskCard | undefined) => {
 export const resolveRequestChangesScenario = (
   task: TaskCard | undefined,
 ): RequestChangesBuildScenario => {
-  return task?.status === "human_review"
-    ? "build_after_human_request_changes"
-    : "build_after_qa_rejected";
+  return resolveBuildRequestChangesScenario(task);
 };
 
 export const buildHumanReviewMessage = (
@@ -51,6 +50,7 @@ type StartKanbanSessionFlowInput = {
   startInBackground: boolean;
   tasks: TaskCard[];
   roleLabels: Record<AgentRole, string>;
+  queryClient: QueryClient;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
@@ -66,6 +66,7 @@ export const startKanbanSessionFlow = async ({
   startInBackground,
   tasks,
   roleLabels,
+  queryClient,
   startAgentSession,
   updateAgentSessionModel,
   humanRequestChangesTask,
@@ -136,7 +137,9 @@ export const startKanbanSessionFlow = async ({
       return message;
     }
 
-    const promptOverrides = activeRepo ? await loadEffectivePromptOverrides(activeRepo) : undefined;
+    const promptOverrides = activeRepo
+      ? await loadEffectivePromptOverrides(activeRepo, queryClient)
+      : undefined;
     const intentTask = tasks.find((entry) => entry.id === intent.taskId);
     const kickoffScenario = assertAgentKickoffScenario(intent.scenario);
     return kickoffPromptForScenario(intent.role, kickoffScenario, intent.taskId, {
@@ -151,13 +154,14 @@ export const startKanbanSessionFlow = async ({
       : "Session started, but feedback message failed.";
 
   if (startInBackground) {
-    void (async () => {
-      try {
-        await sendAgentMessage(sessionId, await buildPostStartMessage());
-      } catch {
+    try {
+      const postStartMessage = await buildPostStartMessage();
+      void sendAgentMessage(sessionId, postStartMessage).catch(() => {
         toast.error(failureMessage);
-      }
-    })();
+      });
+    } catch {
+      toast.error(failureMessage);
+    }
     return;
   }
 
