@@ -135,7 +135,10 @@ fn standard_search_directories() -> Vec<PathBuf> {
 }
 
 fn standard_command_directories(program: &str) -> Vec<PathBuf> {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     let mut directories = standard_search_directories();
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let directories = standard_search_directories();
 
     #[cfg(target_os = "macos")]
     {
@@ -155,6 +158,9 @@ fn standard_command_directories(program: &str) -> Vec<PathBuf> {
             directories.push(PathBuf::from(program_files_x86).join(program));
         }
     }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let _ = program;
 
     unique_path_entries(directories)
 }
