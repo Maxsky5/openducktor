@@ -412,4 +412,168 @@ describe("useAppLifecycle", () => {
       });
     }
   });
+
+  test("clears pending Beads preparation timer when initialization fails before the toast delay", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const beadsDeferred = createDeferred<{ beadsOk: boolean; beadsError?: string | null }>();
+    const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthMap>();
+    const branchesDeferred = createDeferred<void>();
+
+    const Harness = ({ args }: { args: HookArgs }): ReactElement | null => {
+      useAppLifecycle(args);
+      return null;
+    };
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    const baseArgs: HookArgs = {
+      activeRepo: null,
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => branchesDeferred.promise),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
+      refreshRepoRuntimeHealthForRepo: mock(async () => runtimeHealthDeferred.promise),
+      runtimeKinds: ["opencode"],
+      refreshTaskData: mock(async () => {}),
+      clearTaskData: mock(() => {}),
+      clearBranchData: mock(() => {}),
+      clearActiveBeadsCheck: mock(() => {}),
+      clearActiveRepoRuntimeHealth: mock(() => {}),
+      setIsLoadingTasks: mock((_value: boolean) => {}),
+      setIsLoadingChecks: mock((_value: boolean) => {}),
+      hasRuntimeCheck: mock(() => false),
+      hasCachedBeadsCheck: mock((_repoPath: string) => false),
+      hasCachedRepoRuntimeHealth: mock((_repoPath: string, _runtimeKinds) => false),
+      beadsPreparationToastDelayMs: 15,
+    };
+
+    try {
+      await act(async () => {
+        renderer = TestRenderer.create(createElement(Harness, { args: baseArgs }));
+      });
+      await flush();
+
+      await act(async () => {
+        renderer?.update(
+          createElement(Harness, {
+            args: {
+              ...baseArgs,
+              activeRepo: "/repo",
+            },
+          }),
+        );
+      });
+
+      await act(async () => {
+        beadsDeferred.resolve({ beadsOk: false, beadsError: "init failed" });
+        runtimeHealthDeferred.resolve({});
+        branchesDeferred.resolve();
+        await flush();
+      });
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      });
+
+      expect(toastLoading).not.toHaveBeenCalled();
+      expect(toastDismiss).not.toHaveBeenCalled();
+      expect(toastError).toHaveBeenCalledWith("Repository tasks unavailable", {
+        description: "Task store unavailable. init failed",
+      });
+    } finally {
+      beadsDeferred.resolve({ beadsOk: true, beadsError: null });
+      runtimeHealthDeferred.resolve({});
+      branchesDeferred.resolve();
+      await act(async () => {
+        renderer?.unmount();
+      });
+    }
+  });
+
+  test("dismisses the Beads preparation toast when initialization reports an error after it is shown", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const beadsDeferred = createDeferred<{ beadsOk: boolean; beadsError?: string | null }>();
+    const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthMap>();
+    const branchesDeferred = createDeferred<void>();
+
+    const Harness = ({ args }: { args: HookArgs }): ReactElement | null => {
+      useAppLifecycle(args);
+      return null;
+    };
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    const baseArgs: HookArgs = {
+      activeRepo: null,
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => branchesDeferred.promise),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
+      refreshRepoRuntimeHealthForRepo: mock(async () => runtimeHealthDeferred.promise),
+      runtimeKinds: ["opencode"],
+      refreshTaskData: mock(async () => {}),
+      clearTaskData: mock(() => {}),
+      clearBranchData: mock(() => {}),
+      clearActiveBeadsCheck: mock(() => {}),
+      clearActiveRepoRuntimeHealth: mock(() => {}),
+      setIsLoadingTasks: mock((_value: boolean) => {}),
+      setIsLoadingChecks: mock((_value: boolean) => {}),
+      hasRuntimeCheck: mock(() => false),
+      hasCachedBeadsCheck: mock((_repoPath: string) => false),
+      hasCachedRepoRuntimeHealth: mock((_repoPath: string, _runtimeKinds) => false),
+      beadsPreparationToastDelayMs: 5,
+    };
+
+    try {
+      await act(async () => {
+        renderer = TestRenderer.create(createElement(Harness, { args: baseArgs }));
+      });
+      await flush();
+
+      await act(async () => {
+        renderer?.update(
+          createElement(Harness, {
+            args: {
+              ...baseArgs,
+              activeRepo: "/repo",
+            },
+          }),
+        );
+      });
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 15));
+      });
+
+      expect(toastLoading).toHaveBeenCalledWith("Preparing Beads database", {
+        description: "OpenDucktor is initializing the Beads task store for this repository.",
+      });
+
+      await act(async () => {
+        beadsDeferred.resolve({ beadsOk: false, beadsError: "store failed" });
+        runtimeHealthDeferred.resolve({});
+        branchesDeferred.resolve();
+        await flush();
+      });
+
+      expect(toastDismiss).toHaveBeenCalledWith("toast-id");
+      expect(toastSuccess).not.toHaveBeenCalled();
+      expect(toastError).toHaveBeenCalledWith("Repository tasks unavailable", {
+        description: "Task store unavailable. store failed",
+      });
+    } finally {
+      beadsDeferred.resolve({ beadsOk: true, beadsError: null });
+      runtimeHealthDeferred.resolve({});
+      branchesDeferred.resolve();
+      await act(async () => {
+        renderer?.unmount();
+      });
+    }
+  });
 });
