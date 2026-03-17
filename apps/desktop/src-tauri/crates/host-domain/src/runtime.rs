@@ -235,16 +235,16 @@ impl fmt::Display for RuntimeRole {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum QaReviewTargetSource {
+pub enum BuildContinuationTargetSource {
     ActiveBuildRun,
     BuilderSession,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct QaReviewTarget {
+pub struct BuildContinuationTarget {
     pub working_directory: String,
-    pub source: QaReviewTargetSource,
+    pub source: BuildContinuationTargetSource,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

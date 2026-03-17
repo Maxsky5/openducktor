@@ -53,6 +53,26 @@ describe("agent-orchestrator/support/scenario", () => {
         planMarkdown: "",
         qaMarkdown: "qa",
       }),
+    ).toBe("build_implementation_start");
+  });
+
+  test("infers qa-rework builder scenario from rejected qa verdict", () => {
+    expect(
+      inferScenario(
+        "build",
+        {
+          ...taskFixture,
+          documentSummary: {
+            ...taskFixture.documentSummary,
+            qaReport: { has: true, updatedAt: "2026-02-22T09:00:00.000Z", verdict: "rejected" },
+          },
+        },
+        {
+          specMarkdown: "",
+          planMarkdown: "",
+          qaMarkdown: "",
+        },
+      ),
     ).toBe("build_after_qa_rejected");
   });
 

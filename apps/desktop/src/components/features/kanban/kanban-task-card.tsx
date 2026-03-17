@@ -7,6 +7,7 @@ import {
   PriorityBadge,
   QaRejectedBadge,
   RunStateBadge,
+  type VisibleKanbanRunState,
 } from "@/components/features/kanban/kanban-task-badges";
 import {
   resolveTaskCardActions,
@@ -24,6 +25,26 @@ type RunningTaskSession = Pick<
   AgentSessionState,
   "sessionId" | "runtimeKind" | "role" | "scenario" | "status"
 >;
+
+const toVisibleKanbanRunState = (
+  runState: RunSummary["state"] | undefined,
+): VisibleKanbanRunState | undefined => {
+  if (!runState) {
+    return undefined;
+  }
+
+  if (
+    runState === "starting" ||
+    runState === "running" ||
+    runState === "awaiting_done_confirmation" ||
+    runState === "completed" ||
+    runState === "stopped"
+  ) {
+    return undefined;
+  }
+
+  return runState;
+};
 
 type KanbanTaskCardProps = {
   task: TaskCard;
@@ -187,7 +208,7 @@ function TaskMeta({
   runState,
 }: {
   task: TaskCard;
-  runState: RunSummary["state"] | undefined;
+  runState: VisibleKanbanRunState | undefined;
 }): ReactElement {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -301,6 +322,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   onHumanRequestChanges,
 }: KanbanTaskCardProps): ReactElement {
   const hasActiveSessions = activeSessions.length > 0;
+  const visibleRunState = toVisibleKanbanRunState(runState);
 
   return (
     <article
@@ -337,7 +359,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
           </span>
         </button>
 
-        <TaskMeta task={task} runState={runState} />
+        <TaskMeta task={task} runState={visibleRunState} />
 
         {hasActiveSessions ? (
           <ActiveSessionsLine taskId={task.id} activeSessions={activeSessions} />

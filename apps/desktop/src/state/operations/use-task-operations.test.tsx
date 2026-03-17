@@ -1,8 +1,9 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { BeadsCheck, RunSummary, TaskCard, TaskCreateInput } from "@openducktor/contracts";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { toast } from "sonner";
+import { clearAppQueryClient } from "@/lib/query-client";
 import { host } from "./host";
 import { useTaskOperations } from "./use-task-operations";
 
@@ -110,6 +111,10 @@ const createHookHarness = (initialArgs: HookArgs) => {
 };
 
 describe("use-task-operations", () => {
+  beforeEach(async () => {
+    await clearAppQueryClient();
+  });
+
   test("refreshTaskData filters deferred tasks and loads runs", async () => {
     const tasksList = mock(async () => [makeTask("A", "open"), makeTask("B", "deferred")]);
     const runsList = mock(
@@ -159,6 +164,49 @@ describe("use-task-operations", () => {
       expect(harness.getLatest().runs).toHaveLength(1);
       expect(tasksList).toHaveBeenCalledWith("/repo");
       expect(runsList).toHaveBeenCalledWith("/repo");
+    } finally {
+      await harness.unmount();
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
+  test("refreshTaskData bypasses stale cached task data on repeated explicit refreshes", async () => {
+    const tasksList = mock(async () => [makeTask("A", "open")]);
+    tasksList.mockImplementationOnce(async () => [makeTask("A", "open")]);
+    tasksList.mockImplementationOnce(async () => [makeTask("A", "ready_for_dev")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.refreshTaskData("/repo");
+      });
+      expect(harness.getLatest().tasks[0]?.status).toBe("open");
+
+      await harness.run(async (value) => {
+        await value.refreshTaskData("/repo");
+      });
+
+      expect(tasksList).toHaveBeenCalledTimes(2);
+      expect(runsList).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().tasks[0]?.status).toBe("ready_for_dev");
     } finally {
       await harness.unmount();
       host.tasksList = original.tasksList;

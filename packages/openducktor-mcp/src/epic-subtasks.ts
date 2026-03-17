@@ -42,7 +42,7 @@ export async function deleteTaskById(
   invalidateTaskIndex: () => void,
   deleteSubtasks = false,
 ): Promise<void> {
-  const args = ["delete", "--force", "--reason", "Deleted from OpenDucktor"];
+  const args = ["delete", "--force"];
   if (deleteSubtasks) {
     args.push("--cascade");
   }

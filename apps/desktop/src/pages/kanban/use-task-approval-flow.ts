@@ -1,11 +1,12 @@
 import type { TaskApprovalContext, TaskCard } from "@openducktor/contracts";
 import { buildAgentMessagePrompt } from "@openducktor/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
-import { appQueryClient } from "@/lib/query-client";
 import { canonicalTargetBranch, checkoutTargetBranch } from "@/lib/target-branch";
+import { pickLatestSession } from "@/state/operations/agent-orchestrator/handlers/start-session-support";
 import { host } from "@/state/operations/host";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
@@ -85,6 +86,7 @@ export function useTaskApprovalFlow({
     },
   ) => void;
 } {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<ApprovalState | null>(INITIAL_STATE);
   const sessionsRef = useRef(sessions);
   const approvalRequestVersionRef = useRef(0);
@@ -131,7 +133,7 @@ export function useTaskApprovalFlow({
       void (async () => {
         try {
           const approvalContext = await loadTaskApprovalContextFromQuery(
-            appQueryClient,
+            queryClient,
             activeRepo,
             taskId,
           );
@@ -163,7 +165,7 @@ export function useTaskApprovalFlow({
         }
       })();
     },
-    [activeRepo, reset, tasks],
+    [activeRepo, queryClient, reset, tasks],
   );
 
   const waitForLoadedParentSession = useCallback(
@@ -231,9 +233,11 @@ export function useTaskApprovalFlow({
         throw new Error("No active repository selected.");
       }
 
-      const latestBuilderRecord = (
-        await loadAgentSessionListFromQuery(appQueryClient, activeRepo, currentState.taskId)
-      ).find((entry) => entry.role === "build");
+      const latestBuilderRecord = pickLatestSession(
+        (await loadAgentSessionListFromQuery(queryClient, activeRepo, currentState.taskId)).filter(
+          (entry) => entry.role === "build",
+        ),
+      );
       if (!latestBuilderRecord) {
         throw new Error("No Builder session is available to fork for pull request drafting.");
       }
@@ -244,10 +248,10 @@ export function useTaskApprovalFlow({
       );
       const [task, overrides, spec, plan, qa] = await Promise.all([
         Promise.resolve(tasks.find((entry) => entry.id === currentState.taskId) ?? null),
-        loadEffectivePromptOverrides(activeRepo),
-        loadSpecDocumentFromQuery(appQueryClient, activeRepo, currentState.taskId),
-        loadPlanDocumentFromQuery(appQueryClient, activeRepo, currentState.taskId),
-        loadQaReportDocumentFromQuery(appQueryClient, activeRepo, currentState.taskId),
+        loadEffectivePromptOverrides(activeRepo, queryClient),
+        loadSpecDocumentFromQuery(queryClient, activeRepo, currentState.taskId),
+        loadPlanDocumentFromQuery(queryClient, activeRepo, currentState.taskId),
+        loadQaReportDocumentFromQuery(queryClient, activeRepo, currentState.taskId),
       ]);
       if (!task) {
         throw new Error(`Task not found: ${currentState.taskId}`);
@@ -291,6 +295,7 @@ export function useTaskApprovalFlow({
     [
       activeRepo,
       forkAgentSession,
+      queryClient,
       sendAgentMessage,
       tasks,
       waitForForkedAssistantReply,

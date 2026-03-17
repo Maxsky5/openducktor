@@ -318,7 +318,7 @@ const createOrReuseSession = async ({
     const overrideWorkingDirectory = normalizeWorkingDirectory(input.workingDirectoryOverride);
     resolvedQaWorkingDirectory =
       overrideWorkingDirectory ||
-      (await deps.runtime.resolveQaReviewTarget(ctx.repoPath, ctx.taskId));
+      (await deps.runtime.resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId));
     return resolvedQaWorkingDirectory;
   };
 

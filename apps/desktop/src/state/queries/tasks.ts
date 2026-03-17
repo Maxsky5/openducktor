@@ -65,3 +65,21 @@ export const loadRepoRunsFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
 ): Promise<RunSummary[]> => queryClient.fetchQuery(repoRunsQueryOptions(repoPath));
+
+export const invalidateRepoTaskQueries = (
+  queryClient: QueryClient,
+  repoPath: string,
+): Promise<unknown[]> => {
+  return Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: taskQueryKeys.repoData(repoPath),
+      exact: true,
+      refetchType: "none",
+    }),
+    queryClient.invalidateQueries({
+      queryKey: taskQueryKeys.runs(repoPath),
+      exact: true,
+      refetchType: "none",
+    }),
+  ]);
+};

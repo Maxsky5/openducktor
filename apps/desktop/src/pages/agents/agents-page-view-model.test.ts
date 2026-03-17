@@ -127,13 +127,33 @@ describe("agents-page-view-model", () => {
         { role: "planner", label: "Planner", icon: Sparkles },
       ],
       workflowStateByRole: {
-        spec: "in_progress",
-        planner: "available",
-        build: "blocked",
-        qa: "blocked",
+        spec: {
+          tone: "in_progress",
+          availability: "available",
+          completion: "in_progress",
+          liveSession: "waiting_input",
+        },
+        planner: {
+          tone: "available",
+          availability: "available",
+          completion: "not_started",
+          liveSession: "none",
+        },
+        build: {
+          tone: "blocked",
+          availability: "blocked",
+          completion: "not_started",
+          liveSession: "none",
+        },
+        qa: {
+          tone: "blocked",
+          availability: "blocked",
+          completion: "not_started",
+          liveSession: "none",
+        },
       },
       selectedRole: "spec",
-      latestSessionByRole: {
+      workflowSessionByRole: {
         spec: activeSession,
         planner: null,
         build: null,
@@ -170,13 +190,33 @@ describe("agents-page-view-model", () => {
       activeSession: null,
       roleOptions: [],
       workflowStateByRole: {
-        spec: "blocked",
-        planner: "blocked",
-        build: "blocked",
-        qa: "blocked",
+        spec: {
+          tone: "blocked",
+          availability: "blocked",
+          completion: "not_started",
+          liveSession: "none",
+        },
+        planner: {
+          tone: "blocked",
+          availability: "blocked",
+          completion: "not_started",
+          liveSession: "none",
+        },
+        build: {
+          tone: "blocked",
+          availability: "blocked",
+          completion: "not_started",
+          liveSession: "none",
+        },
+        qa: {
+          tone: "blocked",
+          availability: "blocked",
+          completion: "not_started",
+          liveSession: "none",
+        },
       },
       selectedRole: null,
-      latestSessionByRole: {
+      workflowSessionByRole: {
         spec: null,
         planner: null,
         build: null,

@@ -1,6 +1,8 @@
 use crate::app_service::service_core::AppService;
 use anyhow::{anyhow, Context, Result};
-use host_domain::{AgentSessionDocument, QaReviewTarget, QaReviewTargetSource, RunState};
+use host_domain::{
+    AgentSessionDocument, BuildContinuationTarget, BuildContinuationTargetSource, RunState,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -30,8 +32,13 @@ impl AppService {
         Ok(true)
     }
 
-    pub fn qa_review_target_get(&self, repo_path: &str, task_id: &str) -> Result<QaReviewTarget> {
+    pub fn build_continuation_target_get(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+    ) -> Result<BuildContinuationTarget> {
         let repo_path = self.resolve_task_repo_path(repo_path)?;
+        let normalized_repo_path = normalize_path_for_comparison(repo_path.as_str());
 
         let active_worktree_path: Option<String> = {
             let runs = self
@@ -40,7 +47,7 @@ impl AppService {
                 .map_err(|_| anyhow!("Run state lock poisoned"))?;
             runs.values()
                 .filter(|run| {
-                    run.repo_path == repo_path
+                    normalize_path_for_comparison(run.repo_path.as_str()) == normalized_repo_path
                         && run.task_id == task_id
                         && matches!(
                             run.summary.state,
@@ -55,14 +62,14 @@ impl AppService {
         };
 
         if let Some(worktree_path) = active_worktree_path {
-            let working_directory = validate_qa_review_target_working_directory(
+            let working_directory = validate_build_continuation_working_directory(
                 repo_path.as_str(),
                 task_id,
                 &worktree_path,
             )?;
-            return Ok(QaReviewTarget {
+            return Ok(BuildContinuationTarget {
                 working_directory,
-                source: QaReviewTargetSource::ActiveBuildRun,
+                source: BuildContinuationTargetSource::ActiveBuildRun,
             });
         }
 
@@ -77,18 +84,18 @@ impl AppService {
             })
             .ok_or_else(|| {
                 anyhow!(
-                    "QA cannot start until a builder worktree exists for task {task_id}. Start Builder first."
+                    "Builder continuation cannot start until a builder worktree exists for task {task_id}. Start Builder first."
                 )
             })?;
 
-        let working_directory = validate_qa_review_target_working_directory(
+        let working_directory = validate_build_continuation_working_directory(
             repo_path.as_str(),
             task_id,
             &latest_builder_session.working_directory,
         )?;
-        Ok(QaReviewTarget {
+        Ok(BuildContinuationTarget {
             working_directory,
-            source: QaReviewTargetSource::BuilderSession,
+            source: BuildContinuationTargetSource::BuilderSession,
         })
     }
 }
@@ -176,19 +183,6 @@ fn validate_task_agent_session(
     ))
 }
 
-fn canonicalize_existing_path(path: &str, error_message: &str) -> Result<PathBuf> {
-    fs::canonicalize(path.trim()).with_context(|| format!("{error_message}: {}", path.trim()))
-}
-
-fn try_canonicalize_existing_path(path: &str) -> Option<PathBuf> {
-    let trimmed = path.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    fs::canonicalize(trimmed).ok()
-}
-
 fn normalize_path_for_comparison(path: &str) -> PathBuf {
     let trimmed = path.trim();
     if trimmed.is_empty() {
@@ -205,7 +199,20 @@ fn normalize_path_for_comparison(path: &str) -> PathBuf {
     })
 }
 
-fn validate_qa_review_target_working_directory(
+fn canonicalize_existing_path(path: &str, error_message: &str) -> Result<PathBuf> {
+    fs::canonicalize(path.trim()).with_context(|| format!("{error_message}: {}", path.trim()))
+}
+
+fn try_canonicalize_existing_path(path: &str) -> Option<PathBuf> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    fs::canonicalize(trimmed).ok()
+}
+
+fn validate_build_continuation_working_directory(
     repo_path: &str,
     task_id: &str,
     working_directory: &str,
@@ -213,13 +220,13 @@ fn validate_qa_review_target_working_directory(
     let trimmed = working_directory.trim();
     if trimmed.is_empty() {
         return Err(anyhow!(
-            "QA cannot start until a builder worktree exists for task {task_id}. The latest builder workspace is empty."
+            "Builder continuation cannot start until a builder worktree exists for task {task_id}. The latest builder workspace is empty."
         ));
     }
 
     if !Path::new(trimmed).exists() {
         return Err(anyhow!(
-            "QA cannot start until a builder worktree exists for task {task_id}. The latest builder workspace does not exist: {trimmed}"
+            "Builder continuation cannot start until a builder worktree exists for task {task_id}. The latest builder workspace does not exist: {trimmed}"
         ));
     }
 
@@ -227,7 +234,7 @@ fn validate_qa_review_target_working_directory(
     let normalized_working_directory = normalize_path_for_comparison(trimmed);
     if normalized_working_directory == normalized_repo {
         return Err(anyhow!(
-            "QA cannot start until a builder worktree exists for task {task_id}. The latest builder workspace points to the repository root."
+            "Builder continuation cannot start until a builder worktree exists for task {task_id}. The latest builder workspace points to the repository root."
         ));
     }
 

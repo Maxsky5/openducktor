@@ -866,7 +866,9 @@ async fn dispatch_runtime_command(
         "runs_list" => Some(handle_runs_list(state, args)),
         "runtime_definitions_list" => Some(handle_runtime_definitions_list(state).await),
         "runtime_list" => Some(handle_runtime_list(state, args).await),
-        "qa_review_target_get" => Some(handle_qa_review_target_get(state, args).await),
+        "build_continuation_target_get" => {
+            Some(handle_build_continuation_target_get(state, args).await)
+        }
         "runtime_stop" => Some(handle_runtime_stop(state, args).await),
         "runtime_ensure" => Some(handle_runtime_ensure(state, args).await),
         "agent_sessions_list" => Some(handle_agent_sessions_list(state, args)),
@@ -1916,12 +1918,12 @@ async fn handle_runtime_list(state: &HeadlessState, args: Value) -> CommandResul
     )
 }
 
-async fn handle_qa_review_target_get(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_build_continuation_target_get(state: &HeadlessState, args: Value) -> CommandResult {
     let RepoTaskArgs { repo_path, task_id } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
-        run_service_blocking_tokio("qa_review_target_get", move || {
-            service.qa_review_target_get(&repo_path, &task_id)
+        run_service_blocking_tokio("build_continuation_target_get", move || {
+            service.build_continuation_target_get(&repo_path, &task_id)
         })
         .await
         .map_err(service_error)?,

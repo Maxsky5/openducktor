@@ -166,7 +166,7 @@ describe("TauriHostClient", () => {
       "runsList",
       "runtimeDefinitionsList",
       "runtimeList",
-      "qaReviewTargetGet",
+      "buildContinuationTargetGet",
       "runtimeStop",
       "runtimeEnsure",
       "buildStart",
@@ -1029,7 +1029,7 @@ describe("TauriHostClient", () => {
           },
         ];
       }
-      if (command === "qa_review_target_get") {
+      if (command === "build_continuation_target_get") {
         return {
           workingDirectory: "/repo/worktrees/task-1",
           source: "active_build_run",
@@ -1076,7 +1076,7 @@ describe("TauriHostClient", () => {
     });
 
     const definitions = await client.runtimeDefinitionsList();
-    const qaTarget = await client.qaReviewTargetGet("/repo", "task-1");
+    const qaTarget = await client.buildContinuationTargetGet("/repo", "task-1");
     const runtimes = await client.runtimeList("/repo", "opencode");
     const ensured = await client.runtimeEnsure("/repo", "opencode");
     const stopped = await client.runtimeStop("runtime-1");
@@ -1091,7 +1091,7 @@ describe("TauriHostClient", () => {
     expect(stopped.ok).toBe(true);
     expect(calls.map((entry) => entry.command)).toEqual([
       "runtime_definitions_list",
-      "qa_review_target_get",
+      "build_continuation_target_get",
       "runtime_list",
       "runtime_ensure",
       "runtime_stop",

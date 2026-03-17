@@ -1,6 +1,7 @@
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import type { NewSessionStartRequest, SessionStartRequestReason } from "@/features/session-start";
+import { resolveBuildWorkingDirectoryOverride } from "@/lib/build-worktree-overrides";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import {
@@ -11,6 +12,7 @@ import {
 } from "./use-agent-studio-session-action-helpers";
 
 type UseAgentStudioSessionStartSessionArgs = {
+  activeRepo: string | null;
   taskId: string;
   role: AgentRole;
   scenario: AgentScenario;
@@ -30,6 +32,7 @@ type UseAgentStudioSessionStartSessionArgs = {
 };
 
 export function useAgentStudioSessionStartSession({
+  activeRepo,
   taskId,
   role,
   scenario,
@@ -65,6 +68,20 @@ export function useAgentStudioSessionStartSession({
           return undefined;
         }
 
+        let workingDirectoryOverride: string | null = null;
+        try {
+          workingDirectoryOverride = await resolveBuildWorkingDirectoryOverride({
+            activeRepo,
+            taskId,
+            role,
+            scenario,
+          });
+        } catch (error) {
+          const description = error instanceof Error ? error.message : "Unknown error";
+          throw new Error(
+            `Failed to resolve working directory override for ${role} ${scenario} on ${taskId}: ${description}`,
+          );
+        }
         const sessionId = await startAgentSession({
           taskId,
           role,
@@ -73,6 +90,7 @@ export function useAgentStudioSessionStartSession({
           sendKickoff: false,
           startMode: params.startMode,
           requireModelReady: true,
+          ...(workingDirectoryOverride ? { workingDirectoryOverride } : {}),
         });
 
         if (selectedModel) {
@@ -93,6 +111,7 @@ export function useAgentStudioSessionStartSession({
       resolveRequestedSelection,
       role,
       scenario,
+      activeRepo,
       setIsStarting,
       startAgentSession,
       updateQuery,

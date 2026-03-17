@@ -43,6 +43,10 @@ const workspaceGetSettingsSnapshotMock = mock(async () => ({
   repos: {},
   globalPromptOverrides: {} as RepoPromptOverrides,
 }));
+const buildContinuationTargetGetMock = mock(async () => ({
+  workingDirectory: "/repo/worktrees/task-1",
+  source: "builder_session" as const,
+}));
 
 let latestKanbanColumnProps: Record<string, unknown> | null = null;
 let latestHumanReviewFeedbackModalModel: Record<string, unknown> | null = null;
@@ -166,6 +170,7 @@ mock.module("@/state/operations/host", () => ({
   host: {
     workspaceGetRepoConfig: workspaceGetRepoConfigMock,
     workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
+    buildContinuationTargetGet: buildContinuationTargetGetMock,
   },
 }));
 
@@ -194,7 +199,7 @@ mock.module("./kanban-session-start-modal", () => ({
   },
 }));
 
-mock.module("./human-review-feedback-modal", () => ({
+mock.module("@/features/human-review-feedback/human-review-feedback-modal", () => ({
   HumanReviewFeedbackModal: ({
     model,
   }: {
@@ -267,6 +272,27 @@ const renderPage = async (): Promise<ReactTestRenderer> => {
   return renderer;
 };
 
+// Double Promise.resolve() intentionally flushes React's queued microtasks and batched updates.
+// maxAttempts controls how long we poll for the observed mock call.
+const waitForMockCall = async (
+  fn: { mock: { calls: unknown[][] } },
+  minCalls = 1,
+  maxAttempts = 10,
+): Promise<void> => {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (fn.mock.calls.length >= minCalls) {
+      return;
+    }
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+  throw new Error(
+    `Timed out waiting for mock calls: expected >= ${minCalls}, received ${fn.mock.calls.length}, attempts=${maxAttempts}`,
+  );
+};
+
 describe("KanbanPage session start modal flow", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
@@ -326,6 +352,7 @@ describe("KanbanPage session start modal flow", () => {
     toastErrorMock.mockClear();
     workspaceGetRepoConfigMock.mockClear();
     workspaceGetSettingsSnapshotMock.mockClear();
+    buildContinuationTargetGetMock.mockClear();
     workspaceGetRepoConfigMock.mockImplementation(async () => createRepoConfigFixture());
     workspaceGetSettingsSnapshotMock.mockImplementation(async () => ({
       theme: "light" as const,
@@ -392,7 +419,9 @@ describe("KanbanPage session start modal flow", () => {
     await act(async () => {
       (latestSessionStartModalModel?.onConfirm as (runInBackground: boolean) => void)(true);
       await Promise.resolve();
+      await Promise.resolve();
     });
+    await waitForMockCall(sendAgentMessageMock);
 
     expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
     expect(updateAgentSessionModelMock).toHaveBeenCalledTimes(1);
@@ -781,6 +810,7 @@ describe("KanbanPage session start modal flow", () => {
         role: "build",
         scenario: "build_after_human_request_changes",
         startMode: "fresh",
+        workingDirectoryOverride: "/repo/worktrees/task-1",
       }),
     );
     expect(humanRequestChangesTaskMock).toHaveBeenCalledWith(
@@ -914,6 +944,7 @@ describe("KanbanPage session start modal flow", () => {
         role: "build",
         scenario: "build_after_qa_rejected",
         startMode: "fresh",
+        workingDirectoryOverride: "/repo/worktrees/task-1",
       }),
     );
     expect(humanRequestChangesTaskMock).toHaveBeenCalledWith(
@@ -936,6 +967,25 @@ describe("KanbanPage session start modal flow", () => {
     expect(latestSessionStartModalModel).toBeNull();
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(latestLocation).toContain("/agents?task=TASK-123");
+    expect(latestLocation).toContain("scenario=build_implementation_start");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("build action routes human review tasks into the human-changes builder scenario", async () => {
+    currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onBuild as (taskId: string) => void)("TASK-123");
+    });
+
+    expect(latestSessionStartModalModel).toBeNull();
+    expect(startAgentSessionMock).not.toHaveBeenCalled();
+    expect(latestLocation).toContain("/agents?task=TASK-123");
+    expect(latestLocation).toContain("scenario=build_after_human_request_changes");
 
     await act(async () => {
       renderer.unmount();

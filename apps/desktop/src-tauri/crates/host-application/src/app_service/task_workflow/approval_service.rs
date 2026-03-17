@@ -19,7 +19,7 @@ impl AppService {
         let repo_config = self.workspace_get_repo_config(context.repo.repo_path.as_str())?;
         let metadata = self.task_metadata_get(context.repo.repo_path.as_str(), task_id)?;
         let working_directory = self
-            .qa_review_target_get(context.repo.repo_path.as_str(), task_id)?
+            .build_continuation_target_get(context.repo.repo_path.as_str(), task_id)?
             .working_directory;
         let current_branch = self
             .git_port
@@ -223,7 +223,7 @@ impl AppService {
         }
         let repo_config = self.workspace_get_repo_config(context.repo.repo_path.as_str())?;
         let working_directory = self
-            .qa_review_target_get(context.repo.repo_path.as_str(), task_id)?
+            .build_continuation_target_get(context.repo.repo_path.as_str(), task_id)?
             .working_directory;
         let current_branch = self
             .git_port

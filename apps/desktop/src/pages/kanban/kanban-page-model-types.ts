@@ -1,6 +1,7 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario, KanbanColumn as KanbanColumnData } from "@openducktor/core";
 import type { SessionStartModalModel } from "@/components/features/agents";
+import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export type KanbanSessionStartIntent = {
@@ -14,26 +15,6 @@ export type KanbanSessionStartIntent = {
     action: "human_request_changes";
     note: string;
   };
-};
-
-export type HumanReviewFeedbackTargetOption = {
-  value: string;
-  label: string;
-  description: string;
-  secondaryLabel?: string;
-};
-
-export type HumanReviewFeedbackModalModel = {
-  open: boolean;
-  taskId: string;
-  selectedTarget: string;
-  targetOptions: HumanReviewFeedbackTargetOption[];
-  message: string;
-  isSubmitting: boolean;
-  onOpenChange: (open: boolean) => void;
-  onTargetChange: (value: string) => void;
-  onMessageChange: (message: string) => void;
-  onConfirm: () => void;
 };
 
 export type TaskApprovalMode = "direct_merge" | "pull_request";

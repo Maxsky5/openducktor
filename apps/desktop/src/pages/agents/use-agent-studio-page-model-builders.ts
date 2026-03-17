@@ -10,6 +10,7 @@ import { SCENARIO_LABELS } from "./agents-page-constants";
 import {
   buildLatestSessionByRoleMap,
   buildRoleEnabledMapForTask,
+  buildRoleSessionSummaryMap,
   buildSessionCreateOptions,
   buildSessionSelectorGroups,
   buildWorkflowStateByRole,
@@ -36,8 +37,13 @@ type BuildWorkflowModelContextArgs = {
   roleLabelByRole: Record<AgentRole, string>;
 };
 
+const isTaskAwaitingHumanFeedback = (task: TaskCard | null): boolean => {
+  return task?.status === "human_review";
+};
+
 export type WorkflowModelContext = {
   latestSessionByRole: ReturnType<typeof buildLatestSessionByRoleMap>;
+  workflowSessionByRole: Record<AgentRole, AgentSessionState | null>;
   workflowStateByRole: ReturnType<typeof buildWorkflowStateByRole>;
   sessionSelectorGroups: ComboboxGroup[];
   sessionSelectorValue: string;
@@ -46,10 +52,6 @@ export type WorkflowModelContext = {
   selectedRoleAvailable: boolean;
   selectedRoleReadOnlyReason: string | null;
   createSessionDisabled: boolean;
-};
-
-const isTaskAwaitingHumanFeedback = (task: TaskCard | null): boolean => {
-  return task?.status === "human_review";
 };
 
 export const buildWorkflowModelContext = ({
@@ -63,10 +65,11 @@ export const buildWorkflowModelContext = ({
   const roleEnabledByTask = buildRoleEnabledMapForTask(selectedTask);
   const roleWorkflowsByTask = buildRoleWorkflowMapForTask(selectedTask);
   const latestSessionByRole = buildLatestSessionByRoleMap(sessionsForTask);
+  const roleSessionByRole = buildRoleSessionSummaryMap(sessionsForTask);
   const workflowStateByRole = buildWorkflowStateByRole({
     task: selectedTask,
     roleWorkflowsByTask,
-    latestSessionByRole,
+    roleSessionByRole,
   });
   const selectedInteractionRole = activeSession?.role ?? role;
   const selectedRoleAvailable = roleWorkflowsByTask[selectedInteractionRole].available;
@@ -78,8 +81,7 @@ export const buildWorkflowModelContext = ({
     scenarioLabels: SCENARIO_LABELS,
     roleLabelByRole,
   });
-  const fallbackSessionForSelectedRole =
-    sessionsForTask.find((session) => session.role === selectedInteractionRole) ?? null;
+  const fallbackSessionForSelectedRole = latestSessionByRole[selectedInteractionRole];
   const sessionSelectorValue =
     activeSession?.sessionId ?? fallbackSessionForSelectedRole?.sessionId ?? "";
   const createSessionDisabled = Boolean(activeSession && isSessionWorking);
@@ -94,6 +96,12 @@ export const buildWorkflowModelContext = ({
 
   return {
     latestSessionByRole,
+    workflowSessionByRole: {
+      spec: roleSessionByRole.spec.workflowSession,
+      planner: roleSessionByRole.planner.workflowSession,
+      build: roleSessionByRole.build.workflowSession,
+      qa: roleSessionByRole.qa.workflowSession,
+    },
     workflowStateByRole,
     sessionSelectorGroups,
     sessionSelectorValue,

@@ -23,33 +23,49 @@ const buildModel = () => ({
       role: "spec" as const,
       label: "Spec",
       icon: roleIcon(0),
-      state: "in_progress" as const,
+      state: {
+        tone: "in_progress" as const,
+        availability: "available" as const,
+        completion: "in_progress" as const,
+        liveSession: "running" as const,
+      },
       sessionId: "spec-session",
-      hasRunningSession: true,
     },
     {
       role: "planner" as const,
       label: "Planner",
       icon: roleIcon(1),
-      state: "done" as const,
+      state: {
+        tone: "done" as const,
+        availability: "available" as const,
+        completion: "done" as const,
+        liveSession: "idle" as const,
+      },
       sessionId: "planner-session",
-      hasRunningSession: false,
     },
     {
       role: "build" as const,
       label: "Builder",
       icon: roleIcon(2),
-      state: "available" as const,
+      state: {
+        tone: "available" as const,
+        availability: "available" as const,
+        completion: "not_started" as const,
+        liveSession: "none" as const,
+      },
       sessionId: null,
-      hasRunningSession: false,
     },
     {
       role: "qa" as const,
       label: "QA",
       icon: roleIcon(3),
-      state: "optional" as const,
+      state: {
+        tone: "optional" as const,
+        availability: "optional" as const,
+        completion: "not_started" as const,
+        liveSession: "none" as const,
+      },
       sessionId: null,
-      hasRunningSession: false,
     },
   ],
   onWorkflowStepSelect: () => {},
@@ -177,22 +193,31 @@ describe("AgentStudioHeader", () => {
       createElement(AgentStudioHeader, {
         model: {
           ...buildModel(),
+          selectedRole: "qa",
           workflowSteps: [
             {
               role: "spec" as const,
               label: "Spec",
               icon: roleIcon(0),
-              state: "in_progress" as const,
+              state: {
+                tone: "in_progress" as const,
+                availability: "available" as const,
+                completion: "in_progress" as const,
+                liveSession: "running" as const,
+              },
               sessionId: "spec-session",
-              hasRunningSession: true,
             },
             {
               role: "planner" as const,
               label: "Planner",
               icon: roleIcon(1),
-              state: "blocked" as const,
+              state: {
+                tone: "blocked" as const,
+                availability: "blocked" as const,
+                completion: "not_started" as const,
+                liveSession: "none" as const,
+              },
               sessionId: null,
-              hasRunningSession: false,
             },
           ],
         },
@@ -214,9 +239,13 @@ describe("AgentStudioHeader", () => {
               role: "planner" as const,
               label: "Planner",
               icon: roleIcon(1),
-              state: "done" as const,
+              state: {
+                tone: "done" as const,
+                availability: "available" as const,
+                completion: "done" as const,
+                liveSession: "idle" as const,
+              },
               sessionId: "planner-session",
-              hasRunningSession: false,
             },
           ],
         },
@@ -227,5 +256,200 @@ describe("AgentStudioHeader", () => {
     expect(html).toContain("border-success-border");
     expect(html).toContain("bg-success-surface");
     expect(html).toContain("text-success-muted");
+  });
+
+  test("renders waiting-input workflow step hint and warning styling", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          selectedRole: "qa",
+          workflowSteps: [
+            {
+              role: "qa" as const,
+              label: "QA",
+              icon: roleIcon(3),
+              state: {
+                tone: "waiting_input" as const,
+                availability: "optional" as const,
+                completion: "in_progress" as const,
+                liveSession: "waiting_input" as const,
+              },
+              sessionId: "qa-session",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).toContain('title="Session is waiting for input"');
+    expect(html).toContain("border-warning-border");
+  });
+
+  test("renders optional workflow step as neutral dashed styling", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          selectedRole: "qa",
+          workflowSteps: [
+            {
+              role: "qa" as const,
+              label: "QA",
+              icon: roleIcon(3),
+              state: {
+                tone: "optional" as const,
+                availability: "optional" as const,
+                completion: "not_started" as const,
+                liveSession: "none" as const,
+              },
+              sessionId: null,
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).toContain("border-dashed");
+    expect(html).toContain("border-input");
+    expect(html).toContain("text-foreground");
+    expect(html).not.toContain("border-warning-border");
+    expect(html).not.toContain("text-warning-muted");
+  });
+
+  test("does not keep the dashed border once an optional step becomes active", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          workflowSteps: [
+            {
+              role: "qa" as const,
+              label: "QA",
+              icon: roleIcon(3),
+              state: {
+                tone: "in_progress" as const,
+                availability: "optional" as const,
+                completion: "in_progress" as const,
+                liveSession: "running" as const,
+              },
+              sessionId: "qa-session",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).not.toContain("border-dashed");
+  });
+
+  test("renders failed workflow step hint and destructive styling", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          workflowSteps: [
+            {
+              role: "planner" as const,
+              label: "Planner",
+              icon: roleIcon(1),
+              state: {
+                tone: "failed" as const,
+                availability: "available" as const,
+                completion: "in_progress" as const,
+                liveSession: "error" as const,
+              },
+              sessionId: "planner-session",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).toContain('title="Latest session failed"');
+    expect(html).toContain("border-destructive-border");
+  });
+
+  test("renders failed workflow step without session as actionable startup failure", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          workflowSteps: [
+            {
+              role: "planner" as const,
+              label: "Planner",
+              icon: roleIcon(1),
+              state: {
+                tone: "failed" as const,
+                availability: "blocked" as const,
+                completion: "not_started" as const,
+                liveSession: "none" as const,
+              },
+              sessionId: null,
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).toContain('title="Step failed before a session could start"');
+    expect(html).not.toContain('title="Blocked by workflow state"');
+  });
+
+  test("uses neutral rejection copy for rejected review steps", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          workflowSteps: [
+            {
+              role: "qa" as const,
+              label: "QA",
+              icon: roleIcon(3),
+              state: {
+                tone: "rejected" as const,
+                availability: "available" as const,
+                completion: "rejected" as const,
+                liveSession: "idle" as const,
+              },
+              sessionId: "qa-session",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).toContain('title="Latest review rejected this task"');
+    expect(html).not.toContain("Latest QA review rejected this task");
+    expect(html).toContain("border-rejected-border");
+    expect(html).toContain("bg-rejected-surface");
+    expect(html).toContain("text-rejected-muted");
+  });
+
+  test("throws for invalid workflow tones instead of masking them as blocked", () => {
+    expect(() =>
+      renderToStaticMarkup(
+        createElement(AgentStudioHeader, {
+          model: {
+            ...buildModel(),
+            workflowSteps: [
+              {
+                role: "qa" as const,
+                label: "QA",
+                icon: roleIcon(3),
+                state: {
+                  tone: "broken" as never,
+                  availability: "available" as const,
+                  completion: "not_started" as const,
+                  liveSession: "none" as const,
+                },
+                sessionId: null,
+              },
+            ],
+          },
+        }),
+      ),
+    ).toThrow("Unknown workflow tone");
   });
 });

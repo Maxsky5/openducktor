@@ -50,7 +50,7 @@ export const buildAgentStudioHeaderModel = (args: {
   roleOptions: AgentRoleOption[];
   workflowStateByRole: Record<AgentRole, AgentWorkflowStepState>;
   selectedRole: AgentRole | null;
-  latestSessionByRole: Record<AgentRole, AgentSessionState | null>;
+  workflowSessionByRole: Record<AgentRole, AgentSessionState | null>;
   onWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
   onSessionSelectionChange: (value: string) => void;
   sessionSelectorValue: string;
@@ -69,15 +69,13 @@ export const buildAgentStudioHeaderModel = (args: {
   sessionStatus: args.activeSession?.status ?? null,
   selectedRole: args.selectedRole,
   workflowSteps: args.roleOptions.map((entry) => {
-    const latestSession = args.latestSessionByRole[entry.role];
+    const workflowSession = args.workflowSessionByRole[entry.role];
     return {
       role: entry.role,
       label: entry.label,
       icon: entry.icon,
       state: args.workflowStateByRole[entry.role],
-      sessionId: latestSession?.sessionId ?? null,
-      hasRunningSession:
-        latestSession?.status === "running" || latestSession?.status === "starting",
+      sessionId: workflowSession?.sessionId ?? null,
     };
   }),
   onWorkflowStepSelect: args.onWorkflowStepSelect,

@@ -4,6 +4,7 @@ import type { TaskApprovalContext } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { clearAppQueryClient } from "@/lib/query-client";
+import { QueryProvider } from "@/lib/query-provider";
 import {
   createAgentSessionFixture,
   createTaskCardFixture,
@@ -62,7 +63,26 @@ const buildMockedHost = () => ({
   taskDirectMerge: taskDirectMergeMock,
   taskPullRequestUpsert: taskPullRequestUpsertMock,
   gitPushBranch: gitPushBranchMock,
-  agentSessionsList: async () => [{ role: "build", sessionId: "builder-session" }],
+  agentSessionsList: async () => [
+    {
+      ...createAgentSessionFixture({
+        sessionId: "builder-session-old",
+        taskId: "TASK-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        startedAt: "2026-03-12T11:59:00Z",
+      }),
+    },
+    {
+      ...createAgentSessionFixture({
+        sessionId: "builder-session",
+        taskId: "TASK-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        startedAt: "2026-03-12T12:00:00Z",
+      }),
+    },
+  ],
   specGet: async () => ({ markdown: "", updatedAt: null }),
   planGet: async () => ({ markdown: "", updatedAt: null }),
   qaGetReport: async () => ({ markdown: "", updatedAt: null }),
@@ -198,7 +218,11 @@ describe("useTaskApprovalFlow", () => {
 
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<Harness />);
+      renderer = create(
+        <QueryProvider useIsolatedClient>
+          <Harness />
+        </QueryProvider>,
+      );
     });
 
     await act(async () => {
@@ -271,7 +295,11 @@ describe("useTaskApprovalFlow", () => {
 
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<Harness />);
+      renderer = create(
+        <QueryProvider useIsolatedClient>
+          <Harness />
+        </QueryProvider>,
+      );
     });
 
     await act(async () => {
@@ -332,7 +360,11 @@ describe("useTaskApprovalFlow", () => {
 
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<Harness />);
+      renderer = create(
+        <QueryProvider useIsolatedClient>
+          <Harness />
+        </QueryProvider>,
+      );
     });
 
     await act(async () => {
@@ -357,6 +389,7 @@ describe("useTaskApprovalFlow", () => {
 
   test("creates an AI pull request when the forked reply is already present before the waiter starts", async () => {
     const refreshTasksMock = mock(async () => {});
+    const loadAgentSessionsMock = mock(async () => {});
     taskApprovalContextGetMock.mockResolvedValue({
       taskId: "TASK-1",
       taskStatus: "human_review",
@@ -417,7 +450,7 @@ describe("useTaskApprovalFlow", () => {
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
         sessions: [builderSession, forkedSession],
-        loadAgentSessions: async () => {},
+        loadAgentSessions: loadAgentSessionsMock,
         forkAgentSession: async () => "forked-session",
         sendAgentMessage: async () => {
           forkedSession.messages.push({
@@ -435,7 +468,11 @@ describe("useTaskApprovalFlow", () => {
 
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<Harness />);
+      renderer = create(
+        <QueryProvider useIsolatedClient>
+          <Harness />
+        </QueryProvider>,
+      );
     });
 
     await act(async () => {
@@ -454,6 +491,9 @@ describe("useTaskApprovalFlow", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
+    expect(loadAgentSessionsMock).toHaveBeenCalledWith("TASK-1", {
+      hydrateHistoryForSessionId: "builder-session",
+    });
     expect(taskPullRequestUpsertMock).toHaveBeenCalledWith("/repo", "TASK-1", "PR", "Body");
     expect(refreshTasksMock).toHaveBeenCalledTimes(1);
     expect(toastSuccessMock).toHaveBeenCalledWith(
@@ -550,7 +590,11 @@ describe("useTaskApprovalFlow", () => {
 
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<Harness />);
+      renderer = create(
+        <QueryProvider useIsolatedClient>
+          <Harness />
+        </QueryProvider>,
+      );
     });
 
     await act(async () => {

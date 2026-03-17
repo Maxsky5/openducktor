@@ -1,6 +1,6 @@
 use anyhow::Result;
 use host_domain::{
-    AgentRuntimeKind, GitCurrentBranch, QaReviewTargetSource, RunState, RunSummary,
+    AgentRuntimeKind, BuildContinuationTargetSource, GitCurrentBranch, RunState, RunSummary,
     RuntimeInstanceSummary, RuntimeRole,
 };
 use host_infra_system::{AppConfigStore, HookSet, RepoConfig};
@@ -256,7 +256,7 @@ fn runtime_list_prunes_stale_entries() -> Result<()> {
 }
 
 #[test]
-fn qa_review_target_get_prefers_active_build_run() -> Result<()> {
+fn build_continuation_target_get_prefers_active_build_run() -> Result<()> {
     let repo_root = unique_temp_path("qa-review-target-active-run");
     let repo = repo_root.join("repo");
     init_git_repo(&repo)?;
@@ -312,8 +312,10 @@ fn qa_review_target_get_prefers_active_build_run() -> Result<()> {
         },
     );
 
-    let target = service.qa_review_target_get(repo_path.as_str(), "task-1")?;
-    assert_eq!(target.source, QaReviewTargetSource::ActiveBuildRun);
+    let repo_path_with_trailing_separator = format!("{repo_path}/");
+    let target = service
+        .build_continuation_target_get(repo_path_with_trailing_separator.as_str(), "task-1")?;
+    assert_eq!(target.source, BuildContinuationTargetSource::ActiveBuildRun);
     assert_eq!(
         target.working_directory,
         worktree.to_string_lossy().to_string()
@@ -322,7 +324,7 @@ fn qa_review_target_get_prefers_active_build_run() -> Result<()> {
 }
 
 #[test]
-fn qa_review_target_get_falls_back_to_latest_builder_session_worktree() -> Result<()> {
+fn build_continuation_target_get_falls_back_to_latest_builder_session_worktree() -> Result<()> {
     let repo_root = unique_temp_path("qa-review-target-session");
     let repo = repo_root.join("repo");
     init_git_repo(&repo)?;
@@ -360,8 +362,8 @@ fn qa_review_target_get_falls_back_to_latest_builder_session_worktree() -> Resul
         .expect("task lock poisoned")
         .agent_sessions = vec![older, latest];
 
-    let target = service.qa_review_target_get(repo_path.as_str(), "task-1")?;
-    assert_eq!(target.source, QaReviewTargetSource::BuilderSession);
+    let target = service.build_continuation_target_get(repo_path.as_str(), "task-1")?;
+    assert_eq!(target.source, BuildContinuationTargetSource::BuilderSession);
     assert_eq!(
         target.working_directory,
         worktree.to_string_lossy().to_string()
@@ -370,7 +372,7 @@ fn qa_review_target_get_falls_back_to_latest_builder_session_worktree() -> Resul
 }
 
 #[test]
-fn qa_review_target_get_rejects_missing_builder_worktree() -> Result<()> {
+fn build_continuation_target_get_rejects_missing_builder_worktree() -> Result<()> {
     let repo_root = unique_temp_path("qa-review-target-missing");
     let repo = repo_root.join("repo");
     init_git_repo(&repo)?;
@@ -394,16 +396,16 @@ fn qa_review_target_get_rejects_missing_builder_worktree() -> Result<()> {
     service.workspace_add(repo_path.as_str())?;
 
     let error = service
-        .qa_review_target_get(repo_path.as_str(), "task-1")
+        .build_continuation_target_get(repo_path.as_str(), "task-1")
         .expect_err("missing builder target should fail fast");
     assert!(error
         .to_string()
-        .contains("QA cannot start until a builder worktree exists"));
+        .contains("Builder continuation cannot start until a builder worktree exists"));
     Ok(())
 }
 
 #[test]
-fn qa_review_target_get_rejects_repo_root_builder_session() -> Result<()> {
+fn build_continuation_target_get_rejects_repo_root_builder_session() -> Result<()> {
     let repo_root = unique_temp_path("qa-review-target-root");
     let repo = repo_root.join("repo");
     init_git_repo(&repo)?;
@@ -435,7 +437,7 @@ fn qa_review_target_get_rejects_repo_root_builder_session() -> Result<()> {
         .agent_sessions = vec![session];
 
     let error = service
-        .qa_review_target_get(repo_path.as_str(), "task-1")
+        .build_continuation_target_get(repo_path.as_str(), "task-1")
         .expect_err("repo root builder session should be rejected");
     assert!(error.to_string().contains("repository root"));
     Ok(())

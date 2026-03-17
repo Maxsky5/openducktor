@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { appQueryClient } from "@/lib/query-client";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
-import { loadRepoTaskDataFromQuery, taskQueryKeys } from "../queries/tasks";
+import { invalidateRepoTaskQueries, loadRepoTaskDataFromQuery } from "../queries/tasks";
 import { host } from "./host";
 import {
   DEFERRED_BY_USER_REASON,
@@ -68,6 +68,7 @@ export function useTaskOperations({
   }, [activeRepo]);
 
   const refreshTaskData = useCallback(async (repoPath: string): Promise<void> => {
+    await invalidateRepoTaskQueries(appQueryClient, repoPath);
     const { tasks: taskList, runs: runList } = await loadRepoTaskDataFromQuery(
       appQueryClient,
       repoPath,
@@ -89,14 +90,6 @@ export function useTaskOperations({
       try {
         const repoPath = requireActiveRepo(activeRepo);
         await options.run(repoPath);
-        await Promise.all([
-          appQueryClient.invalidateQueries({
-            queryKey: taskQueryKeys.repoData(repoPath),
-          }),
-          appQueryClient.invalidateQueries({
-            queryKey: taskQueryKeys.runs(repoPath),
-          }),
-        ]);
         await refreshTaskData(repoPath);
         if (options.successTitle) {
           toast.success(options.successTitle, {
@@ -132,14 +125,6 @@ export function useTaskOperations({
       } catch (error) {
         console.warn("Pull request sync failed during task refresh", errorMessage(error));
       }
-      await Promise.all([
-        appQueryClient.invalidateQueries({
-          queryKey: taskQueryKeys.repoData(activeRepo),
-        }),
-        appQueryClient.invalidateQueries({
-          queryKey: taskQueryKeys.runs(activeRepo),
-        }),
-      ]);
       await refreshTaskData(activeRepo);
     } catch (error) {
       toast.error("Failed to refresh tasks", {
@@ -157,14 +142,6 @@ export function useTaskOperations({
         const repoPath = requireActiveRepo(activeRepo);
         const result = await host.taskPullRequestDetect(repoPath, taskId);
         if (result.outcome === "linked") {
-          await Promise.all([
-            appQueryClient.invalidateQueries({
-              queryKey: taskQueryKeys.repoData(repoPath),
-            }),
-            appQueryClient.invalidateQueries({
-              queryKey: taskQueryKeys.runs(repoPath),
-            }),
-          ]);
           await refreshTaskData(repoPath);
           toast.success("Pull request linked", {
             description: `PR #${result.pullRequest.number}`,

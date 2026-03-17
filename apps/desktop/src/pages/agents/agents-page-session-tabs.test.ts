@@ -6,6 +6,7 @@ import {
   buildLatestSessionByRoleMap,
   buildLatestSessionByTaskMap,
   buildRoleEnabledMapForTask,
+  buildRoleSessionSummaryMap,
   buildSessionCreateOptions,
   buildSessionSelectorGroups,
   buildTaskTabs,
@@ -198,6 +199,7 @@ describe("agents-page-session-tabs", () => {
   });
 
   test("builds workflow rail states from backend-provided workflow fields", () => {
+    const roleSessionByRole = buildRoleSessionSummaryMap([]);
     const states = buildWorkflowStateByRole({
       task: null,
       roleWorkflowsByTask: {
@@ -206,23 +208,63 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: false, completed: false },
         qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      latestSessionByRole: {
-        spec: null,
-        planner: null,
-        build: null,
-        qa: null,
-      },
+      roleSessionByRole,
     });
 
     expect(states).toEqual({
-      spec: "done",
-      planner: "done",
-      build: "blocked",
-      qa: "optional",
+      spec: {
+        tone: "done",
+        availability: "available",
+        completion: "done",
+        liveSession: "none",
+      },
+      planner: {
+        tone: "done",
+        availability: "available",
+        completion: "done",
+        liveSession: "none",
+      },
+      build: {
+        tone: "blocked",
+        availability: "blocked",
+        completion: "not_started",
+        liveSession: "none",
+      },
+      qa: {
+        tone: "blocked",
+        availability: "blocked",
+        completion: "not_started",
+        liveSession: "none",
+      },
     });
   });
 
+  test("renders skippable available steps as optional", () => {
+    const roleSessionByRole = buildRoleSessionSummaryMap([]);
+    const states = buildWorkflowStateByRole({
+      task: null,
+      roleWorkflowsByTask: {
+        spec: { required: false, canSkip: true, available: true, completed: false },
+        planner: { required: true, canSkip: false, available: false, completed: false },
+        build: { required: true, canSkip: false, available: false, completed: false },
+        qa: { required: false, canSkip: true, available: false, completed: false },
+      },
+      roleSessionByRole,
+    });
+
+    expect(states.spec).toEqual({
+      tone: "optional",
+      availability: "optional",
+      completion: "not_started",
+      liveSession: "none",
+    });
+    expect(states.qa.availability).toBe("blocked");
+  });
+
   test("marks workflow role as in_progress when latest role session is started but not completed", () => {
+    const roleSessionByRole = buildRoleSessionSummaryMap([
+      buildSession({ role: "planner", status: "idle" }),
+    ]);
     const states = buildWorkflowStateByRole({
       task: null,
       roleWorkflowsByTask: {
@@ -231,23 +273,41 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: false, completed: false },
         qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      latestSessionByRole: {
-        spec: null,
-        planner: buildSession({ role: "planner", status: "idle" }),
-        build: null,
-        qa: null,
-      },
+      roleSessionByRole,
     });
 
     expect(states).toEqual({
-      spec: "blocked",
-      planner: "in_progress",
-      build: "blocked",
-      qa: "optional",
+      spec: {
+        tone: "blocked",
+        availability: "blocked",
+        completion: "not_started",
+        liveSession: "none",
+      },
+      planner: {
+        tone: "in_progress",
+        availability: "available",
+        completion: "in_progress",
+        liveSession: "idle",
+      },
+      build: {
+        tone: "blocked",
+        availability: "blocked",
+        completion: "not_started",
+        liveSession: "none",
+      },
+      qa: {
+        tone: "blocked",
+        availability: "blocked",
+        completion: "not_started",
+        liveSession: "none",
+      },
     });
   });
 
   test("keeps workflow role in_progress while the latest role session is still running even if workflow is completed", () => {
+    const roleSessionByRole = buildRoleSessionSummaryMap([
+      buildSession({ role: "spec", status: "running" }),
+    ]);
     const states = buildWorkflowStateByRole({
       task: null,
       roleWorkflowsByTask: {
@@ -256,23 +316,41 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: false, completed: false },
         qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      latestSessionByRole: {
-        spec: buildSession({ role: "spec", status: "running" }),
-        planner: null,
-        build: null,
-        qa: null,
-      },
+      roleSessionByRole,
     });
 
     expect(states).toEqual({
-      spec: "in_progress",
-      planner: "available",
-      build: "blocked",
-      qa: "optional",
+      spec: {
+        tone: "in_progress",
+        availability: "available",
+        completion: "done",
+        liveSession: "running",
+      },
+      planner: {
+        tone: "available",
+        availability: "available",
+        completion: "not_started",
+        liveSession: "none",
+      },
+      build: {
+        tone: "blocked",
+        availability: "blocked",
+        completion: "not_started",
+        liveSession: "none",
+      },
+      qa: {
+        tone: "blocked",
+        availability: "blocked",
+        completion: "not_started",
+        liveSession: "none",
+      },
     });
   });
 
   test("does not mark unavailable roles as in_progress when a session exists", () => {
+    const roleSessionByRole = buildRoleSessionSummaryMap([
+      buildSession({ role: "qa", status: "idle", scenario: "qa_review" }),
+    ]);
     const states = buildWorkflowStateByRole({
       task: null,
       roleWorkflowsByTask: {
@@ -281,19 +359,34 @@ describe("agents-page-session-tabs", () => {
         build: { required: true, canSkip: false, available: false, completed: false },
         qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      latestSessionByRole: {
-        spec: null,
-        planner: null,
-        build: null,
-        qa: buildSession({ role: "qa", status: "idle", scenario: "qa_review" }),
-      },
+      roleSessionByRole,
     });
 
     expect(states).toEqual({
-      spec: "blocked",
-      planner: "blocked",
-      build: "blocked",
-      qa: "optional",
+      spec: {
+        tone: "blocked",
+        availability: "blocked",
+        completion: "not_started",
+        liveSession: "none",
+      },
+      planner: {
+        tone: "blocked",
+        availability: "blocked",
+        completion: "not_started",
+        liveSession: "none",
+      },
+      build: {
+        tone: "blocked",
+        availability: "blocked",
+        completion: "not_started",
+        liveSession: "none",
+      },
+      qa: {
+        tone: "blocked",
+        availability: "blocked",
+        completion: "not_started",
+        liveSession: "idle",
+      },
     });
   });
 
@@ -321,19 +414,36 @@ describe("agents-page-session-tabs", () => {
         build: task.agentWorkflows.builder,
         qa: task.agentWorkflows.qa,
       },
-      latestSessionByRole: {
-        spec: null,
-        planner: null,
-        build: null,
-        qa: buildSession({ role: "qa", status: "idle", scenario: "qa_review" }),
-      },
+      roleSessionByRole: buildRoleSessionSummaryMap([
+        buildSession({ role: "qa", status: "idle", scenario: "qa_review" }),
+      ]),
     });
 
     expect(states).toEqual({
-      spec: "done",
-      planner: "done",
-      build: "done",
-      qa: "rejected",
+      spec: {
+        tone: "done",
+        availability: "available",
+        completion: "done",
+        liveSession: "none",
+      },
+      planner: {
+        tone: "done",
+        availability: "available",
+        completion: "done",
+        liveSession: "none",
+      },
+      build: {
+        tone: "done",
+        availability: "available",
+        completion: "done",
+        liveSession: "none",
+      },
+      qa: {
+        tone: "rejected",
+        availability: "blocked",
+        completion: "rejected",
+        liveSession: "idle",
+      },
     });
   });
 
@@ -361,30 +471,118 @@ describe("agents-page-session-tabs", () => {
         build: task.agentWorkflows.builder,
         qa: task.agentWorkflows.qa,
       },
-      latestSessionByRole: {
-        spec: buildSession({ role: "spec", status: "idle" }),
-        planner: buildSession({ role: "planner", status: "idle" }),
-        build: buildSession({
+      roleSessionByRole: buildRoleSessionSummaryMap([
+        buildSession({ role: "spec", status: "idle" }),
+        buildSession({ role: "planner", status: "idle" }),
+        buildSession({
           role: "build",
           status: "stopped",
           scenario: "build_after_qa_rejected",
           startedAt: "2026-02-22T11:00:00.000Z",
         }),
-        qa: buildSession({
+        buildSession({
           role: "qa",
           status: "idle",
           scenario: "qa_review",
           startedAt: "2026-02-22T10:00:00.000Z",
         }),
-      },
+      ]),
     });
 
     expect(states).toEqual({
-      spec: "done",
-      planner: "done",
-      build: "done",
-      qa: "done",
+      spec: {
+        tone: "done",
+        availability: "available",
+        completion: "done",
+        liveSession: "idle",
+      },
+      planner: {
+        tone: "done",
+        availability: "available",
+        completion: "done",
+        liveSession: "idle",
+      },
+      build: {
+        tone: "done",
+        availability: "available",
+        completion: "done",
+        liveSession: "stopped",
+      },
+      qa: {
+        tone: "done",
+        availability: "blocked",
+        completion: "done",
+        liveSession: "idle",
+      },
     });
+  });
+
+  test("keeps the newest role session as the workflow target even when an older one is waiting", () => {
+    const summaries = buildRoleSessionSummaryMap([
+      buildSession({
+        role: "spec",
+        sessionId: "session-newer",
+        startedAt: "2026-02-22T11:00:00.000Z",
+        status: "idle",
+      }),
+      buildSession({
+        role: "spec",
+        sessionId: "session-waiting",
+        startedAt: "2026-02-22T10:00:00.000Z",
+        status: "running",
+        pendingQuestions: [{ requestId: "q-1", questions: [] }],
+      }),
+    ]);
+
+    expect(summaries.spec.latestSession?.sessionId).toBe("session-newer");
+    expect(summaries.spec.workflowSession?.sessionId).toBe("session-newer");
+    expect(summaries.spec.liveSession).toBe("idle");
+  });
+
+  test("marks optional available roles as optional instead of generic available", () => {
+    const states = buildWorkflowStateByRole({
+      task: null,
+      roleWorkflowsByTask: {
+        spec: { required: false, canSkip: true, available: true, completed: false },
+        planner: { required: false, canSkip: true, available: true, completed: false },
+        build: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: false, canSkip: true, available: true, completed: false },
+      },
+      roleSessionByRole: buildRoleSessionSummaryMap([]),
+    });
+
+    expect(states.spec.tone).toBe("optional");
+    expect(states.planner.tone).toBe("optional");
+    expect(states.qa.tone).toBe("optional");
+    expect(states.build.tone).toBe("available");
+  });
+
+  test("surfaces waiting-input and failed lane tones from role sessions", () => {
+    const states = buildWorkflowStateByRole({
+      task: null,
+      roleWorkflowsByTask: {
+        spec: { required: true, canSkip: false, available: true, completed: false },
+        planner: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: false, completed: false },
+        qa: { required: false, canSkip: true, available: false, completed: false },
+      },
+      roleSessionByRole: buildRoleSessionSummaryMap([
+        buildSession({
+          role: "spec",
+          status: "running",
+          pendingPermissions: [{ requestId: "p-1", permission: "bash", patterns: [] }],
+        }),
+        buildSession({
+          role: "planner",
+          status: "error",
+        }),
+      ]),
+    });
+
+    expect(states.spec.tone).toBe("waiting_input");
+    expect(states.spec.liveSession).toBe("waiting_input");
+    expect(states.planner.tone).toBe("failed");
+    expect(states.planner.liveSession).toBe("error");
   });
 
   test("builds grouped session selector options", () => {

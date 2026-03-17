@@ -12,7 +12,7 @@ import {
   createAgentSessionActions,
   createEnsureRuntime,
   createLoadAgentSessions,
-  loadQaReviewTarget,
+  loadBuildContinuationTarget,
   loadRepoDefaultModel,
   loadRepoPromptOverrides,
   loadTaskDocuments,
@@ -273,8 +273,8 @@ export function useAgentOrchestratorOperations({
         turnModelBySessionRef: refBridges.turnModelBySessionRef,
         updateSession,
         attachSessionListener,
-        resolveQaReviewTarget: async (repoPath, taskId) =>
-          (await loadQaReviewTarget(repoPath, taskId)).workingDirectory,
+        resolveBuildContinuationTarget: async (repoPath, taskId) =>
+          (await loadBuildContinuationTarget(repoPath, taskId)).workingDirectory,
         ensureRuntime,
         loadTaskDocuments,
         loadRepoDefaultModel,

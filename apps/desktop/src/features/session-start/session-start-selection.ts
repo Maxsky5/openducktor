@@ -1,5 +1,25 @@
-import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
+import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
+import type { RepoSettingsInput } from "@/types/state-slices";
+
+export const roleDefaultSelectionFor = (
+  repoSettings: RepoSettingsInput | null,
+  role: AgentRole,
+): AgentModelSelection | null => {
+  const roleDefault = repoSettings?.agentDefaults[role];
+  if (!roleDefault || !roleDefault.providerId || !roleDefault.modelId) {
+    return null;
+  }
+
+  return {
+    runtimeKind:
+      roleDefault.runtimeKind ?? repoSettings?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND,
+    providerId: roleDefault.providerId,
+    modelId: roleDefault.modelId,
+    ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),
+    ...(roleDefault.profileId ? { profileId: roleDefault.profileId } : {}),
+  };
+};
 
 export const pickDefaultSelectionForCatalog = (
   catalog: AgentModelCatalog | null,

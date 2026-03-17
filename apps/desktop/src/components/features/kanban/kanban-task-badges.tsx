@@ -1,14 +1,6 @@
 import type { IssueType, RunSummary, TaskCard } from "@openducktor/contracts";
 import type { LucideIcon } from "lucide-react";
-import {
-  AlertTriangle,
-  Bug,
-  CheckSquare,
-  Layers3,
-  Loader2,
-  PlayCircle,
-  Sparkles,
-} from "lucide-react";
+import { AlertTriangle, Bug, CheckSquare, Layers3, Sparkles } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { assertNever } from "@/lib/assert-never";
@@ -110,45 +102,35 @@ const toPriorityLevel = (priority: number): PriorityLevel => {
 const getPriorityStyle = (priority: number): (typeof PRIORITY_STYLES)[PriorityLevel] =>
   PRIORITY_STYLES[toPriorityLevel(priority)];
 
-const runStateLabel = (value: RunSummary["state"]): string => {
+export type VisibleKanbanRunState = Extract<RunSummary["state"], "blocked" | "failed">;
+
+const runStateLabel = (value: VisibleKanbanRunState): string => {
   switch (value) {
-    case "starting":
-      return "Starting";
-    case "running":
-      return "Running";
     case "blocked":
       return "Blocked";
-    case "awaiting_done_confirmation":
-      return "Awaiting confirm";
-    case "completed":
-      return "Completed";
     case "failed":
       return "Failed";
-    case "stopped":
-      return "Stopped";
     default:
       return assertNever(value, "Unhandled run state");
   }
 };
 
-const runStateIcon = (value: RunSummary["state"]): LucideIcon => {
-  if (value === "running" || value === "starting") {
-    return Loader2;
+const runStateIcon = (value: VisibleKanbanRunState): LucideIcon => {
+  switch (value) {
+    case "blocked":
+      return AlertTriangle;
+    case "failed":
+      return AlertTriangle;
+    default:
+      return assertNever(value, "Unhandled run state");
   }
-  if (value === "blocked" || value === "failed") {
-    return AlertTriangle;
-  }
-  return PlayCircle;
 };
 
-const runStateClassName = (value: RunSummary["state"]): string => {
+const runStateClassName = (value: VisibleKanbanRunState): string => {
   if (value === "blocked" || value === "failed") {
     return "border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300";
   }
-  if (value === "running" || value === "starting") {
-    return "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300";
-  }
-  return "border-border bg-muted text-foreground";
+  return assertNever(value, "Unhandled run state");
 };
 
 export const IssueTypeBadge = memo(function IssueTypeBadge({
@@ -190,7 +172,7 @@ export const PriorityBadge = memo(function PriorityBadge({
 export const RunStateBadge = memo(function RunStateBadge({
   runState,
 }: {
-  runState: RunSummary["state"];
+  runState: VisibleKanbanRunState;
 }): ReactElement {
   const Icon = runStateIcon(runState);
   return (
@@ -198,7 +180,7 @@ export const RunStateBadge = memo(function RunStateBadge({
       variant="outline"
       className={`h-6 rounded-full px-2.5 text-[11px] font-medium gap-1 ${runStateClassName(runState)}`}
     >
-      <Icon className={runState === "starting" ? "size-3 animate-spin" : "size-3"} />
+      <Icon className="size-3" />
       {runStateLabel(runState)}
     </Badge>
   );

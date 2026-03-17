@@ -2,9 +2,10 @@
 
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch, GitPort, IssueType,
-    PlanSubtaskInput, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState,
-    RunSummary, RuntimeInstanceSummary, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
+    AgentRuntimeKind, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch, GitPort,
+    IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent,
+    RunState, RunSummary, RuntimeInstanceSummary, TaskAction, TaskStatus, TaskStore,
+    UpdateTaskPatch,
 };
 use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
@@ -477,6 +478,120 @@ fn task_delete_stops_before_store_delete_when_worktree_cleanup_fails() {
     assert!(format!("{error:#}").contains("remove failed"));
     let task_state = task_state.lock().expect("task lock poisoned");
     assert!(task_state.delete_calls.is_empty());
+}
+
+#[test]
+fn task_delete_rejects_active_builder_runs() {
+    let repo_path = "/tmp/odt-repo-task-delete-active-run";
+    let worktree_path = "/tmp/odt-repo-task-delete-active-run-worktree";
+    fs::create_dir_all(repo_path).expect("repo directory should be created");
+    fs::create_dir_all(worktree_path).expect("worktree directory should be created");
+    init_git_repo(Path::new(repo_path)).expect("repo should be initialized");
+    let parent = make_task("parent-1", "epic", TaskStatus::Open);
+    let mut build_session = make_session("parent-1", "build-session");
+    build_session.working_directory = worktree_path.to_string();
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![parent],
+        vec![GitBranch {
+            name: "obp/parent-1-cleanup".to_string(),
+            is_current: false,
+            is_remote: false,
+        }],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    service
+        .workspace_add(repo_path)
+        .expect("workspace add should succeed");
+    service
+        .workspace_update_repo_config(
+            repo_path,
+            RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
+                worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+                branch_prefix: "obp".to_string(),
+                default_target_branch: host_infra_system::GitTargetBranch {
+                    remote: Some("origin".to_string()),
+                    branch: "main".to_string(),
+                },
+                git: Default::default(),
+                trusted_hooks: true,
+                trusted_hooks_fingerprint: None,
+                hooks: HookSet::default(),
+                worktree_file_copies: Vec::new(),
+                prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
+            },
+        )
+        .expect("repo config update should succeed");
+
+    task_state
+        .lock()
+        .expect("task lock poisoned")
+        .agent_sessions = vec![build_session];
+    service.runs.lock().expect("run lock poisoned").insert(
+        "run-1".to_string(),
+        RunProcess {
+            summary: RunSummary {
+                run_id: "run-1".to_string(),
+                runtime_kind: AgentRuntimeKind::Opencode,
+                runtime_route: AgentRuntimeKind::Opencode.route_for_port(4444),
+                repo_path: repo_path.to_string(),
+                task_id: "parent-1".to_string(),
+                branch: "obp/parent-1-cleanup".to_string(),
+                worktree_path: worktree_path.to_string(),
+                port: 4444,
+                state: RunState::Running,
+                last_message: None,
+                started_at: "2026-02-20T12:00:00Z".to_string(),
+            },
+            child: spawn_sleep_process(20),
+            _opencode_process_guard: None,
+            repo_path: repo_path.to_string(),
+            task_id: "parent-1".to_string(),
+            worktree_path: worktree_path.to_string(),
+            repo_config: RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
+                worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+                branch_prefix: "obp".to_string(),
+                default_target_branch: host_infra_system::GitTargetBranch {
+                    remote: Some("origin".to_string()),
+                    branch: "main".to_string(),
+                },
+                git: Default::default(),
+                trusted_hooks: true,
+                trusted_hooks_fingerprint: None,
+                hooks: HookSet::default(),
+                worktree_file_copies: Vec::new(),
+                prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
+            },
+        },
+    );
+
+    let error = service
+        .task_delete(repo_path, "parent-1", false)
+        .expect_err("task delete should fail while a builder run is active");
+
+    assert!(
+        format!("{error:#}").contains("Cannot delete tasks with active builder work in progress")
+    );
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert!(task_state.delete_calls.is_empty());
+    drop(task_state);
+    if let Some(mut run) = service
+        .runs
+        .lock()
+        .expect("run lock poisoned")
+        .remove("run-1")
+    {
+        terminate_child_process(&mut run.child);
+    }
+    let _ = fs::remove_dir_all(worktree_path);
+    let _ = fs::remove_dir_all(repo_path);
 }
 
 #[test]

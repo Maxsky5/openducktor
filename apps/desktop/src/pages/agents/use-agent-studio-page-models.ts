@@ -199,7 +199,7 @@ export function useAgentStudioPageModels({
     ],
   );
   const {
-    latestSessionByRole,
+    workflowSessionByRole,
     workflowStateByRole,
     sessionSelectorGroups,
     sessionSelectorValue,
@@ -236,7 +236,7 @@ export function useAgentStudioPageModels({
     workflow: {
       workflowStateByRole,
       selectedInteractionRole,
-      latestSessionByRole,
+      workflowSessionByRole,
       sessionSelectorValue,
       sessionSelectorGroups,
       sessionCreateOptions,

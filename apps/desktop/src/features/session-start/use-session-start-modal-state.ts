@@ -27,6 +27,7 @@ import {
   isSameSelection,
   normalizeSelectionForCatalog,
   pickDefaultSelectionForCatalog,
+  roleDefaultSelectionFor,
 } from "./session-start-selection";
 
 export type SessionStartModalSource = "agent_studio" | "kanban";
@@ -72,25 +73,6 @@ type UseSessionStartModalStateResult = {
   handleSelectAgent: (profileId: string) => void;
   handleSelectModel: (modelKey: string) => void;
   handleSelectVariant: (variant: string) => void;
-};
-
-const roleDefaultSelectionFor = (
-  repoSettings: RepoSettingsInput | null,
-  role: AgentRole,
-): AgentModelSelection | null => {
-  const roleDefault = repoSettings?.agentDefaults[role];
-  if (!roleDefault || !roleDefault.providerId || !roleDefault.modelId) {
-    return null;
-  }
-
-  return {
-    runtimeKind:
-      roleDefault.runtimeKind ?? repoSettings?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND,
-    providerId: roleDefault.providerId,
-    modelId: roleDefault.modelId,
-    ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),
-    ...(roleDefault.profileId ? { profileId: roleDefault.profileId } : {}),
-  };
 };
 
 const resolveInitialSelection = (

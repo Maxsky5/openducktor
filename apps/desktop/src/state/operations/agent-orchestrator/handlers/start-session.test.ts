@@ -1156,7 +1156,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveQaReviewTarget: async () => {
+      resolveBuildContinuationTarget: async () => {
         qaTargetCalls += 1;
         return "/tmp/repo/worktree";
       },

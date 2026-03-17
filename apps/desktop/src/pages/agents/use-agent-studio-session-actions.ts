@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { isAgentKickoffScenario } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { RequestNewSessionStart } from "@/features/session-start";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
@@ -33,6 +34,8 @@ type UseAgentStudioSessionActionsArgs = {
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
+  loadAgentSessions: AgentStateContextValue["loadAgentSessions"];
+  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent?: () => void;
@@ -55,12 +58,15 @@ export function useAgentStudioSessionActions({
   startAgentSession,
   sendAgentMessage,
   updateAgentSessionModel,
+  loadAgentSessions,
+  humanRequestChangesTask,
   answerAgentQuestion,
   updateQuery,
   onContextSwitchIntent,
   requestNewSessionStart,
 }: UseAgentStudioSessionActionsArgs): {
   isStarting: boolean;
+  humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   isSending: boolean;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   isSessionWorking: boolean;
@@ -87,26 +93,33 @@ export function useAgentStudioSessionActions({
       (activeSession?.status ?? "stopped") === "starting" ||
       isSending);
 
-  const { isStarting, startSession, startScenarioKickoff, handleCreateSession } =
-    useAgentStudioSessionStartFlow({
-      activeRepo,
-      taskId,
-      role,
-      scenario,
-      activeSession,
-      sessionsForTask,
-      selectedTask,
-      agentStudioReady,
-      isActiveTaskHydrated,
-      isSessionWorking,
-      selectionForNewSession,
-      startAgentSession,
-      sendAgentMessage,
-      updateAgentSessionModel,
-      updateQuery,
-      ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
-      ...(requestNewSessionStart ? { requestNewSessionStart } : {}),
-    });
+  const {
+    isStarting,
+    humanReviewFeedbackModal,
+    startSession,
+    startScenarioKickoff,
+    handleCreateSession,
+  } = useAgentStudioSessionStartFlow({
+    activeRepo,
+    taskId,
+    role,
+    scenario,
+    activeSession,
+    sessionsForTask,
+    selectedTask,
+    agentStudioReady,
+    isActiveTaskHydrated,
+    isSessionWorking,
+    selectionForNewSession,
+    startAgentSession,
+    sendAgentMessage,
+    updateAgentSessionModel,
+    loadAgentSessions,
+    humanRequestChangesTask,
+    updateQuery,
+    ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
+    ...(requestNewSessionStart ? { requestNewSessionStart } : {}),
+  });
 
   useEffect(() => {
     latestInputRef.current = input;
@@ -327,6 +340,7 @@ export function useAgentStudioSessionActions({
 
   return {
     isStarting,
+    humanReviewFeedbackModal,
     isSending,
     isSubmittingQuestionByRequestId,
     isSessionWorking,

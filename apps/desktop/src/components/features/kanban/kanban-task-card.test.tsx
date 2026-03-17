@@ -145,4 +145,106 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).toContain("PR #110");
     expect(html).toContain("text-emerald");
   });
+
+  test("hides terminal run badges for completed and stopped runs", () => {
+    const task = createTaskCardFixture({ id: "TASK-5", title: "Wrap up docs" });
+
+    const completedHtml = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          runState: "completed",
+          activeSessions: [],
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onPlan: noop,
+          onBuild: noop,
+        }),
+      ),
+    );
+    expect(completedHtml).not.toContain("Completed");
+
+    const stoppedHtml = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          runState: "stopped",
+          activeSessions: [],
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onPlan: noop,
+          onBuild: noop,
+        }),
+      ),
+    );
+    expect(stoppedHtml).not.toContain("Stopped");
+  });
+
+  test("hides starting and running run badges on Kanban cards", () => {
+    const task = createTaskCardFixture({ id: "TASK-6", title: "Implement auth" });
+
+    const runningHtml = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          runState: "running",
+          activeSessions: [],
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onPlan: noop,
+          onBuild: noop,
+        }),
+      ),
+    );
+
+    expect(runningHtml).not.toContain("Running");
+    expect(runningHtml).not.toContain("lucide-loader-2");
+
+    const startingHtml = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          runState: "starting",
+          activeSessions: [],
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onPlan: noop,
+          onBuild: noop,
+        }),
+      ),
+    );
+
+    expect(startingHtml).not.toContain("Starting");
+    expect(startingHtml).not.toContain("lucide-loader-2");
+  });
+
+  test("hides awaiting-done-confirmation run badges on Kanban cards", () => {
+    const task = createTaskCardFixture({ id: "TASK-7", title: "Finalize auth" });
+
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          runState: "awaiting_done_confirmation",
+          activeSessions: [],
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onPlan: noop,
+          onBuild: noop,
+        }),
+      ),
+    );
+
+    expect(html).not.toContain("Ready to finish");
+  });
 });

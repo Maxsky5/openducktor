@@ -35,7 +35,7 @@ export type SessionDependencies = {
 };
 
 export type RuntimeDependencies = {
-  resolveQaReviewTarget: (repoPath: string, taskId: string) => Promise<string>;
+  resolveBuildContinuationTarget: (repoPath: string, taskId: string) => Promise<string>;
   adapter: AgentEnginePort;
   ensureRuntime: (
     repoPath: string,

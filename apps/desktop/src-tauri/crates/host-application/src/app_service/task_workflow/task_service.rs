@@ -5,8 +5,8 @@ use crate::app_service::workflow_rules::{
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentSessionDocument, CreateTaskInput, QaWorkflowVerdict, TaskCard, TaskMetadata, TaskStatus,
-    UpdateTaskPatch,
+    AgentSessionDocument, CreateTaskInput, QaWorkflowVerdict, RunState, TaskCard, TaskMetadata,
+    TaskStatus, UpdateTaskPatch,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -80,6 +80,7 @@ impl AppService {
             .iter()
             .map(|task| task.id.as_str())
             .collect::<Vec<_>>();
+        self.ensure_no_active_task_delete_runs(context.repo.repo_path.as_str(), &target_task_ids)?;
         let normalized_repo = normalize_path_for_comparison(context.repo.repo_path.as_str());
         let branch_prefix = self
             .config_store
@@ -138,6 +139,38 @@ impl AppService {
             .delete_task(context.repo_dir(), task_id, delete_subtasks)
             .with_context(|| format!("Failed to delete task {task_id}"))?;
         Ok(())
+    }
+
+    fn ensure_no_active_task_delete_runs(&self, repo_path: &str, task_ids: &[&str]) -> Result<()> {
+        let normalized_repo = normalize_path_for_comparison(repo_path);
+        let runs = self
+            .runs
+            .lock()
+            .map_err(|_| anyhow!("Run state lock poisoned"))?;
+        let active_task_ids = runs
+            .values()
+            .filter(|run| normalize_path_for_comparison(run.repo_path.as_str()) == normalized_repo)
+            .filter(|run| task_ids.iter().any(|task_id| *task_id == run.task_id))
+            .filter(|run| {
+                matches!(
+                    run.summary.state,
+                    RunState::Starting
+                        | RunState::Running
+                        | RunState::Blocked
+                        | RunState::AwaitingDoneConfirmation
+                )
+            })
+            .map(|run| run.task_id.clone())
+            .collect::<HashSet<_>>();
+
+        if active_task_ids.is_empty() {
+            return Ok(());
+        }
+
+        let active_summary = active_task_ids.into_iter().collect::<Vec<_>>().join(", ");
+        Err(anyhow!(
+            "Cannot delete tasks with active builder work in progress. Stop the active run(s) first: {active_summary}"
+        ))
     }
 
     pub fn task_transition(
