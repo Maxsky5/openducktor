@@ -339,10 +339,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                 </Button>
                 {nextStep ? (
                   <ChevronRight
-                    className={cn(
-                      "size-4 shrink-0",
-                      workflowConnectorClassName(nextStep.state),
-                    )}
+                    className={cn("size-4 shrink-0", workflowConnectorClassName(nextStep.state))}
                   />
                 ) : null}
               </div>
