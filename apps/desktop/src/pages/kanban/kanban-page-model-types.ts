@@ -71,6 +71,7 @@ export type KanbanPageContentModel = {
   onBuild: (taskId: string) => void;
   onHumanApprove: (taskId: string) => void;
   onHumanRequestChanges: (taskId: string) => void;
+  onResetImplementation: (taskId: string) => void;
 };
 
 export type KanbanPageTaskComposerModel = {
@@ -93,6 +94,7 @@ export type KanbanPageTaskDetailsControllerModel = {
   onResumeDeferred: (taskId: string) => void;
   onHumanApprove: (taskId: string) => void;
   onHumanRequestChanges: (taskId: string) => void;
+  onResetImplementation: (taskId: string) => void;
   onDetectPullRequest: (taskId: string) => void;
   onUnlinkPullRequest: (taskId: string) => void;
   detectingPullRequestTaskId: string | null;
@@ -107,5 +109,20 @@ export type KanbanPageModels = {
   taskDetailsController: KanbanPageTaskDetailsControllerModel;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   taskApprovalModal: TaskApprovalModalModel | null;
+  resetImplementationModal: {
+    open: boolean;
+    taskId: string;
+    taskTitle: string;
+    targetStatusLabel: string;
+    isSubmitting: boolean;
+    isLoadingImpact: boolean;
+    hasManagedSessionCleanup: boolean;
+    managedWorktreeCount: number;
+    impactError: string | null;
+    errorMessage: string | null;
+    onOpenChange: (open: boolean) => void;
+    onCancel: () => void;
+    onConfirm: () => void;
+  } | null;
   sessionStartModal: SessionStartModalModel | null;
 };

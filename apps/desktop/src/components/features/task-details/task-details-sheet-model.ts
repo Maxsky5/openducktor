@@ -11,6 +11,7 @@ type TaskWorkflowCallbacks = {
   onResumeDeferred: ((taskId: string) => void) | undefined;
   onHumanApprove: ((taskId: string) => void) | undefined;
   onHumanRequestChanges: ((taskId: string) => void) | undefined;
+  onResetImplementation: ((taskId: string) => void) | undefined;
 };
 
 export const toTaskLabels = (labels: string[] | undefined): string[] =>
@@ -101,6 +102,9 @@ export const runTaskWorkflowAction = (
       return;
     case "human_request_changes":
       callbacks.onHumanRequestChanges?.(taskId);
+      return;
+    case "reset_implementation":
+      callbacks.onResetImplementation?.(taskId);
       return;
     default:
       return;

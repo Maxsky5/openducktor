@@ -82,6 +82,7 @@ type UseKanbanBoardModelArgs = {
   onBuild: (taskId: string) => void;
   onHumanApprove: (taskId: string) => void;
   onHumanRequestChanges: (taskId: string) => void;
+  onResetImplementation: (taskId: string) => void;
 };
 
 export function useKanbanBoardModel({
@@ -98,6 +99,7 @@ export function useKanbanBoardModel({
   onBuild,
   onHumanApprove,
   onHumanRequestChanges,
+  onResetImplementation,
 }: UseKanbanBoardModelArgs): KanbanPageContentModel {
   const columns = useMemo(() => mapToKanbanColumns(tasks), [tasks]);
 
@@ -119,5 +121,6 @@ export function useKanbanBoardModel({
     onBuild,
     onHumanApprove,
     onHumanRequestChanges,
+    onResetImplementation,
   };
 }

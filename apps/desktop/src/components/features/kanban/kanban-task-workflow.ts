@@ -43,6 +43,7 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
     "human_request_changes",
     "resume_deferred",
     "defer_issue",
+    "reset_implementation",
   ],
   feature: [
     "set_spec",
@@ -55,6 +56,7 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
     "human_request_changes",
     "resume_deferred",
     "defer_issue",
+    "reset_implementation",
   ],
   bug: [
     "build_start",
@@ -67,6 +69,7 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
     "human_request_changes",
     "resume_deferred",
     "defer_issue",
+    "reset_implementation",
   ],
   task: [
     "build_start",
@@ -79,6 +82,7 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
     "human_request_changes",
     "resume_deferred",
     "defer_issue",
+    "reset_implementation",
   ],
 };
 

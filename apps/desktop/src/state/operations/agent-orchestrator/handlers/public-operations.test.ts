@@ -55,6 +55,7 @@ describe("agent-orchestrator-public-operations", () => {
         newer: createSessionState("newer", "2026-03-01T11:00:00.000Z"),
       },
       loadAgentSessions: async () => {},
+      removeAgentSessions: () => {},
       sessionActions: createSessionActions(),
     });
 
@@ -71,6 +72,7 @@ describe("agent-orchestrator-public-operations", () => {
       loadAgentSessions: async () => {
         throw new Error("load failed");
       },
+      removeAgentSessions: () => {},
       sessionActions: createSessionActions(),
     });
 
@@ -92,6 +94,7 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       sessionsById: {},
       loadAgentSessions: async () => {},
+      removeAgentSessions: () => {},
       sessionActions: createSessionActions({
         startAgentSession: async () => {
           throw new Error("start failed");
@@ -122,6 +125,7 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       sessionsById: {},
       loadAgentSessions: async () => {},
+      removeAgentSessions: () => {},
       sessionActions: createSessionActions({
         forkAgentSession: async () => {
           throw new Error("fork failed");
@@ -151,6 +155,7 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       sessionsById: {},
       loadAgentSessions: async () => {},
+      removeAgentSessions: () => {},
       sessionActions: createSessionActions({
         sendAgentMessage: async () => {
           throw new Error("send failed");
@@ -168,5 +173,22 @@ describe("agent-orchestrator-public-operations", () => {
     } finally {
       toast.error = originalToastError;
     }
+  });
+
+  test("forwards explicit session removals without toast wrapping", () => {
+    const removeAgentSessions = mock(() => {});
+    const operations = createOrchestratorPublicOperations({
+      sessionsById: {},
+      loadAgentSessions: async () => {},
+      removeAgentSessions,
+      sessionActions: createSessionActions(),
+    });
+
+    operations.removeAgentSessions({ taskId: "task-1", roles: ["build", "qa"] });
+
+    expect(removeAgentSessions).toHaveBeenCalledWith({
+      taskId: "task-1",
+      roles: ["build", "qa"],
+    });
   });
 });

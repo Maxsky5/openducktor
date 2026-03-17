@@ -58,6 +58,7 @@ type KanbanTaskCardProps = {
   onBuild: (taskId: string) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
+  onResetImplementation?: (taskId: string) => void;
 };
 
 const areStringArraysEqual = (left: string[], right: string[]): boolean => {
@@ -133,7 +134,8 @@ const areKanbanTaskCardPropsEqual = (
   previous.onQaOpen === next.onQaOpen &&
   previous.onBuild === next.onBuild &&
   previous.onHumanApprove === next.onHumanApprove &&
-  previous.onHumanRequestChanges === next.onHumanRequestChanges;
+  previous.onHumanRequestChanges === next.onHumanRequestChanges &&
+  previous.onResetImplementation === next.onResetImplementation;
 
 function toSessionHref({
   taskId,
@@ -238,6 +240,7 @@ function TaskActions({
   onDelegate,
   onHumanApprove,
   onHumanRequestChanges,
+  onResetImplementation,
 }: {
   task: TaskCard;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
@@ -247,6 +250,7 @@ function TaskActions({
   onDelegate: (taskId: string) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
+  onResetImplementation?: (taskId: string) => void;
 }): ReactElement | null {
   const includeActions: readonly TaskWorkflowAction[] = [
     "set_spec",
@@ -257,6 +261,7 @@ function TaskActions({
     "open_qa",
     "human_approve",
     "human_request_changes",
+    "reset_implementation",
   ];
   const workflowActions = resolveTaskCardActions(task, { include: includeActions });
 
@@ -287,6 +292,9 @@ function TaskActions({
         return;
       case "human_request_changes":
         onHumanRequestChanges?.(task.id);
+        return;
+      case "reset_implementation":
+        onResetImplementation?.(task.id);
         return;
       default:
         return;
@@ -320,6 +328,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   onBuild,
   onHumanApprove,
   onHumanRequestChanges,
+  onResetImplementation,
 }: KanbanTaskCardProps): ReactElement {
   const hasActiveSessions = activeSessions.length > 0;
   const visibleRunState = toVisibleKanbanRunState(runState);
@@ -374,6 +383,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
           {...(onQaOpen ? { onQaOpen } : {})}
           {...(onHumanApprove ? { onHumanApprove } : {})}
           {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
+          {...(onResetImplementation ? { onResetImplementation } : {})}
         />
       </div>
     </article>

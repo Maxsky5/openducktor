@@ -548,6 +548,56 @@ fn resolve_opencode_binary_path_uses_home_fallback_when_override_and_path_missin
 }
 
 #[test]
+fn resolve_opencode_binary_path_prefers_path_before_home_fallback() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("opencode-path-priority");
+    let path_bin = root.join("path-bin");
+    let home_bin = root.join(".opencode").join("bin");
+    fs::create_dir_all(&path_bin)?;
+    fs::create_dir_all(&home_bin)?;
+    let path_opencode = path_bin.join("opencode");
+    let home_opencode = home_bin.join("opencode");
+    create_fake_opencode(&path_opencode)?;
+    create_fake_opencode(&home_opencode)?;
+
+    let _override_guard = remove_env_var("OPENDUCKTOR_OPENCODE_BINARY");
+    let _home_guard = set_env_var("HOME", root.to_string_lossy().as_ref());
+    let _path_guard = prepend_path(&path_bin);
+
+    let resolved = resolve_opencode_binary_path();
+    assert_eq!(
+        resolved.as_deref(),
+        Some(path_opencode.to_string_lossy().as_ref())
+    );
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn resolve_opencode_binary_path_uses_path_when_home_is_unset() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("opencode-path-without-home");
+    let path_bin = root.join("path-bin");
+    fs::create_dir_all(&path_bin)?;
+    let path_opencode = path_bin.join("opencode");
+    create_fake_opencode(&path_opencode)?;
+
+    let _override_guard = remove_env_var("OPENDUCKTOR_OPENCODE_BINARY");
+    let _home_guard = remove_env_var("HOME");
+    let _path_guard = prepend_path(&path_bin);
+
+    let resolved = resolve_opencode_binary_path();
+    assert_eq!(
+        resolved.as_deref(),
+        Some(path_opencode.to_string_lossy().as_ref())
+    );
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
 fn find_openducktor_workspace_root_uses_workspace_markers_instead_of_fixed_depth() -> Result<()> {
     let root = unique_temp_path("workspace-root-discovery");
     let nested_manifest = root.join("apps").join("desktop").join("src-tauri");

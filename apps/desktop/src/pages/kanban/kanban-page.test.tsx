@@ -24,9 +24,13 @@ const updateAgentSessionModelMock = mock(() => {});
 const loadAgentSessionsMock = mock(
   async (_taskId: string, _options?: AgentSessionLoadOptions) => {},
 );
+const removeAgentSessionsMock = mock(
+  (_input: { taskId: string; roles?: Array<"spec" | "planner" | "build" | "qa"> }) => {},
+);
 const humanApproveTaskMock = mock(async () => {});
 const humanRequestChangesTaskMock = mock(async () => {});
 const deleteTaskMock = mock(async () => {});
+const resetTaskImplementationMock = mock(async () => {});
 const deferTaskMock = mock(async () => {});
 const resumeDeferredTaskMock = mock(async () => {});
 const toastSuccessMock = mock(() => {});
@@ -51,6 +55,7 @@ const buildContinuationTargetGetMock = mock(async () => ({
 let latestKanbanColumnProps: Record<string, unknown> | null = null;
 let latestHumanReviewFeedbackModalModel: Record<string, unknown> | null = null;
 let latestSessionStartModalModel: Record<string, unknown> | null = null;
+let latestResetImplementationModalModel: Record<string, unknown> | null = null;
 let latestLocation = "/";
 const RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR] as const;
 
@@ -199,6 +204,17 @@ mock.module("./kanban-session-start-modal", () => ({
   },
 }));
 
+mock.module("./task-reset-implementation-modal", () => ({
+  TaskResetImplementationModal: ({
+    model,
+  }: {
+    model: Record<string, unknown> | null;
+  }): ReactElement | null => {
+    latestResetImplementationModalModel = model;
+    return null;
+  },
+}));
+
 mock.module("@/features/human-review-feedback/human-review-feedback-modal", () => ({
   HumanReviewFeedbackModal: ({
     model,
@@ -220,6 +236,7 @@ mock.module("@/state", () => ({
   useAgentState: () => ({
     sessions: currentSessionsFixture,
     loadAgentSessions: loadAgentSessionsMock,
+    removeAgentSessions: removeAgentSessionsMock,
     startAgentSession: startAgentSessionMock,
     forkAgentSession: async () => "session-forked",
     sendAgentMessage: sendAgentMessageMock,
@@ -229,11 +246,16 @@ mock.module("@/state", () => ({
     tasks: [currentTaskFixture],
     runs: [],
     isLoadingTasks: false,
-    runningTaskSessionByTaskId: {},
     createTask: async () => {},
-    updateTaskStatus: async () => {},
+    updateTask: async () => {},
     refreshTasks: async () => {},
+    syncPullRequests: async () => {},
+    unlinkPullRequest: async () => {},
+    detectingPullRequestTaskId: null,
+    unlinkingPullRequestTaskId: null,
     deleteTask: deleteTaskMock,
+    resetTaskImplementation: resetTaskImplementationMock,
+    transitionTask: async () => {},
     deferTask: deferTaskMock,
     resumeDeferredTask: resumeDeferredTaskMock,
     humanApproveTask: humanApproveTaskMock,
@@ -338,14 +360,17 @@ describe("KanbanPage session start modal flow", () => {
     latestKanbanColumnProps = null;
     latestHumanReviewFeedbackModalModel = null;
     latestSessionStartModalModel = null;
+    latestResetImplementationModalModel = null;
     latestLocation = "/";
     startAgentSessionMock.mockClear();
     sendAgentMessageMock.mockClear();
     updateAgentSessionModelMock.mockClear();
     loadAgentSessionsMock.mockClear();
+    removeAgentSessionsMock.mockClear();
     humanApproveTaskMock.mockClear();
     humanRequestChangesTaskMock.mockClear();
     deleteTaskMock.mockClear();
+    resetTaskImplementationMock.mockClear();
     deferTaskMock.mockClear();
     resumeDeferredTaskMock.mockClear();
     toastSuccessMock.mockClear();
@@ -902,6 +927,76 @@ describe("KanbanPage session start modal flow", () => {
         expect.objectContaining({ value: "session-build-hydrated", secondaryLabel: "Latest" }),
       ]),
     );
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("reset implementation prunes local build and qa sessions before reloading persisted sessions", async () => {
+    currentTaskFixture = createTaskCardFixture({
+      id: "TASK-123",
+      status: "in_progress",
+      availableActions: ["reset_implementation"],
+    });
+    currentSessionsFixture = [
+      {
+        runtimeKind: "opencode",
+        sessionId: "session-build-idle",
+        taskId: "TASK-123",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+        startedAt: "2026-01-02T00:00:00.000Z",
+        updatedAt: "2026-01-02T00:00:00.000Z",
+        pendingPermissions: 0,
+        pendingQuestions: 0,
+      },
+      {
+        runtimeKind: "opencode",
+        sessionId: "session-qa-stopped",
+        taskId: "TASK-123",
+        role: "qa",
+        scenario: "qa_review",
+        status: "stopped",
+        startedAt: "2026-01-03T00:00:00.000Z",
+        updatedAt: "2026-01-03T00:00:00.000Z",
+        pendingPermissions: 0,
+        pendingQuestions: 0,
+      },
+    ];
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onResetImplementation as (taskId: string) => void)("TASK-123");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(latestResetImplementationModalModel?.open).toBe(true);
+
+    await act(async () => {
+      (latestResetImplementationModalModel?.onConfirm as () => void)();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitForMockCall(loadAgentSessionsMock);
+
+    expect(resetTaskImplementationMock).toHaveBeenCalledWith("TASK-123");
+    expect(removeAgentSessionsMock).toHaveBeenCalledWith({
+      taskId: "TASK-123",
+      roles: ["build", "qa"],
+    });
+    expect(loadAgentSessionsMock).toHaveBeenCalledWith("TASK-123");
+
+    const removeCallOrder = removeAgentSessionsMock.mock.invocationCallOrder[0];
+    const loadCallOrder = loadAgentSessionsMock.mock.invocationCallOrder[0];
+    expect(removeCallOrder).toBeDefined();
+    expect(loadCallOrder).toBeDefined();
+    if (removeCallOrder !== undefined && loadCallOrder !== undefined) {
+      expect(removeCallOrder).toBeLessThan(loadCallOrder);
+    }
 
     await act(async () => {
       renderer.unmount();

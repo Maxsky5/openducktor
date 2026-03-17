@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
-import { taskActionLabel } from "./task-action-ui";
+import {
+  taskActionIsDestructive,
+  taskActionLabel,
+  taskPrimaryActionVariant,
+} from "./task-action-ui";
 
 describe("taskActionLabel", () => {
   test("uses builder naming consistently for standard workflow actions", () => {
@@ -19,6 +23,7 @@ describe("taskActionLabel", () => {
     expect(taskActionLabel("defer_issue", task)).toBe("Defer Task");
     expect(taskActionLabel("resume_deferred", task)).toBe("Resume Task");
     expect(taskActionLabel("human_approve", task)).toBe("Approve Task");
+    expect(taskActionLabel("reset_implementation", task)).toBe("Reset Implementation");
   });
 
   test("uses open wording for spec-ready follow-up actions", () => {
@@ -72,5 +77,15 @@ describe("taskActionLabel", () => {
     });
 
     expect(taskActionLabel("qa_start", task)).toBe("Request QA Review");
+  });
+
+  test("keeps request changes and defer as non-destructive workflow actions", () => {
+    expect(taskPrimaryActionVariant("human_request_changes")).toBe("outline");
+    expect(taskPrimaryActionVariant("defer_issue")).toBe("outline");
+    expect(taskPrimaryActionVariant("reset_implementation")).toBe("destructive");
+
+    expect(taskActionIsDestructive("human_request_changes")).toBe(false);
+    expect(taskActionIsDestructive("defer_issue")).toBe(false);
+    expect(taskActionIsDestructive("reset_implementation")).toBe(true);
   });
 });

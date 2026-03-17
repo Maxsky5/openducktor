@@ -24,6 +24,7 @@ const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
   "open_qa",
   "human_approve",
   "human_request_changes",
+  "reset_implementation",
   "defer_issue",
   "resume_deferred",
 ];
@@ -45,6 +46,7 @@ export function TaskDetailsSheet({
   onResumeDeferred,
   onHumanApprove,
   onHumanRequestChanges,
+  onResetImplementation,
   onDetectPullRequest,
   onUnlinkPullRequest,
   detectingPullRequestTaskId = null,
@@ -65,6 +67,7 @@ export function TaskDetailsSheet({
     onResumeDeferred,
     onHumanApprove,
     onHumanRequestChanges,
+    onResetImplementation,
     onDelete,
   });
 

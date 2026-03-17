@@ -53,6 +53,13 @@ pub trait TaskStore: Send + Sync {
         task_id: &str,
         session: AgentSessionDocument,
     ) -> Result<()>;
+    fn clear_agent_sessions_by_roles(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        roles: &[&str],
+    ) -> Result<()>;
+    fn clear_qa_reports(&self, repo_path: &Path, task_id: &str) -> Result<()>;
     fn set_pull_request(
         &self,
         repo_path: &Path,

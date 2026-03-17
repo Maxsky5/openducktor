@@ -173,6 +173,19 @@ impl TaskStore for BeadsTaskStore {
         self.upsert_agent_session_impl(repo_path, task_id, session)
     }
 
+    fn clear_agent_sessions_by_roles(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        roles: &[&str],
+    ) -> Result<()> {
+        self.clear_agent_sessions_by_roles_impl(repo_path, task_id, roles)
+    }
+
+    fn clear_qa_reports(&self, repo_path: &Path, task_id: &str) -> Result<()> {
+        self.clear_qa_reports_impl(repo_path, task_id)
+    }
+
     fn set_pull_request(
         &self,
         repo_path: &Path,

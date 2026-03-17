@@ -95,6 +95,20 @@ pub async fn task_delete(
 }
 
 #[tauri::command]
+pub async fn task_reset_implementation(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+) -> Result<TaskCard, String> {
+    let service = state.service.clone();
+    let result = run_service_blocking("task_reset_implementation", move || {
+        service.task_reset_implementation(&repo_path, &task_id)
+    })
+    .await;
+    as_error(result)
+}
+
+#[tauri::command]
 pub async fn task_transition(
     state: State<'_, AppState>,
     repo_path: String,

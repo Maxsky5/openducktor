@@ -23,12 +23,14 @@ type SessionActions = {
 type CreatePublicOperationsArgs = {
   sessionsById: Record<string, AgentSessionState>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
+  removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
   sessionActions: SessionActions;
 };
 
 type OrchestratorPublicOperations = {
   sessions: AgentSessionState[];
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
+  removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
   startAgentSession: (input: StartAgentSessionInput) => Promise<string>;
   forkAgentSession: (input: ForkAgentSessionActionInput) => Promise<string>;
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
@@ -60,11 +62,13 @@ const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Pr
 export const createOrchestratorPublicOperations = ({
   sessionsById,
   loadAgentSessions,
+  removeAgentSessions,
   sessionActions,
 }: CreatePublicOperationsArgs): OrchestratorPublicOperations => ({
   sessions: Object.values(sessionsById).sort(sortByStartedAtDesc),
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions): Promise<void> =>
     withErrorToast("Failed to load agent sessions", () => loadAgentSessions(taskId, options)),
+  removeAgentSessions,
   startAgentSession: (input: StartAgentSessionInput): Promise<string> =>
     withErrorToast("Failed to start agent session", () => sessionActions.startAgentSession(input)),
   forkAgentSession: (input: ForkAgentSessionActionInput): Promise<string> =>

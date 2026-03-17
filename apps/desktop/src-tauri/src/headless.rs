@@ -362,6 +362,13 @@ struct TaskDeleteArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct TaskResetImplementationArgs {
+    repo_path: String,
+    task_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct TaskTransitionArgs {
     repo_path: String,
     task_id: String,
@@ -825,6 +832,7 @@ async fn dispatch_task_command(
         "task_create" => Some(handle_task_create(state, args).await),
         "task_update" => Some(handle_task_update(state, args).await),
         "task_delete" => Some(handle_task_delete(state, args).await),
+        "task_reset_implementation" => Some(handle_task_reset_implementation(state, args).await),
         "task_transition" => Some(handle_task_transition(state, args).await),
         "task_defer" => Some(handle_task_defer(state, args).await),
         "task_resume_deferred" => Some(handle_task_resume_deferred(state, args).await),
@@ -1547,6 +1555,17 @@ async fn handle_task_delete(state: &HeadlessState, args: Value) -> CommandResult
     })
     .await?;
     Ok(json!({ "ok": ok }))
+}
+
+async fn handle_task_reset_implementation(state: &HeadlessState, args: Value) -> CommandResult {
+    let TaskResetImplementationArgs { repo_path, task_id } = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        run_headless_blocking("task_reset_implementation", move || {
+            service.task_reset_implementation(&repo_path, &task_id)
+        })
+        .await?,
+    )
 }
 
 async fn handle_task_transition(state: &HeadlessState, args: Value) -> CommandResult {

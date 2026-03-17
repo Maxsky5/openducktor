@@ -48,19 +48,31 @@ pub(crate) fn resolve_opencode_binary_path() -> Option<String> {
         }
     }
 
-    if let Some(resolved) = resolve_command_path("opencode").ok().flatten() {
+    if let Some(resolved) = resolve_opencode_binary_from_path() {
         return Some(resolved);
     }
 
-    let home = std::env::var_os("HOME")?;
-    let candidate = PathBuf::from(home)
-        .join(".opencode")
-        .join("bin")
-        .join("opencode");
-    if candidate.is_file() {
-        return candidate.to_str().map(|value| value.to_string());
+    if let Some(home) = std::env::var_os("HOME") {
+        let candidate = PathBuf::from(home)
+            .join(".opencode")
+            .join("bin")
+            .join("opencode");
+        if candidate.is_file() {
+            return candidate.to_str().map(|value| value.to_string());
+        }
     }
 
+    resolve_command_path("opencode").ok().flatten()
+}
+
+fn resolve_opencode_binary_from_path() -> Option<String> {
+    let path_value = std::env::var_os("PATH")?;
+    for directory in std::env::split_paths(&path_value) {
+        let candidate = directory.join("opencode");
+        if candidate.is_file() {
+            return candidate.to_str().map(|value| value.to_string());
+        }
+    }
     None
 }
 

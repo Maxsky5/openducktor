@@ -23,6 +23,7 @@ export function AgentStudioStateProvider({
   const {
     sessions,
     loadAgentSessions,
+    removeAgentSessions,
     startAgentSession,
     forkAgentSession,
     sendAgentMessage,
@@ -43,6 +44,7 @@ export function AgentStudioStateProvider({
       buildAgentStateValue({
         sessions,
         loadAgentSessions,
+        removeAgentSessions,
         startAgentSession,
         forkAgentSession,
         sendAgentMessage,
@@ -54,6 +56,7 @@ export function AgentStudioStateProvider({
     [
       answerAgentQuestion,
       loadAgentSessions,
+      removeAgentSessions,
       forkAgentSession,
       replyAgentPermission,
       sendAgentMessage,

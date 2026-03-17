@@ -1,7 +1,8 @@
 use anyhow::Result;
 use host_domain::{
-    CreateTaskInput, IssueType, PlanSubtaskInput, QaWorkflowVerdict, RuntimeRole, TaskAction,
-    TaskStatus, TaskStore, UpdateTaskPatch,
+    AgentSessionDocument, CreateTaskInput, GitBranch, IssueType, PlanSubtaskInput,
+    PullRequestRecord, QaWorkflowVerdict, RuntimeRole, TaskAction, TaskStatus, TaskStore,
+    UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, OpencodeStartupReadinessConfig, RuntimeConfig, RuntimeConfigStore,
@@ -14,7 +15,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::app_service::test_support::{
-    make_task, unique_temp_path, write_private_file, FakeTaskStore, TaskStoreState,
+    build_service_with_git_state, make_task, unique_temp_path, write_private_file, FakeTaskStore,
+    TaskStoreState,
 };
 use crate::app_service::{
     allows_transition, build_opencode_startup_event_payload, can_set_plan,
@@ -26,6 +28,21 @@ use crate::app_service::{
     OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupEventContext,
     StartupEventCorrelation, StartupEventPayload,
 };
+
+fn init_git_repo(path: &std::path::Path) -> Result<()> {
+    let status = Command::new("git")
+        .args(["init", "--quiet"])
+        .arg(path)
+        .status()?;
+    if status.success() {
+        return Ok(());
+    }
+
+    Err(anyhow::anyhow!(
+        "failed to initialize git repo for test at {}",
+        path.display()
+    ))
+}
 
 #[test]
 fn app_service_new_constructor_is_callable() -> Result<()> {
@@ -49,6 +66,8 @@ fn app_service_new_constructor_is_callable() -> Result<()> {
             latest_qa_report: None,
             agent_sessions: Vec::new(),
             upserted_sessions: Vec::new(),
+            cleared_session_roles: Vec::new(),
+            cleared_qa_reports: Vec::new(),
             pull_requests: std::collections::HashMap::new(),
             direct_merge_records: std::collections::HashMap::new(),
         })),
@@ -309,6 +328,7 @@ fn in_progress_tasks_expose_builder_action_and_no_plan_actions() {
     let task = make_task("task-1", "task", TaskStatus::InProgress);
     let actions = derive_available_actions(&task, std::slice::from_ref(&task));
     assert!(actions.contains(&TaskAction::OpenBuilder));
+    assert!(actions.contains(&TaskAction::ResetImplementation));
     assert!(!actions.contains(&TaskAction::BuildStart));
     assert!(!actions.contains(&TaskAction::OpenQa));
     assert!(!actions.contains(&TaskAction::SetSpec));
@@ -333,6 +353,7 @@ fn ai_review_tasks_expose_qa_start_request_changes_approve_and_hide_build_start(
     let task = make_task("task-1", "task", TaskStatus::AiReview);
     let actions = derive_available_actions(&task, std::slice::from_ref(&task));
     assert!(actions.contains(&TaskAction::QaStart));
+    assert!(actions.contains(&TaskAction::ResetImplementation));
     assert!(actions.contains(&TaskAction::HumanRequestChanges));
     assert!(actions.contains(&TaskAction::HumanApprove));
     assert!(!actions.contains(&TaskAction::BuildStart));
@@ -344,8 +365,248 @@ fn human_review_tasks_expose_qa_start_and_request_changes() {
     let task = make_task("task-1", "task", TaskStatus::HumanReview);
     let actions = derive_available_actions(&task, std::slice::from_ref(&task));
     assert!(actions.contains(&TaskAction::QaStart));
+    assert!(actions.contains(&TaskAction::ResetImplementation));
     assert!(actions.contains(&TaskAction::HumanRequestChanges));
     assert!(actions.contains(&TaskAction::HumanApprove));
+}
+
+#[test]
+fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_dev() -> Result<()>
+{
+    let repo_path = unique_temp_path("reset-implementation-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+    let build_worktree = unique_temp_path("reset-implementation-build-worktree");
+    let qa_worktree = unique_temp_path("reset-implementation-qa-worktree");
+    fs::create_dir_all(&build_worktree)?;
+    fs::create_dir_all(&qa_worktree)?;
+
+    let mut task = make_task("task-1", "task", TaskStatus::AiReview);
+    task.document_summary.spec.has = true;
+    task.document_summary.plan.has = true;
+    task.document_summary.qa_report.has = true;
+    task.document_summary.qa_report.verdict = QaWorkflowVerdict::Rejected;
+    task.pull_request = Some(PullRequestRecord {
+        provider_id: "github".to_string(),
+        number: 42,
+        url: "https://example.com/pr/42".to_string(),
+        state: "open".to_string(),
+        created_at: "2026-03-17T12:00:00Z".to_string(),
+        updated_at: "2026-03-17T12:00:00Z".to_string(),
+        last_synced_at: None,
+        merged_at: None,
+        closed_at: None,
+    });
+
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![task],
+        vec![
+            GitBranch {
+                name: "odt/task-1".to_string(),
+                is_current: false,
+                is_remote: false,
+            },
+            GitBranch {
+                name: "odt/task-1-follow-up".to_string(),
+                is_current: false,
+                is_remote: false,
+            },
+        ],
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    let repo_config = host_infra_system::RepoConfig {
+        branch_prefix: "odt".to_string(),
+        ..Default::default()
+    };
+    service.workspace_update_repo_config(&repo_path.to_string_lossy(), repo_config)?;
+    {
+        let mut state = task_state.lock().expect("task store lock poisoned");
+        state.agent_sessions = vec![
+            AgentSessionDocument {
+                session_id: "spec-session".to_string(),
+                external_session_id: None,
+                task_id: Some("task-1".to_string()),
+                role: "spec".to_string(),
+                scenario: Some("spec_initial".to_string()),
+                status: Some("stopped".to_string()),
+                started_at: "2026-03-17T10:00:00Z".to_string(),
+                updated_at: None,
+                ended_at: None,
+                runtime_kind: "opencode".to_string(),
+                working_directory: repo_path.to_string_lossy().to_string(),
+                selected_model: None,
+            },
+            AgentSessionDocument {
+                session_id: "build-session".to_string(),
+                external_session_id: None,
+                task_id: Some("task-1".to_string()),
+                role: "build".to_string(),
+                scenario: Some("build_implementation_start".to_string()),
+                status: Some("stopped".to_string()),
+                started_at: "2026-03-17T11:00:00Z".to_string(),
+                updated_at: None,
+                ended_at: None,
+                runtime_kind: "opencode".to_string(),
+                working_directory: build_worktree.to_string_lossy().to_string(),
+                selected_model: None,
+            },
+            AgentSessionDocument {
+                session_id: "qa-session".to_string(),
+                external_session_id: None,
+                task_id: Some("task-1".to_string()),
+                role: "qa".to_string(),
+                scenario: Some("qa_review".to_string()),
+                status: Some("stopped".to_string()),
+                started_at: "2026-03-17T12:00:00Z".to_string(),
+                updated_at: None,
+                ended_at: None,
+                runtime_kind: "opencode".to_string(),
+                working_directory: qa_worktree.to_string_lossy().to_string(),
+                selected_model: None,
+            },
+        ];
+        state.pull_requests.insert(
+            "task-1".to_string(),
+            PullRequestRecord {
+                provider_id: "github".to_string(),
+                number: 42,
+                url: "https://example.com/pr/42".to_string(),
+                state: "open".to_string(),
+                created_at: "2026-03-17T12:00:00Z".to_string(),
+                updated_at: "2026-03-17T12:00:00Z".to_string(),
+                last_synced_at: None,
+                merged_at: None,
+                closed_at: None,
+            },
+        );
+    }
+
+    let updated = service.task_reset_implementation(&repo_path.to_string_lossy(), "task-1")?;
+    assert_eq!(updated.status, TaskStatus::ReadyForDev);
+
+    let state = task_state.lock().expect("task store lock poisoned");
+    assert_eq!(
+        state.cleared_session_roles,
+        vec![(
+            "task-1".to_string(),
+            vec!["build".to_string(), "qa".to_string()]
+        )]
+    );
+    assert_eq!(state.cleared_qa_reports, vec!["task-1".to_string()]);
+    assert_eq!(state.agent_sessions.len(), 1);
+    assert_eq!(state.agent_sessions[0].role, "spec");
+    assert!(!state.pull_requests.contains_key("task-1"));
+    drop(state);
+
+    let git_calls = &git_state.lock().expect("git state lock poisoned").calls;
+    assert!(git_calls.iter().any(|call| matches!(
+        call,
+        crate::app_service::test_support::GitCall::RemoveWorktree { worktree_path, force, .. }
+            if worktree_path == &build_worktree.to_string_lossy() && *force
+    )));
+    assert!(git_calls.iter().any(|call| matches!(
+        call,
+        crate::app_service::test_support::GitCall::RemoveWorktree { worktree_path, force, .. }
+            if worktree_path == &qa_worktree.to_string_lossy() && *force
+    )));
+    assert!(git_calls.iter().any(|call| matches!(
+        call,
+        crate::app_service::test_support::GitCall::DeleteLocalBranch { branch, force, .. }
+            if branch == "odt/task-1" && *force
+    )));
+
+    Ok(())
+}
+
+#[test]
+fn task_reset_implementation_uses_document_presence_for_rollback_target() -> Result<()> {
+    let repo_path = unique_temp_path("reset-implementation-status-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let mut spec_ready = make_task("task-spec", "task", TaskStatus::InProgress);
+    spec_ready.document_summary.spec.has = true;
+
+    let open = make_task("task-open", "task", TaskStatus::HumanReview);
+
+    let (service, _task_state, _git_state) = build_service_with_git_state(
+        vec![spec_ready, open],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    let repo_config = host_infra_system::RepoConfig {
+        branch_prefix: "odt".to_string(),
+        ..Default::default()
+    };
+    service.workspace_update_repo_config(&repo_path.to_string_lossy(), repo_config)?;
+
+    let spec_ready_result =
+        service.task_reset_implementation(&repo_path.to_string_lossy(), "task-spec")?;
+    let open_result =
+        service.task_reset_implementation(&repo_path.to_string_lossy(), "task-open")?;
+
+    assert_eq!(spec_ready_result.status, TaskStatus::SpecReady);
+    assert_eq!(open_result.status, TaskStatus::Open);
+    Ok(())
+}
+
+#[test]
+fn task_reset_implementation_rejects_active_builder_or_qa_sessions() -> Result<()> {
+    let repo_path = unique_temp_path("reset-implementation-active-session-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let task = make_task("task-1", "task", TaskStatus::InProgress);
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    let repo_config = host_infra_system::RepoConfig {
+        branch_prefix: "odt".to_string(),
+        ..Default::default()
+    };
+    service.workspace_update_repo_config(&repo_path.to_string_lossy(), repo_config)?;
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "build-session".to_string(),
+        external_session_id: None,
+        task_id: Some("task-1".to_string()),
+        role: "build".to_string(),
+        scenario: Some("build_implementation_start".to_string()),
+        status: Some("running".to_string()),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        updated_at: None,
+        ended_at: None,
+        runtime_kind: "opencode".to_string(),
+        working_directory: repo_path.to_string_lossy().to_string(),
+        selected_model: None,
+    }];
+
+    let error = service
+        .task_reset_implementation(&repo_path.to_string_lossy(), "task-1")
+        .expect_err("active session should block reset");
+    assert!(error
+        .to_string()
+        .contains("Stop the active session(s) first"));
+    Ok(())
 }
 
 #[test]

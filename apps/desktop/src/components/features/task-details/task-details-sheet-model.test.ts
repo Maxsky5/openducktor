@@ -76,6 +76,7 @@ describe("task-details-sheet-model", () => {
     const onResumeDeferred = mock(() => {});
     const onHumanApprove = mock(() => {});
     const onHumanRequestChanges = mock(() => {});
+    const onResetImplementation = mock(() => {});
 
     runTaskWorkflowAction("set_spec", "T-1", {
       onPlan,
@@ -87,6 +88,7 @@ describe("task-details-sheet-model", () => {
       onResumeDeferred,
       onHumanApprove,
       onHumanRequestChanges,
+      onResetImplementation,
     });
     runTaskWorkflowAction("open_builder", "T-1", {
       onPlan,
@@ -98,6 +100,7 @@ describe("task-details-sheet-model", () => {
       onResumeDeferred,
       onHumanApprove,
       onHumanRequestChanges,
+      onResetImplementation,
     });
 
     expect(onPlan).toHaveBeenCalledWith("T-1", "set_spec");
@@ -113,6 +116,7 @@ describe("task-details-sheet-model", () => {
       onResumeDeferred,
       onHumanApprove,
       onHumanRequestChanges,
+      onResetImplementation,
     });
     expect(onPlan).toHaveBeenCalledTimes(1);
 
@@ -126,6 +130,7 @@ describe("task-details-sheet-model", () => {
       onResumeDeferred,
       onHumanApprove,
       onHumanRequestChanges,
+      onResetImplementation,
     });
     expect(onQaStart).toHaveBeenCalledWith("T-1");
 
@@ -139,8 +144,23 @@ describe("task-details-sheet-model", () => {
       onResumeDeferred,
       onHumanApprove,
       onHumanRequestChanges,
+      onResetImplementation,
     });
     expect(onQaOpen).toHaveBeenCalledWith("T-1");
+
+    runTaskWorkflowAction("reset_implementation", "T-1", {
+      onPlan,
+      onQaStart,
+      onQaOpen,
+      onBuild,
+      onDelegate,
+      onDefer,
+      onResumeDeferred,
+      onHumanApprove,
+      onHumanRequestChanges,
+      onResetImplementation,
+    });
+    expect(onResetImplementation).toHaveBeenCalledWith("T-1");
   });
 
   test("loads document sections only when summary reports content", () => {

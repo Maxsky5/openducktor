@@ -123,6 +123,7 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
               onBuild={model.onBuild}
               onHumanApprove={model.onHumanApprove}
               onHumanRequestChanges={model.onHumanRequestChanges}
+              onResetImplementation={model.onResetImplementation}
             />
           ))}
         </div>
