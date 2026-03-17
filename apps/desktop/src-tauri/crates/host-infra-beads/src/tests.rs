@@ -1321,6 +1321,7 @@ fn delete_task_forwards_cascade_flag() -> Result<()> {
     assert!(store.delete_task(repo.path(), "task-1", true)?);
     let calls = runner.take_calls();
     assert_eq!(calls.len(), 1);
+    assert!(!calls[0].args.iter().any(|entry| entry == "--reason"));
     assert!(calls[0].args.iter().any(|entry| entry == "--cascade"));
     assert!(calls[0].args.iter().any(|entry| entry == "--"));
     assert_eq!(calls[0].args.last().map(String::as_str), Some("task-1"));

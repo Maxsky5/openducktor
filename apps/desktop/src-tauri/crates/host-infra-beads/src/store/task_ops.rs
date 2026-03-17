@@ -246,7 +246,7 @@ impl BeadsTaskStore {
         task_id: &str,
         delete_subtasks: bool,
     ) -> Result<bool> {
-        let mut args = vec!["delete", "--force", "--reason", "Deleted from OpenDucktor"];
+        let mut args = vec!["delete", "--force"];
         if delete_subtasks {
             args.push("--cascade");
         }
