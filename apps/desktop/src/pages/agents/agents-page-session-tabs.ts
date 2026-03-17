@@ -72,13 +72,38 @@ const toLiveSessionState = (session: AgentSessionState): AgentWorkflowStepLiveSe
 const deriveWorkflowAvailability = (
   workflow: AgentWorkflowState,
 ): AgentWorkflowStepAvailability => {
-  if (workflow.canSkip) {
+  if (workflow.canSkip && workflow.available) {
     return "optional";
   }
-  if (workflow.available) {
-    return "available";
+  return workflow.available ? "available" : "blocked";
+};
+
+const deriveWorkflowTone = (params: {
+  availability: AgentWorkflowStepAvailability;
+  completion: AgentWorkflowStepState["completion"];
+  liveSession: AgentWorkflowStepLiveSession;
+}): AgentWorkflowStepState["tone"] => {
+  const { availability, completion, liveSession } = params;
+
+  if (completion === "rejected") {
+    return "rejected";
   }
-  return "blocked";
+  if (liveSession === "waiting_input") {
+    return "waiting_input";
+  }
+  if (liveSession === "running") {
+    return "in_progress";
+  }
+  if (liveSession === "error") {
+    return "failed";
+  }
+  if (completion === "done") {
+    return "done";
+  }
+  if (completion === "in_progress") {
+    return "in_progress";
+  }
+  return availability;
 };
 
 const normalizeTaskTabs = (entries: unknown): string[] => {
@@ -247,20 +272,11 @@ export const buildWorkflowStateByRole = (params: {
       completion = "in_progress";
     }
 
-    const tone: AgentWorkflowStepState["tone"] =
-      completion === "rejected"
-        ? "rejected"
-        : liveSession === "waiting_input"
-          ? "waiting_input"
-          : liveSession === "running"
-            ? "in_progress"
-            : liveSession === "error"
-              ? "failed"
-              : completion === "done"
-                ? "done"
-                : completion === "in_progress"
-                  ? "in_progress"
-                  : availability;
+    const tone = deriveWorkflowTone({
+      availability,
+      completion,
+      liveSession,
+    });
 
     stateByRole[role] = {
       tone,

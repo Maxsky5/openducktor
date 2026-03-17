@@ -231,12 +231,34 @@ describe("agents-page-session-tabs", () => {
         liveSession: "none",
       },
       qa: {
-        tone: "optional",
-        availability: "optional",
+        tone: "blocked",
+        availability: "blocked",
         completion: "not_started",
         liveSession: "none",
       },
     });
+  });
+
+  test("renders skippable available steps as optional", () => {
+    const roleSessionByRole = buildRoleSessionSummaryMap([]);
+    const states = buildWorkflowStateByRole({
+      task: null,
+      roleWorkflowsByTask: {
+        spec: { required: false, canSkip: true, available: true, completed: false },
+        planner: { required: true, canSkip: false, available: false, completed: false },
+        build: { required: true, canSkip: false, available: false, completed: false },
+        qa: { required: false, canSkip: true, available: false, completed: false },
+      },
+      roleSessionByRole,
+    });
+
+    expect(states.spec).toEqual({
+      tone: "optional",
+      availability: "optional",
+      completion: "not_started",
+      liveSession: "none",
+    });
+    expect(states.qa.availability).toBe("blocked");
   });
 
   test("marks workflow role as in_progress when latest role session is started but not completed", () => {
@@ -274,8 +296,8 @@ describe("agents-page-session-tabs", () => {
         liveSession: "none",
       },
       qa: {
-        tone: "optional",
-        availability: "optional",
+        tone: "blocked",
+        availability: "blocked",
         completion: "not_started",
         liveSession: "none",
       },
@@ -317,8 +339,8 @@ describe("agents-page-session-tabs", () => {
         liveSession: "none",
       },
       qa: {
-        tone: "optional",
-        availability: "optional",
+        tone: "blocked",
+        availability: "blocked",
         completion: "not_started",
         liveSession: "none",
       },
@@ -360,8 +382,8 @@ describe("agents-page-session-tabs", () => {
         liveSession: "none",
       },
       qa: {
-        tone: "optional",
-        availability: "optional",
+        tone: "blocked",
+        availability: "blocked",
         completion: "not_started",
         liveSession: "idle",
       },

@@ -109,14 +109,30 @@ const WORKFLOW_SELECTION_CLASSES: Record<AgentWorkflowStepState["tone"], string>
   blocked: "ring-2 ring-offset-2 ring-offset-card ring-warning-ring",
 };
 
+const requireWorkflowToneClass = (
+  classes: Record<AgentWorkflowStepState["tone"], string>,
+  tone: AgentWorkflowStepState["tone"],
+  context: string,
+): string => {
+  const className = classes[tone];
+  if (!className) {
+    throw new Error(`Unknown workflow tone for ${context}: ${tone}`);
+  }
+  return className;
+};
+
 const workflowStepClassName = (state: AgentWorkflowStepState): string =>
-  WORKFLOW_STEP_CLASSES[state.tone] ?? WORKFLOW_STEP_CLASSES.blocked;
+  requireWorkflowToneClass(WORKFLOW_STEP_CLASSES, state.tone, "workflow step");
 
 const workflowConnectorClassName = (state: AgentWorkflowStepState): string =>
-  WORKFLOW_CONNECTOR_CLASSES[state.tone] ?? WORKFLOW_CONNECTOR_CLASSES.blocked;
+  requireWorkflowToneClass(WORKFLOW_CONNECTOR_CLASSES, state.tone, "workflow connector");
 
-const workflowSelectionClassName = (isSelected: boolean, state: AgentWorkflowStepState): string =>
-  isSelected ? (WORKFLOW_SELECTION_CLASSES[state.tone] ?? WORKFLOW_SELECTION_CLASSES.blocked) : "";
+const workflowSelectionClassName = (isSelected: boolean, state: AgentWorkflowStepState): string => {
+  if (!isSelected) {
+    return "";
+  }
+  return requireWorkflowToneClass(WORKFLOW_SELECTION_CLASSES, state.tone, "workflow selection");
+};
 
 const workflowBorderStyleClassName = (state: AgentWorkflowStepState): string =>
   state.tone === "optional" ? "border-dashed" : "";
@@ -132,7 +148,7 @@ const workflowStepHint = (entry: AgentWorkflowStep): string => {
     return "Latest session failed";
   }
   if (entry.state.completion === "rejected") {
-    return "Latest QA review rejected this task";
+    return "Latest review rejected this task";
   }
   if (entry.sessionId) {
     return "Open latest relevant session for this role";

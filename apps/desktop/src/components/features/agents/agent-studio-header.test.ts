@@ -340,4 +340,57 @@ describe("AgentStudioHeader", () => {
     expect(html).toContain('title="Latest session failed"');
     expect(html).toContain("border-destructive-border");
   });
+
+  test("uses neutral rejection copy for rejected review steps", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          workflowSteps: [
+            {
+              role: "qa" as const,
+              label: "QA",
+              icon: roleIcon(3),
+              state: {
+                tone: "rejected" as const,
+                availability: "available" as const,
+                completion: "rejected" as const,
+                liveSession: "idle" as const,
+              },
+              sessionId: "qa-session",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).toContain('title="Latest review rejected this task"');
+    expect(html).not.toContain("Latest QA review rejected this task");
+  });
+
+  test("throws for invalid workflow tones instead of masking them as blocked", () => {
+    expect(() =>
+      renderToStaticMarkup(
+        createElement(AgentStudioHeader, {
+          model: {
+            ...buildModel(),
+            workflowSteps: [
+              {
+                role: "qa" as const,
+                label: "QA",
+                icon: roleIcon(3),
+                state: {
+                  tone: "broken" as never,
+                  availability: "available" as const,
+                  completion: "not_started" as const,
+                  liveSession: "none" as const,
+                },
+                sessionId: null,
+              },
+            ],
+          },
+        }),
+      ),
+    ).toThrow("Unknown workflow tone");
+  });
 });
