@@ -272,17 +272,13 @@ export function useKanbanSessionStartFlow({
       void (async () => {
         setIsStartingSession(true);
         try {
+          const explicitSelection = sessionStartSelectionRef.current;
           let effectiveRepoSettings = repoSettings;
-          if (!effectiveRepoSettings && activeRepo) {
-            try {
-              effectiveRepoSettings = await loadRepoSettings();
-            } catch {
-              effectiveRepoSettings = null;
-            }
+          if (!explicitSelection && !effectiveRepoSettings && activeRepo) {
+            effectiveRepoSettings = await loadRepoSettings();
           }
           const selection =
-            sessionStartSelectionRef.current ??
-            roleDefaultSelectionFor(effectiveRepoSettings, intent.role);
+            explicitSelection ?? roleDefaultSelectionFor(effectiveRepoSettings, intent.role);
           await startKanbanSessionFlow({
             activeRepo,
             intent,

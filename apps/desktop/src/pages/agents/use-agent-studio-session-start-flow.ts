@@ -149,6 +149,10 @@ export function useAgentStudioSessionStartFlow({
     if (!canStartSessionForRole(selectedTask, role)) {
       return;
     }
+    if (role === "build" && scenario === "build_after_human_request_changes") {
+      openHumanReviewFeedback();
+      return;
+    }
 
     const kickoffScenario = assertAgentKickoffScenario(scenario);
     const sessionId = await startSession("scenario_kickoff");
@@ -183,6 +187,7 @@ export function useAgentStudioSessionStartFlow({
     scenario,
     selectedTask,
     sendAgentMessage,
+    openHumanReviewFeedback,
     startSession,
     taskId,
     queryClient,

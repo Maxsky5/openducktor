@@ -58,11 +58,16 @@ export const confirmHumanReviewFeedbackFlow = async ({
   }
 
   await humanRequestChangesTask(state.taskId, trimmedMessage);
-  await loadAgentSessions(state.taskId, {
-    hydrateHistoryForSessionId: existingBuilderSession.sessionId,
-  });
   onDismiss();
   openAgentStudioSession(state.taskId, existingBuilderSession);
+
+  try {
+    await loadAgentSessions(state.taskId, {
+      hydrateHistoryForSessionId: existingBuilderSession.sessionId,
+    });
+  } catch {
+    toast.error("Changes requested, but refreshing Builder sessions failed.");
+  }
 
   try {
     await sendAgentMessage(existingBuilderSession.sessionId, trimmedMessage);

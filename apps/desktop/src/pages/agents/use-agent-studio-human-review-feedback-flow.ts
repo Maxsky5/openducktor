@@ -250,12 +250,23 @@ export function useAgentStudioHumanReviewFeedbackFlow({
           return;
         }
 
-        await humanRequestChangesTask(humanReviewFeedbackState.taskId, trimmedMessage);
-        await loadAgentSessions(humanReviewFeedbackState.taskId, {
-          hydrateHistoryForSessionId: existingBuilderSession.sessionId,
-        });
+        try {
+          await humanRequestChangesTask(humanReviewFeedbackState.taskId, trimmedMessage);
+        } catch {
+          toast.error("Requesting changes failed.");
+          return;
+        }
+
         setHumanReviewFeedbackState(null);
         selectSessionInAgentStudio(existingBuilderSession.sessionId, "build");
+
+        try {
+          await loadAgentSessions(humanReviewFeedbackState.taskId, {
+            hydrateHistoryForSessionId: existingBuilderSession.sessionId,
+          });
+        } catch {
+          toast.error("Changes requested, but refreshing Builder sessions failed.");
+        }
 
         try {
           await sendAgentMessage(existingBuilderSession.sessionId, trimmedMessage);

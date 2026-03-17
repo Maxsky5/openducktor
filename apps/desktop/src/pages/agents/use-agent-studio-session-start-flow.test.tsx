@@ -301,7 +301,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("startScenarioKickoff for human changes reuses the existing builder worktree", async () => {
+  test("startScenarioKickoff for human changes opens the feedback modal instead of starting immediately", async () => {
     const requestNewSessionStart = mock(async () => ({
       selectedModel: {
         runtimeKind: "opencode",
@@ -313,6 +313,9 @@ describe("useAgentStudioSessionStartFlow", () => {
     }));
     const startAgentSession = mock(async () => "session-build-human");
     const sendAgentMessage = mock(async () => {});
+    const loadAgentSessions = mock(
+      async (_taskId: string, _options?: AgentSessionLoadOptions) => {},
+    );
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -321,7 +324,16 @@ describe("useAgentStudioSessionStartFlow", () => {
       requestNewSessionStart,
       startAgentSession,
       sendAgentMessage,
+      loadAgentSessions,
       selectedTask: createTask({ status: "human_review" }),
+      sessionsForTask: [
+        createSession({
+          sessionId: "session-build-existing",
+          role: "build",
+          scenario: "build_implementation_start",
+          startedAt: "2026-02-22T12:00:00.000Z",
+        }),
+      ],
     });
 
     await harness.mount();
@@ -329,22 +341,12 @@ describe("useAgentStudioSessionStartFlow", () => {
       await state.startScenarioKickoff();
     });
 
-    expect(startAgentSession).toHaveBeenCalledWith({
-      taskId: "task-1",
-      role: "build",
-      scenario: "build_after_human_request_changes",
-      selectedModel: {
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-        profileId: "build",
-      },
-      sendKickoff: false,
-      startMode: "reuse_latest",
-      requireModelReady: true,
-      workingDirectoryOverride: "/repo/worktrees/task-1",
-    });
+    await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
+
+    expect(loadAgentSessions).toHaveBeenCalledWith("task-1");
+    expect(harness.getLatest().humanReviewFeedbackModal?.open).toBe(true);
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).not.toHaveBeenCalled();
 
     await harness.unmount();
   });

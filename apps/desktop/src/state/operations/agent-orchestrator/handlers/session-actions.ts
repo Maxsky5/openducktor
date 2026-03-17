@@ -263,7 +263,7 @@ export const createAgentSessionActions = ({
       resolveBuildContinuationTarget:
         resolveBuildContinuationTarget ??
         (async () => {
-          throw new Error("QA review target resolution is unavailable.");
+          throw new Error("Build continuation target resolution is unavailable.");
         }),
       ensureRuntime,
     },

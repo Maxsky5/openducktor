@@ -68,12 +68,20 @@ export function useAgentStudioSessionStartSession({
           return undefined;
         }
 
-        const workingDirectoryOverride = await resolveBuildWorkingDirectoryOverride({
-          activeRepo,
-          taskId,
-          role,
-          scenario,
-        });
+        let workingDirectoryOverride: string | null = null;
+        try {
+          workingDirectoryOverride = await resolveBuildWorkingDirectoryOverride({
+            activeRepo,
+            taskId,
+            role,
+            scenario,
+          });
+        } catch (error) {
+          const description = error instanceof Error ? error.message : "Unknown error";
+          throw new Error(
+            `Failed to resolve working directory override for ${role} ${scenario} on ${taskId}: ${description}`,
+          );
+        }
         const sessionId = await startAgentSession({
           taskId,
           role,
