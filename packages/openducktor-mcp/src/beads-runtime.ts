@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 
 export const CUSTOM_STATUS_VALUES = "spec_ready,ready_for_dev,ai_review,human_review";
 
@@ -55,6 +56,38 @@ export type ProcessRunner = (
 export type BeadsDirResolver = (repoPath: string) => Promise<string>;
 export type TimeProvider = () => string;
 
+export const commandEnvOverrideName = (command: string): string => {
+  const sanitized = command
+    .split("")
+    .map((character) => (/^[a-z0-9]$/i.test(character) ? character.toUpperCase() : "_"))
+    .join("");
+  return `OPENDUCKTOR_${sanitized}_PATH`;
+};
+
+export const resolveBundledCommandPath = (command: string): string | null => {
+  const sibling = resolve(dirname(process.execPath), command);
+  return existsSync(sibling) ? sibling : null;
+};
+
+export const resolveCommandExecutable = (command: string): string => {
+  if (command.includes("/") || command.includes("\\")) {
+    return command;
+  }
+
+  const overrideName = commandEnvOverrideName(command);
+  const explicit = normalizeOptionalInput(process.env[overrideName]);
+  if (explicit) {
+    if (!existsSync(explicit)) {
+      throw new Error(
+        `Configured command override ${overrideName} points to a missing file: ${explicit}`,
+      );
+    }
+    return explicit;
+  }
+
+  return resolveBundledCommandPath(command) ?? command;
+};
+
 export const runProcess: ProcessRunner = async (
   command: string,
   args: string[],
@@ -62,7 +95,8 @@ export const runProcess: ProcessRunner = async (
   env: Record<string, string>,
 ): Promise<ProcessResult> => {
   return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(command, args, {
+    const executable = resolveCommandExecutable(command);
+    const child = spawn(executable, args, {
       cwd,
       env: {
         ...process.env,

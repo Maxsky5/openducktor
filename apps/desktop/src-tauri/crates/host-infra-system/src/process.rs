@@ -51,7 +51,7 @@ fn bundled_command_path(program: &str) -> Option<String> {
     bundled_command_path_from_executable(&executable_path, program)
 }
 
-fn resolve_command(program: &str) -> Result<Option<String>> {
+pub fn resolve_command_path(program: &str) -> Result<Option<String>> {
     let path = Path::new(program);
     if path.components().count() > 1 {
         return Ok(Some(path.to_string_lossy().to_string()));
@@ -106,7 +106,7 @@ pub fn run_command_with_env(
     cwd: Option<&Path>,
     env: &[(&str, &str)],
 ) -> Result<String> {
-    let resolved_program = resolve_command(program)?.unwrap_or_else(|| program.to_string());
+    let resolved_program = resolve_command_path(program)?.unwrap_or_else(|| program.to_string());
     let output = spawn_command_output(&resolved_program, args, cwd, env)?;
 
     if !output.status.success() {
@@ -141,7 +141,7 @@ pub fn run_command_allow_failure_with_env(
     cwd: Option<&Path>,
     env: &[(&str, &str)],
 ) -> Result<(bool, String, String)> {
-    let resolved_program = resolve_command(program)?.unwrap_or_else(|| program.to_string());
+    let resolved_program = resolve_command_path(program)?.unwrap_or_else(|| program.to_string());
     let output = spawn_command_output(&resolved_program, args, cwd, env)?;
 
     Ok((
@@ -159,7 +159,7 @@ pub fn command_path(program: &str) -> Option<String> {
     spawn_command_output(
         "sh",
         &[
-            "-lc",
+            "-c",
             "command -v \"$1\" 2>/dev/null",
             "odt-command-path",
             program,
@@ -179,11 +179,11 @@ pub fn command_path(program: &str) -> Option<String> {
 
 /// Returns whether `program` can be resolved on PATH by [`command_path`].
 pub fn command_exists(program: &str) -> bool {
-    resolve_command(program).ok().flatten().is_some()
+    resolve_command_path(program).ok().flatten().is_some()
 }
 
 pub fn version_command(program: &str, args: &[&str]) -> Option<String> {
-    let resolved = resolve_command(program).ok().flatten()?;
+    let resolved = resolve_command_path(program).ok().flatten()?;
     run_command(&resolved, args, None).ok().and_then(|output| {
         output
             .lines()

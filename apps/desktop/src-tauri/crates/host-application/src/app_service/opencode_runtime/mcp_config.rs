@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use host_infra_system::{command_exists, resolve_central_beads_dir};
+use host_infra_system::{resolve_central_beads_dir, resolve_command_path};
 use serde_json::json;
 use std::path::Path;
 
@@ -51,15 +51,15 @@ pub(crate) fn resolve_mcp_command() -> Result<Vec<String>> {
         return parse_mcp_command_json(raw.as_str());
     }
 
-    if command_exists("openducktor-mcp") {
-        return Ok(vec!["openducktor-mcp".to_string()]);
+    if let Some(mcp_binary) = resolve_command_path("openducktor-mcp")? {
+        return Ok(vec![mcp_binary]);
     }
 
-    if !command_exists("bun") {
+    let Some(bun_binary) = resolve_command_path("bun")? else {
         return Err(anyhow!(
-            "Missing MCP runner. Install `openducktor-mcp` on PATH or install bun for workspace fallback."
+            "Missing MCP runner. Package the openducktor-mcp sidecar or install bun for the workspace fallback."
         ));
-    }
+    };
 
     let workspace_root = default_mcp_workspace_root()?;
     let direct_entrypoint = Path::new(&workspace_root)
@@ -70,13 +70,13 @@ pub(crate) fn resolve_mcp_command() -> Result<Vec<String>> {
 
     if direct_entrypoint.exists() {
         return Ok(vec![
-            "bun".to_string(),
+            bun_binary.clone(),
             direct_entrypoint.to_string_lossy().to_string(),
         ]);
     }
 
     Ok(vec![
-        "bun".to_string(),
+        bun_binary,
         "run".to_string(),
         "--silent".to_string(),
         "--cwd".to_string(),

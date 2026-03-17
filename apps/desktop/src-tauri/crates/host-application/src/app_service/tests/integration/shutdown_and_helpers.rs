@@ -567,7 +567,10 @@ fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
         let path = format!("{}:/usr/bin:/bin", cli_bin.to_string_lossy());
         let _path_guard = set_env_var("PATH", path.as_str());
         let command = resolve_mcp_command()?;
-        assert_eq!(command, vec!["openducktor-mcp".to_string()]);
+        assert_eq!(
+            command,
+            vec![cli_bin.join("openducktor-mcp").to_string_lossy().to_string()]
+        );
     }
 
     {
@@ -602,7 +605,7 @@ fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
         assert_eq!(
             command,
             vec![
-                "bun".to_string(),
+                bun_bin.join("bun").to_string_lossy().to_string(),
                 direct_entrypoint.to_string_lossy().to_string()
             ]
         );
@@ -621,7 +624,7 @@ fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
         assert_eq!(
             command,
             vec![
-                "bun".to_string(),
+                bun_bin.join("bun").to_string_lossy().to_string(),
                 "run".to_string(),
                 "--silent".to_string(),
                 "--cwd".to_string(),
