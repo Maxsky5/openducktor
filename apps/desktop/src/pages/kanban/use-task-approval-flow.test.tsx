@@ -4,6 +4,7 @@ import type { TaskApprovalContext } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { clearAppQueryClient } from "@/lib/query-client";
+import { QueryProvider } from "@/lib/query-provider";
 import {
   createAgentSessionFixture,
   createTaskCardFixture,
@@ -198,7 +199,11 @@ describe("useTaskApprovalFlow", () => {
 
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<Harness />);
+      renderer = create(
+        <QueryProvider useIsolatedClient>
+          <Harness />
+        </QueryProvider>,
+      );
     });
 
     await act(async () => {
@@ -271,7 +276,11 @@ describe("useTaskApprovalFlow", () => {
 
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<Harness />);
+      renderer = create(
+        <QueryProvider useIsolatedClient>
+          <Harness />
+        </QueryProvider>,
+      );
     });
 
     await act(async () => {
@@ -332,7 +341,11 @@ describe("useTaskApprovalFlow", () => {
 
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<Harness />);
+      renderer = create(
+        <QueryProvider useIsolatedClient>
+          <Harness />
+        </QueryProvider>,
+      );
     });
 
     await act(async () => {
@@ -435,7 +448,11 @@ describe("useTaskApprovalFlow", () => {
 
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<Harness />);
+      renderer = create(
+        <QueryProvider useIsolatedClient>
+          <Harness />
+        </QueryProvider>,
+      );
     });
 
     await act(async () => {
@@ -550,7 +567,11 @@ describe("useTaskApprovalFlow", () => {
 
     let renderer!: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<Harness />);
+      renderer = create(
+        <QueryProvider useIsolatedClient>
+          <Harness />
+        </QueryProvider>,
+      );
     });
 
     await act(async () => {
