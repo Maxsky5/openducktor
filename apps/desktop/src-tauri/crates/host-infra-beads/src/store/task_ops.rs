@@ -29,27 +29,56 @@ impl BeadsTaskStore {
             return Ok(());
         }
 
-        if !store_exists {
-            let slug = compute_repo_slug(repo_path);
-            let beads_dir_env = beads_dir.to_string_lossy().to_string();
-            let (ok, _stdout, stderr) = self.command_runner.run_allow_failure_with_env(
-                "bd",
-                &["init", "--quiet", "--skip-hooks", "--prefix", slug.as_str()],
-                Some(repo_path),
-                &[("BEADS_DIR", beads_dir_env.as_str())],
-            )?;
+        let (is_ready, reason) = if store_exists {
+            self.verify_repo_initialized(repo_path, &beads_dir)?
+        } else {
+            (false, format!("bd init failed for {}", beads_dir.display()))
+        };
 
-            if !ok {
-                let details = if stderr.trim().is_empty() {
-                    format!("bd init failed for {}", beads_dir.display())
-                } else {
-                    stderr.trim().to_string()
-                };
-                return Err(anyhow!(
-                    "Failed to initialize Beads at {}: {}",
-                    beads_dir.display(),
-                    details
-                ));
+        if !is_ready {
+            if store_exists {
+                self.repair_repo_store(repo_path)?;
+                let (is_ready_after_repair, reason_after_repair) =
+                    self.verify_repo_initialized(repo_path, &beads_dir)?;
+                if !is_ready_after_repair {
+                    return Err(anyhow!(
+                        "Failed to repair existing Beads store at {}: {}",
+                        beads_dir.display(),
+                        reason_after_repair
+                    ));
+                }
+            } else {
+                let slug = compute_repo_slug(repo_path);
+                let beads_dir_env = beads_dir.to_string_lossy().to_string();
+                let (ok, _stdout, stderr) = self.command_runner.run_allow_failure_with_env(
+                    "bd",
+                    &["init", "--quiet", "--skip-hooks", "--prefix", slug.as_str()],
+                    Some(repo_path),
+                    &[("BEADS_DIR", beads_dir_env.as_str())],
+                )?;
+
+                if !ok {
+                    let details = if stderr.trim().is_empty() {
+                        reason
+                    } else {
+                        stderr.trim().to_string()
+                    };
+                    return Err(anyhow!(
+                        "Failed to initialize Beads at {}: {}",
+                        beads_dir.display(),
+                        details
+                    ));
+                }
+
+                let (is_ready_after_init, reason_after_init) =
+                    self.verify_repo_initialized(repo_path, &beads_dir)?;
+                if !is_ready_after_init {
+                    return Err(anyhow!(
+                        "Beads init completed but store is not ready at {}: {}",
+                        beads_dir.display(),
+                        reason_after_init
+                    ));
+                }
             }
         }
 
