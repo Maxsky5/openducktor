@@ -1,5 +1,5 @@
 import { type RunEvent, type RuntimeKind, runEventSchema } from "@openducktor/contracts";
-import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { subscribeRunEvents } from "@/lib/host-client";
@@ -8,6 +8,8 @@ import { taskQueryKeys } from "@/state/queries/tasks";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { prependRunEvent, shouldLoadChecks } from "./app-lifecycle-model";
+
+const BEADS_PREPARATION_TOAST_DELAY_MS = 10_000;
 
 type UseAppLifecycleArgs = {
   activeRepo: string | null;
@@ -38,6 +40,7 @@ type UseAppLifecycleArgs = {
   hasRuntimeCheck: () => boolean;
   hasCachedBeadsCheck: (repoPath: string) => boolean;
   hasCachedRepoRuntimeHealth: (repoPath: string, runtimeKinds: RuntimeKind[]) => boolean;
+  beadsPreparationToastDelayMs?: number;
 };
 
 export function useAppLifecycle({
@@ -60,15 +63,24 @@ export function useAppLifecycle({
   hasRuntimeCheck,
   hasCachedBeadsCheck,
   hasCachedRepoRuntimeHealth,
+  beadsPreparationToastDelayMs = BEADS_PREPARATION_TOAST_DELAY_MS,
 }: UseAppLifecycleArgs): void {
   const repoLoadVersionRef = useRef(0);
   const activeRepoRef = useRef(activeRepo);
   const refreshTaskDataRef = useRef(refreshTaskData);
+  const beadsPreparationToastIdRef = useRef<string | number | null>(null);
 
   useEffect(() => {
     activeRepoRef.current = activeRepo;
     refreshTaskDataRef.current = refreshTaskData;
   }, [activeRepo, refreshTaskData]);
+
+  const dismissBeadsPreparationToast = useCallback((): void => {
+    if (beadsPreparationToastIdRef.current !== null) {
+      toast.dismiss(beadsPreparationToastIdRef.current);
+      beadsPreparationToastIdRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     Promise.allSettled([refreshWorkspaces(), refreshRuntimeCheck(false)]).then(
@@ -132,6 +144,7 @@ export function useAppLifecycle({
 
   useEffect(() => {
     if (!activeRepo) {
+      dismissBeadsPreparationToast();
       clearTaskData();
       clearBranchData();
       clearActiveBeadsCheck();
@@ -142,6 +155,7 @@ export function useAppLifecycle({
     }
 
     const loadVersion = ++repoLoadVersionRef.current;
+    dismissBeadsPreparationToast();
     setIsLoadingTasks(true);
     setIsLoadingChecks(
       shouldLoadChecks({
@@ -152,12 +166,43 @@ export function useAppLifecycle({
     );
 
     const taskLoadPromise = (async () => {
-      const beads = await refreshBeadsCheckForRepo(activeRepo, false);
-      if (!beads.beadsOk) {
-        throw new Error(beads.beadsError ?? "Beads store is not initialized for this repository.");
-      }
+      let beadsPreparationToastShown = false;
+      const beadsPreparationTimer = setTimeout(() => {
+        if (repoLoadVersionRef.current !== loadVersion || activeRepoRef.current !== activeRepo) {
+          return;
+        }
+        beadsPreparationToastShown = true;
+        beadsPreparationToastIdRef.current = toast.loading("Preparing Beads database", {
+          description: "OpenDucktor is initializing the Beads task store for this repository.",
+        });
+      }, beadsPreparationToastDelayMs);
 
-      await refreshTaskData(activeRepo);
+      try {
+        const beads = await refreshBeadsCheckForRepo(activeRepo, false);
+        if (!beads.beadsOk) {
+          throw new Error(
+            beads.beadsError ?? "Beads store is not initialized for this repository.",
+          );
+        }
+
+        if (
+          beadsPreparationToastShown &&
+          repoLoadVersionRef.current === loadVersion &&
+          activeRepoRef.current === activeRepo
+        ) {
+          dismissBeadsPreparationToast();
+          toast.success("Beads database ready", {
+            description: "The task store is ready for this repository.",
+          });
+        }
+
+        await refreshTaskData(activeRepo);
+      } finally {
+        clearTimeout(beadsPreparationTimer);
+        if (!beadsPreparationToastShown) {
+          dismissBeadsPreparationToast();
+        }
+      }
     })();
     const runtimeCheckPromise = refreshRuntimeCheck(false);
     const runtimeHealthPromise = refreshRepoRuntimeHealthForRepo(activeRepo, false);
@@ -227,10 +272,12 @@ export function useAppLifecycle({
       });
   }, [
     activeRepo,
+    beadsPreparationToastDelayMs,
     clearBranchData,
     clearActiveBeadsCheck,
     clearActiveRepoRuntimeHealth,
     clearTaskData,
+    dismissBeadsPreparationToast,
     hasCachedBeadsCheck,
     hasCachedRepoRuntimeHealth,
     hasRuntimeCheck,
