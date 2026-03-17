@@ -112,26 +112,24 @@ export function useSessionStartModalState({
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
   const [selection, setSelection] = useState<AgentModelSelection | null>(null);
-  const [selectedRuntimeKind, setSelectedRuntimeKind] = useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
+  const [requestedRuntimeKind, setRequestedRuntimeKind] = useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
   const activeRole = intent?.role ?? null;
   const runtimeOptions = useMemo(
     () => toAgentRuntimeOptions(runtimeDefinitions),
     [runtimeDefinitions],
   );
+  const selectedRuntimeKind = useMemo(
+    () =>
+      resolveRuntimeKindSelection({
+        runtimeDefinitions,
+        requestedRuntimeKind,
+      }),
+    [requestedRuntimeKind, runtimeDefinitions],
+  );
   const selectedRuntimeDescriptor = useMemo(
     () => findRuntimeDefinition(runtimeDefinitions, selectedRuntimeKind),
     [runtimeDefinitions, selectedRuntimeKind],
   );
-
-  useEffect(() => {
-    const nextRuntimeKind = resolveRuntimeKindSelection({
-      runtimeDefinitions,
-      requestedRuntimeKind: selectedRuntimeKind,
-    });
-    if (nextRuntimeKind !== selectedRuntimeKind) {
-      setSelectedRuntimeKind(nextRuntimeKind);
-    }
-  }, [runtimeDefinitions, selectedRuntimeKind]);
 
   const catalogQuery = useQuery({
     ...repoRuntimeCatalogQueryOptions(activeRepo ?? "", selectedRuntimeKind, loadCatalogForRepo),
@@ -165,7 +163,7 @@ export function useSessionStartModalState({
           repoSettings?.defaultRuntimeKind ??
           DEFAULT_RUNTIME_KIND,
       });
-      setSelectedRuntimeKind(initialRuntimeKind);
+      setRequestedRuntimeKind(initialRuntimeKind);
       setIntent(nextIntent);
       setSelection(
         resolveInitialSelection(
@@ -205,7 +203,7 @@ export function useSessionStartModalState({
         runtimeDefinitions,
         requestedRuntimeKind: runtimeKindValue,
       });
-      setSelectedRuntimeKind(runtimeKind);
+      setRequestedRuntimeKind(runtimeKind);
       setSelection((current) => {
         if (!activeRole) {
           return current ? { ...current, runtimeKind } : current;
