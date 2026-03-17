@@ -13,7 +13,7 @@ use host_infra_system::{compute_repo_slug, resolve_central_beads_dir};
 use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -85,7 +85,7 @@ impl MockCommandRunner {
         kind: CallKind,
         program: &str,
         args: &[&str],
-        cwd: Option<&Path>,
+        _cwd: Option<&Path>,
         env: &[(&str, &str)],
     ) {
         self.calls
@@ -593,7 +593,7 @@ fn ensure_repo_initialized_skips_init_when_store_is_ready() -> Result<()> {
     let beads_dir = resolve_central_beads_dir(repo.path())?;
     fs::create_dir_all(beads_dir.join("dolt")).expect("dolt directory should be writable");
     let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(
-        "Dolt server started".to_string(),
+        "Dolt server started".to_string()
     ))]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
@@ -637,10 +637,16 @@ fn ensure_repo_initialized_runs_init_then_uses_cache_when_store_exists() -> Resu
     assert_eq!(calls[0].kind, CallKind::AllowFailureWithEnv);
     assert_eq!(
         calls[0].args,
-        vec!["init", "--quiet", "--skip-hooks", "--prefix", expected_slug.as_str()]
-            .into_iter()
-            .map(str::to_string)
-            .collect::<Vec<_>>()
+        vec![
+            "init",
+            "--quiet",
+            "--skip-hooks",
+            "--prefix",
+            expected_slug.as_str()
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>()
     );
     assert_beads_env(&calls[0]);
     assert_eq!(calls[1].kind, CallKind::WithEnv);
@@ -661,7 +667,7 @@ fn ensure_repo_initialized_skips_reinit_after_restart_when_dolt_store_exists() -
     let beads_dir = resolve_central_beads_dir(repo.path())?;
     fs::create_dir_all(beads_dir.join("dolt")).expect("dolt directory should be writable");
     let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(
-        "Dolt server started".to_string(),
+        "Dolt server started".to_string()
     ))]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
@@ -704,7 +710,7 @@ fn ensure_repo_initialized_returns_error_when_dolt_start_fails() {
     let beads_dir = resolve_central_beads_dir(repo.path()).expect("expected beads dir");
     fs::create_dir_all(beads_dir.join("dolt")).expect("dolt directory should be writable");
     let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Err(
-        "port already in use".to_string(),
+        "port already in use".to_string()
     ))]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
 
@@ -881,7 +887,7 @@ fn list_tasks_cache_is_invalidated_after_update_mutation() -> Result<()> {
     let calls = runner.take_calls();
     let list_calls = calls
         .iter()
-        .filter(|call| call.args.get(0).map(String::as_str) == Some("list"))
+        .filter(|call| call.args.first().map(String::as_str) == Some("list"))
         .count();
     assert_eq!(list_calls, 2);
     Ok(())
@@ -934,7 +940,7 @@ fn list_tasks_cache_is_invalidated_after_metadata_mutation() -> Result<()> {
     let calls = runner.take_calls();
     let list_calls = calls
         .iter()
-        .filter(|call| call.args.get(0).map(String::as_str) == Some("list"))
+        .filter(|call| call.args.first().map(String::as_str) == Some("list"))
         .count();
     assert_eq!(list_calls, 2);
     Ok(())
@@ -969,7 +975,7 @@ fn list_tasks_cache_expires_after_ttl() -> Result<()> {
     let calls = runner.take_calls();
     let list_calls = calls
         .iter()
-        .filter(|call| call.args.get(0).map(String::as_str) == Some("list"))
+        .filter(|call| call.args.first().map(String::as_str) == Some("list"))
         .count();
     assert_eq!(list_calls, 2);
     Ok(())
@@ -1019,7 +1025,7 @@ fn list_tasks_cache_is_invalidated_after_create_mutation() -> Result<()> {
     let calls = runner.take_calls();
     let list_calls = calls
         .iter()
-        .filter(|call| call.args.get(0).map(String::as_str) == Some("list"))
+        .filter(|call| call.args.first().map(String::as_str) == Some("list"))
         .count();
     assert_eq!(list_calls, 2);
     Ok(())
@@ -1049,7 +1055,7 @@ fn list_tasks_cache_is_invalidated_after_delete_mutation() -> Result<()> {
     let calls = runner.take_calls();
     let list_calls = calls
         .iter()
-        .filter(|call| call.args.get(0).map(String::as_str) == Some("list"))
+        .filter(|call| call.args.first().map(String::as_str) == Some("list"))
         .count();
     assert_eq!(list_calls, 2);
     Ok(())

@@ -569,7 +569,10 @@ fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
         let command = resolve_mcp_command()?;
         assert_eq!(
             command,
-            vec![cli_bin.join("openducktor-mcp").to_string_lossy().to_string()]
+            vec![cli_bin
+                .join("openducktor-mcp")
+                .to_string_lossy()
+                .to_string()]
         );
     }
 

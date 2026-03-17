@@ -65,8 +65,10 @@ impl AppService {
             (
                 false,
                 None,
-                Some("gh not found in bundled locations, standard install locations, or PATH"
-                    .to_string()),
+                Some(
+                    "gh not found in bundled locations, standard install locations, or PATH"
+                        .to_string(),
+                ),
             )
         };
         let opencode_binary = resolve_opencode_binary_path();
@@ -74,10 +76,16 @@ impl AppService {
 
         let mut errors = Vec::new();
         if !git_ok {
-            errors.push("git not found in bundled locations, standard install locations, or PATH".to_string());
+            errors.push(
+                "git not found in bundled locations, standard install locations, or PATH"
+                    .to_string(),
+            );
         }
         if !gh_ok {
-            errors.push("gh not found in bundled locations, standard install locations, or PATH".to_string());
+            errors.push(
+                "gh not found in bundled locations, standard install locations, or PATH"
+                    .to_string(),
+            );
         }
         if !opencode_ok {
             errors.push(

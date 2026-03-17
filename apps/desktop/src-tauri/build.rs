@@ -136,9 +136,10 @@ fn standard_program_directories(program: &str) -> Vec<PathBuf> {
 
 fn resolve_binary_source(program: &str, env_var: &str) -> Result<PathBuf, String> {
     if let Some(explicit) = env::var_os(env_var).map(PathBuf::from) {
-        return explicit.is_file().then_some(explicit.clone()).ok_or_else(|| {
-            format!("{env_var} points to a missing file: {}", explicit.display())
-        });
+        return explicit
+            .is_file()
+            .then_some(explicit.clone())
+            .ok_or_else(|| format!("{env_var} points to a missing file: {}", explicit.display()));
     }
 
     let file_name = command_file_name(program);
@@ -148,14 +149,22 @@ fn resolve_binary_source(program: &str, env_var: &str) -> Result<PathBuf, String
         .map(|directory| directory.join(&file_name))
         .collect::<Vec<_>>();
 
-    candidates.into_iter().find(|path| path.is_file()).ok_or_else(|| {
-        format!(
+    candidates
+        .into_iter()
+        .find(|path| path.is_file())
+        .ok_or_else(|| {
+            format!(
             "Unable to locate the {program} binary in PATH or the standard install directories."
         )
-    })
+        })
 }
 
-fn prepare_sidecar_binary(manifest_dir: &Path, target_triple: &str, program: &str, env_var: &str) -> Result<(), String> {
+fn prepare_sidecar_binary(
+    manifest_dir: &Path,
+    target_triple: &str,
+    program: &str,
+    env_var: &str,
+) -> Result<(), String> {
     let sidecar_path = manifest_dir
         .join("binaries")
         .join(format!("{program}-{target_triple}"));
@@ -180,20 +189,27 @@ fn prepare_sidecar_binary(manifest_dir: &Path, target_triple: &str, program: &st
 
 fn prepare_bd_sidecar() -> Result<(), String> {
     let manifest_dir = PathBuf::from(
-        env::var("CARGO_MANIFEST_DIR").map_err(|error| format!("missing CARGO_MANIFEST_DIR: {error}"))?,
+        env::var("CARGO_MANIFEST_DIR")
+            .map_err(|error| format!("missing CARGO_MANIFEST_DIR: {error}"))?,
     );
-    let target_triple =
-        env::var("TARGET").map_err(|error| format!("missing TARGET environment variable: {error}"))?;
+    let target_triple = env::var("TARGET")
+        .map_err(|error| format!("missing TARGET environment variable: {error}"))?;
     prepare_sidecar_binary(&manifest_dir, &target_triple, "bd", "OPENDUCKTOR_BD_BINARY")
 }
 
 fn prepare_dolt_sidecar() -> Result<(), String> {
     let manifest_dir = PathBuf::from(
-        env::var("CARGO_MANIFEST_DIR").map_err(|error| format!("missing CARGO_MANIFEST_DIR: {error}"))?,
+        env::var("CARGO_MANIFEST_DIR")
+            .map_err(|error| format!("missing CARGO_MANIFEST_DIR: {error}"))?,
     );
-    let target_triple =
-        env::var("TARGET").map_err(|error| format!("missing TARGET environment variable: {error}"))?;
-    prepare_sidecar_binary(&manifest_dir, &target_triple, "dolt", "OPENDUCKTOR_DOLT_BINARY")
+    let target_triple = env::var("TARGET")
+        .map_err(|error| format!("missing TARGET environment variable: {error}"))?;
+    prepare_sidecar_binary(
+        &manifest_dir,
+        &target_triple,
+        "dolt",
+        "OPENDUCKTOR_DOLT_BINARY",
+    )
 }
 
 fn prepare_mcp_sidecar(manifest_dir: &Path, target_triple: &str) -> Result<(), String> {
@@ -212,8 +228,14 @@ fn prepare_mcp_sidecar(manifest_dir: &Path, target_triple: &str) -> Result<(), S
     }
 
     println!("cargo:rerun-if-env-changed=PATH");
-    println!("cargo:rerun-if-changed={}", package_dir.join("package.json").display());
-    println!("cargo:rerun-if-changed={}", package_dir.join("tsconfig.json").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        package_dir.join("package.json").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        package_dir.join("tsconfig.json").display()
+    );
     track_dir_recursive(&package_dir.join("src"))?;
 
     if let Some(parent) = sidecar_path.parent() {
@@ -276,9 +298,8 @@ fn prepare_mcp_sidecar(manifest_dir: &Path, target_triple: &str) -> Result<(), S
 }
 
 fn main() {
-    let manifest_dir = PathBuf::from(
-        env::var("CARGO_MANIFEST_DIR").expect("missing CARGO_MANIFEST_DIR"),
-    );
+    let manifest_dir =
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("missing CARGO_MANIFEST_DIR"));
     let target_triple = env::var("TARGET").expect("missing TARGET environment variable");
 
     prepare_bd_sidecar().expect("failed to prepare Beads sidecar");

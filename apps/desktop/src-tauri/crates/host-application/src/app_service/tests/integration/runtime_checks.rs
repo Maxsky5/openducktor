@@ -225,10 +225,9 @@ fn beads_and_system_checks_report_missing_bd_binary() -> Result<()> {
         .contains("bd not found in bundled locations, standard install locations, or PATH"));
 
     let system = service.system_check("/tmp/does-not-matter")?;
-    assert!(system
-        .errors
-        .iter()
-        .any(|entry| entry.contains("beads: bd not found in bundled locations, standard install locations, or PATH")));
+    assert!(system.errors.iter().any(|entry| entry.contains(
+        "beads: bd not found in bundled locations, standard install locations, or PATH"
+    )));
 
     let _ = fs::remove_dir_all(root);
     Ok(())

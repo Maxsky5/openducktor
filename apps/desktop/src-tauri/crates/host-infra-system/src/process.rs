@@ -64,8 +64,7 @@ fn command_file_name(program: &str) -> OsString {
 }
 
 fn existing_file_path(path: PathBuf) -> Option<String> {
-    path.is_file()
-        .then(|| path.to_string_lossy().to_string())
+    path.is_file().then(|| path.to_string_lossy().to_string())
 }
 
 fn path_entries_from_value(path_value: Option<OsString>) -> Vec<PathBuf> {
@@ -147,11 +146,7 @@ fn standard_command_directories(program: &str) -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
-            directories.push(
-                PathBuf::from(local_app_data)
-                    .join("Programs")
-                    .join(program),
-            );
+            directories.push(PathBuf::from(local_app_data).join("Programs").join(program));
         }
         if let Some(program_files) = env::var_os("ProgramFiles") {
             directories.push(PathBuf::from(program_files).join(program));
@@ -172,7 +167,10 @@ fn command_path_from_directories(program: &str, directories: &[PathBuf]) -> Opti
         .find_map(|directory| existing_file_path(directory.join(&file_name)))
 }
 
-fn command_path_from_environment_path(program: &str, path_value: Option<OsString>) -> Option<String> {
+fn command_path_from_environment_path(
+    program: &str,
+    path_value: Option<OsString>,
+) -> Option<String> {
     let directories = path_entries_from_value(path_value);
     command_path_from_directories(program, &directories)
 }
@@ -440,7 +438,10 @@ mod tests {
         fs::write(&fake_bd, "").expect("fake bundled command should be writable");
 
         let resolved = bundled_command_path_from_executable(&fake_executable, "bd");
-        assert_eq!(resolved.as_deref(), Some(fake_bd.to_string_lossy().as_ref()));
+        assert_eq!(
+            resolved.as_deref(),
+            Some(fake_bd.to_string_lossy().as_ref())
+        );
 
         let _ = fs::remove_dir_all(root);
     }
@@ -483,8 +484,6 @@ mod tests {
         let error = explicit_command_override("bd").expect_err("invalid override should fail");
         std::env::remove_var(&env_name);
 
-        assert!(error
-            .to_string()
-            .contains("Configured command override"));
+        assert!(error.to_string().contains("Configured command override"));
     }
 }

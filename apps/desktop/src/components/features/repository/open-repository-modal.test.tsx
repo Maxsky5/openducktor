@@ -29,13 +29,8 @@ mock.module("@/state", () => ({
 }));
 
 mock.module("@/components/ui/button", () => ({
-  Button: ({
-    children,
-    ...props
-  }: {
-    children: ReactNode;
-    [key: string]: unknown;
-  }) => createElement("button", { type: "button", ...props }, children),
+  Button: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+    createElement("button", { type: "button", ...props }, children),
 }));
 
 mock.module("@/components/ui/dialog", () => ({

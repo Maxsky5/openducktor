@@ -34,13 +34,7 @@ impl BeadsTaskStore {
             let beads_dir_env = beads_dir.to_string_lossy().to_string();
             let (ok, _stdout, stderr) = self.command_runner.run_allow_failure_with_env(
                 "bd",
-                &[
-                    "init",
-                    "--quiet",
-                    "--skip-hooks",
-                    "--prefix",
-                    slug.as_str(),
-                ],
+                &["init", "--quiet", "--skip-hooks", "--prefix", slug.as_str()],
                 Some(repo_path),
                 &[("BEADS_DIR", beads_dir_env.as_str())],
             )?;
