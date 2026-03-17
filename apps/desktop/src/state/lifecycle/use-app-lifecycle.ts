@@ -67,8 +67,10 @@ export function useAppLifecycle({
   const activeRepoRef = useRef(activeRepo);
   const refreshTaskDataRef = useRef(refreshTaskData);
 
-  activeRepoRef.current = activeRepo;
-  refreshTaskDataRef.current = refreshTaskData;
+  useEffect(() => {
+    activeRepoRef.current = activeRepo;
+    refreshTaskDataRef.current = refreshTaskData;
+  }, [activeRepo, refreshTaskData]);
 
   useEffect(() => {
     Promise.allSettled([refreshWorkspaces(), refreshRuntimeCheck(false)]).then(
