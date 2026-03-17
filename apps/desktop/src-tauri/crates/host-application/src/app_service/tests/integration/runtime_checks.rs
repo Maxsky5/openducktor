@@ -203,6 +203,7 @@ fn beads_and_system_checks_report_missing_bd_binary() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("beads-missing-binary");
     let _path_guard = set_env_var("PATH", "/usr/bin:/bin");
+    let _override_guard = set_env_var("OPENDUCKTOR_BD_PATH", "/tmp/odt-missing-bd-binary");
 
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![],
@@ -221,13 +222,13 @@ fn beads_and_system_checks_report_missing_bd_binary() -> Result<()> {
         .beads_error
         .as_deref()
         .unwrap_or_default()
-        .contains("bd not found in PATH"));
+        .contains("bd not found in bundled locations, standard install locations, or PATH"));
 
     let system = service.system_check("/tmp/does-not-matter")?;
     assert!(system
         .errors
         .iter()
-        .any(|entry| entry.contains("beads: bd not found in PATH")));
+        .any(|entry| entry.contains("beads: bd not found in bundled locations, standard install locations, or PATH")));
 
     let _ = fs::remove_dir_all(root);
     Ok(())

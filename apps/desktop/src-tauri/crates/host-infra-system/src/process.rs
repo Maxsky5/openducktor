@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use std::env;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
@@ -51,6 +52,150 @@ fn bundled_command_path(program: &str) -> Option<String> {
     bundled_command_path_from_executable(&executable_path, program)
 }
 
+fn command_file_name(program: &str) -> OsString {
+    #[cfg(windows)]
+    {
+        OsString::from(format!("{program}.exe"))
+    }
+    #[cfg(not(windows))]
+    {
+        OsString::from(program)
+    }
+}
+
+fn existing_file_path(path: PathBuf) -> Option<String> {
+    path.is_file()
+        .then(|| path.to_string_lossy().to_string())
+}
+
+fn path_entries_from_value(path_value: Option<OsString>) -> Vec<PathBuf> {
+    path_value
+        .as_ref()
+        .map(env::split_paths)
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
+fn path_value_from_entries(entries: &[PathBuf]) -> Option<OsString> {
+    let filtered = entries
+        .iter()
+        .filter(|entry| !entry.as_os_str().is_empty())
+        .cloned()
+        .collect::<Vec<_>>();
+    if filtered.is_empty() {
+        return None;
+    }
+    env::join_paths(filtered).ok()
+}
+
+fn unique_path_entries(entries: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
+    let mut deduped = Vec::new();
+    for entry in entries {
+        if deduped.iter().any(|existing| existing == &entry) {
+            continue;
+        }
+        deduped.push(entry);
+    }
+    deduped
+}
+
+fn standard_search_directories() -> Vec<PathBuf> {
+    let mut directories = Vec::new();
+
+    #[cfg(target_os = "macos")]
+    {
+        directories.push(PathBuf::from("/opt/homebrew/bin"));
+        directories.push(PathBuf::from("/usr/local/bin"));
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        directories.push(PathBuf::from("/usr/local/bin"));
+        directories.push(PathBuf::from("/usr/bin"));
+        directories.push(PathBuf::from("/snap/bin"));
+        if let Some(home) = env::var_os("HOME") {
+            directories.push(PathBuf::from(home).join(".local").join("bin"));
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
+            directories.push(PathBuf::from(local_app_data).join("Programs"));
+        }
+        if let Some(program_files) = env::var_os("ProgramFiles") {
+            directories.push(PathBuf::from(program_files));
+        }
+        if let Some(program_files_x86) = env::var_os("ProgramFiles(x86)") {
+            directories.push(PathBuf::from(program_files_x86));
+        }
+    }
+
+    unique_path_entries(directories)
+}
+
+fn standard_command_directories(program: &str) -> Vec<PathBuf> {
+    let mut directories = standard_search_directories();
+
+    #[cfg(target_os = "macos")]
+    {
+        directories.push(PathBuf::from(format!("/opt/homebrew/opt/{program}/bin")));
+        directories.push(PathBuf::from(format!("/usr/local/opt/{program}/bin")));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
+            directories.push(
+                PathBuf::from(local_app_data)
+                    .join("Programs")
+                    .join(program),
+            );
+        }
+        if let Some(program_files) = env::var_os("ProgramFiles") {
+            directories.push(PathBuf::from(program_files).join(program));
+        }
+        if let Some(program_files_x86) = env::var_os("ProgramFiles(x86)") {
+            directories.push(PathBuf::from(program_files_x86).join(program));
+        }
+    }
+
+    unique_path_entries(directories)
+}
+
+fn command_path_from_directories(program: &str, directories: &[PathBuf]) -> Option<String> {
+    let file_name = command_file_name(program);
+    directories
+        .iter()
+        .filter(|directory| !directory.as_os_str().is_empty())
+        .find_map(|directory| existing_file_path(directory.join(&file_name)))
+}
+
+fn command_path_from_environment_path(program: &str, path_value: Option<OsString>) -> Option<String> {
+    let directories = path_entries_from_value(path_value);
+    command_path_from_directories(program, &directories)
+}
+
+fn augmented_process_path(path_override: Option<&str>) -> Option<OsString> {
+    let bundled_dir = env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf));
+    let inherited = path_entries_from_value(
+        path_override
+            .map(OsString::from)
+            .or_else(|| env::var_os("PATH")),
+    );
+
+    let entries = unique_path_entries(
+        bundled_dir
+            .into_iter()
+            .chain(inherited)
+            .chain(standard_search_directories()),
+    );
+    path_value_from_entries(&entries)
+}
+
 pub fn resolve_command_path(program: &str) -> Result<Option<String>> {
     let path = Path::new(program);
     if path.components().count() > 1 {
@@ -61,7 +206,10 @@ pub fn resolve_command_path(program: &str) -> Result<Option<String>> {
         return Ok(Some(explicit_path));
     }
 
-    Ok(bundled_command_path(program).or_else(|| command_path(program)))
+    let resolved = bundled_command_path(program)
+        .or_else(|| command_path(program))
+        .or_else(|| command_path_from_directories(program, &standard_command_directories(program)));
+    Ok(resolved)
 }
 
 fn configured_command(
@@ -71,6 +219,9 @@ fn configured_command(
     env: &[(&str, &str)],
 ) -> Command {
     let mut command = Command::new(program);
+    let path_override = env
+        .iter()
+        .find_map(|(key, value)| (*key == "PATH").then_some(*value));
     command
         .args(args)
         .stdin(Stdio::null())
@@ -80,7 +231,12 @@ fn configured_command(
         command.current_dir(path);
     }
     if !env.is_empty() {
-        command.envs(env.iter().copied());
+        for (key, value) in env.iter().copied().filter(|(key, _)| *key != "PATH") {
+            command.env(key, value);
+        }
+    }
+    if let Some(path_value) = augmented_process_path(path_override) {
+        command.env("PATH", path_value);
     }
     command
 }
@@ -156,25 +312,7 @@ pub fn run_command_allow_failure_with_env(
 /// The lookup script is static and `program` is passed as a positional shell
 /// argument (`$1`) to avoid shell interpolation of untrusted input.
 pub fn command_path(program: &str) -> Option<String> {
-    spawn_command_output(
-        "sh",
-        &[
-            "-c",
-            "command -v \"$1\" 2>/dev/null",
-            "odt-command-path",
-            program,
-        ],
-        None,
-        &[],
-    )
-    .ok()
-    .and_then(|output| {
-        String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .find(|line| !line.trim().is_empty())
-            .map(|line| line.trim().to_string())
-    })
-    .filter(|path| !path.is_empty())
+    command_path_from_environment_path(program, augmented_process_path(None))
 }
 
 /// Returns whether `program` can be resolved on PATH by [`command_path`].

@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use host_infra_system::command_path;
+use host_infra_system::resolve_command_path;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -48,7 +48,7 @@ pub(crate) fn resolve_opencode_binary_path() -> Option<String> {
         }
     }
 
-    if let Some(resolved) = command_path("opencode") {
+    if let Some(resolved) = resolve_command_path("opencode").ok().flatten() {
         return Some(resolved);
     }
 
@@ -229,7 +229,7 @@ pub(super) fn spawn_opencode_server_with_config(
     port: u16,
 ) -> Result<Child> {
     let opencode_binary = resolve_opencode_binary_path()
-        .ok_or_else(|| anyhow!("opencode binary not found in PATH or ~/.opencode/bin"))?;
+        .ok_or_else(|| anyhow!("opencode binary not found in bundled locations, standard install locations, PATH, or ~/.opencode/bin"))?;
     spawn_opencode_server_with_binary(
         opencode_binary.as_str(),
         working_directory,

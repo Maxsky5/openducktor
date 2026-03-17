@@ -62,20 +62,28 @@ impl AppService {
         let (gh_auth_ok, gh_auth_login, gh_auth_error) = if gh_ok {
             probe_github_auth_status()
         } else {
-            (false, None, Some("gh not found in PATH".to_string()))
+            (
+                false,
+                None,
+                Some("gh not found in bundled locations, standard install locations, or PATH"
+                    .to_string()),
+            )
         };
         let opencode_binary = resolve_opencode_binary_path();
         let opencode_ok = opencode_binary.is_some();
 
         let mut errors = Vec::new();
         if !git_ok {
-            errors.push("git not found in PATH".to_string());
+            errors.push("git not found in bundled locations, standard install locations, or PATH".to_string());
         }
         if !gh_ok {
-            errors.push("gh not found in PATH".to_string());
+            errors.push("gh not found in bundled locations, standard install locations, or PATH".to_string());
         }
         if !opencode_ok {
-            errors.push("opencode not found in PATH".to_string());
+            errors.push(
+                "opencode not found in bundled locations, standard install locations, PATH, or ~/.opencode/bin"
+                    .to_string(),
+            );
         }
 
         RuntimeCheck {
@@ -96,7 +104,10 @@ impl AppService {
                         format!("installed ({binary})")
                     }
                 }),
-                error: (!opencode_ok).then(|| "opencode not found in PATH".to_string()),
+                error: (!opencode_ok).then(|| {
+                    "opencode not found in bundled locations, standard install locations, PATH, or ~/.opencode/bin"
+                        .to_string()
+                }),
             }],
             errors,
         }
@@ -132,7 +143,10 @@ impl AppService {
             return Ok(BeadsCheck {
                 beads_ok: false,
                 beads_path: None,
-                beads_error: Some("bd not found in PATH".to_string()),
+                beads_error: Some(
+                    "bd not found in bundled locations, standard install locations, or PATH"
+                        .to_string(),
+                ),
             });
         }
 
@@ -149,14 +163,14 @@ impl AppService {
                     Err(error) => Ok(BeadsCheck {
                         beads_ok: false,
                         beads_path: Some(path_string),
-                        beads_error: Some(error.to_string()),
+                        beads_error: Some(format!("{error:#}")),
                     }),
                 }
             }
             Err(error) => Ok(BeadsCheck {
                 beads_ok: false,
                 beads_path: None,
-                beads_error: Some(error.to_string()),
+                beads_error: Some(format!("{error:#}")),
             }),
         }
     }

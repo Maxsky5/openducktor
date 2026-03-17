@@ -1,4 +1,5 @@
 use std::env;
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -53,25 +54,128 @@ fn track_dir_recursive(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn resolve_bd_source() -> Result<PathBuf, String> {
-    if let Some(explicit) = env::var_os("OPENDUCKTOR_BD_BINARY").map(PathBuf::from) {
+fn command_file_name(program: &str) -> OsString {
+    #[cfg(windows)]
+    {
+        OsString::from(format!("{program}.exe"))
+    }
+    #[cfg(not(windows))]
+    {
+        OsString::from(program)
+    }
+}
+
+fn path_entries_from_env() -> Vec<PathBuf> {
+    env::var_os("PATH")
+        .as_ref()
+        .map(env::split_paths)
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
+fn standard_search_directories() -> Vec<PathBuf> {
+    let mut directories = Vec::new();
+
+    #[cfg(target_os = "macos")]
+    {
+        directories.push(PathBuf::from("/opt/homebrew/bin"));
+        directories.push(PathBuf::from("/usr/local/bin"));
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        directories.push(PathBuf::from("/usr/local/bin"));
+        directories.push(PathBuf::from("/usr/bin"));
+        directories.push(PathBuf::from("/snap/bin"));
+        if let Some(home) = env::var_os("HOME") {
+            directories.push(PathBuf::from(home).join(".local").join("bin"));
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
+            directories.push(PathBuf::from(local_app_data).join("Programs"));
+        }
+        if let Some(program_files) = env::var_os("ProgramFiles") {
+            directories.push(PathBuf::from(program_files));
+        }
+        if let Some(program_files_x86) = env::var_os("ProgramFiles(x86)") {
+            directories.push(PathBuf::from(program_files_x86));
+        }
+    }
+
+    directories
+}
+
+fn standard_program_directories(program: &str) -> Vec<PathBuf> {
+    let mut directories = standard_search_directories();
+
+    #[cfg(target_os = "macos")]
+    {
+        directories.push(PathBuf::from(format!("/opt/homebrew/opt/{program}/bin")));
+        directories.push(PathBuf::from(format!("/usr/local/opt/{program}/bin")));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
+            directories.push(PathBuf::from(local_app_data).join("Programs").join(program));
+        }
+        if let Some(program_files) = env::var_os("ProgramFiles") {
+            directories.push(PathBuf::from(program_files).join(program));
+        }
+        if let Some(program_files_x86) = env::var_os("ProgramFiles(x86)") {
+            directories.push(PathBuf::from(program_files_x86).join(program));
+        }
+    }
+
+    directories
+}
+
+fn resolve_binary_source(program: &str, env_var: &str) -> Result<PathBuf, String> {
+    if let Some(explicit) = env::var_os(env_var).map(PathBuf::from) {
         return explicit.is_file().then_some(explicit.clone()).ok_or_else(|| {
-            format!(
-                "OPENDUCKTOR_BD_BINARY points to a missing file: {}",
-                explicit.display()
-            )
+            format!("{env_var} points to a missing file: {}", explicit.display())
         });
     }
 
-    [
-        PathBuf::from("/opt/homebrew/opt/beads/bin/bd"),
-        PathBuf::from("/opt/homebrew/bin/bd"),
-        PathBuf::from("/usr/local/opt/beads/bin/bd"),
-        PathBuf::from("/usr/local/bin/bd"),
-    ]
-    .into_iter()
-    .find(|path| path.is_file())
-    .ok_or_else(|| "Unable to locate the Beads CLI binary in the standard install paths.".to_string())
+    let file_name = command_file_name(program);
+    let candidates = standard_program_directories(program)
+        .into_iter()
+        .chain(path_entries_from_env())
+        .map(|directory| directory.join(&file_name))
+        .collect::<Vec<_>>();
+
+    candidates.into_iter().find(|path| path.is_file()).ok_or_else(|| {
+        format!(
+            "Unable to locate the {program} binary in PATH or the standard install directories."
+        )
+    })
+}
+
+fn prepare_sidecar_binary(manifest_dir: &Path, target_triple: &str, program: &str, env_var: &str) -> Result<(), String> {
+    let sidecar_path = manifest_dir
+        .join("binaries")
+        .join(format!("{program}-{target_triple}"));
+    println!("cargo:rerun-if-env-changed={env_var}");
+
+    let source = resolve_binary_source(program, env_var).map_err(|source_error| {
+        format!(
+            "{source_error} Set {env_var} or install {program} so it is available during packaging (expected target sidecar: {}).",
+            sidecar_path.display(),
+        )
+    })?;
+
+    println!("cargo:rerun-if-changed={}", source.display());
+    copy_sidecar_binary(&source, &sidecar_path).map_err(|error| {
+        format!(
+            "Failed to stage {program} sidecar from {} to {}: {error}",
+            source.display(),
+            sidecar_path.display()
+        )
+    })
 }
 
 fn prepare_bd_sidecar() -> Result<(), String> {
@@ -80,25 +184,16 @@ fn prepare_bd_sidecar() -> Result<(), String> {
     );
     let target_triple =
         env::var("TARGET").map_err(|error| format!("missing TARGET environment variable: {error}"))?;
-    let sidecar_dir = manifest_dir.join("binaries");
-    let sidecar_path = sidecar_dir.join(format!("bd-{target_triple}"));
-    println!("cargo:rerun-if-env-changed=OPENDUCKTOR_BD_BINARY");
+    prepare_sidecar_binary(&manifest_dir, &target_triple, "bd", "OPENDUCKTOR_BD_BINARY")
+}
 
-    let source = resolve_bd_source().map_err(|source_error| {
-        format!(
-            "{source_error} Set OPENDUCKTOR_BD_BINARY or install beads so one of the standard paths exists (expected target sidecar: {}).",
-            sidecar_path.display(),
-        )
-    })?;
-
-    println!("cargo:rerun-if-changed={}", source.display());
-    copy_sidecar_binary(&source, &sidecar_path).map_err(|error| {
-        format!(
-            "Failed to stage Beads sidecar from {} to {}: {error}",
-            source.display(),
-            sidecar_path.display()
-        )
-    })
+fn prepare_dolt_sidecar() -> Result<(), String> {
+    let manifest_dir = PathBuf::from(
+        env::var("CARGO_MANIFEST_DIR").map_err(|error| format!("missing CARGO_MANIFEST_DIR: {error}"))?,
+    );
+    let target_triple =
+        env::var("TARGET").map_err(|error| format!("missing TARGET environment variable: {error}"))?;
+    prepare_sidecar_binary(&manifest_dir, &target_triple, "dolt", "OPENDUCKTOR_DOLT_BINARY")
 }
 
 fn prepare_mcp_sidecar(manifest_dir: &Path, target_triple: &str) -> Result<(), String> {
@@ -187,6 +282,7 @@ fn main() {
     let target_triple = env::var("TARGET").expect("missing TARGET environment variable");
 
     prepare_bd_sidecar().expect("failed to prepare Beads sidecar");
+    prepare_dolt_sidecar().expect("failed to prepare Dolt sidecar");
     prepare_mcp_sidecar(&manifest_dir, &target_triple).expect("failed to prepare MCP sidecar");
     tauri_build::build()
 }

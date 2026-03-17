@@ -93,13 +93,7 @@ export class BdRuntimeClient {
 
       if (!ready) {
         const slug = sanitizeSlug(basename(this.repoPath));
-        await this.runBd([
-          "init",
-          "--quiet",
-          "--skip-hooks",
-          "--prefix",
-          slug,
-        ]);
+        await this.runBd(["init", "--quiet", "--skip-hooks", "--prefix", slug]);
       }
 
       await this.runBd(["config", "set", "status.custom", CUSTOM_STATUS_VALUES]);

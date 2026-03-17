@@ -577,8 +577,11 @@ fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
         let _workspace_guard = remove_env_var("OPENDUCKTOR_WORKSPACE_ROOT");
         let path = format!("{}:/usr/bin:/bin", empty_bin.to_string_lossy());
         let _path_guard = set_env_var("PATH", path.as_str());
+        let _bun_override_guard = set_env_var("OPENDUCKTOR_BUN_PATH", "/tmp/odt-missing-bun");
         let error = resolve_mcp_command().expect_err("missing mcp + bun should fail");
-        assert!(error.to_string().contains("Missing MCP runner"));
+        assert!(error
+            .to_string()
+            .contains("Configured command override OPENDUCKTOR_BUN_PATH points to a missing file"));
     }
 
     let workspace_direct = root.join("workspace-direct");
