@@ -15,6 +15,7 @@ const gitPushBranchMock = mock(async () => ({
 }));
 const gitPullBranchMock = mock(async () => ({ outcome: "pulled", output: "updated" }));
 const gitRebaseBranchMock = mock(async () => ({ outcome: "rebased" }));
+const gitAbortConflictMock = mock(async () => ({ output: "aborted" }));
 const gitRebaseAbortMock = mock(async () => ({ outcome: "aborted" }));
 const toastSuccessMock = mock(() => {});
 const toastErrorMock = mock(() => {});
@@ -25,6 +26,7 @@ mock.module("@/state/operations/host", () => ({
     gitPushBranch: gitPushBranchMock,
     gitPullBranch: gitPullBranchMock,
     gitRebaseBranch: gitRebaseBranchMock,
+    gitAbortConflict: gitAbortConflictMock,
     gitRebaseAbort: gitRebaseAbortMock,
   },
 }));
@@ -64,6 +66,7 @@ beforeEach(() => {
   gitPushBranchMock.mockClear();
   gitPullBranchMock.mockClear();
   gitRebaseBranchMock.mockClear();
+  gitAbortConflictMock.mockClear();
   gitRebaseAbortMock.mockClear();
   toastSuccessMock.mockClear();
   toastErrorMock.mockClear();
@@ -75,6 +78,7 @@ beforeEach(() => {
   }));
   gitPullBranchMock.mockImplementation(async () => ({ outcome: "pulled", output: "updated" }));
   gitRebaseBranchMock.mockImplementation(async () => ({ outcome: "rebased" }));
+  gitAbortConflictMock.mockImplementation(async () => ({ output: "aborted" }));
   gitRebaseAbortMock.mockImplementation(async () => ({ outcome: "aborted" }));
 });
 
@@ -390,11 +394,11 @@ describe("useAgentStudioGitActions", () => {
   });
 
   test("derives persistent conflict state from unmerged files and blocks commit", async () => {
-    const onResolveRebaseConflict = mock(async () => true);
+    const onResolveGitConflict = mock(async () => true);
     const harness = createHookHarness(
       createBaseArgs({
         detectedConflictedFiles: ["AGENTS.md"],
-        onResolveRebaseConflict,
+        onResolveGitConflict,
         workingDir: "/tmp/worktree/task-10",
       }),
     );
@@ -402,7 +406,7 @@ describe("useAgentStudioGitActions", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().rebaseConflict).toEqual({
+      expect(harness.getLatest().gitConflict).toEqual({
         operation: "rebase",
         currentBranch: "feature/task-10",
         targetBranch: "current rebase target",
@@ -415,8 +419,8 @@ describe("useAgentStudioGitActions", () => {
       expect(harness.getLatest().gitActionsLockReason).toBe(
         "Git actions are disabled while git conflicts are unresolved.",
       );
-      expect(harness.getLatest().rebaseConflictAutoOpenNonce).toBe(0);
-      expect(harness.getLatest().rebaseConflictCloseNonce).toBe(0);
+      expect(harness.getLatest().gitConflictAutoOpenNonce).toBe(0);
+      expect(harness.getLatest().gitConflictCloseNonce).toBe(0);
 
       await harness.run(async (state) => {
         await state.commitAll("restore lost work");
@@ -428,10 +432,10 @@ describe("useAgentStudioGitActions", () => {
       );
 
       await harness.run(async (state) => {
-        await state.askBuilderToResolveRebaseConflict();
+        await state.askBuilderToResolveGitConflict();
       });
 
-      expect(onResolveRebaseConflict).toHaveBeenCalledWith({
+      expect(onResolveGitConflict).toHaveBeenCalledWith({
         operation: "rebase",
         currentBranch: "feature/task-10",
         targetBranch: "current rebase target",
@@ -550,7 +554,7 @@ describe("useAgentStudioGitActions", () => {
       expect(toastErrorMock).toHaveBeenCalledWith("Pull requires conflict resolution", {
         description: "Pull with rebase stopped due to conflicts in: src/main.ts, src/lib.ts.",
       });
-      expect(harness.getLatest().rebaseConflict).toEqual({
+      expect(harness.getLatest().gitConflict).toEqual({
         operation: "pull_rebase",
         currentBranch: "feature/task-10",
         targetBranch: "tracked upstream branch",
@@ -558,7 +562,7 @@ describe("useAgentStudioGitActions", () => {
         output: "Automatic merge failed; fix conflicts and then commit the result.",
         workingDir: null,
       });
-      expect(harness.getLatest().rebaseConflictAutoOpenNonce).toBe(1);
+      expect(harness.getLatest().gitConflictAutoOpenNonce).toBe(1);
       expect(harness.getLatest().rebaseError).toBeNull();
       expect(refreshDiffData).toHaveBeenCalledTimes(1);
     } finally {
@@ -572,13 +576,13 @@ describe("useAgentStudioGitActions", () => {
       conflictedFiles: ["src/main.ts", "src/lib.ts"],
       output: "CONFLICT (content): Merge conflict in src/main.ts",
     }));
-    const onResolveRebaseConflict = mock(async () => true);
+    const onResolveGitConflict = mock(async () => true);
     const refreshDiffData = mock(async () => {});
     const harness = createHookHarness(
       createBaseArgs({
         refreshDiffData,
         workingDir: "/tmp/worktree/task-10",
-        onResolveRebaseConflict,
+        onResolveGitConflict,
       }),
     );
 
@@ -589,7 +593,7 @@ describe("useAgentStudioGitActions", () => {
         await state.rebaseOntoTarget();
       });
 
-      expect(harness.getLatest().rebaseConflict).toEqual({
+      expect(harness.getLatest().gitConflict).toEqual({
         operation: "rebase",
         currentBranch: "feature/task-10",
         targetBranch: "origin/main",
@@ -597,15 +601,15 @@ describe("useAgentStudioGitActions", () => {
         output: "CONFLICT (content): Merge conflict in src/main.ts",
         workingDir: "/tmp/worktree/task-10",
       });
-      expect(harness.getLatest().rebaseConflictAutoOpenNonce).toBe(1);
+      expect(harness.getLatest().gitConflictAutoOpenNonce).toBe(1);
       expect(harness.getLatest().rebaseError).toBeNull();
       expect(refreshDiffData).toHaveBeenCalledTimes(1);
 
       await harness.run(async (state) => {
-        await state.askBuilderToResolveRebaseConflict();
+        await state.askBuilderToResolveGitConflict();
       });
 
-      expect(onResolveRebaseConflict).toHaveBeenCalledWith({
+      expect(onResolveGitConflict).toHaveBeenCalledWith({
         operation: "rebase",
         currentBranch: "feature/task-10",
         targetBranch: "origin/main",
@@ -613,7 +617,7 @@ describe("useAgentStudioGitActions", () => {
         output: "CONFLICT (content): Merge conflict in src/main.ts",
         workingDir: "/tmp/worktree/task-10",
       });
-      expect(harness.getLatest().rebaseConflict).toEqual({
+      expect(harness.getLatest().gitConflict).toEqual({
         operation: "rebase",
         currentBranch: "feature/task-10",
         targetBranch: "origin/main",
@@ -632,8 +636,8 @@ describe("useAgentStudioGitActions", () => {
       conflictedFiles: ["src/main.ts"],
       output: "CONFLICT (content): Merge conflict in src/main.ts",
     }));
-    const abortDeferred = createDeferred<{ outcome: string }>();
-    gitRebaseAbortMock.mockImplementationOnce(async () => abortDeferred.promise);
+    const abortDeferred = createDeferred<{ output: string }>();
+    gitAbortConflictMock.mockImplementationOnce(async () => abortDeferred.promise);
     const refreshDiffData = mock(async () => {});
     const harness = createHookHarness(
       createBaseArgs({
@@ -649,21 +653,21 @@ describe("useAgentStudioGitActions", () => {
       });
 
       await harness.run((state) => {
-        void state.abortRebase();
+        void state.abortGitConflict();
       });
 
       await harness.waitFor(
-        (state) => state.isHandlingRebaseConflict && state.rebaseConflictAction === "abort",
+        (state) => state.isHandlingGitConflict && state.gitConflictAction === "abort",
       );
-      expect(harness.getLatest().isHandlingRebaseConflict).toBe(true);
-      expect(harness.getLatest().rebaseConflictAction).toBe("abort");
+      expect(harness.getLatest().isHandlingGitConflict).toBe(true);
+      expect(harness.getLatest().gitConflictAction).toBe("abort");
 
-      abortDeferred.resolve({ outcome: "aborted" });
+      abortDeferred.resolve({ output: "aborted" });
 
-      await harness.waitFor((state) => !state.isHandlingRebaseConflict);
-      expect(harness.getLatest().rebaseConflictAction).toBeNull();
-      expect(harness.getLatest().rebaseConflict).toBeNull();
-      expect(harness.getLatest().rebaseConflictCloseNonce).toBe(1);
+      await harness.waitFor((state) => !state.isHandlingGitConflict);
+      expect(harness.getLatest().gitConflictAction).toBeNull();
+      expect(harness.getLatest().gitConflict).toBeNull();
+      expect(harness.getLatest().gitConflictCloseNonce).toBe(1);
       expect(refreshDiffData).toHaveBeenCalledTimes(2);
       expect(toastSuccessMock).toHaveBeenCalledWith("Rebase aborted");
     } finally {
@@ -673,11 +677,11 @@ describe("useAgentStudioGitActions", () => {
 
   test("tracks ask-builder action lifecycle while request is pending", async () => {
     const resolveDeferred = createDeferred<boolean>();
-    const onResolveRebaseConflict = mock(async () => resolveDeferred.promise);
+    const onResolveGitConflict = mock(async () => resolveDeferred.promise);
     const harness = createHookHarness(
       createBaseArgs({
         detectedConflictedFiles: ["AGENTS.md"],
-        onResolveRebaseConflict,
+        onResolveGitConflict,
         workingDir: "/tmp/worktree/task-10",
       }),
     );
@@ -686,22 +690,22 @@ describe("useAgentStudioGitActions", () => {
       await harness.mount();
 
       await harness.run((state) => {
-        void state.askBuilderToResolveRebaseConflict();
+        void state.askBuilderToResolveGitConflict();
       });
 
       await harness.waitFor(
-        (state) => state.isHandlingRebaseConflict && state.rebaseConflictAction === "ask_builder",
+        (state) => state.isHandlingGitConflict && state.gitConflictAction === "ask_builder",
       );
-      expect(harness.getLatest().isHandlingRebaseConflict).toBe(true);
-      expect(harness.getLatest().rebaseConflictAction).toBe("ask_builder");
+      expect(harness.getLatest().isHandlingGitConflict).toBe(true);
+      expect(harness.getLatest().gitConflictAction).toBe("ask_builder");
 
       resolveDeferred.resolve(true);
 
-      await harness.waitFor((state) => !state.isHandlingRebaseConflict);
-      expect(harness.getLatest().rebaseConflictAction).toBeNull();
-      expect(harness.getLatest().rebaseConflict).not.toBeNull();
+      await harness.waitFor((state) => !state.isHandlingGitConflict);
+      expect(harness.getLatest().gitConflictAction).toBeNull();
+      expect(harness.getLatest().gitConflict).not.toBeNull();
       expect(toastSuccessMock).toHaveBeenCalledWith(
-        "Sent rebase conflict resolution request to Builder",
+        "Sent git conflict resolution request to Builder",
       );
     } finally {
       await harness.unmount();
@@ -728,7 +732,7 @@ describe("useAgentStudioGitActions", () => {
         await state.rebaseOntoTarget();
       });
 
-      expect(harness.getLatest().rebaseConflict).toEqual({
+      expect(harness.getLatest().gitConflict).toEqual({
         operation: "rebase",
         currentBranch: "feature/task-10",
         targetBranch: "origin/main",
@@ -745,8 +749,8 @@ describe("useAgentStudioGitActions", () => {
         }),
       );
 
-      await harness.waitFor((state) => state.rebaseConflict === null);
-      expect(harness.getLatest().rebaseConflictCloseNonce).toBe(1);
+      await harness.waitFor((state) => state.gitConflict === null);
+      expect(harness.getLatest().gitConflictCloseNonce).toBe(1);
       expect(harness.getLatest().isGitActionsLocked).toBe(false);
     } finally {
       await harness.unmount();

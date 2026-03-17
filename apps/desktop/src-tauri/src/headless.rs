@@ -330,6 +330,14 @@ struct GitRebaseAbortArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct GitConflictAbortArgs {
+    repo_path: String,
+    operation: host_domain::GitConflictOperation,
+    working_dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct GitWorktreeStatusArgs {
     repo_path: String,
     target_branch: String,
@@ -813,6 +821,7 @@ async fn dispatch_git_command(
         "git_pull_branch" => Some(handle_git_pull_branch(state, args).await),
         "git_rebase_branch" => Some(handle_git_rebase_branch(state, args).await),
         "git_rebase_abort" => Some(handle_git_rebase_abort(state, args).await),
+        "git_abort_conflict" => Some(handle_git_abort_conflict(state, args).await),
         _ => None,
     }
 }
@@ -851,6 +860,7 @@ async fn dispatch_task_command(
         "build_completed" => Some(handle_build_completed(state, args)),
         "task_approval_context_get" => Some(handle_task_approval_context_get(state, args)),
         "task_direct_merge" => Some(handle_task_direct_merge(state, args)),
+        "task_direct_merge_complete" => Some(handle_task_direct_merge_complete(state, args)),
         "task_pull_request_upsert" => Some(handle_task_pull_request_upsert(state, args)),
         "task_pull_request_unlink" => Some(handle_task_pull_request_unlink(state, args)),
         "task_pull_request_detect" => Some(handle_task_pull_request_detect(state, args)),
@@ -1512,6 +1522,25 @@ async fn handle_git_rebase_abort(state: &HeadlessState, args: Value) -> CommandR
     )
 }
 
+async fn handle_git_abort_conflict(state: &HeadlessState, args: Value) -> CommandResult {
+    let request: GitConflictAbortArgs = deserialize_args(args)?;
+    let effective =
+        resolve_authorized_working_dir(state, &request.repo_path, request.working_dir.as_deref())?;
+    let service = state.service.clone();
+    serialize_value(
+        run_headless_blocking("git_abort_conflict", move || {
+            service.git_abort_conflict(
+                &request.repo_path,
+                host_domain::GitConflictAbortRequest {
+                    operation: request.operation,
+                    working_dir: Some(effective),
+                },
+            )
+        })
+        .await?,
+    )
+}
+
 async fn handle_task_create(state: &HeadlessState, args: Value) -> CommandResult {
     let TaskCreateArgs { repo_path, input } = deserialize_args(args)?;
     let create = map_task_create_payload(input).map_err(request_error)?;
@@ -1784,6 +1813,16 @@ fn handle_task_direct_merge(state: &HeadlessState, args: Value) -> CommandResult
         state
             .service
             .task_direct_merge(&repo_path, &task_id, merge_method)
+            .map_err(service_error)?,
+    )
+}
+
+fn handle_task_direct_merge_complete(state: &HeadlessState, args: Value) -> CommandResult {
+    let RepoTaskArgs { repo_path, task_id } = deserialize_args(args)?;
+    serialize_value(
+        state
+            .service
+            .task_direct_merge_complete(&repo_path, &task_id)
             .map_err(service_error)?,
     )
 }

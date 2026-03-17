@@ -248,7 +248,7 @@ describe("kickoff and permission prompts", () => {
     ).toBe("Rejected by OpenDucktor qa read-only policy.");
   });
 
-  test("builds rebase conflict resolution message with git context", () => {
+  test("builds git conflict resolution message with git context", () => {
     const prompt = buildAgentMessagePrompt({
       role: "build",
       templateId: "message.build_rebase_conflict_resolution",
@@ -256,14 +256,16 @@ describe("kickoff and permission prompts", () => {
         taskId: "task-1",
       },
       git: {
+        operationLabel: "direct merge (rebase)",
         currentBranch: "feature/task-1",
         targetBranch: "origin/main",
         conflictedFiles: ["src/main.ts", "src/lib.ts"],
-        rebaseOutput: "CONFLICT (content): Merge conflict in src/main.ts",
+        conflictOutput: "CONFLICT (content): Merge conflict in src/main.ts",
       },
     });
 
-    expect(prompt).toContain("Resolve the current git rebase conflict");
+    expect(prompt).toContain("Resolve the current git conflict");
+    expect(prompt).toContain("direct merge (rebase)");
     expect(prompt).toContain("feature/task-1");
     expect(prompt).toContain("origin/main");
     expect(prompt).toContain("- src/main.ts");
@@ -280,14 +282,14 @@ describe("kickoff and permission prompts", () => {
         },
         overrides: {
           "kickoff.planner_initial": {
-            template: "Planner kickoff {{git.rebaseOutput}}",
+            template: "Planner kickoff {{git.conflictOutput}}",
             baseVersion: 1,
             enabled: true,
           },
         },
       }),
     ).toThrow(
-      'Prompt template "kickoff.planner_initial" is missing placeholder value "git.rebaseOutput".',
+      'Prompt template "kickoff.planner_initial" is missing placeholder value "git.conflictOutput".',
     );
   });
 });

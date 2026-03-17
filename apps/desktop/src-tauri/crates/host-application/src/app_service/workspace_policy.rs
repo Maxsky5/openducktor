@@ -391,7 +391,9 @@ mod tests {
         canonical_repo_key, normalize_hook_set, validate_trust_challenge_entry, AppService,
         HookTrustChallenge, RepoConfigUpdate, RepoSettingsUpdate,
     };
-    use crate::app_service::test_support::{unique_temp_path, FakeTaskStore, TaskStoreState};
+    use crate::app_service::test_support::{
+        lock_env, set_env_var, unique_temp_path, EnvVarGuard, FakeTaskStore, TaskStoreState,
+    };
     use anyhow::{anyhow, Result};
     use host_domain::TaskStore;
     use host_infra_system::{
@@ -441,6 +443,8 @@ mod tests {
         service: AppService,
         repo_path: String,
         root: PathBuf,
+        _env_lock: std::sync::MutexGuard<'static, ()>,
+        _home_guard: EnvVarGuard,
     }
 
     impl Drop for WorkspacePolicyFixture {
@@ -450,7 +454,10 @@ mod tests {
     }
 
     fn setup_fixture(prefix: &str, hooks: HookSet) -> WorkspacePolicyFixture {
+        let env_lock = lock_env();
         let root = unique_temp_path(prefix);
+        fs::create_dir_all(&root).expect("fixture root should exist");
+        let home_guard = set_env_var("HOME", root.to_string_lossy().as_ref());
         let repo = root.join("repo");
         fs::create_dir_all(repo.join(".git")).expect("fake git workspace should exist");
         let repo_path = repo.to_string_lossy().to_string();
@@ -473,6 +480,8 @@ mod tests {
             service,
             repo_path,
             root,
+            _env_lock: env_lock,
+            _home_guard: home_guard,
         }
     }
 

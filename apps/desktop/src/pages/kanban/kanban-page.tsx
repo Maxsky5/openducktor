@@ -4,6 +4,11 @@ import {
   TaskDetailsSheetController,
   type TaskDetailsSheetControllerHandle,
 } from "@/components/features/task-details/task-details-sheet-controller";
+import {
+  createGitConflictActionsModel,
+  GitConflictDialog,
+  GitConflictResolutionModal,
+} from "@/features/git-conflict-resolution";
 import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
 import { KanbanPageContent } from "./kanban-page-content";
 import { KanbanPageHeader } from "./kanban-page-header";
@@ -24,6 +29,15 @@ export function KanbanPage(): ReactElement {
     onOpenDetails: handleOpenDetails,
     onCloseDetails: handleCloseDetails,
   });
+  const taskGitConflictActions = models.taskGitConflictDialog?.conflict
+    ? createGitConflictActionsModel({
+        operation: models.taskGitConflictDialog.conflict.operation,
+        isHandlingConflict: models.taskGitConflictDialog.isHandlingConflict,
+        conflictAction: models.taskGitConflictDialog.conflictAction,
+        onAbort: models.taskGitConflictDialog.onAbort,
+        onAskBuilder: models.taskGitConflictDialog.onAskBuilder,
+      })
+    : null;
 
   return (
     <div className="flex h-full min-h-full min-w-0 flex-col gap-4 py-4 pl-4">
@@ -34,6 +48,21 @@ export function KanbanPage(): ReactElement {
       <HumanReviewFeedbackModal model={models.humanReviewFeedbackModal} />
       <TaskApprovalModal model={models.taskApprovalModal} />
       <TaskResetImplementationModal model={models.resetImplementationModal} />
+      {models.taskGitConflictDialog && taskGitConflictActions ? (
+        <GitConflictDialog
+          conflict={models.taskGitConflictDialog.conflict}
+          open={models.taskGitConflictDialog.open}
+          onOpenChange={models.taskGitConflictDialog.onOpenChange}
+          actions={taskGitConflictActions}
+          testId="kanban-task-git-conflict-modal"
+        />
+      ) : null}
+      {models.gitConflictResolutionModal ? (
+        <GitConflictResolutionModal
+          request={models.gitConflictResolutionModal.request}
+          onResolve={models.gitConflictResolutionModal.onResolve}
+        />
+      ) : null}
       <KanbanSessionStartModal model={models.sessionStartModal} />
     </div>
   );

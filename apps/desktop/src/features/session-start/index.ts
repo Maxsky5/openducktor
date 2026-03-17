@@ -1,5 +1,5 @@
 export {
-  buildRebaseConflictResolutionPrompt,
+  buildGitConflictResolutionPrompt,
   firstScenario,
   isScenario,
   kickoffPromptForScenario,

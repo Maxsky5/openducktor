@@ -4,24 +4,25 @@ import { toast } from "sonner";
 import type {
   AgentStudioPendingForcePush,
   AgentStudioPendingPullRebase,
-  AgentStudioRebaseConflict,
-  AgentStudioRebaseConflictAction,
-  AgentStudioRebaseConflictOperation,
+  GitConflict,
+  GitConflictAction,
+  GitConflictOperation,
 } from "@/features/agent-studio-git";
+import { getGitConflictCopy } from "@/features/git-conflict-resolution";
 import { host } from "@/state/operations/host";
 
 type AgentStudioGitActionState = {
   isCommitting: boolean;
   isPushing: boolean;
   isRebasing: boolean;
-  isHandlingRebaseConflict: boolean;
-  rebaseConflictAction: AgentStudioRebaseConflictAction;
-  rebaseConflictAutoOpenNonce: number;
-  rebaseConflictCloseNonce: number;
+  isHandlingGitConflict: boolean;
+  gitConflictAction: GitConflictAction;
+  gitConflictAutoOpenNonce: number;
+  gitConflictCloseNonce: number;
   showLockReasonBanner: boolean;
   isGitActionsLocked: boolean;
   gitActionsLockReason: string | null;
-  rebaseConflict: AgentStudioRebaseConflict | null;
+  gitConflict: GitConflict | null;
   pendingForcePush: AgentStudioPendingForcePush | null;
   pendingPullRebase: AgentStudioPendingPullRebase | null;
   commitError: string | null;
@@ -34,8 +35,8 @@ type AgentStudioGitActionState = {
   confirmPullRebase: () => Promise<void>;
   cancelPullRebase: () => void;
   rebaseOntoTarget: () => Promise<void>;
-  abortRebase: () => Promise<void>;
-  askBuilderToResolveRebaseConflict: () => Promise<void>;
+  abortGitConflict: () => Promise<void>;
+  askBuilderToResolveGitConflict: () => Promise<void>;
   pullFromUpstream: () => Promise<void>;
 };
 
@@ -49,7 +50,7 @@ type UseAgentStudioGitActionsInput = {
   worktreeStatusSnapshotKey?: string | null;
   refreshDiffData: () => void | Promise<void>;
   isBuilderSessionWorking?: boolean;
-  onResolveRebaseConflict?: (conflict: AgentStudioRebaseConflict) => Promise<boolean>;
+  onResolveGitConflict?: (conflict: GitConflict) => Promise<boolean>;
 };
 
 const BUILDER_LOCK_REASON = "Git actions are disabled while the Builder session is working.";
@@ -65,11 +66,8 @@ const toErrorMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
-const toConflictMessage = (
-  conflictedFiles: string[],
-  operation: AgentStudioRebaseConflictOperation,
-): string => {
-  const action = operation === "pull_rebase" ? "Pull with rebase" : "Rebase";
+const toConflictMessage = (conflictedFiles: string[], operation: GitConflictOperation): string => {
+  const action = getGitConflictCopy(operation).title.replace(" conflict detected", "");
   return conflictedFiles.length > 0
     ? `${action} stopped due to conflicts in: ${conflictedFiles.join(", ")}.`
     : `${action} stopped due to conflicts.`;
@@ -85,17 +83,17 @@ export function useAgentStudioGitActions({
   worktreeStatusSnapshotKey = null,
   refreshDiffData,
   isBuilderSessionWorking = false,
-  onResolveRebaseConflict,
+  onResolveGitConflict,
 }: UseAgentStudioGitActionsInput): AgentStudioGitActionState {
+  const resolveGitConflict = onResolveGitConflict;
   const [isCommitting, setIsCommitting] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
   const [isRebasing, setIsRebasing] = useState(false);
-  const [isHandlingRebaseConflict, setIsHandlingRebaseConflict] = useState(false);
-  const [rebaseConflictAction, setRebaseConflictAction] =
-    useState<AgentStudioRebaseConflictAction>(null);
-  const [rebaseConflictAutoOpenNonce, setRebaseConflictAutoOpenNonce] = useState(0);
-  const [rebaseConflictCloseNonce, setRebaseConflictCloseNonce] = useState(0);
-  const [rebaseConflict, setRebaseConflict] = useState<AgentStudioRebaseConflict | null>(null);
+  const [isHandlingGitConflict, setIsHandlingGitConflict] = useState(false);
+  const [gitConflictAction, setGitConflictAction] = useState<GitConflictAction>(null);
+  const [gitConflictAutoOpenNonce, setGitConflictAutoOpenNonce] = useState(0);
+  const [gitConflictCloseNonce, setGitConflictCloseNonce] = useState(0);
+  const [gitConflict, setGitConflict] = useState<GitConflict | null>(null);
   const [pendingForcePush, setPendingForcePush] = useState<AgentStudioPendingForcePush | null>(
     null,
   );
@@ -105,7 +103,7 @@ export function useAgentStudioGitActions({
   const [commitError, setCommitError] = useState<string | null>(null);
   const [pushError, setPushError] = useState<string | null>(null);
   const [rebaseError, setRebaseError] = useState<string | null>(null);
-  const rebaseConflictSnapshotKeyRef = useRef<string | null>(null);
+  const gitConflictSnapshotKeyRef = useRef<string | null>(null);
 
   const detectedConflict = useMemo(
     () =>
@@ -118,18 +116,18 @@ export function useAgentStudioGitActions({
             output:
               "Git conflict is still in progress in this worktree. Previous command output is unavailable after reload.",
             workingDir,
-          } satisfies AgentStudioRebaseConflict)
+          } satisfies GitConflict)
         : null,
     [branch, detectedConflictedFiles, workingDir],
   );
-  const activeRebaseConflict = useMemo(
-    () => rebaseConflict ?? detectedConflict,
-    [detectedConflict, rebaseConflict],
+  const activeGitConflict = useMemo(
+    () => gitConflict ?? detectedConflict,
+    [detectedConflict, gitConflict],
   );
-  const isGitActionsLocked = isBuilderSessionWorking || activeRebaseConflict != null;
+  const isGitActionsLocked = isBuilderSessionWorking || activeGitConflict != null;
   const gitActionsLockReason = isBuilderSessionWorking
     ? BUILDER_LOCK_REASON
-    : activeRebaseConflict
+    : activeGitConflict
       ? CONFLICT_LOCK_REASON
       : null;
 
@@ -140,25 +138,23 @@ export function useAgentStudioGitActions({
   }, []);
 
   useEffect(() => {
-    if (rebaseConflict == null || isHandlingRebaseConflict || worktreeStatusSnapshotKey == null) {
+    if (gitConflict == null || isHandlingGitConflict || worktreeStatusSnapshotKey == null) {
       return;
     }
 
-    const previousSnapshotKey = rebaseConflictSnapshotKeyRef.current;
+    const previousSnapshotKey = gitConflictSnapshotKeyRef.current;
     if (previousSnapshotKey !== null && previousSnapshotKey === worktreeStatusSnapshotKey) {
       return;
     }
 
     if (detectedConflictedFiles.length > 0) {
-      rebaseConflictSnapshotKeyRef.current = worktreeStatusSnapshotKey;
+      gitConflictSnapshotKeyRef.current = worktreeStatusSnapshotKey;
       const conflictedFilesChanged =
-        rebaseConflict.conflictedFiles.length !== detectedConflictedFiles.length ||
-        rebaseConflict.conflictedFiles.some(
-          (path, index) => path !== detectedConflictedFiles[index],
-        );
+        gitConflict.conflictedFiles.length !== detectedConflictedFiles.length ||
+        gitConflict.conflictedFiles.some((path, index) => path !== detectedConflictedFiles[index]);
 
       if (conflictedFilesChanged) {
-        setRebaseConflict((currentConflict) =>
+        setGitConflict((currentConflict) =>
           currentConflict == null
             ? currentConflict
             : {
@@ -170,15 +166,10 @@ export function useAgentStudioGitActions({
       return;
     }
 
-    rebaseConflictSnapshotKeyRef.current = null;
-    setRebaseConflict(null);
-    setRebaseConflictCloseNonce((nonce) => nonce + 1);
-  }, [
-    detectedConflictedFiles,
-    isHandlingRebaseConflict,
-    rebaseConflict,
-    worktreeStatusSnapshotKey,
-  ]);
+    gitConflictSnapshotKeyRef.current = null;
+    setGitConflict(null);
+    setGitConflictCloseNonce((nonce) => nonce + 1);
+  }, [detectedConflictedFiles, gitConflict, isHandlingGitConflict, worktreeStatusSnapshotKey]);
 
   const ensureGitActionsUnlocked = useCallback(
     (kind: "commit" | "push" | "rebase"): boolean => {
@@ -384,7 +375,7 @@ export function useAgentStudioGitActions({
           if (isConfirmedPullRebase) {
             setPendingPullRebase(null);
           }
-          const conflict: AgentStudioRebaseConflict = {
+          const conflict: GitConflict = {
             operation: "pull_rebase",
             currentBranch: branch,
             targetBranch: "tracked upstream branch",
@@ -393,9 +384,9 @@ export function useAgentStudioGitActions({
             workingDir,
           };
           const message = toConflictMessage(result.conflictedFiles, "pull_rebase");
-          rebaseConflictSnapshotKeyRef.current = worktreeStatusSnapshotKey;
-          setRebaseConflict(conflict);
-          setRebaseConflictAutoOpenNonce((nonce) => nonce + 1);
+          gitConflictSnapshotKeyRef.current = worktreeStatusSnapshotKey;
+          setGitConflict(conflict);
+          setGitConflictAutoOpenNonce((nonce) => nonce + 1);
           toast.error("Pull requires conflict resolution", { description: message });
           await refreshDiffData();
           return;
@@ -463,7 +454,7 @@ export function useAgentStudioGitActions({
       try {
         const result = await host.gitRebaseBranch(repoPath, trimmedTarget, workingDir ?? undefined);
         if (result.outcome === "conflicts") {
-          const conflict: AgentStudioRebaseConflict = {
+          const conflict: GitConflict = {
             operation: "rebase",
             currentBranch: branch,
             targetBranch: trimmedTarget,
@@ -472,17 +463,17 @@ export function useAgentStudioGitActions({
             workingDir,
           };
           const message = toConflictMessage(result.conflictedFiles, "rebase");
-          rebaseConflictSnapshotKeyRef.current = worktreeStatusSnapshotKey;
-          setRebaseConflict(conflict);
-          setRebaseConflictAutoOpenNonce((nonce) => nonce + 1);
+          gitConflictSnapshotKeyRef.current = worktreeStatusSnapshotKey;
+          setGitConflict(conflict);
+          setGitConflictAutoOpenNonce((nonce) => nonce + 1);
           toast.error("Rebase requires conflict resolution", { description: message });
           await refreshDiffData();
           return;
         }
 
         clearActionErrors();
-        rebaseConflictSnapshotKeyRef.current = null;
-        setRebaseConflict(null);
+        gitConflictSnapshotKeyRef.current = null;
+        setGitConflict(null);
         await refreshDiffData();
       } catch (error) {
         setRebaseError(toErrorMessage(error, fallbackError));
@@ -510,74 +501,76 @@ export function useAgentStudioGitActions({
     );
   }, [runRebase, targetBranch]);
 
-  const abortRebase = useCallback(async (): Promise<void> => {
-    if (!activeRebaseConflict || isHandlingRebaseConflict) {
+  const abortGitConflict = useCallback(async (): Promise<void> => {
+    if (!activeGitConflict || isHandlingGitConflict) {
       return;
     }
 
     if (!repoPath) {
-      setRebaseError("Cannot abort rebase because no repository is selected.");
+      setRebaseError("Cannot abort the git conflict because no repository is selected.");
       return;
     }
 
-    setIsHandlingRebaseConflict(true);
-    setRebaseConflictAction("abort");
+    setIsHandlingGitConflict(true);
+    setGitConflictAction("abort");
     try {
-      await host.gitRebaseAbort(repoPath, workingDir ?? undefined);
+      await host.gitAbortConflict(repoPath, activeGitConflict.operation, workingDir ?? undefined);
       clearActionErrors();
       await refreshDiffData();
-      rebaseConflictSnapshotKeyRef.current = null;
-      setRebaseConflict(null);
-      setRebaseConflictCloseNonce((nonce) => nonce + 1);
-      toast.success("Rebase aborted");
+      gitConflictSnapshotKeyRef.current = null;
+      setGitConflict(null);
+      setGitConflictCloseNonce((nonce) => nonce + 1);
+      toast.success(getGitConflictCopy(activeGitConflict.operation).abortedToastTitle);
     } catch (error) {
-      const message = toErrorMessage(error, "Failed to abort rebase.");
+      const message = toErrorMessage(error, "Failed to abort the git conflict.");
       setRebaseError(message);
-      toast.error("Failed to abort rebase", { description: message });
+      toast.error(getGitConflictCopy(activeGitConflict.operation).abortFailureTitle, {
+        description: message,
+      });
     } finally {
-      setIsHandlingRebaseConflict(false);
-      setRebaseConflictAction(null);
+      setIsHandlingGitConflict(false);
+      setGitConflictAction(null);
     }
   }, [
-    activeRebaseConflict,
+    activeGitConflict,
     clearActionErrors,
-    isHandlingRebaseConflict,
+    isHandlingGitConflict,
     refreshDiffData,
     repoPath,
     workingDir,
   ]);
 
-  const askBuilderToResolveRebaseConflict = useCallback(async (): Promise<void> => {
-    if (!activeRebaseConflict || isHandlingRebaseConflict) {
+  const askBuilderToResolveGitConflict = useCallback(async (): Promise<void> => {
+    if (!activeGitConflict || isHandlingGitConflict) {
       return;
     }
 
-    if (!onResolveRebaseConflict) {
+    if (!resolveGitConflict) {
       setRebaseError("Cannot send conflict resolution request to Builder.");
       return;
     }
 
-    setIsHandlingRebaseConflict(true);
-    setRebaseConflictAction("ask_builder");
+    setIsHandlingGitConflict(true);
+    setGitConflictAction("ask_builder");
     try {
-      const wasHandled = await onResolveRebaseConflict(activeRebaseConflict);
+      const wasHandled = await resolveGitConflict(activeGitConflict);
       if (!wasHandled) {
         return;
       }
       clearActionErrors();
-      toast.success("Sent rebase conflict resolution request to Builder");
+      toast.success(getGitConflictCopy(activeGitConflict.operation).builderSuccessTitle);
     } catch (error) {
       const message = toErrorMessage(
         error,
-        "Failed to contact Builder for rebase conflict resolution.",
+        getGitConflictCopy(activeGitConflict.operation).builderFailureMessage,
       );
       setRebaseError(message);
       toast.error("Failed to contact Builder", { description: message });
     } finally {
-      setIsHandlingRebaseConflict(false);
-      setRebaseConflictAction(null);
+      setIsHandlingGitConflict(false);
+      setGitConflictAction(null);
     }
-  }, [activeRebaseConflict, clearActionErrors, isHandlingRebaseConflict, onResolveRebaseConflict]);
+  }, [activeGitConflict, clearActionErrors, isHandlingGitConflict, resolveGitConflict]);
 
   const pullFromUpstream = useCallback(async (): Promise<void> => {
     await pullFromUpstreamInternal();
@@ -605,14 +598,14 @@ export function useAgentStudioGitActions({
     isCommitting,
     isPushing,
     isRebasing,
-    isHandlingRebaseConflict,
-    rebaseConflictAction,
-    rebaseConflictAutoOpenNonce,
-    rebaseConflictCloseNonce,
+    isHandlingGitConflict,
+    gitConflictAction,
+    gitConflictAutoOpenNonce,
+    gitConflictCloseNonce,
     showLockReasonBanner: isGitActionsLocked && !isBuilderSessionWorking,
     isGitActionsLocked,
     gitActionsLockReason,
-    rebaseConflict: activeRebaseConflict,
+    gitConflict: activeGitConflict,
     pendingForcePush,
     pendingPullRebase,
     commitError,
@@ -625,8 +618,8 @@ export function useAgentStudioGitActions({
     confirmPullRebase,
     cancelPullRebase,
     rebaseOntoTarget,
-    abortRebase,
-    askBuilderToResolveRebaseConflict,
+    abortGitConflict,
+    askBuilderToResolveGitConflict,
     pullFromUpstream,
   };
 }

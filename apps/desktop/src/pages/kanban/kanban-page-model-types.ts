@@ -1,6 +1,11 @@
-import type { RunSummary, TaskCard } from "@openducktor/contracts";
+import type { GitTargetBranch, RunSummary, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario, KanbanColumn as KanbanColumnData } from "@openducktor/core";
 import type { SessionStartModalModel } from "@/components/features/agents";
+import type { GitConflict, GitConflictAction } from "@/features/agent-studio-git";
+import type {
+  GitConflictResolutionDecision,
+  PendingGitConflictResolutionRequest,
+} from "@/features/git-conflict-resolution";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
@@ -22,7 +27,7 @@ export type PullRequestDraftMode = "manual" | "generate_ai";
 
 export type TaskApprovalModalModel = {
   open: boolean;
-  stage: "approval" | "push_target";
+  stage: "approval" | "complete_direct_merge";
   taskId: string;
   isLoading: boolean;
   mode: TaskApprovalMode;
@@ -35,8 +40,8 @@ export type TaskApprovalModalModel = {
   pullRequestUrl: string | null;
   title: string;
   body: string;
-  targetBranch: string;
-  publishTarget: string | null;
+  targetBranch: GitTargetBranch | null;
+  publishTarget: GitTargetBranch | null;
   isSubmitting: boolean;
   errorMessage: string | null;
   onOpenChange: (open: boolean) => void;
@@ -46,8 +51,8 @@ export type TaskApprovalModalModel = {
   onTitleChange: (value: string) => void;
   onBodyChange: (value: string) => void;
   onConfirm: () => void;
-  onSkipPush: () => void;
-  onConfirmPush: () => void;
+  onSkipDirectMergeCompletion: () => void;
+  onCompleteDirectMerge: () => void;
 };
 
 export type KanbanPageHeaderModel = {
@@ -123,6 +128,19 @@ export type KanbanPageModels = {
     onOpenChange: (open: boolean) => void;
     onCancel: () => void;
     onConfirm: () => void;
+  } | null;
+  taskGitConflictDialog: {
+    open: boolean;
+    conflict: GitConflict | null;
+    isHandlingConflict: boolean;
+    conflictAction: GitConflictAction;
+    onOpenChange: (open: boolean) => void;
+    onAbort: () => void;
+    onAskBuilder: () => void;
+  } | null;
+  gitConflictResolutionModal: {
+    request: PendingGitConflictResolutionRequest;
+    onResolve: (decision: GitConflictResolutionDecision) => void;
   } | null;
   sessionStartModal: SessionStartModalModel | null;
 };

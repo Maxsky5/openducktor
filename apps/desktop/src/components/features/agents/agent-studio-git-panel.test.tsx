@@ -901,7 +901,7 @@ describe("AgentStudioGitPanel", () => {
           model: baseModel({
             isGitActionsLocked: true,
             gitActionsLockReason: "Git actions are disabled while the Builder session is working.",
-            rebaseConflict: {
+            gitConflict: {
               operation: "rebase",
               currentBranch: "feature/task-11",
               targetBranch: "origin/main",
@@ -1024,7 +1024,7 @@ describe("AgentStudioGitPanel", () => {
       renderer = TestRenderer.create(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
-            rebaseConflict: {
+            gitConflict: {
               operation: "pull_rebase",
               currentBranch: "feature/task-11",
               targetBranch: "tracked upstream branch",
@@ -1068,7 +1068,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const persistedConflictModel = baseModel({
-      rebaseConflict: {
+      gitConflict: {
         operation: "rebase",
         currentBranch: "feature/task-11",
         targetBranch: "origin/main",
@@ -1089,8 +1089,8 @@ describe("AgentStudioGitPanel", () => {
     expect(countByTestId(root, "agent-studio-git-rebase-conflict-modal")).toBe(0);
 
     const actionConflictModel = baseModel({
-      rebaseConflictAutoOpenNonce: 1,
-      rebaseConflict: {
+      gitConflictAutoOpenNonce: 1,
+      gitConflict: {
         operation: "rebase",
         currentBranch: "feature/task-11",
         targetBranch: "origin/main",
@@ -1123,10 +1123,10 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const abortPendingModel = baseModel({
-      isHandlingRebaseConflict: true,
-      rebaseConflictAction: "abort",
-      rebaseConflictAutoOpenNonce: 1,
-      rebaseConflict: {
+      isHandlingGitConflict: true,
+      gitConflictAction: "abort",
+      gitConflictAutoOpenNonce: 1,
+      gitConflict: {
         operation: "rebase",
         currentBranch: "feature/task-11",
         targetBranch: "origin/main",
@@ -1174,10 +1174,10 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const askBuilderPendingModel = baseModel({
-      isHandlingRebaseConflict: true,
-      rebaseConflictAction: "ask_builder",
-      rebaseConflictAutoOpenNonce: 1,
-      rebaseConflict: {
+      isHandlingGitConflict: true,
+      gitConflictAction: "ask_builder",
+      gitConflictAutoOpenNonce: 1,
+      gitConflict: {
         operation: "rebase",
         currentBranch: "feature/task-11",
         targetBranch: "origin/main",
@@ -1226,9 +1226,9 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const conflictModel = baseModel({
-      askBuilderToResolveRebaseConflict: askBuilder,
-      rebaseConflictAutoOpenNonce: 1,
-      rebaseConflict: {
+      askBuilderToResolveGitConflict: askBuilder,
+      gitConflictAutoOpenNonce: 1,
+      gitConflict: {
         operation: "rebase",
         currentBranch: "feature/task-11",
         targetBranch: "origin/main",

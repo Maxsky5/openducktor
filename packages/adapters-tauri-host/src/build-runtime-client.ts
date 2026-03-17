@@ -17,8 +17,10 @@ import {
   type SystemCheck,
   systemCheckSchema,
   type TaskCard,
+  type TaskDirectMergeResult,
   taskApprovalContextSchema,
   taskCardSchema,
+  taskDirectMergeResultSchema,
   taskPullRequestDetectResultSchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
@@ -191,11 +193,23 @@ export const taskDirectMerge = async (
   repoPath: string,
   taskId: string,
   mergeMethod: string,
-): Promise<TaskCard> => {
+): Promise<TaskDirectMergeResult> => {
   const payload = await invokeFn("task_direct_merge", {
     repoPath,
     taskId,
     mergeMethod: gitMergeMethodSchema.parse(mergeMethod),
+  });
+  return taskDirectMergeResultSchema.parse(payload);
+};
+
+export const taskDirectMergeComplete = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  taskId: string,
+): Promise<TaskCard> => {
+  const payload = await invokeFn("task_direct_merge_complete", {
+    repoPath,
+    taskId,
   });
   return taskCardSchema.parse(payload);
 };
@@ -348,8 +362,20 @@ export class TauriAgentClient {
     return taskApprovalContextGet(this.invokeFn, repoPath, taskId);
   }
 
-  async taskDirectMerge(repoPath: string, taskId: string, mergeMethod: string): Promise<TaskCard> {
-    const task = await taskDirectMerge(this.invokeFn, repoPath, taskId, mergeMethod);
+  async taskDirectMerge(
+    repoPath: string,
+    taskId: string,
+    mergeMethod: string,
+  ): Promise<TaskDirectMergeResult> {
+    const result = await taskDirectMerge(this.invokeFn, repoPath, taskId, mergeMethod);
+    if (result.outcome === "completed") {
+      this.metadataCache?.invalidate(repoPath, taskId);
+    }
+    return result;
+  }
+
+  async taskDirectMergeComplete(repoPath: string, taskId: string): Promise<TaskCard> {
+    const task = await taskDirectMergeComplete(this.invokeFn, repoPath, taskId);
     this.metadataCache?.invalidate(repoPath, taskId);
     return task;
   }

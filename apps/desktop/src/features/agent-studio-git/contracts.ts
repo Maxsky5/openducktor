@@ -22,17 +22,27 @@ export type DiffDataState = {
   setDiffScope: (scope: DiffScope) => void;
 };
 
-export type AgentStudioRebaseConflictOperation = "rebase" | "pull_rebase";
-export type AgentStudioRebaseConflictAction = "abort" | "ask_builder" | null;
+export type GitConflictOperation =
+  | "rebase"
+  | "pull_rebase"
+  | "direct_merge_merge_commit"
+  | "direct_merge_squash"
+  | "direct_merge_rebase";
 
-export type AgentStudioRebaseConflict = {
-  operation: AgentStudioRebaseConflictOperation;
+export type GitConflictAction = "abort" | "ask_builder" | null;
+
+export type GitConflict = {
+  operation: GitConflictOperation;
   currentBranch: string | null;
   targetBranch: string;
   conflictedFiles: string[];
   output: string;
   workingDir: string | null;
 };
+
+export type AgentStudioRebaseConflictOperation = GitConflictOperation;
+export type AgentStudioRebaseConflictAction = GitConflictAction;
+export type AgentStudioRebaseConflict = GitConflict;
 
 export type AgentStudioPendingForcePush = {
   remote: string;

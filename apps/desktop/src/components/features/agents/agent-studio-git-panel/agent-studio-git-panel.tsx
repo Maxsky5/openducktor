@@ -3,15 +3,17 @@ import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-v
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { DiffScope } from "@/features/agent-studio-git";
+import {
+  createGitConflictActionsModel,
+  GitConflictDialog,
+  GitConflictStrip,
+} from "@/features/git-conflict-resolution";
 import { CommitComposer } from "./commit-composer";
 import { EmptyDiffState } from "./empty-diff-state";
 import { FileDiffList } from "./file-diff-list";
 import { ForcePushDialog } from "./force-push-dialog";
 import { GitInfoHeader } from "./git-info-header";
 import { PullRebaseDialog } from "./pull-rebase-dialog";
-import { createRebaseConflictActionsModel } from "./rebase-conflict-actions";
-import { RebaseConflictDialog } from "./rebase-conflict-dialog";
-import { RebaseConflictStrip } from "./rebase-conflict-strip";
 import { ReviewActions } from "./review-actions";
 import type { AgentStudioGitPanelModel } from "./types";
 
@@ -22,9 +24,16 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
 }): ReactElement {
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [diffStyle, setDiffStyle] = useState<PierreDiffStyle>("unified");
-  const [isRebaseConflictModalOpen, setIsRebaseConflictModalOpen] = useState(false);
+  const [isGitConflictModalOpen, setIsGitConflictModalOpen] = useState(false);
   const [selectedFileNotificationTick, setSelectedFileNotificationTick] = useState(0);
-  const hasRebaseConflict = model.rebaseConflict != null;
+  const activeGitConflict = model.gitConflict ?? null;
+  const hasGitConflict = activeGitConflict != null;
+  const isHandlingGitConflict = model.isHandlingGitConflict ?? false;
+  const gitConflictAction = model.gitConflictAction;
+  const gitConflictAutoOpenNonce = model.gitConflictAutoOpenNonce ?? 0;
+  const gitConflictCloseNonce = model.gitConflictCloseNonce ?? 0;
+  const abortGitConflict = model.abortGitConflict;
+  const askBuilderToResolveGitConflict = model.askBuilderToResolveGitConflict;
   const hasInitializedConflictModalSyncRef = useRef(false);
   const previousAutoOpenNonceRef = useRef(0);
   const previousCloseNonceRef = useRef(0);
@@ -85,47 +94,53 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
   );
 
   const handleAskBuilderFromConflictModal = useCallback((): void => {
-    setIsRebaseConflictModalOpen(false);
-    void model.askBuilderToResolveRebaseConflict?.();
-  }, [model.askBuilderToResolveRebaseConflict]);
+    setIsGitConflictModalOpen(false);
+    void askBuilderToResolveGitConflict?.();
+  }, [askBuilderToResolveGitConflict]);
 
-  const stripRebaseConflictActions = useMemo(
-    () =>
-      createRebaseConflictActionsModel({
-        isHandlingRebaseConflict: model.isHandlingRebaseConflict ?? false,
-        rebaseConflictAction: model.rebaseConflictAction,
-        onAbort: () => {
-          void model.abortRebase?.();
-        },
-        onAskBuilder: () => {
-          void model.askBuilderToResolveRebaseConflict?.();
-        },
-      }),
-    [
-      model.abortRebase,
-      model.askBuilderToResolveRebaseConflict,
-      model.isHandlingRebaseConflict,
-      model.rebaseConflictAction,
-    ],
-  );
+  const stripGitConflictActions = useMemo(() => {
+    if (!activeGitConflict) {
+      return null;
+    }
+    return createGitConflictActionsModel({
+      operation: activeGitConflict.operation,
+      isHandlingConflict: isHandlingGitConflict,
+      conflictAction: gitConflictAction,
+      onAbort: () => {
+        void abortGitConflict?.();
+      },
+      onAskBuilder: () => {
+        void askBuilderToResolveGitConflict?.();
+      },
+    });
+  }, [
+    abortGitConflict,
+    activeGitConflict,
+    askBuilderToResolveGitConflict,
+    gitConflictAction,
+    isHandlingGitConflict,
+  ]);
 
-  const modalRebaseConflictActions = useMemo(
-    () =>
-      createRebaseConflictActionsModel({
-        isHandlingRebaseConflict: model.isHandlingRebaseConflict ?? false,
-        rebaseConflictAction: model.rebaseConflictAction,
-        onAbort: () => {
-          void model.abortRebase?.();
-        },
-        onAskBuilder: handleAskBuilderFromConflictModal,
-      }),
-    [
-      handleAskBuilderFromConflictModal,
-      model.abortRebase,
-      model.isHandlingRebaseConflict,
-      model.rebaseConflictAction,
-    ],
-  );
+  const modalGitConflictActions = useMemo(() => {
+    if (!activeGitConflict) {
+      return null;
+    }
+    return createGitConflictActionsModel({
+      operation: activeGitConflict.operation,
+      isHandlingConflict: isHandlingGitConflict,
+      conflictAction: gitConflictAction,
+      onAbort: () => {
+        void abortGitConflict?.();
+      },
+      onAskBuilder: handleAskBuilderFromConflictModal,
+    });
+  }, [
+    abortGitConflict,
+    activeGitConflict,
+    gitConflictAction,
+    handleAskBuilderFromConflictModal,
+    isHandlingGitConflict,
+  ]);
 
   useEffect(() => {
     setExpandedFiles((previous) => {
@@ -156,36 +171,33 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
   }, [model.fileDiffs, model.selectedFile, model.setSelectedFile]);
 
   useEffect(() => {
-    const autoOpenNonce = model.rebaseConflictAutoOpenNonce ?? 0;
-    const closeNonce = model.rebaseConflictCloseNonce ?? 0;
-
     if (!hasInitializedConflictModalSyncRef.current) {
       hasInitializedConflictModalSyncRef.current = true;
-      previousAutoOpenNonceRef.current = autoOpenNonce;
-      previousCloseNonceRef.current = closeNonce;
+      previousAutoOpenNonceRef.current = gitConflictAutoOpenNonce;
+      previousCloseNonceRef.current = gitConflictCloseNonce;
       return;
     }
 
     let nextModalOpenState: boolean | null = null;
 
-    if (closeNonce !== previousCloseNonceRef.current) {
-      previousCloseNonceRef.current = closeNonce;
+    if (gitConflictCloseNonce !== previousCloseNonceRef.current) {
+      previousCloseNonceRef.current = gitConflictCloseNonce;
       nextModalOpenState = false;
     }
 
-    if (autoOpenNonce !== previousAutoOpenNonceRef.current) {
-      previousAutoOpenNonceRef.current = autoOpenNonce;
+    if (gitConflictAutoOpenNonce !== previousAutoOpenNonceRef.current) {
+      previousAutoOpenNonceRef.current = gitConflictAutoOpenNonce;
       nextModalOpenState = true;
     }
 
-    if (!hasRebaseConflict) {
+    if (!hasGitConflict) {
       nextModalOpenState = false;
     }
 
     if (nextModalOpenState !== null) {
-      setIsRebaseConflictModalOpen(nextModalOpenState);
+      setIsGitConflictModalOpen(nextModalOpenState);
     }
-  }, [hasRebaseConflict, model.rebaseConflictAutoOpenNonce, model.rebaseConflictCloseNonce]);
+  }, [gitConflictAutoOpenNonce, gitConflictCloseNonce, hasGitConflict]);
 
   return (
     <TooltipProvider>
@@ -207,7 +219,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
           isDetectingPullRequest={model.isDetectingPullRequest ?? false}
           isGitActionsLocked={model.isGitActionsLocked ?? false}
           gitActionsLockReason={model.gitActionsLockReason ?? null}
-          showLockReasonBanner={!hasRebaseConflict && (model.showLockReasonBanner ?? true)}
+          showLockReasonBanner={!hasGitConflict && (model.showLockReasonBanner ?? true)}
           pushError={model.pushError ?? null}
           rebaseError={model.rebaseError ?? null}
           pushBranch={model.pushBranch ?? null}
@@ -224,11 +236,11 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
           </div>
         ) : null}
 
-        {model.rebaseConflict ? (
-          <RebaseConflictStrip
-            conflict={model.rebaseConflict}
-            actions={stripRebaseConflictActions}
-            onViewDetails={() => setIsRebaseConflictModalOpen(true)}
+        {activeGitConflict && stripGitConflictActions ? (
+          <GitConflictStrip
+            conflict={activeGitConflict}
+            actions={stripGitConflictActions}
+            onViewDetails={() => setIsGitConflictModalOpen(true)}
           />
         ) : null}
 
@@ -268,12 +280,14 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
           />
         ) : null}
 
-        <RebaseConflictDialog
-          conflict={model.rebaseConflict ?? null}
-          open={hasRebaseConflict && isRebaseConflictModalOpen}
-          onOpenChange={setIsRebaseConflictModalOpen}
-          actions={modalRebaseConflictActions}
-        />
+        {modalGitConflictActions ? (
+          <GitConflictDialog
+            conflict={activeGitConflict}
+            open={hasGitConflict && isGitConflictModalOpen}
+            onOpenChange={setIsGitConflictModalOpen}
+            actions={modalGitConflictActions}
+          />
+        ) : null}
 
         <ForcePushDialog
           pendingForcePush={model.pendingForcePush ?? null}

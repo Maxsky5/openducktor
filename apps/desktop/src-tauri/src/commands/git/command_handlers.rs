@@ -445,3 +445,28 @@ pub async fn git_rebase_abort(
     .await;
     as_error(result)
 }
+
+#[tauri::command]
+pub async fn git_abort_conflict(
+    state: State<'_, AppState>,
+    repo_path: String,
+    operation: host_domain::GitConflictOperation,
+    working_dir: Option<String>,
+) -> Result<host_domain::GitConflictAbortResult, String> {
+    let _ = state
+        .service
+        .resolve_authorized_repo_path(&repo_path)
+        .map_err(|e| e.to_string())?;
+    let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
+
+    let request = host_domain::GitConflictAbortRequest {
+        operation,
+        working_dir: Some(effective),
+    };
+    let service = state.service.clone();
+    let result = run_service_blocking("git_abort_conflict", move || {
+        service.git_abort_conflict(&repo_path, request)
+    })
+    .await;
+    as_error(result)
+}

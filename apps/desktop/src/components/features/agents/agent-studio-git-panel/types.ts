@@ -2,9 +2,9 @@ import type { PullRequest } from "@openducktor/contracts";
 import type {
   AgentStudioPendingForcePush,
   AgentStudioPendingPullRebase,
-  AgentStudioRebaseConflict,
-  AgentStudioRebaseConflictAction,
   DiffDataState,
+  GitConflict,
+  GitConflictAction,
 } from "@/features/agent-studio-git";
 
 export type AgentStudioGitPanelModel = DiffDataState & {
@@ -13,14 +13,14 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   isCommitting?: boolean;
   isPushing?: boolean;
   isRebasing?: boolean;
-  isHandlingRebaseConflict?: boolean;
-  rebaseConflictAction?: AgentStudioRebaseConflictAction;
-  rebaseConflictAutoOpenNonce?: number;
-  rebaseConflictCloseNonce?: number;
+  isHandlingGitConflict?: boolean;
+  gitConflictAction?: GitConflictAction;
+  gitConflictAutoOpenNonce?: number;
+  gitConflictCloseNonce?: number;
   showLockReasonBanner?: boolean;
   isGitActionsLocked?: boolean;
   gitActionsLockReason?: string | null;
-  rebaseConflict?: AgentStudioRebaseConflict | null;
+  gitConflict?: GitConflict | null;
   pendingForcePush?: AgentStudioPendingForcePush | null;
   pendingPullRebase?: AgentStudioPendingPullRebase | null;
   commitError?: string | null;
@@ -34,8 +34,8 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   confirmPullRebase?: () => Promise<void>;
   cancelPullRebase?: () => void;
   rebaseOntoTarget?: () => Promise<void>;
-  abortRebase?: () => Promise<void>;
-  askBuilderToResolveRebaseConflict?: () => Promise<void>;
+  abortGitConflict?: () => Promise<void>;
+  askBuilderToResolveGitConflict?: () => Promise<void>;
   pullFromUpstream?: () => Promise<void>;
   onDetectPullRequest?: () => Promise<void> | void;
   onSendReview?: (message: string) => void;

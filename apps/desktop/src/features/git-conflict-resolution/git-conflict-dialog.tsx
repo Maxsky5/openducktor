@@ -8,38 +8,44 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { AgentStudioRebaseConflict } from "@/features/agent-studio-git";
-import { INLINE_CODE_CLASS_NAME } from "./constants";
-import { RebaseConflictActions, type RebaseConflictActionsModel } from "./rebase-conflict-actions";
+import type { GitConflict } from "@/features/agent-studio-git";
+import { getGitConflictCopy, getGitConflictTitle } from "./conflict-copy";
+import { GitConflictActions, type GitConflictActionsModel } from "./git-conflict-actions";
 
-type RebaseConflictDialogProps = {
-  conflict: AgentStudioRebaseConflict | null;
+const INLINE_CODE_CLASS_NAME =
+  "rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground";
+
+type GitConflictDialogProps = {
+  conflict: GitConflict | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  actions: RebaseConflictActionsModel;
+  actions: GitConflictActionsModel;
+  testId?: string;
+  abortTestId?: string;
+  askBuilderTestId?: string;
 };
 
-const toConflictTitle = (conflict: AgentStudioRebaseConflict): string =>
-  `${conflict.operation === "pull_rebase" ? "Pull with rebase" : "Rebase"} conflict detected`;
-
-const toConflictDescription = (conflict: AgentStudioRebaseConflict): ReactNode => {
-  const operationLabel = conflict.operation === "pull_rebase" ? "pull with rebase" : "rebase";
+const toConflictDescription = (conflict: GitConflict): ReactNode => {
+  const { operationLabel } = getGitConflictCopy(conflict.operation);
 
   return (
     <>
       The {operationLabel} onto{" "}
       <code className={INLINE_CODE_CLASS_NAME}>{conflict.targetBranch}</code> stopped on conflicts.
-      Abort the rebase or send the conflict to Builder for resolution.
+      Abort the git operation or send the conflict to Builder for resolution.
     </>
   );
 };
 
-export const RebaseConflictDialog = memo(function RebaseConflictDialog({
+export const GitConflictDialog = memo(function GitConflictDialog({
   conflict,
   open,
   onOpenChange,
   actions,
-}: RebaseConflictDialogProps): ReactElement {
+  testId = "agent-studio-git-rebase-conflict-modal",
+  abortTestId = "agent-studio-git-abort-rebase-button",
+  askBuilderTestId = "agent-studio-git-ask-builder-button",
+}: GitConflictDialogProps): ReactElement {
   return (
     <Dialog
       open={open}
@@ -50,10 +56,10 @@ export const RebaseConflictDialog = memo(function RebaseConflictDialog({
         onOpenChange(nextOpen);
       }}
     >
-      <DialogContent className="max-w-xl" data-testid="agent-studio-git-rebase-conflict-modal">
+      <DialogContent className="max-w-xl" data-testid={testId}>
         <DialogHeader>
           <DialogTitle>
-            {conflict ? toConflictTitle(conflict) : "Rebase conflict detected"}
+            {conflict ? getGitConflictTitle(conflict) : "Git conflict detected"}
           </DialogTitle>
           <DialogDescription>{conflict ? toConflictDescription(conflict) : null}</DialogDescription>
         </DialogHeader>
@@ -62,10 +68,7 @@ export const RebaseConflictDialog = memo(function RebaseConflictDialog({
           <div className="space-y-4">
             <div>
               <p className="text-sm font-medium text-foreground">Conflicted files</p>
-              <ul
-                className="mt-2 max-h-40 list-disc space-y-1 overflow-auto pl-5 text-sm text-muted-foreground"
-                data-testid="agent-studio-git-rebase-conflict-files"
-              >
+              <ul className="mt-2 max-h-40 list-disc space-y-1 overflow-auto pl-5 text-sm text-muted-foreground">
                 {conflict.conflictedFiles.map((file) => (
                   <li key={file}>{file}</li>
                 ))}
@@ -74,7 +77,7 @@ export const RebaseConflictDialog = memo(function RebaseConflictDialog({
 
             <div>
               <p className="text-sm font-medium text-foreground">Git output</p>
-              <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-muted p-3 text-xs text-foreground whitespace-pre-wrap">
+              <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap text-foreground">
                 {conflict.output}
               </pre>
             </div>
@@ -87,15 +90,14 @@ export const RebaseConflictDialog = memo(function RebaseConflictDialog({
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={actions.isDisabled}
-            data-testid="agent-studio-git-close-rebase-conflict-modal-button"
           >
             Close
           </Button>
 
-          <RebaseConflictActions
+          <GitConflictActions
             actions={actions}
-            abortTestId="agent-studio-git-abort-rebase-button"
-            askBuilderTestId="agent-studio-git-ask-builder-button"
+            abortTestId={abortTestId}
+            askBuilderTestId={askBuilderTestId}
             size="default"
             className="flex items-center gap-2"
           />

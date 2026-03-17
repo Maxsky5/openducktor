@@ -40,6 +40,15 @@ export type GitProviderId = z.infer<typeof gitProviderIdSchema>;
 export const gitMergeMethodSchema = z.enum(["merge_commit", "squash", "rebase"]);
 export type GitMergeMethod = z.infer<typeof gitMergeMethodSchema>;
 
+export const gitConflictOperationSchema = z.enum([
+  "rebase",
+  "pull_rebase",
+  "direct_merge_merge_commit",
+  "direct_merge_squash",
+  "direct_merge_rebase",
+]);
+export type GitConflictOperation = z.infer<typeof gitConflictOperationSchema>;
+
 export const gitProviderRepositorySchema = z.object({
   host: z.string().trim().min(1).default("github.com"),
   owner: z.string().trim().min(1),
@@ -116,7 +125,7 @@ export type TaskPullRequestDetectResult = z.infer<typeof taskPullRequestDetectRe
 export const directMergeRecordSchema = z.object({
   method: gitMergeMethodSchema,
   sourceBranch: z.string().trim().min(1),
-  targetBranch: z.string().trim().min(1),
+  targetBranch: gitTargetBranchSchema,
   mergedAt: z.string(),
 });
 export type DirectMergeRecord = z.infer<typeof directMergeRecordSchema>;
@@ -132,7 +141,10 @@ export type GitProviderAvailability = z.infer<typeof gitProviderAvailabilitySche
 export const taskApprovalContextSchema = z.object({
   taskId: z.string(),
   taskStatus: z.string(),
-  workingDirectory: z.string().trim().min(1),
+  workingDirectory: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    z.string().trim().min(1).optional(),
+  ),
   sourceBranch: z.string().trim().min(1),
   targetBranch: gitTargetBranchSchema,
   publishTarget: z.preprocess(
@@ -145,6 +157,10 @@ export const taskApprovalContextSchema = z.object({
   pullRequest: z.preprocess(
     (value) => (value === null ? undefined : value),
     pullRequestSchema.optional(),
+  ),
+  directMerge: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    directMergeRecordSchema.optional(),
   ),
   providers: z.array(gitProviderAvailabilitySchema).default([]),
 });
@@ -188,6 +204,31 @@ export const gitPullBranchResultSchema = z.discriminatedUnion("outcome", [
   }),
 ]);
 export type GitPullBranchResult = z.infer<typeof gitPullBranchResultSchema>;
+
+export const gitConflictSchema = z.object({
+  operation: gitConflictOperationSchema,
+  currentBranch: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    z.string().trim().min(1).optional(),
+  ),
+  targetBranch: z.string().trim().min(1),
+  conflictedFiles: z.array(z.string()).default([]),
+  output: z.string(),
+  workingDir: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+});
+export type GitConflict = z.infer<typeof gitConflictSchema>;
+
+export const gitConflictAbortRequestSchema = z.object({
+  repoPath: z.string(),
+  operation: gitConflictOperationSchema,
+  workingDir: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+});
+export type GitConflictAbortRequest = z.infer<typeof gitConflictAbortRequestSchema>;
+
+export const gitConflictAbortResultSchema = z.object({
+  output: z.string(),
+});
+export type GitConflictAbortResult = z.infer<typeof gitConflictAbortResultSchema>;
 
 /** A single file diff entry from `GET /session/:id/diff`. */
 export const fileDiffSchema = z.object({

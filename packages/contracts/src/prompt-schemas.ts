@@ -42,10 +42,11 @@ export const agentPromptPlaceholderValues = [
   "task.specMarkdown",
   "task.planMarkdown",
   "task.latestQaReportMarkdown",
+  "git.operationLabel",
   "git.currentBranch",
   "git.targetBranch",
   "git.conflictedFiles",
-  "git.rebaseOutput",
+  "git.conflictOutput",
 ] as const;
 export const agentPromptPlaceholderSchema = z.enum(agentPromptPlaceholderValues);
 export type AgentPromptPlaceholder = z.infer<typeof agentPromptPlaceholderSchema>;

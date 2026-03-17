@@ -93,21 +93,21 @@ function AgentsPageWorkspace({
 }
 
 type AgentsPageModalContentProps = {
-  rebaseConflictModal: ReactNode;
+  gitConflictResolutionModal: ReactNode;
   humanReviewFeedbackModal: ReactNode;
   sessionStartModal: ReactNode;
   taskDetailsSheet: ReactElement;
 };
 
 function AgentsPageModalContent({
-  rebaseConflictModal,
+  gitConflictResolutionModal,
   humanReviewFeedbackModal,
   sessionStartModal,
   taskDetailsSheet,
 }: AgentsPageModalContentProps): ReactElement {
   return (
     <>
-      {rebaseConflictModal}
+      {gitConflictResolutionModal}
       {humanReviewFeedbackModal}
       {sessionStartModal}
       {taskDetailsSheet}
@@ -130,7 +130,7 @@ type AgentsPageContentProps = {
   chatModel: ComponentProps<typeof AgentChat>["model"];
   isRightPanelVisible: boolean;
   rightPanelModel: ComponentProps<typeof AgentStudioRightPanel>["model"] | null;
-  rebaseConflictModal: ReactNode;
+  gitConflictResolutionModal: ReactNode;
   humanReviewFeedbackModal: ReactNode;
   sessionStartModal: ReactNode;
   taskDetailsSheet: ReactElement;
@@ -151,7 +151,7 @@ function AgentsPageContent({
   chatModel,
   isRightPanelVisible,
   rightPanelModel,
-  rebaseConflictModal,
+  gitConflictResolutionModal,
   humanReviewFeedbackModal,
   sessionStartModal,
   taskDetailsSheet,
@@ -185,7 +185,7 @@ function AgentsPageContent({
       }
       modalContent={
         <AgentsPageModalContent
-          rebaseConflictModal={rebaseConflictModal}
+          gitConflictResolutionModal={gitConflictResolutionModal}
           humanReviewFeedbackModal={humanReviewFeedbackModal}
           sessionStartModal={sessionStartModal}
           taskDetailsSheet={taskDetailsSheet}
@@ -324,9 +324,7 @@ type UseAgentsPageRightPanelModelArgs = {
   runs: ReturnType<typeof useTasksState>["runs"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
-  onResolveRebaseConflict: Parameters<
-    typeof useAgentStudioGitActions
-  >[0]["onResolveRebaseConflict"];
+  onResolveGitConflict: Parameters<typeof useAgentStudioGitActions>[0]["onResolveGitConflict"];
 };
 
 function useAgentsPageRightPanelModel({
@@ -343,7 +341,7 @@ function useAgentsPageRightPanelModel({
   runs,
   detectingPullRequestTaskId,
   onDetectPullRequest,
-  onResolveRebaseConflict,
+  onResolveGitConflict,
 }: UseAgentsPageRightPanelModelArgs) {
   const gitPanelContextMode: "repository" | "worktree" =
     viewActiveSession?.role === "build" ? "worktree" : "repository";
@@ -394,7 +392,7 @@ function useAgentsPageRightPanelModel({
     worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
     refreshDiffData: diffData.refresh,
     isBuilderSessionWorking: isActiveBuilderWorking,
-    ...(onResolveRebaseConflict ? { onResolveRebaseConflict } : {}),
+    ...(onResolveGitConflict ? { onResolveGitConflict } : {}),
   });
   const diffModel = useMemo(
     () => ({
@@ -763,9 +761,9 @@ export function AgentsPage(): ReactElement {
     runs,
     detectingPullRequestTaskId,
     onDetectPullRequest: handleDetectPullRequest,
-    onResolveRebaseConflict: handleResolveRebaseConflict,
+    onResolveGitConflict: handleResolveRebaseConflict,
   });
-  const rebaseConflictModal = pendingRebaseConflictResolutionRequest ? (
+  const gitConflictResolutionModal = pendingRebaseConflictResolutionRequest ? (
     <RebaseConflictResolutionModal
       key={pendingRebaseConflictResolutionRequest.requestId}
       request={pendingRebaseConflictResolutionRequest}
@@ -813,7 +811,7 @@ export function AgentsPage(): ReactElement {
         chatModel={orchestration.agentChatModel}
         isRightPanelVisible={isRightPanelVisible}
         rightPanelModel={rightPanelModel}
-        rebaseConflictModal={rebaseConflictModal}
+        gitConflictResolutionModal={gitConflictResolutionModal}
         humanReviewFeedbackModal={humanReviewFeedbackModal}
         sessionStartModal={sessionStartModal}
         taskDetailsSheet={taskDetailsSheet}

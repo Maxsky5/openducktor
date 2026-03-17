@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Result};
 use host_domain::{
-    GitCommitAllRequest, GitCommitAllResult, GitRebaseAbortRequest, GitRebaseAbortResult,
-    GitRebaseBranchRequest, GitRebaseBranchResult,
+    GitCommitAllRequest, GitCommitAllResult, GitConflictAbortRequest, GitConflictAbortResult,
+    GitConflictOperation, GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest,
+    GitRebaseBranchResult,
 };
 use std::path::Path;
 
@@ -120,5 +121,35 @@ impl GitCliPort {
         }
 
         Ok(GitRebaseAbortResult::Aborted { output })
+    }
+
+    pub(super) fn abort_conflict_impl(
+        &self,
+        repo_path: &Path,
+        request: GitConflictAbortRequest,
+    ) -> Result<GitConflictAbortResult> {
+        self.ensure_repository(repo_path)?;
+
+        let args: Vec<&str> = match request.operation {
+            GitConflictOperation::Rebase
+            | GitConflictOperation::PullRebase
+            | GitConflictOperation::DirectMergeRebase => vec!["rebase", "--abort"],
+            GitConflictOperation::DirectMergeMergeCommit => vec!["merge", "--abort"],
+            GitConflictOperation::DirectMergeSquash => vec!["reset", "--hard", "HEAD"],
+        };
+
+        let (abort_ok, abort_stdout, abort_stderr) =
+            self.run_git_allow_failure(repo_path, &args)?;
+        let output = combine_output(abort_stdout, abort_stderr);
+        if !abort_ok {
+            let detail = if output.is_empty() {
+                format!("No output from git {}", args.join(" "))
+            } else {
+                output
+            };
+            return Err(anyhow!("git conflict abort failed: {}", detail));
+        }
+
+        Ok(GitConflictAbortResult { output })
     }
 }

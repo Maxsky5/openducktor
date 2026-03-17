@@ -37,6 +37,7 @@ const createConflict = (overrides: Record<string, unknown> = {}) => ({
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
   const builderSession = buildSession({
     sessionId: "build-1",
+    workingDirectory: "/repo/worktrees/task-1",
     selectedModel: {
       runtimeKind: "opencode",
       providerId: "openai",
@@ -96,7 +97,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
         "build-1",
       );
       expect(harness.getLatest().pendingRebaseConflictResolutionRequest?.requestId).toBe(
-        "rebase-conflict-0",
+        "git-conflict-0",
       );
 
       await harness.run((state) => {
@@ -142,7 +143,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
 
       await harness.waitFor((state) => state.pendingRebaseConflictResolutionRequest !== null);
       expect(harness.getLatest().pendingRebaseConflictResolutionRequest?.requestId).toBe(
-        "rebase-conflict-0",
+        "git-conflict-0",
       );
 
       await harness.run((state) => {
@@ -195,7 +196,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
 
       await harness.waitFor((state) => state.pendingRebaseConflictResolutionRequest !== null);
       expect(harness.getLatest().pendingRebaseConflictResolutionRequest?.requestId).toBe(
-        "rebase-conflict-0",
+        "git-conflict-0",
       );
       await harness.run((state) => {
         state.resolvePendingRebaseConflictResolution(null);

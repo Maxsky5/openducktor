@@ -52,6 +52,10 @@ fn bundled_command_path(program: &str) -> Option<String> {
     bundled_command_path_from_executable(&executable_path, program)
 }
 
+pub fn bundled_command(program: &str) -> Option<String> {
+    bundled_command_path(program)
+}
+
 fn command_file_name(program: &str) -> OsString {
     #[cfg(windows)]
     {
