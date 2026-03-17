@@ -183,12 +183,12 @@ impl AppService {
             },
             CleanupEvent::PostHookStarted { hook } => RunEvent::PostHookStarted {
                 run_id: run_id.to_string(),
-                message: format!("Running worktree cleanup script command: {hook}"),
+                message: format!("Running post-complete hook command: {hook}"),
                 timestamp: now_rfc3339(),
             },
             CleanupEvent::PostHookFailed { hook, stderr } => RunEvent::PostHookFailed {
                 run_id: run_id.to_string(),
-                message: format!("Worktree cleanup script command failed: {hook}\n{stderr}"),
+                message: format!("Post-complete hook command failed: {hook}\n{stderr}"),
                 timestamp: now_rfc3339(),
             },
             CleanupEvent::ReadyForReview { review_label } => {

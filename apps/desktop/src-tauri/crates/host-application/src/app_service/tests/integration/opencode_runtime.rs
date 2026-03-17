@@ -312,7 +312,9 @@ fn build_continuation_target_get_prefers_active_build_run() -> Result<()> {
         },
     );
 
-    let target = service.build_continuation_target_get(repo_path.as_str(), "task-1")?;
+    let repo_path_with_trailing_separator = format!("{repo_path}/");
+    let target = service
+        .build_continuation_target_get(repo_path_with_trailing_separator.as_str(), "task-1")?;
     assert_eq!(target.source, BuildContinuationTargetSource::ActiveBuildRun);
     assert_eq!(
         target.working_directory,

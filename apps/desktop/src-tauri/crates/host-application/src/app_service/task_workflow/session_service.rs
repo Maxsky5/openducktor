@@ -38,6 +38,7 @@ impl AppService {
         task_id: &str,
     ) -> Result<BuildContinuationTarget> {
         let repo_path = self.resolve_task_repo_path(repo_path)?;
+        let normalized_repo_path = normalize_path_for_comparison(repo_path.as_str());
 
         let active_worktree_path: Option<String> = {
             let runs = self
@@ -46,7 +47,7 @@ impl AppService {
                 .map_err(|_| anyhow!("Run state lock poisoned"))?;
             runs.values()
                 .filter(|run| {
-                    run.repo_path == repo_path
+                    normalize_path_for_comparison(run.repo_path.as_str()) == normalized_repo_path
                         && run.task_id == task_id
                         && matches!(
                             run.summary.state,
@@ -182,19 +183,6 @@ fn validate_task_agent_session(
     ))
 }
 
-fn canonicalize_existing_path(path: &str, error_message: &str) -> Result<PathBuf> {
-    fs::canonicalize(path.trim()).with_context(|| format!("{error_message}: {}", path.trim()))
-}
-
-fn try_canonicalize_existing_path(path: &str) -> Option<PathBuf> {
-    let trimmed = path.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    fs::canonicalize(trimmed).ok()
-}
-
 fn normalize_path_for_comparison(path: &str) -> PathBuf {
     let trimmed = path.trim();
     if trimmed.is_empty() {
@@ -209,6 +197,19 @@ fn normalize_path_for_comparison(path: &str) -> PathBuf {
             PathBuf::from(without_trailing_separators)
         }
     })
+}
+
+fn canonicalize_existing_path(path: &str, error_message: &str) -> Result<PathBuf> {
+    fs::canonicalize(path.trim()).with_context(|| format!("{error_message}: {}", path.trim()))
+}
+
+fn try_canonicalize_existing_path(path: &str) -> Option<PathBuf> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    fs::canonicalize(trimmed).ok()
 }
 
 fn validate_build_continuation_working_directory(
