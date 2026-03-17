@@ -225,7 +225,7 @@ describe("openducktor-mcp lib", () => {
     let status = "open";
 
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -254,7 +254,7 @@ describe("openducktor-mcp lib", () => {
         };
       }
       if (command === "show") {
-        const id = args[2];
+        const id = args[1];
         if (id !== "fairnest-wsp") {
           return { ok: true, stdout: JSON.stringify([]) };
         }
@@ -272,11 +272,11 @@ describe("openducktor-mcp lib", () => {
         };
       }
       if (command === "update" && args.includes("--metadata")) {
-        metadataTargetTaskId = args[2] ?? null;
+        metadataTargetTaskId = args[1] ?? null;
         return { ok: true, stdout: "{}" };
       }
       if (command === "update" && args.includes("--status")) {
-        statusTargetTaskId = args[2] ?? null;
+        statusTargetTaskId = args[1] ?? null;
         status = args[args.indexOf("--status") + 1] ?? status;
         return { ok: true, stdout: "{}" };
       }
@@ -312,7 +312,7 @@ describe("openducktor-mcp lib", () => {
     let status = "open";
 
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -341,7 +341,7 @@ describe("openducktor-mcp lib", () => {
         };
       }
       if (command === "show") {
-        const id = args[2];
+        const id = args[1];
         if (id !== "fairnest-wsp") {
           return { ok: true, stdout: JSON.stringify([]) };
         }
@@ -359,11 +359,11 @@ describe("openducktor-mcp lib", () => {
         };
       }
       if (command === "update" && args.includes("--metadata")) {
-        metadataTargetTaskId = args[2] ?? null;
+        metadataTargetTaskId = args[1] ?? null;
         return { ok: true, stdout: "{}" };
       }
       if (command === "update" && args.includes("--status")) {
-        statusTargetTaskId = args[2] ?? null;
+        statusTargetTaskId = args[1] ?? null;
         status = args[args.indexOf("--status") + 1] ?? status;
         return { ok: true, stdout: "{}" };
       }
@@ -395,7 +395,7 @@ describe("openducktor-mcp lib", () => {
 
   test("setSpec fails with explicit candidates when task identifier is ambiguous", async () => {
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -445,7 +445,7 @@ describe("openducktor-mcp lib", () => {
 
   test("OdtTaskStore initialization and task index build are cached across concurrent calls", async () => {
     const { runProcess, calls } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: false, stdout: "", stderr: "not initialized" };
       }
@@ -501,10 +501,10 @@ describe("openducktor-mcp lib", () => {
       store.readTask({ taskId: "task-1" }),
     ]);
 
-    expect(calls.filter((entry) => entry.args[1] === "init")).toHaveLength(1);
-    expect(calls.filter((entry) => entry.args[1] === "config")).toHaveLength(1);
-    expect(calls.filter((entry) => entry.args[1] === "list")).toHaveLength(1);
-    expect(calls.filter((entry) => entry.args[1] === "show")).toHaveLength(3);
+    expect(calls.filter((entry) => entry.args[0] === "init")).toHaveLength(1);
+    expect(calls.filter((entry) => entry.args[0] === "config")).toHaveLength(1);
+    expect(calls.filter((entry) => entry.args[0] === "list")).toHaveLength(1);
+    expect(calls.filter((entry) => entry.args[0] === "show")).toHaveLength(3);
     for (const call of calls) {
       expect(call.command).toBe("bd");
       expect(call.env.BEADS_DIR).toBe("/beads");
@@ -515,7 +515,7 @@ describe("openducktor-mcp lib", () => {
     let listCalls = 0;
 
     const { runProcess, calls } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -558,7 +558,7 @@ describe("openducktor-mcp lib", () => {
         };
       }
       if (command === "show") {
-        const id = args[2];
+        const id = args[1];
         if (id !== "task-1" && id !== "task-2") {
           return { ok: true, stdout: JSON.stringify([]) };
         }
@@ -595,14 +595,14 @@ describe("openducktor-mcp lib", () => {
 
     expect(result.task.id).toBe("task-2");
     expect(result.task.status).toBe("in_progress");
-    expect(calls.filter((entry) => entry.args[1] === "list")).toHaveLength(2);
+    expect(calls.filter((entry) => entry.args[0] === "list")).toHaveLength(2);
   });
 
   test("readTask refreshes index on ambiguous cache miss and resolves uniquely", async () => {
     let listCalls = 0;
 
     const { runProcess, calls } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -642,7 +642,7 @@ describe("openducktor-mcp lib", () => {
         return { ok: true, stdout: JSON.stringify(issues) };
       }
       if (command === "show") {
-        const id = args[2];
+        const id = args[1];
         if (id !== "fairnest-wsp") {
           return { ok: true, stdout: JSON.stringify([]) };
         }
@@ -678,7 +678,7 @@ describe("openducktor-mcp lib", () => {
 
     expect(result.task.id).toBe("fairnest-wsp");
     expect(result.task.status).toBe("in_progress");
-    expect(calls.filter((entry) => entry.args[1] === "list")).toHaveLength(2);
+    expect(calls.filter((entry) => entry.args[0] === "list")).toHaveLength(2);
   });
 
   test("buildResumed allows task issues to skip spec/planning from open", async () => {
@@ -686,7 +686,7 @@ describe("openducktor-mcp lib", () => {
     let statusTransition: string | null = null;
 
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -750,7 +750,7 @@ describe("openducktor-mcp lib", () => {
     let statusUpdateCalls = 0;
 
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -799,7 +799,7 @@ describe("openducktor-mcp lib", () => {
   test("qaApproved fails fast when transition is not allowed and does not write metadata", async () => {
     let metadataUpdateCalls = 0;
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -866,7 +866,7 @@ describe("openducktor-mcp lib", () => {
     let updateCalls = 0;
 
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -962,7 +962,7 @@ describe("openducktor-mcp lib", () => {
     let statusUpdateCalls = 0;
 
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -1038,7 +1038,7 @@ describe("openducktor-mcp lib", () => {
     let statusUpdateCalls = 0;
 
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -1114,7 +1114,7 @@ describe("openducktor-mcp lib", () => {
     let statusUpdateCalls = 0;
 
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -1195,7 +1195,7 @@ describe("openducktor-mcp lib", () => {
     let statusUpdateCalls = 0;
 
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -1268,7 +1268,7 @@ describe("openducktor-mcp lib", () => {
     let statusUpdateCalls = 0;
 
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -1342,7 +1342,7 @@ describe("openducktor-mcp lib", () => {
     let createCalls = 0;
 
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -1435,7 +1435,7 @@ describe("openducktor-mcp lib", () => {
     let statusUpdateCalls = 0;
 
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -1530,7 +1530,7 @@ describe("openducktor-mcp lib", () => {
     const deletedTaskIds: string[] = [];
 
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -1624,7 +1624,7 @@ describe("openducktor-mcp lib", () => {
     let statusUpdateCalls = 0;
 
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -1701,7 +1701,7 @@ describe("openducktor-mcp lib", () => {
     let updateCalls = 0;
 
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }
@@ -1780,7 +1780,7 @@ describe("openducktor-mcp lib", () => {
     let updateCalls = 0;
 
     const { runProcess } = buildProcessRunner((args) => {
-      const command = args[1];
+      const command = args[0];
       if (command === "where") {
         return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
       }

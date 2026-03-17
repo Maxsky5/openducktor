@@ -366,7 +366,7 @@ fn show_task_uses_id_flag_when_loading_issue() -> Result<()> {
     assert_eq!(calls.len(), 1);
     assert_eq!(
         calls[0].args,
-        vec!["--no-daemon", "show", "--id", "task-1", "--json"]
+        vec!["show", "--id", "task-1", "--json"]
             .into_iter()
             .map(str::to_string)
             .collect::<Vec<_>>()
@@ -610,7 +610,7 @@ fn ensure_repo_initialized_skips_init_when_store_is_ready() -> Result<()> {
     assert_eq!(calls[0].kind, CallKind::AllowFailureWithEnv);
     assert_eq!(
         calls[0].args,
-        vec!["--no-daemon", "where", "--json"]
+        vec!["where", "--json"]
             .into_iter()
             .map(str::to_string)
             .collect::<Vec<_>>()
@@ -618,16 +618,10 @@ fn ensure_repo_initialized_skips_init_when_store_is_ready() -> Result<()> {
     assert_eq!(calls[1].kind, CallKind::WithEnv);
     assert_eq!(
         calls[1].args,
-        vec![
-            "--no-daemon",
-            "config",
-            "set",
-            "status.custom",
-            CUSTOM_STATUS_VALUES
-        ]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>()
+        vec!["config", "set", "status.custom", CUSTOM_STATUS_VALUES]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
     );
     assert_eq!(calls[0].program, "bd");
     assert_eq!(calls[0].cwd.as_deref(), Some(repo.path()));
@@ -666,11 +660,9 @@ fn ensure_repo_initialized_runs_init_then_uses_cache_when_database_exists() -> R
     assert_eq!(
         calls[1].args,
         vec![
-            "--no-daemon",
             "init",
             "--quiet",
             "--skip-hooks",
-            "--skip-merge-driver",
             "--prefix",
             expected_slug.as_str(),
         ]
@@ -798,7 +790,7 @@ fn list_tasks_filters_events_and_populates_subtask_ids() -> Result<()> {
     assert_eq!(calls.len(), 1);
     assert_eq!(
         calls[0].args,
-        vec!["--no-daemon", "list", "--all", "--limit", "0", "--json"]
+        vec!["list", "--all", "--limit", "0", "--json"]
             .into_iter()
             .map(str::to_string)
             .collect::<Vec<_>>()
@@ -821,7 +813,7 @@ fn list_tasks_uses_short_lived_repo_cache() -> Result<()> {
 
     let calls = runner.take_calls();
     assert_eq!(calls.len(), 1);
-    assert_eq!(calls[0].args[1], "list");
+    assert_eq!(calls[0].args[0], "list");
     Ok(())
 }
 
@@ -881,7 +873,7 @@ fn list_tasks_cache_is_invalidated_after_update_mutation() -> Result<()> {
     let calls = runner.take_calls();
     let list_calls = calls
         .iter()
-        .filter(|call| call.args.get(1).map(String::as_str) == Some("list"))
+        .filter(|call| call.args.get(0).map(String::as_str) == Some("list"))
         .count();
     assert_eq!(list_calls, 2);
     Ok(())
@@ -934,7 +926,7 @@ fn list_tasks_cache_is_invalidated_after_metadata_mutation() -> Result<()> {
     let calls = runner.take_calls();
     let list_calls = calls
         .iter()
-        .filter(|call| call.args.get(1).map(String::as_str) == Some("list"))
+        .filter(|call| call.args.get(0).map(String::as_str) == Some("list"))
         .count();
     assert_eq!(list_calls, 2);
     Ok(())
@@ -969,7 +961,7 @@ fn list_tasks_cache_expires_after_ttl() -> Result<()> {
     let calls = runner.take_calls();
     let list_calls = calls
         .iter()
-        .filter(|call| call.args.get(1).map(String::as_str) == Some("list"))
+        .filter(|call| call.args.get(0).map(String::as_str) == Some("list"))
         .count();
     assert_eq!(list_calls, 2);
     Ok(())
@@ -1019,7 +1011,7 @@ fn list_tasks_cache_is_invalidated_after_create_mutation() -> Result<()> {
     let calls = runner.take_calls();
     let list_calls = calls
         .iter()
-        .filter(|call| call.args.get(1).map(String::as_str) == Some("list"))
+        .filter(|call| call.args.get(0).map(String::as_str) == Some("list"))
         .count();
     assert_eq!(list_calls, 2);
     Ok(())
@@ -1049,7 +1041,7 @@ fn list_tasks_cache_is_invalidated_after_delete_mutation() -> Result<()> {
     let calls = runner.take_calls();
     let list_calls = calls
         .iter()
-        .filter(|call| call.args.get(1).map(String::as_str) == Some("list"))
+        .filter(|call| call.args.get(0).map(String::as_str) == Some("list"))
         .count();
     assert_eq!(list_calls, 2);
     Ok(())
@@ -1076,7 +1068,7 @@ fn stale_generation_cache_writes_are_ignored() -> Result<()> {
 
     let calls = runner.take_calls();
     assert_eq!(calls.len(), 1);
-    assert_eq!(calls[0].args[1], "list");
+    assert_eq!(calls[0].args[0], "list");
     Ok(())
 }
 
@@ -1126,7 +1118,6 @@ fn create_task_normalizes_payload_and_persists_qa_flag() -> Result<()> {
     assert_eq!(
         calls[0].args,
         vec![
-            "--no-daemon",
             "create",
             "Build API",
             "--type",
@@ -1150,7 +1141,7 @@ fn create_task_normalizes_payload_and_persists_qa_flag() -> Result<()> {
         metadata_root["openducktor"]["qaRequired"],
         Value::Bool(false)
     );
-    assert_eq!(calls[1].args[1], "update");
+    assert_eq!(calls[1].args[0], "update");
     assert!(calls[1].args.iter().any(|arg| arg == "--"));
     assert!(calls[1].args.windows(2).any(|pair| {
         pair.first().map(String::as_str) == Some("--json")
@@ -1216,7 +1207,6 @@ fn update_task_updates_cli_fields_and_qa_metadata() -> Result<()> {
     assert_eq!(
         calls[0].args,
         vec![
-            "--no-daemon",
             "update",
             "--title",
             "Renamed",
@@ -1298,8 +1288,8 @@ fn update_task_can_update_only_ai_review_metadata() -> Result<()> {
 
     let calls = runner.take_calls();
     assert_eq!(calls.len(), 3);
-    assert_eq!(calls[0].args[1], "show");
-    assert_eq!(calls[1].args[1], "update");
+    assert_eq!(calls[0].args[0], "show");
+    assert_eq!(calls[1].args[0], "update");
     let metadata_root = metadata_from_call(&calls[1]);
     assert_eq!(
         metadata_root["openducktor"]["qaRequired"],

@@ -44,7 +44,7 @@ export class BdRuntimeClient {
     options?: { json?: boolean; allowFailure?: boolean },
   ): Promise<string> {
     const beadsDir = await this.ensureBeadsDir();
-    const finalArgs = ["--no-daemon", ...args];
+    const finalArgs = [...args];
     if (options?.json) {
       finalArgs.push("--json");
     }
@@ -97,7 +97,6 @@ export class BdRuntimeClient {
           "init",
           "--quiet",
           "--skip-hooks",
-          "--skip-merge-driver",
           "--prefix",
           slug,
         ]);

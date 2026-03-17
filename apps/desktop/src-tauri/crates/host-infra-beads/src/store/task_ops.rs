@@ -22,11 +22,9 @@ impl BeadsTaskStore {
             let (ok, _stdout, stderr) = self.command_runner.run_allow_failure_with_env(
                 "bd",
                 &[
-                    "--no-daemon",
                     "init",
                     "--quiet",
                     "--skip-hooks",
-                    "--skip-merge-driver",
                     "--prefix",
                     slug.as_str(),
                 ],

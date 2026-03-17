@@ -11,9 +11,7 @@ impl BeadsTaskStore {
     pub(crate) fn run_bd(&self, repo_path: &Path, args: &[&str]) -> Result<String> {
         let beads_dir = resolve_central_beads_dir(repo_path)?;
         let beads_dir_env = beads_dir.to_string_lossy().to_string();
-        let mut final_args = Vec::with_capacity(args.len() + 1);
-        final_args.push("--no-daemon");
-        final_args.extend(args);
+        let final_args = args.to_vec();
 
         self.command_runner.run_with_env(
             "bd",
@@ -26,8 +24,7 @@ impl BeadsTaskStore {
     pub(crate) fn run_bd_json(&self, repo_path: &Path, args: &[&str]) -> Result<Value> {
         let beads_dir = resolve_central_beads_dir(repo_path)?;
         let beads_dir_env = beads_dir.to_string_lossy().to_string();
-        let mut final_args = Vec::with_capacity(args.len() + 2);
-        final_args.push("--no-daemon");
+        let mut final_args = Vec::with_capacity(args.len() + 1);
         if let Some(delimiter_index) = args.iter().position(|arg| *arg == "--") {
             final_args.extend(&args[..delimiter_index]);
             final_args.push("--json");

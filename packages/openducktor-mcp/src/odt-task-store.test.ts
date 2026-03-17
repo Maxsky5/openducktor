@@ -104,16 +104,16 @@ class OdtStoreHarness {
   }
 
   getCommandCalls(command: string): ProcessCall[] {
-    return this.calls.filter((call) => call.args[1] === command);
+    return this.calls.filter((call) => call.args[0] === command);
   }
 
   getStatusUpdateCalls(): ProcessCall[] {
-    return this.calls.filter((call) => call.args[1] === "update" && call.args.includes("--status"));
+    return this.calls.filter((call) => call.args[0] === "update" && call.args.includes("--status"));
   }
 
   getMetadataUpdateCalls(): ProcessCall[] {
     return this.calls.filter(
-      (call) => call.args[1] === "update" && call.args.includes("--metadata"),
+      (call) => call.args[0] === "update" && call.args.includes("--metadata"),
     );
   }
 
@@ -138,7 +138,7 @@ class OdtStoreHarness {
       env: { ...env },
     });
 
-    const subcommand = args[1];
+    const subcommand = args[0];
     let result: ProcessResult;
 
     switch (subcommand) {
@@ -156,7 +156,7 @@ class OdtStoreHarness {
         result = { ok: true, stdout: JSON.stringify(this.getListPayload()) };
         break;
       case "show": {
-        const taskId = args[2] ?? "";
+        const taskId = args[1] ?? "";
         const issue = this.issues.get(taskId);
         result = { ok: true, stdout: JSON.stringify(issue ? [clone(issue)] : []) };
         break;
@@ -164,7 +164,7 @@ class OdtStoreHarness {
       case "create": {
         const titleIndex = args.indexOf("--title");
         const title =
-          titleIndex >= 0 ? (args[titleIndex + 1] ?? "Untitled") : (args[2] ?? "Untitled");
+          titleIndex >= 0 ? (args[titleIndex + 1] ?? "Untitled") : (args[1] ?? "Untitled");
         const typeIndex = args.indexOf("--type");
         const parentIndex = args.indexOf("--parent");
         const issueType = typeIndex >= 0 ? (args[typeIndex + 1] ?? "task") : "task";
@@ -200,7 +200,7 @@ class OdtStoreHarness {
         break;
       }
       case "update": {
-        const taskId = args[2] ?? "";
+        const taskId = args[1] ?? "";
         const issue = this.issues.get(taskId);
         if (!issue) {
           result = { ok: true, stdout: "{}" };
@@ -596,10 +596,10 @@ describe("OdtTaskStore workflow mutation paths", () => {
     expect(harness.getStatusUpdateCalls()).toHaveLength(1);
     expect(harness.getStatusUpdateCalls()[0]?.args).toContain("ready_for_dev");
     const metadataUpdateIndex = harness.calls.findIndex(
-      (call) => call.args[1] === "update" && call.args.includes("--metadata"),
+      (call) => call.args[0] === "update" && call.args.includes("--metadata"),
     );
-    const firstDeleteIndex = harness.calls.findIndex((call) => call.args[1] === "delete");
-    const firstCreateIndex = harness.calls.findIndex((call) => call.args[1] === "create");
+    const firstDeleteIndex = harness.calls.findIndex((call) => call.args[0] === "delete");
+    const firstCreateIndex = harness.calls.findIndex((call) => call.args[0] === "create");
     expect(metadataUpdateIndex).toBeGreaterThanOrEqual(0);
     expect(firstDeleteIndex).toBeGreaterThan(metadataUpdateIndex);
     expect(firstCreateIndex).toBeGreaterThan(metadataUpdateIndex);
