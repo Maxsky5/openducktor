@@ -4,6 +4,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use serde_json::{Map, Value};
+
 const PREPARE_SIDECARS_ENV: &str = "OPENDUCKTOR_PREPARE_SIDECARS";
 
 fn copy_sidecar_binary(source: &Path, destination: &Path) -> std::io::Result<()> {
@@ -325,6 +327,30 @@ fn should_prepare_sidecars() -> bool {
     )
 }
 
+fn sanitize_tauri_config_for_non_packaged_builds() -> Result<(), String> {
+    let mut tauri_config = env::var("TAURI_CONFIG")
+        .ok()
+        .map(|raw| serde_json::from_str::<Value>(&raw))
+        .transpose()
+        .map_err(|error| format!("invalid TAURI_CONFIG JSON: {error}"))?
+        .unwrap_or_else(|| Value::Object(Map::new()));
+
+    let Some(root) = tauri_config.as_object_mut() else {
+        return Err("TAURI_CONFIG must be a JSON object".to_string());
+    };
+
+    let bundle = root
+        .entry("bundle")
+        .or_insert_with(|| Value::Object(Map::new()));
+    let Some(bundle_object) = bundle.as_object_mut() else {
+        return Err("TAURI_CONFIG.bundle must be a JSON object".to_string());
+    };
+
+    bundle_object.insert("externalBin".to_string(), Value::Null);
+    env::set_var("TAURI_CONFIG", tauri_config.to_string());
+    Ok(())
+}
+
 fn main() {
     let manifest_dir =
         PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("missing CARGO_MANIFEST_DIR"));
@@ -336,6 +362,9 @@ fn main() {
         prepare_bd_sidecar().expect("failed to prepare Beads sidecar");
         prepare_dolt_sidecar().expect("failed to prepare Dolt sidecar");
         prepare_mcp_sidecar(&manifest_dir, &target_triple).expect("failed to prepare MCP sidecar");
+    } else {
+        sanitize_tauri_config_for_non_packaged_builds()
+            .expect("failed to sanitize non-packaged Tauri config");
     }
     tauri_build::build()
 }

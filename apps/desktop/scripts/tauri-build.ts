@@ -1,13 +1,17 @@
 import { spawn } from "node:child_process";
 
-const child = spawn(process.execPath, ["run", "tauri", "build"], {
-  cwd: process.cwd(),
-  env: {
-    ...process.env,
-    OPENDUCKTOR_PREPARE_SIDECARS: "1",
+const child = spawn(
+  process.execPath,
+  ["run", "tauri", "build", "--config", "src-tauri/bundle.sidecars.json"],
+  {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      OPENDUCKTOR_PREPARE_SIDECARS: "1",
+    },
+    stdio: "inherit",
   },
-  stdio: "inherit",
-});
+);
 
 child.on("exit", (code, signal) => {
   if (signal) {

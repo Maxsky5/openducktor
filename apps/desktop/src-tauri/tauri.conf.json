@@ -56,7 +56,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "externalBin": ["binaries/bd", "binaries/dolt", "binaries/openducktor-mcp"],
     "macOS": {
       "minimumSystemVersion": "12.0"
     },
