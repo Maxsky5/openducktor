@@ -135,6 +135,7 @@ const workflowSelectionClassName = (isSelected: boolean, state: AgentWorkflowSte
 };
 
 const workflowBorderStyleClassName = (state: AgentWorkflowStepState): string =>
+  // Dashed styling is only for steps that are currently merely optional and available.
   state.tone === "optional" ? "border-dashed" : "";
 
 const workflowStepHint = (entry: AgentWorkflowStep): string => {

@@ -317,6 +317,32 @@ describe("AgentStudioHeader", () => {
     expect(html).not.toContain("text-warning-muted");
   });
 
+  test("does not keep the dashed border once an optional step becomes active", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          workflowSteps: [
+            {
+              role: "qa" as const,
+              label: "QA",
+              icon: roleIcon(3),
+              state: {
+                tone: "in_progress" as const,
+                availability: "optional" as const,
+                completion: "in_progress" as const,
+                liveSession: "running" as const,
+              },
+              sessionId: "qa-session",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).not.toContain("border-dashed");
+  });
+
   test("renders failed workflow step hint and destructive styling", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {

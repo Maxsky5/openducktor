@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { canonicalTargetBranch, checkoutTargetBranch } from "@/lib/target-branch";
+import { pickLatestSession } from "@/state/operations/agent-orchestrator/handlers/start-session-support";
 import { host } from "@/state/operations/host";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
@@ -232,9 +233,11 @@ export function useTaskApprovalFlow({
         throw new Error("No active repository selected.");
       }
 
-      const latestBuilderRecord = (
-        await loadAgentSessionListFromQuery(queryClient, activeRepo, currentState.taskId)
-      ).find((entry) => entry.role === "build");
+      const latestBuilderRecord = pickLatestSession(
+        (await loadAgentSessionListFromQuery(queryClient, activeRepo, currentState.taskId)).filter(
+          (entry) => entry.role === "build",
+        ),
+      );
       if (!latestBuilderRecord) {
         throw new Error("No Builder session is available to fork for pull request drafting.");
       }
