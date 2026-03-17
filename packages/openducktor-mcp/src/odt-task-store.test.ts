@@ -142,14 +142,14 @@ class OdtStoreHarness {
     let result: ProcessResult;
 
     switch (subcommand) {
-      case "where":
-        result = { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
-        break;
       case "init":
         result = { ok: true, stdout: "" };
         break;
       case "config":
         result = { ok: true, stdout: "{}" };
+        break;
+      case "dolt":
+        result = { ok: true, stdout: "started" };
         break;
       case "list":
         this.listCalls += 1;

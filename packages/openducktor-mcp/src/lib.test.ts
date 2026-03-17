@@ -67,6 +67,15 @@ const buildProcessRunner = (
         cwd,
         env: { ...env },
       });
+      if (args[0] === "init") {
+        return { ok: true, stdout: "", stderr: "" };
+      }
+      if (args[0] === "dolt" && args[1] === "start") {
+        return { ok: true, stdout: "started", stderr: "" };
+      }
+      if (args[0] === "config" && args[1] === "set" && args[2] === "status.custom") {
+        return { ok: true, stdout: "{}", stderr: "" };
+      }
       const result = impl(args);
       return {
         ok: result.ok,
@@ -446,15 +455,6 @@ describe("openducktor-mcp lib", () => {
   test("OdtTaskStore initialization and task index build are cached across concurrent calls", async () => {
     const { runProcess, calls } = buildProcessRunner((args) => {
       const command = args[0];
-      if (command === "where") {
-        return { ok: false, stdout: "", stderr: "not initialized" };
-      }
-      if (command === "init") {
-        return { ok: true, stdout: "" };
-      }
-      if (command === "config") {
-        return { ok: true, stdout: "{}" };
-      }
       if (command === "list") {
         return {
           ok: true,
@@ -502,7 +502,9 @@ describe("openducktor-mcp lib", () => {
     ]);
 
     expect(calls.filter((entry) => entry.args[0] === "init")).toHaveLength(1);
-    expect(calls.filter((entry) => entry.args[0] === "config")).toHaveLength(1);
+    expect(
+      calls.filter((entry) => entry.args[0] === "dolt" && entry.args[1] === "start"),
+    ).toHaveLength(1);
     expect(calls.filter((entry) => entry.args[0] === "list")).toHaveLength(1);
     expect(calls.filter((entry) => entry.args[0] === "show")).toHaveLength(3);
     for (const call of calls) {

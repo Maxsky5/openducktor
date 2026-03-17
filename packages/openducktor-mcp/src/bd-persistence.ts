@@ -30,6 +30,9 @@ export class BdPersistence implements TaskPersistencePort {
   }
 
   async runBdJson(args: string[]): Promise<unknown> {
+    if (args[0] === "update") {
+      return this.bdClient.updateTask(args);
+    }
     return this.bdClient.runBdJson(args);
   }
 

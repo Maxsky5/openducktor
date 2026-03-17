@@ -2,6 +2,20 @@ use super::*;
 use serde::Deserialize;
 
 impl BeadsTaskStore {
+    fn beads_store_footprint_exists(beads_dir: &Path) -> bool {
+        beads_dir.join("dolt").exists() || beads_dir.join("beads.db").exists()
+    }
+
+    fn task_status_requires_custom_configuration(status: &TaskStatus) -> bool {
+        matches!(
+            status,
+            TaskStatus::SpecReady
+                | TaskStatus::ReadyForDev
+                | TaskStatus::AiReview
+                | TaskStatus::HumanReview
+        )
+    }
+
     pub(super) fn ensure_repo_initialized_impl(&self, repo_path: &Path) -> Result<()> {
         let repo_key = Self::repo_key(repo_path);
         let lock = self.repo_lock(&repo_key)?;
@@ -10,13 +24,12 @@ impl BeadsTaskStore {
             .map_err(|_| anyhow!("Beads repo lock poisoned"))?;
 
         let beads_dir = resolve_central_beads_dir(repo_path)?;
-        let database_path = beads_dir.join("beads.db");
-        if self.is_repo_cached_initialized(&repo_key)? && database_path.exists() {
+        let store_exists = Self::beads_store_footprint_exists(&beads_dir);
+        if self.is_repo_cached_initialized(&repo_key)? && store_exists {
             return Ok(());
         }
 
-        let (is_ready, reason) = self.verify_repo_initialized(repo_path, &beads_dir)?;
-        if !is_ready {
+        if !store_exists {
             let slug = compute_repo_slug(repo_path);
             let beads_dir_env = beads_dir.to_string_lossy().to_string();
             let (ok, _stdout, stderr) = self.command_runner.run_allow_failure_with_env(
@@ -34,7 +47,7 @@ impl BeadsTaskStore {
 
             if !ok {
                 let details = if stderr.trim().is_empty() {
-                    reason
+                    format!("bd init failed for {}", beads_dir.display())
                 } else {
                     stderr.trim().to_string()
                 };
@@ -44,19 +57,9 @@ impl BeadsTaskStore {
                     details
                 ));
             }
-
-            let (is_ready_after, reason_after) =
-                self.verify_repo_initialized(repo_path, &beads_dir)?;
-            if !is_ready_after {
-                return Err(anyhow!(
-                    "Beads init completed but store is not ready at {}: {}",
-                    beads_dir.display(),
-                    reason_after
-                ));
-            }
         }
 
-        self.ensure_custom_statuses(repo_path)?;
+        self.ensure_dolt_server_running(repo_path)?;
         self.mark_repo_initialized(&repo_key)?;
         Ok(())
     }
@@ -193,6 +196,9 @@ impl BeadsTaskStore {
         }
 
         if let Some(status) = patch.status {
+            if Self::task_status_requires_custom_configuration(&status) {
+                self.ensure_custom_statuses(repo_path)?;
+            }
             args.push("--status".to_string());
             args.push(status.as_cli_value().to_string());
         }

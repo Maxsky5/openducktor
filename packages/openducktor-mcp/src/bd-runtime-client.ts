@@ -1,4 +1,5 @@
-import { basename } from "node:path";
+import { existsSync } from "node:fs";
+import { basename, join } from "node:path";
 import {
   type BeadsDirResolver,
   CUSTOM_STATUS_VALUES,
@@ -17,6 +18,7 @@ export class BdRuntimeClient {
   private beadsDir: string | null;
   private readonly runProcess: ProcessRunner;
   private readonly resolveBeadsDir: BeadsDirResolver;
+  private customStatusesConfigured: boolean;
   private initialized: boolean;
   private initializationPromise: Promise<void> | null;
   private readonly repoPath: string;
@@ -26,6 +28,7 @@ export class BdRuntimeClient {
     this.beadsDir = beadsDir;
     this.runProcess = deps.runProcess ?? runProcess;
     this.resolveBeadsDir = deps.resolveBeadsDir ?? resolveCentralBeadsDir;
+    this.customStatusesConfigured = false;
     this.initialized = false;
     this.initializationPromise = null;
   }
@@ -37,6 +40,19 @@ export class BdRuntimeClient {
 
     this.beadsDir = await this.resolveBeadsDir(this.repoPath);
     return this.beadsDir;
+  }
+
+  private beadsStoreFootprintExists(beadsDir: string): boolean {
+    return existsSync(join(beadsDir, "dolt")) || existsSync(join(beadsDir, "beads.db"));
+  }
+
+  private statusRequiresCustomConfiguration(status: string): boolean {
+    return (
+      status === "spec_ready" ||
+      status === "ready_for_dev" ||
+      status === "ai_review" ||
+      status === "human_review"
+    );
   }
 
   async runBd(
@@ -81,22 +97,13 @@ export class BdRuntimeClient {
     }
 
     this.initializationPromise = (async () => {
-      const whereOutput = await this.runBd(["where"], { json: true, allowFailure: true });
-      let ready = false;
-
-      try {
-        const parsed = JSON.parse(whereOutput) as { path?: unknown };
-        ready = typeof parsed.path === "string" && parsed.path.trim().length > 0;
-      } catch {
-        ready = false;
-      }
-
-      if (!ready) {
+      const beadsDir = await this.ensureBeadsDir();
+      if (!this.beadsStoreFootprintExists(beadsDir)) {
         const slug = sanitizeSlug(basename(this.repoPath));
         await this.runBd(["init", "--quiet", "--skip-hooks", "--prefix", slug]);
       }
 
-      await this.runBd(["config", "set", "status.custom", CUSTOM_STATUS_VALUES]);
+      await this.runBd(["dolt", "start"]);
       this.initialized = true;
     })();
 
@@ -105,5 +112,25 @@ export class BdRuntimeClient {
     } finally {
       this.initializationPromise = null;
     }
+  }
+
+  async ensureCustomStatuses(): Promise<void> {
+    if (this.customStatusesConfigured) {
+      return;
+    }
+
+    await this.ensureInitialized();
+    await this.runBd(["config", "set", "status.custom", CUSTOM_STATUS_VALUES]);
+    this.customStatusesConfigured = true;
+  }
+
+  async updateTask(args: string[]): Promise<unknown> {
+    const statusIndex = args.indexOf("--status");
+    const nextStatus =
+      statusIndex >= 0 && statusIndex + 1 < args.length ? args[statusIndex + 1] : undefined;
+    if (typeof nextStatus === "string" && this.statusRequiresCustomConfiguration(nextStatus)) {
+      await this.ensureCustomStatuses();
+    }
+    return this.runBdJson(args);
   }
 }

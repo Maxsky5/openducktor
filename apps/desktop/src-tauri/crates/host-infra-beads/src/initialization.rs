@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+#[cfg(test)]
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
@@ -43,6 +44,7 @@ impl BeadsTaskStore {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn verify_repo_initialized(
         &self,
         repo_path: &Path,
@@ -85,6 +87,12 @@ impl BeadsTaskStore {
                 repo_path.display()
             )
         })?;
+        Ok(())
+    }
+
+    pub(crate) fn ensure_dolt_server_running(&self, repo_path: &Path) -> Result<()> {
+        self.run_bd(repo_path, &["dolt", "start"])
+            .with_context(|| format!("Failed to start Dolt server for {}", repo_path.display()))?;
         Ok(())
     }
 }

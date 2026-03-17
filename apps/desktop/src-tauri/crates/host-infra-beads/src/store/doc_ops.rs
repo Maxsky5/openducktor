@@ -211,6 +211,8 @@ impl BeadsTaskStore {
         markdown: &str,
         verdict: QaVerdict,
     ) -> Result<TaskCard> {
+        self.ensure_custom_statuses(repo_path)?;
+
         let (mut root, namespace_key, mut namespace_map) =
             self.load_namespace(repo_path, task_id)?;
         let mut documents_map = namespace_map
