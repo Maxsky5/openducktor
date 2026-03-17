@@ -20,7 +20,7 @@
     "@openducktor/adapters-tauri-host": "workspace:*",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
-    "@pierre/diffs": "^1.0.11",
+    "@pierre/diffs": "^1.1.0",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-popover": "^1.1.15",
@@ -45,13 +45,13 @@
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
-    "zustand": "^5.0.11"
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.2.1",
     "@tauri-apps/cli": "^2.10.1",
-    "@types/node": "^25.4.0",
+    "@types/node": "^25.5.0",
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.1",
     "@types/react-test-renderer": "^19.1.0",
