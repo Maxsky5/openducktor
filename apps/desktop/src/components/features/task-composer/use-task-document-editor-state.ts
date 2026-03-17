@@ -104,9 +104,7 @@ export function useTaskDocumentEditorState({
     plan: false,
   });
 
-  useEffect(() => {
-    documentsRef.current = documents;
-  }, [documents]);
+  documentsRef.current = documents;
 
   useEffect(() => {
     const contextChanged =

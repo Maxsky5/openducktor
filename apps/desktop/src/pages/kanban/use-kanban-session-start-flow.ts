@@ -134,34 +134,20 @@ export function useKanbanSessionStartFlow({
     repoSettings,
   });
 
-  useEffect(() => {
-    tasksRef.current = tasks;
-  }, [tasks]);
-
-  useEffect(() => {
-    sessionsRef.current = sessions;
-  }, [sessions]);
-
-  useEffect(() => {
-    sessionStartIntentRef.current = sessionStartIntent
-      ? {
-          taskId: sessionStartIntent.taskId,
-          role: sessionStartIntent.role,
-          scenario: sessionStartIntent.scenario,
-          startMode: sessionStartIntent.startMode,
-          postStartAction: sessionStartIntent.postStartAction,
-          ...(sessionStartIntent.message ? { message: sessionStartIntent.message } : {}),
-        }
-      : null;
-  }, [sessionStartIntent]);
-
-  useEffect(() => {
-    sessionStartSelectionRef.current = sessionStartSelection;
-  }, [sessionStartSelection]);
-
-  useEffect(() => {
-    sessionStartBeforeActionRef.current = sessionStartBeforeAction;
-  }, [sessionStartBeforeAction]);
+  tasksRef.current = tasks;
+  sessionsRef.current = sessions;
+  sessionStartIntentRef.current = sessionStartIntent
+    ? {
+        taskId: sessionStartIntent.taskId,
+        role: sessionStartIntent.role,
+        scenario: sessionStartIntent.scenario,
+        startMode: sessionStartIntent.startMode,
+        postStartAction: sessionStartIntent.postStartAction,
+        ...(sessionStartIntent.message ? { message: sessionStartIntent.message } : {}),
+      }
+    : null;
+  sessionStartSelectionRef.current = sessionStartSelection;
+  sessionStartBeforeActionRef.current = sessionStartBeforeAction;
 
   useEffect(() => {
     if (!pendingHumanReviewHydration) {

@@ -86,13 +86,8 @@ export function useAgentStudioHumanReviewFeedbackFlow({
     useState<HumanReviewFeedbackState | null>(null);
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
-  useEffect(() => {
-    sessionsForTaskRef.current = sessionsForTask;
-  }, [sessionsForTask]);
-
-  useEffect(() => {
-    selectedTaskRef.current = selectedTask;
-  }, [selectedTask]);
+  sessionsForTaskRef.current = sessionsForTask;
+  selectedTaskRef.current = selectedTask;
 
   useEffect(() => {
     if (!pendingHumanReviewHydration) {

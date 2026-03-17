@@ -89,9 +89,7 @@ export function useTaskDocuments(
     [taskCacheKey],
   );
 
-  useEffect(() => {
-    documentsRef.current = documents;
-  }, [documents]);
+  documentsRef.current = documents;
 
   useEffect(() => {
     const contextDidChange =

@@ -1,7 +1,7 @@
 import type { TaskApprovalContext, TaskCard } from "@openducktor/contracts";
 import { buildAgentMessagePrompt } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
@@ -91,9 +91,7 @@ export function useTaskApprovalFlow({
   const sessionsRef = useRef(sessions);
   const approvalRequestVersionRef = useRef(0);
 
-  useEffect(() => {
-    sessionsRef.current = sessions;
-  }, [sessions]);
+  sessionsRef.current = sessions;
 
   const reset = useCallback(() => {
     approvalRequestVersionRef.current += 1;
