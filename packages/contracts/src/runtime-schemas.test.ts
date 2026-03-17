@@ -510,7 +510,7 @@ describe("runtime schemas", () => {
     expect(parsed.descriptor.readOnlyRoleBlockedTools).not.toContain("bash");
   });
 
-  test("agent runtime role schemas and qa review target schema enforce boundaries", () => {
+  test("agent runtime role and buildContinuationTarget schemas enforce boundaries", () => {
     expect(runtimeInstanceSummaryRoleSchema.parse("workspace")).toBe("workspace");
     expect(() => runtimeInstanceSummaryRoleSchema.parse("planner")).toThrow();
     expect(buildContinuationTargetSourceSchema.parse("active_build_run")).toBe("active_build_run");

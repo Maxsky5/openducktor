@@ -90,7 +90,6 @@ export function useTaskOperations({
       try {
         const repoPath = requireActiveRepo(activeRepo);
         await options.run(repoPath);
-        await invalidateRepoTaskQueries(appQueryClient, repoPath);
         await refreshTaskData(repoPath);
         if (options.successTitle) {
           toast.success(options.successTitle, {
@@ -126,7 +125,6 @@ export function useTaskOperations({
       } catch (error) {
         console.warn("Pull request sync failed during task refresh", errorMessage(error));
       }
-      await invalidateRepoTaskQueries(appQueryClient, activeRepo);
       await refreshTaskData(activeRepo);
     } catch (error) {
       toast.error("Failed to refresh tasks", {
@@ -144,7 +142,6 @@ export function useTaskOperations({
         const repoPath = requireActiveRepo(activeRepo);
         const result = await host.taskPullRequestDetect(repoPath, taskId);
         if (result.outcome === "linked") {
-          await invalidateRepoTaskQueries(appQueryClient, repoPath);
           await refreshTaskData(repoPath);
           toast.success("Pull request linked", {
             description: `PR #${result.pullRequest.number}`,

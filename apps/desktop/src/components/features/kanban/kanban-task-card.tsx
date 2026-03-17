@@ -28,7 +28,6 @@ type RunningTaskSession = Pick<
 
 const toVisibleKanbanRunState = (
   runState: RunSummary["state"] | undefined,
-  _hasActiveSessions: boolean,
 ): VisibleKanbanRunState | undefined => {
   if (!runState) {
     return undefined;
@@ -323,7 +322,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   onHumanRequestChanges,
 }: KanbanTaskCardProps): ReactElement {
   const hasActiveSessions = activeSessions.length > 0;
-  const visibleRunState = toVisibleKanbanRunState(runState, hasActiveSessions);
+  const visibleRunState = toVisibleKanbanRunState(runState);
 
   return (
     <article

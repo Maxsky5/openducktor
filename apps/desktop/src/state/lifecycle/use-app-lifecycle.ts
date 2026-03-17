@@ -3,8 +3,6 @@ import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { subscribeRunEvents } from "@/lib/host-client";
-import { appQueryClient } from "@/lib/query-client";
-import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { prependRunEvent, shouldLoadChecks } from "./app-lifecycle-model";
@@ -107,13 +105,11 @@ export function useAppLifecycle({
         setRunCompletionSignal(parsed.data.runId, parsed.data.type);
         const repoPath = activeRepoRef.current;
         if (repoPath) {
-          void invalidateRepoTaskQueries(appQueryClient, repoPath)
-            .then(() => refreshTaskDataRef.current(repoPath))
-            .catch((error: unknown) => {
-              toast.error("Failed to refresh tasks", {
-                description: summarizeTaskLoadError(error),
-              });
+          void refreshTaskDataRef.current(repoPath).catch((error: unknown) => {
+            toast.error("Failed to refresh tasks", {
+              description: summarizeTaskLoadError(error),
             });
+          });
         }
       }
     })

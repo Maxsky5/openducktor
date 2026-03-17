@@ -272,11 +272,14 @@ const renderPage = async (): Promise<ReactTestRenderer> => {
   return renderer;
 };
 
+// Double Promise.resolve() intentionally flushes React's queued microtasks and batched updates.
+// maxAttempts controls how long we poll for the observed mock call.
 const waitForMockCall = async (
   fn: { mock: { calls: unknown[][] } },
   minCalls = 1,
+  maxAttempts = 10,
 ): Promise<void> => {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     if (fn.mock.calls.length >= minCalls) {
       return;
     }

@@ -1,6 +1,6 @@
 import type { IssueType, RunSummary, TaskCard } from "@openducktor/contracts";
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, Bug, CheckSquare, Layers3, PlayCircle, Sparkles } from "lucide-react";
+import { AlertTriangle, Bug, CheckSquare, Layers3, Sparkles } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { assertNever } from "@/lib/assert-never";
@@ -116,10 +116,14 @@ const runStateLabel = (value: VisibleKanbanRunState): string => {
 };
 
 const runStateIcon = (value: VisibleKanbanRunState): LucideIcon => {
-  if (value === "blocked" || value === "failed") {
-    return AlertTriangle;
+  switch (value) {
+    case "blocked":
+      return AlertTriangle;
+    case "failed":
+      return AlertTriangle;
+    default:
+      return assertNever(value, "Unhandled run state");
   }
-  return PlayCircle;
 };
 
 const runStateClassName = (value: VisibleKanbanRunState): string => {
