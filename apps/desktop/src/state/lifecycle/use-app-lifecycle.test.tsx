@@ -332,4 +332,84 @@ describe("useAppLifecycle", () => {
       });
     }
   });
+
+  test("does not show Beads preparation toast when task loading is slow but Beads is already ready", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const taskDeferred = createDeferred<void>();
+    const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthMap>();
+    const branchesDeferred = createDeferred<void>();
+
+    const Harness = ({ args }: { args: HookArgs }): ReactElement | null => {
+      useAppLifecycle(args);
+      return null;
+    };
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    const baseArgs: HookArgs = {
+      activeRepo: null,
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => branchesDeferred.promise),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo: mock(async () => ({
+        beadsOk: true,
+        beadsError: null,
+      })),
+      refreshRepoRuntimeHealthForRepo: mock(async () => runtimeHealthDeferred.promise),
+      runtimeKinds: ["opencode"],
+      refreshTaskData: mock(async () => taskDeferred.promise),
+      clearTaskData: mock(() => {}),
+      clearBranchData: mock(() => {}),
+      clearActiveBeadsCheck: mock(() => {}),
+      clearActiveRepoRuntimeHealth: mock(() => {}),
+      setIsLoadingTasks: mock((_value: boolean) => {}),
+      setIsLoadingChecks: mock((_value: boolean) => {}),
+      hasRuntimeCheck: mock(() => false),
+      hasCachedBeadsCheck: mock((_repoPath: string) => false),
+      hasCachedRepoRuntimeHealth: mock((_repoPath: string, _runtimeKinds) => false),
+      beadsPreparationToastDelayMs: 5,
+    };
+
+    try {
+      await act(async () => {
+        renderer = TestRenderer.create(createElement(Harness, { args: baseArgs }));
+      });
+      await flush();
+
+      await act(async () => {
+        renderer?.update(
+          createElement(Harness, {
+            args: {
+              ...baseArgs,
+              activeRepo: "/repo",
+            },
+          }),
+        );
+      });
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 15));
+      });
+
+      expect(toastLoading).not.toHaveBeenCalled();
+      expect(toastSuccess).not.toHaveBeenCalled();
+
+      await act(async () => {
+        taskDeferred.resolve();
+        runtimeHealthDeferred.resolve({});
+        branchesDeferred.resolve();
+        await flush();
+      });
+    } finally {
+      taskDeferred.resolve();
+      runtimeHealthDeferred.resolve({});
+      branchesDeferred.resolve();
+      await act(async () => {
+        renderer?.unmount();
+      });
+    }
+  });
 });

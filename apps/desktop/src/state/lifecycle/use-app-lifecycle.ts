@@ -9,7 +9,7 @@ import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { prependRunEvent, shouldLoadChecks } from "./app-lifecycle-model";
 
-const BEADS_PREPARATION_TOAST_DELAY_MS = 10_000;
+const BEADS_PREPARATION_TOAST_DELAY_MS = 1_000;
 
 type UseAppLifecycleArgs = {
   activeRepo: string | null;
@@ -179,7 +179,12 @@ export function useAppLifecycle({
 
       try {
         const beads = await refreshBeadsCheckForRepo(activeRepo, false);
+        clearTimeout(beadsPreparationTimer);
+
         if (!beads.beadsOk) {
+          if (!beadsPreparationToastShown) {
+            dismissBeadsPreparationToast();
+          }
           throw new Error(
             beads.beadsError ?? "Beads store is not initialized for this repository.",
           );
@@ -198,7 +203,6 @@ export function useAppLifecycle({
 
         await refreshTaskData(activeRepo);
       } finally {
-        clearTimeout(beadsPreparationTimer);
         if (!beadsPreparationToastShown) {
           dismissBeadsPreparationToast();
         }
