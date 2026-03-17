@@ -5,7 +5,6 @@ use super::super::{
 use super::CleanupMode;
 use anyhow::{anyhow, Result};
 use host_domain::{now_rfc3339, RunEvent, RunState, TaskStatus};
-use host_infra_system::remove_worktree;
 use std::path::Path;
 
 struct ReviewTransition {
@@ -76,7 +75,6 @@ impl AppService {
             },
         );
         self.apply_review_transition(run, &review_transition)?;
-        self.cleanup_worktree(run)?;
         self.emit_cleanup_events(
             emitter,
             run_id,
@@ -120,10 +118,6 @@ impl AppService {
             }
         }
         Ok(true)
-    }
-
-    fn cleanup_worktree(&self, run: &RunProcess) -> Result<()> {
-        remove_worktree(Path::new(&run.repo_path), Path::new(&run.worktree_path))
     }
 
     fn apply_blocked_transition(
@@ -201,14 +195,14 @@ impl AppService {
                 RunEvent::ReadyForManualDoneConfirmation {
                     run_id: run_id.to_string(),
                     message: format!(
-                        "Worktree cleanup script passed. Transitioning to {review_label}."
+                        "Post-complete hooks passed. Transitioning to {review_label} with the builder worktree retained."
                     ),
                     timestamp: now_rfc3339(),
                 }
             }
             CleanupEvent::RunCompleted { review_label } => RunEvent::RunFinished {
                 run_id: run_id.to_string(),
-                message: format!("Run completed; moved to {review_label}; worktree removed"),
+                message: format!("Run completed; moved to {review_label}; builder worktree retained"),
                 timestamp: now_rfc3339(),
                 success: true,
             },

@@ -144,6 +144,7 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
 
     let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
     assert!(matches!(run.state, RunState::Running));
+    let worktree_path = PathBuf::from(run.worktree_path.clone());
     assert_eq!(service.runs_list(Some(repo_path.as_str()))?.len(), 1);
 
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -167,6 +168,10 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
 
     assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Success, emitter.clone())?);
     assert!(service.runs_list(Some(repo_path.as_str()))?.is_empty());
+    assert!(
+        worktree_path.exists(),
+        "builder worktree should be retained while the task is under review"
+    );
 
     let state = task_state.lock().expect("task lock poisoned");
     assert!(state
@@ -192,6 +197,14 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
     assert!(emitted
         .iter()
         .any(|event| matches!(event, RunEvent::RunFinished { success: true, .. })));
+    assert!(emitted.iter().any(|event| matches!(
+        event,
+        RunEvent::RunFinished {
+            success: true,
+            message,
+            ..
+        } if message.contains("builder worktree retained")
+    )));
     let ready_for_review_index = emitted
         .iter()
         .position(|event| matches!(event, RunEvent::ReadyForManualDoneConfirmation { .. }))
