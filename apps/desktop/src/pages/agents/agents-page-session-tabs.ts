@@ -5,7 +5,11 @@ import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { buildRoleWorkflowMapForTask as resolveRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentWorkflowStepState } from "@/types/agent-workflow";
+import type {
+  AgentWorkflowStepAvailability,
+  AgentWorkflowStepLiveSession,
+  AgentWorkflowStepState,
+} from "@/types/agent-workflow";
 
 type PersistedTaskTabsPayload = {
   tabs: string[];
@@ -16,8 +20,6 @@ type PersistedTaskTabsState = {
   tabs: string[];
   activeTaskId: string | null;
 };
-
-type WorkflowStepState = AgentWorkflowStepState;
 
 export type SessionCreateOption = {
   id: string;
@@ -33,6 +35,50 @@ const ALL_AGENT_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
 const DEFAULT_PERSISTED_TABS_STATE: PersistedTaskTabsState = {
   tabs: [],
   activeTaskId: null,
+};
+
+type RoleSessionSummary = {
+  latestSession: AgentSessionState | null;
+  workflowSession: AgentSessionState | null;
+  liveSession: AgentWorkflowStepLiveSession;
+};
+
+const compareSessionRecency = (a: AgentSessionState, b: AgentSessionState): number => {
+  if (a.startedAt !== b.startedAt) {
+    return a.startedAt > b.startedAt ? -1 : 1;
+  }
+  if (a.sessionId === b.sessionId) {
+    return 0;
+  }
+  return a.sessionId > b.sessionId ? -1 : 1;
+};
+
+const toLiveSessionState = (session: AgentSessionState): AgentWorkflowStepLiveSession => {
+  if (session.pendingPermissions.length > 0 || session.pendingQuestions.length > 0) {
+    return "waiting_input";
+  }
+  if (session.status === "starting" || session.status === "running") {
+    return "running";
+  }
+  if (session.status === "error") {
+    return "error";
+  }
+  if (session.status === "stopped") {
+    return "stopped";
+  }
+  return "idle";
+};
+
+const deriveWorkflowAvailability = (
+  workflow: AgentWorkflowState,
+): AgentWorkflowStepAvailability => {
+  if (workflow.canSkip) {
+    return "optional";
+  }
+  if (workflow.available) {
+    return "available";
+  }
+  return "blocked";
 };
 
 const normalizeTaskTabs = (entries: unknown): string[] => {
@@ -51,15 +97,7 @@ const normalizeTaskTabs = (entries: unknown): string[] => {
 export const buildLatestSessionByTaskMap = (
   sessions: AgentSessionState[],
 ): Map<string, AgentSessionState> => {
-  const sortedSessions = [...sessions].sort((a, b) => {
-    if (a.startedAt !== b.startedAt) {
-      return a.startedAt > b.startedAt ? -1 : 1;
-    }
-    if (a.sessionId === b.sessionId) {
-      return 0;
-    }
-    return a.sessionId > b.sessionId ? -1 : 1;
-  });
+  const sortedSessions = [...sessions].sort(compareSessionRecency);
   const next = new Map<string, AgentSessionState>();
   for (const entry of sortedSessions) {
     if (!next.has(entry.taskId)) {
@@ -148,60 +186,88 @@ export const buildRoleEnabledMapForTask = (task: TaskCard | null): Record<AgentR
 export const buildWorkflowStateByRole = (params: {
   task: TaskCard | null;
   roleWorkflowsByTask: Record<AgentRole, AgentWorkflowState>;
-  latestSessionByRole: Record<AgentRole, AgentSessionState | null>;
-}): Record<AgentRole, WorkflowStepState> => {
-  const stateByRole: Record<AgentRole, WorkflowStepState> = {
-    spec: "blocked",
-    planner: "blocked",
-    build: "blocked",
-    qa: "blocked",
+  roleSessionByRole: Record<AgentRole, RoleSessionSummary>;
+}): Record<AgentRole, AgentWorkflowStepState> => {
+  const stateByRole: Record<AgentRole, AgentWorkflowStepState> = {
+    spec: {
+      tone: "blocked",
+      availability: "blocked",
+      completion: "not_started",
+      liveSession: "none",
+    },
+    planner: {
+      tone: "blocked",
+      availability: "blocked",
+      completion: "not_started",
+      liveSession: "none",
+    },
+    build: {
+      tone: "blocked",
+      availability: "blocked",
+      completion: "not_started",
+      liveSession: "none",
+    },
+    qa: {
+      tone: "blocked",
+      availability: "blocked",
+      completion: "not_started",
+      liveSession: "none",
+    },
   };
   const qaRejected = isQaRejectedTask(params.task);
 
   for (const role of ALL_AGENT_ROLES) {
-    const latestRoleSession = params.latestSessionByRole[role];
-    const hasRunningRoleSession =
-      latestRoleSession?.status === "starting" || latestRoleSession?.status === "running";
-    if (hasRunningRoleSession) {
-      stateByRole[role] = "in_progress";
-      continue;
-    }
+    const workflow = params.roleWorkflowsByTask[role];
+    const sessionSummary = params.roleSessionByRole[role];
+    const availability = deriveWorkflowAvailability(workflow);
+    const latestRoleSession = sessionSummary.latestSession;
+    const liveSession = sessionSummary.liveSession;
+    let completion: AgentWorkflowStepState["completion"] = "not_started";
+
     if (role === "build" && qaRejected) {
-      stateByRole[role] = "done";
-      continue;
-    }
-    if (
+      completion = "done";
+    } else if (
       role === "build" &&
       latestRoleSession?.scenario === "build_after_qa_rejected" &&
       (latestRoleSession.status === "idle" || latestRoleSession.status === "stopped") &&
       params.roleWorkflowsByTask.qa.completed &&
       !qaRejected
     ) {
-      stateByRole[role] = "done";
-      continue;
+      completion = "done";
+    } else if (role === "qa" && qaRejected) {
+      completion = "rejected";
+    } else if (workflow.completed) {
+      completion = "done";
+    } else if (
+      liveSession === "waiting_input" ||
+      liveSession === "running" ||
+      liveSession === "error" ||
+      (liveSession === "idle" && workflow.available)
+    ) {
+      completion = "in_progress";
     }
-    if (role === "qa" && qaRejected) {
-      stateByRole[role] = "rejected";
-      continue;
-    }
-    if (params.roleWorkflowsByTask[role].completed) {
-      stateByRole[role] = "done";
-      continue;
-    }
-    const hasStartedRoleSession = latestRoleSession?.status === "idle";
-    if (params.roleWorkflowsByTask[role].available && hasStartedRoleSession) {
-      stateByRole[role] = "in_progress";
-      continue;
-    }
-    if (params.roleWorkflowsByTask[role].available) {
-      stateByRole[role] = "available";
-      continue;
-    }
-    if (params.roleWorkflowsByTask[role].canSkip) {
-      stateByRole[role] = "optional";
-      continue;
-    }
-    stateByRole[role] = "blocked";
+
+    const tone: AgentWorkflowStepState["tone"] =
+      completion === "rejected"
+        ? "rejected"
+        : liveSession === "waiting_input"
+          ? "waiting_input"
+          : liveSession === "running"
+            ? "in_progress"
+            : liveSession === "error"
+              ? "failed"
+              : completion === "done"
+                ? "done"
+                : completion === "in_progress"
+                  ? "in_progress"
+                  : availability;
+
+    stateByRole[role] = {
+      tone,
+      availability,
+      completion,
+      liveSession,
+    };
   }
 
   return stateByRole;
@@ -217,18 +283,52 @@ export const buildLatestSessionByRoleMap = (
     qa: null,
   };
 
-  const sortedSessions = [...sessionsForTask].sort((a, b) => {
-    if (a.startedAt !== b.startedAt) {
-      return a.startedAt > b.startedAt ? -1 : 1;
-    }
-    if (a.sessionId === b.sessionId) {
-      return 0;
-    }
-    return a.sessionId > b.sessionId ? -1 : 1;
-  });
+  const sortedSessions = [...sessionsForTask].sort(compareSessionRecency);
 
   for (const role of ALL_AGENT_ROLES) {
     map[role] = sortedSessions.find((entry) => entry.role === role) ?? null;
+  }
+
+  return map;
+};
+
+export const buildRoleSessionSummaryMap = (
+  sessionsForTask: AgentSessionState[],
+): Record<AgentRole, RoleSessionSummary> => {
+  const sortedSessions = [...sessionsForTask].sort(compareSessionRecency);
+  const map: Record<AgentRole, RoleSessionSummary> = {
+    spec: {
+      latestSession: null,
+      workflowSession: null,
+      liveSession: "none",
+    },
+    planner: {
+      latestSession: null,
+      workflowSession: null,
+      liveSession: "none",
+    },
+    build: {
+      latestSession: null,
+      workflowSession: null,
+      liveSession: "none",
+    },
+    qa: {
+      latestSession: null,
+      workflowSession: null,
+      liveSession: "none",
+    },
+  };
+
+  for (const role of ALL_AGENT_ROLES) {
+    const roleSessions = sortedSessions.filter((entry) => entry.role === role);
+    const latestSession = roleSessions[0] ?? null;
+    const workflowSession = latestSession;
+
+    map[role] = {
+      latestSession,
+      workflowSession,
+      liveSession: workflowSession ? toLiveSessionState(workflowSession) : "none",
+    };
   }
 
   return map;

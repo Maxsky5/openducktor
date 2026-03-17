@@ -33,7 +33,6 @@ type AgentWorkflowStep = {
   icon: AgentRoleOption["icon"];
   state: AgentWorkflowStepState;
   sessionId: string | null;
-  hasRunningSession: boolean;
 };
 
 type AgentStudioSessionSelectorModel = {
@@ -74,61 +73,75 @@ export type AgentStudioHeaderModel = {
   agentStudioReady: boolean;
 };
 
-const WORKFLOW_STEP_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
+const WORKFLOW_STEP_CLASSES: Record<AgentWorkflowStepState["tone"], string> = {
   in_progress: "border-info-border bg-info-surface hover:bg-info-surface text-info-muted shadow-sm",
   done: "border-success-border bg-success-surface hover:bg-success-surface text-success-muted shadow-sm",
   available: "border-input bg-card text-foreground",
-  optional: "border-warning-border bg-warning-surface text-warning-muted",
+  optional: "border-input bg-card text-foreground",
   rejected:
     "border-rose-300 bg-rose-50 text-rose-700 shadow-sm dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
+  waiting_input:
+    "border-warning-border bg-warning-surface hover:bg-warning-surface text-warning-muted shadow-sm",
+  failed:
+    "border-destructive-border bg-destructive-surface hover:bg-destructive-surface text-destructive-muted shadow-sm",
   blocked: "border-border bg-muted text-muted-foreground",
 };
 
-const WORKFLOW_CONNECTOR_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
+const WORKFLOW_CONNECTOR_CLASSES: Record<AgentWorkflowStepState["tone"], string> = {
   done: "text-success-ring",
   in_progress: "text-info-ring",
   available: "text-muted-foreground/40",
-  optional: "text-warning-ring",
+  optional: "text-muted-foreground/40",
   rejected: "text-rose-500",
+  waiting_input: "text-warning-ring",
+  failed: "text-destructive-ring",
   blocked: "text-muted-foreground/20",
 };
 
-const WORKFLOW_SELECTION_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
+const WORKFLOW_SELECTION_CLASSES: Record<AgentWorkflowStepState["tone"], string> = {
   done: "ring-2 ring-offset-2 ring-offset-card ring-success-ring",
   in_progress: "ring-2 ring-offset-2 ring-offset-card ring-info-ring",
   available: "ring-2 ring-offset-2 ring-offset-card ring-muted-foreground/50",
-  optional: "ring-2 ring-offset-2 ring-offset-card ring-warning-ring",
+  optional: "ring-2 ring-offset-2 ring-offset-card ring-muted-foreground/50",
   rejected: "ring-2 ring-offset-2 ring-offset-card ring-rose-400",
+  waiting_input: "ring-2 ring-offset-2 ring-offset-card ring-warning-ring",
+  failed: "ring-2 ring-offset-2 ring-offset-card ring-destructive-ring",
   blocked: "ring-2 ring-offset-2 ring-offset-card ring-warning-ring",
 };
 
-const workflowStepClassName = (state: AgentWorkflowStep["state"]): string =>
-  WORKFLOW_STEP_CLASSES[state] ?? WORKFLOW_STEP_CLASSES.blocked;
+const workflowStepClassName = (state: AgentWorkflowStepState): string =>
+  WORKFLOW_STEP_CLASSES[state.tone] ?? WORKFLOW_STEP_CLASSES.blocked;
 
-const workflowConnectorClassName = (state: AgentWorkflowStep["state"] | "blocked"): string =>
-  WORKFLOW_CONNECTOR_CLASSES[state] ?? WORKFLOW_CONNECTOR_CLASSES.blocked;
+const workflowConnectorClassName = (state: AgentWorkflowStepState): string =>
+  WORKFLOW_CONNECTOR_CLASSES[state.tone] ?? WORKFLOW_CONNECTOR_CLASSES.blocked;
 
-const workflowSelectionClassName = (
-  isSelected: boolean,
-  state: AgentWorkflowStep["state"],
-): string =>
-  isSelected ? (WORKFLOW_SELECTION_CLASSES[state] ?? WORKFLOW_SELECTION_CLASSES.blocked) : "";
+const workflowSelectionClassName = (isSelected: boolean, state: AgentWorkflowStepState): string =>
+  isSelected ? (WORKFLOW_SELECTION_CLASSES[state.tone] ?? WORKFLOW_SELECTION_CLASSES.blocked) : "";
+
+const workflowBorderStyleClassName = (state: AgentWorkflowStepState): string =>
+  state.tone === "optional" ? "border-dashed" : "";
 
 const workflowStepHint = (entry: AgentWorkflowStep): string => {
-  if (entry.sessionId) {
-    if (entry.state === "in_progress") {
-      return "Step in progress";
-    }
-    return "Open latest session for this role";
+  if (entry.state.liveSession === "waiting_input") {
+    return "Session is waiting for input";
   }
-  if (entry.state === "available") {
+  if (entry.state.liveSession === "running") {
+    return "Step in progress";
+  }
+  if (entry.state.liveSession === "error") {
+    return "Latest session failed";
+  }
+  if (entry.state.completion === "rejected") {
+    return "Latest QA review rejected this task";
+  }
+  if (entry.sessionId) {
+    return "Open latest relevant session for this role";
+  }
+  if (entry.state.tone === "available") {
     return "No session yet for this role";
   }
-  if (entry.state === "optional") {
+  if (entry.state.tone === "optional") {
     return "Optional step for this task";
-  }
-  if (entry.state === "rejected") {
-    return "Latest QA review rejected this task";
   }
   return "Blocked by workflow state";
 };
@@ -267,7 +280,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
           {workflowSteps.map((entry, index) => {
             const Icon = entry.icon;
             const isSelected = selectedRole === entry.role;
-            const shouldSpinInProgress = entry.state === "in_progress" && entry.hasRunningSession;
+            const shouldSpinInProgress = entry.state.liveSession === "running";
             return (
               <div key={entry.role} className="flex min-w-0 items-center gap-2">
                 <Button
@@ -277,6 +290,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                   className={cn(
                     "h-10 shrink-0 gap-2 rounded-lg border px-4 text-sm transition-colors",
                     workflowStepClassName(entry.state),
+                    workflowBorderStyleClassName(entry.state),
                     workflowSelectionClassName(isSelected, entry.state),
                     "cursor-pointer",
                   )}
@@ -288,24 +302,36 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                 >
                   <Icon className="size-4" />
                   {entry.label}
-                  {entry.state === "done" ? (
+                  {entry.state.tone === "done" ? (
                     <Check className="size-3.5 text-success-accent" />
                   ) : null}
-                  {entry.state === "in_progress" && shouldSpinInProgress ? (
+                  {entry.state.liveSession === "waiting_input" ? (
+                    <CircleDashed className="size-3.5" />
+                  ) : null}
+                  {entry.state.tone === "in_progress" && shouldSpinInProgress ? (
                     <LoaderCircle className="size-3.5 animate-spin" />
                   ) : null}
-                  {entry.state === "in_progress" && !shouldSpinInProgress ? (
+                  {entry.state.tone === "in_progress" && !shouldSpinInProgress ? (
                     <CircleDotDashed className="size-3.5" />
                   ) : null}
-                  {entry.state === "available" ? <Circle className="size-3" /> : null}
-                  {entry.state === "optional" ? <CircleDashed className="size-3" /> : null}
-                  {entry.state === "rejected" ? <AlertTriangle className="size-3.5" /> : null}
+                  {entry.state.tone === "available" ? <Circle className="size-3" /> : null}
+                  {entry.state.tone === "optional" ? <CircleDashed className="size-3" /> : null}
+                  {entry.state.tone === "rejected" || entry.state.tone === "failed" ? (
+                    <AlertTriangle className="size-3.5" />
+                  ) : null}
                 </Button>
                 {index < workflowSteps.length - 1 ? (
                   <ChevronRight
                     className={cn(
                       "size-4 shrink-0",
-                      workflowConnectorClassName(workflowSteps[index + 1]?.state ?? "blocked"),
+                      workflowConnectorClassName(
+                        workflowSteps[index + 1]?.state ?? {
+                          tone: "blocked",
+                          availability: "blocked",
+                          completion: "not_started",
+                          liveSession: "none",
+                        },
+                      ),
                     )}
                   />
                 ) : null}

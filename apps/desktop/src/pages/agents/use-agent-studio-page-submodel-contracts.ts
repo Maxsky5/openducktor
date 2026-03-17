@@ -9,7 +9,7 @@ export type WorkflowHeaderContext = Pick<
   WorkflowModelContext,
   | "workflowStateByRole"
   | "selectedInteractionRole"
-  | "latestSessionByRole"
+  | "workflowSessionByRole"
   | "sessionSelectorValue"
   | "sessionSelectorGroups"
   | "sessionCreateOptions"
