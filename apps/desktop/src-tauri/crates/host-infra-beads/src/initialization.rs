@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Context, Result};
-#[cfg(test)]
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
@@ -44,7 +43,6 @@ impl BeadsTaskStore {
         Ok(())
     }
 
-    #[cfg(test)]
     pub(crate) fn verify_repo_initialized(
         &self,
         repo_path: &Path,
@@ -58,6 +56,22 @@ impl BeadsTaskStore {
             &[("BEADS_DIR", beads_dir_env.as_str())],
         )?;
 
+        if !stdout.trim().is_empty() {
+            // Treat malformed JSON as a hard failure: the CLI contract for
+            // `bd where --json` is broken in that case, so attempting repair
+            // would mask an unexpected protocol error.
+            let payload: Value = serde_json::from_str(&stdout)
+                .context("Failed to parse `bd where --json` output")?;
+            if payload.get("path").and_then(Value::as_str).is_some() {
+                return Ok((true, String::new()));
+            }
+            if let Some(error) = payload.get("error").and_then(Value::as_str) {
+                return Ok((false, error.trim().to_string()));
+            }
+
+            return Ok((false, "bd where returned malformed payload".to_string()));
+        }
+
         if !ok {
             let error = if stderr.trim().is_empty() {
                 "bd where failed".to_string()
@@ -67,13 +81,13 @@ impl BeadsTaskStore {
             return Ok((false, error));
         }
 
-        let payload: Value =
-            serde_json::from_str(&stdout).context("Failed to parse `bd where --json` output")?;
-        if payload.get("path").and_then(Value::as_str).is_some() {
-            return Ok((true, String::new()));
-        }
+        Ok((false, "bd where returned empty payload".to_string()))
+    }
 
-        Ok((false, "bd where returned malformed payload".to_string()))
+    pub(crate) fn repair_repo_store(&self, repo_path: &Path) -> Result<()> {
+        self.run_bd(repo_path, &["doctor", "--fix", "--yes"])
+            .with_context(|| format!("Failed to repair Beads store for {}", repo_path.display()))?;
+        Ok(())
     }
 
     pub(crate) fn ensure_custom_statuses(&self, repo_path: &Path) -> Result<()> {
