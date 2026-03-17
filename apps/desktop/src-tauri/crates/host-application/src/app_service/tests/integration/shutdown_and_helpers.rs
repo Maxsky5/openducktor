@@ -27,9 +27,9 @@ use crate::app_service::test_support::{
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
-    parse_mcp_command_json, read_opencode_process_registry, read_opencode_version,
-    resolve_mcp_command, resolve_opencode_binary_path, terminate_child_process,
-    terminate_process_by_pid, validate_parent_relationships_for_update,
+    find_openducktor_workspace_root, parse_mcp_command_json, read_opencode_process_registry,
+    read_opencode_version, resolve_mcp_command, resolve_opencode_binary_path,
+    terminate_child_process, terminate_process_by_pid, validate_parent_relationships_for_update,
     with_locked_opencode_process_registry, AgentRuntimeProcess, OpencodeProcessRegistryInstance,
     RunProcess, RuntimeCleanupTarget, TrackedOpencodeProcessGuard,
     OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
@@ -544,6 +544,26 @@ fn resolve_opencode_binary_path_uses_home_fallback_when_override_and_path_missin
         Some(home_opencode.to_string_lossy().as_ref())
     );
     let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn find_openducktor_workspace_root_uses_workspace_markers_instead_of_fixed_depth() -> Result<()> {
+    let root = unique_temp_path("workspace-root-discovery");
+    let nested_manifest = root.join("apps").join("desktop").join("src-tauri");
+    fs::create_dir_all(root.join("apps"))?;
+    fs::create_dir_all(root.join("packages"))?;
+    fs::create_dir_all(&nested_manifest)?;
+    fs::write(root.join("bun.lock"), "")?;
+    fs::write(
+        root.join("package.json"),
+        r#"{"name":"openducktor","private":true}"#,
+    )?;
+
+    let resolved = find_openducktor_workspace_root(&nested_manifest)?;
+    assert_eq!(resolved, root);
+
+    let _ = fs::remove_dir_all(resolved);
     Ok(())
 }
 

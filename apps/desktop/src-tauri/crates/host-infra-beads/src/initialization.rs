@@ -91,6 +91,9 @@ impl BeadsTaskStore {
     }
 
     pub(crate) fn ensure_dolt_server_running(&self, repo_path: &Path) -> Result<()> {
+        // `bd dolt start` is the official warm-up path and remains cheap when the
+        // server is already running, which keeps later task operations off the
+        // slow auto-start path.
         self.run_bd(repo_path, &["dolt", "start"])
             .with_context(|| format!("Failed to start Dolt server for {}", repo_path.display()))?;
         Ok(())

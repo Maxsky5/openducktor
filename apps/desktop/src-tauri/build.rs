@@ -21,9 +21,16 @@ fn copy_sidecar_binary(source: &Path, destination: &Path) -> std::io::Result<()>
 }
 
 fn workspace_root(manifest_dir: &Path) -> Result<PathBuf, String> {
+    fn is_workspace_root_candidate(path: &Path) -> bool {
+        path.join("bun.lock").is_file()
+            && path.join("package.json").is_file()
+            && path.join("apps").is_dir()
+            && path.join("packages").is_dir()
+    }
+
     manifest_dir
         .ancestors()
-        .nth(3)
+        .find(|candidate| is_workspace_root_candidate(candidate))
         .map(Path::to_path_buf)
         .ok_or_else(|| {
             format!(

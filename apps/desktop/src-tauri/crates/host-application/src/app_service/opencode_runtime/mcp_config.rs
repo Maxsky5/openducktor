@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use host_infra_system::{resolve_central_beads_dir, resolve_command_path};
 use serde_json::json;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub(crate) fn parse_mcp_command_json(raw: &str) -> Result<Vec<String>> {
     let parsed: serde_json::Value =
@@ -30,6 +30,21 @@ pub(crate) fn parse_mcp_command_json(raw: &str) -> Result<Vec<String>> {
     Ok(command)
 }
 
+fn is_workspace_root_candidate(path: &Path) -> bool {
+    path.join("bun.lock").is_file()
+        && path.join("package.json").is_file()
+        && path.join("apps").is_dir()
+        && path.join("packages").is_dir()
+}
+
+pub(crate) fn find_openducktor_workspace_root(start: &Path) -> Result<PathBuf> {
+    start
+        .ancestors()
+        .find(|candidate| is_workspace_root_candidate(candidate))
+        .map(Path::to_path_buf)
+        .ok_or_else(|| anyhow!("Unable to resolve OpenDucktor workspace root from manifest path"))
+}
+
 pub(crate) fn default_mcp_workspace_root() -> Result<String> {
     let from_env = std::env::var("OPENDUCKTOR_WORKSPACE_ROOT")
         .ok()
@@ -40,9 +55,7 @@ pub(crate) fn default_mcp_workspace_root() -> Result<String> {
     }
 
     let compiled_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let root = compiled_path.ancestors().nth(5).ok_or_else(|| {
-        anyhow!("Unable to resolve OpenDucktor workspace root from manifest path")
-    })?;
+    let root = find_openducktor_workspace_root(compiled_path)?;
     Ok(root.to_string_lossy().to_string())
 }
 

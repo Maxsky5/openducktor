@@ -197,7 +197,7 @@ fn augmented_process_path(path_override: Option<&str>) -> Option<OsString> {
 pub fn resolve_command_path(program: &str) -> Result<Option<String>> {
     let path = Path::new(program);
     if path.components().count() > 1 {
-        return Ok(Some(path.to_string_lossy().to_string()));
+        return Ok(existing_file_path(path.to_path_buf()));
     }
 
     if let Some(explicit_path) = explicit_command_override(program)? {
@@ -332,8 +332,9 @@ pub fn version_command(program: &str, args: &[&str]) -> Option<String> {
 mod tests {
     use super::{
         bundled_command_path_from_executable, command_env_override_name, command_exists,
-        command_path, explicit_command_override, run_command, run_command_allow_failure,
-        run_command_allow_failure_with_env, run_command_with_env, version_command,
+        command_path, explicit_command_override, resolve_command_path, run_command,
+        run_command_allow_failure, run_command_allow_failure_with_env, run_command_with_env,
+        version_command,
     };
     use std::{
         fs,
@@ -485,5 +486,21 @@ mod tests {
         std::env::remove_var(&env_name);
 
         assert!(error.to_string().contains("Configured command override"));
+    }
+
+    #[test]
+    fn resolve_command_path_requires_explicit_paths_to_exist() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        let missing = std::env::temp_dir().join(format!("odt-missing-explicit-command-{nonce}"));
+        let missing_str = missing.to_string_lossy().to_string();
+
+        let resolved =
+            resolve_command_path(missing_str.as_str()).expect("path resolution should succeed");
+
+        assert!(resolved.is_none());
+        assert!(!command_exists(missing_str.as_str()));
     }
 }

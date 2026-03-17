@@ -3,6 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  bundledCommandCandidates,
   commandEnvOverrideName,
   resolveBundledCommandPath,
   resolveCommandExecutable,
@@ -35,6 +36,25 @@ describe("beads runtime command resolution", () => {
     setExecPath(fakeExecPath);
 
     expect(resolveBundledCommandPath("bd")).toBe(fakeBdPath);
+
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("resolveBundledCommandPath checks Windows executable suffixes for bundled sidecars", () => {
+    const root = mkdtempSync(join(tmpdir(), "odt-mcp-bundled-win-"));
+    const executableDir = join(root, "bin");
+    mkdirSync(executableDir, { recursive: true });
+    const fakeExecPath = join(executableDir, "openducktor-mcp.exe");
+    const fakeBdPath = join(executableDir, "bd.exe");
+    writeFileSync(fakeExecPath, "");
+    writeFileSync(fakeBdPath, "");
+
+    expect(resolveBundledCommandPath("bd", "win32", ".EXE;.CMD", fakeExecPath)).toBe(fakeBdPath);
+    expect(bundledCommandCandidates("bd", "win32", ".EXE;.CMD")).toEqual([
+      "bd",
+      "bd.exe",
+      "bd.cmd",
+    ]);
 
     rmSync(root, { recursive: true, force: true });
   });

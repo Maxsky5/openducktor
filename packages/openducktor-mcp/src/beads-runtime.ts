@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, resolve } from "node:path";
+import { basename, dirname, extname, resolve } from "node:path";
 
 export const CUSTOM_STATUS_VALUES = "spec_ready,ready_for_dev,ai_review,human_review";
 
@@ -64,9 +64,54 @@ export const commandEnvOverrideName = (command: string): string => {
   return `OPENDUCKTOR_${sanitized}_PATH`;
 };
 
-export const resolveBundledCommandPath = (command: string): string | null => {
-  const sibling = resolve(dirname(process.execPath), command);
-  return existsSync(sibling) ? sibling : null;
+const DEFAULT_WINDOWS_EXECUTABLE_EXTENSIONS = [".exe", ".cmd", ".bat", ".com"];
+
+const normalizeWindowsExecutableExtension = (extension: string): string => {
+  const trimmed = extension.trim();
+  if (trimmed.length === 0) {
+    return "";
+  }
+  return (trimmed.startsWith(".") ? trimmed : `.${trimmed}`).toLowerCase();
+};
+
+export const bundledCommandCandidates = (
+  command: string,
+  platform = process.platform,
+  pathExt = process.env.PATHEXT,
+): string[] => {
+  if (platform !== "win32") {
+    return [command];
+  }
+
+  if (extname(command).length > 0) {
+    return [command];
+  }
+
+  const configuredExtensions = normalizeOptionalInput(pathExt)
+    ?.split(";")
+    .map(normalizeWindowsExecutableExtension)
+    .filter((extension) => extension.length > 0);
+  const extensions =
+    configuredExtensions && configuredExtensions.length > 0
+      ? configuredExtensions
+      : DEFAULT_WINDOWS_EXECUTABLE_EXTENSIONS;
+
+  return [command, ...extensions.map((extension) => `${command}${extension}`)];
+};
+
+export const resolveBundledCommandPath = (
+  command: string,
+  platform = process.platform,
+  pathExt = process.env.PATHEXT,
+  executablePath = process.execPath,
+): string | null => {
+  for (const candidateName of bundledCommandCandidates(command, platform, pathExt)) {
+    const sibling = resolve(dirname(executablePath), candidateName);
+    if (existsSync(sibling)) {
+      return sibling;
+    }
+  }
+  return null;
 };
 
 export const resolveCommandExecutable = (command: string): string => {
