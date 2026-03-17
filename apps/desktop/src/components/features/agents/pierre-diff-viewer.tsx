@@ -1,6 +1,7 @@
 import { getSingularPatch } from "@pierre/diffs";
 import { FileDiff, useWorkerPool } from "@pierre/diffs/react";
-import { type CSSProperties, memo, type ReactElement, useEffect, useMemo } from "react";
+import type { DiffRendererInstance } from "@pierre/diffs/worker";
+import { type CSSProperties, memo, type ReactElement, useEffect, useId, useMemo } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { selectRenderableDiff } from "./renderable-patch";
 
@@ -58,16 +59,18 @@ export const PierreDiffPreloader = memo(function PierreDiffPreloader({
   filePath,
 }: PierreDiffPreloaderProps): null {
   const workerPool = useWorkerPool();
+  const preloadRendererId = useId();
   const { fileDiff, normalizedPatch } = useMemo(
     () => getRenderableFileDiff(patch, filePath),
     [filePath, patch],
   );
-  const preloadRenderer = useMemo(
+  const preloadRenderer = useMemo<DiffRendererInstance>(
     () => ({
+      __id: `pierre-diff-preloader:${preloadRendererId}`,
       onHighlightSuccess: (_diff: unknown, _result: unknown, _options: unknown) => undefined,
       onHighlightError: (_error: unknown) => undefined,
     }),
-    [],
+    [preloadRendererId],
   );
 
   useEffect(() => {
