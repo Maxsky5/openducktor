@@ -211,16 +211,28 @@ impl AppService {
 
         self.task_store
             .clear_agent_sessions_by_roles(context.repo_dir(), task_id, &["build", "qa"])
-            .with_context(|| format!("Failed to clear builder and QA sessions for {task_id}"))?;
+            .with_context(|| format!("Failed to clear builder and QA sessions for {task_id}"))
+            .map_err(|error| {
+                with_reset_cleanup_progress(error, &removed_worktrees, &deleted_branches)
+            })?;
         self.task_store
             .clear_qa_reports(context.repo_dir(), task_id)
-            .with_context(|| format!("Failed to clear QA reports for {task_id}"))?;
+            .with_context(|| format!("Failed to clear QA reports for {task_id}"))
+            .map_err(|error| {
+                with_reset_cleanup_progress(error, &removed_worktrees, &deleted_branches)
+            })?;
         self.task_store
             .set_pull_request(context.repo_dir(), task_id, None)
-            .with_context(|| format!("Failed to clear linked pull request for {task_id}"))?;
+            .with_context(|| format!("Failed to clear linked pull request for {task_id}"))
+            .map_err(|error| {
+                with_reset_cleanup_progress(error, &removed_worktrees, &deleted_branches)
+            })?;
         self.task_store
             .set_direct_merge_record(context.repo_dir(), task_id, None)
-            .with_context(|| format!("Failed to clear direct merge metadata for {task_id}"))?;
+            .with_context(|| format!("Failed to clear direct merge metadata for {task_id}"))
+            .map_err(|error| {
+                with_reset_cleanup_progress(error, &removed_worktrees, &deleted_branches)
+            })?;
 
         let updated = self
             .task_store
@@ -240,7 +252,10 @@ impl AppService {
                     parent_id: None,
                 },
             )
-            .with_context(|| format!("Failed to reset implementation for {task_id}"))?;
+            .with_context(|| format!("Failed to reset implementation for {task_id}"))
+            .map_err(|error| {
+                with_reset_cleanup_progress(error, &removed_worktrees, &deleted_branches)
+            })?;
 
         if let Some(index) = context
             .repo

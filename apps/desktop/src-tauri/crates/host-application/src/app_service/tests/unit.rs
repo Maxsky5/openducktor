@@ -68,6 +68,7 @@ fn app_service_new_constructor_is_callable() -> Result<()> {
             agent_sessions: Vec::new(),
             upserted_sessions: Vec::new(),
             cleared_session_roles: Vec::new(),
+            clear_agent_sessions_error: None,
             cleared_qa_reports: Vec::new(),
             pull_requests: std::collections::HashMap::new(),
             direct_merge_records: std::collections::HashMap::new(),
@@ -511,6 +512,8 @@ fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_
 
     let updated = service.task_reset_implementation(&repo_path.to_string_lossy(), "task-1")?;
     assert_eq!(updated.status, TaskStatus::ReadyForDev);
+    assert!(updated.pull_request.is_none());
+    assert!(!updated.document_summary.qa_report.has);
 
     let state = task_state.lock().expect("task store lock poisoned");
     assert_eq!(
@@ -976,6 +979,82 @@ fn task_reset_implementation_reports_partial_cleanup_progress_when_branch_delete
     assert!(error_text.contains("Retry reset to finish cleanup safely."));
     let state = task_state.lock().expect("task store lock poisoned");
     assert!(state.cleared_session_roles.is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn task_reset_implementation_reports_partial_cleanup_progress_when_store_cleanup_fails(
+) -> Result<()> {
+    let repo_path = unique_temp_path("reset-implementation-store-failure-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+    let worktree_base = repo_path.join("worktrees");
+    let build_worktree = worktree_base.join("task-1");
+    fs::create_dir_all(&build_worktree)?;
+
+    let task = make_task("task-1", "task", TaskStatus::AiReview);
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![task],
+        vec![GitBranch {
+            name: "odt/task-1".to_string(),
+            is_current: false,
+            is_remote: false,
+        }],
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            ..Default::default()
+        },
+    )?;
+    git_state
+        .lock()
+        .expect("git state lock poisoned")
+        .current_branches_by_path
+        .insert(
+            build_worktree.to_string_lossy().to_string(),
+            host_domain::GitCurrentBranch {
+                name: Some("odt/task-1".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
+    {
+        let mut state = task_state.lock().expect("task store lock poisoned");
+        state.clear_agent_sessions_error = Some("clear sessions failed".to_string());
+        state.agent_sessions = vec![AgentSessionDocument {
+            session_id: "build-session".to_string(),
+            external_session_id: None,
+            task_id: Some("task-1".to_string()),
+            role: "build".to_string(),
+            scenario: Some("build_implementation_start".to_string()),
+            status: Some("stopped".to_string()),
+            started_at: "2026-03-17T11:00:00Z".to_string(),
+            updated_at: None,
+            ended_at: None,
+            runtime_kind: "opencode".to_string(),
+            working_directory: build_worktree.to_string_lossy().to_string(),
+            selected_model: None,
+        }];
+    }
+
+    let error = service
+        .task_reset_implementation(&repo_path.to_string_lossy(), "task-1")
+        .expect_err("store cleanup failure should report cleanup progress");
+    let error_text = format!("{error:#}");
+    assert!(error_text.contains("clear sessions failed"));
+    assert!(error_text.contains(build_worktree.to_string_lossy().as_ref()));
+    assert!(error_text.contains("odt/task-1"));
+    assert!(error_text.contains("Retry reset to finish cleanup safely."));
 
     Ok(())
 }

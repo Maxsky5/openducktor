@@ -71,6 +71,9 @@ export function useTaskResetFlow({
     (nextTaskId: string, options?: ResetImplementationOptions): void => {
       const nextTask = tasks.find((entry) => entry.id === nextTaskId);
       if (!nextTask) {
+        toast.error("Unable to reset implementation", {
+          description: `Task ${nextTaskId} was not found. Refresh tasks and try again.`,
+        });
         return;
       }
 

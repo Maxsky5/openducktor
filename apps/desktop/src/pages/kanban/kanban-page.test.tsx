@@ -1023,15 +1023,17 @@ describe("KanbanPage session start modal flow", () => {
         pendingQuestions: 0,
       },
     ];
-    loadAgentSessionsMock.mockImplementationOnce(async () => {
-      throw new Error("refresh failed");
-    });
     const renderer = await renderPage();
 
     await act(async () => {
       (latestKanbanColumnProps?.onResetImplementation as (taskId: string) => void)("TASK-123");
       await Promise.resolve();
       await Promise.resolve();
+    });
+
+    loadAgentSessionsMock.mockClear();
+    loadAgentSessionsMock.mockImplementationOnce(async () => {
+      throw new Error("refresh failed");
     });
 
     await act(async () => {
@@ -1045,6 +1047,25 @@ describe("KanbanPage session start modal flow", () => {
     expect(toastErrorMock).toHaveBeenCalledWith("Failed to refresh sessions", {
       description: "refresh failed",
     });
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("reset implementation reports a missing task instead of silently returning", async () => {
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onResetImplementation as (taskId: string) => void)("MISSING-1");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(toastErrorMock).toHaveBeenCalledWith("Unable to reset implementation", {
+      description: "Task MISSING-1 was not found. Refresh tasks and try again.",
+    });
+    expect(latestResetImplementationModalModel).toBeNull();
 
     await act(async () => {
       renderer.unmount();

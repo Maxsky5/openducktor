@@ -96,6 +96,7 @@ pub(crate) struct TaskStoreState {
     pub(crate) agent_sessions: Vec<AgentSessionDocument>,
     pub(crate) upserted_sessions: Vec<(String, AgentSessionDocument)>,
     pub(crate) cleared_session_roles: Vec<(String, Vec<String>)>,
+    pub(crate) clear_agent_sessions_error: Option<String>,
     pub(crate) cleared_qa_reports: Vec<String>,
     pub(crate) pull_requests: HashMap<String, PullRequestRecord>,
     pub(crate) direct_merge_records: HashMap<String, DirectMergeRecord>,
@@ -351,6 +352,9 @@ impl TaskStore for FakeTaskStore {
         roles: &[&str],
     ) -> Result<()> {
         let mut state = self.state.lock().expect("task store lock poisoned");
+        if let Some(message) = state.clear_agent_sessions_error.as_ref() {
+            return Err(anyhow!(message.clone()));
+        }
         state.cleared_session_roles.push((
             task_id.to_string(),
             roles.iter().map(|role| (*role).to_string()).collect(),
@@ -885,6 +889,7 @@ pub(crate) fn build_service_with_git_state_enforced(
         agent_sessions: Vec::new(),
         upserted_sessions: Vec::new(),
         cleared_session_roles: Vec::new(),
+        clear_agent_sessions_error: None,
         cleared_qa_reports: Vec::new(),
         pull_requests: HashMap::new(),
         direct_merge_records: HashMap::new(),
@@ -955,6 +960,7 @@ pub(crate) fn build_service_with_git_state(
         agent_sessions: Vec::new(),
         upserted_sessions: Vec::new(),
         cleared_session_roles: Vec::new(),
+        clear_agent_sessions_error: None,
         cleared_qa_reports: Vec::new(),
         pull_requests: HashMap::new(),
         direct_merge_records: HashMap::new(),
@@ -1376,6 +1382,7 @@ pub(crate) fn build_service_with_store(
         agent_sessions: Vec::new(),
         upserted_sessions: Vec::new(),
         cleared_session_roles: Vec::new(),
+        clear_agent_sessions_error: None,
         cleared_qa_reports: Vec::new(),
         pull_requests: HashMap::new(),
         direct_merge_records: HashMap::new(),
