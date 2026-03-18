@@ -614,11 +614,32 @@ export const buildAgentMessagePromptBundle = (
   input: BuildAgentMessagePromptInput,
 ): BuiltAgentPrompt => {
   if (input.templateId === "message.build_rebase_conflict_resolution") {
+    const currentBranch = input.git?.currentBranch?.trim();
     const operationLabel = input.git?.operationLabel?.trim();
+    const targetBranch = input.git?.targetBranch?.trim();
+    const conflictedFiles = input.git?.conflictedFiles;
     const conflictOutput = input.git?.conflictOutput?.trim();
-    if (!operationLabel || !conflictOutput) {
+    const missingFields: string[] = [];
+
+    if (!operationLabel) {
+      missingFields.push("operationLabel");
+    }
+    if (!currentBranch) {
+      missingFields.push("currentBranch");
+    }
+    if (!targetBranch) {
+      missingFields.push("targetBranch");
+    }
+    if (!Array.isArray(conflictedFiles) || conflictedFiles.length === 0) {
+      missingFields.push("conflictedFiles");
+    }
+    if (!conflictOutput) {
+      missingFields.push("conflictOutput");
+    }
+
+    if (missingFields.length > 0) {
       throw new Error(
-        'Missing required git conflict context for "message.build_rebase_conflict_resolution": operationLabel and conflictOutput are required.',
+        `Missing required git conflict context for "message.build_rebase_conflict_resolution": ${missingFields.join(", ")}.`,
       );
     }
   }

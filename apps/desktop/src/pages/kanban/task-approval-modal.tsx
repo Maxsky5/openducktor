@@ -243,6 +243,7 @@ export function TaskApprovalModal({
       "Finish later to keep the task in Human Review while the local merge stays ready to publish.";
   }
   const completionActionDisabled = model.isSubmitting || completionContextError !== null;
+  const finishLaterDisabled = model.isSubmitting;
   const completionErrorMessage = completionContextError ?? model.errorMessage;
 
   return (
@@ -494,7 +495,7 @@ export function TaskApprovalModal({
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={completionActionDisabled}
+                  disabled={finishLaterDisabled}
                   onClick={model.onSkipDirectMergeCompletion}
                 >
                   Finish Later

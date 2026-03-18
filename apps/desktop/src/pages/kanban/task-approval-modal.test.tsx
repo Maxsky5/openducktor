@@ -108,5 +108,7 @@ describe("TaskApprovalModal", () => {
     );
     expect(html).not.toContain("the target branch");
     expect(html).not.toContain("Local merge ready");
+    expect(html).toMatch(/<button[^>]*>Finish Later<\/button>/);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Mark Task Done<\/button>/);
   });
 });

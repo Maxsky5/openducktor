@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO } from "@/features/git-conflict-resolution";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -154,7 +155,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(args.startAgentSession).toHaveBeenCalledWith({
         taskId: "task-1",
         role: "build",
-        scenario: "build_rebase_conflict_resolution",
+        scenario: BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO,
         selectedModel: {
           runtimeKind: "opencode",
           providerId: "openai",
@@ -210,6 +211,37 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(args.startAgentSession).toHaveBeenCalledTimes(0);
       expect(args.sendAgentMessage).toHaveBeenCalledTimes(0);
       expect(args.scheduleQueryUpdate).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("fails fast when the paused worktree is missing from the conflict payload", async () => {
+    const args = createBaseArgs();
+    const harness = createHookHarness(args);
+
+    try {
+      await harness.mount();
+
+      let resolutionPromise: Promise<boolean> | null = null;
+      await harness.run((state) => {
+        resolutionPromise = state.handleResolveRebaseConflict(
+          createConflict({
+            workingDir: undefined,
+          }),
+        );
+      });
+
+      if (resolutionPromise === null) {
+        throw new Error("Expected conflict resolution promise");
+      }
+
+      await expect(resolutionPromise).rejects.toThrow(
+        "Missing paused worktree: conflict.workingDir is required.",
+      );
+
+      expect(args.startAgentSession).toHaveBeenCalledTimes(0);
+      expect(args.sendAgentMessage).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
     }

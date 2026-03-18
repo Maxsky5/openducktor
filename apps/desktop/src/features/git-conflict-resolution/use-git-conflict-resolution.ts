@@ -7,6 +7,7 @@ import { loadEffectivePromptOverrides } from "@/state/operations/prompt-override
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { getGitConflictCopy } from "./conflict-copy";
+import { BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO } from "./constants";
 
 export type GitConflictResolutionDecision =
   | {
@@ -122,7 +123,11 @@ export function useGitConflictResolution({
         throw new Error("Cannot resolve a git conflict because no repository is selected.");
       }
 
-      const currentWorktreePath = normalizePath(conflict.workingDir ?? activeRepo);
+      if (conflict.workingDir == null) {
+        throw new Error("Missing paused worktree: conflict.workingDir is required.");
+      }
+
+      const currentWorktreePath = normalizePath(conflict.workingDir);
       if (!currentWorktreePath) {
         throw new Error(
           "Cannot resolve a git conflict because the paused worktree is unavailable.",
@@ -184,7 +189,7 @@ export function useGitConflictResolution({
       const sessionId = await startAgentSession({
         taskId: taskContext.taskId,
         role: "build",
-        scenario: "build_rebase_conflict_resolution",
+        scenario: BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO,
         selectedModel: defaultBuilderSession?.selectedModel ?? null,
         sendKickoff: false,
         startMode: "fresh",

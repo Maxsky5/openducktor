@@ -286,7 +286,7 @@ describe("kickoff and permission prompts", () => {
         },
       }),
     ).toThrow(
-      'Missing required git conflict context for "message.build_rebase_conflict_resolution": operationLabel and conflictOutput are required.',
+      'Missing required git conflict context for "message.build_rebase_conflict_resolution": operationLabel, currentBranch, conflictOutput.',
     );
   });
 

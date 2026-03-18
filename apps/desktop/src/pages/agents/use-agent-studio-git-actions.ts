@@ -56,6 +56,21 @@ type UseAgentStudioGitActionsInput = {
 const BUILDER_LOCK_REASON = "Git actions are disabled while the Builder session is working.";
 const CONFLICT_LOCK_REASON = "Git actions are disabled while git conflicts are unresolved.";
 
+const getGitActionsLockReason = (
+  isBuilderSessionWorking: boolean,
+  activeGitConflict: GitConflict | null,
+): string | null => {
+  if (isBuilderSessionWorking) {
+    return BUILDER_LOCK_REASON;
+  }
+
+  if (activeGitConflict) {
+    return CONFLICT_LOCK_REASON;
+  }
+
+  return null;
+};
+
 const toErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
@@ -125,11 +140,7 @@ export function useAgentStudioGitActions({
     [detectedConflict, gitConflict],
   );
   const isGitActionsLocked = isBuilderSessionWorking || activeGitConflict != null;
-  const gitActionsLockReason = isBuilderSessionWorking
-    ? BUILDER_LOCK_REASON
-    : activeGitConflict
-      ? CONFLICT_LOCK_REASON
-      : null;
+  const gitActionsLockReason = getGitActionsLockReason(isBuilderSessionWorking, activeGitConflict);
 
   const clearActionErrors = useCallback(() => {
     setCommitError(null);
