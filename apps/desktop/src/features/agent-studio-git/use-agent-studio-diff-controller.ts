@@ -101,7 +101,7 @@ export function useAgentStudioDiffController({
   const [controllerState, setControllerState] = useState<DiffControllerState>(
     createInitialControllerState,
   );
-  const [diffScope, setDiffScope] = useState<DiffScope>("target");
+  const [diffScope, setDiffScope] = useState<DiffScope>("uncommitted");
   const requestContextKeyRef = useRef<string | null>(null);
   const {
     beginRequest,
@@ -144,6 +144,15 @@ export function useAgentStudioDiffController({
     resetRequestTracking();
     setControllerState(createInitialControllerState());
   }, [resetRequestTracking]);
+
+  const resetToDefaultScope = useCallback((): void => {
+    if (diffScopeRef.current === "uncommitted") {
+      return;
+    }
+
+    diffScopeRef.current = "uncommitted";
+    setDiffScope("uncommitted");
+  }, []);
 
   const hasLoadContextChanged = useCallback(
     (path: string, nextTargetBranch: string, nextWorkingDir: string | null): boolean =>
@@ -433,6 +442,7 @@ export function useAgentStudioDiffController({
 
     if (repoPath && !shouldBlockDiffLoading) {
       if (hasContextChanged) {
+        resetToDefaultScope();
         resetControllerState();
       }
 
@@ -440,7 +450,7 @@ export function useAgentStudioDiffController({
         repoPath,
         targetBranch,
         workingDir,
-        scope: diffScopeRef.current,
+        scope: hasContextChanged ? "uncommitted" : diffScopeRef.current,
         force: hasContextChanged,
       });
       return;
@@ -448,18 +458,21 @@ export function useAgentStudioDiffController({
 
     if (repoPath) {
       if (hasContextChanged) {
+        resetToDefaultScope();
         resetControllerState();
       }
       return;
     }
 
     requestContextKeyRef.current = null;
+    resetToDefaultScope();
     resetControllerState();
   }, [
     loadData,
     repoPath,
     requestContextKey,
     resetControllerState,
+    resetToDefaultScope,
     shouldBlockDiffLoading,
     targetBranch,
     workingDir,

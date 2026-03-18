@@ -25,7 +25,7 @@ export const DIFF_SCOPE_OPTIONS: Array<{
   },
   {
     scope: "target",
-    label: "Compare to target",
+    label: "Branch changes",
     testId: "agent-studio-git-diff-scope-target",
   },
 ];

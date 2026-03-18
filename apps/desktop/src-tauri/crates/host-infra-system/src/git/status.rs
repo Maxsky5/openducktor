@@ -10,6 +10,9 @@ use super::util::{combine_output, normalize_non_empty};
 use super::GitCliPort;
 
 const UPSTREAM_TARGET_BRANCH: &str = "@{upstream}";
+const EMPTY_TREE_SHA1: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+const EMPTY_TREE_SHA256: &str =
+    "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
 
 fn resolve_effective_target_branch(
     requested_target_branch: &str,
@@ -90,7 +93,19 @@ impl GitCliPort {
                         || self.get_status_unchecked(repo_path),
                         || match diff_scope {
                             GitDiffScope::Target if effective_target_branch.is_none() => Ok(None),
-                            _ => self
+                            GitDiffScope::Target => self
+                                .load_branch_changes_diff_payload_unchecked(
+                                    repo_path,
+                                    effective_target_branch
+                                        .as_deref()
+                                        .ok_or_else(|| {
+                                            anyhow!(
+                                                "target scope requires an effective target branch"
+                                            )
+                                        })?,
+                                )
+                                .map(Some),
+                            GitDiffScope::Uncommitted => self
                                 .load_diff_payload_unchecked(repo_path, diff_target)
                                 .map(Some),
                         },
@@ -298,6 +313,63 @@ impl GitCliPort {
         }
 
         Ok((numstat_stdout, diff_stdout))
+    }
+
+    fn load_branch_changes_diff_payload_unchecked(
+        &self,
+        repo_path: &Path,
+        target_branch: &str,
+    ) -> Result<(String, String)> {
+        let diff_base = self.resolve_branch_diff_base_unchecked(repo_path, target_branch)?;
+        self.load_diff_payload_unchecked(repo_path, Some(diff_base.as_str()))
+    }
+
+    fn resolve_branch_diff_base_unchecked(
+        &self,
+        repo_path: &Path,
+        target_branch: &str,
+    ) -> Result<String> {
+        let target = normalize_non_empty(target_branch, "target branch")?;
+        let (ok, stdout, stderr) = self.run_git_allow_failure(
+            repo_path,
+            &["merge-base", "--end-of-options", &target, "HEAD"],
+        )?;
+
+        if !ok {
+            if stdout.trim().is_empty() && stderr.trim().is_empty() {
+                return self.empty_tree_oid_unchecked(repo_path).with_context(|| {
+                    format!("Failed to resolve branch diff base for unrelated histories against {target}")
+                });
+            }
+
+            return Err(anyhow!(
+                "git merge-base {target} HEAD failed for target branch '{target}': {}",
+                combine_output(stdout, stderr)
+            ));
+        }
+
+        let merge_base = stdout
+            .lines()
+            .map(str::trim)
+            .find(|line| !line.is_empty())
+            .ok_or_else(|| anyhow!("git merge-base {target} HEAD returned no merge base"))?;
+
+        Ok(merge_base.to_string())
+    }
+
+    fn empty_tree_oid_unchecked(&self, repo_path: &Path) -> Result<String> {
+        let object_format = self
+            .run_git(repo_path, &["rev-parse", "--show-object-format"])
+            .context("Failed to read git object format for branch diff base")?;
+        let object_format = object_format.trim();
+
+        match object_format {
+            "sha1" => Ok(EMPTY_TREE_SHA1.to_string()),
+            "sha256" => Ok(EMPTY_TREE_SHA256.to_string()),
+            _ => Err(anyhow!(
+                "Unsupported git object format for empty tree branch diff base: {object_format}"
+            )),
+        }
     }
 
     pub(super) fn commits_ahead_behind_unchecked(

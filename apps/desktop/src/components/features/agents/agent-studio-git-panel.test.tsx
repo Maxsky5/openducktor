@@ -244,7 +244,7 @@ describe("AgentStudioGitPanel", () => {
       findByTestId(root, "agent-studio-git-diff-scope-uncommitted").children.join(""),
     ).toContain("Uncommitted changes");
     expect(findByTestId(root, "agent-studio-git-diff-scope-target").children.join("")).toContain(
-      "Compare to target",
+      "Branch changes",
     );
     expect(hasVisibleText(root, "/tmp/worktree")).toBe(false);
 
@@ -418,7 +418,7 @@ describe("AgentStudioGitPanel", () => {
     expect(findByTestId(root, "agent-studio-git-push-button")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-commit-message-input")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-diff-scope-target").children.join("")).toContain(
-      "Compare to upstream",
+      "Branch changes",
     );
 
     await act(async () => {
@@ -450,7 +450,7 @@ describe("AgentStudioGitPanel", () => {
     expect(
       hasVisibleText(
         root,
-        "This branch is not tracking an upstream branch yet. Push it first to create one, then compare against it here.",
+        "This branch is not tracking an upstream branch yet. Push it first to create one, then its branch changes will appear here.",
       ),
     ).toBe(true);
     expect(Boolean(findByTestId(root, "agent-studio-git-pull-button").props.disabled)).toBe(true);
