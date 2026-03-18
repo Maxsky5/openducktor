@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BdRuntimeClient } from "./bd-runtime-client";
+import { BeadsRuntimeClient } from "./beads-runtime-client";
 
 type ProcessCall = {
   command: string;
@@ -14,7 +14,7 @@ type ProcessCall = {
 const tempRoots: string[] = [];
 
 const makeTempBeadsDir = (): string => {
-  const root = mkdtempSync(join(tmpdir(), "odt-bd-runtime-client-"));
+  const root = mkdtempSync(join(tmpdir(), "odt-beads-runtime-client-"));
   tempRoots.push(root);
   return join(root, ".beads");
 };
@@ -25,11 +25,11 @@ afterEach(() => {
   }
 });
 
-describe("BdRuntimeClient", () => {
+describe("BeadsRuntimeClient", () => {
   test("ensureInitialized initializes missing stores and starts dolt", async () => {
     const beadsDir = makeTempBeadsDir();
     const calls: ProcessCall[] = [];
-    const client = new BdRuntimeClient("/repo/fairnest", beadsDir, {
+    const client = new BeadsRuntimeClient("/repo/fairnest", beadsDir, {
       runProcess: async (command, args, cwd, env) => {
         calls.push({ command, args: [...args], cwd, env });
         return { ok: true, stdout: "", stderr: "" };
@@ -51,7 +51,7 @@ describe("BdRuntimeClient", () => {
     const beadsDir = makeTempBeadsDir();
     mkdirSync(join(beadsDir, "dolt"), { recursive: true });
     const calls: ProcessCall[] = [];
-    const client = new BdRuntimeClient("/repo/fairnest", beadsDir, {
+    const client = new BeadsRuntimeClient("/repo/fairnest", beadsDir, {
       runProcess: async (command, args, cwd, env) => {
         calls.push({ command, args: [...args], cwd, env });
         return { ok: true, stdout: "", stderr: "" };
@@ -67,7 +67,7 @@ describe("BdRuntimeClient", () => {
     const beadsDir = makeTempBeadsDir();
     mkdirSync(join(beadsDir, "dolt"), { recursive: true });
     const calls: ProcessCall[] = [];
-    const client = new BdRuntimeClient("/repo/fairnest", beadsDir, {
+    const client = new BeadsRuntimeClient("/repo/fairnest", beadsDir, {
       runProcess: async (command, args, cwd, env) => {
         calls.push({ command, args: [...args], cwd, env });
         return { ok: true, stdout: "", stderr: "" };
@@ -87,7 +87,7 @@ describe("BdRuntimeClient", () => {
     const beadsDir = makeTempBeadsDir();
     mkdirSync(join(beadsDir, "dolt"), { recursive: true });
     const calls: ProcessCall[] = [];
-    const client = new BdRuntimeClient("/repo/fairnest", beadsDir, {
+    const client = new BeadsRuntimeClient("/repo/fairnest", beadsDir, {
       runProcess: async (command, args, cwd, env) => {
         calls.push({ command, args: [...args], cwd, env });
         return { ok: true, stdout: "{}", stderr: "" };

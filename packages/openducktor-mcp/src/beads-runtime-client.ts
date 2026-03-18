@@ -9,12 +9,12 @@ import {
   sanitizeSlug,
 } from "./beads-runtime";
 
-export type BdRuntimeClientDeps = {
+export type BeadsRuntimeClientDeps = {
   runProcess?: ProcessRunner;
   resolveBeadsDir?: BeadsDirResolver;
 };
 
-export class BdRuntimeClient {
+export class BeadsRuntimeClient {
   private beadsDir: string | null;
   private readonly runProcess: ProcessRunner;
   private readonly resolveBeadsDir: BeadsDirResolver;
@@ -23,7 +23,7 @@ export class BdRuntimeClient {
   private initializationPromise: Promise<void> | null;
   private readonly repoPath: string;
 
-  constructor(repoPath: string, beadsDir: string | null, deps: BdRuntimeClientDeps = {}) {
+  constructor(repoPath: string, beadsDir: string | null, deps: BeadsRuntimeClientDeps = {}) {
     this.repoPath = repoPath;
     this.beadsDir = beadsDir;
     this.runProcess = deps.runProcess ?? runProcess;

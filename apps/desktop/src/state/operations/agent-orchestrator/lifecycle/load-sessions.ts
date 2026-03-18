@@ -3,7 +3,6 @@ import type {
   RunSummary,
   RuntimeInstanceSummary,
   RuntimeKind,
-  RuntimeRoute,
   TaskCard,
 } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
@@ -14,7 +13,7 @@ import { loadRuntimeListFromQuery, runtimeQueryKeys } from "@/state/queries/runt
 import { loadRepoRunsFromQuery } from "@/state/queries/tasks";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
-import { toRuntimeConnection } from "../runtime/runtime";
+import { resolveRuntimeRouteConnection, toRuntimeConnection } from "../runtime/runtime";
 import { createRepoStaleGuard, normalizeWorkingDirectory } from "../support/core";
 import { normalizePersistedSelection } from "../support/models";
 import {
@@ -47,13 +46,6 @@ const readPersistedRuntimeKind = ({
     throw new Error(`Persisted session '${sessionId}' is missing runtime kind metadata.`);
   }
   return resolvedRuntimeKind;
-};
-
-const resolveRuntimeRouteEndpoint = (runtimeRoute: RuntimeRoute): string => {
-  switch (runtimeRoute.type) {
-    case "local_http":
-      return runtimeRoute.endpoint;
-  }
 };
 
 type CreateLoadAgentSessionsArgs = {
@@ -314,24 +306,30 @@ export const createLoadAgentSessions = ({
       if (record.role === "build" || record.role === "qa") {
         const run = findRunByWorkingDirectory(runtimeKind, workingDirectory);
         if (run) {
-          const runtimeEndpoint = resolveRuntimeRouteEndpoint(run.runtimeRoute);
+          const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
+            run.runtimeRoute,
+            workingDirectory,
+          );
           return {
             ok: true,
             runtimeKind,
             runtimeEndpoint,
-            runtimeConnection: toRuntimeConnection(runtimeEndpoint, workingDirectory),
+            runtimeConnection,
           };
         }
       }
 
       const runtime = findRuntimeByWorkingDirectory(runtimeKind, workingDirectory);
       if (runtime) {
-        const runtimeEndpoint = resolveRuntimeRouteEndpoint(runtime.runtimeRoute);
+        const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
+          runtime.runtimeRoute,
+          workingDirectory,
+        );
         return {
           ok: true,
           runtimeKind,
           runtimeEndpoint,
-          runtimeConnection: toRuntimeConnection(runtimeEndpoint, workingDirectory),
+          runtimeConnection,
         };
       }
 
@@ -349,12 +347,15 @@ export const createLoadAgentSessions = ({
             reason: `Runtime ${runtimeKind} is unavailable for session hydration.`,
           };
         }
-        const runtimeEndpoint = resolveRuntimeRouteEndpoint(workspaceRuntime.runtimeRoute);
+        const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
+          workspaceRuntime.runtimeRoute,
+          workingDirectory,
+        );
         return {
           ok: true,
           runtimeKind,
           runtimeEndpoint,
-          runtimeConnection: toRuntimeConnection(runtimeEndpoint, workingDirectory),
+          runtimeConnection,
         };
       }
 

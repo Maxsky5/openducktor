@@ -21,3 +21,6 @@ apps/desktop/src-tauri/crates/*/Cargo.lock
 
 .sisyphus/
 .desloppify/
+.agents/skills/desloppify/
+scorecard.png
+packages/openducktor-mcp/tsconfig.tsbuildinfo

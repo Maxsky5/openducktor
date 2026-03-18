@@ -1,17 +1,19 @@
 import { createTauriHostClient, type TauriHostClient } from "@openducktor/adapters-tauri-host";
 import { getBrowserBackendUrl } from "@/lib/browser-mode";
 
-const toErrorMessage = async (response: Response): Promise<string> => {
-  try {
-    const payload = (await response.json()) as { error?: unknown };
-    if (typeof payload.error === "string" && payload.error.trim()) {
-      return payload.error;
-    }
-  } catch {}
-
+export const readBrowserLiveErrorMessage = async (response: Response): Promise<string> => {
   const text = await response.text().catch(() => "");
-  if (text.trim()) {
-    return text.trim();
+  const trimmedText = text.trim();
+
+  if (trimmedText) {
+    try {
+      const payload = JSON.parse(trimmedText) as { error?: unknown };
+      if (typeof payload.error === "string" && payload.error.trim()) {
+        return payload.error;
+      }
+    } catch {}
+
+    return trimmedText;
   }
 
   return `Browser backend request failed with status ${response.status}.`;
@@ -30,7 +32,7 @@ const createHttpInvoke = () => {
     });
 
     if (!response.ok) {
-      throw new Error(await toErrorMessage(response));
+      throw new Error(await readBrowserLiveErrorMessage(response));
     }
 
     return (await response.json()) as T;

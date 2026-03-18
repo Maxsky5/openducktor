@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { BdPersistence } from "./bd-persistence";
-import type { BdRuntimeClient } from "./bd-runtime-client";
+import { BeadsPersistence } from "./beads-persistence";
+import type { BeadsRuntimeClient } from "./beads-runtime-client";
 import type { RawIssue } from "./contracts";
 
 type FakeClientState = {
@@ -15,7 +15,7 @@ const createClient = (
     ensureInitialized?: () => Promise<void>;
   },
   state: FakeClientState,
-): BdRuntimeClient => {
+): BeadsRuntimeClient => {
   return {
     runBdJson: async (args: string[]) => {
       state.calls.push([...args]);
@@ -34,10 +34,10 @@ const createClient = (
         await handlers.ensureInitialized();
       }
     },
-  } as unknown as BdRuntimeClient;
+  } as unknown as BeadsRuntimeClient;
 };
 
-describe("BdPersistence", () => {
+describe("BeadsPersistence", () => {
   test("ensureInitialized delegates to runtime client", async () => {
     const state: FakeClientState = {
       calls: [],
@@ -50,7 +50,7 @@ describe("BdPersistence", () => {
       state,
     );
 
-    const persistence = new BdPersistence(client, "openducktor");
+    const persistence = new BeadsPersistence(client, "openducktor");
     await persistence.ensureInitialized();
 
     expect(state.ensureInitializedCalls).toBe(1);
@@ -76,7 +76,7 @@ describe("BdPersistence", () => {
       state,
     );
 
-    const persistence = new BdPersistence(client, "openducktor");
+    const persistence = new BeadsPersistence(client, "openducktor");
     const result = await persistence.showRawIssue("task-1");
 
     expect(result).toEqual(issue);
@@ -95,7 +95,7 @@ describe("BdPersistence", () => {
       state,
     );
 
-    const persistence = new BdPersistence(client, "openducktor");
+    const persistence = new BeadsPersistence(client, "openducktor");
 
     await expect(persistence.showRawIssue("missing")).rejects.toThrow("Task not found: missing");
   });
@@ -112,7 +112,7 @@ describe("BdPersistence", () => {
       state,
     );
 
-    const persistence = new BdPersistence(client, "openducktor");
+    const persistence = new BeadsPersistence(client, "openducktor");
     await expect(persistence.showRawIssue("task-1")).rejects.toThrow(
       "Invalid issue payload for task task-1",
     );
@@ -143,7 +143,7 @@ describe("BdPersistence", () => {
       state,
     );
 
-    const persistence = new BdPersistence(client, "openducktor");
+    const persistence = new BeadsPersistence(client, "openducktor");
     const tasks = await persistence.listTasks();
 
     expect(tasks).toEqual([
@@ -170,7 +170,7 @@ describe("BdPersistence", () => {
       state,
     );
 
-    const persistence = new BdPersistence(client, "openducktor");
+    const persistence = new BeadsPersistence(client, "openducktor");
     await expect(persistence.listTasks()).rejects.toThrow("bd list did not return an array");
   });
 
@@ -194,7 +194,7 @@ describe("BdPersistence", () => {
       state,
     );
 
-    const persistence = new BdPersistence(client, "openducktor");
+    const persistence = new BeadsPersistence(client, "openducktor");
 
     await expect(persistence.listTasks()).rejects.toThrow(
       'Invalid Beads status for task task-2: received {"raw":"open"}.',
@@ -221,7 +221,7 @@ describe("BdPersistence", () => {
       state,
     );
 
-    const persistence = new BdPersistence(client, "openducktor");
+    const persistence = new BeadsPersistence(client, "openducktor");
 
     await expect(persistence.listTasks()).rejects.toThrow(
       'Invalid Beads issue type for task task-3: received "decision".',
@@ -262,7 +262,7 @@ describe("BdPersistence", () => {
       state,
     );
 
-    const persistence = new BdPersistence(client, "openducktor");
+    const persistence = new BeadsPersistence(client, "openducktor");
 
     await expect(persistence.listTasks()).resolves.toEqual([
       {
@@ -306,7 +306,7 @@ describe("BdPersistence", () => {
       state,
     );
 
-    const persistence = new BdPersistence(client, "openducktor");
+    const persistence = new BeadsPersistence(client, "openducktor");
 
     await expect(
       persistence.createTask({
@@ -331,7 +331,7 @@ describe("BdPersistence", () => {
       state,
     );
 
-    const persistence = new BdPersistence(client, "openducktor");
+    const persistence = new BeadsPersistence(client, "openducktor");
     await persistence.writeNamespace(
       "task-1",
       {
@@ -369,7 +369,7 @@ describe("BdPersistence", () => {
       state,
     );
 
-    const persistence = new BdPersistence(client, "openducktor");
+    const persistence = new BeadsPersistence(client, "openducktor");
     await persistence.updateTask("task-1", {
       metadataRoot: { openducktor: { documents: { qaReports: [] } } },
       status: "human_review",

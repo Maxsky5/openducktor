@@ -1,6 +1,6 @@
-import { BdPersistence, type TaskPersistencePort } from "./bd-persistence";
-import { BdRuntimeClient, type BdRuntimeClientDeps } from "./bd-runtime-client";
+import { BeadsPersistence, type TaskPersistencePort } from "./beads-persistence";
 import { nowIso, type TimeProvider } from "./beads-runtime";
+import { BeadsRuntimeClient, type BeadsRuntimeClientDeps } from "./beads-runtime-client";
 import { EpicSubtaskReplacementService } from "./epic-subtask-replacement";
 import { createSubtask, deleteTaskById } from "./epic-subtasks";
 import { createOdtTaskStoreUseCases, type OdtTaskStoreUseCases } from "./odt-task-store-use-cases";
@@ -22,8 +22,8 @@ import {
 } from "./tool-schemas";
 
 export type OdtTaskStoreDeps = {
-  runProcess?: BdRuntimeClientDeps["runProcess"];
-  resolveBeadsDir?: BdRuntimeClientDeps["resolveBeadsDir"];
+  runProcess?: BeadsRuntimeClientDeps["runProcess"];
+  resolveBeadsDir?: BeadsRuntimeClientDeps["resolveBeadsDir"];
   now?: TimeProvider;
   persistence?: TaskPersistencePort;
   documentStore?: TaskDocumentPort;
@@ -78,12 +78,12 @@ export class OdtTaskStore {
   private createDefaultPersistence(
     options: OdtStoreOptions,
     deps: OdtTaskStoreDeps,
-  ): BdPersistence {
-    const bdClient = new BdRuntimeClient(this.repoPath, options.beadsDir ?? null, {
+  ): BeadsPersistence {
+    const beadsClient = new BeadsRuntimeClient(this.repoPath, options.beadsDir ?? null, {
       ...(deps.runProcess ? { runProcess: deps.runProcess } : {}),
       ...(deps.resolveBeadsDir ? { resolveBeadsDir: deps.resolveBeadsDir } : {}),
     });
-    return new BdPersistence(bdClient, options.metadataNamespace);
+    return new BeadsPersistence(beadsClient, options.metadataNamespace);
   }
 
   async readTask(

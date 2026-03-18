@@ -65,8 +65,7 @@ export type AgentStudioOrchestrationActionsContext = {
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
   requestNewSessionStart?: RequestNewSessionStart;
 };
-
-type UseAgentStudioOrchestrationControllerArgs = {
+export type UseAgentStudioOrchestrationControllerArgs = {
   workspace: AgentStudioOrchestrationWorkspaceContext;
   selection: AgentStudioOrchestrationSelectionContext;
   readiness: AgentStudioOrchestrationReadinessContext;

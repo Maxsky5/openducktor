@@ -1194,7 +1194,7 @@ describe("TauriHostClient", () => {
     });
   });
 
-  test("agentSessionsList normalizes legacy scenarios", async () => {
+  test("agentSessionsList rejects legacy persisted scenarios", async () => {
     const { client } = createClient((command) => {
       if (command === "task_metadata_get") {
         return {
@@ -1240,11 +1240,9 @@ describe("TauriHostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const sessions = await client.agentSessionsList("/repo", "task-1");
-
-    expect(sessions).toHaveLength(2);
-    expect(sessions[0]?.scenario).toBe("spec_initial");
-    expect(sessions[1]?.scenario).toBe("planner_initial");
+    await expect(client.agentSessionsList("/repo", "task-1")).rejects.toThrow(
+      "Task metadata for task-1 contains invalid persisted agent sessions",
+    );
   });
 
   test("agentSessionsList rejects invalid persisted agent session entries", async () => {

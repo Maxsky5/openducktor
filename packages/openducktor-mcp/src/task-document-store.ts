@@ -1,5 +1,5 @@
 import type { AgentToolName, QaReportVerdict } from "@openducktor/contracts";
-import type { TaskPersistencePort } from "./bd-persistence";
+import type { TaskPersistencePort } from "./beads-persistence";
 import type { TimeProvider } from "./beads-runtime";
 import type { MarkdownEntry, QaEntry, RawIssue } from "./contracts";
 import { parseTaskDocuments, type TaskDocumentsSnapshot } from "./metadata-docs";

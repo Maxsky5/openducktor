@@ -9,6 +9,7 @@ import {
   loadRepoDefaultModel,
   loadRepoPromptOverrides,
   loadTaskDocuments,
+  resolveRuntimeRouteConnection,
 } from "./runtime";
 
 const runningRunFixture: RunSummary = {
@@ -46,6 +47,24 @@ describe("agent-orchestrator-runtime", () => {
       worktreeFileCopies: [],
       promptOverrides: {},
       agentDefaults: {},
+    });
+  });
+
+  test("resolves runtime route connections through one shared boundary helper", () => {
+    expect(
+      resolveRuntimeRouteConnection(
+        {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4555",
+        },
+        "/tmp/repo/worktree",
+      ),
+    ).toEqual({
+      runtimeEndpoint: "http://127.0.0.1:4555",
+      runtimeConnection: {
+        endpoint: "http://127.0.0.1:4555",
+        workingDirectory: "/tmp/repo/worktree",
+      },
     });
   });
 
