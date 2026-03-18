@@ -378,6 +378,15 @@ impl AppService {
             return Ok(false);
         }
 
+        let source_branch_exists = self
+            .git_port
+            .get_branches(Path::new(repo_path))?
+            .into_iter()
+            .any(|branch| !branch.is_remote && branch.name == direct_merge.source_branch);
+        if !source_branch_exists {
+            return Ok(false);
+        }
+
         let target_branch = direct_merge.target_branch.checkout_branch();
         Ok(!self.git_port.is_ancestor(
             Path::new(repo_path),

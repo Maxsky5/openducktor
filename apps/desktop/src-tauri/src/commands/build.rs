@@ -128,12 +128,17 @@ pub async fn task_direct_merge(
     task_id: String,
     input: TaskDirectMergePayload,
 ) -> Result<TaskDirectMergeResult, String> {
-    as_error(state.service.task_direct_merge(
-        &repo_path,
-        &task_id,
-        input.merge_method,
-        input.squash_commit_message,
-    ))
+    let service = state.service.clone();
+    let result = run_service_blocking("task_direct_merge", move || {
+        service.task_direct_merge(
+            &repo_path,
+            &task_id,
+            input.merge_method,
+            input.squash_commit_message,
+        )
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]

@@ -80,6 +80,10 @@ impl GitCliPort {
         before_head: &str,
         squash_commit_message: Option<&str>,
     ) -> Result<GitMergeBranchResult> {
+        let commit_message = normalize_non_empty(
+            squash_commit_message.unwrap_or_default(),
+            "squash commit message",
+        )?;
         let args = ["merge", "--squash", source_branch];
         let (ok, stdout, stderr) = self.run_git_allow_failure(repo_path, &args)?;
         let output = combine_output(stdout, stderr);
@@ -93,10 +97,6 @@ impl GitCliPort {
             return Ok(GitMergeBranchResult::UpToDate { output });
         }
 
-        let commit_message = normalize_non_empty(
-            squash_commit_message.unwrap_or_default(),
-            "squash commit message",
-        )?;
         let (commit_ok, commit_stdout, commit_stderr) =
             self.run_git_allow_failure(repo_path, &["commit", "-m", commit_message.as_str()])?;
         let commit_output = combine_output(commit_stdout, commit_stderr);

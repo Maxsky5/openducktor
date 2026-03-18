@@ -185,18 +185,20 @@ export function TaskApprovalModal({
     model.pullRequestAvailable &&
     model.pullRequestDraftMode === "manual" &&
     (model.title.trim().length === 0 || model.body.trim().length === 0);
-  const hasSquashCommitMessageValidationError =
+  const hasSquashCommitMessageSubmitError =
     model.stage === "approval" &&
     model.mode === "direct_merge" &&
     model.mergeMethod === "squash" &&
-    (model.hasSuggestedSquashCommitMessage || model.squashCommitMessageTouched) &&
     model.squashCommitMessage.trim().length === 0;
+  const showSquashCommitMessageValidationError =
+    hasSquashCommitMessageSubmitError &&
+    (model.hasSuggestedSquashCommitMessage || model.squashCommitMessageTouched);
   const confirmDisabled =
     model.isLoading ||
     model.isSubmitting ||
     model.hasUncommittedChanges ||
     hasManualPullRequestValidationError ||
-    hasSquashCommitMessageValidationError;
+    hasSquashCommitMessageSubmitError;
   const isCompletionStage = model.stage === "complete_direct_merge";
   const hasPublishTarget = model.publishTarget !== null;
   const hasCompletionBranchContext = model.targetBranch !== null;
@@ -356,7 +358,7 @@ export function TaskApprovalModal({
                           </span>
                           .
                         </p>
-                        {hasSquashCommitMessageValidationError ? (
+                        {showSquashCommitMessageValidationError ? (
                           <p className="text-sm text-destructive">
                             Enter the squash commit message before merging locally.
                           </p>

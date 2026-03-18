@@ -35,7 +35,7 @@ export const GitConflictStrip = memo(function GitConflictStrip({
     >
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="rounded-full bg-amber-500/12 p-2.5 text-amber-600 dark:text-amber-300">
+          <div className="rounded-full border border-warning-border bg-warning-surface p-2.5 text-warning-muted">
             <AlertTriangle className="size-4" />
           </div>
           <div className="min-w-0 flex-1 space-y-1.5">
@@ -44,7 +44,7 @@ export const GitConflictStrip = memo(function GitConflictStrip({
                 {getGitConflictCopy(conflict.operation).inProgressLabel}
               </p>
               <span
-                className="inline-flex max-w-full shrink-0 items-center rounded-full border border-amber-500/20 bg-amber-500/12 px-2.5 py-1 text-xs font-semibold leading-none text-amber-700 dark:text-amber-300"
+                className="inline-flex max-w-full shrink-0 items-center rounded-full border border-warning-border bg-warning-surface px-2.5 py-1 text-xs font-semibold leading-none text-warning-muted"
                 data-testid={GIT_CONFLICT_TEST_IDS.conflictCountBadge}
               >
                 {`${conflict.conflictedFiles.length} conflicted file${conflict.conflictedFiles.length === 1 ? "" : "s"}`}

@@ -930,7 +930,8 @@ describe("AgentStudioGitPanel", () => {
     expect(findByTestId(root, "agent-studio-git-conflict-strip")).toBeTruthy();
     const conflictCountBadge = findByTestId(root, "agent-studio-git-conflict-count-badge");
     expect(getNodeText(conflictCountBadge)).toContain("2 conflicted files");
-    expect(String(conflictCountBadge.props.className)).toContain("amber");
+    expect(String(conflictCountBadge.props.className)).toContain("bg-warning-surface");
+    expect(String(conflictCountBadge.props.className)).toContain("border-warning-border");
     expect(findByTestId(root, "agent-studio-git-view-conflict-details-button")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-abort-conflict-strip-button")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-ask-builder-conflict-strip-button")).toBeTruthy();

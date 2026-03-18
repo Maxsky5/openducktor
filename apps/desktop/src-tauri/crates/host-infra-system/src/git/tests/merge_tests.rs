@@ -250,6 +250,14 @@ fn squash_merge_requires_a_commit_message_when_it_creates_a_commit() {
         .expect_err("squash merge without a commit message should fail");
 
     assert!(error.to_string().contains("squash commit message"));
+    assert_eq!(
+        run_git_ok(&repo.path, &["diff", "--cached", "--name-only"]).trim(),
+        ""
+    );
+    assert!(
+        !repo.path.join("feature.txt").exists(),
+        "blank squash message should fail before staging merge changes"
+    );
 }
 
 #[test]

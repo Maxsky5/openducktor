@@ -145,7 +145,7 @@ describe("TaskApprovalModal", () => {
 
     expect(html).toContain('placeholder="e.g. feat: add Microsoft login"');
     expect(html).not.toContain("Enter the squash commit message before merging locally.");
-    expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Merge Locally<\/button>/);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Merge Locally<\/button>/);
   });
 
   test("fails fast when direct-merge completion branch context is missing", () => {
