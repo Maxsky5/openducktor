@@ -206,4 +206,23 @@ describe("TaskDetailsSheetHeader", () => {
     expect(html).not.toContain("Detect PR");
     expect(html).not.toContain("task-details-detect-pr-button");
   });
+
+  test("renders title attribute on truncated title span for hover tooltip", () => {
+    const longTitle =
+      "This is a very long task title that exceeds available width and should truncate";
+    const task = createTaskCardFixture({
+      id: "TASK-7",
+      title: longTitle,
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, {
+        task,
+        subtasksCount: 0,
+        taskLabels: [],
+      }),
+    );
+
+    expect(html).toContain(`title="${longTitle}"`);
+  });
 });
