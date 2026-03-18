@@ -4,6 +4,7 @@ import type { TaskIndexCache } from "./task-index-cache";
 import { issueToTaskCard } from "./task-mapping";
 import {
   assertTransitionAllowed as assertTaskTransitionAllowed,
+  type RefreshedTaskState,
   refreshTaskContext,
   resolveTaskContext,
   type TaskContext,
@@ -13,12 +14,16 @@ import {
 export type OdtTaskWorkflowRuntimePort = {
   metadataNamespace: string;
   ensureInitialized(): Promise<void>;
-  applyTaskUpdate(taskId: string, input: TaskUpdateInput): Promise<TaskCard>;
+  applyTaskUpdate(taskId: string, input: TaskUpdateInput): Promise<RefreshedTaskState>;
   readTaskSnapshot(taskId: string): Promise<{ issue: RawIssue; task: TaskCard }>;
   resolveTaskContext(taskId: string): Promise<TaskContext>;
   refreshTaskContext(taskId: string, context?: TaskContext): Promise<TaskContext>;
   assertTransitionAllowed(task: TaskCard, tasks: TaskCard[], nextStatus: TaskStatus): void;
-  transitionTask(taskId: string, nextStatus: TaskStatus, context?: TaskContext): Promise<TaskCard>;
+  transitionTask(
+    taskId: string,
+    nextStatus: TaskStatus,
+    context?: TaskContext,
+  ): Promise<RefreshedTaskState>;
 };
 
 type TaskLookupPort = Pick<TaskIndexCache, "invalidate" | "resolveTask">;
@@ -43,12 +48,15 @@ class DefaultOdtTaskWorkflowRuntime implements OdtTaskWorkflowRuntimePort {
     await this.persistence.ensureInitialized();
   }
 
-  async applyTaskUpdate(taskId: string, input: TaskUpdateInput): Promise<TaskCard> {
+  async applyTaskUpdate(taskId: string, input: TaskUpdateInput): Promise<RefreshedTaskState> {
     await this.persistence.updateTask(taskId, input);
 
-    const refreshed = await this.persistence.showRawIssue(taskId);
+    const issue = await this.persistence.showRawIssue(taskId);
     this.taskLookup.invalidate();
-    return issueToTaskCard(refreshed, this.metadataNamespace);
+    return {
+      issue,
+      task: issueToTaskCard(issue, this.metadataNamespace),
+    };
   }
 
   async readTaskSnapshot(taskId: string): Promise<{ issue: RawIssue; task: TaskCard }> {
@@ -79,7 +87,7 @@ class DefaultOdtTaskWorkflowRuntime implements OdtTaskWorkflowRuntimePort {
     taskId: string,
     nextStatus: TaskStatus,
     context?: TaskContext,
-  ): Promise<TaskCard> {
+  ): Promise<RefreshedTaskState> {
     return transitionTask({
       taskId,
       nextStatus,

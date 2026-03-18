@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js";
+import packageJson from "../package.json" with { type: "json" };
 import { ODT_TOOL_SCHEMAS, type OdtStoreContext, OdtTaskStore, resolveStoreContext } from "./lib";
 
 type ToolResult = {
@@ -176,7 +177,7 @@ export const ODT_REGISTERED_TOOL_SPECS: Readonly<RegisteredToolSpecs> = {
   },
   search_tasks: {
     description:
-      "Search active OpenDucktor tasks using exact filters for priority/issueType/status plus title substring and tag AND matching. Returns the same public task/document response model used by odt_read_task.",
+      "Search active OpenDucktor tasks using exact filters for priority/issueType/status plus title substring and tag AND matching. The response is paginated as { results, limit, totalCount, hasMore }, and each item in results uses the same { task, documents } snapshot model as odt_read_task.",
     execute: (store, input) => store.searchTasks(input),
   },
   odt_set_spec: {
@@ -240,7 +241,7 @@ export const createOpenducktorMcpServer = async (
   const server = new McpServer(
     {
       name: "openducktor",
-      version: "0.1.0",
+      version: packageJson.version,
     },
     {
       instructions:

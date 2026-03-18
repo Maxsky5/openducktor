@@ -157,9 +157,10 @@ describe("task workflow runtime", () => {
       },
     });
 
-    await expect(runtime.transitionTask("task-1", "ready_for_dev")).resolves.toEqual(
-      makeTask({ status: "ready_for_dev" }),
-    );
+    await expect(runtime.transitionTask("task-1", "ready_for_dev")).resolves.toEqual({
+      issue: makeIssue({ status: "ready_for_dev" }),
+      task: makeTask({ status: "ready_for_dev" }),
+    });
     expect(runCalls).toEqual([["update", "task-1", "--status", "ready_for_dev"]]);
     expect(invalidateCalls).toBe(1);
   });
@@ -208,7 +209,13 @@ describe("task workflow runtime", () => {
         metadataRoot: { openducktor: { documents: { qaReports: [{ verdict: "approved" }] } } },
         status: "human_review",
       }),
-    ).resolves.toEqual(makeTask({ status: "human_review" }));
+    ).resolves.toEqual({
+      issue: makeIssue({
+        status: "human_review",
+        metadata: { openducktor: { documents: { qaReports: [{ verdict: "approved" }] } } },
+      }),
+      task: makeTask({ status: "human_review" }),
+    });
     expect(updateCalls).toEqual([
       {
         metadataRoot: { openducktor: { documents: { qaReports: [{ verdict: "approved" }] } } },

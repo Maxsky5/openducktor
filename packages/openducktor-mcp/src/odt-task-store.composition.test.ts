@@ -66,8 +66,8 @@ describe("OdtTaskStore composition", () => {
         namespace: {},
         root: {},
       }),
-      persistSpec: async () => ({ updatedAt: "", revision: 1 }),
-      persistImplementationPlan: async () => ({ updatedAt: "", revision: 1 }),
+      persistSpec: async () => ({ issue, updatedAt: "", revision: 1 }),
+      persistImplementationPlan: async () => ({ issue, updatedAt: "", revision: 1 }),
       appendQaReport: async () => {},
     };
 
@@ -141,8 +141,8 @@ describe("OdtTaskStore composition", () => {
         namespace: {},
         root: {},
       }),
-      persistSpec: async () => ({ updatedAt: "", revision: 1 }),
-      persistImplementationPlan: async () => ({ updatedAt: "", revision: 1 }),
+      persistSpec: async () => ({ issue, updatedAt: "", revision: 1 }),
+      persistImplementationPlan: async () => ({ issue, updatedAt: "", revision: 1 }),
       appendQaReport: async () => {},
     };
 
@@ -210,8 +210,8 @@ describe("OdtTaskStore composition", () => {
         namespace: {},
         root: {},
       }),
-      persistSpec: async () => ({ updatedAt: "", revision: 1 }),
-      persistImplementationPlan: async () => ({ updatedAt: "", revision: 1 }),
+      persistSpec: async () => ({ issue, updatedAt: "", revision: 1 }),
+      persistImplementationPlan: async () => ({ issue, updatedAt: "", revision: 1 }),
       appendQaReport: async () => {},
     };
 

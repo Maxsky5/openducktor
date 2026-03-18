@@ -53,13 +53,16 @@ type PreparedNamespaceWrite = {
 
 export type PreparedQaReportWrite = PreparedNamespaceWrite;
 
+export type PersistedTaskDocumentResult = {
+  issue: RawIssue;
+  updatedAt: string;
+  revision: number;
+};
+
 export type TaskDocumentPort = {
   parseDocs(issue: RawIssue): TaskDocumentsSnapshot;
-  persistSpec(taskId: string, markdown: string): Promise<{ updatedAt: string; revision: number }>;
-  persistImplementationPlan(
-    taskId: string,
-    markdown: string,
-  ): Promise<{ updatedAt: string; revision: number }>;
+  persistSpec(taskId: string, markdown: string): Promise<PersistedTaskDocumentResult>;
+  persistImplementationPlan(taskId: string, markdown: string): Promise<PersistedTaskDocumentResult>;
   appendQaReport(taskId: string, markdown: string, verdict: QaReportVerdict): Promise<void>;
   prepareQaReportWrite(
     issue: RawIssue,
@@ -86,10 +89,7 @@ export class TaskDocumentStore implements TaskDocumentPort {
     return parseTaskDocuments(issue, this.persistence.metadataNamespace);
   }
 
-  async persistSpec(
-    taskId: string,
-    markdown: string,
-  ): Promise<{ updatedAt: string; revision: number }> {
+  async persistSpec(taskId: string, markdown: string): Promise<PersistedTaskDocumentResult> {
     const issue = await this.persistence.showRawIssue(taskId);
     return this.persistLatestMarkdown({
       issue,
@@ -101,7 +101,7 @@ export class TaskDocumentStore implements TaskDocumentPort {
   async persistImplementationPlan(
     taskId: string,
     markdown: string,
-  ): Promise<{ updatedAt: string; revision: number }> {
+  ): Promise<PersistedTaskDocumentResult> {
     const issue = await this.persistence.showRawIssue(taskId);
     return this.persistLatestMarkdown({
       issue,
@@ -155,7 +155,7 @@ export class TaskDocumentStore implements TaskDocumentPort {
 
   private async persistLatestMarkdown(
     input: PersistLatestMarkdownInput,
-  ): Promise<{ updatedAt: string; revision: number }> {
+  ): Promise<PersistedTaskDocumentResult> {
     const { root, namespace, documents } = this.persistence.getNamespaceData(input.issue);
     const source = MARKDOWN_DOCUMENT_SOURCES[input.documentKey];
     const nextRevision = getNextRevision(parseMarkdownEntries(documents[input.documentKey]));
@@ -180,7 +180,9 @@ export class TaskDocumentStore implements TaskDocumentPort {
     };
 
     await this.persistence.writeNamespace(input.issue.id, root, nextNamespace);
+    const refreshedIssue = await this.persistence.showRawIssue(input.issue.id);
     return {
+      issue: refreshedIssue,
       updatedAt,
       revision: nextRevision,
     };

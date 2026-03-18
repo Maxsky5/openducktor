@@ -94,7 +94,9 @@ export const CreateTaskInputSchema = z
 export const SearchTasksInputSchema = z
   .object({
     priority: taskPrioritySchema.optional().describe("Exact-match priority filter."),
-    issueType: issueTypeSchema.optional().describe("Exact-match issue type filter."),
+    issueType: issueTypeSchema
+      .optional()
+      .describe("Exact-match issue type filter. Active epics may appear in search results."),
     status: activeTaskStatusSchema.optional().describe("Exact-match active status filter."),
     title: z.string().trim().min(1).optional().describe("Case-insensitive title substring filter."),
     tags: z

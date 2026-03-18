@@ -46,6 +46,7 @@ Input fields:
 ## `search_tasks`
 
 Searches active tasks only. Closed and deferred tasks are excluded.
+Active epics may appear in search results.
 
 Optional filters:
 
@@ -58,7 +59,7 @@ Optional filters:
 
 ## Output Model
 
-`create_task`, `search_tasks`, and `odt_read_task` share the same public task snapshot model:
+`create_task` and `odt_read_task` return the same public task snapshot model. `search_tasks` wraps an array of that same snapshot model in `{ results, limit, totalCount, hasMore }`.
 
 ```json
 {
@@ -71,8 +72,8 @@ Optional filters:
     "issueType": "task",
     "aiReviewEnabled": true,
     "labels": ["docs"],
-    "createdAt": "2026-03-18T12:00:00Z",
-    "updatedAt": "2026-03-18T12:00:00Z"
+    "createdAt": "<ISO 8601 timestamp>",
+    "updatedAt": "<ISO 8601 timestamp>"
   },
   "documents": {
     "spec": { "markdown": "", "updatedAt": null },
@@ -81,4 +82,3 @@ Optional filters:
   }
 }
 ```
-

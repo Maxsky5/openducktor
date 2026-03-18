@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 env:
   BUN_VERSION: 1.3.5
@@ -40,5 +41,5 @@ jobs:
         working-directory: packages/openducktor-mcp
         env:
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
         run: bun publish --access public
-

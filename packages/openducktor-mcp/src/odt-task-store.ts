@@ -71,6 +71,7 @@ export class OdtTaskStore {
       workflow,
       documentStore,
       epicSubtaskReplacementService,
+      invalidateTaskIndex: () => taskIndexCache.invalidate(),
     });
   }
 

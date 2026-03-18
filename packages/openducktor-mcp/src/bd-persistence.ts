@@ -154,22 +154,27 @@ export class BdPersistence implements TaskPersistencePort {
     }
 
     const createdTaskId = issueId.trim();
-    const createdIssue = await this.showRawIssue(createdTaskId);
-    const { root, namespace } = this.getNamespaceData(createdIssue);
-    await this.writeNamespace(createdTaskId, root, {
-      ...namespace,
-      qaRequired: input.aiReviewEnabled ?? true,
-    });
+    try {
+      const createdIssue = await this.showRawIssue(createdTaskId);
+      const { root, namespace } = this.getNamespaceData(createdIssue);
+      await this.writeNamespace(createdTaskId, root, {
+        ...namespace,
+        qaRequired: input.aiReviewEnabled ?? true,
+      });
 
-    return this.showRawIssue(createdTaskId);
+      return await this.showRawIssue(createdTaskId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Task ${createdTaskId} was created, but post-create metadata sync failed: ${message}`,
+      );
+    }
   }
 
   async listTasks(filters: TaskSearchFilters = {}): Promise<TaskCard[]> {
     const payload = await this.listRawIssues(filters);
 
-    return payload
-      .filter((entry) => !isNonTaskBeadsIssueType((entry as RawIssue).issue_type))
-      .map((entry) => issueToTaskCard(entry as RawIssue, this.metadataNamespace));
+    return payload.map((entry) => issueToTaskCard(entry as RawIssue, this.metadataNamespace));
   }
 
   getNamespaceData(issue: RawIssue): NamespaceData {

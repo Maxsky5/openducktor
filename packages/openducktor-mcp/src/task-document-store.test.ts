@@ -183,6 +183,7 @@ describe("TaskDocumentStore", () => {
     const persisted = await documents.persistImplementationPlan("task-1", "# new plan");
 
     expect(persisted).toEqual({
+      issue: harness.getIssue(),
       updatedAt: FIXED_NOW,
       revision: 5,
     });
@@ -307,6 +308,7 @@ describe("TaskDocumentStore", () => {
     const persisted = await documents.persistSpec("task-1", "# new spec");
 
     expect(persisted).toEqual({
+      issue: harness.getIssue(),
       updatedAt: FIXED_NOW,
       revision: 2,
     });

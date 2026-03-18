@@ -52,25 +52,6 @@ const makePublicTask = (overrides: Partial<PublicTask> = {}): PublicTask => ({
   ...overrides,
 });
 
-const makePersistence = (issue: RawIssue, calls: string[]) => ({
-  metadataNamespace: "openducktor",
-  ensureInitialized: async () => {
-    calls.push("persist-init");
-  },
-  showRawIssue: async (taskId: string) => {
-    calls.push(`show:${taskId}`);
-    return { ...issue, id: taskId };
-  },
-  createTask: async () => {
-    calls.push("create");
-    return issue;
-  },
-  listRawIssues: async () => {
-    calls.push("list-raw");
-    return [issue];
-  },
-});
-
 describe("odt task workflow use cases", () => {
   test("ReadTaskUseCase returns the latest task snapshot and parsed documents", async () => {
     const issue = makeIssue({ status: "spec_ready" });
@@ -126,6 +107,9 @@ describe("odt task workflow use cases", () => {
           return issue;
         },
       },
+      invalidateTaskIndex: () => {
+        calls.push("invalidate");
+      },
       documentStore: {
         parseDocs: () => ({
           spec: { markdown: "", updatedAt: null },
@@ -145,7 +129,7 @@ describe("odt task workflow use cases", () => {
         latestQaReport: { markdown: "", updatedAt: null, verdict: null },
       },
     });
-    expect(calls).toEqual(["init", "create:bug:1"]);
+    expect(calls).toEqual(["init", "create:bug:1", "invalidate"]);
   });
 
   test("SearchTasksUseCase returns active snapshots with limit metadata", async () => {
@@ -192,6 +176,35 @@ describe("odt task workflow use cases", () => {
     expect(calls).toEqual(["init", "list-raw"]);
   });
 
+  test("SearchTasksUseCase surfaces invalid Beads statuses instead of hiding them", async () => {
+    const calls: string[] = [];
+
+    const useCase = new SearchTasksUseCase({
+      persistence: {
+        metadataNamespace: "openducktor",
+        ensureInitialized: async () => {
+          calls.push("init");
+        },
+        listRawIssues: async () => {
+          calls.push("list-raw");
+          return [makeIssue({ id: "broken-task", status: { raw: "open" } })];
+        },
+      },
+      documentStore: {
+        parseDocs: () => ({
+          spec: { markdown: "", updatedAt: null },
+          implementationPlan: { markdown: "", updatedAt: null },
+          latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+        }),
+      },
+    });
+
+    await expect(useCase.execute({ limit: 10 })).rejects.toThrow(
+      'Invalid Beads status for task broken-task: received {"raw":"open"}.',
+    );
+    expect(calls).toEqual(["init", "list-raw"]);
+  });
+
   test("SetSpecUseCase persists the document before transitioning open tasks", async () => {
     const initialTask = makeTask({ status: "open" });
     const transitionedTask = makeTask({ status: "spec_ready" });
@@ -199,8 +212,8 @@ describe("odt task workflow use cases", () => {
     const calls: string[] = [];
 
     const useCase = new SetSpecUseCase({
-      persistence: makePersistence(transitionedIssue, calls),
       workflow: {
+        metadataNamespace: "openducktor",
         ensureInitialized: async () => {
           calls.push("init");
         },
@@ -214,13 +227,20 @@ describe("odt task workflow use cases", () => {
         },
         transitionTask: async (taskId, nextStatus) => {
           calls.push(`transition:${taskId}:${nextStatus}`);
-          return transitionedTask;
+          return {
+            issue: transitionedIssue,
+            task: transitionedTask,
+          };
         },
       },
       documentStore: {
         persistSpec: async (taskId, markdown) => {
           calls.push(`persist:${taskId}:${markdown}`);
-          return { updatedAt: FIXED_TIMESTAMP, revision: 2 };
+          return {
+            issue: transitionedIssue,
+            updatedAt: FIXED_TIMESTAMP,
+            revision: 2,
+          };
         },
       },
     });
@@ -241,7 +261,6 @@ describe("odt task workflow use cases", () => {
       "persist:task-1:# Refined spec",
       "refresh:task-1:open",
       "transition:task-1:spec_ready",
-      "show:task-1",
     ]);
   });
 
@@ -261,16 +280,8 @@ describe("odt task workflow use cases", () => {
     const calls: string[] = [];
 
     const useCase = new SetPlanUseCase({
-      persistence: makePersistence(
-        makeIssue({
-          id: "epic-1",
-          title: "Epic",
-          status: "ready_for_dev",
-          issue_type: "epic",
-        }),
-        calls,
-      ),
       workflow: {
+        metadataNamespace: "openducktor",
         ensureInitialized: async () => {
           calls.push("init");
         },
@@ -284,13 +295,30 @@ describe("odt task workflow use cases", () => {
         },
         transitionTask: async (taskId, nextStatus) => {
           calls.push(`transition:${taskId}:${nextStatus}`);
-          return readyTask;
+          return {
+            issue: makeIssue({
+              id: "epic-1",
+              title: "Epic",
+              status: "ready_for_dev",
+              issue_type: "epic",
+            }),
+            task: readyTask,
+          };
         },
       },
       documentStore: {
         persistImplementationPlan: async (taskId, markdown) => {
           calls.push(`persist:${taskId}:${markdown}`);
-          return { updatedAt: "2026-03-02T00:00:00.000Z", revision: 4 };
+          return {
+            issue: makeIssue({
+              id: "epic-1",
+              title: "Epic",
+              status: "spec_ready",
+              issue_type: "epic",
+            }),
+            updatedAt: "2026-03-02T00:00:00.000Z",
+            revision: 4,
+          };
         },
       },
       epicSubtaskReplacementService: {
@@ -336,7 +364,6 @@ describe("odt task workflow use cases", () => {
       "apply:epic-1:1:1",
       "refresh:epic-1:spec_ready",
       "transition:epic-1:ready_for_dev",
-      "show:epic-1",
     ]);
   });
 
@@ -347,8 +374,8 @@ describe("odt task workflow use cases", () => {
     const calls: string[] = [];
 
     const useCase = new BuildCompletedUseCase({
-      persistence: makePersistence(makeIssue({ status: "ai_review" }), calls),
       workflow: {
+        metadataNamespace: "openducktor",
         ensureInitialized: async () => {
           calls.push("init");
         },
@@ -366,7 +393,10 @@ describe("odt task workflow use cases", () => {
         },
         transitionTask: async (taskId, nextStatus) => {
           calls.push(`transition:${taskId}:${nextStatus}`);
-          return aiReviewTask;
+          return {
+            issue: makeIssue({ status: "ai_review" }),
+            task: aiReviewTask,
+          };
         },
       },
       documentStore: {
@@ -394,7 +424,6 @@ describe("odt task workflow use cases", () => {
       "read:task-1",
       "docs:task-1:not_reviewed",
       "transition:task-1:ai_review",
-      "show:task-1",
     ]);
   });
 
@@ -402,14 +431,17 @@ describe("odt task workflow use cases", () => {
     const calls: string[] = [];
 
     const useCase = new BuildBlockedUseCase({
-      persistence: makePersistence(makeIssue({ status: "blocked" }), calls),
       workflow: {
+        metadataNamespace: "openducktor",
         ensureInitialized: async () => {
           calls.push("init");
         },
         transitionTask: async (taskId, nextStatus) => {
           calls.push(`transition:${taskId}:${nextStatus}`);
-          return makeTask({ status: "blocked" });
+          return {
+            issue: makeIssue({ status: "blocked" }),
+            task: makeTask({ status: "blocked" }),
+          };
         },
       },
     });
@@ -420,21 +452,24 @@ describe("odt task workflow use cases", () => {
       task: makePublicTask({ status: "blocked" }),
       reason: "Waiting on upstream change",
     });
-    expect(calls).toEqual(["init", "transition:task-1:blocked", "show:task-1"]);
+    expect(calls).toEqual(["init", "transition:task-1:blocked"]);
   });
 
   test("BuildResumedUseCase transitions back to in_progress", async () => {
     const calls: string[] = [];
 
     const useCase = new BuildResumedUseCase({
-      persistence: makePersistence(makeIssue({ status: "in_progress" }), calls),
       workflow: {
+        metadataNamespace: "openducktor",
         ensureInitialized: async () => {
           calls.push("init");
         },
         transitionTask: async (taskId, nextStatus) => {
           calls.push(`transition:${taskId}:${nextStatus}`);
-          return makeTask({ status: "in_progress" });
+          return {
+            issue: makeIssue({ status: "in_progress" }),
+            task: makeTask({ status: "in_progress" }),
+          };
         },
       },
     });
@@ -442,7 +477,7 @@ describe("odt task workflow use cases", () => {
     await expect(useCase.execute({ taskId: "task-1" })).resolves.toEqual({
       task: makePublicTask({ status: "in_progress" }),
     });
-    expect(calls).toEqual(["init", "transition:task-1:in_progress", "show:task-1"]);
+    expect(calls).toEqual(["init", "transition:task-1:in_progress"]);
   });
 
   test("QaApprovedUseCase writes the qa report and status in a single task update", async () => {
@@ -452,8 +487,8 @@ describe("odt task workflow use cases", () => {
     let appliedUpdate: { metadataRoot?: unknown; status?: string } | null = null;
 
     const useCase = new QaApprovedUseCase({
-      persistence: makePersistence(makeIssue({ status: "human_review" }), calls),
       workflow: {
+        metadataNamespace: "openducktor",
         ensureInitialized: async () => {
           calls.push("init");
         },
@@ -467,7 +502,10 @@ describe("odt task workflow use cases", () => {
         applyTaskUpdate: async (taskId, input) => {
           calls.push(`apply:${taskId}:${input.status ?? "none"}`);
           appliedUpdate = input;
-          return makeTask({ status: "human_review" });
+          return {
+            issue: makeIssue({ status: "human_review" }),
+            task: makeTask({ status: "human_review" }),
+          };
         },
       },
       documentStore: {
@@ -491,7 +529,6 @@ describe("odt task workflow use cases", () => {
       "assert",
       "prepare:task-1:approved:## QA review",
       "apply:task-1:human_review",
-      "show:task-1",
     ]);
     expect(appliedUpdate).toEqual({
       metadataRoot: {
@@ -509,8 +546,8 @@ describe("odt task workflow use cases", () => {
     const calls: string[] = [];
 
     const useCase = new QaRejectedUseCase({
-      persistence: makePersistence(makeIssue({ status: "in_progress" }), calls),
       workflow: {
+        metadataNamespace: "openducktor",
         ensureInitialized: async () => {
           calls.push("init");
         },
@@ -523,7 +560,10 @@ describe("odt task workflow use cases", () => {
         },
         applyTaskUpdate: async (taskId, input) => {
           calls.push(`apply:${taskId}:${input.status ?? "none"}`);
-          return makeTask({ status: "in_progress" });
+          return {
+            issue: makeIssue({ status: "in_progress" }),
+            task: makeTask({ status: "in_progress" }),
+          };
         },
       },
       documentStore: {
@@ -547,7 +587,6 @@ describe("odt task workflow use cases", () => {
       "assert",
       "prepare:task-1:rejected:## QA reject",
       "apply:task-1:in_progress",
-      "show:task-1",
     ]);
   });
 });

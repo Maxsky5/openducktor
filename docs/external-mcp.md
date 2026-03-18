@@ -67,8 +67,8 @@ Current OpenDucktor Spec/Planner/Builder/QA agents must not receive `create_task
     "issueType": "task",
     "aiReviewEnabled": true,
     "labels": ["docs"],
-    "createdAt": "2026-03-18T12:00:00Z",
-    "updatedAt": "2026-03-18T12:00:00Z"
+    "createdAt": "<ISO 8601 timestamp>",
+    "updatedAt": "<ISO 8601 timestamp>"
   },
   "documents": {
     "spec": { "markdown": "", "updatedAt": null },
@@ -91,9 +91,9 @@ Creates a new public task.
 
 Allowed inputs:
 
-- `title` required
-- `issueType` required: `task | feature | bug`
-- `priority` required: `0 | 1 | 2 | 3 | 4`
+- `title` is required
+- `issueType` is required: `task | feature | bug`
+- `priority` is required: `0 | 1 | 2 | 3 | 4`
 - `description` optional
 - `labels` optional
 - `aiReviewEnabled` optional
@@ -123,7 +123,7 @@ Optional filters:
 Search semantics:
 
 - `priority`: exact match
-- `issueType`: exact match
+- `issueType`: exact match. Active epics may appear in search results.
 - `status`: exact active-status match only
 - `title`: case-insensitive substring match
 - `tags`: AND semantics, task must contain all provided tags
@@ -144,4 +144,3 @@ Output:
   "hasMore": false
 }
 ```
-
