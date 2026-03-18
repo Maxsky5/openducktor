@@ -70,22 +70,21 @@ describe("use-inline-comment-draft-store", () => {
   test("formats grouped markdown by file with sorted line ranges and original-side labels", () => {
     Date.now = () => 1_700_000_000_000;
 
-    const store = useInlineCommentDraftStore.getState();
-    store.addDraft({
+    useInlineCommentDraftStore.getState().addDraft({
       filePath: "apps/desktop/src/beta.ts",
       startLine: 30,
       endLine: 30,
       side: "modified",
       text: "Beta line comment",
     });
-    store.addDraft({
+    useInlineCommentDraftStore.getState().addDraft({
       filePath: "apps/desktop/src/alpha.ts",
       startLine: 12,
       endLine: 15,
       side: "original",
       text: "Alpha range comment",
     });
-    store.addDraft({
+    useInlineCommentDraftStore.getState().addDraft({
       filePath: "apps/desktop/src/alpha.ts",
       startLine: 5,
       endLine: 5,

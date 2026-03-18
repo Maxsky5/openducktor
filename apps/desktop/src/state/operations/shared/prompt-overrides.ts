@@ -9,6 +9,9 @@ export const loadEffectivePromptOverrides = async (
   queryClient: QueryClient = appQueryClient,
 ): Promise<RepoPromptOverrides> => {
   const normalizedRepoPath = repoPath.trim();
+  if (normalizedRepoPath.length === 0) {
+    throw new Error("Repository path is required to load prompt overrides.");
+  }
   const [repoConfig, snapshot] = await Promise.all([
     loadRepoConfigFromQuery(queryClient, normalizedRepoPath),
     loadSettingsSnapshotFromQuery(queryClient),
