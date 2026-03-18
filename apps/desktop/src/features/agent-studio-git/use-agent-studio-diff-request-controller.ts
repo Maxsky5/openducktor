@@ -47,6 +47,19 @@ const createVersionState = (): RequestStatusByScopeAndMode => ({
   uncommitted: { full: 0, summary: 0 },
 });
 
+const invalidateVersionState = (
+  currentState: RequestStatusByScopeAndMode,
+): RequestStatusByScopeAndMode => ({
+  target: {
+    full: currentState.target.full + 1,
+    summary: currentState.target.summary + 1,
+  },
+  uncommitted: {
+    full: currentState.uncommitted.full + 1,
+    summary: currentState.uncommitted.summary + 1,
+  },
+});
+
 const createInFlightState = (): InFlightRequestState => ({
   target: { full: null, summary: null },
   uncommitted: { full: null, summary: null },
@@ -67,7 +80,7 @@ export function useAgentStudioDiffRequestController(): UseAgentStudioDiffRequest
   const latestLoadingRequestSequenceRef = useRef<number | null>(null);
 
   const resetRequestTracking = useCallback((): void => {
-    versionByScopeAndModeRef.current = createVersionState();
+    versionByScopeAndModeRef.current = invalidateVersionState(versionByScopeAndModeRef.current);
     inFlightScopeRequestRef.current = createInFlightState();
     queuedFullReloadByScopeRef.current = createQueuedReloadState();
     queuedFullReloadForceByScopeRef.current = createQueuedReloadState();

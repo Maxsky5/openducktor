@@ -48,16 +48,11 @@ export function useAgentChatResizeSync({
     };
 
     const scheduleResizeSync = () => {
-      if (typeof window === "undefined") {
-        syncAfterResize();
-        return;
-      }
-
       if (contentResizeFrameRef.current !== null) {
         return;
       }
 
-      contentResizeFrameRef.current = window.requestAnimationFrame(syncAfterResize);
+      contentResizeFrameRef.current = globalThis.requestAnimationFrame(syncAfterResize);
     };
 
     const observer = new ResizeObserver(() => {
@@ -67,8 +62,8 @@ export function useAgentChatResizeSync({
 
     return () => {
       observer.disconnect();
-      if (contentResizeFrameRef.current !== null && typeof window !== "undefined") {
-        window.cancelAnimationFrame(contentResizeFrameRef.current);
+      if (contentResizeFrameRef.current !== null) {
+        globalThis.cancelAnimationFrame(contentResizeFrameRef.current);
         contentResizeFrameRef.current = null;
       }
     };
@@ -104,16 +99,11 @@ export function useAgentChatResizeSync({
     };
 
     const scheduleResizeSync = () => {
-      if (typeof window === "undefined") {
-        syncAfterResize();
-        return;
-      }
-
       if (containerResizeFrameRef.current !== null) {
         return;
       }
 
-      containerResizeFrameRef.current = window.requestAnimationFrame(syncAfterResize);
+      containerResizeFrameRef.current = globalThis.requestAnimationFrame(syncAfterResize);
     };
 
     const observer = new ResizeObserver(() => {
@@ -123,8 +113,8 @@ export function useAgentChatResizeSync({
 
     return () => {
       observer.disconnect();
-      if (containerResizeFrameRef.current !== null && typeof window !== "undefined") {
-        window.cancelAnimationFrame(containerResizeFrameRef.current);
+      if (containerResizeFrameRef.current !== null) {
+        globalThis.cancelAnimationFrame(containerResizeFrameRef.current);
         containerResizeFrameRef.current = null;
       }
     };

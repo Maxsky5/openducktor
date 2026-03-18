@@ -528,6 +528,29 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
         sessions[0].external_session_id.as_deref(),
         Some("session-opencode-1")
     );
+
+    let legacy_sessions = parse_agent_sessions(&json!([
+        {
+            "sessionId": "legacy-planner-session",
+            "externalSessionId": "legacy-opencode-session",
+            "taskId": "task-1",
+            "role": "planner",
+            "scenario": "planner_revision",
+            "status": "idle",
+            "startedAt": "2026-02-18T17:22:00Z",
+            "updatedAt": "2026-02-18T17:23:00Z",
+            "endedAt": null,
+            "runtimeKind": "opencode",
+            "workingDirectory": "/repo",
+            "selectedModel": null
+        }
+    ]))
+    .expect("legacy agent sessions");
+    assert_eq!(legacy_sessions.len(), 1);
+    assert_eq!(
+        legacy_sessions[0].scenario.as_deref(),
+        Some("planner_initial")
+    );
 }
 
 #[test]

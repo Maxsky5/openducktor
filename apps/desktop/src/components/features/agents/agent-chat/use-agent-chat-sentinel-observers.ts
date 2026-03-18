@@ -34,7 +34,7 @@ export function useAgentChatSentinelObservers({
     (element) => {
       topObserverRef.current?.disconnect();
       topObserverRef.current = null;
-      if (!element || windowStart <= 0 || typeof IntersectionObserver === "undefined") {
+      if (!element || windowStart <= 0) {
         return;
       }
 
@@ -60,7 +60,7 @@ export function useAgentChatSentinelObservers({
     (element) => {
       bottomObserverRef.current?.disconnect();
       bottomObserverRef.current = null;
-      if (!element || windowEnd >= rowCount - 1 || typeof IntersectionObserver === "undefined") {
+      if (!element || windowEnd >= rowCount - 1) {
         return;
       }
 

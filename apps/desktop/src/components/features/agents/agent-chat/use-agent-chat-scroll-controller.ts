@@ -47,8 +47,8 @@ export function useAgentChatScrollController({
   const isUpdatingRef = useRef(false);
 
   const cancelScrollAnimation = useCallback((skipStateUpdate = false) => {
-    if (scrollAnimationFrameRef.current !== null && typeof window !== "undefined") {
-      window.cancelAnimationFrame(scrollAnimationFrameRef.current);
+    if (scrollAnimationFrameRef.current !== null) {
+      globalThis.cancelAnimationFrame(scrollAnimationFrameRef.current);
     }
     scrollAnimationFrameRef.current = null;
 
@@ -72,11 +72,6 @@ export function useAgentChatScrollController({
       cancelScrollAnimation();
 
       const initialTargetTop = resolveTargetTop();
-      if (typeof window === "undefined") {
-        container.scrollTop = initialTargetTop;
-        return;
-      }
-
       const startTop = container.scrollTop;
       const initialDelta = initialTargetTop - startTop;
       if (Math.abs(initialDelta) < 1 || durationMs <= 0) {
@@ -119,10 +114,10 @@ export function useAgentChatScrollController({
           return;
         }
 
-        scrollAnimationFrameRef.current = window.requestAnimationFrame(step);
+        scrollAnimationFrameRef.current = globalThis.requestAnimationFrame(step);
       };
 
-      scrollAnimationFrameRef.current = window.requestAnimationFrame(step);
+      scrollAnimationFrameRef.current = globalThis.requestAnimationFrame(step);
     },
     [cancelScrollAnimation],
   );
@@ -136,8 +131,8 @@ export function useAgentChatScrollController({
       }
 
       suppressSentinelsRef.current = true;
-      if (sentinelUnlockFrameRef.current !== null && typeof window !== "undefined") {
-        window.cancelAnimationFrame(sentinelUnlockFrameRef.current);
+      if (sentinelUnlockFrameRef.current !== null) {
+        globalThis.cancelAnimationFrame(sentinelUnlockFrameRef.current);
         sentinelUnlockFrameRef.current = null;
       }
     },
@@ -179,12 +174,7 @@ export function useAgentChatScrollController({
       return;
     }
 
-    if (typeof window === "undefined") {
-      suppressSentinelsRef.current = false;
-      return;
-    }
-
-    sentinelUnlockFrameRef.current = window.requestAnimationFrame(() => {
+    sentinelUnlockFrameRef.current = globalThis.requestAnimationFrame(() => {
       suppressSentinelsRef.current = false;
       sentinelUnlockFrameRef.current = null;
     });
@@ -276,8 +266,8 @@ export function useAgentChatScrollController({
 
   useEffect(() => {
     return () => {
-      if (sentinelUnlockFrameRef.current !== null && typeof window !== "undefined") {
-        window.cancelAnimationFrame(sentinelUnlockFrameRef.current);
+      if (sentinelUnlockFrameRef.current !== null) {
+        globalThis.cancelAnimationFrame(sentinelUnlockFrameRef.current);
       }
       cancelScrollAnimation(true);
     };
