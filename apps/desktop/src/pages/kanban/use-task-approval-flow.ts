@@ -67,18 +67,26 @@ const INITIAL_GIT_CONFLICT_STATE: {
   conflictAction: null,
 };
 
-const parseGeneratedPullRequest = (content: string): { title: string; body: string } => {
-  const trimmed = content.trim();
+export const parseGeneratedPullRequest = (content: string): { title: string; body: string } => {
+  const boldPattern = /\*\*/g;
+  let cleaned = content.trim();
+
+  const wrappingFenceMatch = cleaned.match(/^```[\w]*\n([\s\S]*)\n```$/);
+  if (wrappingFenceMatch?.[1] != null) {
+    cleaned = wrappingFenceMatch[1];
+  }
+
+  cleaned = cleaned.replace(boldPattern, "");
   const titlePrefix = "Title:";
   const descriptionPrefix = "Description:";
-  const titleIndex = trimmed.indexOf(titlePrefix);
-  const descriptionIndex = trimmed.indexOf(descriptionPrefix);
+  const titleIndex = cleaned.indexOf(titlePrefix);
+  const descriptionIndex = cleaned.indexOf(descriptionPrefix);
   if (titleIndex !== 0 || descriptionIndex < 0) {
     throw new Error("Generated pull request response did not match the expected format.");
   }
 
-  const title = trimmed.slice(titlePrefix.length, descriptionIndex).trim();
-  const body = trimmed.slice(descriptionIndex + descriptionPrefix.length).trim();
+  const title = cleaned.slice(titlePrefix.length, descriptionIndex).trim();
+  const body = cleaned.slice(descriptionIndex + descriptionPrefix.length).trim();
   if (!title || !body) {
     throw new Error("Generated pull request response is missing the title or description.");
   }
@@ -303,12 +311,10 @@ export function useTaskApprovalFlow({
         throw new Error(`Task not found: ${currentState.taskId}`);
       }
 
-      const baselineAssistantCount = parentSession.messages.filter(
-        (message) => message.role === "assistant",
-      ).length;
       const forkedSessionId = await forkAgentSession({
         parentSessionId: parentSession.sessionId,
       });
+      const baselineAssistantCount = 0;
       const prompt = buildAgentMessagePrompt({
         role: "build",
         templateId: "message.build_pull_request_draft",
@@ -426,10 +432,11 @@ export function useTaskApprovalFlow({
             description:
               "OpenDucktor is drafting the title and description. This can take some time.",
           });
+          const currentState = state;
           reset();
           void (async () => {
             try {
-              const pullRequest = await createPullRequestWithAi(state);
+              const pullRequest = await createPullRequestWithAi(currentState);
               await refreshTasks();
               toast.success("Pull request created", {
                 id: loadingToastId,
@@ -453,7 +460,7 @@ export function useTaskApprovalFlow({
                 action: {
                   label: "Reopen",
                   onClick: () => {
-                    openTaskApproval(state.taskId, {
+                    openTaskApproval(currentState.taskId, {
                       ...reopenOptions,
                       errorMessage: description,
                     });
