@@ -208,6 +208,55 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
+  test("resets transient sending state when switching task context", async () => {
+    const sendDeferred = createDeferred<void>();
+    const sendAgentMessage = mock(() => sendDeferred.promise);
+    const taskOneSession = createSession({
+      taskId: "task-1",
+      sessionId: "session-task-1",
+      status: "stopped",
+    });
+    const taskTwoSession = createSession({
+      taskId: "task-2",
+      sessionId: "session-task-2",
+      status: "stopped",
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: taskOneSession,
+      sessionsForTask: [taskOneSession],
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+
+    let sendPromise: Promise<void> | undefined;
+    await harness.run((state) => {
+      sendPromise = state.onSend();
+    });
+
+    await harness.waitFor((state) => state.isSending);
+    expect(harness.getLatest().isSessionWorking).toBe(true);
+
+    await harness.update({
+      ...createBaseArgs(),
+      taskId: "task-2",
+      activeSession: taskTwoSession,
+      sessionsForTask: [taskTwoSession],
+      sendAgentMessage,
+      input: "follow up",
+    });
+
+    const nextState = harness.getLatest();
+    expect(nextState.isSending).toBe(false);
+    expect(nextState.isSessionWorking).toBe(false);
+
+    sendDeferred.resolve();
+    await sendPromise;
+    await harness.unmount();
+  });
+
   test("onSend requests model selection before creating a new session", async () => {
     const requestedSelection = {
       runtimeKind: "opencode",

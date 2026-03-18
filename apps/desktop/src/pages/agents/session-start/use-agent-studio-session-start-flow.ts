@@ -79,6 +79,8 @@ export function useAgentStudioSessionStartFlow({
 
   const previousRepoForSessionRefs = useRef<string | null>(activeRepo);
   const startingSessionByTaskRef = useRef(new Map<string, Promise<string | undefined>>());
+  const sessionStartScopeKey = `${activeRepo ?? ""}:${taskId}:${role}`;
+  const previousSessionStartScopeKeyRef = useRef(sessionStartScopeKey);
 
   useEffect(() => {
     if (previousRepoForSessionRefs.current === activeRepo) {
@@ -88,6 +90,15 @@ export function useAgentStudioSessionStartFlow({
     previousRepoForSessionRefs.current = activeRepo;
     startingSessionByTaskRef.current.clear();
   }, [activeRepo]);
+
+  useEffect(() => {
+    if (previousSessionStartScopeKeyRef.current === sessionStartScopeKey) {
+      return;
+    }
+
+    previousSessionStartScopeKeyRef.current = sessionStartScopeKey;
+    setStartingActivityCount(0);
+  }, [sessionStartScopeKey]);
 
   const resolveRequestedSelection = useCallback(
     async (

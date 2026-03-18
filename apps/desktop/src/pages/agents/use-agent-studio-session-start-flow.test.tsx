@@ -176,6 +176,39 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
+  test("resets transient starting state when switching task context", async () => {
+    const selectionDeferred = createDeferred<{
+      selectedModel: HookArgs["selectionForNewSession"];
+    } | null>();
+    const requestNewSessionStart = mock(() => selectionDeferred.promise);
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      requestNewSessionStart,
+    });
+
+    await harness.mount();
+
+    let startPromise: Promise<string | undefined> | undefined;
+    await harness.run((state) => {
+      startPromise = state.startSession("composer_send");
+    });
+
+    await harness.waitFor((state) => state.isStarting);
+
+    await harness.update({
+      ...createBaseArgs(),
+      taskId: "task-2",
+      requestNewSessionStart,
+    });
+
+    expect(harness.getLatest().isStarting).toBe(false);
+
+    selectionDeferred.resolve(null);
+    await startPromise;
+    await harness.unmount();
+  });
+
   test("handleCreateSession for qa rejection starts a fresh builder session in the existing worktree", async () => {
     const startAgentSession = mock(async () => "session-build-rework");
     const sendAgentMessage = mock(async () => {});

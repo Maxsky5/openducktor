@@ -87,6 +87,8 @@ export function useAgentStudioSessionActions({
   const latestInputRef = useRef(input);
 
   const activeSessionId = activeSession?.sessionId ?? null;
+  const activeComposerContextKey = `${activeRepo ?? ""}:${taskId}:${role}:${activeSessionId ?? ""}`;
+  const previousComposerContextKeyRef = useRef(activeComposerContextKey);
   const isSessionWorking =
     Boolean(activeSession) &&
     ((activeSession?.status ?? "stopped") === "running" ||
@@ -124,6 +126,15 @@ export function useAgentStudioSessionActions({
   useEffect(() => {
     latestInputRef.current = input;
   }, [input]);
+
+  useEffect(() => {
+    if (previousComposerContextKeyRef.current === activeComposerContextKey) {
+      return;
+    }
+
+    previousComposerContextKeyRef.current = activeComposerContextKey;
+    setIsSending(false);
+  }, [activeComposerContextKey]);
 
   const onSend = useCallback(async (): Promise<void> => {
     if (isSending || isStarting || !agentStudioReady) {
