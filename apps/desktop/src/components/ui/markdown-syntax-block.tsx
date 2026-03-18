@@ -138,7 +138,13 @@ export default function MarkdownSyntaxBlock({
   );
 
   useEffect(() => {
-    if (!isDark || oneDarkTheme) {
+    if (!isDark) {
+      setLoadFailure((current) => (current?.kind === "theme" ? null : current));
+      return;
+    }
+
+    if (oneDarkTheme) {
+      setLoadFailure((current) => (current?.kind === "theme" ? null : current));
       return;
     }
 
@@ -165,6 +171,12 @@ export default function MarkdownSyntaxBlock({
       isActive = false;
     };
   }, [isDark, oneDarkTheme]);
+
+  useEffect(() => {
+    if (!isSupportedLanguage || isLanguageRegistered) {
+      setLoadFailure((current) => (current?.kind === "language" ? null : current));
+    }
+  }, [isLanguageRegistered, isSupportedLanguage]);
 
   useEffect(() => {
     const shouldRegisterLanguage =

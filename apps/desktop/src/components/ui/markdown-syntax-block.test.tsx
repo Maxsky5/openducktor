@@ -175,7 +175,7 @@ describe("MarkdownSyntaxBlock", () => {
     });
   });
 
-  test("surfaces a fallback notice when a supported language grammar fails to load", async () => {
+  test("surfaces a fallback notice for grammar load failures and clears it after switching away", async () => {
     yamlLanguageShouldFail = true;
 
     let renderer!: ReactTestRenderer;
@@ -190,6 +190,17 @@ describe("MarkdownSyntaxBlock", () => {
       "Syntax highlighting unavailable: failed to load the yaml grammar (missing yaml grammar)",
     );
     expect(findSyntaxNodes(renderer)).toHaveLength(0);
+
+    act(() => {
+      renderer.update(<MarkdownSyntaxBlock language="elixir" code="IO.puts(:hello)" />);
+    });
+
+    await act(flushMicrotasks);
+
+    expect(
+      renderer.root.findAll((node) => node.props["data-syntax-load-failure"] !== undefined),
+    ).toHaveLength(0);
+    expect(renderer.root.findAllByType("p")).toHaveLength(0);
 
     act(() => {
       renderer.unmount();
