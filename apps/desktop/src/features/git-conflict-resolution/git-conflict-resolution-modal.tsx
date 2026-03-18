@@ -58,7 +58,9 @@ export function useGitConflictResolutionModalState(
   request: PendingGitConflictResolutionRequest,
 ): UseGitConflictResolutionModalStateResult {
   const requestKey = getRequestKey(request);
-  const [state, setState] = useState<GitConflictResolutionModalState>(() => createModalState(request));
+  const [state, setState] = useState<GitConflictResolutionModalState>(() =>
+    createModalState(request),
+  );
   const currentState = state.requestKey === requestKey ? state : createModalState(request);
   const hasExistingSessions = request.builderSessions.length > 0;
   const confirmDisabled =

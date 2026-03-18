@@ -217,7 +217,8 @@ export const createEnsureSessionReady = ({
         },
         {
           operationPrefix: "ensure-ready-warm-session",
-          shouldLoadModelCatalog: !activeSession.modelCatalog && !activeSession.isLoadingModelCatalog,
+          shouldLoadModelCatalog:
+            !activeSession.modelCatalog && !activeSession.isLoadingModelCatalog,
         },
       );
     }

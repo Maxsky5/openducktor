@@ -18,7 +18,9 @@ export function BranchSwitcher(): ReactElement | null {
   const activeBranchValue = activeBranch?.name ?? "";
 
   const branchOptions = useMemo(() => toBranchSelectorOptions(branches), [branches]);
-  const selectedBranchValue = isSwitchingBranch ? pendingBranchValue ?? activeBranchValue : activeBranchValue;
+  const selectedBranchValue = isSwitchingBranch
+    ? (pendingBranchValue ?? activeBranchValue)
+    : activeBranchValue;
 
   if (!activeRepo) {
     return null;

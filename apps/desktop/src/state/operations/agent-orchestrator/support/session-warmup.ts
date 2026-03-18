@@ -33,24 +33,11 @@ export type SessionWarmupOptions = {
 
 export const warmSessionData = (
   context: SessionOrchestrationContext,
-  {
-    loadSessionTodos,
-    loadSessionModelCatalog,
-  }: SessionWarmupDependencies,
-  {
-    operationPrefix,
-    shouldLoadModelCatalog = true,
-  }: SessionWarmupOptions,
+  { loadSessionTodos, loadSessionModelCatalog }: SessionWarmupDependencies,
+  { operationPrefix, shouldLoadModelCatalog = true }: SessionWarmupOptions,
 ): void => {
-  const {
-    repoPath,
-    sessionId,
-    taskId,
-  role,
-    runtimeKind,
-    runtimeConnection,
-    externalSessionId,
-  } = context;
+  const { repoPath, sessionId, taskId, role, runtimeKind, runtimeConnection, externalSessionId } =
+    context;
   const baseTags = {
     repoPath,
     sessionId,
