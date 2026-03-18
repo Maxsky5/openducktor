@@ -1,4 +1,4 @@
-import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { type ReactElement, useMemo, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import { useWorkspaceState } from "@/state";
@@ -14,13 +14,11 @@ export function BranchSwitcher(): ReactElement | null {
     branchSyncDegraded,
     switchBranch,
   } = useWorkspaceState();
-  const [selectedBranchValue, setSelectedBranchValue] = useState("");
+  const [pendingBranchValue, setPendingBranchValue] = useState<string | null>(null);
+  const activeBranchValue = activeBranch?.name ?? "";
 
   const branchOptions = useMemo(() => toBranchSelectorOptions(branches), [branches]);
-
-  useEffect(() => {
-    setSelectedBranchValue(activeBranch?.name ?? "");
-  }, [activeBranch?.name]);
+  const selectedBranchValue = isSwitchingBranch ? pendingBranchValue ?? activeBranchValue : activeBranchValue;
 
   if (!activeRepo) {
     return null;
@@ -46,15 +44,15 @@ export function BranchSwitcher(): ReactElement | null {
         placeholder={branchPlaceholder}
         popoverClassName="w-[min(28rem,calc(100vw-2rem))] p-0"
         onValueChange={(nextBranch) => {
-          const previousBranch = activeBranch?.name ?? "";
+          const previousBranch = activeBranchValue;
 
           if (!nextBranch || nextBranch === previousBranch) {
             return;
           }
 
-          setSelectedBranchValue(nextBranch);
+          setPendingBranchValue(nextBranch);
           void switchBranch(nextBranch).catch(() => {
-            setSelectedBranchValue(previousBranch);
+            setPendingBranchValue(null);
           });
         }}
       />
