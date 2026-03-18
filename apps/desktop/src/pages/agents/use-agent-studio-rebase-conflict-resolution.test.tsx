@@ -223,22 +223,15 @@ describe("useAgentStudioRebaseConflictResolution", () => {
     try {
       await harness.mount();
 
-      let resolutionPromise: Promise<boolean> | null = null;
-      await harness.run((state) => {
-        resolutionPromise = state.handleResolveRebaseConflict(
-          createConflict({
-            workingDir: undefined,
-          }),
-        );
-      });
-
-      if (resolutionPromise === null) {
-        throw new Error("Expected conflict resolution promise");
-      }
-
-      await expect(resolutionPromise).rejects.toThrow(
-        "Missing paused worktree: conflict.workingDir is required.",
-      );
+      await expect(
+        harness.run(async (state) => {
+          await state.handleResolveRebaseConflict(
+            createConflict({
+              workingDir: undefined,
+            }),
+          );
+        }),
+      ).rejects.toThrow("Missing paused worktree: conflict.workingDir is required.");
 
       expect(args.startAgentSession).toHaveBeenCalledTimes(0);
       expect(args.sendAgentMessage).toHaveBeenCalledTimes(0);
