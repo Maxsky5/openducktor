@@ -307,7 +307,7 @@ describe("agents-page-session-tabs", () => {
     });
   });
 
-  test("marks builder as in_progress when latest role session is started but not completed", () => {
+  test("marks workflow role as in_progress when latest role session is started but not completed", () => {
     const roleSessionByRole = buildRoleSessionSummaryMap([
       buildSession({ role: "planner", status: "idle" }),
     ]);

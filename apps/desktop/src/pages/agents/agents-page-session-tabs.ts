@@ -97,9 +97,6 @@ const deriveWorkflowTone = (params: {
   if (liveSession === "error") {
     return "failed";
   }
-  if (liveSession === "stopped" && completion === "in_progress") {
-    return "in_progress";
-  }
   if (completion === "done") {
     return "done";
   }
@@ -271,7 +268,7 @@ export const buildWorkflowStateByRole = (params: {
       liveSession === "running" ||
       liveSession === "error" ||
       (liveSession === "idle" && workflow.available) ||
-      (liveSession === "stopped" && workflow.available)
+      (role === "build" && liveSession === "stopped" && workflow.available)
     ) {
       completion = "in_progress";
     }
