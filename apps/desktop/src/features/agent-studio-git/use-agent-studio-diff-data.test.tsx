@@ -315,6 +315,8 @@ describe("useAgentStudioDiffData", () => {
 
       await secondHarness.mount();
       await secondHarness.waitFor((state) => state.diffScope === "uncommitted" && !state.isLoading);
+      expect(secondHarness.getLatest().fileStatuses[0]?.path).toBe("src/main.ts");
+      expect(secondHarness.getLatest().upstreamAheadBehind).toEqual({ ahead: 1, behind: 0 });
 
       expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(1);
     } finally {
@@ -390,6 +392,41 @@ describe("useAgentStudioDiffData", () => {
       });
 
       await harness.waitFor((state) => state.selectedFile === null);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("resets diff scope to uncommitted when repository context changes", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      repoPath: "/repo-a",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.run((state) => {
+        state.setDiffScope("target");
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+      await harness.waitFor((state) => state.diffScope === "target");
+
+      await harness.update({
+        ...createBaseArgs(),
+        repoPath: "/repo-b",
+      });
+
+      await harness.waitFor((state) => state.diffScope === "uncommitted");
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        3,
+        "/repo-b",
+        "origin/main",
+        "uncommitted",
+        undefined,
+      );
     } finally {
       await harness.unmount();
     }
@@ -629,13 +666,8 @@ describe("useAgentStudioDiffData", () => {
       });
 
       await harness.waitFor((state) => state.branch === "feature/switched");
-      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(3);
-
-      await harness.run((state) => {
-        state.setDiffScope("uncommitted");
-      });
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 4);
       await harness.waitFor((state) => state.diffScope === "uncommitted");
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(3);
 
       expect(harness.getLatest().fileDiffs).toEqual([
         {
@@ -1784,19 +1816,19 @@ describe("useAgentStudioDiffData", () => {
         3,
         "/repo-b",
         "origin/main",
-        "target",
+        "uncommitted",
         undefined,
       );
 
       await harness.run((state) => {
-        state.setDiffScope("uncommitted");
+        state.setDiffScope("target");
       });
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 4);
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
         4,
         "/repo-b",
         "origin/main",
-        "uncommitted",
+        "target",
         undefined,
       );
     } finally {

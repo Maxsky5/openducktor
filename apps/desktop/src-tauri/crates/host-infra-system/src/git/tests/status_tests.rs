@@ -400,6 +400,36 @@ fn get_worktree_status_target_scope_uses_branch_point_when_branch_is_ahead_and_b
 }
 
 #[test]
+fn get_worktree_status_target_scope_uses_empty_tree_when_histories_are_unrelated() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-status-unrelated-histories");
+    run_git_ok(&repo.path, &["switch", "--orphan", "feature/unrelated"]);
+    run_git_ok(&repo.path, &["rm", "-rf", "--ignore-unmatch", "."]);
+
+    fs::write(repo.path.join("orphan.txt"), "orphan branch\n").expect("orphan file should write");
+    run_git_ok(&repo.path, &["add", "orphan.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "orphan root"]);
+
+    let git = GitCliPort::new();
+    let status = git
+        .get_worktree_status(&repo.path, "main", GitDiffScope::Target)
+        .expect("target scope should resolve for unrelated histories");
+
+    assert!(
+        status.file_diffs.iter().any(|diff| {
+            diff.file == "orphan.txt"
+                && diff.diff_type == "added"
+                && diff.additions == 1
+                && diff.deletions == 0
+        }),
+        "target scope should diff against the empty tree when there is no merge base"
+    );
+}
+
+#[test]
 fn get_worktree_status_surfaces_non_fatal_upstream_count_error() {
     if !git_available() {
         return;

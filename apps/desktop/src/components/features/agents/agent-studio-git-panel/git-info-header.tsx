@@ -349,15 +349,10 @@ function GitActionRow({
 
 type GitDiffScopeTabsProps = {
   diffScope: DiffScope;
-  isRepositoryMode: boolean;
   onScopeChange: (scope: DiffScope) => void;
 };
 
-function GitDiffScopeTabs({
-  diffScope,
-  isRepositoryMode,
-  onScopeChange,
-}: GitDiffScopeTabsProps): ReactElement {
+function GitDiffScopeTabs({ diffScope, onScopeChange }: GitDiffScopeTabsProps): ReactElement {
   return (
     <div className="flex flex-col gap-1">
       <Tabs
@@ -569,11 +564,7 @@ export function GitInfoHeader({
         </div>
       ) : null}
 
-      <GitDiffScopeTabs
-        diffScope={diffScope}
-        isRepositoryMode={isRepositoryMode}
-        onScopeChange={handleScopeChange}
-      />
+      <GitDiffScopeTabs diffScope={diffScope} onScopeChange={handleScopeChange} />
       <GitInfoHeaderErrors pushError={pushError ?? null} rebaseError={rebaseError ?? null} />
     </div>
   );

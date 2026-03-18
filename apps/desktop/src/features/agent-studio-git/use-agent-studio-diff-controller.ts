@@ -102,16 +102,6 @@ export function useAgentStudioDiffController({
     createInitialControllerState,
   );
   const [diffScope, setDiffScope] = useState<DiffScope>("uncommitted");
-
-  const versionByScopeAndModeRef = useRef(createVersionState());
-  // Keep this monotonic across context resets so stale completions cannot
-  // collide with a newer loading request after resetRequestTracking clears refs.
-  const requestSequenceRef = useRef(0);
-  const inFlightScopeRequestRef = useRef(createInFlightState());
-  const queuedFullReloadByScopeRef = useRef(createQueuedReloadState());
-  const queuedFullReloadForceByScopeRef = useRef(createQueuedReloadForceState());
-  const invalidatedFullReloadByScopeRef = useRef(createInvalidatedFullReloadState());
-  const latestLoadingRequestSequenceRef = useRef<number | null>(null);
   const requestContextKeyRef = useRef<string | null>(null);
   const {
     beginRequest,
