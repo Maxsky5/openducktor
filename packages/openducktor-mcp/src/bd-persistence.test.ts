@@ -155,7 +155,7 @@ describe("BdPersistence", () => {
         aiReviewEnabled: false,
       },
     ]);
-    expect(state.calls).toEqual([["list", "--all", "-n", "500"]]);
+    expect(state.calls).toEqual([["list", "--all", "--limit", "0"]]);
   });
 
   test("listTasks throws when bd payload is not an array", async () => {

@@ -1,16 +1,24 @@
-import type { TaskCard } from "./contracts";
+import type {
+  PublicTaskCreateInput,
+  TaskPersistencePort,
+  TaskSearchFilters,
+} from "./bd-persistence";
+import type { PublicTask, RawIssue, TaskCard, TaskStatus } from "./contracts";
 import type { EpicSubtaskReplacementService } from "./epic-subtask-replacement";
 import type { TaskDocumentsSnapshot } from "./metadata-docs";
 import { normalizePlanSubtasks } from "./plan-subtasks";
 import type { TaskDocumentPort } from "./task-document-store";
+import { issueToPublicTask } from "./task-mapping";
 import type { OdtTaskWorkflowRuntimePort } from "./task-workflow-runtime";
 import type {
   BuildBlockedInput,
   BuildCompletedInput,
   BuildResumedInput,
+  CreateTaskInput,
   QaApprovedInput,
   QaRejectedInput,
   ReadTaskInput,
+  SearchTasksInput,
   SetPlanInput,
   SetSpecInput,
 } from "./tool-schemas";
@@ -27,8 +35,15 @@ type PersistedDocumentResult = {
   revision: number;
 };
 
+export type TaskSnapshotResult = {
+  task: PublicTask;
+  documents: TaskDocumentsSnapshot;
+};
+
 export type OdtTaskStoreUseCases = {
   readTask: OdtTaskStoreUseCase<ReadTaskInput, ReadTaskResult>;
+  createTask: OdtTaskStoreUseCase<CreateTaskInput, CreateTaskResult>;
+  searchTasks: OdtTaskStoreUseCase<SearchTasksInput, SearchTasksResult>;
   setSpec: OdtTaskStoreUseCase<SetSpecInput, SetSpecResult>;
   setPlan: OdtTaskStoreUseCase<SetPlanInput, SetPlanResult>;
   buildBlocked: OdtTaskStoreUseCase<BuildBlockedInput, BuildBlockedResult>;
@@ -42,42 +57,47 @@ export type OdtTaskStoreUseCase<Input, Output> = {
   execute(input: Input): Promise<Output>;
 };
 
-export type ReadTaskResult = {
-  task: TaskCard;
-  documents: TaskDocumentsSnapshot;
+export type ReadTaskResult = TaskSnapshotResult;
+export type CreateTaskResult = TaskSnapshotResult;
+
+export type SearchTasksResult = {
+  results: TaskSnapshotResult[];
+  limit: number;
+  totalCount: number;
+  hasMore: boolean;
 };
 
 export type SetSpecResult = {
-  task: TaskCard;
+  task: PublicTask;
   document: PersistedDocumentResult;
 };
 
 export type SetPlanResult = {
-  task: TaskCard;
+  task: PublicTask;
   document: PersistedDocumentResult;
   createdSubtaskIds: string[];
 };
 
 export type BuildBlockedResult = {
-  task: TaskCard;
+  task: PublicTask;
   reason: string;
 };
 
 export type BuildResumedResult = {
-  task: TaskCard;
+  task: PublicTask;
 };
 
 export type BuildCompletedResult = {
-  task: TaskCard;
+  task: PublicTask;
   summary?: string;
 };
 
 export type QaApprovedResult = {
-  task: TaskCard;
+  task: PublicTask;
 };
 
 export type QaRejectedResult = {
-  task: TaskCard;
+  task: PublicTask;
 };
 
 type EpicSubtaskReplacementPort = Pick<
@@ -85,8 +105,38 @@ type EpicSubtaskReplacementPort = Pick<
   "prepareReplacement" | "applyReplacement"
 >;
 
+const ACTIVE_TASK_STATUSES = new Set<TaskStatus>([
+  "open",
+  "spec_ready",
+  "ready_for_dev",
+  "in_progress",
+  "blocked",
+  "ai_review",
+  "human_review",
+]);
+
+const toTaskSnapshotResult = (
+  issue: RawIssue,
+  metadataNamespace: string,
+  documentStore: Pick<TaskDocumentPort, "parseDocs">,
+): TaskSnapshotResult => ({
+  task: issueToPublicTask(issue, metadataNamespace),
+  documents: documentStore.parseDocs(issue),
+});
+
+const toPublicTaskFromWorkflow = async (
+  persistence: Pick<TaskPersistencePort, "metadataNamespace" | "showRawIssue">,
+  taskId: string,
+): Promise<PublicTask> => {
+  const issue = await persistence.showRawIssue(taskId);
+  return issueToPublicTask(issue, persistence.metadataNamespace);
+};
+
 type ReadTaskUseCaseDeps = {
-  workflow: Pick<OdtTaskWorkflowRuntimePort, "ensureInitialized" | "readTaskSnapshot">;
+  workflow: Pick<
+    OdtTaskWorkflowRuntimePort,
+    "ensureInitialized" | "readTaskSnapshot" | "metadataNamespace"
+  >;
   documentStore: Pick<TaskDocumentPort, "parseDocs">;
 };
 
@@ -101,16 +151,90 @@ export class ReadTaskUseCase implements OdtTaskStoreUseCase<ReadTaskInput, ReadT
 
   async execute(input: ReadTaskInput): Promise<ReadTaskResult> {
     await this.workflow.ensureInitialized();
-    const { issue, task } = await this.workflow.readTaskSnapshot(input.taskId);
+    const { issue } = await this.workflow.readTaskSnapshot(input.taskId);
+    return toTaskSnapshotResult(issue, this.workflow.metadataNamespace, this.documentStore);
+  }
+}
+
+type CreateTaskUseCaseDeps = {
+  persistence: Pick<TaskPersistencePort, "createTask" | "ensureInitialized" | "metadataNamespace">;
+  documentStore: Pick<TaskDocumentPort, "parseDocs">;
+};
+
+export class CreateTaskUseCase implements OdtTaskStoreUseCase<CreateTaskInput, CreateTaskResult> {
+  private readonly persistence: CreateTaskUseCaseDeps["persistence"];
+  private readonly documentStore: CreateTaskUseCaseDeps["documentStore"];
+
+  constructor(deps: CreateTaskUseCaseDeps) {
+    this.persistence = deps.persistence;
+    this.documentStore = deps.documentStore;
+  }
+
+  async execute(input: CreateTaskInput): Promise<CreateTaskResult> {
+    await this.persistence.ensureInitialized();
+    const createInput: PublicTaskCreateInput = {
+      title: input.title.trim(),
+      issueType: input.issueType,
+      priority: input.priority,
+      ...(input.description !== undefined ? { description: input.description } : {}),
+      ...(input.labels !== undefined ? { labels: input.labels } : {}),
+      ...(input.aiReviewEnabled !== undefined ? { aiReviewEnabled: input.aiReviewEnabled } : {}),
+    };
+    const issue = await this.persistence.createTask(createInput);
+    return toTaskSnapshotResult(issue, this.persistence.metadataNamespace, this.documentStore);
+  }
+}
+
+type SearchTasksUseCaseDeps = {
+  persistence: Pick<
+    TaskPersistencePort,
+    "ensureInitialized" | "listRawIssues" | "metadataNamespace"
+  >;
+  documentStore: Pick<TaskDocumentPort, "parseDocs">;
+};
+
+export class SearchTasksUseCase
+  implements OdtTaskStoreUseCase<SearchTasksInput, SearchTasksResult>
+{
+  private readonly persistence: SearchTasksUseCaseDeps["persistence"];
+  private readonly documentStore: SearchTasksUseCaseDeps["documentStore"];
+
+  constructor(deps: SearchTasksUseCaseDeps) {
+    this.persistence = deps.persistence;
+    this.documentStore = deps.documentStore;
+  }
+
+  async execute(input: SearchTasksInput): Promise<SearchTasksResult> {
+    await this.persistence.ensureInitialized();
+    const filters: TaskSearchFilters = {
+      ...(input.priority !== undefined ? { priority: input.priority } : {}),
+      ...(input.issueType ? { issueType: input.issueType } : {}),
+      ...(input.status ? { status: input.status } : {}),
+      ...(input.title ? { title: input.title } : {}),
+      ...(input.tags ? { tags: input.tags } : {}),
+    };
+    const issues = await this.persistence.listRawIssues(filters);
+    const activeIssues = issues.filter((issue) =>
+      ACTIVE_TASK_STATUSES.has(issue.status as TaskStatus),
+    );
+    const totalCount = activeIssues.length;
+    const results = activeIssues
+      .slice(0, input.limit)
+      .map((issue) =>
+        toTaskSnapshotResult(issue, this.persistence.metadataNamespace, this.documentStore),
+      );
 
     return {
-      task,
-      documents: this.documentStore.parseDocs(issue),
+      results,
+      limit: input.limit,
+      totalCount,
+      hasMore: totalCount > results.length,
     };
   }
 }
 
 type SetSpecUseCaseDeps = {
+  persistence: Pick<TaskPersistencePort, "metadataNamespace" | "showRawIssue">;
   workflow: Pick<
     OdtTaskWorkflowRuntimePort,
     "ensureInitialized" | "resolveTaskContext" | "refreshTaskContext" | "transitionTask"
@@ -119,10 +243,12 @@ type SetSpecUseCaseDeps = {
 };
 
 export class SetSpecUseCase implements OdtTaskStoreUseCase<SetSpecInput, SetSpecResult> {
+  private readonly persistence: SetSpecUseCaseDeps["persistence"];
   private readonly workflow: SetSpecUseCaseDeps["workflow"];
   private readonly documentStore: SetSpecUseCaseDeps["documentStore"];
 
   constructor(deps: SetSpecUseCaseDeps) {
+    this.persistence = deps.persistence;
     this.workflow = deps.workflow;
     this.documentStore = deps.documentStore;
   }
@@ -144,7 +270,7 @@ export class SetSpecUseCase implements OdtTaskStoreUseCase<SetSpecInput, SetSpec
     }
 
     return {
-      task: nextTask,
+      task: await toPublicTaskFromWorkflow(this.persistence, nextTask.id),
       document: {
         markdown,
         updatedAt: persistedDocument.updatedAt,
@@ -155,6 +281,7 @@ export class SetSpecUseCase implements OdtTaskStoreUseCase<SetSpecInput, SetSpec
 }
 
 type SetPlanUseCaseDeps = {
+  persistence: Pick<TaskPersistencePort, "metadataNamespace" | "showRawIssue">;
   workflow: Pick<
     OdtTaskWorkflowRuntimePort,
     "ensureInitialized" | "resolveTaskContext" | "refreshTaskContext" | "transitionTask"
@@ -164,11 +291,13 @@ type SetPlanUseCaseDeps = {
 };
 
 export class SetPlanUseCase implements OdtTaskStoreUseCase<SetPlanInput, SetPlanResult> {
+  private readonly persistence: SetPlanUseCaseDeps["persistence"];
   private readonly workflow: SetPlanUseCaseDeps["workflow"];
   private readonly documentStore: SetPlanUseCaseDeps["documentStore"];
   private readonly epicSubtaskReplacementService: SetPlanUseCaseDeps["epicSubtaskReplacementService"];
 
   constructor(deps: SetPlanUseCaseDeps) {
+    this.persistence = deps.persistence;
     this.workflow = deps.workflow;
     this.documentStore = deps.documentStore;
     this.epicSubtaskReplacementService = deps.epicSubtaskReplacementService;
@@ -185,7 +314,6 @@ export class SetPlanUseCase implements OdtTaskStoreUseCase<SetPlanInput, SetPlan
     let persistedDocument: { updatedAt: string; revision: number };
     let createdSubtaskIds: string[] = [];
     if (task.issueType === "epic") {
-      // Epic subtask replacement must validate against a fresh snapshot, not the initial context.
       const epicReplacement = await this.epicSubtaskReplacementService.prepareReplacement(
         task,
         normalizedSubtasks,
@@ -206,7 +334,7 @@ export class SetPlanUseCase implements OdtTaskStoreUseCase<SetPlanInput, SetPlan
     const nextTask = await this.workflow.transitionTask(task.id, "ready_for_dev", refreshedContext);
 
     return {
-      task: nextTask,
+      task: await toPublicTaskFromWorkflow(this.persistence, nextTask.id),
       document: {
         markdown,
         updatedAt: persistedDocument.updatedAt,
@@ -218,15 +346,18 @@ export class SetPlanUseCase implements OdtTaskStoreUseCase<SetPlanInput, SetPlan
 }
 
 type TransitionTaskUseCaseDeps = {
+  persistence: Pick<TaskPersistencePort, "metadataNamespace" | "showRawIssue">;
   workflow: Pick<OdtTaskWorkflowRuntimePort, "ensureInitialized" | "transitionTask">;
 };
 
 export class BuildBlockedUseCase
   implements OdtTaskStoreUseCase<BuildBlockedInput, BuildBlockedResult>
 {
+  private readonly persistence: TransitionTaskUseCaseDeps["persistence"];
   private readonly workflow: TransitionTaskUseCaseDeps["workflow"];
 
   constructor(deps: TransitionTaskUseCaseDeps) {
+    this.persistence = deps.persistence;
     this.workflow = deps.workflow;
   }
 
@@ -234,7 +365,7 @@ export class BuildBlockedUseCase
     await this.workflow.ensureInitialized();
     const task = await this.workflow.transitionTask(input.taskId, "blocked");
     return {
-      task,
+      task: await toPublicTaskFromWorkflow(this.persistence, task.id),
       reason: input.reason,
     };
   }
@@ -243,20 +374,25 @@ export class BuildBlockedUseCase
 export class BuildResumedUseCase
   implements OdtTaskStoreUseCase<BuildResumedInput, BuildResumedResult>
 {
+  private readonly persistence: TransitionTaskUseCaseDeps["persistence"];
   private readonly workflow: TransitionTaskUseCaseDeps["workflow"];
 
   constructor(deps: TransitionTaskUseCaseDeps) {
+    this.persistence = deps.persistence;
     this.workflow = deps.workflow;
   }
 
   async execute(input: BuildResumedInput): Promise<BuildResumedResult> {
     await this.workflow.ensureInitialized();
     const task = await this.workflow.transitionTask(input.taskId, "in_progress");
-    return { task };
+    return {
+      task: await toPublicTaskFromWorkflow(this.persistence, task.id),
+    };
   }
 }
 
 type BuildCompletedUseCaseDeps = {
+  persistence: Pick<TaskPersistencePort, "metadataNamespace" | "showRawIssue">;
   workflow: Pick<
     OdtTaskWorkflowRuntimePort,
     | "ensureInitialized"
@@ -271,10 +407,12 @@ type BuildCompletedUseCaseDeps = {
 export class BuildCompletedUseCase
   implements OdtTaskStoreUseCase<BuildCompletedInput, BuildCompletedResult>
 {
+  private readonly persistence: BuildCompletedUseCaseDeps["persistence"];
   private readonly workflow: BuildCompletedUseCaseDeps["workflow"];
   private readonly documentStore: BuildCompletedUseCaseDeps["documentStore"];
 
   constructor(deps: BuildCompletedUseCaseDeps) {
+    this.persistence = deps.persistence;
     this.workflow = deps.workflow;
     this.documentStore = deps.documentStore;
   }
@@ -294,13 +432,14 @@ export class BuildCompletedUseCase
         : "human_review";
     const updatedTask = await this.workflow.transitionTask(task.id, nextStatus, refreshedContext);
     return {
-      task: updatedTask,
+      task: await toPublicTaskFromWorkflow(this.persistence, updatedTask.id),
       ...(input.summary ? { summary: input.summary } : {}),
     };
   }
 }
 
 type QaUseCaseDeps = {
+  persistence: Pick<TaskPersistencePort, "metadataNamespace" | "showRawIssue">;
   workflow: Pick<
     OdtTaskWorkflowRuntimePort,
     "applyTaskUpdate" | "assertTransitionAllowed" | "ensureInitialized" | "readTaskSnapshot"
@@ -309,10 +448,12 @@ type QaUseCaseDeps = {
 };
 
 export class QaApprovedUseCase implements OdtTaskStoreUseCase<QaApprovedInput, QaApprovedResult> {
+  private readonly persistence: QaUseCaseDeps["persistence"];
   private readonly workflow: QaUseCaseDeps["workflow"];
   private readonly documentStore: QaUseCaseDeps["documentStore"];
 
   constructor(deps: QaUseCaseDeps) {
+    this.persistence = deps.persistence;
     this.workflow = deps.workflow;
     this.documentStore = deps.documentStore;
   }
@@ -335,15 +476,19 @@ export class QaApprovedUseCase implements OdtTaskStoreUseCase<QaApprovedInput, Q
       metadataRoot: preparedWrite.metadataRoot,
       status: "human_review",
     });
-    return { task: updatedTask };
+    return {
+      task: await toPublicTaskFromWorkflow(this.persistence, updatedTask.id),
+    };
   }
 }
 
 export class QaRejectedUseCase implements OdtTaskStoreUseCase<QaRejectedInput, QaRejectedResult> {
+  private readonly persistence: QaUseCaseDeps["persistence"];
   private readonly workflow: QaUseCaseDeps["workflow"];
   private readonly documentStore: QaUseCaseDeps["documentStore"];
 
   constructor(deps: QaUseCaseDeps) {
+    this.persistence = deps.persistence;
     this.workflow = deps.workflow;
     this.documentStore = deps.documentStore;
   }
@@ -366,11 +511,14 @@ export class QaRejectedUseCase implements OdtTaskStoreUseCase<QaRejectedInput, Q
       metadataRoot: preparedWrite.metadataRoot,
       status: "in_progress",
     });
-    return { task: updatedTask };
+    return {
+      task: await toPublicTaskFromWorkflow(this.persistence, updatedTask.id),
+    };
   }
 }
 
 export type CreateOdtTaskStoreUseCasesDeps = {
+  persistence: TaskPersistencePort;
   workflow: OdtTaskWorkflowRuntimePort;
   documentStore: TaskDocumentPort;
   epicSubtaskReplacementService: EpicSubtaskReplacementPort;
@@ -383,30 +531,45 @@ export const createOdtTaskStoreUseCases = (
     workflow: deps.workflow,
     documentStore: deps.documentStore,
   }),
+  createTask: new CreateTaskUseCase({
+    persistence: deps.persistence,
+    documentStore: deps.documentStore,
+  }),
+  searchTasks: new SearchTasksUseCase({
+    persistence: deps.persistence,
+    documentStore: deps.documentStore,
+  }),
   setSpec: new SetSpecUseCase({
+    persistence: deps.persistence,
     workflow: deps.workflow,
     documentStore: deps.documentStore,
   }),
   setPlan: new SetPlanUseCase({
+    persistence: deps.persistence,
     workflow: deps.workflow,
     documentStore: deps.documentStore,
     epicSubtaskReplacementService: deps.epicSubtaskReplacementService,
   }),
   buildBlocked: new BuildBlockedUseCase({
+    persistence: deps.persistence,
     workflow: deps.workflow,
   }),
   buildResumed: new BuildResumedUseCase({
+    persistence: deps.persistence,
     workflow: deps.workflow,
   }),
   buildCompleted: new BuildCompletedUseCase({
+    persistence: deps.persistence,
     workflow: deps.workflow,
     documentStore: deps.documentStore,
   }),
   qaApproved: new QaApprovedUseCase({
+    persistence: deps.persistence,
     workflow: deps.workflow,
     documentStore: deps.documentStore,
   }),
   qaRejected: new QaRejectedUseCase({
+    persistence: deps.persistence,
     workflow: deps.workflow,
     documentStore: deps.documentStore,
   }),

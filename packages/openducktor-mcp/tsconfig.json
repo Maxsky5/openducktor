@@ -4,6 +4,8 @@
     "composite": true,
     "declaration": true,
     "emitDeclarationOnly": true,
+    "noEmit": false,
+    "rootDir": "src",
     "outDir": "dist",
     "lib": ["ES2022"]
   },

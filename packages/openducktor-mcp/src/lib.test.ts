@@ -24,6 +24,8 @@ type ProcessResult = {
   stderr?: string;
 };
 
+const FIXED_TIMESTAMP = "2026-02-28T11:30:00.000Z";
+
 const ENV_KEYS = ["ODT_REPO_PATH", "ODT_METADATA_NAMESPACE", "ODT_BEADS_DIR", "BEADS_DIR"] as const;
 
 const takeEnvSnapshot = (): Record<(typeof ENV_KEYS)[number], string | undefined> => ({
@@ -44,6 +46,28 @@ const restoreEnvSnapshot = (
     }
     process.env[key] = value;
   }
+};
+
+const enrichIssuePayload = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => enrichIssuePayload(entry));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (typeof record.id !== "string" || typeof record.title !== "string") {
+    return value;
+  }
+
+  return {
+    priority: 2,
+    labels: [],
+    created_at: FIXED_TIMESTAMP,
+    updated_at: FIXED_TIMESTAMP,
+    ...record,
+  };
 };
 
 const buildProcessRunner = (
@@ -77,9 +101,17 @@ const buildProcessRunner = (
         return { ok: true, stdout: "{}", stderr: "" };
       }
       const result = impl(args);
+      let stdout = result.stdout ?? "";
+      if (typeof result.stdout === "string" && result.stdout.trim().length > 0) {
+        try {
+          stdout = JSON.stringify(enrichIssuePayload(JSON.parse(result.stdout)));
+        } catch {
+          stdout = result.stdout;
+        }
+      }
       return {
         ok: result.ok,
-        stdout: result.stdout ?? "",
+        stdout,
         stderr: result.stderr ?? "",
       };
     },
@@ -224,6 +256,61 @@ describe("openducktor-mcp lib", () => {
             priority: 5,
           },
         ],
+      }),
+    ).toThrow();
+  });
+
+  test("schema rejects epic for create_task", () => {
+    const parsed = ODT_TOOL_SCHEMAS.create_task.parse({
+      title: "Ship docs",
+      issueType: "feature",
+      priority: 2,
+      labels: ["docs"],
+    });
+    expect(parsed.issueType).toBe("feature");
+
+    expect(() =>
+      ODT_TOOL_SCHEMAS.create_task.parse({
+        title: "Epic not allowed",
+        issueType: "epic",
+        priority: 2,
+      }),
+    ).toThrow();
+    expect(() =>
+      ODT_TOOL_SCHEMAS.create_task.parse({
+        title: "No hidden fields",
+        issueType: "task",
+        priority: 2,
+        parentId: "epic-1",
+      }),
+    ).toThrow();
+    expect(() =>
+      ODT_TOOL_SCHEMAS.create_task.parse({
+        title: "No hidden fields",
+        issueType: "task",
+        priority: 2,
+        assignee: "max",
+      }),
+    ).toThrow();
+  });
+
+  test("schema validates search_tasks limit and active status filters", () => {
+    const parsed = ODT_TOOL_SCHEMAS.search_tasks.parse({
+      status: "blocked",
+      limit: 25,
+      tags: ["backend", "mcp"],
+    });
+    expect(parsed.status).toBe("blocked");
+    expect(parsed.limit).toBe(25);
+
+    expect(() =>
+      ODT_TOOL_SCHEMAS.search_tasks.parse({
+        status: "closed",
+      }),
+    ).toThrow();
+    expect(() =>
+      ODT_TOOL_SCHEMAS.search_tasks.parse({
+        limit: 101,
       }),
     ).toThrow();
   });

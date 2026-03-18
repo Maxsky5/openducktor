@@ -20,7 +20,11 @@ describe("OdtTaskStore composition", () => {
       title: "Task 1",
       description: "Read the task description from Beads.",
       status: "open",
+      priority: 2,
       issue_type: "feature",
+      labels: [],
+      created_at: "2026-03-01T00:00:00.000Z",
+      updated_at: "2026-03-01T00:00:00.000Z",
       metadata: {
         custom_ns: {
           qaRequired: false,
@@ -34,6 +38,10 @@ describe("OdtTaskStore composition", () => {
       runBdJson: async () => {
         throw new Error("runBdJson should not be called by readTask");
       },
+      createTask: async () => {
+        throw new Error("createTask should not be called by readTask");
+      },
+      listRawIssues: async () => [issue],
       listTasks: async () => [makeTask()],
       showRawIssue: async () => issue,
       getNamespaceData: () => {
@@ -82,6 +90,7 @@ describe("OdtTaskStore composition", () => {
 
     expect(result.task.aiReviewEnabled).toBe(false);
     expect(result.task.description).toBe("Read the task description from Beads.");
+    expect((result.task as unknown as { priority: number }).priority).toBe(2);
     expect(result.documents.spec.markdown).toBe("spec");
   });
 
@@ -90,7 +99,11 @@ describe("OdtTaskStore composition", () => {
       id: "task-1",
       title: "Task 1",
       status: "open",
+      priority: 2,
       issue_type: "decision",
+      labels: [],
+      created_at: "2026-03-01T00:00:00.000Z",
+      updated_at: "2026-03-01T00:00:00.000Z",
       metadata: {},
     };
 
@@ -100,6 +113,10 @@ describe("OdtTaskStore composition", () => {
       runBdJson: async () => {
         throw new Error("runBdJson should not be called by readTask");
       },
+      createTask: async () => {
+        throw new Error("createTask should not be called by readTask");
+      },
+      listRawIssues: async () => [issue],
       listTasks: async () => [makeTask()],
       showRawIssue: async () => issue,
       getNamespaceData: () => {
@@ -151,7 +168,11 @@ describe("OdtTaskStore composition", () => {
       id: "task-1",
       title: "Task 1",
       status: null,
+      priority: 2,
       issue_type: "feature",
+      labels: [],
+      created_at: "2026-03-01T00:00:00.000Z",
+      updated_at: "2026-03-01T00:00:00.000Z",
       metadata: {},
     };
 
@@ -161,6 +182,10 @@ describe("OdtTaskStore composition", () => {
       runBdJson: async () => {
         throw new Error("runBdJson should not be called by readTask");
       },
+      createTask: async () => {
+        throw new Error("createTask should not be called by readTask");
+      },
+      listRawIssues: async () => [issue],
       listTasks: async () => [makeTask()],
       showRawIssue: async () => issue,
       getNamespaceData: () => {

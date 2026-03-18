@@ -1,7 +1,14 @@
-import { qaReportVerdictSchema } from "@openducktor/contracts";
+import { qaReportVerdictSchema, taskPrioritySchema } from "@openducktor/contracts";
 import { z } from "zod";
 import { parseBeadsIssueType, parseBeadsTaskStatus } from "./beads-task-parsing";
-import type { JsonObject, MarkdownEntry, QaEntry, RawIssue, TaskCard } from "./contracts";
+import type {
+  JsonObject,
+  MarkdownEntry,
+  PublicTask,
+  QaEntry,
+  RawIssue,
+  TaskCard,
+} from "./contracts";
 
 const defaultQaRequiredForIssueType = (): boolean => true;
 
@@ -59,6 +66,48 @@ export const parseQaEntries = (value: unknown): QaEntry[] => {
   return parseTypedEntries(QaEntrySchema, value);
 };
 
+export const normalizeLabels = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const labels = new Set<string>();
+  for (const entry of value) {
+    if (typeof entry !== "string") {
+      continue;
+    }
+    const trimmed = entry.trim();
+    if (trimmed.length === 0) {
+      continue;
+    }
+    labels.add(trimmed);
+  }
+
+  return Array.from(labels).sort((left, right) => left.localeCompare(right));
+};
+
+const parsePriority = (taskId: string, value: unknown): number => {
+  const parsed = taskPrioritySchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(
+      `Invalid Beads priority for task ${taskId}: received ${JSON.stringify(value)}. Expected an integer 0..4.`,
+    );
+  }
+  return parsed.data;
+};
+
+const parseTimestamp = (
+  taskId: string,
+  fieldName: "created_at" | "updated_at",
+  value: unknown,
+): string => {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value;
+  }
+
+  throw new Error(`Invalid Beads ${fieldName} for task ${taskId}: expected a non-empty string.`);
+};
+
 const normalizeParentId = (issue: RawIssue): string | undefined => {
   if (typeof issue.parent === "string" && issue.parent.trim().length > 0) {
     return issue.parent;
@@ -109,5 +158,29 @@ export const issueToTaskCard = (issue: RawIssue, metadataNamespace: string): Tas
     issueType,
     aiReviewEnabled: qaRequired,
     ...(parentId ? { parentId } : {}),
+  };
+};
+
+export const issueToPublicTask = (issue: RawIssue, metadataNamespace: string): PublicTask => {
+  const issueType = parseBeadsIssueType(issue.id, issue.issue_type);
+  const status = parseBeadsTaskStatus(issue.id, issue.status);
+  const root = parseMetadataRoot(issue.metadata);
+  const namespace = ensureObject(root[metadataNamespace]);
+  const qaRequired =
+    typeof namespace.qaRequired === "boolean"
+      ? namespace.qaRequired
+      : defaultQaRequiredForIssueType();
+
+  return {
+    id: issue.id,
+    title: issue.title,
+    description: typeof issue.description === "string" ? issue.description : "",
+    status,
+    priority: parsePriority(issue.id, issue.priority),
+    issueType,
+    aiReviewEnabled: qaRequired,
+    labels: normalizeLabels(issue.labels),
+    createdAt: parseTimestamp(issue.id, "created_at", issue.created_at),
+    updatedAt: parseTimestamp(issue.id, "updated_at", issue.updated_at),
   };
 };

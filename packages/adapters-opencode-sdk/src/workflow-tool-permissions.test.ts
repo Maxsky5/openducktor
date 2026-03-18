@@ -24,13 +24,21 @@ describe("workflow-tool-permissions", () => {
       });
     }
     expect(rules).not.toContainEqual({ permission: "bash", pattern: "*", action: "deny" });
+    expect(rules).toContainEqual({ permission: "openducktor_*", pattern: "*", action: "deny" });
     expect(rules).toContainEqual({
-      permission: "openducktor_odt_*",
+      permission: "functions.openducktor_*",
       pattern: "*",
       action: "deny",
     });
+    expect(rules).toContainEqual({ permission: "create_task", pattern: "*", action: "deny" });
+    expect(rules).toContainEqual({ permission: "search_tasks", pattern: "*", action: "deny" });
     expect(rules).toContainEqual({
       permission: "openducktor_odt_read_task",
+      pattern: "*",
+      action: "allow",
+    });
+    expect(rules).toContainEqual({
+      permission: "functions.openducktor_odt_read_task",
       pattern: "*",
       action: "allow",
     });
@@ -57,6 +65,11 @@ describe("workflow-tool-permissions", () => {
     expect(rules).not.toContainEqual({ permission: "apply_patch", pattern: "*", action: "deny" });
     expect(rules).toContainEqual({
       permission: "openducktor_odt_build_completed",
+      pattern: "*",
+      action: "allow",
+    });
+    expect(rules).toContainEqual({
+      permission: "functions.openducktor_odt_build_completed",
       pattern: "*",
       action: "allow",
     });

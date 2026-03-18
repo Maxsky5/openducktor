@@ -94,8 +94,11 @@
       },
     },
     "packages/openducktor-mcp": {
-      "name": "@openducktor/openducktor-mcp",
+      "name": "@openducktor/mcp",
       "version": "0.1.0",
+      "bin": {
+        "openducktor-mcp": "./dist/index.js",
+      },
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.27.1",
         "@openducktor/contracts": "workspace:*",
@@ -230,7 +233,7 @@
 
     "@openducktor/desktop": ["@openducktor/desktop@workspace:apps/desktop"],
 
-    "@openducktor/openducktor-mcp": ["@openducktor/openducktor-mcp@workspace:packages/openducktor-mcp"],
+    "@openducktor/mcp": ["@openducktor/mcp@workspace:packages/openducktor-mcp"],
 
     "@oxc-project/runtime": ["@oxc-project/runtime@0.115.0", "", {}, "sha512-Rg8Wlt5dCbXhQnsXPrkOjL1DTSvXLgb2R/KYfnf1/K+R0k6UMLEmbQXPM+kwrWqSmWA2t0B1EtHy2/3zikQpvQ=="],
 

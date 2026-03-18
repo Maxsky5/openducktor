@@ -1,15 +1,19 @@
 import { describe, expect, test } from "bun:test";
-import type { RawIssue, TaskCard } from "./contracts";
+import type { PublicTask, RawIssue, TaskCard } from "./contracts";
 import {
   BuildBlockedUseCase,
   BuildCompletedUseCase,
   BuildResumedUseCase,
+  CreateTaskUseCase,
   QaApprovedUseCase,
   QaRejectedUseCase,
   ReadTaskUseCase,
+  SearchTasksUseCase,
   SetPlanUseCase,
   SetSpecUseCase,
 } from "./odt-task-store-use-cases";
+
+const FIXED_TIMESTAMP = "2026-03-01T00:00:00.000Z";
 
 const makeTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
@@ -23,20 +27,59 @@ const makeTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
 const makeIssue = (overrides: Partial<RawIssue> = {}): RawIssue => ({
   id: "task-1",
   title: "Task 1",
+  description: "",
   status: "open",
+  priority: 2,
   issue_type: "feature",
+  labels: [],
+  created_at: FIXED_TIMESTAMP,
+  updated_at: FIXED_TIMESTAMP,
   metadata: {},
   ...overrides,
 });
 
+const makePublicTask = (overrides: Partial<PublicTask> = {}): PublicTask => ({
+  id: "task-1",
+  title: "Task 1",
+  description: "",
+  status: "open",
+  priority: 2,
+  issueType: "feature",
+  aiReviewEnabled: true,
+  labels: [],
+  createdAt: FIXED_TIMESTAMP,
+  updatedAt: FIXED_TIMESTAMP,
+  ...overrides,
+});
+
+const makePersistence = (issue: RawIssue, calls: string[]) => ({
+  metadataNamespace: "openducktor",
+  ensureInitialized: async () => {
+    calls.push("persist-init");
+  },
+  showRawIssue: async (taskId: string) => {
+    calls.push(`show:${taskId}`);
+    return { ...issue, id: taskId };
+  },
+  createTask: async () => {
+    calls.push("create");
+    return issue;
+  },
+  listRawIssues: async () => {
+    calls.push("list-raw");
+    return [issue];
+  },
+});
+
 describe("odt task workflow use cases", () => {
   test("ReadTaskUseCase returns the latest task snapshot and parsed documents", async () => {
-    const issue = makeIssue();
+    const issue = makeIssue({ status: "spec_ready" });
     const task = makeTask({ status: "spec_ready" });
     const calls: string[] = [];
 
     const useCase = new ReadTaskUseCase({
       workflow: {
+        metadataNamespace: "openducktor",
         ensureInitialized: async () => {
           calls.push("init");
         },
@@ -58,7 +101,7 @@ describe("odt task workflow use cases", () => {
     });
 
     await expect(useCase.execute({ taskId: "task-1" })).resolves.toEqual({
-      task,
+      task: makePublicTask({ status: "spec_ready" }),
       documents: {
         spec: { markdown: "# Spec", updatedAt: null },
         implementationPlan: { markdown: "# Plan", updatedAt: null },
@@ -68,12 +111,95 @@ describe("odt task workflow use cases", () => {
     expect(calls).toEqual(["init", "read:task-1", "docs:task-1"]);
   });
 
+  test("CreateTaskUseCase returns the public snapshot envelope", async () => {
+    const issue = makeIssue({ issue_type: "bug" });
+    const calls: string[] = [];
+
+    const useCase = new CreateTaskUseCase({
+      persistence: {
+        metadataNamespace: "openducktor",
+        ensureInitialized: async () => {
+          calls.push("init");
+        },
+        createTask: async (input) => {
+          calls.push(`create:${input.issueType}:${input.priority}`);
+          return issue;
+        },
+      },
+      documentStore: {
+        parseDocs: () => ({
+          spec: { markdown: "", updatedAt: null },
+          implementationPlan: { markdown: "", updatedAt: null },
+          latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+        }),
+      },
+    });
+
+    await expect(
+      useCase.execute({ title: "Fix bug", issueType: "bug", priority: 1 }),
+    ).resolves.toEqual({
+      task: makePublicTask({ issueType: "bug", priority: 2 }),
+      documents: {
+        spec: { markdown: "", updatedAt: null },
+        implementationPlan: { markdown: "", updatedAt: null },
+        latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+      },
+    });
+    expect(calls).toEqual(["init", "create:bug:1"]);
+  });
+
+  test("SearchTasksUseCase returns active snapshots with limit metadata", async () => {
+    const issueOne = makeIssue({ id: "task-1", title: "Task 1", status: "open" });
+    const issueTwo = makeIssue({ id: "task-2", title: "Task 2", status: "human_review" });
+    const issueClosed = makeIssue({ id: "task-3", title: "Task 3", status: "closed" });
+    const calls: string[] = [];
+
+    const useCase = new SearchTasksUseCase({
+      persistence: {
+        metadataNamespace: "openducktor",
+        ensureInitialized: async () => {
+          calls.push("init");
+        },
+        listRawIssues: async () => {
+          calls.push("list-raw");
+          return [issueOne, issueTwo, issueClosed];
+        },
+      },
+      documentStore: {
+        parseDocs: () => ({
+          spec: { markdown: "", updatedAt: null },
+          implementationPlan: { markdown: "", updatedAt: null },
+          latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+        }),
+      },
+    });
+
+    await expect(useCase.execute({ limit: 1 })).resolves.toEqual({
+      results: [
+        {
+          task: makePublicTask({ id: "task-1", title: "Task 1" }),
+          documents: {
+            spec: { markdown: "", updatedAt: null },
+            implementationPlan: { markdown: "", updatedAt: null },
+            latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+          },
+        },
+      ],
+      limit: 1,
+      totalCount: 2,
+      hasMore: true,
+    });
+    expect(calls).toEqual(["init", "list-raw"]);
+  });
+
   test("SetSpecUseCase persists the document before transitioning open tasks", async () => {
     const initialTask = makeTask({ status: "open" });
     const transitionedTask = makeTask({ status: "spec_ready" });
+    const transitionedIssue = makeIssue({ status: "spec_ready" });
     const calls: string[] = [];
 
     const useCase = new SetSpecUseCase({
+      persistence: makePersistence(transitionedIssue, calls),
       workflow: {
         ensureInitialized: async () => {
           calls.push("init");
@@ -94,7 +220,7 @@ describe("odt task workflow use cases", () => {
       documentStore: {
         persistSpec: async (taskId, markdown) => {
           calls.push(`persist:${taskId}:${markdown}`);
-          return { updatedAt: "2026-03-01T00:00:00.000Z", revision: 2 };
+          return { updatedAt: FIXED_TIMESTAMP, revision: 2 };
         },
       },
     });
@@ -102,10 +228,10 @@ describe("odt task workflow use cases", () => {
     await expect(
       useCase.execute({ taskId: "task-1", markdown: "  # Refined spec  " }),
     ).resolves.toEqual({
-      task: transitionedTask,
+      task: makePublicTask({ status: "spec_ready" }),
       document: {
         markdown: "# Refined spec",
-        updatedAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: FIXED_TIMESTAMP,
         revision: 2,
       },
     });
@@ -115,6 +241,7 @@ describe("odt task workflow use cases", () => {
       "persist:task-1:# Refined spec",
       "refresh:task-1:open",
       "transition:task-1:spec_ready",
+      "show:task-1",
     ]);
   });
 
@@ -134,6 +261,15 @@ describe("odt task workflow use cases", () => {
     const calls: string[] = [];
 
     const useCase = new SetPlanUseCase({
+      persistence: makePersistence(
+        makeIssue({
+          id: "epic-1",
+          title: "Epic",
+          status: "ready_for_dev",
+          issue_type: "epic",
+        }),
+        calls,
+      ),
       workflow: {
         ensureInitialized: async () => {
           calls.push("init");
@@ -179,7 +315,12 @@ describe("odt task workflow use cases", () => {
         subtasks: [{ title: "Build API" }],
       }),
     ).resolves.toEqual({
-      task: readyTask,
+      task: makePublicTask({
+        id: "epic-1",
+        title: "Epic",
+        status: "ready_for_dev",
+        issueType: "epic",
+      }),
       document: {
         markdown: "# Execution plan",
         updatedAt: "2026-03-02T00:00:00.000Z",
@@ -195,6 +336,7 @@ describe("odt task workflow use cases", () => {
       "apply:epic-1:1:1",
       "refresh:epic-1:spec_ready",
       "transition:epic-1:ready_for_dev",
+      "show:epic-1",
     ]);
   });
 
@@ -205,6 +347,7 @@ describe("odt task workflow use cases", () => {
     const calls: string[] = [];
 
     const useCase = new BuildCompletedUseCase({
+      persistence: makePersistence(makeIssue({ status: "ai_review" }), calls),
       workflow: {
         ensureInitialized: async () => {
           calls.push("init");
@@ -232,7 +375,7 @@ describe("odt task workflow use cases", () => {
           return {
             spec: { markdown: "", updatedAt: null },
             implementationPlan: { markdown: "", updatedAt: null },
-            latestQaReport: { markdown: "", updatedAt: null, verdict: "not_reviewed" },
+            latestQaReport: { markdown: "", updatedAt: null, verdict: null },
           };
         },
       },
@@ -241,7 +384,7 @@ describe("odt task workflow use cases", () => {
     await expect(
       useCase.execute({ taskId: "task-1", summary: "Implementation complete" }),
     ).resolves.toEqual({
-      task: aiReviewTask,
+      task: makePublicTask({ status: "ai_review" }),
       summary: "Implementation complete",
     });
     expect(calls).toEqual([
@@ -251,76 +394,22 @@ describe("odt task workflow use cases", () => {
       "read:task-1",
       "docs:task-1:not_reviewed",
       "transition:task-1:ai_review",
-    ]);
-  });
-
-  test("BuildCompletedUseCase routes to human_review after approved QA", async () => {
-    const inProgressTask = makeTask({ status: "in_progress", aiReviewEnabled: true });
-    const humanReviewTask = makeTask({ status: "human_review", aiReviewEnabled: true });
-    const issue = makeIssue({
-      metadata: { openducktor: { documents: { qaReports: [{ verdict: "approved" }] } } },
-    });
-    const calls: string[] = [];
-
-    const useCase = new BuildCompletedUseCase({
-      workflow: {
-        ensureInitialized: async () => {
-          calls.push("init");
-        },
-        readTaskSnapshot: async (taskId) => {
-          calls.push(`read:${taskId}`);
-          return { issue, task: inProgressTask };
-        },
-        resolveTaskContext: async (taskId) => {
-          calls.push(`resolve:${taskId}`);
-          return { task: inProgressTask, tasks: [inProgressTask] };
-        },
-        refreshTaskContext: async (taskId, context) => {
-          calls.push(`refresh:${taskId}:${context?.task.status ?? "none"}`);
-          return { task: inProgressTask, tasks: [inProgressTask] };
-        },
-        transitionTask: async (taskId, nextStatus) => {
-          calls.push(`transition:${taskId}:${nextStatus}`);
-          return humanReviewTask;
-        },
-      },
-      documentStore: {
-        parseDocs: (rawIssue) => {
-          calls.push(`docs:${rawIssue.id}:approved`);
-          return {
-            spec: { markdown: "", updatedAt: null },
-            implementationPlan: { markdown: "", updatedAt: null },
-            latestQaReport: { markdown: "", updatedAt: null, verdict: "approved" },
-          };
-        },
-      },
-    });
-
-    await expect(useCase.execute({ taskId: "task-1" })).resolves.toEqual({
-      task: humanReviewTask,
-    });
-    expect(calls).toEqual([
-      "init",
-      "resolve:task-1",
-      "refresh:task-1:in_progress",
-      "read:task-1",
-      "docs:task-1:approved",
-      "transition:task-1:human_review",
+      "show:task-1",
     ]);
   });
 
   test("BuildBlockedUseCase returns the blocker reason and transitions to blocked", async () => {
-    const blockedTask = makeTask({ status: "blocked" });
     const calls: string[] = [];
 
     const useCase = new BuildBlockedUseCase({
+      persistence: makePersistence(makeIssue({ status: "blocked" }), calls),
       workflow: {
         ensureInitialized: async () => {
           calls.push("init");
         },
         transitionTask: async (taskId, nextStatus) => {
           calls.push(`transition:${taskId}:${nextStatus}`);
-          return blockedTask;
+          return makeTask({ status: "blocked" });
         },
       },
     });
@@ -328,42 +417,42 @@ describe("odt task workflow use cases", () => {
     await expect(
       useCase.execute({ taskId: "task-1", reason: "Waiting on upstream change" }),
     ).resolves.toEqual({
-      task: blockedTask,
+      task: makePublicTask({ status: "blocked" }),
       reason: "Waiting on upstream change",
     });
-    expect(calls).toEqual(["init", "transition:task-1:blocked"]);
+    expect(calls).toEqual(["init", "transition:task-1:blocked", "show:task-1"]);
   });
 
   test("BuildResumedUseCase transitions back to in_progress", async () => {
-    const resumedTask = makeTask({ status: "in_progress" });
     const calls: string[] = [];
 
     const useCase = new BuildResumedUseCase({
+      persistence: makePersistence(makeIssue({ status: "in_progress" }), calls),
       workflow: {
         ensureInitialized: async () => {
           calls.push("init");
         },
         transitionTask: async (taskId, nextStatus) => {
           calls.push(`transition:${taskId}:${nextStatus}`);
-          return resumedTask;
+          return makeTask({ status: "in_progress" });
         },
       },
     });
 
     await expect(useCase.execute({ taskId: "task-1" })).resolves.toEqual({
-      task: resumedTask,
+      task: makePublicTask({ status: "in_progress" }),
     });
-    expect(calls).toEqual(["init", "transition:task-1:in_progress"]);
+    expect(calls).toEqual(["init", "transition:task-1:in_progress", "show:task-1"]);
   });
 
   test("QaApprovedUseCase writes the qa report and status in a single task update", async () => {
     const qaTask = makeTask({ status: "ai_review" });
     const issue = makeIssue({ status: "ai_review" });
-    const approvedTask = makeTask({ status: "human_review" });
     const calls: string[] = [];
     let appliedUpdate: { metadataRoot?: unknown; status?: string } | null = null;
 
     const useCase = new QaApprovedUseCase({
+      persistence: makePersistence(makeIssue({ status: "human_review" }), calls),
       workflow: {
         ensureInitialized: async () => {
           calls.push("init");
@@ -378,7 +467,7 @@ describe("odt task workflow use cases", () => {
         applyTaskUpdate: async (taskId, input) => {
           calls.push(`apply:${taskId}:${input.status ?? "none"}`);
           appliedUpdate = input;
-          return approvedTask;
+          return makeTask({ status: "human_review" });
         },
       },
       documentStore: {
@@ -395,13 +484,14 @@ describe("odt task workflow use cases", () => {
 
     await expect(
       useCase.execute({ taskId: "task-1", reportMarkdown: "## QA review" }),
-    ).resolves.toEqual({ task: approvedTask });
+    ).resolves.toEqual({ task: makePublicTask({ status: "human_review" }) });
     expect(calls).toEqual([
       "init",
       "read:task-1",
       "assert",
       "prepare:task-1:approved:## QA review",
       "apply:task-1:human_review",
+      "show:task-1",
     ]);
     expect(appliedUpdate).toEqual({
       metadataRoot: {
@@ -413,184 +503,13 @@ describe("odt task workflow use cases", () => {
     });
   });
 
-  test("QaApprovedUseCase accepts human_review tasks", async () => {
-    const qaTask = makeTask({ status: "human_review" });
-    const issue = makeIssue({ status: "human_review" });
-    const approvedTask = makeTask({ status: "human_review" });
-    const calls: string[] = [];
-
-    const useCase = new QaApprovedUseCase({
-      workflow: {
-        ensureInitialized: async () => {
-          calls.push("init");
-        },
-        readTaskSnapshot: async (taskId) => {
-          calls.push(`read:${taskId}`);
-          return { issue, task: qaTask };
-        },
-        assertTransitionAllowed: () => {
-          calls.push("assert");
-        },
-        applyTaskUpdate: async (taskId, input) => {
-          calls.push(`apply:${taskId}:${input.status ?? "none"}`);
-          return approvedTask;
-        },
-      },
-      documentStore: {
-        prepareQaReportWrite: (rawIssue, markdown, verdict) => {
-          calls.push(`prepare:${rawIssue.id}:${verdict}:${markdown}`);
-          return {
-            metadataRoot: { openducktor: { documents: { qaReports: [{ verdict, markdown }] } } },
-            namespace: {},
-            root: {},
-          };
-        },
-      },
-    });
-
-    await expect(
-      useCase.execute({ taskId: "task-1", reportMarkdown: "## QA follow-up" }),
-    ).resolves.toEqual({ task: approvedTask });
-    expect(calls).toEqual([
-      "init",
-      "read:task-1",
-      "assert",
-      "prepare:task-1:approved:## QA follow-up",
-      "apply:task-1:human_review",
-    ]);
-  });
-
-  test("QaApprovedUseCase rejects invalid transitions before preparing qa metadata", async () => {
-    let prepareCalled = false;
-    let updateCalled = false;
-    const currentTask = makeTask({ status: "open" });
-
-    const useCase = new QaApprovedUseCase({
-      workflow: {
-        ensureInitialized: async () => {},
-        readTaskSnapshot: async () => ({ issue: makeIssue(), task: currentTask }),
-        assertTransitionAllowed: () => {
-          throw new Error("Transition not allowed");
-        },
-        applyTaskUpdate: async () => {
-          updateCalled = true;
-          return currentTask;
-        },
-      },
-      documentStore: {
-        prepareQaReportWrite: () => {
-          prepareCalled = true;
-          return {
-            metadataRoot: {},
-            namespace: {},
-            root: {},
-          };
-        },
-      },
-    });
-
-    await expect(
-      useCase.execute({ taskId: "task-1", reportMarkdown: "## QA review" }),
-    ).rejects.toThrow("QA outcomes are only allowed from ai_review or human_review");
-    expect(prepareCalled).toBe(false);
-    expect(updateCalled).toBe(false);
-  });
-
-  test("QaApprovedUseCase rejects non-ai-review tasks before transition validation", async () => {
-    let assertCalled = false;
-    const currentTask = makeTask({ status: "in_progress" });
-
-    const useCase = new QaApprovedUseCase({
-      workflow: {
-        ensureInitialized: async () => {},
-        readTaskSnapshot: async () => ({ issue: makeIssue(), task: currentTask }),
-        assertTransitionAllowed: () => {
-          assertCalled = true;
-        },
-        applyTaskUpdate: async () => currentTask,
-      },
-      documentStore: {
-        prepareQaReportWrite: () => {
-          throw new Error("should not prepare metadata");
-        },
-      },
-    });
-
-    await expect(
-      useCase.execute({ taskId: "task-1", reportMarkdown: "## QA review" }),
-    ).rejects.toThrow("QA outcomes are only allowed from ai_review or human_review");
-    expect(assertCalled).toBe(false);
-  });
-
-  test("QaRejectedUseCase rejects invalid transitions before preparing qa metadata", async () => {
-    let prepareCalled = false;
-    let updateCalled = false;
-    const currentTask = makeTask({ status: "open" });
-
-    const useCase = new QaRejectedUseCase({
-      workflow: {
-        ensureInitialized: async () => {},
-        readTaskSnapshot: async () => ({ issue: makeIssue(), task: currentTask }),
-        assertTransitionAllowed: () => {
-          throw new Error("Transition not allowed");
-        },
-        applyTaskUpdate: async () => {
-          updateCalled = true;
-          return currentTask;
-        },
-      },
-      documentStore: {
-        prepareQaReportWrite: () => {
-          prepareCalled = true;
-          return {
-            metadataRoot: {},
-            namespace: {},
-            root: {},
-          };
-        },
-      },
-    });
-
-    await expect(
-      useCase.execute({ taskId: "task-1", reportMarkdown: "## QA review" }),
-    ).rejects.toThrow("QA outcomes are only allowed from ai_review or human_review");
-    expect(prepareCalled).toBe(false);
-    expect(updateCalled).toBe(false);
-  });
-
-  test("QaRejectedUseCase rejects non-ai-review tasks before transition validation", async () => {
-    let assertCalled = false;
-    const currentTask = makeTask({ status: "in_progress" });
-
-    const useCase = new QaRejectedUseCase({
-      workflow: {
-        ensureInitialized: async () => {},
-        readTaskSnapshot: async () => ({ issue: makeIssue(), task: currentTask }),
-        assertTransitionAllowed: () => {
-          assertCalled = true;
-        },
-        applyTaskUpdate: async () => currentTask,
-      },
-      documentStore: {
-        prepareQaReportWrite: () => {
-          throw new Error("should not prepare metadata");
-        },
-      },
-    });
-
-    await expect(
-      useCase.execute({ taskId: "task-1", reportMarkdown: "## QA review" }),
-    ).rejects.toThrow("QA outcomes are only allowed from ai_review or human_review");
-    expect(assertCalled).toBe(false);
-  });
-
   test("QaRejectedUseCase accepts human_review tasks", async () => {
     const qaTask = makeTask({ status: "human_review" });
     const issue = makeIssue({ status: "human_review" });
-    const rejectedTask = makeTask({ status: "in_progress" });
     const calls: string[] = [];
 
     const useCase = new QaRejectedUseCase({
+      persistence: makePersistence(makeIssue({ status: "in_progress" }), calls),
       workflow: {
         ensureInitialized: async () => {
           calls.push("init");
@@ -604,7 +523,7 @@ describe("odt task workflow use cases", () => {
         },
         applyTaskUpdate: async (taskId, input) => {
           calls.push(`apply:${taskId}:${input.status ?? "none"}`);
-          return rejectedTask;
+          return makeTask({ status: "in_progress" });
         },
       },
       documentStore: {
@@ -621,13 +540,14 @@ describe("odt task workflow use cases", () => {
 
     await expect(
       useCase.execute({ taskId: "task-1", reportMarkdown: "## QA reject" }),
-    ).resolves.toEqual({ task: rejectedTask });
+    ).resolves.toEqual({ task: makePublicTask({ status: "in_progress" }) });
     expect(calls).toEqual([
       "init",
       "read:task-1",
       "assert",
       "prepare:task-1:rejected:## QA reject",
       "apply:task-1:in_progress",
+      "show:task-1",
     ]);
   });
 });

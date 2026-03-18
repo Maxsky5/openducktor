@@ -8,6 +8,8 @@ import { isReadOnlyRole } from "./read-only-roles";
 
 const TRUSTED_ODT_MCP_SERVER_NAME = "openducktor";
 const CONNECTED_MCP_SERVER_STATUSES = new Set(["connected"]);
+const TRUSTED_ODT_MCP_TOOL_PREFIXES = ["openducktor_", "functions.openducktor_"] as const;
+const TRUSTED_ODT_MCP_CANONICAL_TOOL_IDS = new Set(["create_task", "search_tasks"]);
 
 type ModelScopedToolInput = {
   providerId: string;
@@ -152,6 +154,22 @@ export const resolveWorkflowToolSelection = async (input: {
     for (const toolId of input.runtimeDescriptor.readOnlyRoleBlockedTools) {
       selection[toolId] = false;
     }
+  }
+
+  for (const toolId of runtimeToolIds) {
+    const trimmedToolId = toolId.trim();
+    if (trimmedToolId.length === 0) {
+      continue;
+    }
+    if (!TRUSTED_ODT_MCP_TOOL_PREFIXES.some((prefix) => trimmedToolId.startsWith(prefix))) {
+      if (!TRUSTED_ODT_MCP_CANONICAL_TOOL_IDS.has(trimmedToolId)) {
+        continue;
+      }
+    }
+    if (selection[trimmedToolId] !== undefined) {
+      continue;
+    }
+    selection[trimmedToolId] = false;
   }
 
   return selection;

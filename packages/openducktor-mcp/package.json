@@ -1,15 +1,29 @@
 {
-  "name": "@openducktor/openducktor-mcp",
+  "name": "@openducktor/mcp",
   "version": "0.1.0",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "openducktor-mcp": "./dist/index.js"
+  },
+  "files": ["dist", "README.md"],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "start": "bun run src/index.ts",
-    "build": "bunx tsc -p tsconfig.json",
+    "build": "bun build --target=bun --outfile dist/index.js --banner '#!/usr/bin/env bun' src/index.ts && chmod +x dist/index.js && bunx tsc -p tsconfig.json --emitDeclarationOnly",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
     "test": "bun test",
-    "lint": "biome check src"
+    "lint": "biome check src",
+    "publish:dry-run": "bun publish --dry-run"
   },
   "dependencies": {
     "@openducktor/contracts": "workspace:*",

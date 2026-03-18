@@ -1,6 +1,6 @@
 import type { BdRuntimeClient } from "./bd-runtime-client";
 import { isNonTaskBeadsIssueType } from "./beads-task-parsing";
-import type { JsonObject, RawIssue, TaskCard, TaskStatus } from "./contracts";
+import type { IssueType, JsonObject, RawIssue, TaskCard, TaskStatus } from "./contracts";
 import { getNamespaceData, type NamespaceData } from "./metadata-docs";
 import { issueToTaskCard } from "./task-mapping";
 
@@ -9,12 +9,52 @@ export type TaskUpdateInput = {
   metadataRoot?: JsonObject;
 };
 
+export type TaskSearchFilters = {
+  priority?: number;
+  issueType?: IssueType;
+  status?: TaskStatus;
+  title?: string;
+  tags?: string[];
+};
+
+export type PublicTaskCreateInput = {
+  title: string;
+  issueType: "task" | "feature" | "bug";
+  priority: number;
+  description?: string;
+  labels?: string[];
+  aiReviewEnabled?: boolean;
+};
+
+const normalizeLabels = (labels: string[]): string[] => {
+  const deduped = new Set<string>();
+  for (const entry of labels) {
+    const trimmed = entry.trim();
+    if (trimmed.length === 0) {
+      continue;
+    }
+    deduped.add(trimmed);
+  }
+
+  return Array.from(deduped).sort((left, right) => left.localeCompare(right));
+};
+
+const normalizeText = (value: string | undefined): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
 export type TaskPersistencePort = {
   metadataNamespace: string;
   runBdJson(args: string[]): Promise<unknown>;
   ensureInitialized(): Promise<void>;
   showRawIssue(taskId: string): Promise<RawIssue>;
-  listTasks(): Promise<TaskCard[]>;
+  listRawIssues(filters?: TaskSearchFilters): Promise<RawIssue[]>;
+  createTask(input: PublicTaskCreateInput): Promise<RawIssue>;
+  listTasks(filters?: TaskSearchFilters): Promise<TaskCard[]>;
   updateTask(taskId: string, input: TaskUpdateInput): Promise<void>;
   getNamespaceData(issue: RawIssue): NamespaceData;
   writeNamespace(taskId: string, root: JsonObject, namespace: JsonObject): Promise<void>;
@@ -54,14 +94,80 @@ export class BdPersistence implements TaskPersistencePort {
     return issue as RawIssue;
   }
 
-  async listTasks(): Promise<TaskCard[]> {
-    const payload = await this.runBdJson(["list", "--all", "-n", "500"]);
+  async listRawIssues(filters: TaskSearchFilters = {}): Promise<RawIssue[]> {
+    const args = ["list", "--all", "--limit", "0"];
+    if (typeof filters.priority === "number") {
+      args.push("--priority", String(filters.priority));
+    }
+    if (filters.issueType) {
+      args.push("--type", filters.issueType);
+    }
+    if (filters.status) {
+      args.push("--status", filters.status);
+    }
+    const title = normalizeText(filters.title);
+    if (title) {
+      args.push("--title-contains", title);
+    }
+    const tags = normalizeLabels(filters.tags ?? []);
+    for (const tag of tags) {
+      args.push("--label", tag);
+    }
+
+    const payload = await this.runBdJson(args);
     if (!Array.isArray(payload)) {
       throw new Error("bd list did not return an array");
     }
 
     return payload
       .filter((entry) => entry && typeof entry === "object")
+      .filter((entry) => !isNonTaskBeadsIssueType((entry as RawIssue).issue_type))
+      .map((entry) => entry as RawIssue);
+  }
+
+  async createTask(input: PublicTaskCreateInput): Promise<RawIssue> {
+    const args = [
+      "create",
+      input.title,
+      "--type",
+      input.issueType,
+      "--priority",
+      String(input.priority),
+    ];
+    const description = normalizeText(input.description);
+    if (description) {
+      args.push("--description", description);
+    }
+
+    const labels = normalizeLabels(input.labels ?? []);
+    if (labels.length > 0) {
+      args.push("--labels", labels.join(","));
+    }
+
+    const payload = await this.runBdJson(args);
+    if (!payload || typeof payload !== "object") {
+      throw new Error("bd create did not return an issue payload");
+    }
+    const issueId = (payload as { id?: unknown }).id;
+    if (typeof issueId !== "string" || issueId.trim().length === 0) {
+      throw new Error("bd create did not return a task id");
+    }
+
+    const createdTaskId = issueId.trim();
+    const createdIssue = await this.showRawIssue(createdTaskId);
+    const { root, namespace } = this.getNamespaceData(createdIssue);
+    await this.writeNamespace(createdTaskId, root, {
+      ...namespace,
+      qaRequired: input.aiReviewEnabled ?? true,
+    });
+
+    return this.showRawIssue(createdTaskId);
+  }
+
+  async listTasks(filters: TaskSearchFilters = {}): Promise<TaskCard[]> {
+    const payload = await this.listRawIssues(filters);
+
+    return payload
       .filter((entry) => !isNonTaskBeadsIssueType((entry as RawIssue).issue_type))
       .map((entry) => issueToTaskCard(entry as RawIssue, this.metadataNamespace));
   }

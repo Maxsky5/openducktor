@@ -1,0 +1,84 @@
+# `@openducktor/mcp`
+
+OpenDucktor MCP server for local repository task workflows.
+
+## Usage
+
+```json
+{
+  "mcpServers": {
+    "openducktor": {
+      "command": "bunx",
+      "args": ["@openducktor/mcp", "--repo", "/absolute/path/to/repo"]
+    }
+  }
+}
+```
+
+Optional arguments:
+
+- `--beads-dir <path>`
+- `--metadata-namespace <name>`
+
+## Public Tools
+
+- `create_task`
+- `search_tasks`
+- `odt_read_task`
+
+The `odt_*` mutation tools are intended for OpenDucktor workflow automation and remain available on the same server.
+
+## `create_task`
+
+Creates a new `task`, `feature`, or `bug`.
+
+Input fields:
+
+- `title`
+- `issueType`
+- `priority`
+- `description?`
+- `labels?`
+- `aiReviewEnabled?`
+
+`issueType=epic` is rejected by the MCP schema.
+
+## `search_tasks`
+
+Searches active tasks only. Closed and deferred tasks are excluded.
+
+Optional filters:
+
+- `priority`
+- `issueType`
+- `status`
+- `title`
+- `tags`
+- `limit`
+
+## Output Model
+
+`create_task`, `search_tasks`, and `odt_read_task` share the same public task snapshot model:
+
+```json
+{
+  "task": {
+    "id": "repo-123",
+    "title": "Implement MCP docs",
+    "description": "",
+    "status": "open",
+    "priority": 2,
+    "issueType": "task",
+    "aiReviewEnabled": true,
+    "labels": ["docs"],
+    "createdAt": "2026-03-18T12:00:00Z",
+    "updatedAt": "2026-03-18T12:00:00Z"
+  },
+  "documents": {
+    "spec": { "markdown": "", "updatedAt": null },
+    "implementationPlan": { "markdown": "", "updatedAt": null },
+    "latestQaReport": { "markdown": "", "updatedAt": null, "verdict": null }
+  }
+}
+```
+

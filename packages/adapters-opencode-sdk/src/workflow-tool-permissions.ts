@@ -10,7 +10,8 @@ export type OpencodePermissionRule = {
   action: PermissionAction;
 };
 
-const ODT_WORKFLOW_PERMISSION_WILDCARD = "openducktor_odt_*";
+const ODT_MCP_PERMISSION_WILDCARDS = ["openducktor_*", "functions.openducktor_*"] as const;
+const TRUSTED_ODT_CANONICAL_DENY_PERMISSIONS = ["create_task", "search_tasks"] as const;
 
 export const buildRoleScopedPermissionRules = (input: {
   role: AgentRole;
@@ -30,21 +31,32 @@ export const buildRoleScopedPermissionRules = (input: {
     }
   }
 
-  rules.push({
-    permission: ODT_WORKFLOW_PERMISSION_WILDCARD,
-    pattern: "*",
-    action: "deny",
-  });
+  for (const permission of ODT_MCP_PERMISSION_WILDCARDS) {
+    rules.push({
+      permission,
+      pattern: "*",
+      action: "deny",
+    });
+  }
+  for (const permission of TRUSTED_ODT_CANONICAL_DENY_PERMISSIONS) {
+    rules.push({
+      permission,
+      pattern: "*",
+      action: "deny",
+    });
+  }
 
   for (const toolName of ODT_WORKFLOW_TOOL_NAMES) {
     if (!allowedTools.has(toolName)) {
       continue;
     }
-    rules.push({
-      permission: `openducktor_${toolName}`,
-      pattern: "*",
-      action: "allow",
-    });
+    for (const permission of [`openducktor_${toolName}`, `functions.openducktor_${toolName}`]) {
+      rules.push({
+        permission,
+        pattern: "*",
+        action: "allow",
+      });
+    }
   }
 
   return rules;
