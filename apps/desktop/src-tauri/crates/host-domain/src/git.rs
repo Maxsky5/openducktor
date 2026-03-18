@@ -444,6 +444,12 @@ pub trait GitPort: Send + Sync {
         source_branch: &str,
         target_branch: &str,
     ) -> Result<Option<String>>;
+    fn is_ancestor(
+        &self,
+        repo_path: &Path,
+        ancestor_ref: &str,
+        descendant_ref: &str,
+    ) -> Result<bool>;
     fn commits_ahead_behind(&self, repo_path: &Path, target_branch: &str)
         -> Result<GitAheadBehind>;
     fn commit_all(

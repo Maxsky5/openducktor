@@ -41,6 +41,8 @@ export type TaskApprovalModalModel = {
   title: string;
   body: string;
   squashCommitMessage: string;
+  squashCommitMessageTouched: boolean;
+  hasSuggestedSquashCommitMessage: boolean;
   targetBranch: GitTargetBranch | null;
   publishTarget: GitTargetBranch | null;
   isSubmitting: boolean;

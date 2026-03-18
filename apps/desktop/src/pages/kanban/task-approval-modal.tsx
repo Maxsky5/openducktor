@@ -189,6 +189,7 @@ export function TaskApprovalModal({
     model.stage === "approval" &&
     model.mode === "direct_merge" &&
     model.mergeMethod === "squash" &&
+    (model.hasSuggestedSquashCommitMessage || model.squashCommitMessageTouched) &&
     model.squashCommitMessage.trim().length === 0;
   const confirmDisabled =
     model.isLoading ||
@@ -340,6 +341,7 @@ export function TaskApprovalModal({
                         <Textarea
                           id="task-approval-squash-commit-message"
                           className="min-h-28"
+                          placeholder="e.g. feat: add Microsoft login"
                           value={model.squashCommitMessage}
                           disabled={model.isSubmitting}
                           onChange={(event) =>

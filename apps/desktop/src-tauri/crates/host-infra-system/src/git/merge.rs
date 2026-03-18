@@ -153,6 +153,38 @@ impl GitCliPort {
         Ok(Some(trimmed.to_string()))
     }
 
+    pub(super) fn is_ancestor_impl(
+        &self,
+        repo_path: &Path,
+        ancestor_ref: &str,
+        descendant_ref: &str,
+    ) -> Result<bool> {
+        self.ensure_repository(repo_path)?;
+
+        let ancestor_ref = normalize_non_empty(ancestor_ref, "ancestor ref")?;
+        let descendant_ref = normalize_non_empty(descendant_ref, "descendant ref")?;
+        let (ok, _, stderr) = self.run_git_allow_failure(
+            repo_path,
+            &[
+                "merge-base",
+                "--is-ancestor",
+                &ancestor_ref,
+                &descendant_ref,
+            ],
+        )?;
+        if ok {
+            return Ok(true);
+        }
+        if stderr.trim().is_empty() {
+            return Ok(false);
+        }
+
+        Err(anyhow!(
+            "git merge-base --is-ancestor failed: {}",
+            stderr.trim()
+        ))
+    }
+
     fn merge_with_rebase(
         &self,
         repo_path: &Path,

@@ -271,6 +271,15 @@ impl GitPort for CommandGitPort {
         panic!("unexpected call: suggested_squash_commit_message");
     }
 
+    fn is_ancestor(
+        &self,
+        _repo_path: &Path,
+        _ancestor_ref: &str,
+        _descendant_ref: &str,
+    ) -> anyhow::Result<bool> {
+        panic!("unexpected call: is_ancestor");
+    }
+
     fn commits_ahead_behind(
         &self,
         _repo_path: &Path,

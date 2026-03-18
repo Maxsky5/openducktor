@@ -35,6 +35,7 @@ type ApprovalState = {
   title: string;
   body: string;
   squashCommitMessage: string;
+  squashCommitMessageTouched: boolean;
   isSubmitting: boolean;
   errorMessage: string | null;
   approvalContext: TaskApprovalContext | null;
@@ -167,6 +168,7 @@ export function useTaskApprovalFlow({
         title: task?.title ?? "",
         body: task?.description ?? "",
         squashCommitMessage: "",
+        squashCommitMessageTouched: false,
         isSubmitting: false,
         errorMessage: options?.errorMessage ?? null,
         approvalContext: null,
@@ -193,6 +195,7 @@ export function useTaskApprovalFlow({
             title: task?.title ?? "",
             body: task?.description ?? "",
             squashCommitMessage: approvalContext.suggestedSquashCommitMessage ?? "",
+            squashCommitMessageTouched: false,
             isSubmitting: false,
             errorMessage: options?.errorMessage ?? null,
             approvalContext,
@@ -672,6 +675,8 @@ export function useTaskApprovalFlow({
       targetBranch: approvalContext?.targetBranch ?? null,
       publishTarget: approvalContext?.publishTarget ?? null,
       squashCommitMessage: state.squashCommitMessage,
+      squashCommitMessageTouched: state.squashCommitMessageTouched,
+      hasSuggestedSquashCommitMessage: approvalContext?.suggestedSquashCommitMessage != null,
       isSubmitting: state.isSubmitting,
       errorMessage: state.errorMessage,
       onOpenChange: (open) => {
@@ -695,7 +700,14 @@ export function useTaskApprovalFlow({
         setState((current) => (current ? { ...current, body, errorMessage: null } : current)),
       onSquashCommitMessageChange: (squashCommitMessage) =>
         setState((current) =>
-          current ? { ...current, squashCommitMessage, errorMessage: null } : current,
+          current
+            ? {
+                ...current,
+                squashCommitMessage,
+                squashCommitMessageTouched: true,
+                errorMessage: null,
+              }
+            : current,
         ),
       onConfirm: confirm,
       onSkipDirectMergeCompletion: reset,

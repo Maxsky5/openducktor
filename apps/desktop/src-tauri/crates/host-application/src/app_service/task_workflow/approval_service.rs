@@ -60,51 +60,13 @@ impl AppService {
             });
         }
 
-        let target_branch = normalize_approval_target_branch(&repo_config.default_target_branch)?;
-        let publish_target = publish_target_branch(&repo_config.default_target_branch)?;
-        let working_directory = self
-            .build_continuation_target_get(context.repo.repo_path.as_str(), task_id)?
-            .working_directory;
-        let current_branch = self
-            .git_port
-            .get_current_branch(Path::new(&working_directory))?;
-        if current_branch.detached {
-            return Err(anyhow!(
-                "Human approval requires a builder branch, but the latest builder workspace is detached."
-            ));
-        }
-        let source_branch = current_branch
-            .name
-            .ok_or_else(|| anyhow!("Human approval requires a builder branch name."))?;
-        let suggested_squash_commit_message = self.git_port.suggested_squash_commit_message(
+        let mut approval = self.load_open_task_approval_context(repo_path, task_id)?;
+        approval.suggested_squash_commit_message = self.git_port.suggested_squash_commit_message(
             Path::new(&context.repo.repo_path),
-            source_branch.as_str(),
-            target_branch.canonical().as_str(),
+            approval.source_branch.as_str(),
+            approval.target_branch.canonical().as_str(),
         )?;
-        let worktree_status = self.git_port.get_worktree_status_summary(
-            Path::new(&working_directory),
-            target_branch.canonical().as_str(),
-            GitDiffScope::Uncommitted,
-        )?;
-
-        Ok(TaskApprovalContext {
-            task_id: task_id.to_string(),
-            task_status: context.task.status.as_cli_value().to_string(),
-            working_directory: Some(working_directory),
-            source_branch,
-            target_branch,
-            publish_target,
-            default_merge_method: to_domain_merge_method(config.git.default_merge_method),
-            has_uncommitted_changes: worktree_status.file_status_counts.total > 0,
-            uncommitted_file_count: worktree_status.file_status_counts.total,
-            pull_request: metadata.pull_request,
-            direct_merge: None,
-            suggested_squash_commit_message,
-            providers: vec![github_provider_availability(
-                Path::new(&context.repo.repo_path),
-                &repo_config,
-            )],
-        })
+        Ok(approval)
     }
 
     pub fn task_direct_merge(
@@ -114,16 +76,16 @@ impl AppService {
         method: GitMergeMethod,
         squash_commit_message: Option<String>,
     ) -> Result<TaskDirectMergeResult> {
-        let approval = self.task_approval_context_get(repo_path, task_id)?;
-        if approval.direct_merge.is_some() {
+        let metadata = self.task_metadata_get(repo_path, task_id)?;
+        if metadata.direct_merge.is_some() {
             return Err(anyhow!(
                 "A local direct merge is already recorded for task {task_id}. Finish the direct merge workflow before trying again."
             ));
         }
+        let approval = self.load_open_task_approval_context(repo_path, task_id)?;
         ensure_clean_builder_worktree(&approval)?;
-        let force_delete_source_branch = matches!(method, GitMergeMethod::Squash);
         let repo_path = self.resolve_task_repo_path(repo_path)?;
-        match self.git_port.merge_branch(
+        let squash_created_commit = match self.git_port.merge_branch(
             Path::new(&repo_path),
             GitMergeBranchRequest {
                 source_branch: approval.source_branch.clone(),
@@ -133,7 +95,8 @@ impl AppService {
                 squash_commit_message,
             },
         )? {
-            GitMergeBranchResult::Merged { .. } | GitMergeBranchResult::UpToDate { .. } => {}
+            GitMergeBranchResult::Merged { .. } => matches!(method, GitMergeMethod::Squash),
+            GitMergeBranchResult::UpToDate { .. } => false,
             GitMergeBranchResult::Conflicts {
                 conflicted_files,
                 output,
@@ -148,7 +111,7 @@ impl AppService {
                     ),
                 });
             }
-        }
+        };
 
         self.task_store
             .set_pull_request(Path::new(&repo_path), task_id, None)?;
@@ -192,7 +155,7 @@ impl AppService {
             repo_path.as_str(),
             task_id,
             approval.source_branch.as_str(),
-            force_delete_source_branch,
+            squash_created_commit,
         )?;
         Ok(TaskDirectMergeResult::Completed {
             task: Box::new(task),
@@ -220,12 +183,14 @@ impl AppService {
                 Some("Human approved via direct merge"),
             )?
         };
+        let force_delete_source_branch =
+            self.should_force_delete_source_branch(repo_path.as_str(), &direct_merge)?;
 
         self.finalize_direct_merge_cleanup(
             repo_path.as_str(),
             task_id,
             direct_merge.source_branch.as_str(),
-            matches!(direct_merge.method, GitMergeMethod::Squash),
+            force_delete_source_branch,
         )?;
         Ok(task)
     }
@@ -280,12 +245,13 @@ impl AppService {
         title: &str,
         body: &str,
     ) -> Result<PullRequestRecord> {
-        let approval = self.task_approval_context_get(repo_path, task_id)?;
-        if approval.direct_merge.is_some() {
+        let metadata = self.task_metadata_get(repo_path, task_id)?;
+        if metadata.direct_merge.is_some() {
             return Err(anyhow!(
                 "A local direct merge is already recorded for task {task_id}. Finish or discard that direct merge workflow before opening a pull request."
             ));
         }
+        let approval = self.load_open_task_approval_context(repo_path, task_id)?;
         ensure_clean_builder_worktree(&approval)?;
         let repo_path = self.resolve_task_repo_path(repo_path)?;
         let provider = github_provider();
@@ -349,6 +315,75 @@ impl AppService {
         }
 
         Ok(pull_request.record)
+    }
+
+    fn load_open_task_approval_context(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+    ) -> Result<TaskApprovalContext> {
+        let context = self.load_task_context(repo_path, task_id)?;
+        ensure_human_approval_status(&context.task.status)?;
+        let repo_config = self.workspace_get_repo_config(context.repo.repo_path.as_str())?;
+        let metadata = self.task_metadata_get(context.repo.repo_path.as_str(), task_id)?;
+        let config = self.config_store.load()?;
+        let target_branch = normalize_approval_target_branch(&repo_config.default_target_branch)?;
+        let publish_target = publish_target_branch(&repo_config.default_target_branch)?;
+        let working_directory = self
+            .build_continuation_target_get(context.repo.repo_path.as_str(), task_id)?
+            .working_directory;
+        let current_branch = self
+            .git_port
+            .get_current_branch(Path::new(&working_directory))?;
+        if current_branch.detached {
+            return Err(anyhow!(
+                "Human approval requires a builder branch, but the latest builder workspace is detached."
+            ));
+        }
+        let source_branch = current_branch
+            .name
+            .ok_or_else(|| anyhow!("Human approval requires a builder branch name."))?;
+        let worktree_status = self.git_port.get_worktree_status_summary(
+            Path::new(&working_directory),
+            target_branch.canonical().as_str(),
+            GitDiffScope::Uncommitted,
+        )?;
+
+        Ok(TaskApprovalContext {
+            task_id: task_id.to_string(),
+            task_status: context.task.status.as_cli_value().to_string(),
+            working_directory: Some(working_directory),
+            source_branch,
+            target_branch,
+            publish_target,
+            default_merge_method: to_domain_merge_method(config.git.default_merge_method),
+            has_uncommitted_changes: worktree_status.file_status_counts.total > 0,
+            uncommitted_file_count: worktree_status.file_status_counts.total,
+            pull_request: metadata.pull_request,
+            direct_merge: None,
+            suggested_squash_commit_message: None,
+            providers: vec![github_provider_availability(
+                Path::new(&context.repo.repo_path),
+                &repo_config,
+            )],
+        })
+    }
+
+    fn should_force_delete_source_branch(
+        &self,
+        repo_path: &str,
+        direct_merge: &DirectMergeRecord,
+    ) -> Result<bool> {
+        if !matches!(direct_merge.method, GitMergeMethod::Squash) {
+            return Ok(false);
+        }
+
+        let target_branch = direct_merge.target_branch.checkout_branch();
+        Ok(!self.git_port.is_ancestor(
+            Path::new(repo_path),
+            direct_merge.source_branch.as_str(),
+            target_branch.as_str(),
+        )?)
     }
 
     pub fn task_pull_request_unlink(&self, repo_path: &str, task_id: &str) -> Result<bool> {

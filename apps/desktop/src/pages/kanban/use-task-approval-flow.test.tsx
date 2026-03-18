@@ -152,6 +152,8 @@ let latestHarnessValue: {
     mergeMethod: "merge_commit" | "squash" | "rebase";
     pullRequestDraftMode: "manual" | "generate_ai";
     squashCommitMessage: string;
+    squashCommitMessageTouched: boolean;
+    hasSuggestedSquashCommitMessage: boolean;
     hasUncommittedChanges: boolean;
     uncommittedFileCount: number;
     errorMessage: string | null;
