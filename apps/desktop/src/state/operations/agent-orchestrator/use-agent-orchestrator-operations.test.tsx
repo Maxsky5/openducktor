@@ -9,7 +9,7 @@ import {
 import TestRenderer, { act } from "react-test-renderer";
 import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
-import { host } from "./host";
+import { host } from "../shared/host";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 
 const flush = async (): Promise<void> => {

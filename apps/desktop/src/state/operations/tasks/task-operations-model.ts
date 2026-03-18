@@ -1,5 +1,5 @@
 import type { TaskUpdatePatch } from "@openducktor/contracts";
-import { toVisibleTasks } from "../read-models/task-read-model";
+import { toVisibleTasks } from "../../read-models/task-read-model";
 
 export const WORKSPACE_REQUIRED_ERROR = "Select a workspace first.";
 export const DEFERRED_BY_USER_REASON = "Deferred by user";

@@ -7,7 +7,7 @@ import type {
 } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
-import { formatToolContent } from "../../agent-tool-messages";
+import { formatToolContent } from "../agent-tool-messages";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";
 

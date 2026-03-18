@@ -3,7 +3,7 @@ import { defaultSpecTemplateMarkdown } from "@openducktor/contracts";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { QueryProvider } from "@/lib/query-provider";
-import { host } from "./host";
+import { host } from "../shared/host";
 import { useSpecOperations } from "./use-spec-operations";
 
 const reactActEnvironment = globalThis as typeof globalThis & {

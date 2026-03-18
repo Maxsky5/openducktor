@@ -7,7 +7,7 @@ import { appQueryClient } from "@/lib/query-client";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { requireActiveRepo } from "../../task-operations-model";
+import { requireActiveRepo } from "../../tasks/task-operations-model";
 import { type RuntimeInfo, resolveRuntimeConnection } from "../runtime/runtime";
 import { runOrchestratorSideEffect, runOrchestratorTask } from "../support/async-side-effects";
 import { createRepoStaleGuard, normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";

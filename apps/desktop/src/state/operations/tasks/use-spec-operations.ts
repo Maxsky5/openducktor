@@ -6,8 +6,8 @@ import {
   loadPlanDocumentFromQuery,
   loadQaReportDocumentFromQuery,
   loadSpecDocumentFromQuery,
-} from "../queries/documents";
-import { host } from "./host";
+} from "../../queries/documents";
+import { host } from "../shared/host";
 import { requireActiveRepo } from "./task-operations-model";
 
 type UseSpecOperationsArgs = {

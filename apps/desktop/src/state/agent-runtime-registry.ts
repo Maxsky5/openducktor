@@ -9,7 +9,7 @@ import type {
   AgentWorkspaceInspectionPort,
 } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND, validateRuntimeDefinitionForOpenDucktor } from "@/lib/agent-runtime";
-import type { RuntimeCatalogAdapter } from "./operations/runtime-catalog";
+import type { RuntimeCatalogAdapter } from "./operations/shared/runtime-catalog";
 
 type RegisteredRuntimeAdapter = AgentCatalogPort &
   AgentSessionPort &

@@ -1,5 +1,5 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { isTodoToolName, settleDanglingTodoToolMessages } from "../../agent-tool-messages";
+import { isTodoToolName, settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { finalizeDraftAssistantMessage } from "../support/assistant-meta";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { sanitizeStreamingText } from "../support/core";

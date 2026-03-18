@@ -49,7 +49,7 @@ const workspaceGetSettingsSnapshotMock = mock(
   async (): Promise<SettingsSnapshot> => createSettingsSnapshot(),
 );
 
-mock.module("./host", () => ({
+mock.module("../host", () => ({
   host: {
     workspaceGetRepoConfig: workspaceGetRepoConfigMock,
     workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,

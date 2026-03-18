@@ -9,8 +9,8 @@ import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { canonicalTargetBranch, checkoutTargetBranch } from "@/lib/target-branch";
 import { pickLatestSession } from "@/state/operations/agent-orchestrator/handlers/start-session-support";
-import { host } from "@/state/operations/host";
-import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
+import { host } from "@/state/operations/shared/host";
+import { loadEffectivePromptOverrides } from "@/state/operations/shared/prompt-overrides";
 import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
 import {
   loadPlanDocumentFromQuery,

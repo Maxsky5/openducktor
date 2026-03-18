@@ -12,7 +12,7 @@ import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
 import { loadRuntimeListFromQuery, runtimeQueryKeys } from "@/state/queries/runtime";
 import { loadRepoRunsFromQuery } from "@/state/queries/tasks";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
-import { host } from "../../host";
+import { host } from "../../shared/host";
 import { resolveRuntimeRouteConnection, toRuntimeConnection } from "../runtime/runtime";
 import { createRepoStaleGuard, normalizeWorkingDirectory } from "../support/core";
 import { normalizePersistedSelection } from "../support/models";

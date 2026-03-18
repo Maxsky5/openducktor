@@ -92,8 +92,8 @@ describe("agent-orchestrator-load-sessions", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const originalList = (await import("../../host")).host.agentSessionsList;
-    (await import("../../host")).host.agentSessionsList = async () => [
+    const originalList = (await import("../../shared/host")).host.agentSessionsList;
+    (await import("../../shared/host")).host.agentSessionsList = async () => [
       {
         runtimeKind: "opencode",
         sessionId: "session-1",
@@ -111,7 +111,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1");
     } finally {
-      (await import("../../host")).host.agentSessionsList = originalList;
+      (await import("../../shared/host")).host.agentSessionsList = originalList;
     }
 
     expect(Object.keys(state)).toContain("session-1");
@@ -165,7 +165,7 @@ describe("agent-orchestrator-load-sessions", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const hostModule = await import("../../host");
+    const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     const originalRunsList = hostModule.host.runsList;
     hostModule.host.agentSessionsList = async () => [
@@ -233,7 +233,7 @@ describe("agent-orchestrator-load-sessions", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const hostModule = await import("../../host");
+    const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     const originalRuntimeList = hostModule.host.runtimeList;
     const originalEnsure = hostModule.host.runtimeEnsure;
@@ -368,7 +368,7 @@ describe("agent-orchestrator-load-sessions", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const hostModule = await import("../../host");
+    const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     hostModule.host.agentSessionsList = async () => [
       {
@@ -456,7 +456,7 @@ describe("agent-orchestrator-load-sessions", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const hostModule = await import("../../host");
+    const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     const originalRuntimeList = hostModule.host.runtimeList;
     hostModule.host.agentSessionsList = async () => [
@@ -577,7 +577,7 @@ describe("agent-orchestrator-load-sessions", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const hostModule = await import("../../host");
+    const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     const originalRuntimeList = hostModule.host.runtimeList;
     const originalRunsList = hostModule.host.runsList;
@@ -656,7 +656,7 @@ describe("agent-orchestrator-load-sessions", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const hostModule = await import("../../host");
+    const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     hostModule.host.agentSessionsList = async () => [
       {
@@ -729,7 +729,7 @@ describe("agent-orchestrator-load-sessions", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const hostModule = await import("../../host");
+    const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     const originalRuntimeList = hostModule.host.runtimeList;
     const originalRunsList = hostModule.host.runsList;
@@ -827,7 +827,7 @@ describe("agent-orchestrator-load-sessions", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const hostModule = await import("../../host");
+    const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     const originalRuntimeList = hostModule.host.runtimeList;
     const originalRunsList = hostModule.host.runsList;
@@ -933,7 +933,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const queryKey = runtimeQueryKeys.list("opencode", "/tmp/repo");
     appQueryClient.setQueryData(queryKey, []);
 
-    const hostModule = await import("../../host");
+    const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     const originalRuntimeList = hostModule.host.runtimeList;
     const originalRunsList = hostModule.host.runsList;
@@ -1029,7 +1029,7 @@ describe("agent-orchestrator-load-sessions", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const hostModule = await import("../../host");
+    const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     const originalRuntimeList = hostModule.host.runtimeList;
     const originalRunsList = hostModule.host.runsList;
@@ -1150,8 +1150,8 @@ describe("agent-orchestrator-load-sessions", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const originalList = (await import("../../host")).host.agentSessionsList;
-    (await import("../../host")).host.agentSessionsList = async () => listDeferred.promise;
+    const originalList = (await import("../../shared/host")).host.agentSessionsList;
+    (await import("../../shared/host")).host.agentSessionsList = async () => listDeferred.promise;
 
     try {
       const loadPromise = loadAgentSessions("task-1");
@@ -1174,7 +1174,7 @@ describe("agent-orchestrator-load-sessions", () => {
       ]);
       await loadPromise;
     } finally {
-      (await import("../../host")).host.agentSessionsList = originalList;
+      (await import("../../shared/host")).host.agentSessionsList = originalList;
     }
 
     expect(setCalls).toBe(0);
@@ -1233,7 +1233,7 @@ describe("agent-orchestrator-load-sessions", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const hostModule = await import("../../host");
+    const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     const originalRuntimeList = hostModule.host.runtimeList;
     const originalRunsList = hostModule.host.runsList;

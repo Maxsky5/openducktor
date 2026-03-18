@@ -1,7 +1,7 @@
 import type { BuildRespondInput } from "@openducktor/adapters-tauri-host";
 import { useCallback } from "react";
-import { loadRepoDefaultRuntimeKind } from "./agent-orchestrator/runtime/runtime";
-import { host } from "./host";
+import { loadRepoDefaultRuntimeKind } from "../agent-orchestrator/runtime/runtime";
+import { host } from "../shared/host";
 import { requireActiveRepo } from "./task-operations-model";
 
 type UseDelegationOperationsArgs = {

@@ -1,8 +1,8 @@
 import type { AgentRole } from "@openducktor/core";
 import { buildReadOnlyPermissionRejectionMessage } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
-import { settleDanglingTodoToolMessages } from "../../agent-tool-messages";
-import { isMutatingPermission } from "../../permission-policy";
+import { isMutatingPermission } from "../../shared/permission-policy";
+import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import {
   finalizeDraftAssistantMessage,
   toAssistantMessageMeta,
