@@ -301,6 +301,7 @@ describe("agent-orchestrator-ensure-ready", () => {
 
   test("fails when stopping an attached error session fails", async () => {
     let resumeCalls = 0;
+    let unsubscribeCalls = 0;
 
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
@@ -328,6 +329,16 @@ describe("agent-orchestrator-ensure-ready", () => {
         "session-1": buildSession({ status: "error" }),
       },
     };
+    const unsubscribersRef = {
+      current: new Map<string, () => void>([
+        [
+          "session-1",
+          () => {
+            unsubscribeCalls += 1;
+          },
+        ],
+      ]),
+    };
 
     const ensureReady = createEnsureSessionReady({
       activeRepo: "/tmp/repo",
@@ -336,7 +347,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef: { current: new Map() },
+      unsubscribersRef,
       updateSession: (_sessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
@@ -367,6 +378,8 @@ describe("agent-orchestrator-ensure-ready", () => {
         "Failed to stop attached error session 'session-1' before preparing it: stop boom",
       );
       expect(resumeCalls).toBe(0);
+      expect(unsubscribeCalls).toBe(0);
+      expect(unsubscribersRef.current.has("session-1")).toBe(true);
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;

@@ -125,10 +125,6 @@ export const createEnsureSessionReady = ({
         return;
       }
       const existingUnsubscriber = unsubscribersRef.current.get(sessionId);
-      if (existingUnsubscriber) {
-        existingUnsubscriber();
-        unsubscribersRef.current.delete(sessionId);
-      }
       await stopSessionOrThrow({
         operation: "ensure-ready-stop-attached-error-session",
         cleanupErrorMessage: `Failed to stop attached error session '${sessionId}' before preparing it`,
@@ -136,6 +132,10 @@ export const createEnsureSessionReady = ({
         taskId: session.taskId,
         role: session.role,
       });
+      if (existingUnsubscriber) {
+        existingUnsubscriber();
+        unsubscribersRef.current.delete(sessionId);
+      }
       assertNotStale();
     }
 
