@@ -39,18 +39,18 @@ describe("createMarkdownSyntaxLanguageRegistry", () => {
       registry.ensureLanguageRegistered("yml"),
     ]);
 
-    expect(firstResult).toBe(true);
-    expect(secondResult).toBe(true);
+    expect(firstResult).toEqual({ status: "registered" });
+    expect(secondResult).toEqual({ status: "registered" });
     expect(loadYamlLanguage).toHaveBeenCalledTimes(1);
     expect(registerLanguage).toHaveBeenCalledTimes(1);
     expect(registerLanguage.mock.calls[0]).toEqual(["yaml", { name: "yaml" }]);
 
     const repeatedResult = await registry.ensureLanguageRegistered("yaml");
-    expect(repeatedResult).toBe(true);
+    expect(repeatedResult).toEqual({ status: "registered" });
     expect(loadYamlLanguage).toHaveBeenCalledTimes(1);
   });
 
-  test("returns false for unsupported languages and failed lazy loaders", async () => {
+  test("distinguishes unsupported languages from failed lazy loaders", async () => {
     const originalConsoleError = console.error;
     const consoleError = mock((_message: string, _error?: unknown) => {});
     const registerLanguage = mock((_language: string, _grammar: unknown) => {});
@@ -72,8 +72,8 @@ describe("createMarkdownSyntaxLanguageRegistry", () => {
       const unsupportedResult = await registry.ensureLanguageRegistered("rust");
       const failedResult = await registry.ensureLanguageRegistered("yaml");
 
-      expect(unsupportedResult).toBe(false);
-      expect(failedResult).toBe(false);
+      expect(unsupportedResult).toEqual({ status: "unsupported" });
+      expect(failedResult).toMatchObject({ status: "failed" });
       expect(loadYamlLanguage).toHaveBeenCalledTimes(1);
       expect(registerLanguage).not.toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalledTimes(1);

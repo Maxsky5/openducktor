@@ -1,4 +1,8 @@
 type PrismLanguageLoader = () => Promise<{ default: unknown }>;
+type LanguageRegistrationResult =
+  | { status: "registered" }
+  | { status: "unsupported" }
+  | { status: "failed"; error: Error };
 
 type CreateMarkdownSyntaxLanguageRegistryArgs = {
   languageAliases: Record<string, string>;
@@ -14,7 +18,7 @@ export function createMarkdownSyntaxLanguageRegistry({
   registerLanguage,
 }: CreateMarkdownSyntaxLanguageRegistryArgs) {
   const registeredLanguages = new Set<string>();
-  const pendingLanguageRegistrations = new Map<string, Promise<boolean>>();
+  const pendingLanguageRegistrations = new Map<string, Promise<LanguageRegistrationResult>>();
   const supportedLanguages = new Set([
     ...Object.keys(defaultLanguages),
     ...Object.keys(lazyLanguageLoaders),
@@ -44,15 +48,17 @@ export function createMarkdownSyntaxLanguageRegistry({
   const isLanguageRegistered = (language: string): boolean =>
     registeredLanguages.has(normalizeLanguage(language));
 
-  const ensureLanguageRegistered = async (language: string): Promise<boolean> => {
+  const ensureLanguageRegistered = async (
+    language: string,
+  ): Promise<LanguageRegistrationResult> => {
     const normalizedLanguage = normalizeLanguage(language);
 
     if (!supportedLanguages.has(normalizedLanguage)) {
-      return false;
+      return { status: "unsupported" };
     }
 
     if (registeredLanguages.has(normalizedLanguage)) {
-      return true;
+      return { status: "registered" };
     }
 
     const existingRegistration = pendingLanguageRegistrations.get(normalizedLanguage);
@@ -62,17 +68,21 @@ export function createMarkdownSyntaxLanguageRegistry({
 
     const languageLoader = lazyLanguageLoaders[normalizedLanguage];
     if (!languageLoader) {
-      return false;
+      return { status: "unsupported" };
     }
 
     const registration = languageLoader()
       .then((module) => {
         registerNormalizedLanguage(normalizedLanguage, module.default);
-        return true;
+        return { status: "registered" } as const;
       })
       .catch((error) => {
-        console.error(`Failed to lazy-load language grammar for '${normalizedLanguage}':`, error);
-        return false;
+        const failure =
+          error instanceof Error
+            ? error
+            : new Error(String(error ?? "Unknown language loader error"));
+        console.error(`Failed to lazy-load language grammar for '${normalizedLanguage}':`, failure);
+        return { status: "failed", error: failure } as const;
       })
       .finally(() => {
         pendingLanguageRegistrations.delete(normalizedLanguage);
