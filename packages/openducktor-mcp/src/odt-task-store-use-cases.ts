@@ -2,7 +2,7 @@ import type {
   PublicTaskCreateInput,
   TaskPersistencePort,
   TaskSearchFilters,
-} from "./bd-persistence";
+} from "./beads-persistence";
 import type { PublicTask, RawIssue, TaskStatus } from "./contracts";
 import type { EpicSubtaskReplacementService } from "./epic-subtask-replacement";
 import type { TaskDocumentsSnapshot } from "./metadata-docs";

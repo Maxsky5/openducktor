@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { TaskPersistencePort } from "./bd-persistence";
+import type { TaskPersistencePort } from "./beads-persistence";
 import type { RawIssue, TaskCard } from "./contracts";
 import { OdtTaskStore } from "./odt-task-store";
 import type { TaskDocumentPort } from "./task-document-store";

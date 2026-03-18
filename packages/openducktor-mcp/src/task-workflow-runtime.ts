@@ -1,4 +1,4 @@
-import type { TaskPersistencePort, TaskUpdateInput } from "./bd-persistence";
+import type { TaskPersistencePort, TaskUpdateInput } from "./beads-persistence";
 import type { RawIssue, TaskCard, TaskStatus } from "./contracts";
 import type { TaskIndexCache } from "./task-index-cache";
 import { issueToTaskCard } from "./task-mapping";

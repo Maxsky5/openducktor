@@ -1,4 +1,4 @@
-import type { BdRuntimeClient } from "./bd-runtime-client";
+import type { BeadsRuntimeClient } from "./beads-runtime-client";
 import { isNonTaskBeadsIssueType } from "./beads-task-parsing";
 import type { IssueType, JsonObject, RawIssue, TaskCard, TaskStatus } from "./contracts";
 import { getNamespaceData, type NamespaceData } from "./metadata-docs";
@@ -60,24 +60,24 @@ export type TaskPersistencePort = {
   writeNamespace(taskId: string, root: JsonObject, namespace: JsonObject): Promise<void>;
 };
 
-export class BdPersistence implements TaskPersistencePort {
+export class BeadsPersistence implements TaskPersistencePort {
   readonly metadataNamespace: string;
-  private readonly bdClient: BdRuntimeClient;
+  private readonly beadsClient: BeadsRuntimeClient;
 
-  constructor(bdClient: BdRuntimeClient, metadataNamespace: string) {
-    this.bdClient = bdClient;
+  constructor(beadsClient: BeadsRuntimeClient, metadataNamespace: string) {
+    this.beadsClient = beadsClient;
     this.metadataNamespace = metadataNamespace;
   }
 
   async runBdJson(args: string[]): Promise<unknown> {
     if (args[0] === "update") {
-      return this.bdClient.updateTask(args);
+      return this.beadsClient.updateTask(args);
     }
-    return this.bdClient.runBdJson(args);
+    return this.beadsClient.runBdJson(args);
   }
 
   async ensureInitialized(): Promise<void> {
-    await this.bdClient.ensureInitialized();
+    await this.beadsClient.ensureInitialized();
   }
 
   async showRawIssue(taskId: string): Promise<RawIssue> {
