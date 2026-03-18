@@ -196,28 +196,30 @@ export const createEnsureSessionReady = ({
 
     const activeSession = sessionsRef.current[sessionId];
     const runtimeConnection = resolveRuntimeConnection(runtime);
-    const warmPreparedSession = (targetSession: AgentSessionState): void => {
-      const targetRuntimeKind =
-        targetSession.runtimeKind ?? targetSession.selectedModel?.runtimeKind;
-      if (!targetRuntimeKind) {
+    if (activeSession) {
+      const runtimeKind = activeSession.runtimeKind ?? activeSession.selectedModel?.runtimeKind;
+      if (!runtimeKind) {
         throw new Error(`Runtime kind is required to warm session '${sessionId}'.`);
       }
-      warmSessionData({
-        operationPrefix: "ensure-ready-warm-session",
-        repoPath,
-        sessionId,
-        taskId: targetSession.taskId,
-        role: targetSession.role,
-        runtimeKind: targetRuntimeKind,
-        runtimeConnection,
-        externalSessionId: targetSession.externalSessionId,
-        loadSessionTodos,
-        loadSessionModelCatalog,
-        shouldLoadModelCatalog: !targetSession.modelCatalog && !targetSession.isLoadingModelCatalog,
-      });
-    };
-    if (activeSession) {
-      warmPreparedSession(activeSession);
+      warmSessionData(
+        {
+          repoPath,
+          sessionId,
+          taskId: activeSession.taskId,
+          role: activeSession.role,
+          runtimeKind,
+          runtimeConnection,
+          externalSessionId: activeSession.externalSessionId,
+        },
+        {
+          loadSessionTodos,
+          loadSessionModelCatalog,
+        },
+        {
+          operationPrefix: "ensure-ready-warm-session",
+          shouldLoadModelCatalog: !activeSession.modelCatalog && !activeSession.isLoadingModelCatalog,
+        },
+      );
     }
   };
 };

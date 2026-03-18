@@ -515,18 +515,24 @@ const warmStartedSession = ({
     throw new Error(`Runtime kind is required to warm session '${startedCtx.summary.sessionId}'.`);
   }
 
-  warmSessionData({
-    operationPrefix: "start-session-warm-session",
-    repoPath: startedCtx.repoPath,
-    sessionId: startedCtx.summary.sessionId,
-    taskId: startedCtx.taskId,
-    role: startedCtx.role,
-    runtimeKind,
-    runtimeConnection,
-    externalSessionId: startedCtx.summary.externalSessionId,
-    loadSessionTodos: model.loadSessionTodos,
-    loadSessionModelCatalog: model.loadSessionModelCatalog,
-  });
+  warmSessionData(
+    {
+      repoPath: startedCtx.repoPath,
+      sessionId: startedCtx.summary.sessionId,
+      taskId: startedCtx.taskId,
+      role: startedCtx.role,
+      runtimeKind,
+      runtimeConnection,
+      externalSessionId: startedCtx.summary.externalSessionId,
+    },
+    {
+      loadSessionTodos: model.loadSessionTodos,
+      loadSessionModelCatalog: model.loadSessionModelCatalog,
+    },
+    {
+      operationPrefix: "start-session-warm-session",
+    },
+  );
 };
 
 const applyResolvedModelSelection = ({

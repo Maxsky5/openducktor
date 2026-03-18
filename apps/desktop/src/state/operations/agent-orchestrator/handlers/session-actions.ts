@@ -386,21 +386,27 @@ export const createAgentSessionActions = ({
     }));
     attachSessionListener(repoPath, summary.sessionId);
     void persistSessionSnapshot(nextSession);
-    warmSessionData({
-      operationPrefix: "fork-session-warm-session",
-      repoPath,
-      sessionId: summary.sessionId,
-      taskId: nextSession.taskId,
-      role: nextSession.role,
-      runtimeKind: nextSession.runtimeKind ?? DEFAULT_RUNTIME_KIND,
-      runtimeConnection: {
-        endpoint: nextSession.runtimeEndpoint,
-        workingDirectory: nextSession.workingDirectory,
+    warmSessionData(
+      {
+        repoPath,
+        sessionId: summary.sessionId,
+        taskId: nextSession.taskId,
+        role: nextSession.role,
+        runtimeKind: nextSession.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+        runtimeConnection: {
+          endpoint: nextSession.runtimeEndpoint,
+          workingDirectory: nextSession.workingDirectory,
+        },
+        externalSessionId: summary.externalSessionId,
       },
-      externalSessionId: summary.externalSessionId,
-      loadSessionTodos,
-      loadSessionModelCatalog,
-    });
+      {
+        loadSessionTodos,
+        loadSessionModelCatalog,
+      },
+      {
+        operationPrefix: "fork-session-warm-session",
+      },
+    );
     return summary.sessionId;
   };
 
