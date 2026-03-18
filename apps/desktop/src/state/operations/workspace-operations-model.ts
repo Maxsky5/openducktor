@@ -1,4 +1,5 @@
 import type { GitCurrentBranch } from "@openducktor/contracts";
+import { errorMessage } from "@/lib/errors";
 
 type ProbeBranchChangeParams = {
   activeRepo: string | null;
@@ -80,22 +81,6 @@ export const shouldSkipBranchSwitch = (
   branchName: string,
 ): boolean => activeBranch?.name === branchName && !activeBranch.detached;
 
-const toErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (typeof error === "string") {
-    return error;
-  }
-
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return "Unknown error";
-  }
-};
-
 const toOptionalString = (value: unknown): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value : null;
 
@@ -156,7 +141,7 @@ export const classifyBranchProbeError = (
   error: unknown,
   stage: BranchProbeStage,
 ): BranchProbeError => {
-  const message = toErrorMessage(error);
+  const message = errorMessage(error);
   const structuredHint = extractStructuredErrorHint(error);
 
   return {

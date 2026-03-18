@@ -100,28 +100,22 @@ const parseTrustedHooksChallenge = (payload: unknown): TrustedHooksChallenge => 
   };
 };
 
-export const workspaceList = async (invokeFn: InvokeFn): Promise<WorkspaceRecord[]> => {
+const workspaceList = async (invokeFn: InvokeFn): Promise<WorkspaceRecord[]> => {
   const payload = await invokeFn("workspace_list");
   return parseArray(workspaceRecordSchema, payload, "workspace_list");
 };
 
-export const workspaceAdd = async (
-  invokeFn: InvokeFn,
-  repoPath: string,
-): Promise<WorkspaceRecord> => {
+const workspaceAdd = async (invokeFn: InvokeFn, repoPath: string): Promise<WorkspaceRecord> => {
   const payload = await invokeFn("workspace_add", { repoPath });
   return workspaceRecordSchema.parse(payload);
 };
 
-export const workspaceSelect = async (
-  invokeFn: InvokeFn,
-  repoPath: string,
-): Promise<WorkspaceRecord> => {
+const workspaceSelect = async (invokeFn: InvokeFn, repoPath: string): Promise<WorkspaceRecord> => {
   const payload = await invokeFn("workspace_select", { repoPath });
   return workspaceRecordSchema.parse(payload);
 };
 
-export const workspaceUpdateRepoConfig = async (
+const workspaceUpdateRepoConfig = async (
   invokeFn: InvokeFn,
   repoPath: string,
   config: WorkspaceRepoConfigInput,
@@ -133,7 +127,7 @@ export const workspaceUpdateRepoConfig = async (
   return workspaceRecordSchema.parse(payload);
 };
 
-export const workspaceSaveRepoSettings = async (
+const workspaceSaveRepoSettings = async (
   invokeFn: InvokeFn,
   repoPath: string,
   settings: WorkspaceRepoSettingsInput,
@@ -145,7 +139,7 @@ export const workspaceSaveRepoSettings = async (
   return workspaceRecordSchema.parse(payload);
 };
 
-export const workspaceUpdateRepoHooks = async (
+const workspaceUpdateRepoHooks = async (
   invokeFn: InvokeFn,
   repoPath: string,
   hooks: WorkspaceRepoHooksInput,
@@ -157,7 +151,7 @@ export const workspaceUpdateRepoHooks = async (
   return workspaceRecordSchema.parse(payload);
 };
 
-export const workspaceGetRepoConfig = async (
+const workspaceGetRepoConfig = async (
   invokeFn: InvokeFn,
   repoPath: string,
 ): Promise<RepoConfig> => {
@@ -165,14 +159,12 @@ export const workspaceGetRepoConfig = async (
   return repoConfigSchema.parse(payload);
 };
 
-export const workspaceGetSettingsSnapshot = async (
-  invokeFn: InvokeFn,
-): Promise<SettingsSnapshot> => {
+const workspaceGetSettingsSnapshot = async (invokeFn: InvokeFn): Promise<SettingsSnapshot> => {
   const payload = await invokeFn("workspace_get_settings_snapshot");
   return settingsSnapshotSchema.parse(payload);
 };
 
-export const workspaceSaveSettingsSnapshot = async (
+const workspaceSaveSettingsSnapshot = async (
   invokeFn: InvokeFn,
   snapshot: SettingsSnapshot,
 ): Promise<WorkspaceRecord[]> => {
@@ -180,14 +172,14 @@ export const workspaceSaveSettingsSnapshot = async (
   return parseArray(workspaceRecordSchema, payload, "workspace_save_settings_snapshot");
 };
 
-export const workspaceUpdateGlobalGitConfig = async (
+const workspaceUpdateGlobalGitConfig = async (
   invokeFn: InvokeFn,
   git: GlobalGitConfig,
 ): Promise<void> => {
   await invokeFn("workspace_update_global_git_config", { git });
 };
 
-export const workspaceDetectGithubRepository = async (
+const workspaceDetectGithubRepository = async (
   invokeFn: InvokeFn,
   repoPath: string,
 ): Promise<GitProviderRepository | null> => {
@@ -195,7 +187,7 @@ export const workspaceDetectGithubRepository = async (
   return payload === null ? null : gitProviderRepositorySchema.parse(payload);
 };
 
-export const workspaceSetTrustedHooks = async (
+const workspaceSetTrustedHooks = async (
   invokeFn: InvokeFn,
   repoPath: string,
   trusted: boolean,
@@ -214,7 +206,7 @@ export const workspaceSetTrustedHooks = async (
   return workspaceRecordSchema.parse(payload);
 };
 
-export const workspacePrepareTrustedHooksChallenge = async (
+const workspacePrepareTrustedHooksChallenge = async (
   invokeFn: InvokeFn,
   repoPath: string,
 ): Promise<TrustedHooksChallenge> => {
@@ -224,7 +216,7 @@ export const workspacePrepareTrustedHooksChallenge = async (
   return parseTrustedHooksChallenge(payload);
 };
 
-export const setTheme = async (invokeFn: InvokeFn, theme: string): Promise<void> => {
+const setTheme = async (invokeFn: InvokeFn, theme: string): Promise<void> => {
   await invokeFn("set_theme", { theme });
 };
 

@@ -33,27 +33,27 @@ export type BuildRespondInput =
   | { action: "approve" }
   | { action: "deny" }
   | { action: "message"; message: string };
-export const systemCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<SystemCheck> => {
+const systemCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<SystemCheck> => {
   const payload = await invokeFn("system_check", { repoPath });
   return systemCheckSchema.parse(payload);
 };
 
-export const runtimeCheck = async (invokeFn: InvokeFn, force = false): Promise<RuntimeCheck> => {
+const runtimeCheck = async (invokeFn: InvokeFn, force = false): Promise<RuntimeCheck> => {
   const payload = await invokeFn("runtime_check", { force });
   return runtimeCheckSchema.parse(payload);
 };
 
-export const beadsCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<BeadsCheck> => {
+const beadsCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<BeadsCheck> => {
   const payload = await invokeFn("beads_check", { repoPath });
   return beadsCheckSchema.parse(payload);
 };
 
-export const runsList = async (invokeFn: InvokeFn, repoPath?: string): Promise<RunSummary[]> => {
+const runsList = async (invokeFn: InvokeFn, repoPath?: string): Promise<RunSummary[]> => {
   const payload = await invokeFn("runs_list", { repoPath });
   return parseArray(runSummarySchema, payload, "runs_list");
 };
 
-export const runtimeList = async (
+const runtimeList = async (
   invokeFn: InvokeFn,
   repoPath: string | undefined,
   runtimeKind: RuntimeKind,
@@ -62,12 +62,12 @@ export const runtimeList = async (
   return parseArray(runtimeInstanceSummarySchema, payload, "runtime_list");
 };
 
-export const runtimeDefinitionsList = async (invokeFn: InvokeFn): Promise<RuntimeDescriptor[]> => {
+const runtimeDefinitionsList = async (invokeFn: InvokeFn): Promise<RuntimeDescriptor[]> => {
   const payload = await invokeFn("runtime_definitions_list", {});
   return parseArray(runtimeDescriptorSchema, payload, "runtime_definitions_list");
 };
 
-export const buildContinuationTargetGet = async (
+const buildContinuationTargetGet = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
@@ -79,17 +79,14 @@ export const buildContinuationTargetGet = async (
   return buildContinuationTargetSchema.parse(payload);
 };
 
-export const runtimeStop = async (
-  invokeFn: InvokeFn,
-  runtimeId: string,
-): Promise<{ ok: boolean }> => {
+const runtimeStop = async (invokeFn: InvokeFn, runtimeId: string): Promise<{ ok: boolean }> => {
   const payload = await invokeFn("runtime_stop", {
     runtimeId,
   });
   return parseOkResult(payload, "runtime_stop");
 };
 
-export const runtimeEnsure = async (
+const runtimeEnsure = async (
   invokeFn: InvokeFn,
   repoPath: string,
   runtimeKind: RuntimeKind,
@@ -101,7 +98,7 @@ export const runtimeEnsure = async (
   return runtimeInstanceSummarySchema.parse(payload);
 };
 
-export const buildStart = async (
+const buildStart = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
@@ -111,7 +108,7 @@ export const buildStart = async (
   return runSummarySchema.parse(payload);
 };
 
-export const buildBlocked = async (
+const buildBlocked = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
@@ -125,7 +122,7 @@ export const buildBlocked = async (
   return taskCardSchema.parse(payload);
 };
 
-export const buildResumed = async (
+const buildResumed = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
@@ -137,7 +134,7 @@ export const buildResumed = async (
   return taskCardSchema.parse(payload);
 };
 
-export const buildCompleted = async (
+const buildCompleted = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
@@ -151,7 +148,7 @@ export const buildCompleted = async (
   return taskCardSchema.parse(payload);
 };
 
-export const humanRequestChanges = async (
+const humanRequestChanges = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
@@ -165,7 +162,7 @@ export const humanRequestChanges = async (
   return taskCardSchema.parse(payload);
 };
 
-export const humanApprove = async (
+const humanApprove = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
@@ -177,11 +174,7 @@ export const humanApprove = async (
   return taskCardSchema.parse(payload);
 };
 
-export const taskApprovalContextGet = async (
-  invokeFn: InvokeFn,
-  repoPath: string,
-  taskId: string,
-) => {
+const taskApprovalContextGet = async (invokeFn: InvokeFn, repoPath: string, taskId: string) => {
   const payload = await invokeFn("task_approval_context_get", {
     repoPath,
     taskId,
@@ -189,7 +182,7 @@ export const taskApprovalContextGet = async (
   return taskApprovalContextSchema.parse(payload);
 };
 
-export const taskDirectMerge = async (
+const taskDirectMerge = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
@@ -204,7 +197,7 @@ export const taskDirectMerge = async (
   return taskDirectMergeResultSchema.parse(payload);
 };
 
-export const taskDirectMergeComplete = async (
+const taskDirectMergeComplete = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
@@ -216,7 +209,7 @@ export const taskDirectMergeComplete = async (
   return taskCardSchema.parse(payload);
 };
 
-export const taskPullRequestUpsert = async (
+const taskPullRequestUpsert = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
@@ -231,7 +224,7 @@ export const taskPullRequestUpsert = async (
   return pullRequestSchema.parse(payload);
 };
 
-export const taskPullRequestUnlink = async (
+const taskPullRequestUnlink = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
@@ -240,16 +233,12 @@ export const taskPullRequestUnlink = async (
   return parseOkResult(payload, "task_pull_request_unlink");
 };
 
-export const taskPullRequestDetect = async (
-  invokeFn: InvokeFn,
-  repoPath: string,
-  taskId: string,
-) => {
+const taskPullRequestDetect = async (invokeFn: InvokeFn, repoPath: string, taskId: string) => {
   const payload = await invokeFn("task_pull_request_detect", { repoPath, taskId });
   return taskPullRequestDetectResultSchema.parse(payload);
 };
 
-export const repoPullRequestSync = async (
+const repoPullRequestSync = async (
   invokeFn: InvokeFn,
   repoPath: string,
 ): Promise<{ ok: boolean }> => {
@@ -257,7 +246,7 @@ export const repoPullRequestSync = async (
   return parseOkResult(payload, "repo_pull_request_sync");
 };
 
-export const buildRespond = async (
+const buildRespond = async (
   invokeFn: InvokeFn,
   runId: string,
   input: BuildRespondInput,
@@ -270,12 +259,12 @@ export const buildRespond = async (
   return parseOkResult(response, "build_respond");
 };
 
-export const buildStop = async (invokeFn: InvokeFn, runId: string): Promise<{ ok: boolean }> => {
+const buildStop = async (invokeFn: InvokeFn, runId: string): Promise<{ ok: boolean }> => {
   const payload = await invokeFn("build_stop", { runId });
   return parseOkResult(payload, "build_stop");
 };
 
-export const buildCleanup = async (
+const buildCleanup = async (
   invokeFn: InvokeFn,
   runId: string,
   mode: BuildCleanupMode,

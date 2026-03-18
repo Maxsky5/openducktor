@@ -282,7 +282,6 @@ export function useWorkspaceOperations({
         toast.error("Failed to switch branch", {
           description: errorMessage(error),
         });
-        throw error;
       } finally {
         if (branchRequestVersionRef.current === requestVersion) {
           setIsSwitchingBranch(false);

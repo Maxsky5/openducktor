@@ -1,3 +1,5 @@
+import { NON_ERROR_THROWN_PREFIX } from "@/types/constants";
+
 export const errorMessage = (error: unknown): string => {
   if (error instanceof Error) {
     return error.message;
@@ -7,9 +9,12 @@ export const errorMessage = (error: unknown): string => {
     return error;
   }
 
+  const fallbackMessage = `${NON_ERROR_THROWN_PREFIX} ${String(error)}`;
+
   try {
-    return JSON.stringify(error);
+    const serialized = JSON.stringify(error);
+    return typeof serialized === "string" ? serialized : fallbackMessage;
   } catch {
-    return "Unknown error";
+    return fallbackMessage;
   }
 };

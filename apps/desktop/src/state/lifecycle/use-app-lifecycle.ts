@@ -2,7 +2,7 @@ import { type RunEvent, type RuntimeKind, runEventSchema } from "@openducktor/co
 import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import { subscribeRunEvents } from "@/lib/host-client";
+import { hostBridge } from "@/lib/host-client";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { prependRunEvent, shouldLoadChecks } from "./app-lifecycle-model";
@@ -90,29 +90,30 @@ export function useAppLifecycle({
     );
 
     let unsubscribe: (() => void) | null = null;
-    subscribeRunEvents((payload) => {
-      const parsed = runEventSchema.safeParse(payload);
-      if (!parsed.success) {
-        return;
-      }
-
-      setEvents((current) => prependRunEvent(current, parsed.data));
-      if (
-        parsed.data.type === "run_finished" ||
-        parsed.data.type === "ready_for_manual_done_confirmation" ||
-        parsed.data.type === "error"
-      ) {
-        setRunCompletionSignal(parsed.data.runId, parsed.data.type);
-        const repoPath = activeRepoRef.current;
-        if (repoPath) {
-          void refreshTaskDataRef.current(repoPath).catch((error: unknown) => {
-            toast.error("Failed to refresh tasks", {
-              description: summarizeTaskLoadError(error),
-            });
-          });
+    hostBridge
+      .subscribeRunEvents((payload) => {
+        const parsed = runEventSchema.safeParse(payload);
+        if (!parsed.success) {
+          return;
         }
-      }
-    })
+
+        setEvents((current) => prependRunEvent(current, parsed.data));
+        if (
+          parsed.data.type === "run_finished" ||
+          parsed.data.type === "ready_for_manual_done_confirmation" ||
+          parsed.data.type === "error"
+        ) {
+          setRunCompletionSignal(parsed.data.runId, parsed.data.type);
+          const repoPath = activeRepoRef.current;
+          if (repoPath) {
+            void refreshTaskDataRef.current(repoPath).catch((error: unknown) => {
+              toast.error("Failed to refresh tasks", {
+                description: summarizeTaskLoadError(error),
+              });
+            });
+          }
+        }
+      })
       .then((cleanup) => {
         unsubscribe = cleanup;
       })

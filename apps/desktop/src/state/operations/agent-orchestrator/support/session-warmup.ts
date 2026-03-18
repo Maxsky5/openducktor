@@ -2,8 +2,7 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentRole, AgentRuntimeConnection } from "@openducktor/core";
 import { runOrchestratorSideEffect } from "./async-side-effects";
 
-export type SessionWarmupInput = {
-  operationPrefix: string;
+export type SessionOrchestrationContext = {
   repoPath: string;
   sessionId: string;
   taskId: string;
@@ -11,6 +10,9 @@ export type SessionWarmupInput = {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
   externalSessionId: string;
+};
+
+export type SessionWarmupDependencies = {
   loadSessionTodos: (
     sessionId: string,
     runtimeKind: RuntimeKind,
@@ -22,22 +24,20 @@ export type SessionWarmupInput = {
     runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
   ) => Promise<void>;
+};
+
+export type SessionWarmupOptions = {
+  operationPrefix: string;
   shouldLoadModelCatalog?: boolean;
 };
 
-export const warmSessionData = ({
-  operationPrefix,
-  repoPath,
-  sessionId,
-  taskId,
-  role,
-  runtimeKind,
-  runtimeConnection,
-  externalSessionId,
-  loadSessionTodos,
-  loadSessionModelCatalog,
-  shouldLoadModelCatalog = true,
-}: SessionWarmupInput): void => {
+export const warmSessionData = (
+  context: SessionOrchestrationContext,
+  { loadSessionTodos, loadSessionModelCatalog }: SessionWarmupDependencies,
+  { operationPrefix, shouldLoadModelCatalog = true }: SessionWarmupOptions,
+): void => {
+  const { repoPath, sessionId, taskId, role, runtimeKind, runtimeConnection, externalSessionId } =
+    context;
   const baseTags = {
     repoPath,
     sessionId,

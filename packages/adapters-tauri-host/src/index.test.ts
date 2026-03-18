@@ -78,6 +78,12 @@ const createClient = (resolver: (command: string, args?: Record<string, unknown>
 const assertClientType = (client: TauriHostClientType): TauriHostClientType => client;
 
 describe("TauriHostClient", () => {
+  test("does not export a redundant runtime constructor alias", async () => {
+    const module = await import("./index");
+
+    expect(module).not.toHaveProperty("TauriHostClient");
+  });
+
   test("exports a value and type-compatible host client", async () => {
     const { client } = createClient((command) => {
       if (command === "set_spec") {

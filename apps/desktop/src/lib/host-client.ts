@@ -6,6 +6,15 @@ import {
 import { isBrowserAppMode } from "@/lib/browser-mode";
 import { isTauriRuntime } from "@/lib/runtime";
 
+export type RunEventListener = (payload: unknown) => void;
+export type HostBridge = {
+  client: TauriHostClient;
+  subscribeRunEvents: (listener: RunEventListener) => Promise<() => void>;
+};
+
+const RUN_EVENT_SUBSCRIPTIONS_UNAVAILABLE_WARNING =
+  "run-event subscriptions not available in this runtime, returning no-op";
+
 let tauriCoreModulePromise: Promise<typeof import("@tauri-apps/api/core")> | null = null;
 
 const getTauriCoreModule = (): Promise<typeof import("@tauri-apps/api/core")> => {
@@ -19,7 +28,7 @@ const notAvailable = async <T>(): Promise<T> => {
   throw new Error("Tauri runtime not available. Run inside the desktop shell.");
 };
 
-export const createHostClient = (): TauriHostClient => {
+const createHostCommands = (): TauriHostClient => {
   if (!isTauriRuntime()) {
     if (isBrowserAppMode()) {
       return createBrowserLiveHostClient();
@@ -33,16 +42,13 @@ export const createHostClient = (): TauriHostClient => {
   });
 };
 
-export const hostClient = createHostClient();
-
-export const subscribeRunEvents = async (
-  listener: (payload: unknown) => void,
-): Promise<() => void> => {
+const createRunEventSubscription = (): HostBridge["subscribeRunEvents"] => async (listener) => {
   if (isBrowserAppMode()) {
     return subscribeBrowserLiveRunEvents(listener);
   }
 
   if (!isTauriRuntime()) {
+    console.warn(RUN_EVENT_SUBSCRIPTIONS_UNAVAILABLE_WARNING);
     return () => {};
   }
 
@@ -51,3 +57,16 @@ export const subscribeRunEvents = async (
     listener(event.payload);
   });
 };
+
+export const createHostBridge = (): HostBridge => ({
+  client: createHostCommands(),
+  subscribeRunEvents: createRunEventSubscription(),
+});
+
+export const hostBridge = createHostBridge();
+
+export const createHostClient = (): TauriHostClient => createHostCommands();
+
+export const hostClient = hostBridge.client;
+
+export const subscribeRunEvents = hostBridge.subscribeRunEvents;

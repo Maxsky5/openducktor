@@ -1,4 +1,4 @@
-import { type ReactElement, useEffect, useState } from "react";
+import { type ReactElement, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -37,26 +37,63 @@ const formatConflictResolutionSessionMeta = (session: AgentSessionState): string
   return `${startedAtLabel} · ${session.status} · ${session.sessionId.slice(0, 8)}`;
 };
 
+type GitConflictResolutionModalState = {
+  requestKey: string;
+  mode: "existing" | "new";
+  selectedSessionId: string;
+};
+
+const getRequestKey = (request: PendingGitConflictResolutionRequest): string =>
+  `${request.requestId}:${request.defaultMode}:${request.defaultSessionId ?? ""}`;
+
+const createModalState = (
+  request: PendingGitConflictResolutionRequest,
+): GitConflictResolutionModalState => ({
+  requestKey: getRequestKey(request),
+  mode: request.defaultMode,
+  selectedSessionId: request.defaultSessionId ?? "",
+});
+
+const reconcileModalState = (
+  previousState: GitConflictResolutionModalState,
+  requestKey: string,
+  request: PendingGitConflictResolutionRequest,
+): GitConflictResolutionModalState =>
+  previousState.requestKey === requestKey ? previousState : createModalState(request);
+
 export function useGitConflictResolutionModalState(
   request: PendingGitConflictResolutionRequest,
 ): UseGitConflictResolutionModalStateResult {
-  const [mode, setMode] = useState<"existing" | "new">(request.defaultMode);
-  const [selectedSessionId, setSelectedSessionId] = useState(request.defaultSessionId ?? "");
+  const requestKey = getRequestKey(request);
+  const [state, setState] = useState<GitConflictResolutionModalState>(() =>
+    createModalState(request),
+  );
+  const currentState = reconcileModalState(state, requestKey, request);
   const hasExistingSessions = request.builderSessions.length > 0;
-  const confirmDisabled = mode === "existing" && selectedSessionId.trim().length === 0;
-
-  useEffect(() => {
-    setMode(request.defaultMode);
-    setSelectedSessionId(request.defaultSessionId ?? "");
-  }, [request]);
+  const trimmedSelectedSessionId = currentState.selectedSessionId.trim();
+  const canConfirmExistingSession =
+    currentState.mode === "existing" &&
+    trimmedSelectedSessionId.length > 0 &&
+    request.builderSessions.some((session) => session.sessionId === trimmedSelectedSessionId);
+  const confirmDisabled = currentState.mode === "existing" && !canConfirmExistingSession;
 
   return {
-    mode,
-    selectedSessionId,
+    mode: currentState.mode,
+    selectedSessionId: currentState.selectedSessionId,
     hasExistingSessions,
     confirmDisabled,
-    setMode,
-    setSelectedSessionId,
+    setMode: (mode) => {
+      setState((previousState) => {
+        const baseState = reconcileModalState(previousState, requestKey, request);
+        return { ...baseState, mode };
+      });
+    },
+    setSelectedSessionId: (selectedSessionId) => {
+      setState((previousState) => {
+        const baseState = reconcileModalState(previousState, requestKey, request);
+        return { ...baseState, selectedSessionId };
+      });
+    },
   };
 }
 
@@ -72,6 +109,11 @@ export function GitConflictResolutionModal({
     setMode,
     setSelectedSessionId,
   } = useGitConflictResolutionModalState(request);
+  const trimmedSelectedSessionId = selectedSessionId.trim();
+  const canConfirmExistingSession =
+    mode === "existing" &&
+    trimmedSelectedSessionId.length > 0 &&
+    request.builderSessions.some((session) => session.sessionId === trimmedSelectedSessionId);
 
   return (
     <Dialog
@@ -169,8 +211,11 @@ export function GitConflictResolutionModal({
             type="button"
             disabled={confirmDisabled}
             onClick={() => {
-              if (mode === "existing" && selectedSessionId.trim().length > 0) {
-                onResolve({ mode: "existing", sessionId: selectedSessionId });
+              if (mode === "existing") {
+                if (!canConfirmExistingSession) {
+                  return;
+                }
+                onResolve({ mode: "existing", sessionId: trimmedSelectedSessionId });
                 return;
               }
               onResolve({ mode: "new" });

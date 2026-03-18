@@ -118,19 +118,25 @@ export const createLoadAgentSessions = ({
       role: AgentSessionState["role"],
       shouldLoadModelCatalog = true,
     ): void => {
-      warmSessionData({
-        operationPrefix: "load-sessions-warm-session",
-        repoPath,
-        sessionId: targetSessionId,
-        taskId,
-        role,
-        runtimeKind,
-        runtimeConnection,
-        externalSessionId,
-        loadSessionTodos,
-        loadSessionModelCatalog,
-        shouldLoadModelCatalog,
-      });
+      warmSessionData(
+        {
+          repoPath,
+          sessionId: targetSessionId,
+          taskId,
+          role,
+          runtimeKind,
+          runtimeConnection,
+          externalSessionId,
+        },
+        {
+          loadSessionTodos,
+          loadSessionModelCatalog,
+        },
+        {
+          operationPrefix: "load-sessions-warm-session",
+          shouldLoadModelCatalog,
+        },
+      );
     };
 
     const [persisted, repoPromptOverrides] = await Promise.all([

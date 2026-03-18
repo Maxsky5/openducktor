@@ -162,6 +162,3 @@ const createTauriHostClientApi = (invokeFn: InvokeFn): TauriHostClientApi => {
 export function createTauriHostClient(invokeFn: InvokeFn): TauriHostClient {
   return createTauriHostClientApi(invokeFn);
 }
-
-export const TauriHostClient = (invokeFn: InvokeFn): TauriHostClient =>
-  createTauriHostClient(invokeFn);

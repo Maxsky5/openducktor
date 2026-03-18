@@ -21,7 +21,6 @@ import type {
 import {
   eventTimestampMs,
   hasMeaningfulToolInput,
-  inferToolPartStatus,
   refreshTodosFromSessionRef,
 } from "./session-helpers";
 
@@ -211,7 +210,7 @@ export const handleToolPart = (
   const input = normalizeToolInput(part.input);
   const output = normalizeToolText(part.output);
   const error = normalizeToolText(part.error);
-  const resolvedStatus = inferToolPartStatus(part);
+  const resolvedStatus = part.status;
   const observedEventTimestampMs = eventTimestampMs(event.timestamp);
   const todoUpdateFromTool = resolveTodoUpdateFromTool(part, input, output);
   let shouldRefreshTaskData = false;

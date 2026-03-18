@@ -12,10 +12,32 @@ const toastSuccess = mock((_message: string, _options?: { description?: string }
 const toastDismiss = mock((_toastId?: string | number) => {});
 
 mock.module("@/lib/host-client", () => ({
+  createHostBridge: () => ({
+    client: createTauriHostClient(async () => {
+      throw new Error("Tauri runtime not available. Run inside the desktop shell.");
+    }),
+    subscribeRunEvents: async (listener: (payload: unknown) => void) => {
+      subscribedRunListener = listener;
+      return () => {
+        subscribedRunListener = null;
+      };
+    },
+  }),
   createHostClient: () =>
     createTauriHostClient(async () => {
       throw new Error("Tauri runtime not available. Run inside the desktop shell.");
     }),
+  hostBridge: {
+    client: createTauriHostClient(async () => {
+      throw new Error("Tauri runtime not available. Run inside the desktop shell.");
+    }),
+    subscribeRunEvents: async (listener: (payload: unknown) => void) => {
+      subscribedRunListener = listener;
+      return () => {
+        subscribedRunListener = null;
+      };
+    },
+  },
   hostClient: createTauriHostClient(async () => {
     throw new Error("Tauri runtime not available. Run inside the desktop shell.");
   }),
@@ -62,6 +84,7 @@ const createDeferred = <T,>() => {
 };
 
 beforeEach(() => {
+  subscribedRunListener = null;
   toastError.mockClear();
   toastLoading.mockClear();
   toastSuccess.mockClear();

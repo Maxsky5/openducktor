@@ -1,13 +1,13 @@
-import type { RepoPromptOverrides, RuntimeKind, TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type {
   AgentEnginePort,
   AgentModelSelection,
   AgentRole,
-  AgentRuntimeConnection,
   AgentScenario,
 } from "@openducktor/core";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
+import type { SessionWarmupDependencies } from "../support/session-warmup";
 
 export type StartAgentSessionInput = {
   taskId: string;
@@ -55,20 +55,9 @@ export type TaskDependencies = {
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
 };
 
-export type ModelDependencies = {
+export type ModelDependencies = SessionWarmupDependencies & {
   loadRepoDefaultModel: (repoPath: string, role: AgentRole) => Promise<AgentModelSelection | null>;
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
-  loadSessionTodos: (
-    sessionId: string,
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-    externalSessionId: string,
-  ) => Promise<void>;
-  loadSessionModelCatalog: (
-    sessionId: string,
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-  ) => Promise<void>;
 };
 
 export type RepoDependencies = {
