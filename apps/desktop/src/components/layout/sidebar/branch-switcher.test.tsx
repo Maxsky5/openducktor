@@ -98,7 +98,6 @@ describe("BranchSwitcher", () => {
 
   test("disables branch selection while switching repositories", async () => {
     isSwitchingWorkspace = true;
-    activeBranchName = "main";
     const { BranchSwitcher } = await import("./branch-switcher");
     const html = renderToStaticMarkup(createElement(BranchSwitcher));
 
@@ -144,8 +143,8 @@ describe("BranchSwitcher", () => {
     expect(
       mountedRenderer.root.findByProps({
         "data-branch-value": "feature/desloppify",
-      }).props["data-branch-value"],
-    ).toBe("feature/desloppify");
+      }),
+    ).toBeTruthy();
 
     activeBranchName = "feature/desloppify";
     isSwitchingBranch = false;
@@ -163,8 +162,8 @@ describe("BranchSwitcher", () => {
     expect(
       mountedRenderer.root.findByProps({
         "data-branch-value": "release",
-      }).props["data-branch-value"],
-    ).toBe("release");
+      }),
+    ).toBeTruthy();
 
     await act(async () => {
       mountedRenderer.unmount();

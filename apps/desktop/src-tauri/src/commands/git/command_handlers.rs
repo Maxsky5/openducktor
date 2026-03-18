@@ -24,10 +24,7 @@ fn authorize_git_scope(
     repo_path: &str,
     working_dir: Option<&str>,
 ) -> Result<AuthorizedGitScope, String> {
-    let repo_path = state
-        .service
-        .resolve_authorized_repo_path(repo_path)
-        .map_err(|error| error.to_string())?;
+    let repo_path = as_error(state.service.resolve_authorized_repo_path(repo_path))?;
     let effective_working_dir = resolve_working_dir(repo_path.as_str(), working_dir)?;
 
     Ok(AuthorizedGitScope {

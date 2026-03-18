@@ -12,6 +12,9 @@ export type HostBridge = {
   subscribeRunEvents: (listener: RunEventListener) => Promise<() => void>;
 };
 
+const RUN_EVENT_SUBSCRIPTIONS_UNAVAILABLE_WARNING =
+  "run-event subscriptions not available in this runtime, returning no-op";
+
 let tauriCoreModulePromise: Promise<typeof import("@tauri-apps/api/core")> | null = null;
 
 const getTauriCoreModule = (): Promise<typeof import("@tauri-apps/api/core")> => {
@@ -45,6 +48,7 @@ const createRunEventSubscription = (): HostBridge["subscribeRunEvents"] => async
   }
 
   if (!isTauriRuntime()) {
+    console.warn(RUN_EVENT_SUBSCRIPTIONS_UNAVAILABLE_WARNING);
     return () => {};
   }
 

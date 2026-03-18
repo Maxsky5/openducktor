@@ -890,4 +890,95 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
+
+  test("forkAgentSession fails fast when no runtime kind is available", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    let forkCalls = 0;
+    let attachCalls = 0;
+    let persistCalls = 0;
+    let setCalls = 0;
+
+    const originalForkSession = adapter.forkSession;
+    adapter.forkSession = async () => {
+      forkCalls += 1;
+      return {
+        sessionId: "session-2",
+        externalSessionId: "external-2",
+        startedAt: "2026-02-22T09:00:00.000Z",
+        runtimeKind: "opencode",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+
+    const sessionWithoutRuntimeKind = buildSession({
+      status: "idle",
+    });
+    delete sessionWithoutRuntimeKind.runtimeKind;
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": sessionWithoutRuntimeKind,
+      },
+    };
+    const task = createTaskCardFixture({
+      id: "task-1",
+      issueType: "feature",
+      aiReviewEnabled: true,
+      status: "in_progress",
+    });
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: (updater) => {
+        setCalls += 1;
+        sessionsRef.current =
+          typeof updater === "function" ? updater(sessionsRef.current) : updater;
+      },
+      sessionsRef,
+      taskRef: { current: [task] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map() },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: () => {},
+      attachSessionListener: () => {
+        attachCalls += 1;
+      },
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: "run-1",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {
+        persistCalls += 1;
+      },
+    });
+
+    try {
+      await expect(
+        actions.forkAgentSession({
+          parentSessionId: "session-1",
+        }),
+      ).rejects.toThrow("Runtime kind is required to fork session 'session-1'.");
+      expect(forkCalls).toBe(0);
+      expect(attachCalls).toBe(0);
+      expect(persistCalls).toBe(0);
+      expect(setCalls).toBe(0);
+    } finally {
+      adapter.forkSession = originalForkSession;
+    }
+  });
 });

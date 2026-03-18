@@ -54,6 +54,13 @@ const createModalState = (
   selectedSessionId: request.defaultSessionId ?? "",
 });
 
+const reconcileModalState = (
+  previousState: GitConflictResolutionModalState,
+  requestKey: string,
+  request: PendingGitConflictResolutionRequest,
+): GitConflictResolutionModalState =>
+  previousState.requestKey === requestKey ? previousState : createModalState(request);
+
 export function useGitConflictResolutionModalState(
   request: PendingGitConflictResolutionRequest,
 ): UseGitConflictResolutionModalStateResult {
@@ -61,10 +68,14 @@ export function useGitConflictResolutionModalState(
   const [state, setState] = useState<GitConflictResolutionModalState>(() =>
     createModalState(request),
   );
-  const currentState = state.requestKey === requestKey ? state : createModalState(request);
+  const currentState = reconcileModalState(state, requestKey, request);
   const hasExistingSessions = request.builderSessions.length > 0;
-  const confirmDisabled =
-    currentState.mode === "existing" && currentState.selectedSessionId.trim().length === 0;
+  const trimmedSelectedSessionId = currentState.selectedSessionId.trim();
+  const canConfirmExistingSession =
+    currentState.mode === "existing" &&
+    trimmedSelectedSessionId.length > 0 &&
+    request.builderSessions.some((session) => session.sessionId === trimmedSelectedSessionId);
+  const confirmDisabled = currentState.mode === "existing" && !canConfirmExistingSession;
 
   return {
     mode: currentState.mode,
@@ -73,15 +84,13 @@ export function useGitConflictResolutionModalState(
     confirmDisabled,
     setMode: (mode) => {
       setState((previousState) => {
-        const baseState =
-          previousState.requestKey === requestKey ? previousState : createModalState(request);
+        const baseState = reconcileModalState(previousState, requestKey, request);
         return { ...baseState, mode };
       });
     },
     setSelectedSessionId: (selectedSessionId) => {
       setState((previousState) => {
-        const baseState =
-          previousState.requestKey === requestKey ? previousState : createModalState(request);
+        const baseState = reconcileModalState(previousState, requestKey, request);
         return { ...baseState, selectedSessionId };
       });
     },
@@ -100,6 +109,11 @@ export function GitConflictResolutionModal({
     setMode,
     setSelectedSessionId,
   } = useGitConflictResolutionModalState(request);
+  const trimmedSelectedSessionId = selectedSessionId.trim();
+  const canConfirmExistingSession =
+    mode === "existing" &&
+    trimmedSelectedSessionId.length > 0 &&
+    request.builderSessions.some((session) => session.sessionId === trimmedSelectedSessionId);
 
   return (
     <Dialog
@@ -197,8 +211,11 @@ export function GitConflictResolutionModal({
             type="button"
             disabled={confirmDisabled}
             onClick={() => {
-              if (mode === "existing" && selectedSessionId.trim().length > 0) {
-                onResolve({ mode: "existing", sessionId: selectedSessionId });
+              if (mode === "existing") {
+                if (!canConfirmExistingSession) {
+                  return;
+                }
+                onResolve({ mode: "existing", sessionId: trimmedSelectedSessionId });
                 return;
               }
               onResolve({ mode: "new" });

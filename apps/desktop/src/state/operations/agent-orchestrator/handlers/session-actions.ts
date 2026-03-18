@@ -5,7 +5,6 @@ import type {
   AgentRole,
   AgentRuntimeConnection,
 } from "@openducktor/core";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
@@ -324,12 +323,14 @@ export const createAgentSessionActions = ({
       parentSession.selectedModel ??
       (await loadRepoDefaultModel(repoPath, parentSession.role));
     throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
+    const runtimeKind = parentSession.runtimeKind ?? modelSelection?.runtimeKind;
+    if (!runtimeKind) {
+      throw new Error(`Runtime kind is required to fork session '${parentSessionId}'.`);
+    }
     const { promptOverrides, systemPrompt } = promptContext;
     const summary = await adapter.forkSession({
       repoPath,
-      runtimeKind: (parentSession.runtimeKind ??
-        modelSelection?.runtimeKind ??
-        DEFAULT_RUNTIME_KIND) as string,
+      runtimeKind,
       runtimeConnection: {
         endpoint: parentSession.runtimeEndpoint,
         workingDirectory: parentSession.workingDirectory,
@@ -349,7 +350,7 @@ export const createAgentSessionActions = ({
       sessionId: summary.sessionId,
       externalSessionId: summary.externalSessionId,
       taskId: parentSession.taskId,
-      runtimeKind: parentSession.runtimeKind ?? modelSelection?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+      runtimeKind,
       role: parentSession.role,
       scenario: parentSession.scenario,
       status: "idle",
@@ -392,7 +393,7 @@ export const createAgentSessionActions = ({
         sessionId: summary.sessionId,
         taskId: nextSession.taskId,
         role: nextSession.role,
-        runtimeKind: nextSession.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+        runtimeKind,
         runtimeConnection: {
           endpoint: nextSession.runtimeEndpoint,
           workingDirectory: nextSession.workingDirectory,
