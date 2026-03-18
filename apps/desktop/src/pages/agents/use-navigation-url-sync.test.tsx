@@ -90,4 +90,58 @@ describe("useNavigationUrlSync", () => {
 
     await harness.unmount();
   });
+
+  test("ignores stale self-authored URL echoes while newer local navigation is pending", async () => {
+    const calls: SearchParamsCall[] = [];
+    const setSearchParams: SetURLSearchParams = (nextInit, navigateOptions) => {
+      calls.push([nextInit, navigateOptions]);
+    };
+
+    const harness = createHookHarness({
+      searchParams: new URLSearchParams("task=task-1&agent=build&autostart=1&start=now"),
+      setSearchParams,
+    });
+
+    await harness.mount();
+    await harness.run((latest) => {
+      latest.updateQuery({ session: "session-1" });
+    });
+
+    const [firstCall, secondCall] = calls;
+    if (!firstCall || !secondCall) {
+      throw new Error("Expected two setSearchParams calls");
+    }
+
+    const [firstNext] = firstCall;
+    const [secondNext] = secondCall;
+    if (!(firstNext instanceof URLSearchParams) || !(secondNext instanceof URLSearchParams)) {
+      throw new Error("Expected URLSearchParams");
+    }
+
+    await harness.update({
+      searchParams: firstNext,
+      setSearchParams,
+    });
+
+    expect(harness.getLatest().navigation).toMatchObject({
+      taskId: "task-1",
+      sessionId: "session-1",
+      role: "build",
+    });
+    expect(calls).toHaveLength(2);
+
+    await harness.update({
+      searchParams: secondNext,
+      setSearchParams,
+    });
+
+    expect(harness.getLatest().navigation).toMatchObject({
+      taskId: "task-1",
+      sessionId: "session-1",
+      role: "build",
+    });
+    expect(calls).toHaveLength(2);
+
+    await harness.unmount();
+  });
 });

@@ -26,7 +26,8 @@ export function useNavigationUrlSync({
   setSearchParams,
 }: UseNavigationUrlSyncArgs): UseNavigationUrlSyncResult {
   const syncingFromSearchParamsRef = useRef(false);
-  const lastSetSearchParamsAtRef = useRef<number>(0);
+  const latestSearchParamsRef = useRef<URLSearchParams>(new URLSearchParams(searchParams));
+  const pendingSearchParamWritesRef = useRef<string[]>([]);
   const [navigation, setNavigation] = useState<AgentStudioNavigationState>(() =>
     parseNavigationStateFromSearchParams(searchParams),
   );
@@ -36,6 +37,21 @@ export function useNavigationUrlSync({
   }, []);
 
   useEffect(() => {
+    const currentSearchParams = searchParams.toString();
+    const pendingWriteIndex = pendingSearchParamWritesRef.current.indexOf(currentSearchParams);
+    if (pendingWriteIndex !== -1) {
+      pendingSearchParamWritesRef.current =
+        pendingSearchParamWritesRef.current.slice(pendingWriteIndex + 1);
+
+      if (pendingSearchParamWritesRef.current.length === 0) {
+        latestSearchParamsRef.current = new URLSearchParams(searchParams);
+      }
+      return;
+    }
+
+    pendingSearchParamWritesRef.current = [];
+    latestSearchParamsRef.current = new URLSearchParams(searchParams);
+
     const parsed = parseNavigationStateFromSearchParams(searchParams);
     setNavigation((current) => {
       if (isSameNavigationState(current, parsed)) {
@@ -52,19 +68,22 @@ export function useNavigationUrlSync({
       return;
     }
 
-    const now = Date.now();
-    if (now - lastSetSearchParamsAtRef.current < 100) {
+    const currentSearchParams = latestSearchParamsRef.current.toString();
+    const next = buildSearchParamsFromNavigationState(latestSearchParamsRef.current, navigation);
+    const nextSearchParams = next.toString();
+    if (nextSearchParams === currentSearchParams) {
       return;
     }
 
-    const next = buildSearchParamsFromNavigationState(searchParams, navigation);
-    if (next.toString() === searchParams.toString()) {
-      return;
+    latestSearchParamsRef.current = new URLSearchParams(next);
+    if (pendingSearchParamWritesRef.current.at(-1) !== nextSearchParams) {
+      pendingSearchParamWritesRef.current = [
+        ...pendingSearchParamWritesRef.current,
+        nextSearchParams,
+      ];
     }
-
-    lastSetSearchParamsAtRef.current = now;
     setSearchParams(next, { replace: true });
-  }, [navigation, searchParams, setSearchParams]);
+  }, [navigation, setSearchParams]);
 
   return {
     navigation,
