@@ -69,17 +69,18 @@ const INITIAL_GIT_CONFLICT_STATE: {
 
 const parseGeneratedPullRequest = (content: string): { title: string; body: string } => {
   const codeBlockPattern = /^```[\w]*\n?|```$/g;
-  const trimmed = content.trim().replace(codeBlockPattern, "");
+  const boldPattern = /\*\*/g;
+  const cleaned = content.trim().replace(codeBlockPattern, "").replace(boldPattern, "");
   const titlePrefix = "Title:";
   const descriptionPrefix = "Description:";
-  const titleIndex = trimmed.indexOf(titlePrefix);
-  const descriptionIndex = trimmed.indexOf(descriptionPrefix);
+  const titleIndex = cleaned.indexOf(titlePrefix);
+  const descriptionIndex = cleaned.indexOf(descriptionPrefix);
   if (titleIndex !== 0 || descriptionIndex < 0) {
     throw new Error("Generated pull request response did not match the expected format.");
   }
 
-  const title = trimmed.slice(titlePrefix.length, descriptionIndex).trim();
-  const body = trimmed.slice(descriptionIndex + descriptionPrefix.length).trim();
+  const title = cleaned.slice(titlePrefix.length, descriptionIndex).trim();
+  const body = cleaned.slice(descriptionIndex + descriptionPrefix.length).trim();
   if (!title || !body) {
     throw new Error("Generated pull request response is missing the title or description.");
   }
