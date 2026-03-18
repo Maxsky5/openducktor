@@ -6,29 +6,6 @@ import {
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 
-const LEGACY_AGENT_SESSION_SCENARIO_MAP: Record<string, AgentSessionRecord["scenario"]> = {
-  spec_revision: "spec_initial",
-  planner_revision: "planner_initial",
-};
-
-const normalizeAgentSessionScenario = (entry: unknown): unknown => {
-  if (!entry || typeof entry !== "object") {
-    return entry;
-  }
-  const candidate = entry as { scenario?: unknown };
-  if (typeof candidate.scenario !== "string") {
-    return entry;
-  }
-  const normalizedScenario = LEGACY_AGENT_SESSION_SCENARIO_MAP[candidate.scenario];
-  if (!normalizedScenario) {
-    return entry;
-  }
-  return {
-    ...entry,
-    scenario: normalizedScenario,
-  };
-};
-
 export type ParsedTaskMetadata = Omit<TaskMetadataPayload, "agentSessions"> & {
   agentSessions: AgentSessionRecord[];
 };
@@ -38,7 +15,7 @@ const parseAgentSessions = (entries: unknown[], taskId: string): AgentSessionRec
   const invalidEntries: string[] = [];
 
   for (const [index, entry] of entries.entries()) {
-    const parsed = agentSessionRecordSchema.safeParse(normalizeAgentSessionScenario(entry));
+    const parsed = agentSessionRecordSchema.safeParse(entry);
     if (parsed.success) {
       sessions.push(parsed.data);
       continue;
