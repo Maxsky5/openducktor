@@ -860,7 +860,7 @@ async fn dispatch_task_command(
         "build_completed" => Some(handle_build_completed(state, args)),
         "task_approval_context_get" => Some(handle_task_approval_context_get(state, args)),
         "task_direct_merge" => Some(handle_task_direct_merge(state, args)),
-        "task_direct_merge_complete" => Some(handle_task_direct_merge_complete(state, args)),
+        "task_direct_merge_complete" => Some(handle_task_direct_merge_complete(state, args).await),
         "task_pull_request_upsert" => Some(handle_task_pull_request_upsert(state, args)),
         "task_pull_request_unlink" => Some(handle_task_pull_request_unlink(state, args)),
         "task_pull_request_detect" => Some(handle_task_pull_request_detect(state, args)),
@@ -1817,14 +1817,17 @@ fn handle_task_direct_merge(state: &HeadlessState, args: Value) -> CommandResult
     )
 }
 
-fn handle_task_direct_merge_complete(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_task_direct_merge_complete(state: &HeadlessState, args: Value) -> CommandResult {
     let RepoTaskArgs { repo_path, task_id } = deserialize_args(args)?;
-    serialize_value(
-        state
-            .service
-            .task_direct_merge_complete(&repo_path, &task_id)
-            .map_err(service_error)?,
-    )
+    let service = state.service.clone();
+    let repo_path_for_worker = repo_path.clone();
+    let task_id_for_worker = task_id.clone();
+    let result = run_headless_blocking("task_direct_merge_complete", move || {
+        service.task_direct_merge_complete(&repo_path_for_worker, &task_id_for_worker)
+    })
+    .await?;
+    invalidate_repo_worktree_cache(&repo_path)?;
+    serialize_value(result)
 }
 
 fn handle_task_pull_request_upsert(state: &HeadlessState, args: Value) -> CommandResult {

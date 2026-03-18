@@ -3,6 +3,7 @@ import { memo, type ReactElement, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { getGitConflictCopy } from "./conflict-copy";
+import { GIT_CONFLICT_TEST_IDS } from "./constants";
 import { GitConflictActions, type GitConflictActionsModel } from "./git-conflict-actions";
 
 type GitConflictStripProps = {
@@ -29,25 +30,22 @@ export const GitConflictStrip = memo(function GitConflictStrip({
 }: GitConflictStripProps): ReactElement {
   return (
     <div
-      className="border-b border-amber-200 bg-amber-50 px-3 py-3 dark:border-amber-950 dark:bg-amber-950/20"
-      data-testid="agent-studio-git-rebase-strip"
+      className="border-b border-border bg-muted px-3 py-3"
+      data-testid={GIT_CONFLICT_TEST_IDS.strip}
     >
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="rounded-full bg-amber-100 p-2 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+          <div className="rounded-full bg-destructive/10 p-2 text-destructive">
             <AlertTriangle className="size-4" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium text-foreground">
-                {getGitConflictCopy(conflict.operation).title.replace(
-                  " conflict detected",
-                  " in progress",
-                )}
+                {getGitConflictCopy(conflict.operation).inProgressLabel}
               </p>
               <span
-                className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300"
-                data-testid="agent-studio-git-rebase-conflict-count-badge"
+                className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive"
+                data-testid={GIT_CONFLICT_TEST_IDS.conflictCountBadge}
               >
                 {`${conflict.conflictedFiles.length} conflicted file${conflict.conflictedFiles.length === 1 ? "" : "s"}`}
               </span>
@@ -68,8 +66,8 @@ export const GitConflictStrip = memo(function GitConflictStrip({
           </Button>
           <GitConflictActions
             actions={actions}
-            abortTestId="agent-studio-git-abort-rebase-strip-button"
-            askBuilderTestId="agent-studio-git-ask-builder-strip-button"
+            abortTestId={GIT_CONFLICT_TEST_IDS.abortStripButton}
+            askBuilderTestId={GIT_CONFLICT_TEST_IDS.askBuilderStripButton}
             className="flex items-center gap-2"
           />
         </div>

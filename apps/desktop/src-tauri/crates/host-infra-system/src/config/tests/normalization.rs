@@ -1,4 +1,4 @@
-use super::{RepoConfig, TestStoreHarness};
+use super::{lock_env, EnvVarGuard, RepoConfig, TestStoreHarness};
 use crate::GitTargetBranch;
 use serde_json::json;
 use std::fs;
@@ -17,9 +17,11 @@ fn load_missing_returns_default_config() {
 
 #[test]
 fn update_repo_config_normalizes_blank_worktree_path() {
+    let _env_lock = lock_env();
     let harness = TestStoreHarness::new("normalize-worktree");
     let store = harness.store();
     let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
     let repo = root.join("repo");
     fs::create_dir_all(repo.join(".git")).expect("repo");
     let repo_str = repo.to_string_lossy().to_string();
@@ -62,9 +64,11 @@ fn update_repo_config_normalizes_blank_worktree_path() {
 
 #[test]
 fn update_repo_config_preserves_explicit_local_default_target_branch() {
+    let _env_lock = lock_env();
     let harness = TestStoreHarness::new("canonical-target-branch");
     let store = harness.store();
     let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
     let repo = root.join("repo");
     fs::create_dir_all(repo.join(".git")).expect("repo");
     let repo_str = repo.to_string_lossy().to_string();
@@ -98,9 +102,11 @@ fn update_repo_config_preserves_explicit_local_default_target_branch() {
 
 #[test]
 fn update_repo_config_normalizes_remote_qualified_default_target_branch_values() {
+    let _env_lock = lock_env();
     let harness = TestStoreHarness::new("normalize-remote-qualified-target-branch");
     let store = harness.store();
     let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
     let repo = root.join("repo");
     fs::create_dir_all(repo.join(".git")).expect("repo");
     let repo_str = repo.to_string_lossy().to_string();

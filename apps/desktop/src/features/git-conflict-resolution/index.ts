@@ -1,4 +1,5 @@
 export { getGitConflictCopy, getGitConflictTitle } from "./conflict-copy";
+export { GIT_CONFLICT_TEST_IDS, INLINE_CODE_CLASS_NAME } from "./constants";
 export {
   createGitConflictActionsModel,
   GitConflictActions,

@@ -283,7 +283,7 @@ Incorporate requested changes and provide a clean completion summary via odt_bui
   "system.scenario.build_rebase_conflict_resolution": {
     id: "system.scenario.build_rebase_conflict_resolution",
     purpose: "system",
-    builtinVersion: 1,
+    builtinVersion: 2,
     template: `Scenario: Git conflict resolution.
 The worktree is paused on an in-progress git conflict. Resolve it safely, continue or complete the interrupted git operation, and rerun relevant checks.
 Do not call odt_build_completed unless the task itself is actually complete after the conflict is resolved.`,
@@ -367,7 +367,7 @@ Task context:
   "message.build_rebase_conflict_resolution": {
     id: "message.build_rebase_conflict_resolution",
     purpose: "message",
-    builtinVersion: 1,
+    builtinVersion: 2,
     template: `Resolve the current git conflict in this worktree.
 - operation: {{git.operationLabel}}
 - currentBranch: {{git.currentBranch}}

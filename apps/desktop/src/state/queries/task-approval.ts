@@ -27,8 +27,6 @@ export const invalidateTaskApprovalContextQuery = (
   repoPath: string,
   taskId: string,
 ): Promise<void> =>
-  queryClient
-    .invalidateQueries({
-      queryKey: taskApprovalQueryKeys.context(repoPath, taskId),
-    })
-    .then(() => undefined);
+  queryClient.invalidateQueries({
+    queryKey: taskApprovalQueryKeys.context(repoPath, taskId),
+  });

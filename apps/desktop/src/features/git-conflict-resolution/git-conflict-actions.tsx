@@ -47,7 +47,10 @@ export const createGitConflictActionsModel = ({
   },
   askBuilder: {
     isPending: conflictAction === "ask_builder",
-    label: conflictAction === "ask_builder" ? "Sending to Builder..." : "Ask Builder to resolve",
+    label:
+      conflictAction === "ask_builder"
+        ? "Sending to Builder..."
+        : getGitConflictCopy(operation).askBuilderLabel,
     onClick: onAskBuilder,
   },
 });

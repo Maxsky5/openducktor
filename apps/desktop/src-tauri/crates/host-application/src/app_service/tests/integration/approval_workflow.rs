@@ -16,6 +16,7 @@ use crate::app_service::test_support::{
     build_service_with_store, init_git_repo, lock_env, make_session, make_task, prepend_path,
     set_env_var, unique_temp_path, write_executable_script, GitCall,
 };
+use crate::RepoConfigUpdate;
 
 fn base_repo_config(worktree_base: &Path) -> RepoConfig {
     RepoConfig {
@@ -396,6 +397,16 @@ fn task_approval_context_uses_pending_direct_merge_metadata_without_builder_work
     let repo_path = repo.to_string_lossy().to_string();
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
+    service.workspace_merge_repo_config(
+        repo_path.as_str(),
+        RepoConfigUpdate {
+            default_target_branch: Some(host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "beta".to_string(),
+            }),
+            ..RepoConfigUpdate::default()
+        },
+    )?;
 
     let mut session = make_session("task-1", "session-build");
     session.working_directory = missing_worktree_path.to_string_lossy().to_string();
@@ -420,6 +431,11 @@ fn task_approval_context_uses_pending_direct_merge_metadata_without_builder_work
     let approval = service.task_approval_context_get(repo_path.as_str(), "task-1")?;
     assert_eq!(approval.working_directory, None);
     assert_eq!(approval.source_branch, "odt/task-1");
+    assert_eq!(approval.target_branch.checkout_branch(), "main");
+    assert_eq!(
+        approval.publish_target.map(|target| target.canonical()),
+        Some("origin/main".to_string())
+    );
     assert!(approval.direct_merge.is_some());
 
     let _ = fs::remove_dir_all(root);

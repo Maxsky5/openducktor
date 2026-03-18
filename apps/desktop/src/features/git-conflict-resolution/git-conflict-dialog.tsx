@@ -10,10 +10,8 @@ import {
 } from "@/components/ui/dialog";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { getGitConflictCopy, getGitConflictTitle } from "./conflict-copy";
+import { GIT_CONFLICT_TEST_IDS, INLINE_CODE_CLASS_NAME } from "./constants";
 import { GitConflictActions, type GitConflictActionsModel } from "./git-conflict-actions";
-
-const INLINE_CODE_CLASS_NAME =
-  "rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground";
 
 type GitConflictDialogProps = {
   conflict: GitConflict | null;
@@ -42,9 +40,9 @@ export const GitConflictDialog = memo(function GitConflictDialog({
   open,
   onOpenChange,
   actions,
-  testId = "agent-studio-git-rebase-conflict-modal",
-  abortTestId = "agent-studio-git-abort-rebase-button",
-  askBuilderTestId = "agent-studio-git-ask-builder-button",
+  testId = GIT_CONFLICT_TEST_IDS.dialog,
+  abortTestId = GIT_CONFLICT_TEST_IDS.abortButton,
+  askBuilderTestId = GIT_CONFLICT_TEST_IDS.askBuilderButton,
 }: GitConflictDialogProps): ReactElement {
   return (
     <Dialog

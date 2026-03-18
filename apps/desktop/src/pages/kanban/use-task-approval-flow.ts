@@ -98,7 +98,11 @@ export function useTaskApprovalFlow({
   forkAgentSession,
   sendAgentMessage,
   refreshTasks,
-  onResolveGitConflict = async () => false,
+  onResolveGitConflict = async (): Promise<boolean> => {
+    throw new Error(
+      "onResolveGitConflict handler is required to use the Ask Builder conflict-resolution path.",
+    );
+  },
 }: UseTaskApprovalFlowArgs): {
   taskApprovalModal: TaskApprovalModalModel | null;
   taskGitConflictDialog: {
@@ -617,24 +621,26 @@ export function useTaskApprovalFlow({
     })();
   }, [activeRepo, refreshTasks, reset, state]);
 
+  const taskGitConflictDialog = gitConflictState.conflict
+    ? {
+        open: gitConflictState.open,
+        conflict: gitConflictState.conflict,
+        isHandlingConflict: gitConflictState.isHandlingConflict,
+        conflictAction: gitConflictState.conflictAction,
+        onOpenChange: (open: boolean) => {
+          if (!open && !gitConflictState.isHandlingConflict) {
+            closeGitConflict();
+          }
+        },
+        onAbort: abortGitConflict,
+        onAskBuilder: askBuilderToResolveGitConflict,
+      }
+    : null;
+
   if (!state) {
     return {
       taskApprovalModal: null,
-      taskGitConflictDialog: gitConflictState.conflict
-        ? {
-            open: gitConflictState.open,
-            conflict: gitConflictState.conflict,
-            isHandlingConflict: gitConflictState.isHandlingConflict,
-            conflictAction: gitConflictState.conflictAction,
-            onOpenChange: (open) => {
-              if (!open && !gitConflictState.isHandlingConflict) {
-                closeGitConflict();
-              }
-            },
-            onAbort: abortGitConflict,
-            onAskBuilder: askBuilderToResolveGitConflict,
-          }
-        : null,
+      taskGitConflictDialog,
       openTaskApproval,
     };
   }
@@ -685,21 +691,7 @@ export function useTaskApprovalFlow({
       onSkipDirectMergeCompletion: reset,
       onCompleteDirectMerge: completeDirectMerge,
     },
-    taskGitConflictDialog: gitConflictState.conflict
-      ? {
-          open: gitConflictState.open,
-          conflict: gitConflictState.conflict,
-          isHandlingConflict: gitConflictState.isHandlingConflict,
-          conflictAction: gitConflictState.conflictAction,
-          onOpenChange: (open) => {
-            if (!open && !gitConflictState.isHandlingConflict) {
-              closeGitConflict();
-            }
-          },
-          onAbort: abortGitConflict,
-          onAskBuilder: askBuilderToResolveGitConflict,
-        }
-      : null,
+    taskGitConflictDialog,
     openTaskApproval,
   };
 }

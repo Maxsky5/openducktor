@@ -19,8 +19,6 @@ impl AppService {
         ensure_human_approval_status(&context.task.status)?;
         let repo_config = self.workspace_get_repo_config(context.repo.repo_path.as_str())?;
         let metadata = self.task_metadata_get(context.repo.repo_path.as_str(), task_id)?;
-        let target_branch = normalize_approval_target_branch(&repo_config.default_target_branch)?;
-        let publish_target = publish_target_branch(&repo_config.default_target_branch)?;
         let config = self.config_store.load()?;
 
         if let Some(direct_merge) = metadata
@@ -28,6 +26,8 @@ impl AppService {
             .clone()
             .filter(|_| !is_terminal_task_status(&context.task.status))
         {
+            let target_branch = normalize_recorded_target_branch(&direct_merge.target_branch)?;
+            let publish_target = publish_recorded_target_branch(&direct_merge.target_branch)?;
             let working_directory = latest_builder_cleanup_target(
                 self,
                 context.repo.repo_path.as_str(),
@@ -59,6 +59,8 @@ impl AppService {
             });
         }
 
+        let target_branch = normalize_approval_target_branch(&repo_config.default_target_branch)?;
+        let publish_target = publish_target_branch(&repo_config.default_target_branch)?;
         let working_directory = self
             .build_continuation_target_get(context.repo.repo_path.as_str(), task_id)?
             .working_directory;
@@ -774,7 +776,21 @@ fn to_domain_merge_method(method: host_infra_system::GitMergeMethod) -> GitMerge
 fn normalize_approval_target_branch(
     target_branch: &host_infra_system::GitTargetBranch,
 ) -> Result<GitTargetBranch> {
-    let branch = target_branch.branch.trim();
+    normalize_target_branch(
+        target_branch.remote.as_deref(),
+        target_branch.branch.as_str(),
+    )
+}
+
+fn normalize_recorded_target_branch(target_branch: &GitTargetBranch) -> Result<GitTargetBranch> {
+    normalize_target_branch(
+        target_branch.remote.as_deref(),
+        target_branch.branch.as_str(),
+    )
+}
+
+fn normalize_target_branch(remote: Option<&str>, branch: &str) -> Result<GitTargetBranch> {
+    let branch = branch.trim();
     if branch.is_empty() {
         return Err(anyhow!("Human approval requires a target branch."));
     }
@@ -784,7 +800,7 @@ fn normalize_approval_target_branch(
         ));
     }
     Ok(GitTargetBranch {
-        remote: target_branch.remote.clone(),
+        remote: remote.map(ToOwned::to_owned),
         branch: branch.to_string(),
     })
 }
@@ -793,6 +809,17 @@ fn publish_target_branch(
     target_branch: &host_infra_system::GitTargetBranch,
 ) -> Result<Option<GitTargetBranch>> {
     let normalized = normalize_approval_target_branch(target_branch)?;
+    publish_target_from_normalized(normalized)
+}
+
+fn publish_recorded_target_branch(
+    target_branch: &GitTargetBranch,
+) -> Result<Option<GitTargetBranch>> {
+    let normalized = normalize_recorded_target_branch(target_branch)?;
+    publish_target_from_normalized(normalized)
+}
+
+fn publish_target_from_normalized(normalized: GitTargetBranch) -> Result<Option<GitTargetBranch>> {
     if normalized.remote.is_some() {
         return Ok(Some(normalized));
     }
