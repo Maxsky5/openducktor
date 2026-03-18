@@ -90,7 +90,15 @@ impl GitCliPort {
                         || self.get_status_unchecked(repo_path),
                         || match diff_scope {
                             GitDiffScope::Target if effective_target_branch.is_none() => Ok(None),
-                            _ => self
+                            GitDiffScope::Target => self
+                                .load_branch_changes_diff_payload_unchecked(
+                                    repo_path,
+                                    effective_target_branch
+                                        .as_deref()
+                                        .expect("target scope requires an effective target branch"),
+                                )
+                                .map(Some),
+                            GitDiffScope::Uncommitted => self
                                 .load_diff_payload_unchecked(repo_path, diff_target)
                                 .map(Some),
                         },
@@ -298,6 +306,42 @@ impl GitCliPort {
         }
 
         Ok((numstat_stdout, diff_stdout))
+    }
+
+    fn load_branch_changes_diff_payload_unchecked(
+        &self,
+        repo_path: &Path,
+        target_branch: &str,
+    ) -> Result<(String, String)> {
+        let merge_base = self.resolve_merge_base_unchecked(repo_path, target_branch)?;
+        self.load_diff_payload_unchecked(repo_path, Some(merge_base.as_str()))
+    }
+
+    fn resolve_merge_base_unchecked(
+        &self,
+        repo_path: &Path,
+        target_branch: &str,
+    ) -> Result<String> {
+        let target = normalize_non_empty(target_branch, "target branch")?;
+        let (ok, stdout, stderr) = self.run_git_allow_failure(
+            repo_path,
+            &["merge-base", "--end-of-options", &target, "HEAD"],
+        )?;
+
+        if !ok {
+            return Err(anyhow!(
+                "git merge-base {target} HEAD failed: {}",
+                combine_output(stdout, stderr)
+            ));
+        }
+
+        let merge_base = stdout
+            .lines()
+            .map(str::trim)
+            .find(|line| !line.is_empty())
+            .ok_or_else(|| anyhow!("git merge-base {target} HEAD returned no merge base"))?;
+
+        Ok(merge_base.to_string())
     }
 
     pub(super) fn commits_ahead_behind_unchecked(

@@ -202,9 +202,10 @@ pub async fn git_get_diff(
     let scope = authorize_git_scope(&state, &repo_path, working_dir.as_deref())?;
     let service = state.service.clone();
     let result = run_service_blocking("git_get_diff", move || {
-        service
-            .git_port()
-            .get_diff(Path::new(&scope.effective_working_dir), target_branch.as_deref())
+        service.git_port().get_diff(
+            Path::new(&scope.effective_working_dir),
+            target_branch.as_deref(),
+        )
     })
     .await;
     as_error(result)

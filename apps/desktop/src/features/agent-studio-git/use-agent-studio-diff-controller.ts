@@ -101,7 +101,17 @@ export function useAgentStudioDiffController({
   const [controllerState, setControllerState] = useState<DiffControllerState>(
     createInitialControllerState,
   );
-  const [diffScope, setDiffScope] = useState<DiffScope>("target");
+  const [diffScope, setDiffScope] = useState<DiffScope>("uncommitted");
+
+  const versionByScopeAndModeRef = useRef(createVersionState());
+  // Keep this monotonic across context resets so stale completions cannot
+  // collide with a newer loading request after resetRequestTracking clears refs.
+  const requestSequenceRef = useRef(0);
+  const inFlightScopeRequestRef = useRef(createInFlightState());
+  const queuedFullReloadByScopeRef = useRef(createQueuedReloadState());
+  const queuedFullReloadForceByScopeRef = useRef(createQueuedReloadForceState());
+  const invalidatedFullReloadByScopeRef = useRef(createInvalidatedFullReloadState());
+  const latestLoadingRequestSequenceRef = useRef<number | null>(null);
   const requestContextKeyRef = useRef<string | null>(null);
   const {
     beginRequest,
@@ -144,6 +154,15 @@ export function useAgentStudioDiffController({
     resetRequestTracking();
     setControllerState(createInitialControllerState());
   }, [resetRequestTracking]);
+
+  const resetToDefaultScope = useCallback((): void => {
+    if (diffScopeRef.current === "uncommitted") {
+      return;
+    }
+
+    diffScopeRef.current = "uncommitted";
+    setDiffScope("uncommitted");
+  }, []);
 
   const hasLoadContextChanged = useCallback(
     (path: string, nextTargetBranch: string, nextWorkingDir: string | null): boolean =>
@@ -433,6 +452,7 @@ export function useAgentStudioDiffController({
 
     if (repoPath && !shouldBlockDiffLoading) {
       if (hasContextChanged) {
+        resetToDefaultScope();
         resetControllerState();
       }
 
@@ -440,7 +460,7 @@ export function useAgentStudioDiffController({
         repoPath,
         targetBranch,
         workingDir,
-        scope: diffScopeRef.current,
+        scope: hasContextChanged ? "uncommitted" : diffScopeRef.current,
         force: hasContextChanged,
       });
       return;
@@ -448,18 +468,21 @@ export function useAgentStudioDiffController({
 
     if (repoPath) {
       if (hasContextChanged) {
+        resetToDefaultScope();
         resetControllerState();
       }
       return;
     }
 
     requestContextKeyRef.current = null;
+    resetToDefaultScope();
     resetControllerState();
   }, [
     loadData,
     repoPath,
     requestContextKey,
     resetControllerState,
+    resetToDefaultScope,
     shouldBlockDiffLoading,
     targetBranch,
     workingDir,

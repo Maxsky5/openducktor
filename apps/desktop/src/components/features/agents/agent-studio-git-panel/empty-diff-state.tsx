@@ -16,14 +16,14 @@ export function EmptyDiffState({
   const title = (() => {
     if (isLoading) {
       return contextMode === "repository" && diffScope === "target"
-        ? "Checking upstream differences..."
+        ? "Checking branch changes..."
         : "Scanning for changes...";
     }
     if (contextMode === "repository" && diffScope === "target" && upstreamStatus === "untracked") {
       return "No upstream branch yet";
     }
     if (contextMode === "repository" && diffScope === "target") {
-      return "No upstream differences detected";
+      return "No branch changes detected";
     }
     if (contextMode === "repository") {
       return "No repository changes detected";
@@ -34,14 +34,14 @@ export function EmptyDiffState({
   const description = (() => {
     if (isLoading) {
       return contextMode === "repository" && diffScope === "target"
-        ? "Comparing this branch against its tracked upstream branch."
+        ? "Collecting changes in this branch since it diverged from its tracked upstream branch."
         : "Checking the working directory for file modifications.";
     }
     if (contextMode === "repository" && diffScope === "target" && upstreamStatus === "untracked") {
-      return "This branch is not tracking an upstream branch yet. Push it first to create one, then compare against it here.";
+      return "This branch is not tracking an upstream branch yet. Push it first to create one, then its branch changes will appear here.";
     }
     if (contextMode === "repository" && diffScope === "target") {
-      return "Differences against the tracked upstream branch will appear here.";
+      return "Changes in this branch since it diverged from the tracked upstream branch will appear here.";
     }
     if (contextMode === "repository") {
       return "Uncommitted changes in the repository branch will appear here.";

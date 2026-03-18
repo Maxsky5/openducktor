@@ -384,7 +384,7 @@ function GitDiffScopeTabs({
               )}
               data-testid={option.testId}
             >
-              {option.scope === "target" && isRepositoryMode ? "Compare to upstream" : option.label}
+              {option.label}
             </TabsTrigger>
           ))}
         </TabsList>

@@ -344,6 +344,62 @@ fn get_worktree_status_honors_diff_scope_uncommitted_vs_target() {
 }
 
 #[test]
+fn get_worktree_status_target_scope_uses_branch_point_when_branch_is_ahead_and_behind() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-status-branch-point");
+    run_git_ok(&repo.path, &["switch", "-c", "feature/branch-point"]);
+
+    fs::write(repo.path.join("feature_only.txt"), "feature change\n")
+        .expect("feature file should write");
+    run_git_ok(&repo.path, &["add", "feature_only.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "feature commit"]);
+
+    run_git_ok(&repo.path, &["switch", "main"]);
+    fs::write(repo.path.join("main_only.txt"), "main change\n").expect("main file should write");
+    run_git_ok(&repo.path, &["add", "main_only.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "main commit"]);
+
+    run_git_ok(&repo.path, &["switch", "feature/branch-point"]);
+    fs::write(
+        repo.path.join("README.md"),
+        "# OpenDucktor\nbranch point dirty change\n",
+    )
+    .expect("dirty file should write");
+
+    let git = GitCliPort::new();
+    let status = git
+        .get_worktree_status(&repo.path, "main", GitDiffScope::Target)
+        .expect("target scope should resolve from branch point");
+
+    assert_eq!(status.target_ahead_behind.ahead, 1);
+    assert_eq!(status.target_ahead_behind.behind, 1);
+    assert!(
+        status
+            .file_diffs
+            .iter()
+            .any(|diff| diff.file == "feature_only.txt"),
+        "target scope should include feature commits after the merge base"
+    );
+    assert!(
+        status
+            .file_diffs
+            .iter()
+            .any(|diff| diff.file == "README.md"),
+        "target scope should keep uncommitted worktree changes on top of branch changes"
+    );
+    assert!(
+        !status
+            .file_diffs
+            .iter()
+            .any(|diff| diff.file == "main_only.txt"),
+        "target scope should exclude target-only commits after the merge base"
+    );
+}
+
+#[test]
 fn get_worktree_status_surfaces_non_fatal_upstream_count_error() {
     if !git_available() {
         return;

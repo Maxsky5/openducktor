@@ -262,35 +262,28 @@ describe("useAgentStudioDiffData", () => {
       await harness.mount();
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
 
-      expect(harness.getLatest().diffScope).toBe("target");
+      expect(harness.getLatest().diffScope).toBe("uncommitted");
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
         1,
         "/repo",
         "origin/main",
-        "target",
+        "uncommitted",
         undefined,
       );
       expect(harness.getLatest().upstreamAheadBehind).toEqual({ ahead: 1, behind: 0 });
-      expect(harness.getLatest().fileDiffs.length).toBe(1);
+      expect(harness.getLatest().fileDiffs).toEqual([]);
 
       await harness.run((state) => {
-        state.setDiffScope("uncommitted");
+        state.setDiffScope("target");
       });
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
         2,
         "/repo",
         "origin/main",
-        "uncommitted",
+        "target",
         undefined,
       );
-      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
-      expect(harness.getLatest().fileDiffs).toEqual([]);
-
-      await harness.run((state) => {
-        state.setDiffScope("target");
-      });
-      await harness.waitFor(() => harness.getLatest().diffScope === "target");
       expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
       expect(harness.getLatest().fileDiffs.length).toBe(1);
 
@@ -298,6 +291,13 @@ describe("useAgentStudioDiffData", () => {
         state.setDiffScope("uncommitted");
       });
       await harness.waitFor(() => harness.getLatest().diffScope === "uncommitted");
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
+      expect(harness.getLatest().fileDiffs).toEqual([]);
+
+      await harness.run((state) => {
+        state.setDiffScope("target");
+      });
+      await harness.waitFor(() => harness.getLatest().diffScope === "target");
       expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
     } finally {
       await harness.unmount();
@@ -314,7 +314,7 @@ describe("useAgentStudioDiffData", () => {
       await firstHarness.unmount();
 
       await secondHarness.mount();
-      await secondHarness.waitFor((state) => state.fileDiffs.length === 1);
+      await secondHarness.waitFor((state) => state.diffScope === "uncommitted" && !state.isLoading);
 
       expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(1);
     } finally {
@@ -339,7 +339,7 @@ describe("useAgentStudioDiffData", () => {
         2,
         "/repo",
         "origin/main",
-        "target",
+        "uncommitted",
         undefined,
       );
     } finally {
@@ -355,7 +355,7 @@ describe("useAgentStudioDiffData", () => {
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
 
       await harness.run((state) => {
-        state.setDiffScope("uncommitted");
+        state.setDiffScope("target");
       });
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
 
@@ -438,13 +438,9 @@ describe("useAgentStudioDiffData", () => {
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
 
       await harness.run((state) => {
-        state.setDiffScope("uncommitted");
-      });
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
-
-      await harness.run((state) => {
         state.setDiffScope("target");
       });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
       await harness.waitFor((state) => state.diffScope === "target");
 
       gitGetWorktreeStatusMock.mockImplementation(
@@ -552,6 +548,10 @@ describe("useAgentStudioDiffData", () => {
       });
 
       await harness.waitFor((state) => state.branch === "feature/switched");
+      await harness.run((state) => {
+        state.setDiffScope("target");
+      });
+      await harness.waitFor((state) => state.diffScope === "target");
       expect(harness.getLatest().fileDiffs[0]).toMatchObject({
         file: "src/switched.ts",
         additions: 5,
@@ -573,14 +573,9 @@ describe("useAgentStudioDiffData", () => {
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
 
       await harness.run((state) => {
-        state.setDiffScope("uncommitted");
-      });
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
-
-      await harness.run((state) => {
         state.setDiffScope("target");
       });
-      await harness.waitFor((state) => state.diffScope === "target");
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
       expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
 
       gitGetWorktreeStatusMock.mockImplementation(
@@ -668,14 +663,10 @@ describe("useAgentStudioDiffData", () => {
       expect(harness.getLatest().upstreamStatus).toBe("tracking");
 
       await harness.run((state) => {
-        state.setDiffScope("uncommitted");
+        state.setDiffScope("target");
       });
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
       expect(harness.getLatest().upstreamStatus).toBe("tracking");
-
-      await harness.run((state) => {
-        state.setDiffScope("target");
-      });
       await harness.waitFor((state) => state.diffScope === "target");
 
       gitGetWorktreeStatusMock.mockImplementation(
@@ -766,13 +757,9 @@ describe("useAgentStudioDiffData", () => {
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
 
       await harness.run((state) => {
-        state.setDiffScope("uncommitted");
-      });
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
-
-      await harness.run((state) => {
         state.setDiffScope("target");
       });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
       await harness.waitFor((state) => state.diffScope === "target");
 
       gitGetWorktreeStatusMock.mockImplementation(
@@ -932,20 +919,20 @@ describe("useAgentStudioDiffData", () => {
         1,
         "/repo",
         "origin/main",
-        "target",
+        "uncommitted",
         undefined,
       );
       expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(1);
 
       await harness.run((state) => {
-        state.setDiffScope("uncommitted");
+        state.setDiffScope("target");
       });
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
         2,
         "/repo",
         "origin/main",
-        "uncommitted",
+        "target",
         undefined,
       );
 
@@ -957,7 +944,7 @@ describe("useAgentStudioDiffData", () => {
         2,
         "/repo",
         "origin/main",
-        "uncommitted",
+        "target",
         undefined,
       );
       expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
@@ -1623,7 +1610,7 @@ describe("useAgentStudioDiffData", () => {
     });
     const clearIntervalMock = mock((_intervalId: number) => {});
 
-    let fullRequestCount = 0;
+    let targetFullRequestCount = 0;
     gitGetWorktreeStatusMock.mockImplementation(
       async (
         _repoPath: string,
@@ -1631,24 +1618,37 @@ describe("useAgentStudioDiffData", () => {
         diffScope?: "target" | "uncommitted",
         workingDir?: string,
       ): Promise<GitWorktreeStatus> => {
-        fullRequestCount += 1;
-
-        if (fullRequestCount === 1) {
+        if ((diffScope ?? "target") !== "target") {
           return withSnapshotHashes({
             currentBranch: { name: "feature/task-10", detached: false },
             fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
-            fileDiffs:
-              (diffScope ?? "target") === "target"
-                ? [
-                    {
-                      file: "src/main.ts",
-                      type: "modified",
-                      additions: 1,
-                      deletions: 1,
-                      diff: "@@ -1 +1 @@\n-old\n+draft\n",
-                    },
-                  ]
-                : [],
+            fileDiffs: [],
+            targetAheadBehind: { ahead: 1, behind: 0 },
+            upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+            snapshot: {
+              effectiveWorkingDir: workingDir ?? "/repo",
+              targetBranch,
+              diffScope: diffScope ?? "target",
+              observedAtMs: 1731000000000,
+            },
+          });
+        }
+
+        targetFullRequestCount += 1;
+
+        if (targetFullRequestCount === 1) {
+          return withSnapshotHashes({
+            currentBranch: { name: "feature/task-10", detached: false },
+            fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
+            fileDiffs: [
+              {
+                file: "src/main.ts",
+                type: "modified",
+                additions: 1,
+                deletions: 1,
+                diff: "@@ -1 +1 @@\n-old\n+draft\n",
+              },
+            ],
             targetAheadBehind: { ahead: 1, behind: 0 },
             upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
             snapshot: {
@@ -1663,18 +1663,15 @@ describe("useAgentStudioDiffData", () => {
         return withSnapshotHashes({
           currentBranch: { name: "feature/task-10", detached: false },
           fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
-          fileDiffs:
-            (diffScope ?? "target") === "target"
-              ? [
-                  {
-                    file: "src/main.ts",
-                    type: "modified",
-                    additions: 3,
-                    deletions: 1,
-                    diff: "@@ -1 +1,2 @@\n-old\n+new\n+line\n",
-                  },
-                ]
-              : [],
+          fileDiffs: [
+            {
+              file: "src/main.ts",
+              type: "modified",
+              additions: 3,
+              deletions: 1,
+              diff: "@@ -1 +1,2 @@\n-old\n+new\n+line\n",
+            },
+          ],
           targetAheadBehind: { ahead: 1, behind: 0 },
           upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
           snapshot: {
@@ -1739,13 +1736,17 @@ describe("useAgentStudioDiffData", () => {
     try {
       await harness.mount();
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      await harness.run((state) => {
+        state.setDiffScope("target");
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
       expect(harness.getLatest().fileDiffs[0]?.additions).toBe(1);
 
       await harness.run(() => {
         runTick();
       });
       await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 1);
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
 
       expect(harness.getLatest().fileDiffs[0]).toMatchObject({
         file: "src/main.ts",
@@ -1769,14 +1770,9 @@ describe("useAgentStudioDiffData", () => {
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
 
       await harness.run((state) => {
-        state.setDiffScope("uncommitted");
-      });
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
-
-      await harness.run((state) => {
         state.setDiffScope("target");
       });
-      await harness.waitFor((state) => state.diffScope === "target");
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
       expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
 
       await harness.update({
@@ -1856,7 +1852,7 @@ describe("useAgentStudioDiffData", () => {
         2,
         "/repo-b",
         "origin/main",
-        "target",
+        "uncommitted",
         undefined,
       );
 
@@ -1952,9 +1948,31 @@ describe("useAgentStudioDiffData", () => {
       await harness.waitFor((state) => state.isLoading);
 
       await harness.run((state) => {
-        state.setDiffScope("uncommitted");
+        state.setDiffScope("target");
       });
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+
+      uncommittedRequest.resolve(
+        withSnapshotHashes({
+          currentBranch: { name: "feature/uncommitted", detached: false },
+          fileStatuses: [{ path: "src/uncommitted.ts", status: "M", staged: false }],
+          fileDiffs: [],
+          targetAheadBehind: { ahead: 0, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+          snapshot: {
+            effectiveWorkingDir: "/repo",
+            targetBranch: "origin/main",
+            diffScope: "uncommitted",
+            observedAtMs: 1731000001000,
+          },
+        }),
+      );
+
+      await harness.run(async () => {
+        await Promise.resolve();
+      });
+
+      expect(harness.getLatest().isLoading).toBe(true);
 
       targetRequest.resolve(
         withSnapshotHashes({
@@ -1975,34 +1993,12 @@ describe("useAgentStudioDiffData", () => {
             effectiveWorkingDir: "/repo",
             targetBranch: "origin/main",
             diffScope: "target",
-            observedAtMs: 1731000001000,
-          },
-        }),
-      );
-
-      await harness.run(async () => {
-        await Promise.resolve();
-      });
-
-      expect(harness.getLatest().isLoading).toBe(true);
-
-      uncommittedRequest.resolve(
-        withSnapshotHashes({
-          currentBranch: { name: "feature/uncommitted", detached: false },
-          fileStatuses: [{ path: "src/uncommitted.ts", status: "M", staged: false }],
-          fileDiffs: [],
-          targetAheadBehind: { ahead: 0, behind: 0 },
-          upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
-          snapshot: {
-            effectiveWorkingDir: "/repo",
-            targetBranch: "origin/main",
-            diffScope: "uncommitted",
             observedAtMs: 1731000002000,
           },
         }),
       );
 
-      await harness.waitFor((state) => !state.isLoading && state.diffScope === "uncommitted");
+      await harness.waitFor((state) => !state.isLoading && state.diffScope === "target");
     } finally {
       await harness.unmount();
     }
@@ -2285,7 +2281,7 @@ describe("useAgentStudioDiffData", () => {
   test("keeps newer shared fields when older response resolves from another scope", async () => {
     const targetRequest = createDeferred<GitWorktreeStatus>();
     const uncommittedRequest = createDeferred<GitWorktreeStatus>();
-    const queue = [targetRequest, uncommittedRequest];
+    const queue = [uncommittedRequest, targetRequest];
 
     gitGetWorktreeStatusMock.mockImplementation(
       async (
@@ -2318,46 +2314,46 @@ describe("useAgentStudioDiffData", () => {
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
 
       await harness.run((state) => {
-        state.setDiffScope("uncommitted");
+        state.setDiffScope("target");
       });
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
 
-      uncommittedRequest.resolve(
+      targetRequest.resolve(
         withSnapshotHashes({
           currentBranch: { name: "feature/newer", detached: false },
           fileStatuses: [{ path: "src/newer.ts", status: "M", staged: false }],
-          fileDiffs: [],
-          targetAheadBehind: { ahead: 2, behind: 1 },
-          upstreamAheadBehind: { outcome: "tracking", ahead: 4, behind: 1 },
-          snapshot: {
-            effectiveWorkingDir: "/repo",
-            targetBranch: "origin/main",
-            diffScope: "uncommitted",
-            observedAtMs: 1731000004000,
-          },
-        }),
-      );
-      await harness.waitFor((state) => state.branch === "feature/newer");
-
-      targetRequest.resolve(
-        withSnapshotHashes({
-          currentBranch: { name: "feature/older", detached: false },
-          fileStatuses: [{ path: "src/older.ts", status: "M", staged: false }],
           fileDiffs: [
             {
-              file: "src/older.ts",
+              file: "src/newer.ts",
               type: "modified",
               additions: 1,
               deletions: 0,
               diff: "@@ -1 +1 @@",
             },
           ],
+          targetAheadBehind: { ahead: 2, behind: 1 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 4, behind: 1 },
+          snapshot: {
+            effectiveWorkingDir: "/repo",
+            targetBranch: "origin/main",
+            diffScope: "target",
+            observedAtMs: 1731000004000,
+          },
+        }),
+      );
+      await harness.waitFor((state) => state.branch === "feature/newer");
+
+      uncommittedRequest.resolve(
+        withSnapshotHashes({
+          currentBranch: { name: "feature/older", detached: false },
+          fileStatuses: [{ path: "src/older.ts", status: "M", staged: false }],
+          fileDiffs: [],
           targetAheadBehind: { ahead: 0, behind: 0 },
           upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
           snapshot: {
             effectiveWorkingDir: "/repo",
             targetBranch: "origin/main",
-            diffScope: "target",
+            diffScope: "uncommitted",
             observedAtMs: 1731000003000,
           },
         }),
@@ -2368,7 +2364,7 @@ describe("useAgentStudioDiffData", () => {
       });
 
       const latest = harness.getLatest();
-      expect(latest.diffScope).toBe("uncommitted");
+      expect(latest.diffScope).toBe("target");
       expect(latest.branch).toBe("feature/newer");
       expect(latest.fileStatuses[0]?.path).toBe("src/newer.ts");
       expect(latest.commitsAheadBehind).toEqual({ ahead: 2, behind: 1 });
@@ -2462,7 +2458,7 @@ describe("useAgentStudioDiffData", () => {
         1,
         "/repo",
         "origin/main",
-        "target",
+        "uncommitted",
         "/repo/.worktrees/run-1",
       );
       expect(harness.getLatest().error).toBeNull();
@@ -2530,7 +2526,7 @@ describe("useAgentStudioDiffData", () => {
         1,
         "/repo",
         "origin/main",
-        "target",
+        "uncommitted",
         "/repo/.worktrees/run-1",
       );
       expect(harness.getLatest().error).toBeNull();
@@ -2576,7 +2572,7 @@ describe("useAgentStudioDiffData", () => {
         1,
         "/repo",
         "origin/main",
-        "target",
+        "uncommitted",
         "/repo/.worktrees/run-1",
       );
       expect(harness.getLatest().error).toBeNull();
@@ -2801,7 +2797,7 @@ describe("useAgentStudioDiffData", () => {
         1,
         "/repo",
         "origin/main",
-        "target",
+        "uncommitted",
         undefined,
       );
     } finally {
