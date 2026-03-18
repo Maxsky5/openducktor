@@ -38,15 +38,12 @@ import {
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray, parseOkResult } from "./invoke-utils";
 
-export const gitGetBranches = async (
-  invokeFn: InvokeFn,
-  repoPath: string,
-): Promise<GitBranch[]> => {
+const gitGetBranches = async (invokeFn: InvokeFn, repoPath: string): Promise<GitBranch[]> => {
   const payload = await invokeFn("git_get_branches", { repoPath });
   return parseArray(gitBranchSchema, payload, "git_get_branches");
 };
 
-export const gitGetCurrentBranch = async (
+const gitGetCurrentBranch = async (
   invokeFn: InvokeFn,
   repoPath: string,
   workingDir?: string,
@@ -58,7 +55,7 @@ export const gitGetCurrentBranch = async (
   return gitCurrentBranchSchema.parse(payload);
 };
 
-export const gitSwitchBranch = async (
+const gitSwitchBranch = async (
   invokeFn: InvokeFn,
   repoPath: string,
   branch: string,
@@ -72,7 +69,7 @@ export const gitSwitchBranch = async (
   return gitCurrentBranchSchema.parse(payload);
 };
 
-export const gitCreateWorktree = async (
+const gitCreateWorktree = async (
   invokeFn: InvokeFn,
   repoPath: string,
   worktreePath: string,
@@ -88,7 +85,7 @@ export const gitCreateWorktree = async (
   return gitWorktreeSummarySchema.parse(payload);
 };
 
-export const gitRemoveWorktree = async (
+const gitRemoveWorktree = async (
   invokeFn: InvokeFn,
   repoPath: string,
   worktreePath: string,
@@ -102,7 +99,7 @@ export const gitRemoveWorktree = async (
   return parseOkResult(payload, "git_remove_worktree");
 };
 
-export const gitPushBranch = async (
+const gitPushBranch = async (
   invokeFn: InvokeFn,
   repoPath: string,
   branch: string,
@@ -124,7 +121,7 @@ export const gitPushBranch = async (
   return gitPushBranchResultSchema.parse(payload);
 };
 
-export const gitPullBranch = async (
+const gitPullBranch = async (
   invokeFn: InvokeFn,
   repoPath: string,
   workingDir?: string,
@@ -140,7 +137,7 @@ export const gitPullBranch = async (
   return gitPullBranchResultSchema.parse(payload);
 };
 
-export const gitGetStatus = async (
+const gitGetStatus = async (
   invokeFn: InvokeFn,
   repoPath: string,
   workingDir?: string,
@@ -152,7 +149,7 @@ export const gitGetStatus = async (
   return parseArray(fileStatusSchema, payload, "git_get_status");
 };
 
-export const gitGetDiff = async (
+const gitGetDiff = async (
   invokeFn: InvokeFn,
   repoPath: string,
   targetBranch?: string,
@@ -166,7 +163,7 @@ export const gitGetDiff = async (
   return parseArray(fileDiffSchema, payload, "git_get_diff");
 };
 
-export const gitCommitsAheadBehind = async (
+const gitCommitsAheadBehind = async (
   invokeFn: InvokeFn,
   repoPath: string,
   targetBranch: string,
@@ -180,7 +177,7 @@ export const gitCommitsAheadBehind = async (
   return commitsAheadBehindSchema.parse(payload);
 };
 
-export const gitGetWorktreeStatus = async (
+const gitGetWorktreeStatus = async (
   invokeFn: InvokeFn,
   repoPath: string,
   targetBranch: string,
@@ -196,7 +193,7 @@ export const gitGetWorktreeStatus = async (
   return gitWorktreeStatusSchema.parse(payload);
 };
 
-export const gitGetWorktreeStatusSummary = async (
+const gitGetWorktreeStatusSummary = async (
   invokeFn: InvokeFn,
   repoPath: string,
   targetBranch: string,
@@ -212,7 +209,7 @@ export const gitGetWorktreeStatusSummary = async (
   return gitWorktreeStatusSummarySchema.parse(payload);
 };
 
-export const gitCommitAll = async (
+const gitCommitAll = async (
   invokeFn: InvokeFn,
   repoPath: string,
   message: string,
@@ -231,7 +228,7 @@ export const gitCommitAll = async (
   return gitCommitAllResultSchema.parse(payload);
 };
 
-export const gitRebaseBranch = async (
+const gitRebaseBranch = async (
   invokeFn: InvokeFn,
   repoPath: string,
   targetBranch: string,
@@ -250,7 +247,7 @@ export const gitRebaseBranch = async (
   return gitRebaseBranchResultSchema.parse(payload);
 };
 
-export const gitRebaseAbort = async (
+const gitRebaseAbort = async (
   invokeFn: InvokeFn,
   repoPath: string,
   workingDir?: string,
@@ -266,7 +263,7 @@ export const gitRebaseAbort = async (
   return gitRebaseAbortResultSchema.parse(payload);
 };
 
-export const gitAbortConflict = async (
+const gitAbortConflict = async (
   invokeFn: InvokeFn,
   repoPath: string,
   operation: GitConflictOperation,
