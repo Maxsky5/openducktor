@@ -203,6 +203,7 @@ describe("TauriHostClient", () => {
       "gitCommitsAheadBehind",
       "gitGetWorktreeStatus",
       "gitGetWorktreeStatusSummary",
+      "gitResetWorktreeSelection",
       "gitCommitAll",
       "gitRebaseBranch",
     ] as const;
@@ -736,6 +737,11 @@ describe("TauriHostClient", () => {
           },
         };
       }
+      if (command === "git_reset_worktree_selection") {
+        return {
+          affectedPaths: ["src/main.ts"],
+        };
+      }
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -768,6 +774,21 @@ describe("TauriHostClient", () => {
       "target",
       "/tmp/wt/task-1",
     );
+    const resetResult = await client.gitResetWorktreeSelection({
+      repoPath: "/repo",
+      workingDir: "/tmp/wt/task-1",
+      targetBranch: "origin/main",
+      snapshot: {
+        hashVersion: 1,
+        statusHash: "0123456789abcdef",
+        diffHash: "fedcba9876543210",
+      },
+      selection: {
+        kind: "hunk",
+        filePath: "src/main.ts",
+        hunkIndex: 1,
+      },
+    });
 
     expect(branches).toHaveLength(1);
     expect(current.detached).toBe(false);
@@ -783,6 +804,7 @@ describe("TauriHostClient", () => {
     expect(worktreeStatus.currentBranch.name).toBe("feature/task-1");
     expect(worktreeStatus.targetAheadBehind.ahead).toBe(1);
     expect(worktreeStatusSummary.fileStatusCounts.total).toBe(1);
+    expect(resetResult.affectedPaths).toEqual(["src/main.ts"]);
 
     expect(calls.map((entry) => entry.command)).toEqual([
       "git_get_branches",
@@ -797,6 +819,7 @@ describe("TauriHostClient", () => {
       "git_push_branch",
       "git_get_worktree_status",
       "git_get_worktree_status_summary",
+      "git_reset_worktree_selection",
     ]);
     expect(calls[2].args).toEqual({
       repoPath: "/repo",
@@ -852,6 +875,21 @@ describe("TauriHostClient", () => {
       diffScope: "target",
       workingDir: "/tmp/wt/task-1",
     });
+    expect(calls[12].args).toEqual({
+      repoPath: "/repo",
+      workingDir: "/tmp/wt/task-1",
+      targetBranch: "origin/main",
+      snapshot: {
+        hashVersion: 1,
+        statusHash: "0123456789abcdef",
+        diffHash: "fedcba9876543210",
+      },
+      selection: {
+        kind: "hunk",
+        filePath: "src/main.ts",
+        hunkIndex: 1,
+      },
+    });
   });
 
   test("gitRemoveWorktree rejects malformed ack payloads", async () => {
@@ -884,6 +922,47 @@ describe("TauriHostClient", () => {
     await expect(client.gitCommitAll("/repo", "Build all changes")).rejects.toThrow();
     await expect(client.gitPullBranch("/repo")).rejects.toThrow();
     await expect(client.gitRebaseBranch("/repo", "origin/main")).rejects.toThrow();
+  });
+
+  test("git reset worktree selection validates payloads and rejects malformed host responses", async () => {
+    const { client } = createClient((command) => {
+      if (command === "git_reset_worktree_selection") {
+        return { affectedPaths: [] };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(
+      client.gitResetWorktreeSelection({
+        repoPath: "/repo",
+        targetBranch: "origin/main",
+        snapshot: {
+          hashVersion: 1,
+          statusHash: "bad-hash",
+          diffHash: "fedcba9876543210",
+        },
+        selection: {
+          kind: "file",
+          filePath: "src/main.ts",
+        },
+      }),
+    ).rejects.toThrow();
+
+    await expect(
+      client.gitResetWorktreeSelection({
+        repoPath: "/repo",
+        targetBranch: "origin/main",
+        snapshot: {
+          hashVersion: 1,
+          statusHash: "0123456789abcdef",
+          diffHash: "fedcba9876543210",
+        },
+        selection: {
+          kind: "file",
+          filePath: "src/main.ts",
+        },
+      }),
+    ).rejects.toThrow();
   });
 
   test("git worktree status rejects malformed hash metadata payloads", async () => {

@@ -59,6 +59,9 @@ const baseModel = (overrides: Partial<AgentStudioGitPanelModel> = {}): AgentStud
     upstreamStatus: "tracking",
     fileDiffs: [],
     fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
+    hashVersion: 1,
+    statusHash: "0123456789abcdef",
+    diffHash: "fedcba9876543210",
     uncommittedFileCount: 1,
     isLoading: false,
     error: null,
@@ -1358,6 +1361,114 @@ describe("AgentStudioGitPanel", () => {
     });
 
     expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(0);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("shows file reset only in uncommitted scope and opens confirmation without toggling", async () => {
+    const requestFileReset = mock((_filePath: string) => {});
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "uncommitted",
+            requestFileReset,
+            confirmReset: async () => {},
+            cancelReset: () => {},
+            pendingReset: { kind: "file", filePath: "src/main.ts" },
+            fileDiffs: [
+              {
+                file: "src/main.ts",
+                type: "modified",
+                additions: 1,
+                deletions: 1,
+                diff: "@@ -1 +1 @@\n-old\n+new\n",
+              },
+            ],
+            fileStatuses: [{ path: "src/main.ts", staged: false, status: "modified" }],
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+
+    expect(countByTestId(root, "agent-studio-git-reset-file-button")).toBe(1);
+    expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(0);
+
+    await act(async () => {
+      findByTestId(root, "agent-studio-git-reset-file-button").props.onClick({
+        stopPropagation: () => {},
+      });
+      await flush();
+    });
+
+    expect(requestFileReset).toHaveBeenCalledWith("src/main.ts");
+    expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(0);
+    expect(findByTestId(root, "agent-studio-git-reset-modal")).toBeTruthy();
+
+    await act(async () => {
+      ensureRenderer(renderer).update(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "target",
+            fileDiffs: [
+              {
+                file: "src/main.ts",
+                type: "modified",
+                additions: 1,
+                deletions: 1,
+                diff: "@@ -1 +1 @@\n-old\n+new\n",
+              },
+            ],
+            fileStatuses: [{ path: "src/main.ts", staged: false, status: "modified" }],
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    expect(countByTestId(getRoot(renderer), "agent-studio-git-reset-file-button")).toBe(0);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("disables file reset controls when reset actions are unavailable", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "uncommitted",
+            requestFileReset: () => {},
+            isResetDisabled: true,
+            resetDisabledReason: "Cannot reset while git diff data is loading.",
+            fileDiffs: [
+              {
+                file: "src/main.ts",
+                type: "modified",
+                additions: 1,
+                deletions: 1,
+                diff: "@@ -1 +1 @@\n-old\n+new\n",
+              },
+            ],
+            fileStatuses: [{ path: "src/main.ts", staged: false, status: "modified" }],
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(findByTestId(root, "agent-studio-git-reset-file-button").props.disabled).toBe(true);
 
     await act(async () => {
       ensureRenderer(renderer).unmount();

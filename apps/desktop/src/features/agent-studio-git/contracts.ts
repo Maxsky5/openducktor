@@ -1,4 +1,9 @@
-import type { CommitsAheadBehind, FileDiff, FileStatus } from "@openducktor/contracts";
+import type {
+  CommitsAheadBehind,
+  FileDiff,
+  FileStatus,
+  GitResetWorktreeSelection,
+} from "@openducktor/contracts";
 
 export type DiffScope = "target" | "uncommitted";
 
@@ -13,6 +18,9 @@ export type DiffDataState = {
   fileDiffs: FileDiff[];
   fileStatuses: FileStatus[];
   statusSnapshotKey?: string | null;
+  hashVersion: number | null;
+  statusHash: string | null;
+  diffHash: string | null;
   uncommittedFileCount: number;
   isLoading: boolean;
   error: string | null;
@@ -55,3 +63,5 @@ export type AgentStudioPendingPullRebase = {
   localAhead: number;
   upstreamBehind: number;
 };
+
+export type AgentStudioPendingReset = GitResetWorktreeSelection;

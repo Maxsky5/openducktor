@@ -2,6 +2,7 @@ import type { PullRequest } from "@openducktor/contracts";
 import type {
   AgentStudioPendingForcePush,
   AgentStudioPendingPullRebase,
+  AgentStudioPendingReset,
   DiffDataState,
   GitConflict,
   GitConflictAction,
@@ -13,6 +14,9 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   isCommitting?: boolean;
   isPushing?: boolean;
   isRebasing?: boolean;
+  isResetting?: boolean;
+  isResetDisabled?: boolean;
+  resetDisabledReason?: string | null;
   isHandlingGitConflict?: boolean;
   gitConflictAction?: GitConflictAction;
   gitConflictAutoOpenNonce?: number;
@@ -23,11 +27,17 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   gitConflict?: GitConflict | null;
   pendingForcePush?: AgentStudioPendingForcePush | null;
   pendingPullRebase?: AgentStudioPendingPullRebase | null;
+  pendingReset?: AgentStudioPendingReset | null;
   commitError?: string | null;
   pushError?: string | null;
   rebaseError?: string | null;
+  resetError?: string | null;
   isDetectingPullRequest?: boolean;
   commitAll?: (message: string) => Promise<boolean>;
+  requestFileReset?: (filePath: string) => void;
+  requestHunkReset?: (filePath: string, hunkIndex: number) => void;
+  confirmReset?: () => Promise<void>;
+  cancelReset?: () => void;
   pushBranch?: () => Promise<void>;
   confirmForcePush?: () => Promise<void>;
   cancelForcePush?: () => void;

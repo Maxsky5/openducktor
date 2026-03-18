@@ -15,6 +15,11 @@ type FileDiffListProps = {
   setDiffStyle: (style: PierreDiffStyle) => void;
   expandedFiles: ReadonlySet<string>;
   onToggleFile: (filePath: string) => void;
+  canResetFiles: boolean;
+  isResetDisabled: boolean;
+  resetDisabledReason: string | null;
+  onRequestFileReset?: ((filePath: string) => void) | undefined;
+  onRequestHunkReset?: ((filePath: string, hunkIndex: number) => void) | undefined;
 };
 
 type DiffStyleToggleButtonProps = {
@@ -60,6 +65,11 @@ export const FileDiffList = memo(function FileDiffList({
   setDiffStyle,
   expandedFiles,
   onToggleFile,
+  canResetFiles,
+  isResetDisabled,
+  resetDisabledReason,
+  onRequestFileReset,
+  onRequestHunkReset,
 }: FileDiffListProps): ReactElement {
   const { totalAdditions, totalDeletions } = useMemo(() => {
     let additions = 0;
@@ -120,6 +130,11 @@ export const FileDiffList = memo(function FileDiffList({
           isExpanded={expandedFiles.has(diff.file)}
           onToggle={onToggleFile}
           diffStyle={diffStyle}
+          canReset={canResetFiles}
+          isResetDisabled={isResetDisabled}
+          resetDisabledReason={resetDisabledReason}
+          onRequestFileReset={onRequestFileReset}
+          onRequestHunkReset={onRequestHunkReset}
         />
       ))}
     </div>

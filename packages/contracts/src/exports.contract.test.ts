@@ -35,6 +35,10 @@ import type {
   GitPullBranchResult,
   GitRebaseBranchRequest,
   GitRebaseBranchResult,
+  GitResetSnapshot,
+  GitResetWorktreeSelection,
+  GitResetWorktreeSelectionRequest,
+  GitResetWorktreeSelectionResult,
   GitUpstreamAheadBehind,
   GitWorktreeStatus,
   GitWorktreeStatusSnapshot,
@@ -123,6 +127,10 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitProviderRepositorySchema",
   "gitPullBranchRequestSchema",
   "gitPullBranchResultSchema",
+  "gitResetSnapshotSchema",
+  "gitResetWorktreeSelectionSchema",
+  "gitResetWorktreeSelectionRequestSchema",
+  "gitResetWorktreeSelectionResultSchema",
   "gitPullRequestStateSchema",
   "gitPushBranchResultSchema",
   "gitTargetBranchSchema",
@@ -250,6 +258,10 @@ type ExportedTypeContract = {
   GitPullBranchResult: GitPullBranchResult;
   GitRebaseBranchRequest: GitRebaseBranchRequest;
   GitRebaseBranchResult: GitRebaseBranchResult;
+  GitResetSnapshot: GitResetSnapshot;
+  GitResetWorktreeSelection: GitResetWorktreeSelection;
+  GitResetWorktreeSelectionRequest: GitResetWorktreeSelectionRequest;
+  GitResetWorktreeSelectionResult: GitResetWorktreeSelectionResult;
   GitUpstreamAheadBehind: GitUpstreamAheadBehind;
   GitWorktreeStatus: GitWorktreeStatus;
   GitWorktreeStatusSummary: GitWorktreeStatusSummary;

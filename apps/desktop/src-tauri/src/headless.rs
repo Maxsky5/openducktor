@@ -323,6 +323,16 @@ struct GitPullBranchArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct GitResetWorktreeSelectionArgs {
+    repo_path: String,
+    target_branch: String,
+    snapshot: host_domain::GitResetSnapshot,
+    selection: host_domain::GitResetWorktreeSelection,
+    working_dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct GitRebaseAbortArgs {
     repo_path: String,
     working_dir: Option<String>,
@@ -818,6 +828,9 @@ async fn dispatch_git_command(
             Some(handle_git_get_worktree_status_summary(state, args).await)
         }
         "git_commit_all" => Some(handle_git_commit_all(state, args).await),
+        "git_reset_worktree_selection" => {
+            Some(handle_git_reset_worktree_selection(state, args).await)
+        }
         "git_pull_branch" => Some(handle_git_pull_branch(state, args).await),
         "git_rebase_branch" => Some(handle_git_rebase_branch(state, args).await),
         "git_rebase_abort" => Some(handle_git_rebase_abort(state, args).await),
@@ -1451,6 +1464,30 @@ async fn handle_git_commit_all(state: &HeadlessState, args: Value) -> CommandRes
                 host_domain::GitCommitAllRequest {
                     working_dir: Some(effective),
                     message,
+                },
+            )
+        })
+        .await?,
+    )
+}
+
+async fn handle_git_reset_worktree_selection(state: &HeadlessState, args: Value) -> CommandResult {
+    let request: GitResetWorktreeSelectionArgs = deserialize_args(args)?;
+    let target_branch = require_target_branch(&request.target_branch)
+        .map_err(request_error)?
+        .to_string();
+    let effective =
+        resolve_authorized_working_dir(state, &request.repo_path, request.working_dir.as_deref())?;
+    let service = state.service.clone();
+    serialize_value(
+        run_headless_blocking("git_reset_worktree_selection", move || {
+            service.git_reset_worktree_selection(
+                &request.repo_path,
+                host_domain::GitResetWorktreeSelectionRequest {
+                    working_dir: Some(effective),
+                    target_branch,
+                    snapshot: request.snapshot,
+                    selection: request.selection,
                 },
             )
         })

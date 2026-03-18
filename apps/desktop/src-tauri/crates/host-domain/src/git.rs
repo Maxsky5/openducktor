@@ -304,6 +304,36 @@ pub struct GitWorktreeStatusSummaryData {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct GitResetSnapshot {
+    pub hash_version: u32,
+    pub status_hash: String,
+    pub diff_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum GitResetWorktreeSelection {
+    File { file_path: String },
+    Hunk { file_path: String, hunk_index: u32 },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitResetWorktreeSelectionRequest {
+    pub working_dir: Option<String>,
+    pub target_branch: String,
+    pub snapshot: GitResetSnapshot,
+    pub selection: GitResetWorktreeSelection,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitResetWorktreeSelectionResult {
+    pub affected_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct GitCommitAllRequest {
     pub working_dir: Option<String>,
     pub message: String,
@@ -457,6 +487,11 @@ pub trait GitPort: Send + Sync {
         repo_path: &Path,
         request: GitCommitAllRequest,
     ) -> Result<GitCommitAllResult>;
+    fn reset_worktree_selection(
+        &self,
+        repo_path: &Path,
+        request: GitResetWorktreeSelectionRequest,
+    ) -> Result<GitResetWorktreeSelectionResult>;
     fn rebase_branch(
         &self,
         repo_path: &Path,

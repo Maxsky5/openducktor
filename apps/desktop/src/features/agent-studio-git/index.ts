@@ -1,6 +1,7 @@
 export type {
   AgentStudioPendingForcePush,
   AgentStudioPendingPullRebase,
+  AgentStudioPendingReset,
   AgentStudioRebaseConflict,
   AgentStudioRebaseConflictAction,
   AgentStudioRebaseConflictOperation,

@@ -17,10 +17,11 @@ const gitPullBranchMock = mock(async () => ({ outcome: "pulled", output: "update
 const gitRebaseBranchMock = mock(async () => ({ outcome: "rebased" }));
 const gitAbortConflictMock = mock(async () => ({ output: "aborted" }));
 const gitRebaseAbortMock = mock(async () => ({ outcome: "aborted" }));
+const gitResetWorktreeSelectionMock = mock(async () => ({ affectedPaths: ["src/main.ts"] }));
 const toastSuccessMock = mock(() => {});
 const toastErrorMock = mock(() => {});
 
-mock.module("@/state/operations/host", () => ({
+mock.module("@/state/operations/shared/host", () => ({
   host: {
     gitCommitAll: gitCommitAllMock,
     gitPushBranch: gitPushBranchMock,
@@ -28,6 +29,7 @@ mock.module("@/state/operations/host", () => ({
     gitRebaseBranch: gitRebaseBranchMock,
     gitAbortConflict: gitAbortConflictMock,
     gitRebaseAbort: gitRebaseAbortMock,
+    gitResetWorktreeSelection: gitResetWorktreeSelectionMock,
   },
 }));
 
@@ -53,6 +55,9 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   workingDir: null,
   branch: "feature/task-10",
   targetBranch: "origin/main",
+  hashVersion: 1,
+  statusHash: "0123456789abcdef",
+  diffHash: "fedcba9876543210",
   refreshDiffData: async () => {},
   ...overrides,
 });
@@ -68,6 +73,7 @@ beforeEach(() => {
   gitRebaseBranchMock.mockClear();
   gitAbortConflictMock.mockClear();
   gitRebaseAbortMock.mockClear();
+  gitResetWorktreeSelectionMock.mockClear();
   toastSuccessMock.mockClear();
   toastErrorMock.mockClear();
   gitCommitAllMock.mockImplementation(async () => ({ outcome: "committed", commitHash: "abc123" }));
@@ -80,6 +86,9 @@ beforeEach(() => {
   gitRebaseBranchMock.mockImplementation(async () => ({ outcome: "rebased" }));
   gitAbortConflictMock.mockImplementation(async () => ({ output: "aborted" }));
   gitRebaseAbortMock.mockImplementation(async () => ({ outcome: "aborted" }));
+  gitResetWorktreeSelectionMock.mockImplementation(async () => ({
+    affectedPaths: ["src/main.ts"],
+  }));
 });
 
 describe("useAgentStudioGitActions", () => {
@@ -203,6 +212,121 @@ describe("useAgentStudioGitActions", () => {
       await harness.waitFor((state) => state.isRebasing === false);
       expect(refreshDiffData).toHaveBeenCalledTimes(1);
       expect(harness.getLatest().rebaseError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("requests confirmation and resets a file with snapshot metadata", async () => {
+    const refreshDiffData = mock(async () => {});
+    const harness = createHookHarness(
+      createBaseArgs({
+        refreshDiffData,
+        workingDir: "/tmp/worktree/task-10",
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      await harness.run((state) => {
+        state.requestFileReset("src/main.ts");
+      });
+
+      expect(harness.getLatest().pendingReset).toEqual({ kind: "file", filePath: "src/main.ts" });
+
+      await harness.run(async (state) => {
+        await state.confirmReset();
+      });
+
+      expect(gitResetWorktreeSelectionMock).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        workingDir: "/tmp/worktree/task-10",
+        targetBranch: "origin/main",
+        snapshot: {
+          hashVersion: 1,
+          statusHash: "0123456789abcdef",
+          diffHash: "fedcba9876543210",
+        },
+        selection: {
+          kind: "file",
+          filePath: "src/main.ts",
+        },
+      });
+      expect(refreshDiffData).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().pendingReset).toBeNull();
+      expect(harness.getLatest().resetError).toBeNull();
+      expect(toastSuccessMock).toHaveBeenCalledWith("File reset", {
+        description: "src/main.ts",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps reset blocked while git diff data is loading", async () => {
+    const harness = createHookHarness(
+      createBaseArgs({
+        isDiffDataLoading: true,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().isResetDisabled).toBe(true);
+      expect(harness.getLatest().resetDisabledReason).toBe(
+        "Cannot reset while git diff data is loading.",
+      );
+
+      await harness.run((state) => {
+        state.requestFileReset("src/main.ts");
+      });
+
+      expect(harness.getLatest().pendingReset).toBeNull();
+      expect(harness.getLatest().resetError).toBe("Cannot reset while git diff data is loading.");
+      expect(gitResetWorktreeSelectionMock).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("clears reset errors after a newer snapshot arrives", async () => {
+    gitResetWorktreeSelectionMock.mockImplementationOnce(async () => {
+      throw new Error("Displayed diff is stale. Refresh and try again.");
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        worktreeStatusSnapshotKey: "1:aaaaaaaaaaaaaaaa:bbbbbbbbbbbbbbbb",
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      await harness.run((state) => {
+        state.requestHunkReset("src/main.ts", 2);
+      });
+      await harness.run(async (state) => {
+        await state.confirmReset();
+      });
+
+      expect(harness.getLatest().resetError).toBe(
+        "Displayed diff is stale. Refresh and try again.",
+      );
+
+      await harness.update(
+        createBaseArgs({
+          worktreeStatusSnapshotKey: "1:cccccccccccccccc:dddddddddddddddd",
+        }),
+      );
+
+      await harness.waitFor((state) => state.resetError === null);
+      expect(harness.getLatest().pendingReset).toEqual({
+        kind: "hunk",
+        filePath: "src/main.ts",
+        hunkIndex: 2,
+      });
     } finally {
       await harness.unmount();
     }

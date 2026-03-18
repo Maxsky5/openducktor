@@ -294,6 +294,7 @@ fn startup_phase_command_registration(
         git_get_worktree_status,
         git_get_worktree_status_summary,
         git_commit_all,
+        git_reset_worktree_selection,
         git_pull_branch,
         git_rebase_branch,
         git_rebase_abort,

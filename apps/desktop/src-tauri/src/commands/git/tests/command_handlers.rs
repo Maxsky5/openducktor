@@ -5,11 +5,13 @@ use super::super::{
 use super::fixtures::{
     init_repo, invoke_json, run_git, sample_worktree_status_data,
     sample_worktree_status_summary_data, setup_command_git_fixture,
-    setup_command_git_fixture_with_summary, WorktreeStatusCall, WorktreeStatusResult,
-    WorktreeStatusSummaryCall, WorktreeStatusSummaryResult,
+    setup_command_git_fixture_with_mutations, setup_command_git_fixture_with_summary,
+    ResetWorktreeSelectionCall, ResetWorktreeSelectionResult, WorktreeStatusCall,
+    WorktreeStatusResult, WorktreeStatusSummaryCall, WorktreeStatusSummaryResult,
 };
 use host_domain::{
-    GitDiffScope, GitUpstreamAheadBehind, GitWorktreeStatus, GitWorktreeStatusSummary,
+    GitDiffScope, GitResetWorktreeSelection, GitUpstreamAheadBehind, GitWorktreeStatus,
+    GitWorktreeStatusSummary,
 };
 use serde_json::json;
 use std::{fs, path::Path};
@@ -233,6 +235,170 @@ fn git_get_worktree_status_accepts_registered_worktree_working_dir() {
         .expect("command git state lock should not be poisoned");
     assert_eq!(state.worktree_status_calls.len(), 1);
     assert_eq!(state.worktree_status_calls[0].repo_path, expected_worktree);
+}
+
+#[test]
+fn git_reset_worktree_selection_rejects_unauthorized_repo() {
+    let fixture = setup_command_git_fixture_with_mutations(
+        "git-reset-command-unauthorized",
+        WorktreeStatusResult::Ok(sample_worktree_status_data(
+            GitUpstreamAheadBehind::Tracking {
+                ahead: 0,
+                behind: 0,
+            },
+        )),
+        false,
+    );
+
+    let error = invoke_json(
+        &fixture.webview,
+        "git_reset_worktree_selection",
+        json!({
+            "repoPath": fixture.repo_path.as_str(),
+            "targetBranch": "origin/main",
+            "snapshot": {
+                "hashVersion": 1,
+                "statusHash": "0123456789abcdef",
+                "diffHash": "fedcba9876543210"
+            },
+            "selection": {
+                "kind": "file",
+                "file_path": "src/main.rs"
+            }
+        }),
+    )
+    .expect_err("unauthorized repo should fail");
+
+    assert!(
+        error
+            .to_string()
+            .contains("Repository path is not in the configured workspace allowlist"),
+        "unexpected error: {error}"
+    );
+    let state = fixture
+        .git_state
+        .lock()
+        .expect("command git state lock should not be poisoned");
+    assert!(
+        state.reset_worktree_selection_calls.is_empty(),
+        "reset path should not run when authorization fails"
+    );
+}
+
+#[test]
+fn git_reset_worktree_selection_forwards_trimmed_target_branch_and_effective_working_dir() {
+    let fixture = setup_command_git_fixture_with_mutations(
+        "git-reset-command-success",
+        WorktreeStatusResult::Ok(sample_worktree_status_data(
+            GitUpstreamAheadBehind::Tracking {
+                ahead: 0,
+                behind: 0,
+            },
+        )),
+        true,
+    );
+    let worktree = fixture.root.join("repo-wt-reset");
+    let worktree_str = worktree.to_string_lossy().to_string();
+    run_git(
+        &[
+            "-C",
+            fixture.repo_path.as_str(),
+            "worktree",
+            "add",
+            "-b",
+            "feature/reset-command",
+            worktree_str.as_str(),
+        ],
+        Path::new(&fixture.repo_path),
+    );
+
+    let response = invoke_json(
+        &fixture.webview,
+        "git_reset_worktree_selection",
+        json!({
+            "repoPath": fixture.repo_path.as_str(),
+            "workingDir": worktree_str,
+            "targetBranch": "  origin/main  ",
+            "snapshot": {
+                "hashVersion": 1,
+                "statusHash": "0123456789abcdef",
+                "diffHash": "fedcba9876543210"
+            },
+            "selection": {
+                "kind": "hunk",
+                "file_path": "src/main.rs",
+                "hunk_index": 2
+            }
+        }),
+    )
+    .expect("reset command should succeed");
+
+    assert_eq!(response["affectedPaths"], json!(["src/main.rs"]));
+    let expected_worktree = fs::canonicalize(&worktree)
+        .expect("worktree should canonicalize")
+        .to_string_lossy()
+        .to_string();
+    let state = fixture
+        .git_state
+        .lock()
+        .expect("command git state lock should not be poisoned");
+    assert_eq!(state.reset_worktree_selection_calls.len(), 1);
+    assert_eq!(
+        state.reset_worktree_selection_calls[0],
+        ResetWorktreeSelectionCall {
+            repo_path: expected_worktree.clone(),
+            working_dir: Some(expected_worktree),
+            target_branch: "origin/main".to_string(),
+            selection: GitResetWorktreeSelection::Hunk {
+                file_path: "src/main.rs".to_string(),
+                hunk_index: 2,
+            },
+        }
+    );
+}
+
+#[test]
+fn git_reset_worktree_selection_propagates_backend_failure() {
+    let fixture = setup_command_git_fixture_with_mutations(
+        "git-reset-command-failure",
+        WorktreeStatusResult::Ok(sample_worktree_status_data(
+            GitUpstreamAheadBehind::Tracking {
+                ahead: 0,
+                behind: 0,
+            },
+        )),
+        true,
+    );
+    fixture
+        .git_state
+        .lock()
+        .expect("command git state lock should not be poisoned")
+        .reset_worktree_selection_result =
+        ResetWorktreeSelectionResult::Err("apply failed".to_string());
+
+    let error = invoke_json(
+        &fixture.webview,
+        "git_reset_worktree_selection",
+        json!({
+            "repoPath": fixture.repo_path.as_str(),
+            "targetBranch": "origin/main",
+            "snapshot": {
+                "hashVersion": 1,
+                "statusHash": "0123456789abcdef",
+                "diffHash": "fedcba9876543210"
+            },
+            "selection": {
+                "kind": "file",
+                "file_path": "src/main.rs"
+            }
+        }),
+    )
+    .expect_err("backend failure should be returned");
+
+    assert!(
+        error.to_string().contains("apply failed"),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]
