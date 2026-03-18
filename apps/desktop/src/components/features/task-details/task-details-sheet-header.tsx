@@ -53,7 +53,9 @@ export function TaskDetailsSheetHeader({
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h2 className="flex items-center gap-2 text-xl font-semibold text-foreground">
             <Sparkles className="size-5 shrink-0 text-primary" />
-            <span className="truncate">{task.title}</span>
+            <span className="truncate" title={task.title}>
+              {task.title}
+            </span>
           </h2>
           <p className="truncate font-mono text-xs text-muted-foreground">{task.id}</p>
         </div>
