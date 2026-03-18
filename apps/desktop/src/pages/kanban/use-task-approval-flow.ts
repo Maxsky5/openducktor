@@ -67,7 +67,7 @@ const INITIAL_GIT_CONFLICT_STATE: {
   conflictAction: null,
 };
 
-const parseGeneratedPullRequest = (content: string): { title: string; body: string } => {
+export const parseGeneratedPullRequest = (content: string): { title: string; body: string } => {
   const codeBlockPattern = /^```[\w]*\n?|```$/g;
   const boldPattern = /\*\*/g;
   const cleaned = content.trim().replace(codeBlockPattern, "").replace(boldPattern, "");
