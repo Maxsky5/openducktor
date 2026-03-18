@@ -35,6 +35,7 @@ const createModel = (overrides: Partial<TaskApprovalModalModel> = {}): TaskAppro
   pullRequestUrl: null,
   title: "Ship direct merge flow",
   body: "Task description",
+  squashCommitMessage: "feat: add Microsoft login",
   targetBranch: { remote: "origin", branch: "beta" },
   publishTarget: { remote: "origin", branch: "beta" },
   isSubmitting: false,
@@ -45,6 +46,7 @@ const createModel = (overrides: Partial<TaskApprovalModalModel> = {}): TaskAppro
   onPullRequestDraftModeChange: noop,
   onTitleChange: noop,
   onBodyChange: noop,
+  onSquashCommitMessageChange: noop,
   onConfirm: noop,
   onSkipDirectMergeCompletion: noop,
   onCompleteDirectMerge: noop,
@@ -91,6 +93,38 @@ describe("TaskApprovalModal", () => {
 
     expect(html).toContain("Merge Locally");
     expect(html).toContain("animate-spin");
+  });
+
+  test("renders the squash commit message editor when squash is selected", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskApprovalModal, {
+        model: createModel({
+          stage: "approval",
+          mergeMethod: "squash",
+          publishTarget: null,
+        }),
+      }),
+    );
+
+    expect(html).toContain("Squash Commit Message");
+    expect(html).toContain("feat: add Microsoft login");
+    expect(html).toContain("oldest commit unique to the builder branch");
+  });
+
+  test("disables direct merge confirmation when the squash commit message is empty", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskApprovalModal, {
+        model: createModel({
+          stage: "approval",
+          mergeMethod: "squash",
+          squashCommitMessage: "",
+          publishTarget: null,
+        }),
+      }),
+    );
+
+    expect(html).toContain("Enter the squash commit message before merging locally.");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Merge Locally<\/button>/);
   });
 
   test("fails fast when direct-merge completion branch context is missing", () => {

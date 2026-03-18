@@ -928,9 +928,9 @@ describe("AgentStudioGitPanel", () => {
     const root = getRoot(renderer);
     expect(countByTestId(root, "agent-studio-git-lock-reason")).toBe(0);
     expect(findByTestId(root, "agent-studio-git-conflict-strip")).toBeTruthy();
-    expect(getNodeText(findByTestId(root, "agent-studio-git-conflict-count-badge"))).toContain(
-      "2 conflicted files",
-    );
+    const conflictCountBadge = findByTestId(root, "agent-studio-git-conflict-count-badge");
+    expect(getNodeText(conflictCountBadge)).toContain("2 conflicted files");
+    expect(String(conflictCountBadge.props.className)).toContain("amber");
     expect(findByTestId(root, "agent-studio-git-view-conflict-details-button")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-abort-conflict-strip-button")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-ask-builder-conflict-strip-button")).toBeTruthy();

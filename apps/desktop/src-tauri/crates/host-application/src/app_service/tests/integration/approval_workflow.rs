@@ -259,7 +259,8 @@ fn task_direct_merge_with_publish_target_stays_resumable_until_completion() -> R
     )?;
     service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
 
-    let task = service.task_direct_merge(repo_path.as_str(), "task-1", GitMergeMethod::Rebase)?;
+    let task =
+        service.task_direct_merge(repo_path.as_str(), "task-1", GitMergeMethod::Rebase, None)?;
     let host_domain::TaskDirectMergeResult::Completed { task } = task else {
         panic!("expected completed direct merge result");
     };
@@ -371,9 +372,14 @@ fn task_direct_merge_with_publish_target_stays_resumable_until_completion() -> R
         GitCall::RemoveWorktree { worktree_path, .. }
             if worktree_path == unrelated_cleanup_worktree.as_str()
     )));
-    assert!(git.calls.iter().any(
-        |call| matches!(call, GitCall::DeleteLocalBranch { branch, .. } if branch == "odt/task-1")
-    ));
+    assert!(git.calls.iter().any(|call| matches!(
+        call,
+        GitCall::DeleteLocalBranch {
+            branch,
+            force: false,
+            ..
+        } if branch == "odt/task-1"
+    )));
 
     let _ = fs::remove_dir_all(root);
     Ok(())
@@ -416,7 +422,12 @@ fn task_direct_merge_local_only_closes_task_records_metadata_and_cleans_builder_
     };
     service.workspace_update_repo_config(repo_path.as_str(), repo_config)?;
 
-    let task = service.task_direct_merge(repo_path.as_str(), "task-1", GitMergeMethod::Squash)?;
+    let task = service.task_direct_merge(
+        repo_path.as_str(),
+        "task-1",
+        GitMergeMethod::Squash,
+        Some("feat: release work".to_string()),
+    )?;
     let host_domain::TaskDirectMergeResult::Completed { task } = task else {
         panic!("expected completed direct merge result");
     };
@@ -427,9 +438,27 @@ fn task_direct_merge_local_only_closes_task_records_metadata_and_cleans_builder_
         .calls
         .iter()
         .any(|call| matches!(call, GitCall::RemoveWorktree { .. })));
-    assert!(git.calls.iter().any(
-        |call| matches!(call, GitCall::DeleteLocalBranch { branch, .. } if branch == "odt/task-1")
-    ));
+    assert!(git.calls.iter().any(|call| matches!(
+        call,
+        GitCall::DeleteLocalBranch {
+            branch,
+            force: true,
+            ..
+        } if branch == "odt/task-1"
+    )));
+    assert!(git.calls.iter().any(|call| matches!(
+        call,
+        GitCall::MergeBranch {
+            source_branch,
+            target_branch,
+            method,
+            squash_commit_message,
+            ..
+        } if source_branch == "odt/task-1"
+            && target_branch == "release/2026.03"
+            && *method == GitMergeMethod::Squash
+            && squash_commit_message.as_deref() == Some("feat: release work")
+    )));
 
     let _ = fs::remove_dir_all(root);
     Ok(())
@@ -570,6 +599,10 @@ fn task_approval_context_reports_global_merge_default_and_dirty_worktree() -> Re
     assert_eq!(approval.default_merge_method, GitMergeMethod::Rebase);
     assert!(approval.has_uncommitted_changes);
     assert_eq!(approval.uncommitted_file_count, 1);
+    assert_eq!(
+        approval.suggested_squash_commit_message.as_deref(),
+        Some("feat: builder change")
+    );
     Ok(())
 }
 
@@ -639,7 +672,12 @@ fn approval_actions_reject_dirty_builder_worktree() -> Result<()> {
     }
 
     let merge_error = service
-        .task_direct_merge(repo_path.as_str(), "task-1", GitMergeMethod::MergeCommit)
+        .task_direct_merge(
+            repo_path.as_str(),
+            "task-1",
+            GitMergeMethod::MergeCommit,
+            None,
+        )
         .expect_err("direct merge should be blocked");
     assert!(merge_error.to_string().contains("uncommitted"));
 

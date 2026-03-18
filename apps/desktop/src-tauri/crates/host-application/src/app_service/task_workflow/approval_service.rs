@@ -52,6 +52,7 @@ impl AppService {
                 uncommitted_file_count: 0,
                 pull_request: metadata.pull_request,
                 direct_merge: Some(direct_merge),
+                suggested_squash_commit_message: None,
                 providers: vec![github_provider_availability(
                     Path::new(&context.repo.repo_path),
                     &repo_config,
@@ -75,6 +76,11 @@ impl AppService {
         let source_branch = current_branch
             .name
             .ok_or_else(|| anyhow!("Human approval requires a builder branch name."))?;
+        let suggested_squash_commit_message = self.git_port.suggested_squash_commit_message(
+            Path::new(&context.repo.repo_path),
+            source_branch.as_str(),
+            target_branch.canonical().as_str(),
+        )?;
         let worktree_status = self.git_port.get_worktree_status_summary(
             Path::new(&working_directory),
             target_branch.canonical().as_str(),
@@ -93,6 +99,7 @@ impl AppService {
             uncommitted_file_count: worktree_status.file_status_counts.total,
             pull_request: metadata.pull_request,
             direct_merge: None,
+            suggested_squash_commit_message,
             providers: vec![github_provider_availability(
                 Path::new(&context.repo.repo_path),
                 &repo_config,
@@ -105,6 +112,7 @@ impl AppService {
         repo_path: &str,
         task_id: &str,
         method: GitMergeMethod,
+        squash_commit_message: Option<String>,
     ) -> Result<TaskDirectMergeResult> {
         let approval = self.task_approval_context_get(repo_path, task_id)?;
         if approval.direct_merge.is_some() {
@@ -113,6 +121,7 @@ impl AppService {
             ));
         }
         ensure_clean_builder_worktree(&approval)?;
+        let force_delete_source_branch = matches!(method, GitMergeMethod::Squash);
         let repo_path = self.resolve_task_repo_path(repo_path)?;
         match self.git_port.merge_branch(
             Path::new(&repo_path),
@@ -121,6 +130,7 @@ impl AppService {
                 target_branch: approval.target_branch.canonical(),
                 source_working_directory: approval.working_directory.clone(),
                 method: method.clone(),
+                squash_commit_message,
             },
         )? {
             GitMergeBranchResult::Merged { .. } | GitMergeBranchResult::UpToDate { .. } => {}
@@ -182,6 +192,7 @@ impl AppService {
             repo_path.as_str(),
             task_id,
             approval.source_branch.as_str(),
+            force_delete_source_branch,
         )?;
         Ok(TaskDirectMergeResult::Completed {
             task: Box::new(task),
@@ -214,6 +225,7 @@ impl AppService {
             repo_path.as_str(),
             task_id,
             direct_merge.source_branch.as_str(),
+            matches!(direct_merge.method, GitMergeMethod::Squash),
         )?;
         Ok(task)
     }
@@ -464,6 +476,7 @@ impl AppService {
                     repo_path.as_str(),
                     task.id.as_str(),
                     updated.source_branch.as_str(),
+                    false,
                 )?;
             }
         }
@@ -513,14 +526,19 @@ impl AppService {
         Ok(detected.map(|repository| to_config_repository(&repository)))
     }
 
-    fn cleanup_builder_branch(&self, repo_path: &str, source_branch: &str) -> Result<()> {
+    fn cleanup_builder_branch(
+        &self,
+        repo_path: &str,
+        source_branch: &str,
+        force_delete: bool,
+    ) -> Result<()> {
         let branch_exists = self
             .git_port
             .get_branches(Path::new(repo_path))?
             .into_iter()
             .any(|branch| !branch.is_remote && branch.name == source_branch);
         if branch_exists {
-            let _ = self.git_delete_local_branch(repo_path, source_branch, false)?;
+            let _ = self.git_delete_local_branch(repo_path, source_branch, force_delete)?;
         }
 
         Ok(())
@@ -531,6 +549,7 @@ impl AppService {
         repo_path: &str,
         task_id: &str,
         source_branch: &str,
+        force_delete_source_branch: bool,
     ) -> Result<()> {
         if let Some(cleanup_target) =
             latest_builder_cleanup_target(self, repo_path, task_id, Some(source_branch))?
@@ -552,7 +571,7 @@ impl AppService {
             }
         }
 
-        self.cleanup_builder_branch(repo_path, source_branch)
+        self.cleanup_builder_branch(repo_path, source_branch, force_delete_source_branch)
     }
 
     fn github_pull_request_repository(&self, repo_path: &str) -> Result<GitProviderRepository> {

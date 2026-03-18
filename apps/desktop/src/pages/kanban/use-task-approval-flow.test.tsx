@@ -151,12 +151,15 @@ let latestHarnessValue: {
     mode: "direct_merge" | "pull_request";
     mergeMethod: "merge_commit" | "squash" | "rebase";
     pullRequestDraftMode: "manual" | "generate_ai";
+    squashCommitMessage: string;
     hasUncommittedChanges: boolean;
     uncommittedFileCount: number;
     errorMessage: string | null;
     onOpenChange: (open: boolean) => void;
     onModeChange: (mode: "direct_merge" | "pull_request") => void;
+    onMergeMethodChange: (mergeMethod: "merge_commit" | "squash" | "rebase") => void;
     onPullRequestDraftModeChange: (mode: "manual" | "generate_ai") => void;
+    onSquashCommitMessageChange: (value: string) => void;
     onConfirm: () => void;
     onCompleteDirectMerge: () => void;
   } | null;
@@ -254,6 +257,7 @@ describe("useTaskApprovalFlow", () => {
       hasUncommittedChanges: true,
       uncommittedFileCount: 2,
       pullRequest: undefined,
+      suggestedSquashCommitMessage: "feat: builder change",
       providers: [],
     });
 
@@ -264,6 +268,7 @@ describe("useTaskApprovalFlow", () => {
 
     expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(false);
     expect(latestHarnessValue?.taskApprovalModal?.mergeMethod).toBe("squash");
+    expect(latestHarnessValue?.taskApprovalModal?.squashCommitMessage).toBe("feat: builder change");
     expect(latestHarnessValue?.taskApprovalModal?.hasUncommittedChanges).toBe(true);
     expect(latestHarnessValue?.taskApprovalModal?.uncommittedFileCount).toBe(2);
 
@@ -478,6 +483,12 @@ describe("useTaskApprovalFlow", () => {
     });
 
     await act(async () => {
+      latestHarnessValue?.taskApprovalModal?.onMergeMethodChange("squash");
+      latestHarnessValue?.taskApprovalModal?.onSquashCommitMessageChange("feat: merged task");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
       latestHarnessValue?.taskApprovalModal?.onConfirm();
       await Promise.resolve();
     });
@@ -489,7 +500,10 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(taskDirectMergeMock).toHaveBeenCalledWith("/repo", "TASK-1", "merge_commit");
+    expect(taskDirectMergeMock).toHaveBeenCalledWith("/repo", "TASK-1", {
+      mergeMethod: "squash",
+      squashCommitMessage: "feat: merged task",
+    });
     expect(gitPushBranchMock).toHaveBeenCalledWith("/repo", "main", {
       remote: "upstream",
     });
@@ -550,7 +564,10 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(taskDirectMergeMock).toHaveBeenCalledWith("/repo", "TASK-1", "merge_commit");
+    expect(taskDirectMergeMock).toHaveBeenCalledWith("/repo", "TASK-1", {
+      mergeMethod: "merge_commit",
+      squashCommitMessage: undefined,
+    });
     expect(gitPushBranchMock).not.toHaveBeenCalled();
     expect(refreshTasksMock).toHaveBeenCalledTimes(1);
     expect(latestHarnessValue?.taskApprovalModal).toBeNull();

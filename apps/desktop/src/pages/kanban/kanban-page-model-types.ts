@@ -40,6 +40,7 @@ export type TaskApprovalModalModel = {
   pullRequestUrl: string | null;
   title: string;
   body: string;
+  squashCommitMessage: string;
   targetBranch: GitTargetBranch | null;
   publishTarget: GitTargetBranch | null;
   isSubmitting: boolean;
@@ -50,6 +51,7 @@ export type TaskApprovalModalModel = {
   onPullRequestDraftModeChange: (mode: PullRequestDraftMode) => void;
   onTitleChange: (value: string) => void;
   onBodyChange: (value: string) => void;
+  onSquashCommitMessageChange: (value: string) => void;
   onConfirm: () => void;
   onSkipDirectMergeCompletion: () => void;
   onCompleteDirectMerge: () => void;

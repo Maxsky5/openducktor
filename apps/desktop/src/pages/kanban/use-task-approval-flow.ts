@@ -34,6 +34,7 @@ type ApprovalState = {
   pullRequestDraftMode: "manual" | "generate_ai";
   title: string;
   body: string;
+  squashCommitMessage: string;
   isSubmitting: boolean;
   errorMessage: string | null;
   approvalContext: TaskApprovalContext | null;
@@ -165,6 +166,7 @@ export function useTaskApprovalFlow({
         pullRequestDraftMode: options?.pullRequestDraftMode ?? "manual",
         title: task?.title ?? "",
         body: task?.description ?? "",
+        squashCommitMessage: "",
         isSubmitting: false,
         errorMessage: options?.errorMessage ?? null,
         approvalContext: null,
@@ -190,6 +192,7 @@ export function useTaskApprovalFlow({
             pullRequestDraftMode: options?.pullRequestDraftMode ?? "manual",
             title: task?.title ?? "",
             body: task?.description ?? "",
+            squashCommitMessage: approvalContext.suggestedSquashCommitMessage ?? "",
             isSubmitting: false,
             errorMessage: options?.errorMessage ?? null,
             approvalContext,
@@ -353,11 +356,13 @@ export function useTaskApprovalFlow({
       setState((current) => (current ? { ...current, isSubmitting: true } : current));
       try {
         if (state.mode === "direct_merge") {
-          const directMergeResult = await host.taskDirectMerge(
-            activeRepo,
-            state.taskId,
-            state.mergeMethod,
-          );
+          const directMergeResult = await host.taskDirectMerge(activeRepo, state.taskId, {
+            mergeMethod: state.mergeMethod,
+            squashCommitMessage:
+              state.mergeMethod === "squash"
+                ? state.squashCommitMessage.trim() || undefined
+                : undefined,
+          });
           if (directMergeResult.outcome === "conflicts") {
             reset();
             setGitConflictState({
@@ -666,6 +671,7 @@ export function useTaskApprovalFlow({
       body: state.body,
       targetBranch: approvalContext?.targetBranch ?? null,
       publishTarget: approvalContext?.publishTarget ?? null,
+      squashCommitMessage: state.squashCommitMessage,
       isSubmitting: state.isSubmitting,
       errorMessage: state.errorMessage,
       onOpenChange: (open) => {
@@ -687,6 +693,10 @@ export function useTaskApprovalFlow({
         setState((current) => (current ? { ...current, title, errorMessage: null } : current)),
       onBodyChange: (body) =>
         setState((current) => (current ? { ...current, body, errorMessage: null } : current)),
+      onSquashCommitMessageChange: (squashCommitMessage) =>
+        setState((current) =>
+          current ? { ...current, squashCommitMessage, errorMessage: null } : current,
+        ),
       onConfirm: confirm,
       onSkipDirectMergeCompletion: reset,
       onCompleteDirectMerge: completeDirectMerge,

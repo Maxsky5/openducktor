@@ -162,6 +162,10 @@ export const taskApprovalContextSchema = z.object({
     (value) => (value === null ? undefined : value),
     directMergeRecordSchema.optional(),
   ),
+  suggestedSquashCommitMessage: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    z.string().trim().min(1).optional(),
+  ),
   providers: z.array(gitProviderAvailabilitySchema).default([]),
 });
 export type TaskApprovalContext = z.infer<typeof taskApprovalContextSchema>;

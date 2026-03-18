@@ -1417,7 +1417,7 @@ describe("TauriHostClient", () => {
     });
 
     expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
-    await client.taskDirectMerge("/repo", "task-1", "merge_commit");
+    await client.taskDirectMerge("/repo", "task-1", { mergeMethod: "merge_commit" });
     expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V2");
 
     await client.taskDirectMergeComplete("/repo", "task-1");
@@ -1476,7 +1476,9 @@ describe("TauriHostClient", () => {
     });
 
     expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
-    await expect(client.taskDirectMerge("/repo", "task-1", "merge_commit")).resolves.toEqual({
+    await expect(
+      client.taskDirectMerge("/repo", "task-1", { mergeMethod: "merge_commit" }),
+    ).resolves.toEqual({
       outcome: "conflicts",
       conflict: {
         operation: "direct_merge_rebase",
@@ -1493,6 +1495,37 @@ describe("TauriHostClient", () => {
       "task_metadata_get",
       "task_direct_merge",
       "task_metadata_get",
+    ]);
+  });
+
+  test("taskDirectMerge sends structured squash input", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "task_direct_merge") {
+        return {
+          outcome: "completed",
+          task: makeTaskCardPayload(),
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await client.taskDirectMerge("/repo", "task-1", {
+      mergeMethod: "squash",
+      squashCommitMessage: "feat: add Microsoft login",
+    });
+
+    expect(calls).toEqual([
+      {
+        command: "task_direct_merge",
+        args: {
+          repoPath: "/repo",
+          taskId: "task-1",
+          input: {
+            mergeMethod: "squash",
+            squashCommitMessage: "feat: add Microsoft login",
+          },
+        },
+      },
     ]);
   });
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { gitConflictSchema, pullRequestSchema } from "./git-schemas";
+import { gitConflictSchema, gitMergeMethodSchema, pullRequestSchema } from "./git-schemas";
 
 export const taskStatusSchema = z.enum([
   "open",
@@ -179,6 +179,15 @@ export const taskCardSchema = z.object({
   createdAt: z.string(),
 });
 export type TaskCard = z.infer<typeof taskCardSchema>;
+
+export const taskDirectMergeInputSchema = z.object({
+  mergeMethod: gitMergeMethodSchema,
+  squashCommitMessage: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    z.string().trim().min(1).optional(),
+  ),
+});
+export type TaskDirectMergeInput = z.infer<typeof taskDirectMergeInputSchema>;
 
 export const taskDirectMergeResultSchema = z.discriminatedUnion("outcome", [
   z.object({

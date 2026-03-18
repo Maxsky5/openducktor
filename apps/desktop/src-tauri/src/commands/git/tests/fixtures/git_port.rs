@@ -262,6 +262,15 @@ impl GitPort for CommandGitPort {
         panic!("unexpected call: resolve_upstream_target");
     }
 
+    fn suggested_squash_commit_message(
+        &self,
+        _repo_path: &Path,
+        _source_branch: &str,
+        _target_branch: &str,
+    ) -> anyhow::Result<Option<String>> {
+        panic!("unexpected call: suggested_squash_commit_message");
+    }
+
     fn commits_ahead_behind(
         &self,
         _repo_path: &Path,

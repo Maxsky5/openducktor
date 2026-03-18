@@ -115,6 +115,13 @@ pub(crate) struct PullRequestContentPayload {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct TaskDirectMergePayload {
+    merge_method: host_domain::GitMergeMethod,
+    squash_commit_message: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct RepoConfigPayload {
     default_runtime_kind: Option<String>,
     worktree_base_path: Option<String>,
