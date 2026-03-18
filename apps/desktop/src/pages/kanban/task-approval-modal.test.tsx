@@ -92,4 +92,21 @@ describe("TaskApprovalModal", () => {
     expect(html).toContain("Merge Locally");
     expect(html).toContain("animate-spin");
   });
+
+  test("fails fast when direct-merge completion branch context is missing", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskApprovalModal, {
+        model: createModel({
+          targetBranch: null,
+          publishTarget: null,
+        }),
+      }),
+    );
+
+    expect(html).toContain(
+      "Missing target branch for direct-merge completion. Refresh approval context and retry.",
+    );
+    expect(html).not.toContain("the target branch");
+    expect(html).not.toContain("Local merge ready");
+  });
 });

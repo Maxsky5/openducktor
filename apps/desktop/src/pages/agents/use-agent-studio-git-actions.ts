@@ -514,7 +514,11 @@ export function useAgentStudioGitActions({
     setIsHandlingGitConflict(true);
     setGitConflictAction("abort");
     try {
-      await host.gitAbortConflict(repoPath, activeGitConflict.operation, workingDir ?? undefined);
+      await host.gitAbortConflict(
+        repoPath,
+        activeGitConflict.operation,
+        activeGitConflict.workingDir ?? workingDir ?? undefined,
+      );
       clearActionErrors();
       await refreshDiffData();
       gitConflictSnapshotKeyRef.current = null;

@@ -214,4 +214,41 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       await harness.unmount();
     }
   });
+
+  test("propagates Builder message delivery failures", async () => {
+    const args = createBaseArgs({
+      sendAgentMessage: mock(async () => {
+        throw new Error("message delivery failed");
+      }),
+    });
+    const harness = createHookHarness(args);
+
+    try {
+      await harness.mount();
+
+      let rejectionMessage: string | null = null;
+      await harness.run((state) => {
+        void state.handleResolveRebaseConflict(createConflict()).catch((error) => {
+          rejectionMessage = (error as Error).message;
+        });
+      });
+
+      await harness.waitFor((state) => state.pendingRebaseConflictResolutionRequest !== null);
+      await harness.run((state) => {
+        state.resolvePendingRebaseConflictResolution({
+          mode: "existing",
+          sessionId: "build-1",
+        });
+      });
+
+      await harness.waitFor((_state) => rejectionMessage !== null);
+      if (rejectionMessage === null) {
+        throw new Error("Expected conflict-resolution message delivery failure");
+      }
+      const message = String(rejectionMessage);
+      expect(message.includes("Failed to send Builder conflict resolution request")).toBe(true);
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

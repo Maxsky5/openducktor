@@ -368,9 +368,7 @@ export class TauriAgentClient {
     mergeMethod: string,
   ): Promise<TaskDirectMergeResult> {
     const result = await taskDirectMerge(this.invokeFn, repoPath, taskId, mergeMethod);
-    if (result.outcome === "completed") {
-      this.metadataCache?.invalidate(repoPath, taskId);
-    }
+    this.metadataCache?.invalidate(repoPath, taskId);
     return result;
   }
 

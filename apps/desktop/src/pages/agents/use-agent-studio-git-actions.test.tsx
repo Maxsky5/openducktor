@@ -651,6 +651,12 @@ describe("useAgentStudioGitActions", () => {
       await harness.run(async (state) => {
         await state.rebaseOntoTarget();
       });
+      await harness.update(
+        createBaseArgs({
+          refreshDiffData,
+          workingDir: "/tmp/worktree/other",
+        }),
+      );
 
       await harness.run((state) => {
         void state.abortGitConflict();
@@ -669,6 +675,7 @@ describe("useAgentStudioGitActions", () => {
       expect(harness.getLatest().gitConflict).toBeNull();
       expect(harness.getLatest().gitConflictCloseNonce).toBe(1);
       expect(refreshDiffData).toHaveBeenCalledTimes(2);
+      expect(gitAbortConflictMock).toHaveBeenCalledWith("/repo", "rebase", "/tmp/worktree/task-10");
       expect(toastSuccessMock).toHaveBeenCalledWith("Rebase aborted");
     } finally {
       await harness.unmount();

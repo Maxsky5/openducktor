@@ -613,6 +613,16 @@ export const buildAgentKickoffPrompt = (input: BuildAgentKickoffPromptInput): st
 export const buildAgentMessagePromptBundle = (
   input: BuildAgentMessagePromptInput,
 ): BuiltAgentPrompt => {
+  if (input.templateId === "message.build_rebase_conflict_resolution") {
+    const operationLabel = input.git?.operationLabel?.trim();
+    const conflictOutput = input.git?.conflictOutput?.trim();
+    if (!operationLabel || !conflictOutput) {
+      throw new Error(
+        'Missing required git conflict context for "message.build_rebase_conflict_resolution": operationLabel and conflictOutput are required.',
+      );
+    }
+  }
+
   return buildPromptFromTemplates({
     templateIds: [input.templateId],
     role: input.role,

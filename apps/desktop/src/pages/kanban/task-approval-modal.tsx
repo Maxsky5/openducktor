@@ -192,24 +192,26 @@ export function TaskApprovalModal({
     hasManualPullRequestValidationError;
   const isCompletionStage = model.stage === "complete_direct_merge";
   const hasPublishTarget = model.publishTarget !== null;
-  const targetBranchLabel = model.targetBranch
-    ? canonicalTargetBranch(model.targetBranch)
-    : "the target branch";
-  const localBranchName = model.targetBranch?.branch ?? "";
-  const publishTargetLabel = model.publishTarget
-    ? canonicalTargetBranch(model.publishTarget)
-    : targetBranchLabel;
-  const publishTargetBranchName = model.publishTarget?.branch ?? localBranchName;
-  const title = isCompletionStage
-    ? hasPublishTarget
-      ? "Publish And Mark Done"
-      : "Complete Direct Merge"
-    : "Approve Task";
-  const description = isCompletionStage
-    ? hasPublishTarget
-      ? `The local merge is already applied. Push ${publishTargetLabel} to publish it, then move the task to Done.`
-      : "The local merge is already applied. Finish the direct merge workflow to move the task to Done and clean up the builder workspace."
-    : "Choose how to finish this task: merge it locally now, or create and update a pull request.";
+  const hasCompletionBranchContext = model.targetBranch !== null;
+  const completionContextError =
+    isCompletionStage && !hasCompletionBranchContext
+      ? "Missing target branch for direct-merge completion. Refresh approval context and retry."
+      : null;
+  const localBranchName = model.targetBranch ? model.targetBranch.branch : "";
+  const publishTargetLabel = model.publishTarget ? canonicalTargetBranch(model.publishTarget) : "";
+  const publishTargetBranchName = model.publishTarget?.branch ?? "";
+
+  let title = "Approve Task";
+  let description =
+    "Choose how to finish this task: merge it locally now, or create and update a pull request.";
+  if (isCompletionStage && hasPublishTarget) {
+    title = "Publish And Mark Done";
+    description = `The local merge is already applied. Push ${publishTargetLabel} to publish it, then move the task to Done.`;
+  } else if (isCompletionStage) {
+    title = "Complete Direct Merge";
+    description =
+      "The local merge is already applied. Finish the direct merge workflow to move the task to Done and clean up the builder workspace.";
+  }
   const dirtyWorktreeMessage =
     model.uncommittedFileCount === 1
       ? "The builder worktree has 1 uncommitted file. Commit or discard it before approving this task."
@@ -226,13 +228,22 @@ export function TaskApprovalModal({
     confirmLabel =
       model.pullRequestDraftMode === "manual" ? "Create Pull Request" : "Generate And Create";
   }
-  const completionButtonLabel = model.isSubmitting
-    ? hasPublishTarget
-      ? `Publishing ${publishTargetBranchName}`
-      : "Completing Direct Merge"
-    : hasPublishTarget
-      ? `Push ${publishTargetBranchName} And Mark Done`
-      : "Mark Task Done";
+  let completionButtonLabel = "Mark Task Done";
+  if (model.isSubmitting && hasPublishTarget) {
+    completionButtonLabel = `Publishing ${publishTargetBranchName}`;
+  } else if (model.isSubmitting) {
+    completionButtonLabel = "Completing Direct Merge";
+  } else if (hasPublishTarget) {
+    completionButtonLabel = `Push ${publishTargetBranchName} And Mark Done`;
+  }
+  let completionStageDescription =
+    "Finish later to keep the task in Human Review until you are ready to close it and clean up the builder workspace.";
+  if (hasPublishTarget) {
+    completionStageDescription =
+      "Finish later to keep the task in Human Review while the local merge stays ready to publish.";
+  }
+  const completionActionDisabled = model.isSubmitting || completionContextError !== null;
+  const completionErrorMessage = completionContextError ?? model.errorMessage;
 
   return (
     <Dialog
@@ -268,7 +279,7 @@ export function TaskApprovalModal({
             ) : (
               <>
                 {model.hasUncommittedChanges ? (
-                  <div className="grid gap-1 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
+                  <div className="grid gap-1 rounded-2xl border border-border bg-muted p-4 text-foreground">
                     <p className="text-sm font-semibold">Uncommitted changes detected</p>
                     <p className="text-sm">{dirtyWorktreeMessage}</p>
                   </div>
@@ -383,78 +394,87 @@ export function TaskApprovalModal({
 
         {isCompletionStage ? (
           <div className="grid gap-4 px-6 py-6 sm:px-8">
-            {model.errorMessage ? (
+            {completionErrorMessage ? (
               <div className="grid gap-1 rounded-2xl border border-destructive/20 bg-destructive/10 p-4 text-destructive">
                 <p className="text-sm font-semibold">Direct merge completion failed</p>
-                <p className="text-sm">{model.errorMessage}</p>
+                <p className="text-sm">{completionErrorMessage}</p>
               </div>
             ) : null}
 
-            <div className="rounded-2xl border border-info-border bg-info-surface p-5">
-              <div className="flex items-start gap-4">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-info-border/60 bg-card/70 text-info-muted">
-                  <Check className="size-5" />
-                </div>
-                <div className="space-y-1.5">
-                  <p className="text-sm font-semibold text-info-surface-foreground">
-                    Local merge ready
-                  </p>
-                  <p className="text-sm leading-6 text-info-surface-foreground">
-                    The direct merge is already applied on this machine for{" "}
-                    <span className="font-mono text-[13px]">{localBranchName}</span> on this task.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-border bg-card p-5">
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-foreground">Next step</p>
-                {hasPublishTarget ? (
-                  <p className="text-sm leading-6 text-muted-foreground">
-                    Push{" "}
-                    <span className="font-mono text-[13px] text-foreground">
-                      {publishTargetLabel}
-                    </span>{" "}
-                    to publish the merged target branch, then move the task to Done and clean up the
-                    builder workspace.
-                  </p>
-                ) : (
-                  <p className="text-sm leading-6 text-muted-foreground">
-                    Move the task to Done and clean up the builder workspace. The merge is already
-                    applied locally on{" "}
-                    <span className="font-mono text-[13px] text-foreground">{localBranchName}</span>
-                    .
-                  </p>
-                )}
-              </div>
-
-              <div
-                className={cn(
-                  "mt-4 grid gap-3",
-                  hasPublishTarget &&
-                    "md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center",
-                )}
-              >
-                <div className="rounded-xl border border-border bg-muted/40 p-4">
-                  <p className={sectionLabelClass}>Local Branch</p>
-                  <p className="mt-2 font-mono text-sm text-foreground">{localBranchName}</p>
-                </div>
-
-                {hasPublishTarget ? (
-                  <>
-                    <div className="hidden justify-center md:flex">
-                      <ArrowRight className="size-4 text-muted-foreground" />
+            {completionContextError ? null : (
+              <>
+                <div className="rounded-2xl border border-info-border bg-info-surface p-5">
+                  <div className="flex items-start gap-4">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-info-border/60 bg-card/70 text-info-muted">
+                      <Check className="size-5" />
                     </div>
+                    <div className="space-y-1.5">
+                      <p className="text-sm font-semibold text-info-surface-foreground">
+                        Local merge ready
+                      </p>
+                      <p className="text-sm leading-6 text-info-surface-foreground">
+                        The direct merge is already applied on this machine for{" "}
+                        <span className="font-mono text-[13px]">{localBranchName}</span> on this
+                        task.
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
+                <div className="rounded-2xl border border-border bg-card p-5">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-foreground">Next step</p>
+                    {hasPublishTarget ? (
+                      <p className="text-sm leading-6 text-muted-foreground">
+                        Push{" "}
+                        <span className="font-mono text-[13px] text-foreground">
+                          {publishTargetLabel}
+                        </span>{" "}
+                        to publish the merged target branch, then move the task to Done and clean up
+                        the builder workspace.
+                      </p>
+                    ) : (
+                      <p className="text-sm leading-6 text-muted-foreground">
+                        Move the task to Done and clean up the builder workspace. The merge is
+                        already applied locally on{" "}
+                        <span className="font-mono text-[13px] text-foreground">
+                          {localBranchName}
+                        </span>
+                        .
+                      </p>
+                    )}
+                  </div>
+
+                  <div
+                    className={cn(
+                      "mt-4 grid gap-3",
+                      hasPublishTarget &&
+                        "md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center",
+                    )}
+                  >
                     <div className="rounded-xl border border-border bg-muted/40 p-4">
-                      <p className={sectionLabelClass}>Remote To Update</p>
-                      <p className="mt-2 font-mono text-sm text-foreground">{publishTargetLabel}</p>
+                      <p className={sectionLabelClass}>Local Branch</p>
+                      <p className="mt-2 font-mono text-sm text-foreground">{localBranchName}</p>
                     </div>
-                  </>
-                ) : null}
-              </div>
-            </div>
+
+                    {hasPublishTarget ? (
+                      <>
+                        <div className="hidden justify-center md:flex">
+                          <ArrowRight className="size-4 text-muted-foreground" />
+                        </div>
+
+                        <div className="rounded-xl border border-border bg-muted/40 p-4">
+                          <p className={sectionLabelClass}>Remote To Update</p>
+                          <p className="mt-2 font-mono text-sm text-foreground">
+                            {publishTargetLabel}
+                          </p>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         ) : null}
 
@@ -468,24 +488,20 @@ export function TaskApprovalModal({
         >
           {isCompletionStage ? (
             <>
-              <p className="text-sm text-muted-foreground">
-                {hasPublishTarget
-                  ? "Finish later to keep the task in Human Review while the local merge stays ready to publish."
-                  : "Finish later to keep the task in Human Review until you are ready to close it and clean up the builder workspace."}
-              </p>
+              <p className="text-sm text-muted-foreground">{completionStageDescription}</p>
 
               <div className="flex items-center justify-end gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={model.isSubmitting}
+                  disabled={completionActionDisabled}
                   onClick={model.onSkipDirectMergeCompletion}
                 >
                   Finish Later
                 </Button>
                 <Button
                   type="button"
-                  disabled={model.isSubmitting}
+                  disabled={completionActionDisabled}
                   onClick={model.onCompleteDirectMerge}
                 >
                   {model.isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}

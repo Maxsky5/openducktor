@@ -272,6 +272,24 @@ describe("kickoff and permission prompts", () => {
     expect(prompt).toContain("Use taskId task-1");
   });
 
+  test("rejects git conflict resolution message when required git context is missing", () => {
+    expect(() =>
+      buildAgentMessagePrompt({
+        role: "build",
+        templateId: "message.build_rebase_conflict_resolution",
+        task: {
+          taskId: "task-1",
+        },
+        git: {
+          targetBranch: "origin/main",
+          conflictedFiles: ["src/main.ts"],
+        },
+      }),
+    ).toThrow(
+      'Missing required git conflict context for "message.build_rebase_conflict_resolution": operationLabel and conflictOutput are required.',
+    );
+  });
+
   test("rejects git placeholders when the selected template does not receive git context", () => {
     expect(() =>
       buildAgentKickoffPrompt({

@@ -141,11 +141,12 @@ pub async fn task_direct_merge_complete(
     repo_path: String,
     task_id: String,
 ) -> Result<TaskCard, String> {
-    as_error(
-        state
-            .service
-            .task_direct_merge_complete(&repo_path, &task_id),
-    )
+    let service = state.service.clone();
+    let result = run_service_blocking("task_direct_merge_complete", move || {
+        service.task_direct_merge_complete(&repo_path, &task_id)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]

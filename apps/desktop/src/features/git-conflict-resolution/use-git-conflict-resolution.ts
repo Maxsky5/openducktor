@@ -1,6 +1,5 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { buildGitConflictResolutionPrompt } from "@/features/session-start";
 import { errorMessage } from "@/lib/errors";
@@ -105,12 +104,14 @@ export function useGitConflictResolution({
   }, []);
 
   const sendConflictResolutionMessage = useCallback(
-    (sessionId: string, message: string): void => {
-      void sendAgentMessage(sessionId, message).catch((error) => {
-        toast.error("Failed to send Builder conflict resolution request", {
-          description: errorMessage(error),
-        });
-      });
+    async (sessionId: string, message: string): Promise<void> => {
+      try {
+        await sendAgentMessage(sessionId, message);
+      } catch (error) {
+        throw new Error(
+          `Failed to send Builder conflict resolution request: ${errorMessage(error)}`,
+        );
+      }
     },
     [sendAgentMessage],
   );
@@ -176,7 +177,7 @@ export function useGitConflictResolution({
         }
 
         taskContext.onOpenSession(builderSession.sessionId);
-        sendConflictResolutionMessage(builderSession.sessionId, message);
+        await sendConflictResolutionMessage(builderSession.sessionId, message);
         return true;
       }
 
@@ -192,7 +193,7 @@ export function useGitConflictResolution({
       });
 
       taskContext.onOpenSession(sessionId);
-      sendConflictResolutionMessage(sessionId, message);
+      await sendConflictResolutionMessage(sessionId, message);
       return true;
     },
     [

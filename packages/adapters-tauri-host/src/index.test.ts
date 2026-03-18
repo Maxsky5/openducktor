@@ -1452,6 +1452,50 @@ describe("TauriHostClient", () => {
     ]);
   });
 
+  test("taskDirectMerge invalidates metadata cache for conflict outcomes", async () => {
+    let metadataReadCount = 0;
+    const { client, calls } = createClient((command) => {
+      if (command === "task_metadata_get") {
+        metadataReadCount += 1;
+        return makeTaskMetadataPayload(`Spec V${metadataReadCount}`);
+      }
+      if (command === "task_direct_merge") {
+        return {
+          outcome: "conflicts",
+          conflict: {
+            operation: "direct_merge_rebase",
+            currentBranch: "feature/task-1",
+            targetBranch: "origin/main",
+            conflictedFiles: ["src/index.ts"],
+            output: "CONFLICT (content): Merge conflict in src/index.ts",
+            workingDir: "/tmp/wt/task-1",
+          },
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
+    await expect(client.taskDirectMerge("/repo", "task-1", "merge_commit")).resolves.toEqual({
+      outcome: "conflicts",
+      conflict: {
+        operation: "direct_merge_rebase",
+        currentBranch: "feature/task-1",
+        targetBranch: "origin/main",
+        conflictedFiles: ["src/index.ts"],
+        output: "CONFLICT (content): Merge conflict in src/index.ts",
+        workingDir: "/tmp/wt/task-1",
+      },
+    });
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V2");
+
+    expect(calls.map((entry) => entry.command)).toEqual([
+      "task_metadata_get",
+      "task_direct_merge",
+      "task_metadata_get",
+    ]);
+  });
+
   test("task approval ack commands reject malformed host payloads", async () => {
     const { client } = createClient((command) => {
       if (command === "task_pull_request_unlink") {
