@@ -19,6 +19,13 @@ type AgentStudioSessionSelectionQueryParams = {
   role: AgentRole;
 };
 
+type AgentStudioAsyncActivityContextKeyParams = {
+  activeRepo: string | null;
+  taskId: string;
+  role: AgentRole;
+  sessionId: string | null | undefined;
+};
+
 export const canStartSessionForRole = (task: TaskCard | null, role: AgentRole): boolean => {
   return !task || isRoleAvailableForTask(task, role);
 };
@@ -89,6 +96,44 @@ export const shouldTriggerContextSwitchIntent = (params: {
   nextRole: AgentRole;
 }): boolean => {
   return params.currentSessionId !== params.nextSessionId || params.currentRole !== params.nextRole;
+};
+
+export const buildAgentStudioAsyncActivityContextKey = (
+  params: AgentStudioAsyncActivityContextKeyParams,
+): string => {
+  const sessionId = params.sessionId ?? "__draft__";
+  return `${params.activeRepo ?? ""}:${params.taskId}:${params.role}:${sessionId}`;
+};
+
+export const incrementActivityCountRecord = (
+  current: Record<string, number>,
+  key: string,
+): Record<string, number> => {
+  return {
+    ...current,
+    [key]: (current[key] ?? 0) + 1,
+  };
+};
+
+export const decrementActivityCountRecord = (
+  current: Record<string, number>,
+  key: string,
+): Record<string, number> => {
+  const currentCount = current[key];
+  if (!currentCount) {
+    return current;
+  }
+
+  if (currentCount === 1) {
+    const next = { ...current };
+    delete next[key];
+    return next;
+  }
+
+  return {
+    ...current,
+    [key]: currentCount - 1,
+  };
 };
 
 export const buildCreateSessionStartKey = (params: {

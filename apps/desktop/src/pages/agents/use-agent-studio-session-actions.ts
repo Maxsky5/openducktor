@@ -10,7 +10,10 @@ import { SCENARIO_LABELS } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
   applyAgentStudioSelectionQuery,
+  buildAgentStudioAsyncActivityContextKey,
   canStartSessionForRole,
+  decrementActivityCountRecord,
+  incrementActivityCountRecord,
   type QueryUpdate,
   shouldTriggerContextSwitchIntent,
 } from "./use-agent-studio-session-action-helpers";
@@ -80,15 +83,22 @@ export function useAgentStudioSessionActions({
   handleSessionSelectionChange: (nextValue: string) => void;
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
-  const [isSending, setIsSending] = useState(false);
+  const [sendingActivityCountByContext, setSendingActivityCountByContext] = useState<
+    Record<string, number>
+  >({});
   const [isSubmittingQuestionByRequestId, setIsSubmittingQuestionByRequestId] = useState<
     Record<string, boolean>
   >({});
   const latestInputRef = useRef(input);
 
   const activeSessionId = activeSession?.sessionId ?? null;
-  const activeComposerContextKey = `${activeRepo ?? ""}:${taskId}:${role}:${activeSessionId ?? ""}`;
-  const previousComposerContextKeyRef = useRef(activeComposerContextKey);
+  const activeComposerContextKey = buildAgentStudioAsyncActivityContextKey({
+    activeRepo,
+    taskId,
+    role,
+    sessionId: activeSessionId,
+  });
+  const isSending = (sendingActivityCountByContext[activeComposerContextKey] ?? 0) > 0;
   const isSessionWorking =
     Boolean(activeSession) &&
     ((activeSession?.status ?? "stopped") === "running" ||
@@ -127,15 +137,6 @@ export function useAgentStudioSessionActions({
     latestInputRef.current = input;
   }, [input]);
 
-  useEffect(() => {
-    if (previousComposerContextKeyRef.current === activeComposerContextKey) {
-      return;
-    }
-
-    previousComposerContextKeyRef.current = activeComposerContextKey;
-    setIsSending(false);
-  }, [activeComposerContextKey]);
-
   const onSend = useCallback(async (): Promise<void> => {
     if (isSending || isStarting || !agentStudioReady) {
       return;
@@ -160,6 +161,7 @@ export function useAgentStudioSessionActions({
       }
       setInput(message);
     };
+    const sendContextKeys = new Set<string>();
 
     try {
       let targetSessionId = activeSession?.sessionId;
@@ -172,15 +174,40 @@ export function useAgentStudioSessionActions({
         return;
       }
 
-      setIsSending(true);
+      const targetComposerContextKey = buildAgentStudioAsyncActivityContextKey({
+        activeRepo,
+        taskId,
+        role,
+        sessionId: targetSessionId,
+      });
+      sendContextKeys.add(activeComposerContextKey);
+      sendContextKeys.add(targetComposerContextKey);
+
+      setSendingActivityCountByContext((current) => {
+        let next = current;
+        for (const contextKey of sendContextKeys) {
+          next = incrementActivityCountRecord(next, contextKey);
+        }
+        return next;
+      });
       await sendAgentMessage(targetSessionId, message);
     } catch (error) {
       restoreComposerInput();
       throw error;
     } finally {
-      setIsSending(false);
+      if (sendContextKeys.size > 0) {
+        setSendingActivityCountByContext((current) => {
+          let next = current;
+          for (const contextKey of sendContextKeys) {
+            next = decrementActivityCountRecord(next, contextKey);
+          }
+          return next;
+        });
+      }
     }
   }, [
+    activeRepo,
+    activeComposerContextKey,
     activeSession,
     agentStudioReady,
     input,

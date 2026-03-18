@@ -15,9 +15,12 @@ import { loadEffectivePromptOverrides } from "../../../state/operations/shared/p
 import { kickoffPromptForScenario } from "../agents-page-constants";
 import { buildRoleEnabledMapForTask, type SessionCreateOption } from "../agents-page-session-tabs";
 import {
+  buildAgentStudioAsyncActivityContextKey,
   buildAgentStudioSelectionQueryUpdate,
   buildCreateSessionStartKey,
   buildPreviousSelectionQueryUpdate,
+  decrementActivityCountRecord,
+  incrementActivityCountRecord,
   type QueryUpdate,
   shouldTriggerContextSwitchIntent,
 } from "../use-agent-studio-session-action-helpers";
@@ -35,7 +38,7 @@ type UseAgentStudioFreshSessionCreationArgs = {
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent?: () => void;
-  setStartingActivityCount: Dispatch<SetStateAction<number>>;
+  setStartingActivityCountByContext: Dispatch<SetStateAction<Record<string, number>>>;
   startingSessionByTaskRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
   resolveRequestedSelection: (
     request: Omit<NewSessionStartRequest, "selectedModel">,
@@ -55,7 +58,7 @@ export function useAgentStudioFreshSessionCreation({
   sendAgentMessage,
   updateQuery,
   onContextSwitchIntent,
-  setStartingActivityCount,
+  setStartingActivityCountByContext,
   startingSessionByTaskRef,
   resolveRequestedSelection,
 }: UseAgentStudioFreshSessionCreationArgs): {
@@ -171,7 +174,15 @@ export function useAgentStudioFreshSessionCreation({
       nextScenario: AgentScenario;
       previousSelection: QueryUpdate;
     }): Promise<string | undefined> => {
-      setStartingActivityCount((current) => current + 1);
+      const startContextKey = buildAgentStudioAsyncActivityContextKey({
+        activeRepo,
+        taskId,
+        role: params.nextRole,
+        sessionId: null,
+      });
+      setStartingActivityCountByContext((current) =>
+        incrementActivityCountRecord(current, startContextKey),
+      );
       try {
         const selectedModel = await resolveRequestedSelection({
           taskId,
@@ -210,20 +221,23 @@ export function useAgentStudioFreshSessionCreation({
         sendFreshSessionKickoff(sessionId, params.nextRole, params.nextScenario);
         return sessionId;
       } finally {
-        setStartingActivityCount((current) => Math.max(0, current - 1));
+        setStartingActivityCountByContext((current) =>
+          decrementActivityCountRecord(current, startContextKey),
+        );
       }
     },
     [
       activeSession,
+      activeRepo,
       applyFreshSessionDraftQuery,
       applyFreshSessionSelectionQuery,
+      setStartingActivityCountByContext,
+      taskId,
       onContextSwitchIntent,
       resolveRequestedSelection,
       role,
       sendFreshSessionKickoff,
-      setStartingActivityCount,
       startFreshSession,
-      taskId,
     ],
   );
 
