@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { captureOrchestratorFallback, runOrchestratorSideEffect } from "./async-side-effects";
+import { runOrchestratorSideEffect, runOrchestratorTask } from "./async-side-effects";
 
 describe("agent-orchestrator/support/async-side-effects", () => {
   test("logs side-effect failures as errors by default", async () => {
@@ -28,7 +28,7 @@ describe("agent-orchestrator/support/async-side-effects", () => {
     expect(String(calls[0]?.[1] ?? "")).toBe("side-effect-default");
   });
 
-  test("uses warn level for expected fallback paths", async () => {
+  test("logs async task failures at warn level and rethrows them", async () => {
     const originalError = console.error;
     const originalWarn = console.warn;
     const errorCalls: unknown[][] = [];
@@ -42,18 +42,17 @@ describe("agent-orchestrator/support/async-side-effects", () => {
     };
 
     try {
-      const result = await captureOrchestratorFallback(
-        "fallback-warn",
-        async () => {
-          throw new Error("recoverable");
-        },
-        {
-          logLevel: "warn",
-          fallback: () => "fallback-value",
-        },
-      );
-
-      expect(result).toBe("fallback-value");
+      await expect(
+        runOrchestratorTask(
+          "task-warn",
+          async () => {
+            throw new Error("recoverable");
+          },
+          {
+            logLevel: "warn",
+          },
+        ),
+      ).rejects.toThrow("recoverable");
     } finally {
       console.error = originalError;
       console.warn = originalWarn;
@@ -61,10 +60,10 @@ describe("agent-orchestrator/support/async-side-effects", () => {
 
     expect(errorCalls.length).toBe(0);
     expect(warnCalls.length).toBe(1);
-    expect(String(warnCalls[0]?.[1] ?? "")).toBe("fallback-warn");
+    expect(String(warnCalls[0]?.[1] ?? "")).toBe("task-warn");
   });
 
-  test("supports no-log fallback mode", async () => {
+  test("supports no-log mode while still propagating failures", async () => {
     const originalError = console.error;
     const originalWarn = console.warn;
     const errorCalls: unknown[][] = [];
@@ -78,18 +77,17 @@ describe("agent-orchestrator/support/async-side-effects", () => {
     };
 
     try {
-      const result = await captureOrchestratorFallback(
-        "fallback-none",
-        async () => {
-          throw new Error("hidden");
-        },
-        {
-          logLevel: "none",
-          fallback: () => "ok",
-        },
-      );
-
-      expect(result).toBe("ok");
+      await expect(
+        runOrchestratorTask(
+          "task-none",
+          async () => {
+            throw new Error("hidden");
+          },
+          {
+            logLevel: "none",
+          },
+        ),
+      ).rejects.toThrow("hidden");
     } finally {
       console.error = originalError;
       console.warn = originalWarn;

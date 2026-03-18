@@ -1,10 +1,11 @@
 import type { RepoPromptOverrides, RuntimeKind, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
+import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../task-operations-model";
 import { type RuntimeInfo, resolveRuntimeConnection, type TaskDocuments } from "../runtime/runtime";
-import { captureOrchestratorFallback } from "../support/async-side-effects";
+import { runOrchestratorTask } from "../support/async-side-effects";
 import {
   createRepoStaleGuard,
   shouldReattachListenerForAttachedSession,
@@ -83,6 +84,27 @@ export const createEnsureSessionReady = ({
     const assertNotStale = (): void => {
       throwIfRepoStale(isStaleRepoOperation, STALE_PREPARE_ERROR);
     };
+    const stopSessionOrThrow = async ({
+      operation,
+      cleanupErrorMessage,
+      sessionId: targetSessionId,
+      taskId,
+      role,
+    }: {
+      operation: string;
+      cleanupErrorMessage: string;
+      sessionId: string;
+      taskId: string;
+      role: AgentSessionState["role"];
+    }): Promise<void> => {
+      try {
+        await runOrchestratorTask(operation, async () => adapter.stopSession(targetSessionId), {
+          tags: { repoPath, sessionId: targetSessionId, taskId, role },
+        });
+      } catch (error) {
+        throw new Error(`${cleanupErrorMessage}: ${errorMessage(error)}`, { cause: error });
+      }
+    };
 
     assertNotStale();
     const session = sessionsRef.current[sessionId];
@@ -107,14 +129,13 @@ export const createEnsureSessionReady = ({
         existingUnsubscriber();
         unsubscribersRef.current.delete(sessionId);
       }
-      await captureOrchestratorFallback(
-        "ensure-ready-stop-attached-error-session",
-        async () => adapter.stopSession(sessionId),
-        {
-          tags: { repoPath, sessionId, taskId: session.taskId, role: session.role },
-          fallback: () => undefined,
-        },
-      );
+      await stopSessionOrThrow({
+        operation: "ensure-ready-stop-attached-error-session",
+        cleanupErrorMessage: `Failed to stop attached error session '${sessionId}' before preparing it`,
+        sessionId,
+        taskId: session.taskId,
+        role: session.role,
+      });
       assertNotStale();
     }
 
@@ -160,14 +181,13 @@ export const createEnsureSessionReady = ({
     });
 
     if (isStaleRepoOperation()) {
-      await captureOrchestratorFallback(
-        "ensure-ready-stop-session-after-stale-resume",
-        async () => adapter.stopSession(sessionId),
-        {
-          tags: { repoPath, sessionId, taskId: session.taskId, role: session.role },
-          fallback: () => undefined,
-        },
-      );
+      await stopSessionOrThrow({
+        operation: "ensure-ready-stop-session-after-stale-resume",
+        cleanupErrorMessage: `${STALE_PREPARE_ERROR} Failed to stop stale resumed session '${sessionId}'`,
+        sessionId,
+        taskId: session.taskId,
+        role: session.role,
+      });
       throw new Error(STALE_PREPARE_ERROR);
     }
 
