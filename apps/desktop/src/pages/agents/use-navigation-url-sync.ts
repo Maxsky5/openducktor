@@ -26,7 +26,7 @@ export function useNavigationUrlSync({
   setSearchParams,
 }: UseNavigationUrlSyncArgs): UseNavigationUrlSyncResult {
   const syncingFromSearchParamsRef = useRef(false);
-  const searchParamsUpdatePendingRef = useRef(false);
+  const lastSetSearchParamsAtRef = useRef<number>(0);
   const [navigation, setNavigation] = useState<AgentStudioNavigationState>(() =>
     parseNavigationStateFromSearchParams(searchParams),
   );
@@ -36,7 +36,6 @@ export function useNavigationUrlSync({
   }, []);
 
   useEffect(() => {
-    searchParamsUpdatePendingRef.current = false;
     const parsed = parseNavigationStateFromSearchParams(searchParams);
     setNavigation((current) => {
       if (isSameNavigationState(current, parsed)) {
@@ -53,7 +52,8 @@ export function useNavigationUrlSync({
       return;
     }
 
-    if (searchParamsUpdatePendingRef.current) {
+    const now = Date.now();
+    if (now - lastSetSearchParamsAtRef.current < 100) {
       return;
     }
 
@@ -62,7 +62,7 @@ export function useNavigationUrlSync({
       return;
     }
 
-    searchParamsUpdatePendingRef.current = true;
+    lastSetSearchParamsAtRef.current = now;
     setSearchParams(next, { replace: true });
   }, [navigation, searchParams, setSearchParams]);
 

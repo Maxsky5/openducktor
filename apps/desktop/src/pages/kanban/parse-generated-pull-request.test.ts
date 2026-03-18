@@ -117,4 +117,44 @@ This is the summary.
 ## Testing
 Ran all tests.`);
   });
+
+  test("preserves code fence inside description body when wrapped in code block", () => {
+    const input = `\`\`\`markdown
+Title: Add utility helper
+Description:
+## Changes
+Added a helper.
+
+\`\`\`typescript
+export const helper = () => {};
+\`\`\`
+\`\`\``;
+    const result = parseGeneratedPullRequest(input);
+    expect(result.title).toBe("Add utility helper");
+    expect(result.body).toBe(`## Changes
+Added a helper.
+
+\`\`\`typescript
+export const helper = () => {};
+\`\`\``);
+  });
+
+  test("does not strip closing fence when code block appears at end of unwrapped content", () => {
+    const input = `Title: Add utility helper
+Description:
+## Changes
+Added a helper.
+
+\`\`\`typescript
+export const helper = () => {};
+\`\`\``;
+    const result = parseGeneratedPullRequest(input);
+    expect(result.title).toBe("Add utility helper");
+    expect(result.body).toBe(`## Changes
+Added a helper.
+
+\`\`\`typescript
+export const helper = () => {};
+\`\`\``);
+  });
 });

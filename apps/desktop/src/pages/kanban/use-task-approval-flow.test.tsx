@@ -748,14 +748,7 @@ describe("useTaskApprovalFlow", () => {
       scenario: "build_implementation_start",
       status: "idle",
       startedAt: "2026-03-12T12:01:00Z",
-      messages: [
-        {
-          id: "assistant-builder",
-          role: "assistant",
-          content: "Builder context",
-          timestamp: "2026-03-12T12:00:00Z",
-        },
-      ],
+      messages: [],
     });
 
     const Harness = (): ReactElement | null => {

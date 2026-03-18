@@ -68,9 +68,15 @@ const INITIAL_GIT_CONFLICT_STATE: {
 };
 
 export const parseGeneratedPullRequest = (content: string): { title: string; body: string } => {
-  const codeBlockPattern = /^```[\w]*\n?|```$/g;
   const boldPattern = /\*\*/g;
-  const cleaned = content.trim().replace(codeBlockPattern, "").replace(boldPattern, "");
+  let cleaned = content.trim();
+
+  const wrappingFenceMatch = cleaned.match(/^```[\w]*\n([\s\S]*)\n```$/);
+  if (wrappingFenceMatch?.[1] != null) {
+    cleaned = wrappingFenceMatch[1];
+  }
+
+  cleaned = cleaned.replace(boldPattern, "");
   const titlePrefix = "Title:";
   const descriptionPrefix = "Description:";
   const titleIndex = cleaned.indexOf(titlePrefix);
@@ -308,10 +314,7 @@ export function useTaskApprovalFlow({
       const forkedSessionId = await forkAgentSession({
         parentSessionId: parentSession.sessionId,
       });
-      const baselineAssistantCount =
-        sessionsRef.current
-          .find((entry) => entry.sessionId === forkedSessionId)
-          ?.messages.filter((message) => message.role === "assistant").length ?? 0;
+      const baselineAssistantCount = 0;
       const prompt = buildAgentMessagePrompt({
         role: "build",
         templateId: "message.build_pull_request_draft",
