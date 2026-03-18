@@ -94,7 +94,7 @@ export type KanbanPageTaskDetailsControllerModel = {
   onResumeDeferred: (taskId: string) => void;
   onHumanApprove: (taskId: string) => void;
   onHumanRequestChanges: (taskId: string) => void;
-  onResetImplementation: (taskId: string) => void;
+  onResetImplementation: (taskId: string, options?: { closeDetailsAfterReset?: boolean }) => void;
   onDetectPullRequest: (taskId: string) => void;
   onUnlinkPullRequest: (taskId: string) => void;
   detectingPullRequestTaskId: string | null;

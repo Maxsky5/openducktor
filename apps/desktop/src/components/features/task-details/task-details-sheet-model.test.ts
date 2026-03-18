@@ -160,7 +160,9 @@ describe("task-details-sheet-model", () => {
       onHumanRequestChanges,
       onResetImplementation,
     });
-    expect(onResetImplementation).toHaveBeenCalledWith("T-1");
+    expect(onResetImplementation).toHaveBeenCalledWith("T-1", {
+      closeDetailsAfterReset: true,
+    });
   });
 
   test("loads document sections only when summary reports content", () => {

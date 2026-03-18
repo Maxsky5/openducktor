@@ -7,6 +7,9 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { KanbanPageModels } from "./kanban-page-model-types";
 
 type ResetImplementationModalModel = KanbanPageModels["resetImplementationModal"];
+type ResetImplementationOptions = {
+  closeDetailsAfterReset?: boolean;
+};
 
 type UseTaskResetFlowArgs = {
   tasks: TaskCard[];
@@ -40,9 +43,10 @@ export function useTaskResetFlow({
   closeTaskDetails,
 }: UseTaskResetFlowArgs): {
   resetImplementationModal: ResetImplementationModalModel;
-  openResetImplementation: (taskId: string) => void;
+  openResetImplementation: (taskId: string, options?: ResetImplementationOptions) => void;
 } {
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [closeDetailsAfterReset, setCloseDetailsAfterReset] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
@@ -59,11 +63,12 @@ export function useTaskResetFlow({
       return;
     }
     setTaskId(null);
+    setCloseDetailsAfterReset(false);
     setModalError(null);
   }, [isSubmitting]);
 
   const openResetImplementation = useCallback(
-    (nextTaskId: string): void => {
+    (nextTaskId: string, options?: ResetImplementationOptions): void => {
       const nextTask = tasks.find((entry) => entry.id === nextTaskId);
       if (!nextTask) {
         return;
@@ -81,6 +86,7 @@ export function useTaskResetFlow({
 
       setModalError(null);
       setTaskId(nextTaskId);
+      setCloseDetailsAfterReset(options?.closeDetailsAfterReset ?? false);
     },
     [sessions, tasks],
   );
@@ -100,7 +106,10 @@ export function useTaskResetFlow({
           roles: ["build", "qa"],
         });
         setTaskId(null);
-        closeTaskDetails();
+        setCloseDetailsAfterReset(false);
+        if (closeDetailsAfterReset) {
+          closeTaskDetails();
+        }
         void loadAgentSessions(task.id).catch(() => {});
       })
       .catch((error: unknown) => {
@@ -111,6 +120,7 @@ export function useTaskResetFlow({
       });
   }, [
     closeTaskDetails,
+    closeDetailsAfterReset,
     isSubmitting,
     loadAgentSessions,
     removeAgentSessions,

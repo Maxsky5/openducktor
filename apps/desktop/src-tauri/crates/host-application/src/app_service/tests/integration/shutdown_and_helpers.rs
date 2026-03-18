@@ -597,6 +597,45 @@ fn resolve_opencode_binary_path_uses_path_when_home_is_unset() -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn resolve_opencode_binary_path_skips_non_executable_path_entry() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let _env_lock = lock_env();
+    let root = unique_temp_path("opencode-path-non-executable");
+    let path_bin = root.join("path-bin");
+    let fallback_bin = root.join("fallback-bin");
+    fs::create_dir_all(&path_bin)?;
+    fs::create_dir_all(&fallback_bin)?;
+    let non_executable = path_bin.join("opencode");
+    let fallback = fallback_bin.join("opencode");
+    fs::write(&non_executable, "#!/bin/sh\nexit 0\n")?;
+    fs::set_permissions(&non_executable, std::fs::Permissions::from_mode(0o644))?;
+    create_fake_opencode(&fallback)?;
+
+    let _override_guard = remove_env_var("OPENDUCKTOR_OPENCODE_BINARY");
+    let _home_guard = remove_env_var("HOME");
+    let _path_guard = set_env_var(
+        "PATH",
+        format!(
+            "{}:{}:/usr/bin:/bin",
+            path_bin.to_string_lossy(),
+            fallback_bin.to_string_lossy()
+        )
+        .as_str(),
+    );
+
+    let resolved = resolve_opencode_binary_path();
+    assert_eq!(
+        resolved.as_deref(),
+        Some(fallback.to_string_lossy().as_ref())
+    );
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
 #[test]
 fn find_openducktor_workspace_root_uses_workspace_markers_instead_of_fixed_depth() -> Result<()> {
     let root = unique_temp_path("workspace-root-discovery");

@@ -11,7 +11,9 @@ type TaskWorkflowCallbacks = {
   onResumeDeferred: ((taskId: string) => void) | undefined;
   onHumanApprove: ((taskId: string) => void) | undefined;
   onHumanRequestChanges: ((taskId: string) => void) | undefined;
-  onResetImplementation: ((taskId: string) => void) | undefined;
+  onResetImplementation:
+    | ((taskId: string, options?: { closeDetailsAfterReset?: boolean }) => void)
+    | undefined;
 };
 
 export const toTaskLabels = (labels: string[] | undefined): string[] =>
@@ -104,7 +106,7 @@ export const runTaskWorkflowAction = (
       callbacks.onHumanRequestChanges?.(taskId);
       return;
     case "reset_implementation":
-      callbacks.onResetImplementation?.(taskId);
+      callbacks.onResetImplementation?.(taskId, { closeDetailsAfterReset: true });
       return;
     default:
       return;

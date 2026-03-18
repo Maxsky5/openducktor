@@ -5,8 +5,8 @@ use crate::app_service::workflow_rules::{
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentSessionDocument, CreateTaskInput, QaWorkflowVerdict, RunState, TaskCard, TaskMetadata,
-    TaskStatus, UpdateTaskPatch,
+    AgentSessionDocument, CreateTaskInput, QaWorkflowVerdict, RunState, RuntimeRole, TaskCard,
+    TaskMetadata, TaskStatus, UpdateTaskPatch,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -149,17 +149,28 @@ impl AppService {
         self.ensure_no_active_task_reset_runs(context.repo.repo_path.as_str(), task_id, &sessions)?;
 
         let rollback_status = derive_reset_implementation_status(&context.task);
-        let normalized_repo = normalize_path_for_comparison(context.repo.repo_path.as_str());
         let branch_prefix = self
             .config_store
             .repo_config(&context.repo.repo_path)?
             .branch_prefix;
-        let removable_worktrees = collect_managed_worktree_paths(&sessions, &normalized_repo, true);
         let related_local_branches = collect_related_task_branches(
             self,
             context.repo_dir(),
             branch_prefix.as_str(),
             task_id,
+        )?;
+        ensure_related_reset_branches_are_deletable(
+            self,
+            context.repo_dir(),
+            &related_local_branches,
+        )?;
+        let removable_worktrees = collect_managed_task_worktree_paths(
+            self,
+            context.repo.repo_path.as_str(),
+            task_id,
+            branch_prefix.as_str(),
+            &sessions,
+            true,
         )?;
 
         for worktree_path in &removable_worktrees {
@@ -282,6 +293,17 @@ impl AppService {
         if has_active_run {
             return Err(anyhow!(
                 "Cannot reset implementation while builder work is active for task {task_id}. Stop the active run first."
+            ));
+        }
+
+        let active_runtime_roles = collect_active_runtime_roles_for_task(self, repo_path, task_id)
+            .with_context(|| {
+                format!("Failed checking live runtime state before resetting {task_id}")
+            })?;
+        if !active_runtime_roles.is_empty() {
+            return Err(anyhow!(
+                "Cannot reset implementation while active {} session(s) exist for task {task_id}. Stop the active session(s) first.",
+                active_runtime_roles.join("/")
             ));
         }
 
@@ -532,31 +554,53 @@ fn normalize_path_key(path: &str) -> String {
         .to_string()
 }
 
-fn collect_managed_worktree_paths(
+fn collect_managed_task_worktree_paths(
+    service: &AppService,
+    repo_path: &str,
+    task_id: &str,
+    branch_prefix: &str,
     sessions: &[AgentSessionDocument],
-    normalized_repo: &Path,
     require_existing_path: bool,
-) -> Vec<String> {
+) -> Result<Vec<String>> {
     let mut removable_worktrees = Vec::new();
     let mut seen_worktree_keys = HashSet::new();
+    let normalized_repo = normalize_path_for_comparison(repo_path);
+    let managed_worktree_base = resolve_effective_worktree_base_path(service, repo_path)?
+        .map(|path| normalize_path_for_comparison(path.as_str()));
+
+    let Some(managed_worktree_base) = managed_worktree_base else {
+        return Ok(removable_worktrees);
+    };
+    let scope = ManagedTaskWorktreeScope {
+        task_id,
+        branch_prefix,
+        normalized_repo: normalized_repo.as_path(),
+        managed_worktree_base: managed_worktree_base.as_path(),
+        require_existing_path,
+    };
 
     for session in sessions {
         let worktree_path = session.working_directory.trim();
-        if !is_managed_worktree_session(session, normalized_repo, worktree_path) {
+        if !is_managed_task_worktree_session(service, &scope, session, worktree_path)? {
             continue;
         }
         let worktree_key = normalize_path_key(worktree_path);
         if !seen_worktree_keys.insert(worktree_key) {
             continue;
         }
-        if require_existing_path && !Path::new(worktree_path).exists() {
-            continue;
-        }
 
         removable_worktrees.push(worktree_path.to_string());
     }
 
-    removable_worktrees
+    Ok(removable_worktrees)
+}
+
+struct ManagedTaskWorktreeScope<'a> {
+    task_id: &'a str,
+    branch_prefix: &'a str,
+    normalized_repo: &'a Path,
+    managed_worktree_base: &'a Path,
+    require_existing_path: bool,
 }
 
 fn is_managed_worktree_session(
@@ -567,6 +611,52 @@ fn is_managed_worktree_session(
     matches!(session.role.as_str(), "build" | "qa")
         && !working_directory.is_empty()
         && normalize_path_for_comparison(working_directory) != normalized_repo
+}
+
+fn is_managed_task_worktree_session(
+    service: &AppService,
+    scope: &ManagedTaskWorktreeScope<'_>,
+    session: &AgentSessionDocument,
+    working_directory: &str,
+) -> Result<bool> {
+    if !matches!(session.role.as_str(), "build" | "qa") || working_directory.is_empty() {
+        return Ok(false);
+    }
+
+    let normalized_worktree = normalize_path_for_comparison(working_directory);
+    if normalized_worktree == scope.normalized_repo
+        || !normalized_worktree.starts_with(scope.managed_worktree_base)
+    {
+        return Ok(false);
+    }
+
+    if scope.require_existing_path && !Path::new(working_directory).exists() {
+        return Ok(false);
+    }
+
+    let current_branch = service
+        .git_port
+        .get_current_branch(Path::new(working_directory))
+        .with_context(|| {
+            format!("Failed to inspect implementation worktree branch for {working_directory}")
+        })?;
+    let branch_name = current_branch
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            anyhow!(
+                "Cannot reset implementation for task {} because worktree {working_directory} is detached or has no active branch.",
+                scope.task_id
+            )
+        })?;
+
+    Ok(is_related_task_branch(
+        branch_name,
+        scope.branch_prefix,
+        scope.task_id,
+    ))
 }
 
 fn is_related_task_branch(branch_name: &str, branch_prefix: &str, task_id: &str) -> bool {
@@ -607,4 +697,83 @@ fn collect_related_task_branches(
         .filter(|branch| is_related_task_branch(branch.name.as_str(), branch_prefix, task_id))
         .map(|branch| branch.name)
         .collect())
+}
+
+fn resolve_effective_worktree_base_path(
+    service: &AppService,
+    repo_path: &str,
+) -> Result<Option<String>> {
+    let normalized_repo = normalize_path_for_comparison(repo_path);
+    Ok(service
+        .workspace_list()?
+        .into_iter()
+        .find(|workspace| normalize_path_for_comparison(workspace.path.as_str()) == normalized_repo)
+        .and_then(|workspace| workspace.effective_worktree_base_path))
+}
+
+fn ensure_related_reset_branches_are_deletable(
+    service: &AppService,
+    repo_path: &Path,
+    related_local_branches: &HashSet<String>,
+) -> Result<()> {
+    let current_branch = service.git_port.get_current_branch(repo_path)?;
+    let Some(current_branch_name) = current_branch
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(());
+    };
+
+    if related_local_branches.contains(current_branch_name) {
+        return Err(anyhow!(
+            "Cannot reset implementation while branch {current_branch_name} is checked out. Switch branches first."
+        ));
+    }
+
+    Ok(())
+}
+
+fn collect_active_runtime_roles_for_task(
+    service: &AppService,
+    repo_path: &str,
+    task_id: &str,
+) -> Result<Vec<&'static str>> {
+    let normalized_repo = normalize_path_for_comparison(repo_path);
+    let mut runtimes = service
+        .agent_runtimes
+        .lock()
+        .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
+    let mut active_roles = HashSet::new();
+
+    for runtime in runtimes.values_mut() {
+        if normalize_path_for_comparison(runtime.summary.repo_path.as_str()) != normalized_repo {
+            continue;
+        }
+        if runtime.summary.task_id.as_deref() != Some(task_id) {
+            continue;
+        }
+        match runtime.summary.role {
+            RuntimeRole::Build | RuntimeRole::Qa => {}
+            _ => continue,
+        }
+
+        match runtime.child.try_wait() {
+            Ok(Some(_)) => continue,
+            Ok(None) => {
+                active_roles.insert(runtime.summary.role.as_str());
+            }
+            Err(error) => {
+                return Err(anyhow!(
+                    "Failed checking runtime {} for task {task_id}: {error}",
+                    runtime.summary.runtime_id
+                ));
+            }
+        }
+    }
+
+    let mut roles = active_roles.into_iter().collect::<Vec<_>>();
+    roles.sort_unstable();
+    Ok(roles)
 }
