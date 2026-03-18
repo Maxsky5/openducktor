@@ -48,6 +48,7 @@ describe("useAgentStudioQuerySync", () => {
 
     const harness = createHookHarness({
       activeRepo: null,
+      navigationType: "REPLACE",
       searchParams: new URLSearchParams("task=task-1&agent=build"),
       setSearchParams,
     });
@@ -88,6 +89,7 @@ describe("useAgentStudioQuerySync", () => {
 
     const harness = createHookHarness({
       activeRepo: null,
+      navigationType: "REPLACE",
       searchParams: new URLSearchParams("task=task-1&agent=spec"),
       setSearchParams,
     });
@@ -99,6 +101,7 @@ describe("useAgentStudioQuerySync", () => {
 
     await harness.update({
       activeRepo: null,
+      navigationType: "POP",
       searchParams: new URLSearchParams("task=task-2&session=session-2&agent=planner"),
       setSearchParams,
     });
@@ -139,6 +142,7 @@ describe("useAgentStudioQuerySync", () => {
 
       const harness = createHookHarness({
         activeRepo: "/repo",
+        navigationType: "REPLACE",
         searchParams: new URLSearchParams(""),
         setSearchParams,
       });
@@ -173,6 +177,7 @@ describe("useAgentStudioQuerySync", () => {
 
       const harness = createHookHarness({
         activeRepo: "/repo",
+        navigationType: "REPLACE",
         searchParams: new URLSearchParams(""),
         setSearchParams: () => {},
       });
@@ -232,6 +237,7 @@ describe("useAgentStudioQuerySync", () => {
 
       const harness = createHookHarness({
         activeRepo: "/repo",
+        navigationType: "REPLACE",
         searchParams: new URLSearchParams("task=task-from-url&session=session-from-url&agent=spec"),
         setSearchParams: () => {},
       });
@@ -262,6 +268,7 @@ describe("useAgentStudioQuerySync", () => {
     try {
       const harness = createHookHarness({
         activeRepo: "/repo",
+        navigationType: "REPLACE",
         searchParams: new URLSearchParams("agent=spec"),
         setSearchParams: () => {},
       });

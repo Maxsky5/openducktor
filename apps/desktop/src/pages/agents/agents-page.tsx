@@ -1,5 +1,5 @@
 import { type ReactElement, startTransition, useCallback, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigationType, useSearchParams } from "react-router-dom";
 import {
   TaskDetailsSheetController,
   type TaskDetailsSheetControllerHandle,
@@ -55,6 +55,7 @@ export function AgentsPage(): ReactElement {
   } = useAgentState();
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigationType = useNavigationType();
   const [input, setInput] = useState("");
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
@@ -72,6 +73,7 @@ export function AgentsPage(): ReactElement {
     updateQuery,
   } = useAgentStudioQuerySync({
     activeRepo,
+    navigationType,
     searchParams,
     setSearchParams,
   });
