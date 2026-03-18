@@ -12,13 +12,6 @@ import type {
 } from "./session-event-types";
 
 const DRAFT_FLUSH_DELAY_MS = 32;
-
-export const inferToolPartStatus = (
-  part: Extract<SessionPart, { kind: "tool" }>,
-): Extract<SessionPart, { kind: "tool" }>["status"] => {
-  return part.status;
-};
-
 export const clearDraftBuffers = (
   context: Pick<SessionLifecycleEventContext, "drafts" | "store">,
 ): void => {
