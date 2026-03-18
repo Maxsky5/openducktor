@@ -17,7 +17,6 @@ import {
   AppBrand,
   BranchSwitcher,
   SidebarNavigation,
-  WorkspaceSummaryCard,
 } from "@/components/layout/sidebar";
 import { summarizeAgentActivity } from "@/components/layout/sidebar/agent-activity-model";
 import { ThemeToggle } from "@/components/layout/sidebar/theme-toggle";
@@ -123,7 +122,6 @@ export function AppShell(): ReactElement {
                     activeSessions={agentActivity.activeSessions}
                     waitingForInputSessions={agentActivity.waitingForInputSessions}
                   />
-                  <WorkspaceSummaryCard />
                 </div>
 
                 <div className="flex justify-center px-3 pb-2 pt-1">
