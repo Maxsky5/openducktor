@@ -35,7 +35,7 @@ export const SetPlanInputSchema = z
   .object({
     taskId: z.string().trim().min(1),
     markdown: z.string().trim().min(1),
-    subtasks: z.array(planSubtaskInputSchema).optional(),
+    subtasks: z.array(planSubtaskInputSchema.strict()).optional(),
   })
   .strict();
 

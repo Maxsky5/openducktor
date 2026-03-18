@@ -260,6 +260,22 @@ describe("openducktor-mcp lib", () => {
     ).toThrow();
   });
 
+  test("schema rejects unknown fields on odt_set_plan subtasks", () => {
+    expect(() =>
+      ODT_TOOL_SCHEMAS.odt_set_plan.parse({
+        taskId: "task-1",
+        markdown: "## Plan",
+        subtasks: [
+          {
+            title: "Implement callback",
+            issueType: "feature",
+            extraField: "should fail",
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
   test("schema rejects epic for create_task", () => {
     const parsed = ODT_TOOL_SCHEMAS.create_task.parse({
       title: "Ship docs",
