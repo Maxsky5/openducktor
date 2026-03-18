@@ -68,7 +68,8 @@ const INITIAL_GIT_CONFLICT_STATE: {
 };
 
 const parseGeneratedPullRequest = (content: string): { title: string; body: string } => {
-  const trimmed = content.trim();
+  const codeBlockPattern = /^```[\w]*\n?|```$/g;
+  const trimmed = content.trim().replace(codeBlockPattern, "");
   const titlePrefix = "Title:";
   const descriptionPrefix = "Description:";
   const titleIndex = trimmed.indexOf(titlePrefix);
