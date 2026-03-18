@@ -40,8 +40,9 @@ export function useNavigationUrlSync({
     const currentSearchParams = searchParams.toString();
     const pendingWriteIndex = pendingSearchParamWritesRef.current.indexOf(currentSearchParams);
     if (pendingWriteIndex !== -1) {
-      pendingSearchParamWritesRef.current =
-        pendingSearchParamWritesRef.current.slice(pendingWriteIndex + 1);
+      pendingSearchParamWritesRef.current = pendingSearchParamWritesRef.current.slice(
+        pendingWriteIndex + 1,
+      );
 
       if (pendingSearchParamWritesRef.current.length === 0) {
         latestSearchParamsRef.current = new URLSearchParams(searchParams);
