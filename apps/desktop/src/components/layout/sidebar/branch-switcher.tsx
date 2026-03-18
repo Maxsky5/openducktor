@@ -53,7 +53,7 @@ export function BranchSwitcher(): ReactElement | null {
           }
 
           setPendingBranchValue(nextBranch);
-          void switchBranch(nextBranch).catch(() => {
+          void switchBranch(nextBranch).finally(() => {
             setPendingBranchValue(null);
           });
         }}

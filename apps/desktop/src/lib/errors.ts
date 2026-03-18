@@ -7,9 +7,12 @@ export const errorMessage = (error: unknown): string => {
     return error;
   }
 
+  const fallbackMessage = `Non-Error thrown: ${String(error)}`;
+
   try {
-    return JSON.stringify(error);
+    const serialized = JSON.stringify(error);
+    return typeof serialized === "string" ? serialized : fallbackMessage;
   } catch {
-    return "Unknown error";
+    return fallbackMessage;
   }
 };
