@@ -21,12 +21,12 @@ use host_domain::{
     GitBranch, GitCommitAllRequest, GitCommitAllResult, GitConflictAbortRequest,
     GitConflictAbortResult, GitConflictOperation, GitCurrentBranch, GitDiffScope, GitFileDiff,
     GitFileStatus, GitFileStatusCounts, GitMergeBranchRequest, GitMergeBranchResult,
-    GitMergeMethod, GitPort, GitPullRequest, GitPullResult, GitPushResult,
-    GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
-    GitUpstreamAheadBehind, GitWorktreeStatusData, GitWorktreeStatusSummaryData, IssueType,
-    PlanSubtaskInput, PullRequestRecord, QaReportDocument, QaVerdict, QaWorkflowVerdict,
-    RunEvent, RunState, RunSummary, RuntimeInstanceSummary, SpecDocument, TaskAction, TaskCard,
-    TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    GitMergeMethod, GitPort, GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest,
+    GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind,
+    GitWorktreeStatusData, GitWorktreeStatusSummaryData, IssueType, PlanSubtaskInput,
+    PullRequestRecord, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState,
+    RunSummary, RuntimeInstanceSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary,
+    TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
