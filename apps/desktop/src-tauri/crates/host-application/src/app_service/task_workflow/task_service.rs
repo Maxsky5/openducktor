@@ -172,21 +172,41 @@ impl AppService {
             &sessions,
             true,
         )?;
+        let mut removed_worktrees = Vec::new();
+        let mut deleted_branches = Vec::new();
 
         for worktree_path in &removable_worktrees {
-            self.git_remove_worktree(context.repo.repo_path.as_str(), worktree_path, true)
+            if let Err(error) = self
+                .git_remove_worktree(context.repo.repo_path.as_str(), worktree_path, true)
                 .with_context(|| {
                     format!("Failed to remove implementation worktree {worktree_path}")
-                })?;
+                })
+            {
+                return Err(with_reset_cleanup_progress(
+                    error,
+                    &removed_worktrees,
+                    &deleted_branches,
+                ));
+            }
+            removed_worktrees.push(worktree_path.clone());
         }
 
         for branch_name in &related_local_branches {
-            self.git_delete_local_branch(
-                context.repo.repo_path.as_str(),
-                branch_name.as_str(),
-                true,
-            )
-            .with_context(|| format!("Failed to delete implementation branch {branch_name}"))?;
+            if let Err(error) = self
+                .git_delete_local_branch(
+                    context.repo.repo_path.as_str(),
+                    branch_name.as_str(),
+                    true,
+                )
+                .with_context(|| format!("Failed to delete implementation branch {branch_name}"))
+            {
+                return Err(with_reset_cleanup_progress(
+                    error,
+                    &removed_worktrees,
+                    &deleted_branches,
+                ));
+            }
+            deleted_branches.push(branch_name.clone());
         }
 
         self.task_store
@@ -733,6 +753,32 @@ fn ensure_related_reset_branches_are_deletable(
     }
 
     Ok(())
+}
+
+fn with_reset_cleanup_progress(
+    error: anyhow::Error,
+    removed_worktrees: &[String],
+    deleted_branches: &[String],
+) -> anyhow::Error {
+    let mut progress = Vec::new();
+    if !removed_worktrees.is_empty() {
+        progress.push(format!(
+            "Reset cleanup already removed worktrees: {}.",
+            removed_worktrees.join(", ")
+        ));
+    }
+    if !deleted_branches.is_empty() {
+        progress.push(format!(
+            "Reset cleanup already deleted branches: {}.",
+            deleted_branches.join(", ")
+        ));
+    }
+    if progress.is_empty() {
+        return error;
+    }
+
+    progress.push("Retry reset to finish cleanup safely.".to_string());
+    error.context(progress.join("\n"))
 }
 
 fn collect_active_runtime_roles_for_task(

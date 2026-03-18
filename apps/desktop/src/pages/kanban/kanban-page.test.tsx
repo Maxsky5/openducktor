@@ -1003,6 +1003,54 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
+  test("reset implementation reports session refresh failures after a successful reset", async () => {
+    currentTaskFixture = createTaskCardFixture({
+      id: "TASK-123",
+      status: "in_progress",
+      availableActions: ["reset_implementation"],
+    });
+    currentSessionsFixture = [
+      {
+        runtimeKind: "opencode",
+        sessionId: "session-build-idle",
+        taskId: "TASK-123",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+        startedAt: "2026-01-02T00:00:00.000Z",
+        updatedAt: "2026-01-02T00:00:00.000Z",
+        pendingPermissions: 0,
+        pendingQuestions: 0,
+      },
+    ];
+    loadAgentSessionsMock.mockImplementationOnce(async () => {
+      throw new Error("refresh failed");
+    });
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onResetImplementation as (taskId: string) => void)("TASK-123");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      (latestResetImplementationModalModel?.onConfirm as () => void)();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitForMockCall(loadAgentSessionsMock);
+
+    expect(toastErrorMock).toHaveBeenCalledWith("Failed to refresh sessions", {
+      description: "refresh failed",
+    });
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   test("ai review request changes starts a fresh builder session with the QA follow-up scenario", async () => {
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "ai_review" });
     const renderer = await renderPage();

@@ -245,33 +245,40 @@ export function useTaskOperations({
   const resetTaskImplementation = useCallback(
     async (taskId: string): Promise<void> => {
       const repoPath = requireActiveRepo(activeRepo);
-      await host.taskResetImplementation(repoPath, taskId);
-      await Promise.all([
-        appQueryClient.invalidateQueries({
-          queryKey: agentSessionQueryKeys.list(repoPath, taskId),
-          exact: true,
-          refetchType: "none",
-        }),
-        appQueryClient.invalidateQueries({
-          queryKey: documentQueryKeys.qaReport(repoPath, taskId),
-          exact: true,
-          refetchType: "none",
-        }),
-        appQueryClient.invalidateQueries({
-          queryKey: documentQueryKeys.spec(repoPath, taskId),
-          exact: true,
-          refetchType: "none",
-        }),
-        appQueryClient.invalidateQueries({
-          queryKey: documentQueryKeys.plan(repoPath, taskId),
-          exact: true,
-          refetchType: "none",
-        }),
-      ]);
-      await refreshTaskData(repoPath);
-      toast.success("Implementation reset", {
-        description: taskId,
-      });
+      try {
+        await host.taskResetImplementation(repoPath, taskId);
+        await Promise.all([
+          appQueryClient.invalidateQueries({
+            queryKey: agentSessionQueryKeys.list(repoPath, taskId),
+            exact: true,
+            refetchType: "none",
+          }),
+          appQueryClient.invalidateQueries({
+            queryKey: documentQueryKeys.qaReport(repoPath, taskId),
+            exact: true,
+            refetchType: "none",
+          }),
+          appQueryClient.invalidateQueries({
+            queryKey: documentQueryKeys.spec(repoPath, taskId),
+            exact: true,
+            refetchType: "none",
+          }),
+          appQueryClient.invalidateQueries({
+            queryKey: documentQueryKeys.plan(repoPath, taskId),
+            exact: true,
+            refetchType: "none",
+          }),
+        ]);
+        await refreshTaskData(repoPath);
+        toast.success("Implementation reset", {
+          description: taskId,
+        });
+      } catch (error) {
+        toast.error("Failed to reset implementation", {
+          description: errorMessage(error),
+        });
+        throw error;
+      }
     },
     [activeRepo, refreshTaskData],
   );

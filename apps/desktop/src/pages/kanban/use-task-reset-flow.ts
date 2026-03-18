@@ -110,7 +110,11 @@ export function useTaskResetFlow({
         if (closeDetailsAfterReset) {
           closeTaskDetails();
         }
-        void loadAgentSessions(task.id).catch(() => {});
+        void loadAgentSessions(task.id).catch((error: unknown) => {
+          toast.error("Failed to refresh sessions", {
+            description: errorMessage(error),
+          });
+        });
       })
       .catch((error: unknown) => {
         setModalError(errorMessage(error));

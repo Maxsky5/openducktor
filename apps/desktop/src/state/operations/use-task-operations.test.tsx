@@ -260,6 +260,45 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("resetTaskImplementation surfaces a toast and rethrows when reset fails", async () => {
+    const taskResetImplementation = mock(async () => {
+      throw new Error("reset failed");
+    });
+    const toastError = mock(() => {});
+
+    const original = {
+      taskResetImplementation: host.taskResetImplementation,
+      toastError: toast.error,
+    };
+    host.taskResetImplementation = taskResetImplementation;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await expect(
+        harness.run(async (value) => {
+          await value.resetTaskImplementation("A");
+        }),
+      ).rejects.toThrow("reset failed");
+      expect(toastError).toHaveBeenCalledWith("Failed to reset implementation", {
+        description: "reset failed",
+      });
+    } finally {
+      await harness.unmount();
+      host.taskResetImplementation = original.taskResetImplementation;
+      toast.error = original.toastError;
+    }
+  });
+
   test("ignores stale refreshTaskData results after active repo switches", async () => {
     const deferredTasks = createDeferred<TaskCard[]>();
     const deferredRuns = createDeferred<RunSummary[]>();
