@@ -19,10 +19,6 @@ type AsyncFailureOptions = {
   logLevel?: OrchestratorAsyncLogLevel;
 };
 
-type AsyncFallbackOptions<T> = AsyncFailureOptions & {
-  fallback: (failure: OrchestratorAsyncFailure) => T;
-};
-
 const ORCHESTRATOR_ERROR_PREFIX = "[agent-orchestrator]";
 
 const createOrchestratorAsyncFailure = (
@@ -72,17 +68,24 @@ export const runOrchestratorSideEffect = (
   });
 };
 
-export const captureOrchestratorFallback = async <T>(
+export const runOrchestratorTask = async <T>(
   operation: string,
   effect: () => Promise<T>,
-  options: AsyncFallbackOptions<T>,
+  options?: AsyncFailureOptions,
 ): Promise<T> => {
   try {
     return await effect();
   } catch (error) {
-    const failure = createOrchestratorAsyncFailure(operation, error, options.tags);
-    logOrchestratorAsyncFailure(failure, options.logLevel ?? "error");
-    options.onFailure?.(failure);
-    return options.fallback(failure);
+    const failure = createOrchestratorAsyncFailure(operation, error, options?.tags);
+    logOrchestratorAsyncFailure(failure, options?.logLevel ?? "error");
+    try {
+      options?.onFailure?.(failure);
+    } catch (callbackError) {
+      logOrchestratorAsyncFailure(
+        createOrchestratorAsyncFailure(`${operation}-onFailure`, callbackError, options?.tags),
+        "warn",
+      );
+    }
+    throw error;
   }
 };

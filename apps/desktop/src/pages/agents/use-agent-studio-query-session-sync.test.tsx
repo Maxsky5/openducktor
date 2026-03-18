@@ -96,7 +96,27 @@ describe("useAgentStudioQuerySessionSync", () => {
     }
   });
 
-  test("clears stale session param when selected session belongs to another task", async () => {
+  test("does not clear a session deep link before session reconciliation can repair it", async () => {
+    const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
+    const harness = createHookHarness(
+      createBaseArgs({
+        tasks: [createTask("task-1")],
+        taskIdParam: "missing-task",
+        sessionParam: "session-2",
+        taskId: "",
+        scheduleQueryUpdate,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      expect(scheduleQueryUpdate).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("corrects the task when a resolved session belongs to another task", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
     const selectedSession = createSession("task-2", "session-2");
     const harness = createHookHarness(
@@ -114,7 +134,7 @@ describe("useAgentStudioQuerySessionSync", () => {
       await harness.mount();
 
       expect(scheduleQueryUpdate).toHaveBeenCalledTimes(1);
-      expect(scheduleQueryUpdate.mock.calls[0]).toEqual([{ session: undefined }]);
+      expect(scheduleQueryUpdate.mock.calls[0]).toEqual([{ task: "task-2" }]);
     } finally {
       await harness.unmount();
     }

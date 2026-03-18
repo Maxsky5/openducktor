@@ -1436,6 +1436,70 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
+  test("surfaces stale-start cleanup failures instead of masking them", async () => {
+    const previousRepoRef = { current: "/tmp/repo" as string | null };
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    const originalStopSession = adapter.stopSession;
+    adapter.startSession = async () => {
+      previousRepoRef.current = "/tmp/other";
+      return {
+        runtimeKind: "opencode",
+        sessionId: "session-created",
+        externalSessionId: "external-created",
+        startedAt: "2026-02-22T08:00:10.000Z",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+    adapter.stopSession = async () => {
+      throw new Error("stop boom");
+    };
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef: { current: {} },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef,
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: "run-1",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(start({ taskId: "task-1", role: "build" })).rejects.toThrow(
+        "Workspace changed while starting session. Failed to stop stale started session 'session-created': stop boom",
+      );
+    } finally {
+      adapter.startSession = originalStartSession;
+      adapter.stopSession = originalStopSession;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
   test("creates a fresh session and triggers kickoff flow", async () => {
     let attachCalls = 0;
     let persistCalls = 0;

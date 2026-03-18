@@ -263,4 +263,35 @@ describe("useAgentStudioRightPanel", () => {
     expect(secondHarness.getLatest().isPanelOpen).toBe(false);
     await secondHarness.unmount();
   });
+
+  test("logs malformed persisted panel state before recovering defaults", async () => {
+    const originalError = console.error;
+    const errorCalls: unknown[][] = [];
+    console.error = (...args: unknown[]) => {
+      errorCalls.push(args);
+    };
+
+    try {
+      globalThis.localStorage.setItem(toRightPanelStorageKey(), "{bad-json");
+
+      const harness = createHookHarness({
+        role: "spec",
+        hasDocumentPanel: true,
+      });
+
+      await harness.mount();
+
+      expect(harness.getLatest().isPanelOpen).toBe(true);
+      expect(errorCalls.length).toBeGreaterThan(0);
+      expect(
+        errorCalls.some((call) =>
+          String(call[0] ?? "").includes("Failed to parse persisted panel state"),
+        ),
+      ).toBe(true);
+
+      await harness.unmount();
+    } finally {
+      console.error = originalError;
+    }
+  });
 });

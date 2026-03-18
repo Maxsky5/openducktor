@@ -20,42 +20,51 @@ describe("useNavigationUrlSync", () => {
     const setSearchParams: SetURLSearchParams = (nextInit, navigateOptions) => {
       calls.push([nextInit, navigateOptions]);
     };
+    const originalDateNow = Date.now;
+    let now = 1_000;
+    Date.now = () => now;
 
-    const harness = createHookHarness({
-      navigationType: "REPLACE",
-      searchParams: new URLSearchParams("task=task-1&agent=build&autostart=1&start=now"),
-      setSearchParams,
-    });
+    try {
+      const harness = createHookHarness({
+        navigationType: "REPLACE",
+        searchParams: new URLSearchParams("task=task-1&agent=build&autostart=1&start=now"),
+        setSearchParams,
+      });
 
-    await harness.mount();
-    expect(harness.getLatest().navigation).toMatchObject({
-      taskId: "task-1",
-      sessionId: null,
-      role: "build",
-    });
+      await harness.mount();
+      expect(harness.getLatest().navigation).toMatchObject({
+        taskId: "task-1",
+        sessionId: null,
+        role: "build",
+      });
+      calls.length = 0;
+      now += 101;
 
-    await harness.run((latest) => {
-      latest.updateQuery({ session: "session-1" });
-    });
+      await harness.run((latest) => {
+        latest.updateQuery({ session: "session-1" });
+      });
 
-    const lastCall = calls[calls.length - 1];
-    if (!lastCall) {
-      throw new Error("Expected setSearchParams to be called");
+      const lastCall = calls[calls.length - 1];
+      if (!lastCall) {
+        throw new Error("Expected setSearchParams to be called");
+      }
+
+      const [next, options] = lastCall;
+      if (!(next instanceof URLSearchParams)) {
+        throw new Error("Expected URLSearchParams");
+      }
+
+      expect(next.get("task")).toBe("task-1");
+      expect(next.get("session")).toBe("session-1");
+      expect(next.get("agent")).toBe("build");
+      expect(next.get("autostart")).toBeNull();
+      expect(next.get("start")).toBeNull();
+      expect(options).toEqual({ replace: true });
+
+      await harness.unmount();
+    } finally {
+      Date.now = originalDateNow;
     }
-
-    const [next, options] = lastCall;
-    if (!(next instanceof URLSearchParams)) {
-      throw new Error("Expected URLSearchParams");
-    }
-
-    expect(next.get("task")).toBe("task-1");
-    expect(next.get("session")).toBe("session-1");
-    expect(next.get("agent")).toBe("build");
-    expect(next.get("autostart")).toBeNull();
-    expect(next.get("start")).toBeNull();
-    expect(options).toEqual({ replace: true });
-
-    await harness.unmount();
   });
 
   test("syncs local navigation state when search params change externally", async () => {

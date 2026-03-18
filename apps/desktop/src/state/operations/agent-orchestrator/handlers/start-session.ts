@@ -9,10 +9,7 @@ import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../task-operations-model";
 import { type RuntimeInfo, resolveRuntimeConnection } from "../runtime/runtime";
-import {
-  captureOrchestratorFallback,
-  runOrchestratorSideEffect,
-} from "../support/async-side-effects";
+import { runOrchestratorSideEffect, runOrchestratorTask } from "../support/async-side-effects";
 import { createRepoStaleGuard, normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
 import { normalizePersistedSelection } from "../support/models";
 import { inferScenario, kickoffPromptWithTaskContext } from "../support/scenario";
@@ -53,14 +50,16 @@ const stopSessionOnStaleAndThrow = async ({
   startedCtx: StartedSessionContext;
 }): Promise<never> => {
   const tags = createSessionStartTags(startedCtx);
-  await captureOrchestratorFallback(
-    reason,
-    async () => runtime.adapter.stopSession(tags.sessionId),
-    {
+  try {
+    await runOrchestratorTask(reason, async () => runtime.adapter.stopSession(tags.sessionId), {
       tags,
-      fallback: () => undefined,
-    },
-  );
+    });
+  } catch (error) {
+    throw new Error(
+      `${STALE_START_ERROR} Failed to stop stale started session '${tags.sessionId}': ${errorMessage(error)}`,
+      { cause: error },
+    );
+  }
   throw new Error(STALE_START_ERROR);
 };
 

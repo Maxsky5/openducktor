@@ -299,6 +299,94 @@ describe("agent-orchestrator-ensure-ready", () => {
     }
   });
 
+  test("fails when stopping an attached error session fails", async () => {
+    let resumeCalls = 0;
+    let unsubscribeCalls = 0;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalStopSession = adapter.stopSession;
+    const originalResumeSession = adapter.resumeSession;
+    adapter.hasSession = () => true;
+    adapter.stopSession = async () => {
+      throw new Error("stop boom");
+    };
+    adapter.resumeSession = async () => {
+      resumeCalls += 1;
+      return {
+        runtimeKind: "opencode",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+
+    const sessionsRef = {
+      current: {
+        "session-1": buildSession({ status: "error" }),
+      },
+    };
+    const unsubscribersRef = {
+      current: new Map<string, () => void>([
+        [
+          "session-1",
+          () => {
+            unsubscribeCalls += 1;
+          },
+        ],
+      ]),
+    };
+
+    const ensureReady = createEnsureSessionReady({
+      activeRepo: "/tmp/repo",
+      adapter,
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef,
+      updateSession: (_sessionId, updater) => {
+        const current = sessionsRef.current["session-1"];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current["session-1"] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: "run-1",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({
+        specMarkdown: "",
+        planMarkdown: "",
+        qaMarkdown: "",
+      }),
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+    });
+
+    try {
+      await expect(ensureReady("session-1")).rejects.toThrow(
+        "Failed to stop attached error session 'session-1' before preparing it: stop boom",
+      );
+      expect(resumeCalls).toBe(0);
+      expect(unsubscribeCalls).toBe(0);
+      expect(unsubscribersRef.current.has("session-1")).toBe(true);
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.stopSession = originalStopSession;
+      adapter.resumeSession = originalResumeSession;
+    }
+  });
+
   test("stops resumed session when workspace becomes stale after resume", async () => {
     const previousRepoRef = { current: "/tmp/repo" as string | null };
     let stopCalls = 0;
@@ -368,6 +456,80 @@ describe("agent-orchestrator-ensure-ready", () => {
         "Workspace changed while preparing session.",
       );
       expect(stopCalls).toBe(1);
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.stopSession = originalStopSession;
+      adapter.resumeSession = originalResumeSession;
+    }
+  });
+
+  test("surfaces stale-resume cleanup failures instead of masking them", async () => {
+    const previousRepoRef = { current: "/tmp/repo" as string | null };
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalStopSession = adapter.stopSession;
+    const originalResumeSession = adapter.resumeSession;
+    adapter.hasSession = () => false;
+    adapter.stopSession = async () => {
+      throw new Error("stop boom");
+    };
+    adapter.resumeSession = async () => {
+      previousRepoRef.current = "/tmp/other";
+      return {
+        runtimeKind: "opencode",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+
+    const sessionsRef = {
+      current: {
+        "session-1": buildSession({ status: "idle" }),
+      },
+    };
+
+    const ensureReady = createEnsureSessionReady({
+      activeRepo: "/tmp/repo",
+      adapter,
+      repoEpochRef: { current: 1 },
+      previousRepoRef,
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef: { current: new Map() },
+      updateSession: (_sessionId, updater) => {
+        const current = sessionsRef.current["session-1"];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current["session-1"] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: "run-1",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({
+        specMarkdown: "",
+        planMarkdown: "",
+        qaMarkdown: "",
+      }),
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+    });
+
+    try {
+      await expect(ensureReady("session-1")).rejects.toThrow(
+        "Workspace changed while preparing session. Failed to stop stale resumed session 'session-1': stop boom",
+      );
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;

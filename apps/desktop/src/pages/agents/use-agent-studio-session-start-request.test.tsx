@@ -37,7 +37,7 @@ describe("useAgentStudioSessionStartRequest", () => {
       expect(harness.getLatest().pendingSessionStartRequest?.requestId).toBe("session-start-0");
 
       await harness.run((state) => {
-        state.resolvePendingSessionStart({ selectedModel: null });
+        state.resolvePendingSessionStart("session-start-0", { selectedModel: null });
       });
 
       await harness.waitFor(() => decision !== undefined);
@@ -72,6 +72,49 @@ describe("useAgentStudioSessionStartRequest", () => {
       expect(firstDecision).toBeNull();
       expect(harness.getLatest().pendingSessionStartRequest?.taskId).toBe("task-2");
       expect(harness.getLatest().pendingSessionStartRequest?.requestId).toBe("session-start-1");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("ignores late resolution from a superseded request", async () => {
+    const harness = createHookHarness();
+
+    try {
+      await harness.mount();
+
+      let firstDecision: unknown;
+      let secondDecision: unknown;
+
+      await harness.run((state) => {
+        void state.requestNewSessionStart(createRequest()).then((result) => {
+          firstDecision = result;
+        });
+      });
+
+      const firstRequestId = harness.getLatest().pendingSessionStartRequest?.requestId;
+      if (!firstRequestId) {
+        throw new Error("Expected first pending request id");
+      }
+
+      await harness.run((state) => {
+        void state
+          .requestNewSessionStart({ ...createRequest(), taskId: "task-2" })
+          .then((result) => {
+            secondDecision = result;
+          });
+      });
+
+      await harness.waitFor(() => firstDecision !== undefined);
+      expect(firstDecision).toBeNull();
+      expect(harness.getLatest().pendingSessionStartRequest?.requestId).toBe("session-start-1");
+
+      await harness.run((state) => {
+        state.resolvePendingSessionStart(firstRequestId, { selectedModel: null });
+      });
+
+      expect(harness.getLatest().pendingSessionStartRequest?.requestId).toBe("session-start-1");
+      expect(secondDecision).toBeUndefined();
     } finally {
       await harness.unmount();
     }
