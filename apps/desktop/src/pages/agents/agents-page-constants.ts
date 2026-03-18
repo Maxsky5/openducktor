@@ -4,7 +4,7 @@ import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import { AGENT_ROLE_LABELS } from "@/types";
 
 export {
-  buildRebaseConflictResolutionPrompt,
+  buildGitConflictResolutionPrompt,
   firstScenario,
   isScenario,
   kickoffPromptForScenario,

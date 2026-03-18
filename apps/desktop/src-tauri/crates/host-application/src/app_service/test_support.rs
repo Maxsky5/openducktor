@@ -18,8 +18,9 @@ use super::{
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentSessionDocument, AgentWorkflows, CreateTaskInput, DirectMergeRecord, GitAheadBehind,
-    GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitDiffScope,
-    GitFileDiff, GitFileStatus, GitFileStatusCounts, GitMergeBranchRequest, GitMergeBranchResult,
+    GitBranch, GitCommitAllRequest, GitCommitAllResult, GitConflictAbortRequest,
+    GitConflictAbortResult, GitConflictOperation, GitCurrentBranch, GitDiffScope, GitFileDiff,
+    GitFileStatus, GitFileStatusCounts, GitMergeBranchRequest, GitMergeBranchResult,
     GitMergeMethod, GitPort, GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest,
     GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind,
     GitWorktreeStatusData, GitWorktreeStatusSummaryData, IssueType, PlanSubtaskInput,
@@ -500,6 +501,11 @@ pub(crate) enum GitCall {
         repo_path: String,
         working_dir: Option<String>,
     },
+    AbortConflict {
+        repo_path: String,
+        operation: GitConflictOperation,
+        working_dir: Option<String>,
+    },
     MergeBranch {
         repo_path: String,
         source_branch: String,
@@ -515,6 +521,10 @@ pub(crate) enum GitCall {
         repo_path: String,
         target_branch: String,
         diff_scope: GitDiffScope,
+    },
+    CommitsAheadBehind {
+        repo_path: String,
+        target_branch: String,
     },
 }
 
@@ -533,7 +543,9 @@ pub(crate) struct GitState {
     pub(crate) commit_all_result: GitCommitAllResult,
     pub(crate) rebase_branch_result: GitRebaseBranchResult,
     pub(crate) rebase_abort_result: GitRebaseAbortResult,
+    pub(crate) conflict_abort_result: GitConflictAbortResult,
     pub(crate) merge_branch_result: GitMergeBranchResult,
+    pub(crate) commits_ahead_behind_result: GitAheadBehind,
 }
 
 #[derive(Clone)]
@@ -696,6 +708,24 @@ impl GitPort for FakeGitPort {
         Ok(state.rebase_abort_result.clone())
     }
 
+    fn abort_conflict(
+        &self,
+        repo_path: &Path,
+        request: GitConflictAbortRequest,
+    ) -> Result<GitConflictAbortResult> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        let GitConflictAbortRequest {
+            operation,
+            working_dir,
+        } = request;
+        state.calls.push(GitCall::AbortConflict {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            operation,
+            working_dir,
+        });
+        Ok(state.conflict_abort_result.clone())
+    }
+
     fn merge_branch(
         &self,
         repo_path: &Path,
@@ -841,13 +871,15 @@ impl GitPort for FakeGitPort {
 
     fn commits_ahead_behind(
         &self,
-        _repo_path: &Path,
-        _target_branch: &str,
+        repo_path: &Path,
+        target_branch: &str,
     ) -> Result<GitAheadBehind> {
-        Ok(GitAheadBehind {
-            ahead: 0,
-            behind: 0,
-        })
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::CommitsAheadBehind {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            target_branch: target_branch.to_string(),
+        });
+        Ok(state.commits_ahead_behind_result.clone())
     }
 }
 
@@ -921,8 +953,15 @@ pub(crate) fn build_service_with_git_state_enforced(
         rebase_abort_result: GitRebaseAbortResult::Aborted {
             output: "rebase aborted".to_string(),
         },
+        conflict_abort_result: GitConflictAbortResult {
+            output: "conflict aborted".to_string(),
+        },
         merge_branch_result: GitMergeBranchResult::Merged {
             output: "merge completed".to_string(),
+        },
+        commits_ahead_behind_result: GitAheadBehind {
+            ahead: 0,
+            behind: 0,
         },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
@@ -992,8 +1031,15 @@ pub(crate) fn build_service_with_git_state(
         rebase_abort_result: GitRebaseAbortResult::Aborted {
             output: "rebase aborted".to_string(),
         },
+        conflict_abort_result: GitConflictAbortResult {
+            output: "conflict aborted".to_string(),
+        },
         merge_branch_result: GitMergeBranchResult::Merged {
             output: "merge completed".to_string(),
+        },
+        commits_ahead_behind_result: GitAheadBehind {
+            ahead: 0,
+            behind: 0,
         },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
@@ -1414,8 +1460,15 @@ pub(crate) fn build_service_with_store(
         rebase_abort_result: GitRebaseAbortResult::Aborted {
             output: "rebase aborted".to_string(),
         },
+        conflict_abort_result: GitConflictAbortResult {
+            output: "conflict aborted".to_string(),
+        },
         merge_branch_result: GitMergeBranchResult::Merged {
             output: "merge completed".to_string(),
+        },
+        commits_ahead_behind_result: GitAheadBehind {
+            ahead: 0,
+            behind: 0,
         },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {

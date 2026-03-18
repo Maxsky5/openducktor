@@ -49,10 +49,11 @@ export type BuildAgentKickoffPromptInput = {
 };
 
 export type AgentPromptGitContext = {
+  operationLabel?: string;
   currentBranch?: string;
   targetBranch?: string;
   conflictedFiles?: string[];
-  rebaseOutput?: string;
+  conflictOutput?: string;
 };
 
 export type AgentMessageTemplateId = Extract<AgentPromptTemplateId, `message.${string}`>;
@@ -282,10 +283,10 @@ Incorporate requested changes and provide a clean completion summary via odt_bui
   "system.scenario.build_rebase_conflict_resolution": {
     id: "system.scenario.build_rebase_conflict_resolution",
     purpose: "system",
-    builtinVersion: 1,
-    template: `Scenario: Rebase conflict resolution.
-The worktree is paused in an in-progress git rebase. Resolve conflicts safely, continue the rebase, and rerun relevant checks.
-Do not call odt_build_completed unless the task itself is actually complete after the rebase is resolved.`,
+    builtinVersion: 2,
+    template: `Scenario: Git conflict resolution.
+The worktree is paused on an in-progress git conflict. Resolve it safely, continue or complete the interrupted git operation, and rerun relevant checks.
+Do not call odt_build_completed unless the task itself is actually complete after the conflict is resolved.`,
   },
   "system.scenario.qa_review": {
     id: "system.scenario.qa_review",
@@ -366,16 +367,17 @@ Task context:
   "message.build_rebase_conflict_resolution": {
     id: "message.build_rebase_conflict_resolution",
     purpose: "message",
-    builtinVersion: 1,
-    template: `Resolve the current git rebase conflict in this worktree.
+    builtinVersion: 2,
+    template: `Resolve the current git conflict in this worktree.
+- operation: {{git.operationLabel}}
 - currentBranch: {{git.currentBranch}}
 - targetBranch: {{git.targetBranch}}
 - conflictedFiles:
 {{git.conflictedFiles}}
-- rebaseOutput:
-{{git.rebaseOutput}}
+- gitOutput:
+{{git.conflictOutput}}
 
-Continue the rebase after resolving the conflicts, run the relevant checks for the touched code, and reply with a concise summary.
+Continue or complete the interrupted git operation after resolving the conflicts, run the relevant checks for the touched code, and reply with a concise summary.
 Use taskId {{task.id}} for any odt_* tool calls.`,
   },
   "permission.read_only.reject": {
@@ -458,10 +460,11 @@ const buildPlaceholderValues = ({
     "task.latestQaReportMarkdown": compact(task.latestQaReportMarkdown),
     ...(git
       ? {
+          "git.operationLabel": compact(git.operationLabel),
           "git.currentBranch": compact(git.currentBranch),
           "git.targetBranch": compact(git.targetBranch),
           "git.conflictedFiles": compactList(git.conflictedFiles),
-          "git.rebaseOutput": compact(git.rebaseOutput),
+          "git.conflictOutput": compact(git.conflictOutput),
         }
       : {}),
   };
@@ -610,6 +613,37 @@ export const buildAgentKickoffPrompt = (input: BuildAgentKickoffPromptInput): st
 export const buildAgentMessagePromptBundle = (
   input: BuildAgentMessagePromptInput,
 ): BuiltAgentPrompt => {
+  if (input.templateId === "message.build_rebase_conflict_resolution") {
+    const currentBranch = input.git?.currentBranch?.trim();
+    const operationLabel = input.git?.operationLabel?.trim();
+    const targetBranch = input.git?.targetBranch?.trim();
+    const conflictedFiles = input.git?.conflictedFiles;
+    const conflictOutput = input.git?.conflictOutput?.trim();
+    const missingFields: string[] = [];
+
+    if (!operationLabel) {
+      missingFields.push("operationLabel");
+    }
+    if (!currentBranch) {
+      missingFields.push("currentBranch");
+    }
+    if (!targetBranch) {
+      missingFields.push("targetBranch");
+    }
+    if (!Array.isArray(conflictedFiles) || conflictedFiles.length === 0) {
+      missingFields.push("conflictedFiles");
+    }
+    if (!conflictOutput) {
+      missingFields.push("conflictOutput");
+    }
+
+    if (missingFields.length > 0) {
+      throw new Error(
+        `Missing required git conflict context for "message.build_rebase_conflict_resolution": ${missingFields.join(", ")}.`,
+      );
+    }
+  }
+
   return buildPromptFromTemplates({
     templateIds: [input.templateId],
     role: input.role,

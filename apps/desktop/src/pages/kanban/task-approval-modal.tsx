@@ -1,4 +1,4 @@
-import { Check, LoaderCircle } from "lucide-react";
+import { ArrowRight, Check, LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { canonicalTargetBranch } from "@/lib/target-branch";
 import { cn } from "@/lib/utils";
 import type {
   PullRequestDraftMode,
@@ -91,7 +92,7 @@ function SegmentedTabs<TValue extends string>({
 }): ReactElement {
   return (
     <div
-      className="inline-flex h-10 w-full items-center gap-2 rounded-lg bg-muted p-1"
+      className="inline-flex min-h-11 w-full items-center gap-2 rounded-xl bg-muted/70 p-1"
       role="tablist"
       aria-label={ariaLabel}
     >
@@ -105,7 +106,7 @@ function SegmentedTabs<TValue extends string>({
             aria-selected={isActive}
             disabled={disabled || option.disabled}
             className={cn(
-              "inline-flex h-8 flex-1 cursor-pointer items-center justify-center rounded-md px-3 text-sm font-medium transition-colors",
+              "inline-flex h-9 flex-1 cursor-pointer items-center justify-center rounded-lg px-3 text-sm font-medium transition-colors",
               isActive
                 ? "bg-primary text-primary-foreground shadow-sm"
                 : "text-muted-foreground hover:bg-background hover:text-foreground",
@@ -144,10 +145,10 @@ function OptionCard<TValue extends string>({
       disabled={disabled}
       onClick={() => onSelect(value)}
       className={cn(
-        "group grid min-h-32 cursor-pointer gap-1 rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+        "group grid min-h-36 cursor-pointer gap-2 rounded-2xl border p-5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
         isSelected
-          ? "border-info-border bg-info-surface"
-          : "border-border bg-card text-foreground hover:border-input hover:bg-muted",
+          ? "border-info-border bg-info-surface shadow-sm"
+          : "border-border bg-card text-foreground hover:border-input hover:bg-muted/60",
         disabled && "pointer-events-none opacity-50",
       )}
     >
@@ -189,15 +190,34 @@ export function TaskApprovalModal({
     model.isSubmitting ||
     model.hasUncommittedChanges ||
     hasManualPullRequestValidationError;
-  const title = model.stage === "push_target" ? "Push Target Branch" : "Approve Task";
-  const description =
-    model.stage === "push_target"
-      ? `The task is already closed locally. Push ${model.publishTarget ?? model.targetBranch} now if you want to publish the merge.`
-      : "Choose whether to merge the builder branch directly or create/update a pull request.";
+  const isCompletionStage = model.stage === "complete_direct_merge";
+  const hasPublishTarget = model.publishTarget !== null;
+  const hasCompletionBranchContext = model.targetBranch !== null;
+  const completionContextError =
+    isCompletionStage && !hasCompletionBranchContext
+      ? "Missing target branch for direct-merge completion. Refresh approval context and retry."
+      : null;
+  const localBranchName = model.targetBranch ? model.targetBranch.branch : "";
+  const publishTargetLabel = model.publishTarget ? canonicalTargetBranch(model.publishTarget) : "";
+  const publishTargetBranchName = model.publishTarget?.branch ?? "";
+
+  let title = "Approve Task";
+  let description =
+    "Choose how to finish this task: merge it locally now, or create and update a pull request.";
+  if (isCompletionStage && hasPublishTarget) {
+    title = "Publish And Mark Done";
+    description = `The local merge is already applied. Push ${publishTargetLabel} to publish it, then move the task to Done.`;
+  } else if (isCompletionStage) {
+    title = "Complete Direct Merge";
+    description =
+      "The local merge is already applied. Finish the direct merge workflow to move the task to Done and clean up the builder workspace.";
+  }
   const dirtyWorktreeMessage =
     model.uncommittedFileCount === 1
       ? "The builder worktree has 1 uncommitted file. Commit or discard it before approving this task."
       : `The builder worktree has ${model.uncommittedFileCount} uncommitted files. Commit or discard them before approving this task.`;
+  const sectionLabelClass =
+    "text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground";
   const actionOptions = APPROVAL_ACTION_OPTIONS.map((option) => ({
     value: option.value,
     label: option.label,
@@ -208,6 +228,23 @@ export function TaskApprovalModal({
     confirmLabel =
       model.pullRequestDraftMode === "manual" ? "Create Pull Request" : "Generate And Create";
   }
+  let completionButtonLabel = "Mark Task Done";
+  if (model.isSubmitting && hasPublishTarget) {
+    completionButtonLabel = `Publishing ${publishTargetBranchName}`;
+  } else if (model.isSubmitting) {
+    completionButtonLabel = "Completing Direct Merge";
+  } else if (hasPublishTarget) {
+    completionButtonLabel = `Push ${publishTargetBranchName} And Mark Done`;
+  }
+  let completionStageDescription =
+    "Finish later to keep the task in Human Review until you are ready to close it and clean up the builder workspace.";
+  if (hasPublishTarget) {
+    completionStageDescription =
+      "Finish later to keep the task in Human Review while the local merge stays ready to publish.";
+  }
+  const completionActionDisabled = model.isSubmitting || completionContextError !== null;
+  const finishLaterDisabled = model.isSubmitting;
+  const completionErrorMessage = completionContextError ?? model.errorMessage;
 
   return (
     <Dialog
@@ -218,16 +255,16 @@ export function TaskApprovalModal({
         }
       }}
     >
-      <DialogContent className="max-w-3xl">
-        <DialogHeader className="space-y-3">
+      <DialogContent className="max-w-3xl overflow-hidden p-0">
+        <DialogHeader className="space-y-3 border-b border-border/80 px-6 py-6 pr-16 sm:px-8 sm:pr-20">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         {model.stage === "approval" ? (
-          <div className="space-y-5 pt-2">
+          <div className="space-y-6 px-6 py-6 sm:px-8">
             {model.isLoading ? (
-              <div className="flex min-h-56 items-center justify-center rounded-xl border border-border bg-muted/30">
+              <div className="flex min-h-56 items-center justify-center rounded-2xl border border-border bg-muted/30 px-6">
                 <div className="flex flex-col items-center gap-3 text-center">
                   <LoaderCircle className="size-6 animate-spin text-primary" />
                   <div className="space-y-1">
@@ -243,21 +280,21 @@ export function TaskApprovalModal({
             ) : (
               <>
                 {model.hasUncommittedChanges ? (
-                  <div className="grid gap-1 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
+                  <div className="grid gap-1 rounded-2xl border border-border bg-muted p-4 text-foreground">
                     <p className="text-sm font-semibold">Uncommitted changes detected</p>
                     <p className="text-sm">{dirtyWorktreeMessage}</p>
                   </div>
                 ) : null}
 
                 {model.errorMessage ? (
-                  <div className="grid gap-1 rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive">
+                  <div className="grid gap-1 rounded-2xl border border-destructive/20 bg-destructive/10 p-4 text-destructive">
                     <p className="text-sm font-semibold">Approval failed</p>
                     <p className="text-sm">{model.errorMessage}</p>
                   </div>
                 ) : null}
 
                 <div className="space-y-3">
-                  <Label>Approval Action</Label>
+                  <Label className={sectionLabelClass}>Approval Action</Label>
                   <SegmentedTabs
                     ariaLabel="Approval action"
                     value={model.mode}
@@ -274,7 +311,7 @@ export function TaskApprovalModal({
 
                 {model.mode === "direct_merge" ? (
                   <div className="space-y-3">
-                    <Label>Merge Method</Label>
+                    <Label className={sectionLabelClass}>Merge Method</Label>
                     <div className="grid gap-3 md:grid-cols-3">
                       {MERGE_METHOD_OPTIONS.map((option) => (
                         <OptionCard
@@ -292,7 +329,7 @@ export function TaskApprovalModal({
                 ) : (
                   <div className="space-y-5">
                     <div className="space-y-3">
-                      <Label>Pull Request Draft</Label>
+                      <Label className={sectionLabelClass}>Pull Request Draft</Label>
                       <div className="grid gap-3 md:grid-cols-2">
                         {PULL_REQUEST_DRAFT_OPTIONS.map((option) => (
                           <OptionCard
@@ -309,7 +346,7 @@ export function TaskApprovalModal({
                     </div>
 
                     {model.pullRequestDraftMode === "manual" ? (
-                      <div className="grid gap-4 rounded-xl border border-border bg-card p-4">
+                      <div className="grid gap-4 rounded-2xl border border-border bg-card p-5">
                         <div className="grid gap-2">
                           <Label htmlFor="task-approval-pr-title">Pull Request Title</Label>
                           <Input
@@ -332,7 +369,7 @@ export function TaskApprovalModal({
                         </div>
                       </div>
                     ) : (
-                      <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                      <div className="rounded-2xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
                         OpenDucktor will fork the latest Builder session, generate the pull request
                         title and description in the background, then create or update the pull
                         request.
@@ -356,27 +393,122 @@ export function TaskApprovalModal({
           </div>
         ) : null}
 
-        {model.stage === "push_target" ? (
-          <div className="rounded-md border border-border bg-muted/60 p-3 text-sm text-muted-foreground">
-            The merge is already applied locally on{" "}
-            <span className="font-mono">{model.targetBranch}</span>.
+        {isCompletionStage ? (
+          <div className="grid gap-4 px-6 py-6 sm:px-8">
+            {completionErrorMessage ? (
+              <div className="grid gap-1 rounded-2xl border border-destructive/20 bg-destructive/10 p-4 text-destructive">
+                <p className="text-sm font-semibold">Direct merge completion failed</p>
+                <p className="text-sm">{completionErrorMessage}</p>
+              </div>
+            ) : null}
+
+            {completionContextError ? null : (
+              <>
+                <div className="rounded-2xl border border-info-border bg-info-surface p-5">
+                  <div className="flex items-start gap-4">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-info-border/60 bg-card/70 text-info-muted">
+                      <Check className="size-5" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-sm font-semibold text-info-surface-foreground">
+                        Local merge ready
+                      </p>
+                      <p className="text-sm leading-6 text-info-surface-foreground">
+                        The direct merge is already applied on this machine for{" "}
+                        <span className="font-mono text-[13px]">{localBranchName}</span> on this
+                        task.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-card p-5">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-foreground">Next step</p>
+                    {hasPublishTarget ? (
+                      <p className="text-sm leading-6 text-muted-foreground">
+                        Push{" "}
+                        <span className="font-mono text-[13px] text-foreground">
+                          {publishTargetLabel}
+                        </span>{" "}
+                        to publish the merged target branch, then move the task to Done and clean up
+                        the builder workspace.
+                      </p>
+                    ) : (
+                      <p className="text-sm leading-6 text-muted-foreground">
+                        Move the task to Done and clean up the builder workspace. The merge is
+                        already applied locally on{" "}
+                        <span className="font-mono text-[13px] text-foreground">
+                          {localBranchName}
+                        </span>
+                        .
+                      </p>
+                    )}
+                  </div>
+
+                  <div
+                    className={cn(
+                      "mt-4 grid gap-3",
+                      hasPublishTarget &&
+                        "md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center",
+                    )}
+                  >
+                    <div className="rounded-xl border border-border bg-muted/40 p-4">
+                      <p className={sectionLabelClass}>Local Branch</p>
+                      <p className="mt-2 font-mono text-sm text-foreground">{localBranchName}</p>
+                    </div>
+
+                    {hasPublishTarget ? (
+                      <>
+                        <div className="hidden justify-center md:flex">
+                          <ArrowRight className="size-4 text-muted-foreground" />
+                        </div>
+
+                        <div className="rounded-xl border border-border bg-muted/40 p-4">
+                          <p className={sectionLabelClass}>Remote To Update</p>
+                          <p className="mt-2 font-mono text-sm text-foreground">
+                            {publishTargetLabel}
+                          </p>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         ) : null}
 
-        <DialogFooter className="justify-between">
-          {model.stage === "push_target" ? (
+        <DialogFooter
+          className={cn(
+            "mt-0 border-t border-border/80 bg-muted/20 px-6 py-4 sm:px-8",
+            isCompletionStage
+              ? "flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+              : "flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between",
+          )}
+        >
+          {isCompletionStage ? (
             <>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={model.isSubmitting}
-                onClick={model.onSkipPush}
-              >
-                Skip
-              </Button>
-              <Button type="button" disabled={model.isSubmitting} onClick={model.onConfirmPush}>
-                Push Target Branch
-              </Button>
+              <p className="text-sm text-muted-foreground">{completionStageDescription}</p>
+
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={finishLaterDisabled}
+                  onClick={model.onSkipDirectMergeCompletion}
+                >
+                  Finish Later
+                </Button>
+                <Button
+                  type="button"
+                  disabled={completionActionDisabled}
+                  onClick={model.onCompleteDirectMerge}
+                >
+                  {model.isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}
+                  {completionButtonLabel}
+                </Button>
+              </div>
             </>
           ) : (
             <>
@@ -389,6 +521,7 @@ export function TaskApprovalModal({
                 Cancel
               </Button>
               <Button type="button" disabled={confirmDisabled} onClick={model.onConfirm}>
+                {model.isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}
                 {confirmLabel}
               </Button>
             </>

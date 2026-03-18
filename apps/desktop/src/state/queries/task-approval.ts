@@ -2,8 +2,6 @@ import type { TaskApprovalContext } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { host } from "../operations/host";
 
-const TASK_APPROVAL_CONTEXT_STALE_TIME_MS = 60_000;
-
 const taskApprovalQueryKeys = {
   all: ["task-approval"] as const,
   context: (repoPath: string, taskId: string) =>
@@ -14,7 +12,7 @@ const taskApprovalContextQueryOptions = (repoPath: string, taskId: string) =>
   queryOptions({
     queryKey: taskApprovalQueryKeys.context(repoPath, taskId),
     queryFn: (): Promise<TaskApprovalContext> => host.taskApprovalContextGet(repoPath, taskId),
-    staleTime: TASK_APPROVAL_CONTEXT_STALE_TIME_MS,
+    staleTime: 0,
   });
 
 export const loadTaskApprovalContextFromQuery = (
@@ -23,3 +21,12 @@ export const loadTaskApprovalContextFromQuery = (
   taskId: string,
 ): Promise<TaskApprovalContext> =>
   queryClient.fetchQuery(taskApprovalContextQueryOptions(repoPath, taskId));
+
+export const invalidateTaskApprovalContextQuery = (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+): Promise<void> =>
+  queryClient.invalidateQueries({
+    queryKey: taskApprovalQueryKeys.context(repoPath, taskId),
+  });

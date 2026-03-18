@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use host_infra_system::resolve_command_path;
+use host_infra_system::{bundled_command, resolve_command_path};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -46,6 +46,10 @@ pub(crate) fn resolve_opencode_binary_path() -> Option<String> {
         if !trimmed.is_empty() {
             return Some(trimmed.to_string());
         }
+    }
+
+    if let Some(resolved) = bundled_command("opencode") {
+        return Some(resolved);
     }
 
     if let Some(resolved) = resolve_opencode_binary_from_path() {

@@ -6,10 +6,11 @@ use std::{
 use anyhow::anyhow;
 use host_domain::GitPort;
 use host_domain::{
-    GitAheadBehind, GitBranch, GitCommitAllRequest, GitCurrentBranch, GitDiffScope, GitFileDiff,
-    GitFileStatus, GitMergeBranchRequest, GitMergeBranchResult, GitPullRequest, GitPullResult,
-    GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest,
-    GitRebaseBranchResult, GitWorktreeStatusData, GitWorktreeStatusSummaryData,
+    GitAheadBehind, GitBranch, GitCommitAllRequest, GitConflictAbortRequest,
+    GitConflictAbortResult, GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus,
+    GitMergeBranchRequest, GitMergeBranchResult, GitPullRequest, GitPullResult, GitPushResult,
+    GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
+    GitWorktreeStatusData, GitWorktreeStatusSummaryData,
 };
 
 #[derive(Clone)]
@@ -183,6 +184,14 @@ impl GitPort for CommandGitPort {
         _request: GitRebaseAbortRequest,
     ) -> anyhow::Result<GitRebaseAbortResult> {
         panic!("unexpected call: rebase_abort");
+    }
+
+    fn abort_conflict(
+        &self,
+        _repo_path: &Path,
+        _request: GitConflictAbortRequest,
+    ) -> anyhow::Result<GitConflictAbortResult> {
+        panic!("unexpected call: abort_conflict");
     }
 
     fn merge_branch(

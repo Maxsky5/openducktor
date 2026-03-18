@@ -901,7 +901,7 @@ describe("AgentStudioGitPanel", () => {
           model: baseModel({
             isGitActionsLocked: true,
             gitActionsLockReason: "Git actions are disabled while the Builder session is working.",
-            rebaseConflict: {
+            gitConflict: {
               operation: "rebase",
               currentBranch: "feature/task-11",
               targetBranch: "origin/main",
@@ -927,14 +927,14 @@ describe("AgentStudioGitPanel", () => {
 
     const root = getRoot(renderer);
     expect(countByTestId(root, "agent-studio-git-lock-reason")).toBe(0);
-    expect(findByTestId(root, "agent-studio-git-rebase-strip")).toBeTruthy();
-    expect(
-      getNodeText(findByTestId(root, "agent-studio-git-rebase-conflict-count-badge")),
-    ).toContain("2 conflicted files");
+    expect(findByTestId(root, "agent-studio-git-conflict-strip")).toBeTruthy();
+    expect(getNodeText(findByTestId(root, "agent-studio-git-conflict-count-badge"))).toContain(
+      "2 conflicted files",
+    );
     expect(findByTestId(root, "agent-studio-git-view-conflict-details-button")).toBeTruthy();
-    expect(findByTestId(root, "agent-studio-git-abort-rebase-strip-button")).toBeTruthy();
-    expect(findByTestId(root, "agent-studio-git-ask-builder-strip-button")).toBeTruthy();
-    expect(countByTestId(root, "agent-studio-git-rebase-conflict-modal")).toBe(0);
+    expect(findByTestId(root, "agent-studio-git-abort-conflict-strip-button")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-ask-builder-conflict-strip-button")).toBeTruthy();
+    expect(countByTestId(root, "agent-studio-git-conflict-modal")).toBe(0);
     expect(findByTestId(root, "agent-studio-git-force-push-modal")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-confirm-force-push-button")).toBeTruthy();
     expect(getNodeText(findByTestId(root, "agent-studio-git-force-push-safety-note"))).toContain(
@@ -957,9 +957,9 @@ describe("AgentStudioGitPanel", () => {
       await flush();
     });
 
-    expect(findByTestId(root, "agent-studio-git-rebase-conflict-modal")).toBeTruthy();
-    expect(findByTestId(root, "agent-studio-git-abort-rebase-button")).toBeTruthy();
-    expect(findByTestId(root, "agent-studio-git-ask-builder-button")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-conflict-modal")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-abort-conflict-button")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-ask-builder-conflict-button")).toBeTruthy();
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
@@ -1024,7 +1024,7 @@ describe("AgentStudioGitPanel", () => {
       renderer = TestRenderer.create(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
-            rebaseConflict: {
+            gitConflict: {
               operation: "pull_rebase",
               currentBranch: "feature/task-11",
               targetBranch: "tracked upstream branch",
@@ -1039,10 +1039,10 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const root = getRoot(renderer);
-    expect(getNodeText(findByTestId(root, "agent-studio-git-rebase-strip"))).toContain(
+    expect(getNodeText(findByTestId(root, "agent-studio-git-conflict-strip"))).toContain(
       "Pull with rebase in progress",
     );
-    expect(countByTestId(root, "agent-studio-git-rebase-conflict-modal")).toBe(0);
+    expect(countByTestId(root, "agent-studio-git-conflict-modal")).toBe(0);
     expect(hasVisibleText(root, "tracked upstream branch")).toBe(true);
 
     await act(async () => {
@@ -1050,7 +1050,7 @@ describe("AgentStudioGitPanel", () => {
       await flush();
     });
 
-    expect(getNodeText(findByTestId(root, "agent-studio-git-rebase-conflict-modal"))).toContain(
+    expect(getNodeText(findByTestId(root, "agent-studio-git-conflict-modal"))).toContain(
       "Pull with rebase conflict detected",
     );
 
@@ -1068,7 +1068,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const persistedConflictModel = baseModel({
-      rebaseConflict: {
+      gitConflict: {
         operation: "rebase",
         currentBranch: "feature/task-11",
         targetBranch: "origin/main",
@@ -1086,11 +1086,11 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const root = getRoot(renderer);
-    expect(countByTestId(root, "agent-studio-git-rebase-conflict-modal")).toBe(0);
+    expect(countByTestId(root, "agent-studio-git-conflict-modal")).toBe(0);
 
     const actionConflictModel = baseModel({
-      rebaseConflictAutoOpenNonce: 1,
-      rebaseConflict: {
+      gitConflictAutoOpenNonce: 1,
+      gitConflict: {
         operation: "rebase",
         currentBranch: "feature/task-11",
         targetBranch: "origin/main",
@@ -1107,7 +1107,7 @@ describe("AgentStudioGitPanel", () => {
       await flush();
     });
 
-    expect(findByTestId(root, "agent-studio-git-rebase-conflict-modal")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-conflict-modal")).toBeTruthy();
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
@@ -1123,10 +1123,10 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const abortPendingModel = baseModel({
-      isHandlingRebaseConflict: true,
-      rebaseConflictAction: "abort",
-      rebaseConflictAutoOpenNonce: 1,
-      rebaseConflict: {
+      isHandlingGitConflict: true,
+      gitConflictAction: "abort",
+      gitConflictAutoOpenNonce: 1,
+      gitConflict: {
         operation: "rebase",
         currentBranch: "feature/task-11",
         targetBranch: "origin/main",
@@ -1144,20 +1144,22 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const root = getRoot(renderer);
-    expect(getNodeText(findByTestId(root, "agent-studio-git-abort-rebase-button"))).toContain(
-      "Aborting...",
-    );
-    expect(Boolean(findByTestId(root, "agent-studio-git-abort-rebase-button").props.disabled)).toBe(
-      true,
-    );
-    expect(Boolean(findByTestId(root, "agent-studio-git-ask-builder-button").props.disabled)).toBe(
-      true,
-    );
-    expect(getNodeText(findByTestId(root, "agent-studio-git-abort-rebase-strip-button"))).toContain(
+    expect(getNodeText(findByTestId(root, "agent-studio-git-abort-conflict-button"))).toContain(
       "Aborting...",
     );
     expect(
-      Boolean(findByTestId(root, "agent-studio-git-ask-builder-strip-button").props.disabled),
+      Boolean(findByTestId(root, "agent-studio-git-abort-conflict-button").props.disabled),
+    ).toBe(true);
+    expect(
+      Boolean(findByTestId(root, "agent-studio-git-ask-builder-conflict-button").props.disabled),
+    ).toBe(true);
+    expect(
+      getNodeText(findByTestId(root, "agent-studio-git-abort-conflict-strip-button")),
+    ).toContain("Aborting...");
+    expect(
+      Boolean(
+        findByTestId(root, "agent-studio-git-ask-builder-conflict-strip-button").props.disabled,
+      ),
     ).toBe(true);
 
     await act(async () => {
@@ -1174,10 +1176,10 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const askBuilderPendingModel = baseModel({
-      isHandlingRebaseConflict: true,
-      rebaseConflictAction: "ask_builder",
-      rebaseConflictAutoOpenNonce: 1,
-      rebaseConflict: {
+      isHandlingGitConflict: true,
+      gitConflictAction: "ask_builder",
+      gitConflictAutoOpenNonce: 1,
+      gitConflict: {
         operation: "rebase",
         currentBranch: "feature/task-11",
         targetBranch: "origin/main",
@@ -1195,20 +1197,20 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const root = getRoot(renderer);
-    expect(getNodeText(findByTestId(root, "agent-studio-git-ask-builder-button"))).toContain(
-      "Sending to Builder...",
-    );
-    expect(Boolean(findByTestId(root, "agent-studio-git-abort-rebase-button").props.disabled)).toBe(
-      true,
-    );
-    expect(Boolean(findByTestId(root, "agent-studio-git-ask-builder-button").props.disabled)).toBe(
-      true,
-    );
-    expect(getNodeText(findByTestId(root, "agent-studio-git-ask-builder-strip-button"))).toContain(
-      "Sending to Builder...",
-    );
     expect(
-      Boolean(findByTestId(root, "agent-studio-git-abort-rebase-strip-button").props.disabled),
+      getNodeText(findByTestId(root, "agent-studio-git-ask-builder-conflict-button")),
+    ).toContain("Sending to Builder...");
+    expect(
+      Boolean(findByTestId(root, "agent-studio-git-abort-conflict-button").props.disabled),
+    ).toBe(true);
+    expect(
+      Boolean(findByTestId(root, "agent-studio-git-ask-builder-conflict-button").props.disabled),
+    ).toBe(true);
+    expect(
+      getNodeText(findByTestId(root, "agent-studio-git-ask-builder-conflict-strip-button")),
+    ).toContain("Sending to Builder...");
+    expect(
+      Boolean(findByTestId(root, "agent-studio-git-abort-conflict-strip-button").props.disabled),
     ).toBe(true);
 
     await act(async () => {
@@ -1226,9 +1228,9 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const conflictModel = baseModel({
-      askBuilderToResolveRebaseConflict: askBuilder,
-      rebaseConflictAutoOpenNonce: 1,
-      rebaseConflict: {
+      askBuilderToResolveGitConflict: askBuilder,
+      gitConflictAutoOpenNonce: 1,
+      gitConflict: {
         operation: "rebase",
         currentBranch: "feature/task-11",
         targetBranch: "origin/main",
@@ -1244,15 +1246,15 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const root = getRoot(renderer);
-    expect(findByTestId(root, "agent-studio-git-rebase-conflict-modal")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-conflict-modal")).toBeTruthy();
 
     await act(async () => {
-      findByTestId(root, "agent-studio-git-ask-builder-button").props.onClick();
+      findByTestId(root, "agent-studio-git-ask-builder-conflict-button").props.onClick();
       await flush();
     });
 
     expect(askBuilder).toHaveBeenCalledTimes(1);
-    expect(countByTestId(getRoot(renderer), "agent-studio-git-rebase-conflict-modal")).toBe(0);
+    expect(countByTestId(getRoot(renderer), "agent-studio-git-conflict-modal")).toBe(0);
 
     await act(async () => {
       ensureRenderer(renderer).unmount();

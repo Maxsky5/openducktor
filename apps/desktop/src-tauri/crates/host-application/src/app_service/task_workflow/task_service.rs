@@ -465,6 +465,16 @@ impl AppService {
         task_id: &str,
         note: Option<&str>,
     ) -> Result<TaskCard> {
+        let context = self.load_task_context(repo_path, task_id)?;
+        if self
+            .task_metadata_get(context.repo.repo_path.as_str(), task_id)?
+            .direct_merge
+            .is_some()
+        {
+            return Err(anyhow!(
+                "Cannot request changes after a local direct merge has already been applied for task {task_id}. Push and complete the direct merge workflow first, or manually revert the local merge before reopening the task."
+            ));
+        }
         let reason = note
             .map(str::trim)
             .filter(|entry| !entry.is_empty())

@@ -2,9 +2,10 @@ use super::{read_opencode_version, resolve_opencode_binary_path, AppService, Cac
 use anyhow::{anyhow, Result};
 use host_domain::{
     BeadsCheck, GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult,
-    GitCurrentBranch, GitFileDiff, GitFileStatus, GitPullRequest, GitPullResult, GitPushResult,
-    GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
-    GitWorktreeSummary, RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord,
+    GitConflictAbortRequest, GitConflictAbortResult, GitCurrentBranch, GitFileDiff, GitFileStatus,
+    GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
+    GitRebaseBranchRequest, GitRebaseBranchResult, GitWorktreeSummary, RuntimeCheck, RuntimeHealth,
+    SystemCheck, WorkspaceRecord,
 };
 use host_infra_system::{
     command_exists, hook_set_fingerprint, resolve_central_beads_dir,
@@ -512,6 +513,24 @@ impl AppService {
         )
     }
 
+    pub fn git_abort_conflict(
+        &self,
+        repo_path: &str,
+        request: GitConflictAbortRequest,
+    ) -> Result<GitConflictAbortResult> {
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
+        let execution_path =
+            resolve_execution_path(repo_path.as_str(), request.working_dir.as_deref());
+
+        self.git_port.abort_conflict(
+            Path::new(&execution_path),
+            GitConflictAbortRequest {
+                operation: request.operation,
+                working_dir: request.working_dir,
+            },
+        )
+    }
+
     pub fn git_get_status(&self, repo_path: &str) -> Result<Vec<GitFileStatus>> {
         let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         self.git_port.get_status(Path::new(&repo_path))
@@ -596,7 +615,9 @@ mod tests {
     use crate::app_service::test_support::{
         build_service_with_state, init_git_repo, unique_temp_path,
     };
-    use host_domain::{GitPushResult, RuntimeCheck, RuntimeHealth};
+    use host_domain::{
+        GitConflictAbortRequest, GitConflictOperation, GitPushResult, RuntimeCheck, RuntimeHealth,
+    };
     use host_infra_system::ChatSettings;
     use std::time::{Duration, Instant};
 
@@ -651,6 +672,34 @@ mod tests {
         }
         let state = git_state.lock().expect("git state lock poisoned");
         assert_eq!(state.last_push_remote.as_deref(), Some("origin"));
+    }
+
+    #[test]
+    fn module_git_abort_conflict_forwards_operation_and_execution_path() {
+        let (service, _task_state, git_state) = build_service_with_state(vec![]);
+
+        let result = service
+            .git_abort_conflict(
+                "/tmp/odt-repo-module",
+                GitConflictAbortRequest {
+                    operation: GitConflictOperation::DirectMergeRebase,
+                    working_dir: Some("/tmp/odt-repo-module/worktrees/task-1".to_string()),
+                },
+            )
+            .expect("abort conflict should be forwarded");
+        assert_eq!(result.output, "conflict aborted");
+
+        let state = git_state.lock().expect("git state lock poisoned");
+        assert!(state.calls.iter().any(|call| matches!(
+            call,
+            crate::app_service::test_support::GitCall::AbortConflict {
+                repo_path,
+                operation,
+                working_dir,
+            } if repo_path == "/tmp/odt-repo-module/worktrees/task-1"
+                && *operation == GitConflictOperation::DirectMergeRebase
+                && working_dir.as_deref() == Some("/tmp/odt-repo-module/worktrees/task-1")
+        )));
     }
 
     #[test]

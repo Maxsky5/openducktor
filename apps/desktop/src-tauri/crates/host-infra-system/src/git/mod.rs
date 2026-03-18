@@ -10,11 +10,11 @@ mod worktree;
 
 use anyhow::{Context, Result};
 use host_domain::{
-    GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
-    GitDiffScope, GitFileDiff, GitFileStatus, GitMergeBranchRequest, GitMergeBranchResult, GitPort,
-    GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
-    GitRebaseBranchRequest, GitRebaseBranchResult, GitWorktreeStatusData,
-    GitWorktreeStatusSummaryData,
+    GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitConflictAbortRequest,
+    GitConflictAbortResult, GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus,
+    GitMergeBranchRequest, GitMergeBranchResult, GitPort, GitPullRequest, GitPullResult,
+    GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest,
+    GitRebaseBranchResult, GitWorktreeStatusData, GitWorktreeStatusSummaryData,
 };
 use std::path::Path;
 
@@ -171,6 +171,14 @@ impl GitPort for GitCliPort {
         request: GitRebaseAbortRequest,
     ) -> Result<GitRebaseAbortResult> {
         self.rebase_abort_impl(repo_path, request)
+    }
+
+    fn abort_conflict(
+        &self,
+        repo_path: &Path,
+        request: GitConflictAbortRequest,
+    ) -> Result<GitConflictAbortResult> {
+        self.abort_conflict_impl(repo_path, request)
     }
 
     fn merge_branch(

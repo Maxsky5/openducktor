@@ -1,42 +1,9 @@
-use super::{fake_git_workspace, RepoConfig, TestStoreHarness};
+use super::{fake_git_workspace, lock_env, EnvVarGuard, RepoConfig, TestStoreHarness};
 use crate::GitTargetBranch;
 use std::ffi::OsString;
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
-use std::sync::{Mutex, MutexGuard, OnceLock};
-
-fn lock_env() -> MutexGuard<'static, ()> {
-    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    ENV_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
-struct EnvVarGuard {
-    key: &'static str,
-    previous: Option<OsString>,
-}
-
-impl EnvVarGuard {
-    #[cfg(unix)]
-    fn set_os(key: &'static str, value: OsString) -> Self {
-        let previous = std::env::var_os(key);
-        std::env::set_var(key, &value);
-        Self { key, previous }
-    }
-}
-
-impl Drop for EnvVarGuard {
-    fn drop(&mut self) {
-        if let Some(previous) = self.previous.clone() {
-            std::env::set_var(self.key, previous);
-        } else {
-            std::env::remove_var(self.key);
-        }
-    }
-}
 
 #[test]
 fn workspace_add_select_and_update_persist_state() {
@@ -44,6 +11,7 @@ fn workspace_add_select_and_update_persist_state() {
     let harness = TestStoreHarness::new("workspace-flow");
     let store = harness.store();
     let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
     let repo_a = root.join("repo-a");
     let repo_b = root.join("repo-b");
     fs::create_dir_all(repo_a.join(".git")).expect("repo a");
@@ -214,7 +182,10 @@ fn explicit_worktree_override_does_not_require_home_for_workspace_records() {
     let repo_str = repo.to_string_lossy().to_string();
     let override_path = root.join("custom-worktrees").to_string_lossy().to_string();
 
-    store.add_workspace(&repo_str).expect("add workspace");
+    {
+        let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+        store.add_workspace(&repo_str).expect("add workspace");
+    }
     let _home_guard = EnvVarGuard::set_os("HOME", OsString::from_vec(vec![0xFF]));
     let updated = store
         .update_repo_config(

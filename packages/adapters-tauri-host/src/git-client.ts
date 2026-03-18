@@ -8,6 +8,9 @@ import {
   type GitBranch,
   type GitCommitAllRequest,
   type GitCommitAllResult,
+  type GitConflictAbortRequest,
+  type GitConflictAbortResult,
+  type GitConflictOperation,
   type GitCurrentBranch,
   type GitPullBranchRequest,
   type GitPullBranchResult,
@@ -21,6 +24,7 @@ import {
   type GitWorktreeSummary,
   gitBranchSchema,
   gitCommitAllResultSchema,
+  gitConflictAbortResultSchema,
   gitCurrentBranchSchema,
   gitDiffScopeSchema,
   gitPullBranchResultSchema,
@@ -262,6 +266,25 @@ export const gitRebaseAbort = async (
   return gitRebaseAbortResultSchema.parse(payload);
 };
 
+export const gitAbortConflict = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  operation: GitConflictOperation,
+  workingDir?: string,
+): Promise<GitConflictAbortResult> => {
+  const request: GitConflictAbortRequest = {
+    repoPath,
+    operation,
+    workingDir,
+  };
+  const payload = await invokeFn("git_abort_conflict", {
+    repoPath: request.repoPath,
+    operation: request.operation,
+    workingDir: request.workingDir ?? null,
+  });
+  return gitConflictAbortResultSchema.parse(payload);
+};
+
 export class TauriGitClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
@@ -377,5 +400,13 @@ export class TauriGitClient {
 
   async gitRebaseAbort(repoPath: string, workingDir?: string): Promise<GitRebaseAbortResult> {
     return gitRebaseAbort(this.invokeFn, repoPath, workingDir);
+  }
+
+  async gitAbortConflict(
+    repoPath: string,
+    operation: GitConflictOperation,
+    workingDir?: string,
+  ): Promise<GitConflictAbortResult> {
+    return gitAbortConflict(this.invokeFn, repoPath, operation, workingDir);
   }
 }

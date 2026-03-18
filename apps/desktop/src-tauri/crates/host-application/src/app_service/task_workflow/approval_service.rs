@@ -2,9 +2,10 @@ use crate::app_service::git_provider::{github_provider, GitHostingProvider, Reso
 use crate::app_service::service_core::AppService;
 use anyhow::{anyhow, Result};
 use host_domain::{
-    now_rfc3339, DirectMergeRecord, GitDiffScope, GitMergeBranchRequest, GitMergeBranchResult,
-    GitMergeMethod, GitProviderAvailability, GitProviderRepository, GitTargetBranch,
-    PullRequestRecord, TaskApprovalContext, TaskCard, TaskPullRequestDetectResult, TaskStatus,
+    now_rfc3339, DirectMergeRecord, GitConflict, GitConflictOperation, GitDiffScope,
+    GitMergeBranchRequest, GitMergeBranchResult, GitMergeMethod, GitProviderAvailability,
+    GitProviderRepository, GitTargetBranch, PullRequestRecord, TaskApprovalContext, TaskCard,
+    TaskDirectMergeResult, TaskPullRequestDetectResult, TaskStatus,
 };
 use std::path::Path;
 
@@ -18,6 +19,48 @@ impl AppService {
         ensure_human_approval_status(&context.task.status)?;
         let repo_config = self.workspace_get_repo_config(context.repo.repo_path.as_str())?;
         let metadata = self.task_metadata_get(context.repo.repo_path.as_str(), task_id)?;
+        let config = self.config_store.load()?;
+
+        if let Some(direct_merge) = metadata
+            .direct_merge
+            .clone()
+            .filter(|_| !is_terminal_task_status(&context.task.status))
+        {
+            let target_branch = normalize_recorded_target_branch(&direct_merge.target_branch)?;
+            let publish_target = publish_recorded_target_branch(&direct_merge.target_branch)?;
+            let working_directory = latest_builder_cleanup_target(
+                self,
+                context.repo.repo_path.as_str(),
+                task_id,
+                Some(direct_merge.source_branch.as_str()),
+            )?
+            .and_then(|target| {
+                Path::new(target.working_directory.as_str())
+                    .exists()
+                    .then_some(target.working_directory)
+            });
+
+            return Ok(TaskApprovalContext {
+                task_id: task_id.to_string(),
+                task_status: context.task.status.as_cli_value().to_string(),
+                working_directory,
+                source_branch: direct_merge.source_branch.clone(),
+                target_branch,
+                publish_target,
+                default_merge_method: to_domain_merge_method(config.git.default_merge_method),
+                has_uncommitted_changes: false,
+                uncommitted_file_count: 0,
+                pull_request: metadata.pull_request,
+                direct_merge: Some(direct_merge),
+                providers: vec![github_provider_availability(
+                    Path::new(&context.repo.repo_path),
+                    &repo_config,
+                )],
+            });
+        }
+
+        let target_branch = normalize_approval_target_branch(&repo_config.default_target_branch)?;
+        let publish_target = publish_target_branch(&repo_config.default_target_branch)?;
         let working_directory = self
             .build_continuation_target_get(context.repo.repo_path.as_str(), task_id)?
             .working_directory;
@@ -32,19 +75,16 @@ impl AppService {
         let source_branch = current_branch
             .name
             .ok_or_else(|| anyhow!("Human approval requires a builder branch name."))?;
-        let target_branch = normalize_approval_target_branch(&repo_config.default_target_branch)?;
-        let publish_target = publish_target_branch(&repo_config.default_target_branch)?;
         let worktree_status = self.git_port.get_worktree_status_summary(
             Path::new(&working_directory),
             target_branch.canonical().as_str(),
             GitDiffScope::Uncommitted,
         )?;
-        let config = self.config_store.load()?;
 
         Ok(TaskApprovalContext {
             task_id: task_id.to_string(),
             task_status: context.task.status.as_cli_value().to_string(),
-            working_directory,
+            working_directory: Some(working_directory),
             source_branch,
             target_branch,
             publish_target,
@@ -52,6 +92,7 @@ impl AppService {
             has_uncommitted_changes: worktree_status.file_status_counts.total > 0,
             uncommitted_file_count: worktree_status.file_status_counts.total,
             pull_request: metadata.pull_request,
+            direct_merge: None,
             providers: vec![github_provider_availability(
                 Path::new(&context.repo.repo_path),
                 &repo_config,
@@ -64,8 +105,13 @@ impl AppService {
         repo_path: &str,
         task_id: &str,
         method: GitMergeMethod,
-    ) -> Result<TaskCard> {
+    ) -> Result<TaskDirectMergeResult> {
         let approval = self.task_approval_context_get(repo_path, task_id)?;
+        if approval.direct_merge.is_some() {
+            return Err(anyhow!(
+                "A local direct merge is already recorded for task {task_id}. Finish the direct merge workflow before trying again."
+            ));
+        }
         ensure_clean_builder_worktree(&approval)?;
         let repo_path = self.resolve_task_repo_path(repo_path)?;
         match self.git_port.merge_branch(
@@ -73,7 +119,7 @@ impl AppService {
             GitMergeBranchRequest {
                 source_branch: approval.source_branch.clone(),
                 target_branch: approval.target_branch.canonical(),
-                source_working_directory: Some(approval.working_directory.clone()),
+                source_working_directory: approval.working_directory.clone(),
                 method: method.clone(),
             },
         )? {
@@ -82,19 +128,18 @@ impl AppService {
                 conflicted_files,
                 output,
             } => {
-                return Err(anyhow!(
-                    "Direct merge stopped on conflicts for task {task_id}: {}. {}",
-                    conflicted_files.join(", "),
-                    output
-                ));
+                return Ok(TaskDirectMergeResult::Conflicts {
+                    conflict: direct_merge_conflict(
+                        repo_path.as_str(),
+                        &approval,
+                        &method,
+                        conflicted_files,
+                        output,
+                    ),
+                });
             }
         }
 
-        self.cleanup_builder_workspace(
-            repo_path.as_str(),
-            approval.working_directory.as_str(),
-            approval.source_branch.as_str(),
-        )?;
         self.task_store
             .set_pull_request(Path::new(&repo_path), task_id, None)?;
         self.task_store.set_direct_merge_record(
@@ -102,18 +147,118 @@ impl AppService {
             task_id,
             Some(DirectMergeRecord {
                 method,
-                source_branch: approval.source_branch,
-                target_branch: approval.target_branch.display(),
+                source_branch: approval.source_branch.clone(),
+                target_branch: approval.target_branch.clone(),
                 merged_at: now_rfc3339(),
             }),
         )?;
 
-        self.task_transition(
+        if approval.publish_target.is_some() {
+            let current_task = self.load_task_context(repo_path.as_str(), task_id)?.task;
+            if current_task.status == TaskStatus::AiReview {
+                return self
+                    .task_transition(
+                        repo_path.as_str(),
+                        task_id,
+                        TaskStatus::HumanReview,
+                        Some("Local direct merge applied"),
+                    )
+                    .map(|task| TaskDirectMergeResult::Completed {
+                        task: Box::new(task),
+                    });
+            }
+            return Ok(TaskDirectMergeResult::Completed {
+                task: Box::new(current_task),
+            });
+        }
+
+        let task = self.task_transition(
             repo_path.as_str(),
             task_id,
             TaskStatus::Closed,
             Some("Human approved via direct merge"),
-        )
+        )?;
+        self.finalize_direct_merge_cleanup(
+            repo_path.as_str(),
+            task_id,
+            approval.source_branch.as_str(),
+        )?;
+        Ok(TaskDirectMergeResult::Completed {
+            task: Box::new(task),
+        })
+    }
+
+    pub fn task_direct_merge_complete(&self, repo_path: &str, task_id: &str) -> Result<TaskCard> {
+        let context = self.load_task_context(repo_path, task_id)?;
+        let direct_merge = self
+            .task_metadata_get(context.repo.repo_path.as_str(), task_id)?
+            .direct_merge
+            .ok_or_else(|| {
+                anyhow!("Task {task_id} does not have a locally applied direct merge to complete.")
+            })?;
+        let repo_path = self.resolve_task_repo_path(repo_path)?;
+        self.ensure_direct_merge_publish_completed(repo_path.as_str(), task_id, &direct_merge)?;
+
+        let task = if context.task.status == TaskStatus::Closed {
+            context.task
+        } else {
+            self.task_transition(
+                repo_path.as_str(),
+                task_id,
+                TaskStatus::Closed,
+                Some("Human approved via direct merge"),
+            )?
+        };
+
+        self.finalize_direct_merge_cleanup(
+            repo_path.as_str(),
+            task_id,
+            direct_merge.source_branch.as_str(),
+        )?;
+        Ok(task)
+    }
+
+    fn ensure_direct_merge_publish_completed(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+        direct_merge: &DirectMergeRecord,
+    ) -> Result<()> {
+        let Some(publish_target) = direct_merge.publish_target() else {
+            return Ok(());
+        };
+
+        let current_branch = self.git_port.get_current_branch(Path::new(repo_path))?;
+        let current_branch_name = current_branch
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| {
+                anyhow!(
+                    "Cannot finish the direct merge for task {task_id} because the target branch checkout is not active."
+                )
+            })?;
+        let expected_branch = publish_target.checkout_branch();
+        if current_branch_name != expected_branch {
+            return Err(anyhow!(
+                "Cannot finish the direct merge for task {task_id} until branch {} is checked out locally.",
+                expected_branch
+            ));
+        }
+
+        let publish_target_ref = publish_target.canonical();
+        let publish_sync = self
+            .git_port
+            .commits_ahead_behind(Path::new(repo_path), publish_target_ref.as_str())?;
+        if publish_sync.ahead != 0 || publish_sync.behind != 0 {
+            return Err(anyhow!(
+                "Cannot finish the direct merge for task {task_id} until {} is fully published and synchronized.",
+                publish_target_ref
+            ));
+        }
+
+        Ok(())
     }
 
     pub fn task_pull_request_upsert(
@@ -124,6 +269,11 @@ impl AppService {
         body: &str,
     ) -> Result<PullRequestRecord> {
         let approval = self.task_approval_context_get(repo_path, task_id)?;
+        if approval.direct_merge.is_some() {
+            return Err(anyhow!(
+                "A local direct merge is already recorded for task {task_id}. Finish or discard that direct merge workflow before opening a pull request."
+            ));
+        }
         ensure_clean_builder_worktree(&approval)?;
         let repo_path = self.resolve_task_repo_path(repo_path)?;
         let provider = github_provider();
@@ -131,7 +281,7 @@ impl AppService {
         let remote_name = provider.resolve_remote_name(Path::new(&repo_path), &repository)?;
         match self.git_push_branch(
             repo_path.as_str(),
-            Some(approval.working_directory.as_str()),
+            approval.working_directory.as_deref(),
             Some(remote_name.as_str()),
             approval.source_branch.as_str(),
             true,
@@ -304,23 +454,16 @@ impl AppService {
             )?;
 
             if updated.record.state == "merged" && task.status != TaskStatus::Closed {
-                if let Some(cleanup_target) = latest_builder_cleanup_target(
-                    self,
-                    repo_path.as_str(),
-                    task.id.as_str(),
-                    Some(updated.source_branch.as_str()),
-                )? {
-                    self.cleanup_builder_workspace(
-                        repo_path.as_str(),
-                        cleanup_target.working_directory.as_str(),
-                        cleanup_target.source_branch.as_str(),
-                    )?;
-                }
                 let _ = self.task_transition(
                     repo_path.as_str(),
                     task.id.as_str(),
                     TaskStatus::Closed,
                     Some("Linked pull request merged"),
+                )?;
+                self.finalize_direct_merge_cleanup(
+                    repo_path.as_str(),
+                    task.id.as_str(),
+                    updated.source_branch.as_str(),
                 )?;
             }
         }
@@ -370,22 +513,7 @@ impl AppService {
         Ok(detected.map(|repository| to_config_repository(&repository)))
     }
 
-    fn cleanup_builder_workspace(
-        &self,
-        repo_path: &str,
-        working_directory: &str,
-        source_branch: &str,
-    ) -> Result<()> {
-        let normalized_repo =
-            std::fs::canonicalize(repo_path).unwrap_or_else(|_| Path::new(repo_path).to_path_buf());
-        let normalized_working_directory = std::fs::canonicalize(working_directory)
-            .unwrap_or_else(|_| Path::new(working_directory).to_path_buf());
-
-        if normalized_repo != normalized_working_directory && Path::new(working_directory).exists()
-        {
-            let _ = self.git_remove_worktree(repo_path, working_directory, false)?;
-        }
-
+    fn cleanup_builder_branch(&self, repo_path: &str, source_branch: &str) -> Result<()> {
         let branch_exists = self
             .git_port
             .get_branches(Path::new(repo_path))?
@@ -396,6 +524,35 @@ impl AppService {
         }
 
         Ok(())
+    }
+
+    fn finalize_direct_merge_cleanup(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+        source_branch: &str,
+    ) -> Result<()> {
+        if let Some(cleanup_target) =
+            latest_builder_cleanup_target(self, repo_path, task_id, Some(source_branch))?
+        {
+            let normalized_repo = std::fs::canonicalize(repo_path)
+                .unwrap_or_else(|_| Path::new(repo_path).to_path_buf());
+            let normalized_working_directory =
+                std::fs::canonicalize(&cleanup_target.working_directory)
+                    .unwrap_or_else(|_| Path::new(&cleanup_target.working_directory).to_path_buf());
+
+            if normalized_repo != normalized_working_directory
+                && Path::new(cleanup_target.working_directory.as_str()).exists()
+            {
+                let _ = self.git_remove_worktree(
+                    repo_path,
+                    cleanup_target.working_directory.as_str(),
+                    false,
+                )?;
+            }
+        }
+
+        self.cleanup_builder_branch(repo_path, source_branch)
     }
 
     fn github_pull_request_repository(&self, repo_path: &str) -> Result<GitProviderRepository> {
@@ -505,6 +662,41 @@ fn ensure_clean_builder_worktree(approval: &TaskApprovalContext) -> Result<()> {
     Err(anyhow!(
         "Human approval is blocked because the builder worktree has {file_label}. Commit or discard it before merging or opening a pull request."
     ))
+}
+
+fn direct_merge_conflict(
+    repo_path: &str,
+    approval: &TaskApprovalContext,
+    method: &GitMergeMethod,
+    conflicted_files: Vec<String>,
+    output: String,
+) -> GitConflict {
+    let (operation, current_branch, working_dir) = match method {
+        GitMergeMethod::MergeCommit => (
+            GitConflictOperation::DirectMergeMergeCommit,
+            Some(approval.target_branch.checkout_branch()),
+            Some(repo_path.to_string()),
+        ),
+        GitMergeMethod::Squash => (
+            GitConflictOperation::DirectMergeSquash,
+            Some(approval.target_branch.checkout_branch()),
+            Some(repo_path.to_string()),
+        ),
+        GitMergeMethod::Rebase => (
+            GitConflictOperation::DirectMergeRebase,
+            Some(approval.source_branch.clone()),
+            approval.working_directory.clone(),
+        ),
+    };
+
+    GitConflict {
+        operation,
+        current_branch,
+        target_branch: approval.target_branch.canonical(),
+        conflicted_files,
+        output,
+        working_dir,
+    }
 }
 
 fn github_provider_availability(
@@ -628,7 +820,21 @@ fn to_domain_merge_method(method: host_infra_system::GitMergeMethod) -> GitMerge
 fn normalize_approval_target_branch(
     target_branch: &host_infra_system::GitTargetBranch,
 ) -> Result<GitTargetBranch> {
-    let branch = target_branch.branch.trim();
+    normalize_target_branch(
+        target_branch.remote.as_deref(),
+        target_branch.branch.as_str(),
+    )
+}
+
+fn normalize_recorded_target_branch(target_branch: &GitTargetBranch) -> Result<GitTargetBranch> {
+    normalize_target_branch(
+        target_branch.remote.as_deref(),
+        target_branch.branch.as_str(),
+    )
+}
+
+fn normalize_target_branch(remote: Option<&str>, branch: &str) -> Result<GitTargetBranch> {
+    let branch = branch.trim();
     if branch.is_empty() {
         return Err(anyhow!("Human approval requires a target branch."));
     }
@@ -638,7 +844,7 @@ fn normalize_approval_target_branch(
         ));
     }
     Ok(GitTargetBranch {
-        remote: target_branch.remote.clone(),
+        remote: remote.map(ToOwned::to_owned),
         branch: branch.to_string(),
     })
 }
@@ -647,6 +853,17 @@ fn publish_target_branch(
     target_branch: &host_infra_system::GitTargetBranch,
 ) -> Result<Option<GitTargetBranch>> {
     let normalized = normalize_approval_target_branch(target_branch)?;
+    publish_target_from_normalized(normalized)
+}
+
+fn publish_recorded_target_branch(
+    target_branch: &GitTargetBranch,
+) -> Result<Option<GitTargetBranch>> {
+    let normalized = normalize_recorded_target_branch(target_branch)?;
+    publish_target_from_normalized(normalized)
+}
+
+fn publish_target_from_normalized(normalized: GitTargetBranch) -> Result<Option<GitTargetBranch>> {
     if normalized.remote.is_some() {
         return Ok(Some(normalized));
     }
@@ -655,7 +872,6 @@ fn publish_target_branch(
 
 struct BuilderCleanupTarget {
     working_directory: String,
-    source_branch: String,
 }
 
 fn latest_builder_cleanup_target(
@@ -665,50 +881,56 @@ fn latest_builder_cleanup_target(
     preferred_source_branch: Option<&str>,
 ) -> Result<Option<BuilderCleanupTarget>> {
     let sessions = service.agent_sessions_list(repo_path, task_id)?;
-    let latest_builder_session = sessions
+    let mut builder_sessions = sessions
         .into_iter()
         .filter(|session| session.role == "build")
-        .max_by(|left, right| {
-            let left_key = left
-                .updated_at
-                .as_deref()
-                .unwrap_or(left.started_at.as_str());
-            let right_key = right
-                .updated_at
-                .as_deref()
-                .unwrap_or(right.started_at.as_str());
-            left_key
-                .cmp(right_key)
-                .then_with(|| left.started_at.cmp(&right.started_at))
-                .then_with(|| left.session_id.cmp(&right.session_id))
-        });
+        .collect::<Vec<_>>();
+    builder_sessions.sort_by(|left, right| {
+        let left_key = left
+            .updated_at
+            .as_deref()
+            .unwrap_or(left.started_at.as_str());
+        let right_key = right
+            .updated_at
+            .as_deref()
+            .unwrap_or(right.started_at.as_str());
+        left_key
+            .cmp(right_key)
+            .then_with(|| left.started_at.cmp(&right.started_at))
+            .then_with(|| left.session_id.cmp(&right.session_id))
+    });
+    builder_sessions.reverse();
 
-    let Some(session) = latest_builder_session else {
-        return Ok(None);
-    };
+    for session in builder_sessions {
+        let working_directory = session.working_directory.trim().to_string();
+        if working_directory.is_empty() {
+            continue;
+        }
+        if !Path::new(working_directory.as_str()).exists() {
+            continue;
+        }
+        let current_branch = service
+            .git_port
+            .get_current_branch(Path::new(working_directory.as_str()))?;
+        let current_branch_name = match current_branch.name {
+            Some(name) => {
+                let trimmed = name.trim().to_string();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                trimmed
+            }
+            None => continue,
+        };
+        if preferred_source_branch
+            .map(str::trim)
+            .is_some_and(|expected| current_branch_name != expected)
+        {
+            continue;
+        }
 
-    let working_directory = session.working_directory.trim().to_string();
-    if working_directory.is_empty() {
-        return Ok(None);
+        return Ok(Some(BuilderCleanupTarget { working_directory }));
     }
 
-    let source_branch =
-        if let Some(branch) = preferred_source_branch.filter(|value| !value.trim().is_empty()) {
-            branch.trim().to_string()
-        } else if Path::new(working_directory.as_str()).exists() {
-            let current_branch = service
-                .git_port
-                .get_current_branch(Path::new(working_directory.as_str()))?;
-            match current_branch.name {
-                Some(name) if !name.trim().is_empty() => name,
-                _ => return Ok(None),
-            }
-        } else {
-            return Ok(None);
-        };
-
-    Ok(Some(BuilderCleanupTarget {
-        working_directory,
-        source_branch,
-    }))
+    Ok(None)
 }

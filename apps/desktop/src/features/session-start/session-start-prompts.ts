@@ -41,7 +41,7 @@ export const SCENARIO_LABELS: Record<AgentScenario, string> = {
   build_implementation_start: "Start Implementation",
   build_after_qa_rejected: "Fix QA Rejection",
   build_after_human_request_changes: "Apply Human Changes",
-  build_rebase_conflict_resolution: "Resolve Rebase Conflict",
+  build_rebase_conflict_resolution: "Resolve Git Conflict",
   qa_review: "QA Review",
 };
 
@@ -72,7 +72,7 @@ export const kickoffPromptForScenario = (
   });
 };
 
-export const buildRebaseConflictResolutionPrompt = (
+export const buildGitConflictResolutionPrompt = (
   taskId: string,
   options?: SessionStartPromptOptions & {
     git?: AgentPromptGitContext;

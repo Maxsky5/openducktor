@@ -34,6 +34,16 @@ pub enum GitMergeMethod {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GitConflictOperation {
+    Rebase,
+    PullRebase,
+    DirectMergeMergeCommit,
+    DirectMergeSquash,
+    DirectMergeRebase,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct GitProviderRepository {
     pub host: String,
@@ -102,8 +112,17 @@ pub enum TaskPullRequestDetectResult {
 pub struct DirectMergeRecord {
     pub method: GitMergeMethod,
     pub source_branch: String,
-    pub target_branch: String,
+    pub target_branch: GitTargetBranch,
     pub merged_at: String,
+}
+
+impl DirectMergeRecord {
+    pub fn publish_target(&self) -> Option<GitTargetBranch> {
+        if self.target_branch.remote.is_some() {
+            return Some(self.target_branch.clone());
+        }
+        None
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -120,7 +139,7 @@ pub struct GitProviderAvailability {
 pub struct TaskApprovalContext {
     pub task_id: String,
     pub task_status: String,
-    pub working_directory: String,
+    pub working_directory: Option<String>,
     pub source_branch: String,
     pub target_branch: GitTargetBranch,
     pub publish_target: Option<GitTargetBranch>,
@@ -128,6 +147,7 @@ pub struct TaskApprovalContext {
     pub has_uncommitted_changes: bool,
     pub uncommitted_file_count: u32,
     pub pull_request: Option<PullRequestRecord>,
+    pub direct_merge: Option<DirectMergeRecord>,
     pub providers: Vec<GitProviderAvailability>,
 }
 
@@ -166,6 +186,17 @@ pub enum GitPullResult {
         conflicted_files: Vec<String>,
         output: String,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitConflict {
+    pub operation: GitConflictOperation,
+    pub current_branch: Option<String>,
+    pub target_branch: String,
+    pub conflicted_files: Vec<String>,
+    pub output: String,
+    pub working_dir: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -327,6 +358,19 @@ pub enum GitRebaseAbortResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct GitConflictAbortRequest {
+    pub operation: GitConflictOperation,
+    pub working_dir: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitConflictAbortResult {
+    pub output: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct GitMergeBranchRequest {
     pub source_branch: String,
     pub target_branch: String,
@@ -409,6 +453,11 @@ pub trait GitPort: Send + Sync {
         repo_path: &Path,
         request: GitRebaseAbortRequest,
     ) -> Result<GitRebaseAbortResult>;
+    fn abort_conflict(
+        &self,
+        repo_path: &Path,
+        request: GitConflictAbortRequest,
+    ) -> Result<GitConflictAbortResult>;
     fn merge_branch(
         &self,
         repo_path: &Path,

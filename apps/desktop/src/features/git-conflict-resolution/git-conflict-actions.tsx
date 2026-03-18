@@ -1,9 +1,10 @@
 import { LoaderCircle, RotateCcw, Sparkles } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
-import type { AgentStudioRebaseConflictAction } from "@/features/agent-studio-git";
+import type { GitConflictAction, GitConflictOperation } from "@/features/agent-studio-git";
+import { getGitConflictCopy } from "./conflict-copy";
 
-export type RebaseConflictActionsModel = {
+export type GitConflictActionsModel = {
   isDisabled: boolean;
   abort: {
     isPending: boolean;
@@ -17,46 +18,50 @@ export type RebaseConflictActionsModel = {
   };
 };
 
-type RebaseConflictActionsProps = {
-  actions: RebaseConflictActionsModel;
+type GitConflictActionsProps = {
+  actions: GitConflictActionsModel;
   abortTestId: string;
   askBuilderTestId: string;
   size?: "default" | "sm" | "lg" | "icon";
   className?: string;
 };
 
-export const createRebaseConflictActionsModel = ({
-  isHandlingRebaseConflict,
-  rebaseConflictAction,
+export const createGitConflictActionsModel = ({
+  operation,
+  isHandlingConflict,
+  conflictAction,
   onAbort,
   onAskBuilder,
 }: {
-  isHandlingRebaseConflict: boolean;
-  rebaseConflictAction: AgentStudioRebaseConflictAction | undefined;
+  operation: GitConflictOperation;
+  isHandlingConflict: boolean;
+  conflictAction: GitConflictAction | undefined;
   onAbort: () => void;
   onAskBuilder: () => void;
-}): RebaseConflictActionsModel => ({
-  isDisabled: isHandlingRebaseConflict,
+}): GitConflictActionsModel => ({
+  isDisabled: isHandlingConflict,
   abort: {
-    isPending: rebaseConflictAction === "abort",
-    label: rebaseConflictAction === "abort" ? "Aborting..." : "Abort rebase",
+    isPending: conflictAction === "abort",
+    label: conflictAction === "abort" ? "Aborting..." : getGitConflictCopy(operation).abortLabel,
     onClick: onAbort,
   },
   askBuilder: {
-    isPending: rebaseConflictAction === "ask_builder",
+    isPending: conflictAction === "ask_builder",
     label:
-      rebaseConflictAction === "ask_builder" ? "Sending to Builder..." : "Ask Builder to resolve",
+      conflictAction === "ask_builder"
+        ? "Sending to Builder..."
+        : getGitConflictCopy(operation).askBuilderLabel,
     onClick: onAskBuilder,
   },
 });
 
-export const RebaseConflictActions = memo(function RebaseConflictActions({
+export const GitConflictActions = memo(function GitConflictActions({
   actions,
   abortTestId,
   askBuilderTestId,
   size = "sm",
   className,
-}: RebaseConflictActionsProps): ReactElement {
+}: GitConflictActionsProps): ReactElement {
   return (
     <div className={className}>
       <Button

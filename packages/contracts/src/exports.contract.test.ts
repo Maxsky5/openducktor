@@ -24,6 +24,10 @@ import type {
   GitBranch,
   GitCommitAllRequest,
   GitCommitAllResult,
+  GitConflict,
+  GitConflictAbortRequest,
+  GitConflictAbortResult,
+  GitConflictOperation,
   GitCurrentBranch,
   GitDiffScope,
   GitFileStatusCounts,
@@ -59,6 +63,7 @@ import type {
   TaskAction,
   TaskCard,
   TaskCreateInput,
+  TaskDirectMergeResult,
   TaskDocumentPresence,
   TaskDocumentSummary,
   TaskMetadataDocument,
@@ -102,6 +107,10 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "chatSettingsSchema",
   "gitCommitAllRequestSchema",
   "gitCommitAllResultSchema",
+  "gitConflictAbortRequestSchema",
+  "gitConflictAbortResultSchema",
+  "gitConflictOperationSchema",
+  "gitConflictSchema",
   "commitsAheadBehindSchema",
   "directMergeRecordSchema",
   "gitDiffScopeSchema",
@@ -184,6 +193,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "taskApprovalContextSchema",
   "taskCardSchema",
   "taskCreateInputSchema",
+  "taskDirectMergeResultSchema",
   "taskPullRequestDetectResultSchema",
   "taskMetadataDocumentSchema",
   "taskMetadataPayloadSchema",
@@ -223,6 +233,10 @@ type ExportedTypeContract = {
   CommitsAheadBehind: CommitsAheadBehind;
   GitCommitAllRequest: GitCommitAllRequest;
   GitCommitAllResult: GitCommitAllResult;
+  GitConflict: GitConflict;
+  GitConflictAbortRequest: GitConflictAbortRequest;
+  GitConflictAbortResult: GitConflictAbortResult;
+  GitConflictOperation: GitConflictOperation;
   FileDiff: FileDiff;
   FileStatus: FileStatus;
   GitFileStatusCounts: GitFileStatusCounts;
@@ -259,6 +273,7 @@ type ExportedTypeContract = {
   TaskAction: TaskAction;
   TaskCard: TaskCard;
   TaskCreateInput: TaskCreateInput;
+  TaskDirectMergeResult: TaskDirectMergeResult;
   TaskDocumentPresence: TaskDocumentPresence;
   TaskDocumentSummary: TaskDocumentSummary;
   TaskMetadataDocument: TaskMetadataDocument;

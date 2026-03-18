@@ -16,6 +16,7 @@ use crate::app_service::test_support::{
     build_service_with_store, init_git_repo, lock_env, make_session, make_task, prepend_path,
     set_env_var, unique_temp_path, write_executable_script, GitCall,
 };
+use crate::RepoConfigUpdate;
 
 fn base_repo_config(worktree_base: &Path) -> RepoConfig {
     RepoConfig {
@@ -227,8 +228,161 @@ fn run_git(repo_path: &Path, args: &[&str]) -> Result<()> {
 }
 
 #[test]
-fn task_direct_merge_closes_task_records_metadata_and_cleans_builder_workspace() -> Result<()> {
+fn task_direct_merge_with_publish_target_stays_resumable_until_completion() -> Result<()> {
     let root = unique_temp_path("approval-direct-merge");
+    let repo = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    let worktree_path = worktree_base.join("task-1");
+    let unrelated_worktree_path = worktree_base.join("task-1-retry");
+    init_git_repo(&repo)?;
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    let _ = run_git(&repo, &["remote", "remove", "origin"]);
+    configure_builder_session(
+        repo_path.as_str(),
+        &worktree_path,
+        "odt/task-1",
+        &service,
+        &task_state,
+        &git_state,
+    )?;
+    service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
+
+    let task = service.task_direct_merge(repo_path.as_str(), "task-1", GitMergeMethod::Rebase)?;
+    let host_domain::TaskDirectMergeResult::Completed { task } = task else {
+        panic!("expected completed direct merge result");
+    };
+    assert_eq!(task.status, TaskStatus::HumanReview);
+
+    let state = task_state.lock().expect("task state lock poisoned");
+    let record = state
+        .direct_merge_records
+        .get("task-1")
+        .ok_or_else(|| anyhow!("direct merge record missing"))?;
+    assert_eq!(record.method, GitMergeMethod::Rebase);
+    assert_eq!(record.source_branch, "odt/task-1");
+    assert_eq!(
+        record.target_branch,
+        host_domain::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
+        }
+    );
+    assert!(!state.pull_requests.contains_key("task-1"));
+    drop(state);
+
+    fs::create_dir_all(&unrelated_worktree_path)?;
+    let mut unrelated_session = make_session("task-1", "session-build-retry");
+    unrelated_session.started_at = "2026-02-20T12:30:00Z".to_string();
+    unrelated_session.updated_at = Some("2026-02-20T12:30:10Z".to_string());
+    unrelated_session.working_directory = unrelated_worktree_path.to_string_lossy().to_string();
+    task_state
+        .lock()
+        .expect("task state lock poisoned")
+        .agent_sessions
+        .push(unrelated_session);
+    git_state
+        .lock()
+        .expect("git state lock poisoned")
+        .current_branches_by_path
+        .insert(
+            unrelated_worktree_path.to_string_lossy().to_string(),
+            GitCurrentBranch {
+                name: Some("odt/task-1-retry".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
+
+    let git = git_state.lock().expect("git state lock poisoned");
+    assert!(git.calls.iter().any(|call| matches!(
+        call,
+        GitCall::MergeBranch {
+            source_branch,
+            target_branch,
+            method,
+            ..
+        } if source_branch == "odt/task-1"
+            && target_branch == "origin/main"
+            && *method == GitMergeMethod::Rebase
+    )));
+    assert!(!git
+        .calls
+        .iter()
+        .any(|call| matches!(call, GitCall::RemoveWorktree { .. })));
+    assert!(!git.calls.iter().any(
+        |call| matches!(call, GitCall::DeleteLocalBranch { branch, .. } if branch == "odt/task-1")
+    ));
+    drop(git);
+
+    {
+        let mut git = git_state.lock().expect("git state lock poisoned");
+        git.commits_ahead_behind_result = host_domain::GitAheadBehind {
+            ahead: 1,
+            behind: 0,
+        };
+    }
+    let complete_error = service
+        .task_direct_merge_complete(repo_path.as_str(), "task-1")
+        .expect_err("publish-target direct merge should require a synchronized push");
+    assert!(complete_error.to_string().contains("fully published"));
+    let state = task_state.lock().expect("task state lock poisoned");
+    assert_eq!(
+        state
+            .tasks
+            .iter()
+            .find(|task| task.id == "task-1")
+            .map(|task| &task.status),
+        Some(&TaskStatus::HumanReview)
+    );
+    drop(state);
+
+    {
+        let mut git = git_state.lock().expect("git state lock poisoned");
+        git.commits_ahead_behind_result = host_domain::GitAheadBehind {
+            ahead: 0,
+            behind: 0,
+        };
+    }
+    let completed = service.task_direct_merge_complete(repo_path.as_str(), "task-1")?;
+    assert_eq!(completed.status, TaskStatus::Closed);
+
+    let expected_cleanup_worktree = worktree_path.to_string_lossy().to_string();
+    let unrelated_cleanup_worktree = unrelated_worktree_path.to_string_lossy().to_string();
+    let git = git_state.lock().expect("git state lock poisoned");
+    assert!(git.calls.iter().any(|call| matches!(
+        call,
+        GitCall::RemoveWorktree { worktree_path, .. }
+            if worktree_path == expected_cleanup_worktree.as_str()
+    )));
+    assert!(!git.calls.iter().any(|call| matches!(
+        call,
+        GitCall::RemoveWorktree { worktree_path, .. }
+            if worktree_path == unrelated_cleanup_worktree.as_str()
+    )));
+    assert!(git.calls.iter().any(
+        |call| matches!(call, GitCall::DeleteLocalBranch { branch, .. } if branch == "odt/task-1")
+    ));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn task_direct_merge_local_only_closes_task_records_metadata_and_cleans_builder_workspace(
+) -> Result<()> {
+    let root = unique_temp_path("approval-direct-merge-local-only");
     let repo = root.join("repo");
     let worktree_base = root.join("worktrees");
     let worktree_path = worktree_base.join("task-1");
@@ -255,34 +409,20 @@ fn task_direct_merge_closes_task_records_metadata_and_cleans_builder_workspace()
         &task_state,
         &git_state,
     )?;
-    service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
+    let mut repo_config = base_repo_config(&worktree_base);
+    repo_config.default_target_branch = host_infra_system::GitTargetBranch {
+        remote: None,
+        branch: "release/2026.03".to_string(),
+    };
+    service.workspace_update_repo_config(repo_path.as_str(), repo_config)?;
 
     let task = service.task_direct_merge(repo_path.as_str(), "task-1", GitMergeMethod::Squash)?;
+    let host_domain::TaskDirectMergeResult::Completed { task } = task else {
+        panic!("expected completed direct merge result");
+    };
     assert_eq!(task.status, TaskStatus::Closed);
 
-    let state = task_state.lock().expect("task state lock poisoned");
-    let record = state
-        .direct_merge_records
-        .get("task-1")
-        .ok_or_else(|| anyhow!("direct merge record missing"))?;
-    assert_eq!(record.method, GitMergeMethod::Squash);
-    assert_eq!(record.source_branch, "odt/task-1");
-    assert_eq!(record.target_branch, "origin/main");
-    assert!(!state.pull_requests.contains_key("task-1"));
-    drop(state);
-
     let git = git_state.lock().expect("git state lock poisoned");
-    assert!(git.calls.iter().any(|call| matches!(
-        call,
-        GitCall::MergeBranch {
-            source_branch,
-            target_branch,
-            method,
-            ..
-        } if source_branch == "odt/task-1"
-            && target_branch == "origin/main"
-            && *method == GitMergeMethod::Squash
-    )));
     assert!(git
         .calls
         .iter()
@@ -290,6 +430,79 @@ fn task_direct_merge_closes_task_records_metadata_and_cleans_builder_workspace()
     assert!(git.calls.iter().any(
         |call| matches!(call, GitCall::DeleteLocalBranch { branch, .. } if branch == "odt/task-1")
     ));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn task_approval_context_uses_pending_direct_merge_metadata_without_builder_worktree() -> Result<()>
+{
+    let root = unique_temp_path("approval-direct-merge-reopen");
+    let repo = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    let missing_worktree_path = worktree_base.join("missing").join("task-1");
+    init_git_repo(&repo)?;
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
+    service.workspace_merge_repo_config(
+        repo_path.as_str(),
+        RepoConfigUpdate {
+            default_target_branch: Some(host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "beta".to_string(),
+            }),
+            ..RepoConfigUpdate::default()
+        },
+    )?;
+
+    let mut session = make_session("task-1", "session-build");
+    session.working_directory = missing_worktree_path.to_string_lossy().to_string();
+    let mut state = task_state.lock().expect("task state lock poisoned");
+    state.agent_sessions.push(session);
+    state.direct_merge_records.insert(
+        "task-1".to_string(),
+        host_domain::DirectMergeRecord {
+            method: GitMergeMethod::Rebase,
+            source_branch: "odt/task-1".to_string(),
+            target_branch: host_domain::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            merged_at: "2026-03-12T12:00:00Z".to_string(),
+        },
+    );
+    drop(state);
+    let _ = fs::remove_dir_all(&missing_worktree_path);
+    assert!(!missing_worktree_path.exists());
+
+    let approval = service.task_approval_context_get(repo_path.as_str(), "task-1")?;
+    assert_eq!(approval.working_directory, None);
+    assert_eq!(approval.source_branch, "odt/task-1");
+    assert_eq!(approval.target_branch.checkout_branch(), "main");
+    assert_eq!(
+        approval.publish_target.map(|target| target.canonical()),
+        Some("origin/main".to_string())
+    );
+    let direct_merge = approval
+        .direct_merge
+        .ok_or_else(|| anyhow!("direct merge metadata missing"))?;
+    assert_eq!(direct_merge.method, GitMergeMethod::Rebase);
+    assert_eq!(direct_merge.target_branch.canonical(), "origin/main");
+    assert_eq!(direct_merge.merged_at, "2026-03-12T12:00:00Z");
 
     let _ = fs::remove_dir_all(root);
     Ok(())
@@ -435,6 +648,68 @@ fn approval_actions_reject_dirty_builder_worktree() -> Result<()> {
         .expect_err("pull request should be blocked");
     assert!(pr_error.to_string().contains("uncommitted"));
 
+    Ok(())
+}
+
+#[test]
+fn human_request_changes_rejects_pending_direct_merge_completion() -> Result<()> {
+    let root = unique_temp_path("approval-direct-merge-request-changes");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    task_state
+        .lock()
+        .expect("task state lock poisoned")
+        .direct_merge_records
+        .insert(
+            "task-1".to_string(),
+            host_domain::DirectMergeRecord {
+                method: GitMergeMethod::MergeCommit,
+                source_branch: "odt/task-1".to_string(),
+                target_branch: host_domain::GitTargetBranch {
+                    remote: Some("origin".to_string()),
+                    branch: "main".to_string(),
+                },
+                merged_at: "2026-03-12T12:00:00Z".to_string(),
+            },
+        );
+
+    let error = service
+        .human_request_changes(repo_path.as_str(), "task-1", None)
+        .expect_err("pending direct merge should block request changes");
+    assert!(error.to_string().contains("local direct merge"));
+    let state = task_state.lock().expect("task state lock poisoned");
+    assert_eq!(
+        state
+            .tasks
+            .iter()
+            .find(|task| task.id == "task-1")
+            .map(|task| &task.status),
+        Some(&TaskStatus::HumanReview)
+    );
+    let direct_merge = state
+        .direct_merge_records
+        .get("task-1")
+        .ok_or_else(|| anyhow!("pending direct merge missing after rejection"))?;
+    assert_eq!(direct_merge.method, GitMergeMethod::MergeCommit);
+    assert_eq!(direct_merge.source_branch, "odt/task-1");
+    assert_eq!(direct_merge.target_branch.canonical(), "origin/main");
+    assert_eq!(direct_merge.merged_at, "2026-03-12T12:00:00Z");
+
+    let _ = fs::remove_dir_all(root);
     Ok(())
 }
 

@@ -1,5 +1,5 @@
 use crate::document::{AgentWorkflows, TaskDocumentSummary};
-use crate::git::PullRequestRecord;
+use crate::git::{GitConflict, PullRequestRecord};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -129,6 +129,13 @@ pub struct TaskCard {
     pub agent_workflows: AgentWorkflows,
     pub updated_at: String,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum TaskDirectMergeResult {
+    Completed { task: Box<TaskCard> },
+    Conflicts { conflict: GitConflict },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

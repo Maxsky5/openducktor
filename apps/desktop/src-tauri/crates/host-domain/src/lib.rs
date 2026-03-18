@@ -12,6 +12,7 @@ pub use document::{
 };
 pub use git::{
     DirectMergeRecord, GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult,
+    GitConflict, GitConflictAbortRequest, GitConflictAbortResult, GitConflictOperation,
     GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus, GitFileStatusCounts,
     GitMergeBranchRequest, GitMergeBranchResult, GitMergeMethod, GitPort, GitProviderAvailability,
     GitProviderRepository, GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest,
@@ -28,7 +29,8 @@ pub use runtime::{
 pub use store::TaskStore;
 pub use system::{BeadsCheck, RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord};
 pub use task::{
-    CreateTaskInput, IssueType, PlanSubtaskInput, TaskAction, TaskCard, TaskStatus, UpdateTaskPatch,
+    CreateTaskInput, IssueType, PlanSubtaskInput, TaskAction, TaskCard, TaskDirectMergeResult,
+    TaskStatus, UpdateTaskPatch,
 };
 
 pub const TASK_METADATA_NAMESPACE: &str = "openducktor";
@@ -102,16 +104,18 @@ mod tests {
         use super::{
             AgentSessionDocument, AgentSessionModelSelection, AgentWorkflowState, AgentWorkflows,
             BeadsCheck, BuildContinuationTarget, BuildContinuationTargetSource, CreateTaskInput,
-            GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitDiffScope,
-            GitFileStatusCounts, GitPort, GitPullRequest, GitPullResult, GitPushResult,
-            GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest,
-            GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatus,
-            GitWorktreeStatusData, GitWorktreeStatusSnapshot, GitWorktreeStatusSummary,
-            GitWorktreeStatusSummaryData, GitWorktreeSummary, IssueType, PlanSubtaskInput,
-            QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState, RunSummary,
-            RuntimeCheck, RuntimeInstanceSummary, RuntimeRole, SpecDocument, SystemCheck,
-            TaskAction, TaskCard, TaskDocumentPresence, TaskDocumentSummary, TaskMetadata,
-            TaskQaDocumentPresence, TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
+            GitBranch, GitCommitAllRequest, GitCommitAllResult, GitConflict,
+            GitConflictAbortRequest, GitConflictAbortResult, GitConflictOperation,
+            GitCurrentBranch, GitDiffScope, GitFileStatusCounts, GitPort, GitPullRequest,
+            GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
+            GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind,
+            GitWorktreeStatus, GitWorktreeStatusData, GitWorktreeStatusSnapshot,
+            GitWorktreeStatusSummary, GitWorktreeStatusSummaryData, GitWorktreeSummary, IssueType,
+            PlanSubtaskInput, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState,
+            RunSummary, RuntimeCheck, RuntimeInstanceSummary, RuntimeRole, SpecDocument,
+            SystemCheck, TaskAction, TaskCard, TaskDirectMergeResult, TaskDocumentPresence,
+            TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence, TaskStatus, TaskStore,
+            UpdateTaskPatch, WorkspaceRecord,
         };
 
         macro_rules! check_types_exported {
@@ -133,6 +137,10 @@ mod tests {
             GitBranch,
             GitCommitAllRequest,
             GitCommitAllResult,
+            GitConflict,
+            GitConflictAbortRequest,
+            GitConflictAbortResult,
+            GitConflictOperation,
             GitCurrentBranch,
             GitDiffScope,
             GitFileStatusCounts,
@@ -166,6 +174,7 @@ mod tests {
             SystemCheck,
             TaskAction,
             TaskCard,
+            TaskDirectMergeResult,
             TaskDocumentPresence,
             TaskDocumentSummary,
             TaskMetadata,

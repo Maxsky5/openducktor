@@ -1,42 +1,22 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
-import type { AgentStudioRebaseConflict } from "@/features/agent-studio-git";
-import { errorMessage } from "@/lib/errors";
+import { useCallback } from "react";
+import type { GitConflict } from "@/features/agent-studio-git";
+import {
+  type GitConflictResolutionDecision,
+  type PendingGitConflictResolutionRequest,
+  useGitConflictResolution,
+} from "@/features/git-conflict-resolution";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import type { AgentStudioQueryUpdate } from "./agent-studio-navigation";
-import { buildRebaseConflictResolutionPrompt } from "./agents-page-constants";
 import {
   resolveAgentStudioBuilderSessionForTask,
   resolveAgentStudioBuilderSessionsForTask,
 } from "./agents-page-selection";
 
-export type RebaseConflictResolutionDecision =
-  | {
-      mode: "existing";
-      sessionId: string;
-    }
-  | {
-      mode: "new";
-    }
-  | null;
-
-export type PendingRebaseConflictResolutionRequest = {
-  requestId: string;
-  conflict: AgentStudioRebaseConflict;
-  builderSessions: AgentSessionState[];
-  currentWorktreePath: string;
-  currentViewSessionId: string | null;
-  defaultMode: "existing" | "new";
-  defaultSessionId: string | null;
-};
-
-type RebaseConflictResolutionRequestInput = Omit<
-  PendingRebaseConflictResolutionRequest,
-  "requestId"
->;
+export type RebaseConflictResolutionDecision = GitConflictResolutionDecision;
+export type PendingRebaseConflictResolutionRequest = PendingGitConflictResolutionRequest;
 
 type AgentStudioRebaseConflictResolutionSelectionContext = {
   viewTaskId: string;
@@ -61,7 +41,7 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
 type UseAgentStudioRebaseConflictResolutionResult = {
   pendingRebaseConflictResolutionRequest: PendingRebaseConflictResolutionRequest | null;
   resolvePendingRebaseConflictResolution: (decision: RebaseConflictResolutionDecision) => void;
-  handleResolveRebaseConflict: (conflict: AgentStudioRebaseConflict) => Promise<boolean>;
+  handleResolveRebaseConflict: (conflict: GitConflict) => Promise<boolean>;
 };
 
 export function useAgentStudioRebaseConflictResolution({
@@ -73,64 +53,21 @@ export function useAgentStudioRebaseConflictResolution({
   sendAgentMessage,
   loadPromptOverrides = loadEffectivePromptOverrides,
 }: UseAgentStudioRebaseConflictResolutionArgs): UseAgentStudioRebaseConflictResolutionResult {
-  const [pendingRebaseConflictResolutionRequest, setPendingRebaseConflictResolutionRequest] =
-    useState<PendingRebaseConflictResolutionRequest | null>(null);
-  const pendingRebaseConflictResolutionResolverRef = useRef<
-    ((decision: RebaseConflictResolutionDecision) => void) | null
-  >(null);
-  const requestSequenceRef = useRef(0);
-
-  const resolvePendingRebaseConflictResolution = useCallback(
-    (decision: RebaseConflictResolutionDecision): void => {
-      const resolver = pendingRebaseConflictResolutionResolverRef.current;
-      pendingRebaseConflictResolutionResolverRef.current = null;
-      setPendingRebaseConflictResolutionRequest(null);
-      resolver?.(decision);
-    },
-    [],
-  );
-
-  const requestRebaseConflictResolutionChoice = useCallback(
-    (request: RebaseConflictResolutionRequestInput): Promise<RebaseConflictResolutionDecision> => {
-      pendingRebaseConflictResolutionResolverRef.current?.(null);
-      return new Promise((resolve) => {
-        pendingRebaseConflictResolutionResolverRef.current = resolve;
-        const requestId = `rebase-conflict-${requestSequenceRef.current}`;
-        requestSequenceRef.current += 1;
-        setPendingRebaseConflictResolutionRequest({
-          ...request,
-          requestId,
-        });
-      });
-    },
-    [],
-  );
-
-  useEffect(() => {
-    return () => {
-      pendingRebaseConflictResolutionResolverRef.current?.(null);
-      pendingRebaseConflictResolutionResolverRef.current = null;
-    };
-  }, []);
-
-  const sendConflictResolutionMessage = useCallback(
-    (sessionId: string, message: string): void => {
-      void sendAgentMessage(sessionId, message).catch((error) => {
-        toast.error("Failed to send Builder conflict resolution request", {
-          description: errorMessage(error),
-        });
-      });
-    },
-    [sendAgentMessage],
-  );
+  const {
+    pendingGitConflictResolutionRequest,
+    resolvePendingGitConflictResolution,
+    handleResolveGitConflict,
+  } = useGitConflictResolution({
+    activeRepo,
+    startAgentSession,
+    sendAgentMessage,
+    loadPromptOverrides,
+  });
 
   const handleResolveRebaseConflict = useCallback(
-    async (conflict: AgentStudioRebaseConflict): Promise<boolean> => {
-      if (!activeRepo) {
-        throw new Error("Cannot resolve rebase conflict because no repository is selected.");
-      }
+    async (conflict: GitConflict): Promise<boolean> => {
       if (!selection.viewTaskId) {
-        throw new Error("Cannot resolve rebase conflict because no task is selected.");
+        throw new Error("Cannot resolve a git conflict because no task is selected.");
       }
 
       const builderSessions = resolveAgentStudioBuilderSessionsForTask({
@@ -149,109 +86,37 @@ export function useAgentStudioRebaseConflictResolution({
         viewSessionsForTask: selection.viewSessionsForTask,
         sessionsForTask: selection.sessionsForTask,
       });
-      const currentWorktreePath = (conflict.workingDir ?? activeRepo)?.trim() ?? "";
-      if (!currentWorktreePath) {
-        throw new Error(
-          "Cannot resolve rebase conflict because the current worktree path is unavailable.",
-        );
-      }
 
-      const decision = await requestRebaseConflictResolutionChoice({
-        conflict,
+      return handleResolveGitConflict(conflict, {
+        taskId: selection.viewTaskId,
+        task: selection.viewSelectedTask,
         builderSessions,
-        currentWorktreePath,
         currentViewSessionId:
           selection.viewActiveSession?.role === "build"
             ? selection.viewActiveSession.sessionId
             : null,
-        defaultMode: defaultBuilderSession ? "existing" : "new",
-        defaultSessionId: defaultBuilderSession?.sessionId ?? null,
-      });
-      if (!decision) {
-        return false;
-      }
-
-      const promptOverrides = await loadPromptOverrides(activeRepo);
-      const message = buildRebaseConflictResolutionPrompt(selection.viewTaskId, {
-        overrides: promptOverrides,
-        ...(selection.viewSelectedTask
-          ? {
-              task: {
-                title: selection.viewSelectedTask.title,
-                issueType: selection.viewSelectedTask.issueType,
-                status: selection.viewSelectedTask.status,
-                qaRequired: selection.viewSelectedTask.aiReviewEnabled,
-                description: selection.viewSelectedTask.description,
-              },
-            }
-          : {}),
-        git: {
-          ...(conflict.currentBranch ? { currentBranch: conflict.currentBranch } : {}),
-          targetBranch: conflict.targetBranch,
-          conflictedFiles: conflict.conflictedFiles,
-          rebaseOutput: conflict.output,
+        onOpenSession: (sessionId) => {
+          const session = builderSessions.find((entry) => entry.sessionId === sessionId);
+          if (
+            selection.viewActiveSession?.sessionId !== sessionId ||
+            selection.viewActiveSession?.role !== "build"
+          ) {
+            onContextSwitchIntent();
+          }
+          scheduleQueryUpdate({
+            task: selection.viewTaskId,
+            session: sessionId,
+            agent: session?.role ?? defaultBuilderSession?.role ?? "build",
+          });
         },
       });
-
-      if (decision.mode === "existing") {
-        const builderSession = builderSessions.find(
-          (session) => session.sessionId === decision.sessionId,
-        );
-        if (!builderSession) {
-          throw new Error("Selected Builder session is no longer available for this task.");
-        }
-
-        if (
-          selection.viewActiveSession?.sessionId !== builderSession.sessionId ||
-          selection.viewActiveSession?.role !== builderSession.role
-        ) {
-          onContextSwitchIntent();
-          scheduleQueryUpdate({
-            task: builderSession.taskId,
-            session: builderSession.sessionId,
-            agent: builderSession.role,
-          });
-        }
-
-        sendConflictResolutionMessage(builderSession.sessionId, message);
-        return true;
-      }
-
-      const sessionId = await startAgentSession({
-        taskId: selection.viewTaskId,
-        role: "build",
-        scenario: "build_rebase_conflict_resolution",
-        selectedModel: defaultBuilderSession?.selectedModel ?? null,
-        sendKickoff: false,
-        startMode: "fresh",
-        requireModelReady: true,
-        workingDirectoryOverride: currentWorktreePath,
-      });
-
-      onContextSwitchIntent();
-      scheduleQueryUpdate({
-        task: selection.viewTaskId,
-        session: sessionId,
-        agent: "build",
-      });
-      sendConflictResolutionMessage(sessionId, message);
-      return true;
     },
-    [
-      activeRepo,
-      onContextSwitchIntent,
-      requestRebaseConflictResolutionChoice,
-      scheduleQueryUpdate,
-      selection,
-      sendConflictResolutionMessage,
-      startAgentSession,
-      loadPromptOverrides,
-    ],
+    [handleResolveGitConflict, onContextSwitchIntent, scheduleQueryUpdate, selection],
   );
 
   return {
-    pendingRebaseConflictResolutionRequest,
-    resolvePendingRebaseConflictResolution,
+    pendingRebaseConflictResolutionRequest: pendingGitConflictResolutionRequest,
+    resolvePendingRebaseConflictResolution: resolvePendingGitConflictResolution,
     handleResolveRebaseConflict,
   };
 }

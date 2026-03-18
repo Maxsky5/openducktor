@@ -1,5 +1,7 @@
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import type { GitConflict } from "@/features/agent-studio-git";
+import { useGitConflictResolution } from "@/features/git-conflict-resolution";
 import { useAgentState, useTasksState, useWorkspaceState } from "@/state";
 import { useAgentStudioRepoSettings } from "../agents/use-agent-studio-repo-settings";
 import type { KanbanPageModels } from "./kanban-page-model-types";
@@ -86,7 +88,39 @@ export function useKanbanPageModels({
     },
     [unlinkPullRequest],
   );
-  const { taskApprovalModal, openTaskApproval } = useTaskApprovalFlow({
+  const {
+    pendingGitConflictResolutionRequest,
+    resolvePendingGitConflictResolution,
+    handleResolveGitConflict,
+  } = useGitConflictResolution({
+    activeRepo,
+    startAgentSession,
+    sendAgentMessage,
+  });
+  const handleResolveKanbanGitConflict = useCallback(
+    (conflict: GitConflict, taskId: string) => {
+      const task = tasks.find((entry) => entry.id === taskId) ?? null;
+      const builderSessions = sessions.filter(
+        (entry) => entry.role === "build" && entry.taskId === taskId,
+      );
+      return handleResolveGitConflict(conflict, {
+        taskId,
+        task,
+        builderSessions,
+        currentViewSessionId: null,
+        onOpenSession: (sessionId) => {
+          const search = new URLSearchParams({
+            task: taskId,
+            session: sessionId,
+            agent: "build",
+          });
+          navigate(`/agents?${search.toString()}`);
+        },
+      });
+    },
+    [handleResolveGitConflict, navigate, sessions, tasks],
+  );
+  const { taskApprovalModal, taskGitConflictDialog, openTaskApproval } = useTaskApprovalFlow({
     activeRepo,
     tasks,
     sessions,
@@ -94,6 +128,7 @@ export function useKanbanPageModels({
     forkAgentSession,
     sendAgentMessage,
     refreshTasks,
+    onResolveGitConflict: handleResolveKanbanGitConflict,
   });
 
   const onHumanApprove = useCallback(
@@ -169,6 +204,13 @@ export function useKanbanPageModels({
     humanReviewFeedbackModal,
     taskApprovalModal,
     resetImplementationModal,
+    taskGitConflictDialog,
+    gitConflictResolutionModal: pendingGitConflictResolutionRequest
+      ? {
+          request: pendingGitConflictResolutionRequest,
+          onResolve: resolvePendingGitConflictResolution,
+        }
+      : null,
     sessionStartModal,
   };
 }

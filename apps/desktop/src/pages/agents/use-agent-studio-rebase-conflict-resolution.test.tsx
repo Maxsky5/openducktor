@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO } from "@/features/git-conflict-resolution";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -37,6 +38,7 @@ const createConflict = (overrides: Record<string, unknown> = {}) => ({
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
   const builderSession = buildSession({
     sessionId: "build-1",
+    workingDirectory: "/repo/worktrees/task-1",
     selectedModel: {
       runtimeKind: "opencode",
       providerId: "openai",
@@ -96,7 +98,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
         "build-1",
       );
       expect(harness.getLatest().pendingRebaseConflictResolutionRequest?.requestId).toBe(
-        "rebase-conflict-0",
+        "git-conflict-0",
       );
 
       await harness.run((state) => {
@@ -142,7 +144,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
 
       await harness.waitFor((state) => state.pendingRebaseConflictResolutionRequest !== null);
       expect(harness.getLatest().pendingRebaseConflictResolutionRequest?.requestId).toBe(
-        "rebase-conflict-0",
+        "git-conflict-0",
       );
 
       await harness.run((state) => {
@@ -153,7 +155,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(args.startAgentSession).toHaveBeenCalledWith({
         taskId: "task-1",
         role: "build",
-        scenario: "build_rebase_conflict_resolution",
+        scenario: BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO,
         selectedModel: {
           runtimeKind: "opencode",
           providerId: "openai",
@@ -195,7 +197,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
 
       await harness.waitFor((state) => state.pendingRebaseConflictResolutionRequest !== null);
       expect(harness.getLatest().pendingRebaseConflictResolutionRequest?.requestId).toBe(
-        "rebase-conflict-0",
+        "git-conflict-0",
       );
       await harness.run((state) => {
         state.resolvePendingRebaseConflictResolution(null);
@@ -209,6 +211,67 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(args.startAgentSession).toHaveBeenCalledTimes(0);
       expect(args.sendAgentMessage).toHaveBeenCalledTimes(0);
       expect(args.scheduleQueryUpdate).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("fails fast when the paused worktree is missing from the conflict payload", async () => {
+    const args = createBaseArgs();
+    const harness = createHookHarness(args);
+
+    try {
+      await harness.mount();
+
+      await expect(
+        harness.run(async (state) => {
+          await state.handleResolveRebaseConflict(
+            createConflict({
+              workingDir: undefined,
+            }),
+          );
+        }),
+      ).rejects.toThrow("Missing paused worktree: conflict.workingDir is required.");
+
+      expect(args.startAgentSession).toHaveBeenCalledTimes(0);
+      expect(args.sendAgentMessage).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("propagates Builder message delivery failures", async () => {
+    const args = createBaseArgs({
+      sendAgentMessage: mock(async () => {
+        throw new Error("message delivery failed");
+      }),
+    });
+    const harness = createHookHarness(args);
+
+    try {
+      await harness.mount();
+
+      let rejectionMessage: string | null = null;
+      await harness.run((state) => {
+        void state.handleResolveRebaseConflict(createConflict()).catch((error) => {
+          rejectionMessage = (error as Error).message;
+        });
+      });
+
+      await harness.waitFor((state) => state.pendingRebaseConflictResolutionRequest !== null);
+      await harness.run((state) => {
+        state.resolvePendingRebaseConflictResolution({
+          mode: "existing",
+          sessionId: "build-1",
+        });
+      });
+
+      await harness.waitFor((_state) => rejectionMessage !== null);
+      if (rejectionMessage === null) {
+        throw new Error("Expected conflict-resolution message delivery failure");
+      }
+      const message = String(rejectionMessage);
+      expect(message.includes("Failed to send Builder conflict resolution request")).toBe(true);
     } finally {
       await harness.unmount();
     }
