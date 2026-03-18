@@ -72,7 +72,8 @@ export function useAgentStudioSessionStartFlow({
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
   const queryClient = useQueryClient();
-  const [isStarting, setIsStarting] = useState(false);
+  const [startingActivityCount, setStartingActivityCount] = useState(0);
+  const isStarting = startingActivityCount > 0;
 
   const previousRepoForSessionRefs = useRef<string | null>(activeRepo);
   const startingSessionByTaskRef = useRef(new Map<string, Promise<string | undefined>>());
@@ -118,7 +119,7 @@ export function useAgentStudioSessionStartFlow({
     isActiveTaskHydrated,
     startAgentSession,
     updateAgentSessionModel,
-    setIsStarting,
+    setStartingActivityCount,
     startingSessionByTaskRef,
     updateQuery,
     resolveRequestedSelection,
@@ -206,7 +207,7 @@ export function useAgentStudioSessionStartFlow({
     sendAgentMessage,
     updateQuery,
     ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
-    setIsStarting,
+    setStartingActivityCount,
     startingSessionByTaskRef,
     resolveRequestedSelection,
   });

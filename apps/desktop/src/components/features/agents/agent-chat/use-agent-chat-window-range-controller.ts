@@ -211,7 +211,13 @@ export function useAgentChatWindowRangeController({
       releaseWindowUpdateLock();
       return nextRange;
     });
-  }, [isUpdatingRef, releaseWindowUpdateLock, rowCount, suppressSentinelsRef]);
+  }, [
+    isUpdatingRef,
+    releaseWindowUpdateLock,
+    rowCount,
+    setBottomAnchoredState,
+    suppressSentinelsRef,
+  ]);
 
   const scrollToBottom = useCallback(() => {
     applyBottomAnchoredWindow();

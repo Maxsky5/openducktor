@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import type { NewSessionStartRequest } from "@/features/session-start";
 import { resolveBuildWorkingDirectoryOverride } from "@/lib/build-worktree-overrides";
 import { errorMessage } from "@/lib/errors";
+import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { runOrchestratorSideEffect } from "../../../state/operations/agent-orchestrator/support/async-side-effects";
@@ -34,7 +35,7 @@ type UseAgentStudioFreshSessionCreationArgs = {
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent?: () => void;
-  setIsStarting: Dispatch<SetStateAction<boolean>>;
+  setStartingActivityCount: Dispatch<SetStateAction<number>>;
   startingSessionByTaskRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
   resolveRequestedSelection: (
     request: Omit<NewSessionStartRequest, "selectedModel">,
@@ -54,7 +55,7 @@ export function useAgentStudioFreshSessionCreation({
   sendAgentMessage,
   updateQuery,
   onContextSwitchIntent,
-  setIsStarting,
+  setStartingActivityCount,
   startingSessionByTaskRef,
   resolveRequestedSelection,
 }: UseAgentStudioFreshSessionCreationArgs): {
@@ -154,7 +155,8 @@ export function useAgentStudioFreshSessionCreation({
         });
       } catch (error) {
         updateQuery(params.previousSelection);
-        toast.error("Failed to start Builder session", {
+        const roleLabel = AGENT_ROLE_LABELS[params.nextRole] ?? params.nextRole.toUpperCase();
+        toast.error(`Failed to start ${roleLabel} session`, {
           description: errorMessage(error),
         });
         return undefined;
@@ -169,7 +171,7 @@ export function useAgentStudioFreshSessionCreation({
       nextScenario: AgentScenario;
       previousSelection: QueryUpdate;
     }): Promise<string | undefined> => {
-      setIsStarting(true);
+      setStartingActivityCount((current) => current + 1);
       try {
         const selectedModel = await resolveRequestedSelection({
           taskId,
@@ -208,7 +210,7 @@ export function useAgentStudioFreshSessionCreation({
         sendFreshSessionKickoff(sessionId, params.nextRole, params.nextScenario);
         return sessionId;
       } finally {
-        setIsStarting(false);
+        setStartingActivityCount((current) => Math.max(0, current - 1));
       }
     },
     [
@@ -219,7 +221,7 @@ export function useAgentStudioFreshSessionCreation({
       resolveRequestedSelection,
       role,
       sendFreshSessionKickoff,
-      setIsStarting,
+      setStartingActivityCount,
       startFreshSession,
       taskId,
     ],

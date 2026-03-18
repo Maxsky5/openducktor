@@ -470,5 +470,4 @@ describe("useRepoNavigationPersistence", () => {
       });
     }
   });
-
 });

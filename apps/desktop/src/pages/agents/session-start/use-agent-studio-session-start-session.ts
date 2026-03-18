@@ -6,6 +6,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import {
   applyAgentStudioSelectionQuery,
+  buildCreateSessionStartKey,
   canStartSessionForRole,
   type QueryUpdate,
   resolveReusableSessionForStart,
@@ -23,7 +24,7 @@ type UseAgentStudioSessionStartSessionArgs = {
   isActiveTaskHydrated: boolean;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
-  setIsStarting: Dispatch<SetStateAction<boolean>>;
+  setStartingActivityCount: Dispatch<SetStateAction<number>>;
   startingSessionByTaskRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
   updateQuery: (updates: QueryUpdate) => void;
   resolveRequestedSelection: (
@@ -43,7 +44,7 @@ export function useAgentStudioSessionStartSession({
   isActiveTaskHydrated,
   startAgentSession,
   updateAgentSessionModel,
-  setIsStarting,
+  setStartingActivityCount,
   startingSessionByTaskRef,
   updateQuery,
   resolveRequestedSelection,
@@ -55,7 +56,7 @@ export function useAgentStudioSessionStartSession({
       reason: SessionStartRequestReason;
       startMode: "fresh" | "reuse_latest";
     }): Promise<string | undefined> => {
-      setIsStarting(true);
+      setStartingActivityCount((current) => current + 1);
       try {
         const selectedModel = await resolveRequestedSelection({
           taskId,
@@ -104,7 +105,7 @@ export function useAgentStudioSessionStartSession({
         });
         return sessionId;
       } finally {
-        setIsStarting(false);
+        setStartingActivityCount((current) => Math.max(0, current - 1));
       }
     },
     [
@@ -112,7 +113,7 @@ export function useAgentStudioSessionStartSession({
       role,
       scenario,
       activeRepo,
-      setIsStarting,
+      setStartingActivityCount,
       startAgentSession,
       updateQuery,
       taskId,
@@ -143,7 +144,12 @@ export function useAgentStudioSessionStartSession({
         return reusableSession.session.sessionId;
       }
 
-      const inFlightSessionStart = startingSessionByTaskRef.current.get(taskId);
+      const startKey = buildCreateSessionStartKey({
+        taskId,
+        role,
+        scenario,
+      });
+      const inFlightSessionStart = startingSessionByTaskRef.current.get(startKey);
       if (inFlightSessionStart) {
         return inFlightSessionStart;
       }
@@ -153,10 +159,10 @@ export function useAgentStudioSessionStartSession({
         startMode: "reuse_latest",
       });
 
-      startingSessionByTaskRef.current.set(taskId, startPromise);
+      startingSessionByTaskRef.current.set(startKey, startPromise);
       void startPromise.finally(() => {
-        if (startingSessionByTaskRef.current.get(taskId) === startPromise) {
-          startingSessionByTaskRef.current.delete(taskId);
+        if (startingSessionByTaskRef.current.get(startKey) === startPromise) {
+          startingSessionByTaskRef.current.delete(startKey);
         }
       });
 
@@ -169,6 +175,7 @@ export function useAgentStudioSessionStartSession({
       role,
       selectedTask,
       sessionsForTask,
+      scenario,
       startRequestedSession,
       startingSessionByTaskRef,
       taskId,

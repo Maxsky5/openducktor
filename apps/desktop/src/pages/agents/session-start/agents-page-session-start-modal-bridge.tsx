@@ -52,6 +52,8 @@ export function AgentStudioSessionStartModalBridge({
   repoSettings,
   onResolve,
 }: AgentStudioSessionStartModalBridgeProps): ReactElement {
+  const activeRequestIdRef = useRef(request.requestId);
+  const resolvedRequestIdRef = useRef<string | null>(null);
   const {
     intent,
     isOpen,
@@ -77,6 +79,19 @@ export function AgentStudioSessionStartModalBridge({
   });
 
   useSessionStartModalRequestActivation({ request, openStartModal });
+
+  if (activeRequestIdRef.current !== request.requestId) {
+    activeRequestIdRef.current = request.requestId;
+    resolvedRequestIdRef.current = null;
+  }
+
+  const resolveDecision = (decision: NewSessionStartDecision): void => {
+    if (resolvedRequestIdRef.current === request.requestId) {
+      return;
+    }
+    resolvedRequestIdRef.current = request.requestId;
+    onResolve(decision);
+  };
 
   return (
     <SessionStartModal
@@ -109,10 +124,12 @@ export function AgentStudioSessionStartModalBridge({
         onOpenChange: (nextOpen) => {
           if (!nextOpen) {
             closeStartModal();
-            onResolve(null);
+            resolveDecision(null);
           }
         },
         onConfirm: (_runInBackground) => {
+          resolvedRequestIdRef.current = request.requestId;
+          closeStartModal();
           onResolve({ selectedModel: selection ?? null });
         },
       }}

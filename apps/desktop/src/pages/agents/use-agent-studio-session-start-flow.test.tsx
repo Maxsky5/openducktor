@@ -4,6 +4,7 @@ import { host } from "@/state/operations/host";
 import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
+  createDeferred,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -250,6 +251,65 @@ describe("useAgentStudioSessionStartFlow", () => {
       autostart: undefined,
       start: undefined,
     });
+
+    await harness.unmount();
+  });
+
+  test("keeps isStarting true until all parallel fresh-session starts finish", async () => {
+    const plannerStart = createDeferred<string>();
+    const buildStart = createDeferred<string>();
+    const startAgentSession = mock(async (params: { role: string }) =>
+      params.role === "planner" ? plannerStart.promise : buildStart.promise,
+    );
+    const sendAgentMessage = mock(async () => {});
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      startAgentSession,
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      state.handleCreateSession({
+        id: "planner:planner_initial:fresh",
+        role: "planner",
+        scenario: "planner_initial",
+        label: "Planner · Start Planner",
+        description: "Create a new planner session from scratch",
+        disabled: false,
+      });
+      state.handleCreateSession({
+        id: "build:build_implementation_start:fresh",
+        role: "build",
+        scenario: "build_implementation_start",
+        label: "Builder · Start Builder",
+        description: "Create a new builder session from scratch",
+        disabled: false,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(startAgentSession).toHaveBeenCalledTimes(2);
+    expect(harness.getLatest().isStarting).toBe(true);
+
+    await harness.run(async () => {
+      plannerStart.resolve("session-planner");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(harness.getLatest().isStarting).toBe(true);
+
+    await harness.run(async () => {
+      buildStart.resolve("session-build");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await harness.waitFor((state) => state.isStarting === false);
+
+    expect(harness.getLatest().isStarting).toBe(false);
 
     await harness.unmount();
   });
