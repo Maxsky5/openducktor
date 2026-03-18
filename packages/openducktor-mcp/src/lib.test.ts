@@ -24,6 +24,8 @@ type ProcessResult = {
   stderr?: string;
 };
 
+const FIXED_TIMESTAMP = "2026-02-28T11:30:00.000Z";
+
 const ENV_KEYS = ["ODT_REPO_PATH", "ODT_METADATA_NAMESPACE", "ODT_BEADS_DIR", "BEADS_DIR"] as const;
 
 const takeEnvSnapshot = (): Record<(typeof ENV_KEYS)[number], string | undefined> => ({
@@ -43,6 +45,39 @@ const restoreEnvSnapshot = (
       continue;
     }
     process.env[key] = value;
+  }
+};
+
+const makeIssuePayload = (value: Record<string, unknown>): Record<string, unknown> => ({
+  priority: 2,
+  labels: [],
+  created_at: FIXED_TIMESTAMP,
+  updated_at: FIXED_TIMESTAMP,
+  ...value,
+});
+
+const assertCompleteIssuePayloads = (value: unknown, commandArgs: string[]): void => {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      assertCompleteIssuePayloads(entry, commandArgs);
+    }
+    return;
+  }
+  if (!value || typeof value !== "object") {
+    return;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (typeof record.id !== "string" || typeof record.title !== "string") {
+    return;
+  }
+
+  for (const requiredKey of ["priority", "labels", "created_at", "updated_at"]) {
+    if (!(requiredKey in record)) {
+      throw new Error(
+        `Incomplete issue fixture for bd ${commandArgs.join(" ")}: missing ${requiredKey} on ${record.id}.`,
+      );
+    }
   }
 };
 
@@ -77,9 +112,19 @@ const buildProcessRunner = (
         return { ok: true, stdout: "{}", stderr: "" };
       }
       const result = impl(args);
+      const stdout = result.stdout ?? "";
+      if (typeof result.stdout === "string" && result.stdout.trim().length > 0) {
+        try {
+          const parsed = JSON.parse(result.stdout);
+          assertCompleteIssuePayloads(parsed, args);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new Error(`Invalid JSON fixture for bd ${args.join(" ")}: ${message}`);
+        }
+      }
       return {
         ok: result.ok,
-        stdout: result.stdout ?? "",
+        stdout,
         stderr: result.stderr ?? "",
       };
     },
@@ -228,6 +273,85 @@ describe("openducktor-mcp lib", () => {
     ).toThrow();
   });
 
+  test("schema rejects unknown fields on odt_set_plan subtasks", () => {
+    expect(() =>
+      ODT_TOOL_SCHEMAS.odt_set_plan.parse({
+        taskId: "task-1",
+        markdown: "## Plan",
+        subtasks: [
+          {
+            title: "Implement callback",
+            issueType: "feature",
+            extraField: "should fail",
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  test("schema rejects epic for create_task", () => {
+    const parsed = ODT_TOOL_SCHEMAS.create_task.parse({
+      title: "Ship docs",
+      issueType: "feature",
+      priority: 2,
+      labels: ["docs"],
+    });
+    expect(parsed.issueType).toBe("feature");
+
+    expect(() =>
+      ODT_TOOL_SCHEMAS.create_task.parse({
+        title: "Epic not allowed",
+        issueType: "epic",
+        priority: 2,
+      }),
+    ).toThrow();
+    expect(() =>
+      ODT_TOOL_SCHEMAS.create_task.parse({
+        title: "No hidden fields",
+        issueType: "task",
+        priority: 2,
+        parentId: "epic-1",
+      }),
+    ).toThrow();
+    expect(() =>
+      ODT_TOOL_SCHEMAS.create_task.parse({
+        title: "No hidden fields",
+        issueType: "task",
+        priority: 2,
+        assignee: "max",
+      }),
+    ).toThrow();
+    expect(() =>
+      ODT_TOOL_SCHEMAS.create_task.parse({
+        title: "No blank description",
+        issueType: "task",
+        priority: 2,
+        description: "   ",
+      }),
+    ).toThrow();
+  });
+
+  test("schema validates search_tasks limit and active status filters", () => {
+    const parsed = ODT_TOOL_SCHEMAS.search_tasks.parse({
+      status: "blocked",
+      limit: 25,
+      tags: ["backend", "mcp"],
+    });
+    expect(parsed.status).toBe("blocked");
+    expect(parsed.limit).toBe(25);
+
+    expect(() =>
+      ODT_TOOL_SCHEMAS.search_tasks.parse({
+        status: "closed",
+      }),
+    ).toThrow();
+    expect(() =>
+      ODT_TOOL_SCHEMAS.search_tasks.parse({
+        limit: 101,
+      }),
+    ).toThrow();
+  });
+
   test("setSpec resolves unique slug-like task identifier to canonical task id", async () => {
     let metadataTargetTaskId: string | null = null;
     let statusTargetTaskId: string | null = null;
@@ -245,20 +369,20 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "fairnest-wsp",
               title: "Add Facebook OAuth Login",
               status,
               issue_type: "epic",
               metadata: {},
-            },
-            {
+            }),
+            makeIssuePayload({
               id: "fairnest-abc",
               title: "Improve UI spacing",
               status: "open",
               issue_type: "task",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -270,13 +394,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "fairnest-wsp",
               title: "Add Facebook OAuth Login",
               status,
               issue_type: "epic",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -332,20 +456,20 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "fairnest-wsp",
               title: "Add Facebook OAuth Login",
               status,
               issue_type: "epic",
               metadata: {},
-            },
-            {
+            }),
+            makeIssuePayload({
               id: "fairnest-abc",
               title: "Improve UI spacing",
               status: "open",
               issue_type: "task",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -357,13 +481,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "fairnest-wsp",
               title: "Add Facebook OAuth Login",
               status,
               issue_type: "epic",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -415,20 +539,20 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "fairnest-a1",
               title: "Add Facebook OAuth Login",
               status: "open",
               issue_type: "epic",
               metadata: {},
-            },
-            {
+            }),
+            makeIssuePayload({
               id: "fairnest-a2",
               title: "Harden Facebook OAuth callback",
               status: "open",
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -459,13 +583,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status: "open",
               issue_type: "task",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -473,13 +597,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status: "open",
               issue_type: "task",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -529,29 +653,29 @@ describe("openducktor-mcp lib", () => {
         const issues =
           listCalls === 1
             ? [
-                {
+                makeIssuePayload({
                   id: "task-1",
                   title: "Task 1",
                   status: "open",
                   issue_type: "task",
                   metadata: {},
-                },
+                }),
               ]
             : [
-                {
+                makeIssuePayload({
                   id: "task-1",
                   title: "Task 1",
                   status: "open",
                   issue_type: "task",
                   metadata: {},
-                },
-                {
+                }),
+                makeIssuePayload({
                   id: "task-2",
                   title: "Task 2",
                   status: "in_progress",
                   issue_type: "task",
                   metadata: {},
-                },
+                }),
               ];
 
         return {
@@ -565,13 +689,13 @@ describe("openducktor-mcp lib", () => {
           return { ok: true, stdout: JSON.stringify([]) };
         }
 
-        const issue = {
+        const issue = makeIssuePayload({
           id,
           title: id === "task-2" ? "Task 2" : "Task 1",
           status: id === "task-2" ? "in_progress" : "open",
           issue_type: "task",
           metadata: {},
-        };
+        });
 
         return {
           ok: true,
@@ -616,29 +740,29 @@ describe("openducktor-mcp lib", () => {
         const issues =
           listCalls === 1
             ? [
-                {
+                makeIssuePayload({
                   id: "fairnest-wsp",
                   title: "Task A",
                   status: "open",
                   issue_type: "task",
                   metadata: {},
-                },
-                {
+                }),
+                makeIssuePayload({
                   id: "delta-wsp",
                   title: "Task B",
                   status: "open",
                   issue_type: "task",
                   metadata: {},
-                },
+                }),
               ]
             : [
-                {
+                makeIssuePayload({
                   id: "fairnest-wsp",
                   title: "Task A",
                   status: "in_progress",
                   issue_type: "task",
                   metadata: {},
-                },
+                }),
               ];
 
         return { ok: true, stdout: JSON.stringify(issues) };
@@ -652,13 +776,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "fairnest-wsp",
               title: "Task A",
               status: "in_progress",
               issue_type: "task",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -699,13 +823,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status,
               issue_type: "task",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -713,13 +837,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status,
               issue_type: "task",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -763,13 +887,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status: "open",
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -812,13 +936,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status: "open",
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -826,13 +950,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status: "open",
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -879,13 +1003,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status: "ai_review",
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -893,13 +1017,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status: statusTransition === "human_review" ? "human_review" : "ai_review",
               issue_type: "feature",
               metadata: metadataPayload ?? {},
-            },
+            }),
           ]),
         };
       }
@@ -976,13 +1100,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status,
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -990,13 +1114,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status,
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1052,13 +1176,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status,
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1066,13 +1190,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status,
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1128,13 +1252,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Epic Task",
               status,
               issue_type: "epic",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1142,13 +1266,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Epic Task",
               status,
               issue_type: "epic",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1208,13 +1332,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Feature task",
               status,
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1222,13 +1346,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Feature task",
               status,
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1281,13 +1405,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Feature task",
               status,
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1295,13 +1419,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Feature task",
               status,
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1355,21 +1479,21 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "epic-1",
               title: "Epic task",
               status,
               issue_type: "epic",
               metadata: {},
-            },
-            {
+            }),
+            makeIssuePayload({
               id: "legacy-subtask",
               title: "Legacy child",
               status: "open",
               issue_type: "task",
               parent: "epic-1",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1377,13 +1501,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "epic-1",
               title: "Epic task",
               status,
               issue_type: "epic",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1448,21 +1572,21 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "epic-1",
               title: "Epic task",
               status,
               issue_type: "epic",
               metadata: {},
-            },
-            {
+            }),
+            makeIssuePayload({
               id: "legacy-subtask",
               title: "Legacy child",
               status: "open",
               issue_type: "task",
               parent: "epic-1",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1470,13 +1594,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "epic-1",
               title: "Epic task",
               status,
               issue_type: "epic",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1545,21 +1669,21 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "epic-1",
               title: "Epic task",
               status,
               issue_type: "epic",
               metadata: {},
-            },
-            {
+            }),
+            makeIssuePayload({
               id: "legacy-subtask",
               title: "Legacy child",
               status: refreshedSubtaskStatus,
               issue_type: "task",
               parent: "epic-1",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1567,13 +1691,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "epic-1",
               title: "Epic task",
               status,
               issue_type: "epic",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1642,14 +1766,14 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status: currentStatus,
               issue_type: "feature",
               ai_review_enabled: false,
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1662,14 +1786,14 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status,
               issue_type: "feature",
               ai_review_enabled: false,
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1715,13 +1839,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status,
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1729,13 +1853,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status,
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1794,13 +1918,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status,
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }
@@ -1808,13 +1932,13 @@ describe("openducktor-mcp lib", () => {
         return {
           ok: true,
           stdout: JSON.stringify([
-            {
+            makeIssuePayload({
               id: "task-1",
               title: "Task 1",
               status,
               issue_type: "feature",
               metadata: {},
-            },
+            }),
           ]),
         };
       }

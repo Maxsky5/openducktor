@@ -155,7 +155,7 @@ describe("BdPersistence", () => {
         aiReviewEnabled: false,
       },
     ]);
-    expect(state.calls).toEqual([["list", "--all", "-n", "500"]]);
+    expect(state.calls).toEqual([["list", "--all", "--limit", "0"]]);
   });
 
   test("listTasks throws when bd payload is not an array", async () => {
@@ -273,6 +273,50 @@ describe("BdPersistence", () => {
         aiReviewEnabled: true,
       },
     ]);
+  });
+
+  test("createTask surfaces created task id when post-create metadata sync fails", async () => {
+    const state: FakeClientState = {
+      calls: [],
+      ensureInitializedCalls: 0,
+    };
+    const client = createClient(
+      {
+        runBdJson: async (args) => {
+          if (args[0] === "create") {
+            return { id: "task-55" };
+          }
+          if (args[0] === "show") {
+            return [
+              {
+                id: "task-55",
+                title: "Task 55",
+                status: "open",
+                issue_type: "task",
+                metadata: {},
+              },
+            ];
+          }
+          throw new Error(`Unexpected command: ${args.join(" ")}`);
+        },
+        updateTask: async () => {
+          throw new Error("metadata write failed");
+        },
+      },
+      state,
+    );
+
+    const persistence = new BdPersistence(client, "openducktor");
+
+    await expect(
+      persistence.createTask({
+        title: "Task 55",
+        issueType: "task",
+        priority: 2,
+      }),
+    ).rejects.toThrow(
+      "Task task-55 was created, but post-create metadata sync failed: metadata write failed",
+    );
   });
 
   test("writeNamespace updates metadata under namespace key", async () => {

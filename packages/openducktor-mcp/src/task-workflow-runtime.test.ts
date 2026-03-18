@@ -157,10 +157,45 @@ describe("task workflow runtime", () => {
       },
     });
 
-    await expect(runtime.transitionTask("task-1", "ready_for_dev")).resolves.toEqual(
-      makeTask({ status: "ready_for_dev" }),
-    );
+    await expect(runtime.transitionTask("task-1", "ready_for_dev")).resolves.toEqual({
+      issue: makeIssue({ status: "ready_for_dev" }),
+      task: makeTask({ status: "ready_for_dev" }),
+    });
     expect(runCalls).toEqual([["update", "task-1", "--status", "ready_for_dev"]]);
+    expect(invalidateCalls).toBe(1);
+  });
+
+  test("transitionTask invalidates lookup state even when refreshed issue loading fails", async () => {
+    let invalidateCalls = 0;
+    const currentTask = makeTask({ status: "spec_ready" });
+    const runtime = createOdtTaskWorkflowRuntime({
+      persistence: {
+        metadataNamespace: "openducktor",
+        ensureInitialized: async () => {},
+        runBdJson: async () => ({}),
+        listTasks: async () => [currentTask],
+        showRawIssue: async () => {
+          throw new Error("show failed");
+        },
+        updateTask: async () => {
+          throw new Error("updateTask should not be called");
+        },
+        getNamespaceData: () => {
+          throw new Error("getNamespaceData should not be called");
+        },
+        writeNamespace: async () => {
+          throw new Error("writeNamespace should not be called");
+        },
+      },
+      taskLookup: {
+        resolveTask: async () => currentTask,
+        invalidate: () => {
+          invalidateCalls += 1;
+        },
+      },
+    });
+
+    await expect(runtime.transitionTask("task-1", "ready_for_dev")).rejects.toThrow("show failed");
     expect(invalidateCalls).toBe(1);
   });
 
@@ -208,13 +243,58 @@ describe("task workflow runtime", () => {
         metadataRoot: { openducktor: { documents: { qaReports: [{ verdict: "approved" }] } } },
         status: "human_review",
       }),
-    ).resolves.toEqual(makeTask({ status: "human_review" }));
+    ).resolves.toEqual({
+      issue: makeIssue({
+        status: "human_review",
+        metadata: { openducktor: { documents: { qaReports: [{ verdict: "approved" }] } } },
+      }),
+      task: makeTask({ status: "human_review" }),
+    });
     expect(updateCalls).toEqual([
       {
         metadataRoot: { openducktor: { documents: { qaReports: [{ verdict: "approved" }] } } },
         status: "human_review",
       },
     ]);
+    expect(invalidateCalls).toBe(1);
+  });
+
+  test("applyTaskUpdate invalidates lookup state even when refreshed issue loading fails", async () => {
+    let invalidateCalls = 0;
+
+    const runtime = createOdtTaskWorkflowRuntime({
+      persistence: {
+        metadataNamespace: "openducktor",
+        ensureInitialized: async () => {},
+        runBdJson: async () => {
+          throw new Error("runBdJson should not be called");
+        },
+        listTasks: async () => [],
+        showRawIssue: async () => {
+          throw new Error("show failed");
+        },
+        updateTask: async () => {},
+        getNamespaceData: () => {
+          throw new Error("getNamespaceData should not be called");
+        },
+        writeNamespace: async () => {
+          throw new Error("writeNamespace should not be called");
+        },
+      },
+      taskLookup: {
+        resolveTask: async () => makeTask(),
+        invalidate: () => {
+          invalidateCalls += 1;
+        },
+      },
+    });
+
+    await expect(
+      runtime.applyTaskUpdate("task-1", {
+        metadataRoot: { openducktor: { documents: { qaReports: [{ verdict: "approved" }] } } },
+        status: "human_review",
+      }),
+    ).rejects.toThrow("show failed");
     expect(invalidateCalls).toBe(1);
   });
 });

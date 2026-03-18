@@ -745,7 +745,7 @@ fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
                 "--cwd".to_string(),
                 workspace_filter.to_string_lossy().to_string(),
                 "--filter".to_string(),
-                "@openducktor/openducktor-mcp".to_string(),
+                "@openducktor/mcp".to_string(),
                 "start".to_string(),
             ]
         );

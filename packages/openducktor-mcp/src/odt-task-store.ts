@@ -12,9 +12,11 @@ import {
   BuildBlockedInputSchema,
   BuildCompletedInputSchema,
   BuildResumedInputSchema,
+  CreateTaskInputSchema,
   QaApprovedInputSchema,
   QaRejectedInputSchema,
   ReadTaskInputSchema,
+  SearchTasksInputSchema,
   SetPlanInputSchema,
   SetSpecInputSchema,
 } from "./tool-schemas";
@@ -65,9 +67,11 @@ export class OdtTaskStore {
       taskLookup: taskIndexCache,
     });
     this.useCases = createOdtTaskStoreUseCases({
+      persistence,
       workflow,
       documentStore,
       epicSubtaskReplacementService,
+      invalidateTaskIndex: () => taskIndexCache.invalidate(),
     });
   }
 
@@ -86,6 +90,18 @@ export class OdtTaskStore {
     rawInput: unknown,
   ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["readTask"]["execute"]>>> {
     return this.useCases.readTask.execute(ReadTaskInputSchema.parse(rawInput));
+  }
+
+  async createTask(
+    rawInput: unknown,
+  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["createTask"]["execute"]>>> {
+    return this.useCases.createTask.execute(CreateTaskInputSchema.parse(rawInput));
+  }
+
+  async searchTasks(
+    rawInput: unknown,
+  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["searchTasks"]["execute"]>>> {
+    return this.useCases.searchTasks.execute(SearchTasksInputSchema.parse(rawInput));
   }
 
   async setSpec(

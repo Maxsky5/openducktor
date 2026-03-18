@@ -19,6 +19,7 @@ This folder contains the project documentation that explains how OpenDucktor is 
 - [agent-orchestrator-module-map.md](agent-orchestrator-module-map.md): maintainer map for the desktop agent orchestration modules.
 - [agent-runtime-implementation-plan.md](agent-runtime-implementation-plan.md): runtime abstraction plan and guardrails.
 - [agent-ui-library-evaluation.md](agent-ui-library-evaluation.md): reasoning behind the current agent UI approach.
+- [external-mcp.md](external-mcp.md): public MCP package usage, install config, and the external task tools.
 - [runtime-integration-guide.md](runtime-integration-guide.md): runtime vocabulary, capability model, integration checklist, and verification path.
 
 ## Security And Maintenance Docs

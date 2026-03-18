@@ -8,6 +8,11 @@ export type TaskContext = {
   tasks: TaskCard[];
 };
 
+export type RefreshedTaskState = {
+  issue: RawIssue;
+  task: TaskCard;
+};
+
 export const resolveTaskContext = async (
   taskId: string,
   listTasks: () => Promise<TaskCard[]>,
@@ -56,14 +61,25 @@ export const applyTransition = async (input: {
   showRawIssue: (taskId: string) => Promise<RawIssue>;
   invalidateTaskIndex: () => void;
   metadataNamespace: string;
-}): Promise<TaskCard> => {
-  if (input.task.status !== input.nextStatus) {
+}): Promise<RefreshedTaskState> => {
+  const mutated = input.task.status !== input.nextStatus;
+  if (mutated) {
     await input.runBdJson(["update", input.task.id, "--status", input.nextStatus]);
   }
 
-  const refreshed = await input.showRawIssue(input.task.id);
-  input.invalidateTaskIndex();
-  return issueToTaskCard(refreshed, input.metadataNamespace);
+  let issue: RawIssue;
+  try {
+    issue = await input.showRawIssue(input.task.id);
+  } finally {
+    if (mutated) {
+      input.invalidateTaskIndex();
+    }
+  }
+
+  return {
+    issue,
+    task: issueToTaskCard(issue, input.metadataNamespace),
+  };
 };
 
 export const transitionTask = async (input: {
@@ -75,7 +91,7 @@ export const transitionTask = async (input: {
   showRawIssue: (taskId: string) => Promise<RawIssue>;
   invalidateTaskIndex: () => void;
   metadataNamespace: string;
-}): Promise<TaskCard> => {
+}): Promise<RefreshedTaskState> => {
   const { task, tasks } =
     input.context ?? (await resolveTaskContext(input.taskId, input.listTasks));
   assertTransitionAllowed(task, tasks, input.nextStatus);

@@ -183,11 +183,13 @@ describe("registerOdtTool", () => {
 
   test("keeps registered tools in sync with MCP schema keys", () => {
     const schemaToolNames = Object.keys(ODT_TOOL_SCHEMAS);
-    expect(ODT_REGISTERED_TOOL_NAMES).toEqual(schemaToolNames);
+    expect([...ODT_REGISTERED_TOOL_NAMES].sort()).toEqual([...schemaToolNames].sort());
   });
 
-  test("matches canonical workflow fixture tool list", () => {
+  test("keeps workflow-prefixed registered tools aligned with the canonical workflow fixture", () => {
     const fixture = loadWorkflowFixture();
-    expect(ODT_REGISTERED_TOOL_NAMES).toEqual(fixture.tools);
+    expect(ODT_REGISTERED_TOOL_NAMES.filter((toolName) => toolName.startsWith("odt_"))).toEqual(
+      fixture.tools,
+    );
   });
 });

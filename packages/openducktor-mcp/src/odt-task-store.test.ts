@@ -19,6 +19,10 @@ type TestIssue = {
   title: string;
   status: string;
   issue_type: string;
+  priority: number;
+  labels: string[];
+  created_at: string;
+  updated_at: string;
   parent?: string;
   metadata?: unknown;
 };
@@ -53,6 +57,10 @@ const makeIssue = (input: {
     title: input.title,
     status: input.status,
     issue_type: input.issueType ?? "task",
+    priority: 2,
+    labels: [],
+    created_at: FIXED_NOW,
+    updated_at: FIXED_NOW,
   };
 
   if (input.parentId) {
@@ -279,11 +287,16 @@ describe("OdtTaskStore workflow mutation paths", () => {
     };
 
     expect(result.task).toEqual({
-      id: "alpha-wsp",
-      title: "Alpha workflow",
-      status: "in_progress",
-      issueType: "feature",
       aiReviewEnabled: true,
+      createdAt: FIXED_NOW,
+      description: "",
+      id: "alpha-wsp",
+      issueType: "feature",
+      labels: [],
+      priority: 2,
+      status: "in_progress",
+      title: "Alpha workflow",
+      updatedAt: FIXED_NOW,
     });
     expect(harness.getCommandCalls("list")).toHaveLength(2);
   });

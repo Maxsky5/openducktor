@@ -228,11 +228,45 @@ describe("workflow-tool-selection", () => {
 
     expect(selection.odt_read_task).toBe(true);
     expect(selection.odt_set_spec).toBe(true);
-    expect(selection.openducktor_odt_set_spec_extra).toBeUndefined();
+    expect(selection.openducktor_odt_set_spec_extra).toBe(false);
     expect(selection.customprefix_odt_set_plan).toBeUndefined();
     expect(selection.OpenDucktor_ODT_SET_SPEC).toBeUndefined();
     expect(selection.edit).toBe(false);
     expect(selection.apply_patch).toBe(false);
     expect(selection.bash).toBeUndefined();
+  });
+
+  test("denies newly discovered public OpenDucktor MCP tools for current workflow roles", async () => {
+    const selection = await resolveWorkflowToolSelection({
+      client: makeClient({
+        toolIds: [
+          "openducktor_odt_read_task",
+          "openducktor_create_task",
+          "functions.openducktor_search_tasks",
+        ],
+      }),
+      role: "spec",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      workingDirectory: "/repo",
+    });
+
+    expect(selection.openducktor_odt_read_task).toBe(true);
+    expect(selection.openducktor_create_task).toBe(false);
+    expect(selection["functions.openducktor_search_tasks"]).toBe(false);
+  });
+
+  test("denies canonical public tool ids when discovery exposes them without a server prefix", async () => {
+    const selection = await resolveWorkflowToolSelection({
+      client: makeClient({
+        toolIds: ["create_task", "search_tasks", "odt_read_task"],
+      }),
+      role: "spec",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      workingDirectory: "/repo",
+    });
+
+    expect(selection.create_task).toBe(false);
+    expect(selection.search_tasks).toBe(false);
+    expect(selection.odt_read_task).toBe(true);
   });
 });

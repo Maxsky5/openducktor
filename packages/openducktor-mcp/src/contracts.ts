@@ -16,13 +16,32 @@ export type TaskCard = Pick<
   parentId?: string;
 };
 
+export type PublicTask = Pick<
+  CanonicalTaskCard,
+  | "id"
+  | "title"
+  | "description"
+  | "status"
+  | "priority"
+  | "issueType"
+  | "aiReviewEnabled"
+  | "labels"
+  | "createdAt"
+  | "updatedAt"
+>;
+
 export type RawIssue = {
   id: string;
   title: string;
   description?: string;
   status: unknown;
+  priority?: unknown;
   issue_type?: unknown;
+  labels?: unknown;
+  owner?: unknown;
   parent?: string | null;
+  created_at?: unknown;
+  updated_at?: unknown;
   dependencies?: Array<{
     type?: string;
     dependency_type?: string;

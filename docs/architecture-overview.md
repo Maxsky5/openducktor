@@ -24,7 +24,7 @@ Current scope note:
 | Tauri command bridge (Rust) | `apps/desktop/src-tauri/src/lib.rs`, `apps/desktop/src-tauri/src/commands/*` | Typed command surface (`tauri::command`), argument mapping, command registration | Deep business policy (kept in `AppService`) |
 | Host application/domain (Rust) | `apps/desktop/src-tauri/crates/host-application/src/app_service/*`, `apps/desktop/src-tauri/crates/host-domain/src/*` | Workflow transition rules, task enrichment (`available_actions`, `agent_workflows`), runtime orchestration, `TaskStore` trait | UI concerns, view-level behavior |
 | Infrastructure/persistence (Rust) | `apps/desktop/src-tauri/crates/host-infra-beads/*`, `apps/desktop/src-tauri/crates/host-infra-system/*` | Beads-backed `TaskStore`, config/worktree/process integrations | UI workflow decisions |
-| MCP workflow service (TS) | `packages/openducktor-mcp/src/index.ts`, `packages/openducktor-mcp/src/lib.ts`, `packages/openducktor-mcp/src/odt-task-store.ts` | `odt_*` tool execution and validation against Beads metadata/status | Frontend rendering/state |
+| MCP workflow service (TS) | `packages/openducktor-mcp/src/index.ts`, `packages/openducktor-mcp/src/lib.ts`, `packages/openducktor-mcp/src/odt-task-store.ts` | public MCP task tools (`create_task`, `search_tasks`, `odt_read_task`) plus `odt_*` workflow execution and validation against Beads metadata/status | Frontend rendering/state |
 
 ## Runtime Data Flows
 
@@ -82,7 +82,7 @@ Agent-triggered path:
 | Task statuses, issue types, action IDs | `packages/contracts/src/task-schemas.ts` | `@openducktor/contracts`, consumed by adapters/frontend/host |
 | Role, scenario, ODT tool IDs | `packages/contracts/src/agent-workflow-schemas.ts` | `@openducktor/contracts` |
 | Role-to-tool allowlist | `AGENT_ROLE_TOOL_POLICY` in `packages/core/src/types/agent-orchestrator.ts` | `@openducktor/core` |
-| ODT tool schema validation | `ODT_TOOL_SCHEMAS` exported from `packages/openducktor-mcp/src/lib.ts` (defined in `src/tool-schemas.ts`) | `@openducktor/openducktor-mcp` |
+| ODT/public MCP tool schema validation | `ODT_TOOL_SCHEMAS` exported from `packages/openducktor-mcp/src/lib.ts` (defined in `src/tool-schemas.ts`) | `@openducktor/mcp` |
 | Transition legality and backend-derived actions/workflows | Rust host path: `apps/desktop/src-tauri/crates/host-application/src/app_service/workflow_rules.rs`; MCP path: `packages/openducktor-mcp/src/workflow-policy.ts` + `packages/openducktor-mcp/src/task-transitions.ts` | Rust host application + MCP workflow service |
 | Persisted task lifecycle state | Beads `status` field | Beads store accessed through `TaskStore` implementations |
 | Agent-authored docs (spec/plan/qa) and session snapshots | Task metadata under configurable namespace (`openducktor` default) | `host-infra-beads` + `openducktor-mcp` |
@@ -98,10 +98,11 @@ Concrete adapters today:
 ## Cross-Layer Change Checklist
 1. If data shape changes, update `packages/contracts` first.
 2. If `odt_*` tool shape or names change, update MCP schemas, core tool normalization/policy, adapter behavior, and UI assumptions together.
-3. If workflow transitions/actions change, update Rust `workflow_rules`, then docs and frontend rendering expectations.
-4. Keep Tauri commands as transport/mapping layer; place policy in `AppService`/domain layers.
-5. Preserve Beads as lifecycle source of truth; do not move lifecycle authority into UI-local state.
-6. Keep Rust host and MCP transition policy matrices aligned; when one changes, update the other in the same change set.
+3. If public MCP tool shapes (`create_task`, `search_tasks`, `odt_read_task`) change, update package docs and public MCP schemas together.
+4. If workflow transitions/actions change, update Rust `workflow_rules`, then docs and frontend rendering expectations.
+5. Keep Tauri commands as transport/mapping layer; place policy in `AppService`/domain layers.
+6. Preserve Beads as lifecycle source of truth; do not move lifecycle authority into UI-local state.
+7. Keep Rust host and MCP transition policy matrices aligned; when one changes, update the other in the same change set.
 
 ## Related Docs
 - `docs/agent-orchestrator-module-map.md`

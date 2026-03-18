@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js";
+import packageJson from "../package.json" with { type: "json" };
 import { ODT_TOOL_SCHEMAS, type OdtStoreContext, OdtTaskStore, resolveStoreContext } from "./lib";
 
 type ToolResult = {
@@ -166,8 +167,18 @@ export const registerOdtTool = <Name extends RegisteredToolName>(
 export const ODT_REGISTERED_TOOL_SPECS: Readonly<RegisteredToolSpecs> = {
   odt_read_task: {
     description:
-      "Read one OpenDucktor task with its current status and agent documents (spec/plan/latest QA).",
+      "Read one OpenDucktor task with its current public fields and agent documents (spec/plan/latest QA).",
     execute: (store, input) => store.readTask(input),
+  },
+  create_task: {
+    description:
+      "Create a new OpenDucktor task, feature, or bug using the same public task/document response model as odt_read_task. Epic creation is not supported by this public tool.",
+    execute: (store, input) => store.createTask(input),
+  },
+  search_tasks: {
+    description:
+      "Search active OpenDucktor tasks using exact filters for priority/issueType/status plus title substring and tag AND matching. The response is paginated as { results, limit, totalCount, hasMore }, and each item in results uses the same { task, documents } snapshot model as odt_read_task.",
+    execute: (store, input) => store.searchTasks(input),
   },
   odt_set_spec: {
     description:
@@ -230,11 +241,11 @@ export const createOpenducktorMcpServer = async (
   const server = new McpServer(
     {
       name: "openducktor",
-      version: "0.1.0",
+      version: packageJson.version,
     },
     {
       instructions:
-        "OpenDucktor workflow server. Use odt_read_task for context, then odt_* transition tools to mutate workflow state. For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).",
+        "OpenDucktor workflow server. Public task access uses create_task, search_tasks, and odt_read_task. Internal workflow mutations use odt_* tools. For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).",
     },
   );
 

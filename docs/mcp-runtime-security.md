@@ -1,6 +1,6 @@
 # MCP Runtime Security Assumptions
 
-This document defines allowed runtime transports and threat assumptions for `@openducktor/openducktor-mcp`.
+This document defines allowed runtime transports and threat assumptions for `@openducktor/mcp`.
 
 ## Allowed Transports (V1)
 

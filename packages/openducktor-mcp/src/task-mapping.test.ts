@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { RawIssue } from "./contracts";
-import { issueToTaskCard, parseMarkdownEntries, parseQaEntries } from "./task-mapping";
+import {
+  issueToPublicTask,
+  issueToTaskCard,
+  parseMarkdownEntries,
+  parseQaEntries,
+} from "./task-mapping";
 
 describe("task mapping entry parsers", () => {
   test("issueToTaskCard rejects invalid Beads issue types with task context", () => {
@@ -46,6 +51,42 @@ describe("task mapping entry parsers", () => {
       issueType: "task",
       aiReviewEnabled: true,
     });
+  });
+
+  test("issueToPublicTask rejects invalid Beads created_at timestamps", () => {
+    const issue: RawIssue = {
+      id: "task-11",
+      title: "Broken created_at",
+      status: "open",
+      issue_type: "task",
+      priority: 2,
+      labels: [],
+      created_at: "not-a-timestamp",
+      updated_at: "2026-02-28T00:00:00Z",
+      metadata: {},
+    };
+
+    expect(() => issueToPublicTask(issue, "openducktor")).toThrow(
+      "Invalid Beads created_at for task task-11: expected a valid ISO-8601 timestamp string.",
+    );
+  });
+
+  test("issueToPublicTask rejects invalid Beads updated_at timestamps", () => {
+    const issue: RawIssue = {
+      id: "task-12",
+      title: "Broken updated_at",
+      status: "open",
+      issue_type: "task",
+      priority: 2,
+      labels: [],
+      created_at: "2026-02-28T00:00:00Z",
+      updated_at: "2026-02-28",
+      metadata: {},
+    };
+
+    expect(() => issueToPublicTask(issue, "openducktor")).toThrow(
+      "Invalid Beads updated_at for task task-12: expected a valid ISO-8601 timestamp string.",
+    );
   });
 
   test("parseMarkdownEntries returns only valid markdown metadata entries", () => {
