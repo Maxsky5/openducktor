@@ -303,12 +303,13 @@ export function useTaskApprovalFlow({
         throw new Error(`Task not found: ${currentState.taskId}`);
       }
 
-      const baselineAssistantCount = parentSession.messages.filter(
-        (message) => message.role === "assistant",
-      ).length;
       const forkedSessionId = await forkAgentSession({
         parentSessionId: parentSession.sessionId,
       });
+      const baselineAssistantCount =
+        sessionsRef.current
+          .find((entry) => entry.sessionId === forkedSessionId)
+          ?.messages.filter((message) => message.role === "assistant").length ?? 0;
       const prompt = buildAgentMessagePrompt({
         role: "build",
         templateId: "message.build_pull_request_draft",
@@ -426,10 +427,11 @@ export function useTaskApprovalFlow({
             description:
               "OpenDucktor is drafting the title and description. This can take some time.",
           });
+          const currentState = state;
           reset();
           void (async () => {
             try {
-              const pullRequest = await createPullRequestWithAi(state);
+              const pullRequest = await createPullRequestWithAi(currentState);
               await refreshTasks();
               toast.success("Pull request created", {
                 id: loadingToastId,
@@ -453,7 +455,7 @@ export function useTaskApprovalFlow({
                 action: {
                   label: "Reopen",
                   onClick: () => {
-                    openTaskApproval(state.taskId, {
+                    openTaskApproval(currentState.taskId, {
                       ...reopenOptions,
                       errorMessage: description,
                     });
