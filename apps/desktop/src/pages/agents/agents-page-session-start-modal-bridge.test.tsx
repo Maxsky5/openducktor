@@ -91,6 +91,7 @@ describe("useSessionStartModalRequestActivation", () => {
 
     try {
       await expect(harness.mount()).rejects.toThrow("open failed");
+      expect(failingOpenStartModal).toHaveBeenCalledTimes(1);
 
       await harness.update({
         request,

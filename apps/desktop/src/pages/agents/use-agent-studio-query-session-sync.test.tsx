@@ -96,6 +96,26 @@ describe("useAgentStudioQuerySessionSync", () => {
     }
   });
 
+  test("does not clear a session deep link before session reconciliation can repair it", async () => {
+    const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
+    const harness = createHookHarness(
+      createBaseArgs({
+        tasks: [createTask("task-1")],
+        taskIdParam: "missing-task",
+        sessionParam: "session-2",
+        taskId: "",
+        scheduleQueryUpdate,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      expect(scheduleQueryUpdate).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("corrects the task when a resolved session belongs to another task", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
     const selectedSession = createSession("task-2", "session-2");

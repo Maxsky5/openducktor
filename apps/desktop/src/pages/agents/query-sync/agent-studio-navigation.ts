@@ -180,11 +180,15 @@ export const restoreNavigationFromPersistedContext = (
   persisted: PersistedAgentStudioContext,
 ): AgentStudioNavigationState => {
   const role = current.role ?? persisted.role ?? null;
+  const taskId = current.taskId || persisted.taskId || "";
+  const sessionId =
+    current.sessionId ??
+    (!current.taskId || persisted.taskId === current.taskId ? (persisted.sessionId ?? null) : null);
 
   return {
     ...current,
-    taskId: current.taskId || persisted.taskId || "",
-    sessionId: current.sessionId ?? persisted.sessionId ?? null,
+    taskId,
+    sessionId,
     role,
   };
 };

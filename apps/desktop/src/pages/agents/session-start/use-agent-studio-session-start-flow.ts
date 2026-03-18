@@ -3,12 +3,14 @@ import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor
 import { assertAgentKickoffScenario } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type {
   NewSessionStartRequest,
   RequestNewSessionStart,
   SessionStartRequestReason,
 } from "@/features/session-start";
+import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { loadEffectivePromptOverrides } from "../../../state/operations/prompt-overrides";
@@ -164,26 +166,33 @@ export function useAgentStudioSessionStartFlow({
     const promptOverrides = activeRepo
       ? await loadEffectivePromptOverrides(activeRepo, queryClient)
       : undefined;
-    await sendAgentMessage(
-      sessionId,
-      kickoffPromptForScenario(role, kickoffScenario, taskId, {
-        overrides: promptOverrides ?? {},
-        task: {
-          ...(selectedTask
-            ? {
-                title: selectedTask.title,
-                issueType: selectedTask.issueType,
-                status: selectedTask.status,
-                qaRequired: selectedTask.aiReviewEnabled,
-                description: selectedTask.description,
-              }
-            : {}),
-        },
-      }),
-    );
+    try {
+      await sendAgentMessage(
+        sessionId,
+        kickoffPromptForScenario(role, kickoffScenario, taskId, {
+          overrides: promptOverrides ?? {},
+          task: {
+            ...(selectedTask
+              ? {
+                  title: selectedTask.title,
+                  issueType: selectedTask.issueType,
+                  status: selectedTask.status,
+                  qaRequired: selectedTask.aiReviewEnabled,
+                  description: selectedTask.description,
+                }
+              : {}),
+          },
+        }),
+      );
+    } catch (error) {
+      toast.error("Session started, but the kickoff prompt failed to send.", {
+        description: errorMessage(error),
+      });
+    }
   }, [
     activeRepo,
     agentStudioReady,
+    queryClient,
     role,
     scenario,
     selectedTask,
@@ -191,7 +200,6 @@ export function useAgentStudioSessionStartFlow({
     openHumanReviewFeedback,
     startSession,
     taskId,
-    queryClient,
   ]);
 
   const { handleCreateSession } = useAgentStudioFreshSessionCreation({

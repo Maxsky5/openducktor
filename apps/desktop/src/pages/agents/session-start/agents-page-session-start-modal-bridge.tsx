@@ -15,7 +15,7 @@ type AgentStudioSessionStartModalBridgeProps = {
   request: PendingSessionStartRequest;
   activeRepo: string | null;
   repoSettings: RepoSettingsInput | null;
-  onResolve: (decision: NewSessionStartDecision) => void;
+  onResolve: (requestId: string, decision: NewSessionStartDecision) => void;
 };
 
 type UseSessionStartModalRequestActivationArgs = {
@@ -90,7 +90,7 @@ export function AgentStudioSessionStartModalBridge({
       return;
     }
     resolvedRequestIdRef.current = request.requestId;
-    onResolve(decision);
+    onResolve(request.requestId, decision);
   };
 
   return (
@@ -130,7 +130,7 @@ export function AgentStudioSessionStartModalBridge({
         onConfirm: (_runInBackground) => {
           resolvedRequestIdRef.current = request.requestId;
           closeStartModal();
-          onResolve({ selectedModel: selection ?? null });
+          onResolve(request.requestId, { selectedModel: selection ?? null });
         },
       }}
     />

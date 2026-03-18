@@ -11,29 +11,39 @@ export type PendingSessionStartRequest = NewSessionStartRequest & {
 export function useAgentStudioSessionStartRequest(): {
   pendingSessionStartRequest: PendingSessionStartRequest | null;
   requestNewSessionStart: (request: NewSessionStartRequest) => Promise<NewSessionStartDecision>;
-  resolvePendingSessionStart: (decision: NewSessionStartDecision) => void;
+  resolvePendingSessionStart: (requestId: string, decision: NewSessionStartDecision) => void;
 } {
   const [pendingSessionStartRequest, setPendingSessionStartRequest] =
     useState<PendingSessionStartRequest | null>(null);
-  const pendingSessionStartResolverRef = useRef<
-    ((decision: NewSessionStartDecision) => void) | null
-  >(null);
+  const pendingSessionStartResolverRef = useRef<{
+    requestId: string;
+    resolve: (decision: NewSessionStartDecision) => void;
+  } | null>(null);
   const requestSequenceRef = useRef(0);
 
-  const resolvePendingSessionStart = useCallback((decision: NewSessionStartDecision): void => {
-    const resolver = pendingSessionStartResolverRef.current;
-    pendingSessionStartResolverRef.current = null;
-    setPendingSessionStartRequest(null);
-    resolver?.(decision);
-  }, []);
+  const resolvePendingSessionStart = useCallback(
+    (requestId: string, decision: NewSessionStartDecision): void => {
+      const pending = pendingSessionStartResolverRef.current;
+      if (!pending || pending.requestId !== requestId) {
+        return;
+      }
+      pendingSessionStartResolverRef.current = null;
+      setPendingSessionStartRequest(null);
+      pending.resolve(decision);
+    },
+    [],
+  );
 
   const requestNewSessionStart = useCallback(
     (request: NewSessionStartRequest): Promise<NewSessionStartDecision> => {
-      pendingSessionStartResolverRef.current?.(null);
+      pendingSessionStartResolverRef.current?.resolve(null);
       return new Promise((resolve) => {
-        pendingSessionStartResolverRef.current = resolve;
         const requestId = `session-start-${requestSequenceRef.current}`;
         requestSequenceRef.current += 1;
+        pendingSessionStartResolverRef.current = {
+          requestId,
+          resolve,
+        };
         setPendingSessionStartRequest({
           ...request,
           requestId,
@@ -45,7 +55,7 @@ export function useAgentStudioSessionStartRequest(): {
 
   useEffect(() => {
     return () => {
-      pendingSessionStartResolverRef.current?.(null);
+      pendingSessionStartResolverRef.current?.resolve(null);
       pendingSessionStartResolverRef.current = null;
     };
   }, []);

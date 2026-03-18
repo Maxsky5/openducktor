@@ -79,7 +79,7 @@ describe("useAgentStudioFreshSessionCreation", () => {
     );
 
     await harness.mount();
-    await harness.run(async (state) => {
+    await harness.run((state) => {
       state.handleCreateSession({
         id: "planner:planner_initial:fresh",
         role: "planner",
@@ -88,10 +88,8 @@ describe("useAgentStudioFreshSessionCreation", () => {
         description: "Create a new planner session from scratch",
         disabled: false,
       });
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
     });
+    await harness.waitFor(() => toastErrorMock.mock.calls.length > 0);
 
     expect(toastErrorMock).toHaveBeenCalledWith("Failed to start Planner session", {
       description: "start failed",

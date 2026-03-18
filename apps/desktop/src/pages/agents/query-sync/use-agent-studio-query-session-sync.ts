@@ -33,7 +33,7 @@ export function useAgentStudioQuerySessionSync({
     if (isLoadingTasks) {
       return;
     }
-    if (!taskIdParam || selectedSessionById) {
+    if (!taskIdParam || sessionParam || selectedSessionById) {
       return;
     }
     if (tasks.some((entry) => entry.id === taskIdParam)) {
@@ -46,7 +46,7 @@ export function useAgentStudioQuerySessionSync({
       [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
       [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
     });
-  }, [isLoadingTasks, scheduleQueryUpdate, selectedSessionById, taskIdParam, tasks]);
+  }, [isLoadingTasks, scheduleQueryUpdate, selectedSessionById, sessionParam, taskIdParam, tasks]);
 
   useEffect(() => {
     if (!selectedSessionById || taskIdParam) {
