@@ -30,31 +30,33 @@ export const GitConflictStrip = memo(function GitConflictStrip({
 }: GitConflictStripProps): ReactElement {
   return (
     <div
-      className="border-b border-border bg-muted px-3 py-3"
+      className="border-b border-border bg-muted/40 px-4 py-4"
       data-testid={GIT_CONFLICT_TEST_IDS.strip}
     >
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="rounded-full bg-destructive/10 p-2 text-destructive">
+          <div className="rounded-full border border-warning-border bg-warning-surface p-2.5 text-warning-muted">
             <AlertTriangle className="size-4" />
           </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-medium text-foreground">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-foreground">
                 {getGitConflictCopy(conflict.operation).inProgressLabel}
               </p>
               <span
-                className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive"
+                className="inline-flex max-w-full shrink-0 items-center rounded-full border border-warning-border bg-warning-surface px-2.5 py-1 text-xs font-semibold leading-none text-warning-muted"
                 data-testid={GIT_CONFLICT_TEST_IDS.conflictCountBadge}
               >
                 {`${conflict.conflictedFiles.length} conflicted file${conflict.conflictedFiles.length === 1 ? "" : "s"}`}
               </span>
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">{toConflictDescription(conflict)}</p>
+            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+              {toConflictDescription(conflict)}
+            </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
           <Button
             type="button"
             variant="outline"

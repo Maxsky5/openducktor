@@ -511,6 +511,17 @@ pub(crate) enum GitCall {
         source_branch: String,
         target_branch: String,
         method: GitMergeMethod,
+        squash_commit_message: Option<String>,
+    },
+    SuggestedSquashCommitMessage {
+        repo_path: String,
+        source_branch: String,
+        target_branch: String,
+    },
+    IsAncestor {
+        repo_path: String,
+        ancestor_ref: String,
+        descendant_ref: String,
     },
     GetWorktreeStatus {
         repo_path: String,
@@ -545,6 +556,8 @@ pub(crate) struct GitState {
     pub(crate) rebase_abort_result: GitRebaseAbortResult,
     pub(crate) conflict_abort_result: GitConflictAbortResult,
     pub(crate) merge_branch_result: GitMergeBranchResult,
+    pub(crate) suggested_squash_commit_message_result: Option<String>,
+    pub(crate) is_ancestor_result: bool,
     pub(crate) commits_ahead_behind_result: GitAheadBehind,
 }
 
@@ -737,8 +750,39 @@ impl GitPort for FakeGitPort {
             source_branch: request.source_branch,
             target_branch: request.target_branch,
             method: request.method,
+            squash_commit_message: request.squash_commit_message,
         });
         Ok(state.merge_branch_result.clone())
+    }
+
+    fn suggested_squash_commit_message(
+        &self,
+        repo_path: &Path,
+        source_branch: &str,
+        target_branch: &str,
+    ) -> Result<Option<String>> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::SuggestedSquashCommitMessage {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            source_branch: source_branch.to_string(),
+            target_branch: target_branch.to_string(),
+        });
+        Ok(state.suggested_squash_commit_message_result.clone())
+    }
+
+    fn is_ancestor(
+        &self,
+        repo_path: &Path,
+        ancestor_ref: &str,
+        descendant_ref: &str,
+    ) -> Result<bool> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::IsAncestor {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            ancestor_ref: ancestor_ref.to_string(),
+            descendant_ref: descendant_ref.to_string(),
+        });
+        Ok(state.is_ancestor_result)
     }
 
     fn get_status(&self, _repo_path: &Path) -> Result<Vec<GitFileStatus>> {
@@ -959,6 +1003,8 @@ pub(crate) fn build_service_with_git_state_enforced(
         merge_branch_result: GitMergeBranchResult::Merged {
             output: "merge completed".to_string(),
         },
+        suggested_squash_commit_message_result: Some("feat: builder change".to_string()),
+        is_ancestor_result: false,
         commits_ahead_behind_result: GitAheadBehind {
             ahead: 0,
             behind: 0,
@@ -1037,6 +1083,8 @@ pub(crate) fn build_service_with_git_state(
         merge_branch_result: GitMergeBranchResult::Merged {
             output: "merge completed".to_string(),
         },
+        suggested_squash_commit_message_result: Some("feat: builder change".to_string()),
+        is_ancestor_result: false,
         commits_ahead_behind_result: GitAheadBehind {
             ahead: 0,
             behind: 0,
@@ -1466,6 +1514,8 @@ pub(crate) fn build_service_with_store(
         merge_branch_result: GitMergeBranchResult::Merged {
             output: "merge completed".to_string(),
         },
+        suggested_squash_commit_message_result: Some("feat: builder change".to_string()),
+        is_ancestor_result: false,
         commits_ahead_behind_result: GitAheadBehind {
             ahead: 0,
             behind: 0,

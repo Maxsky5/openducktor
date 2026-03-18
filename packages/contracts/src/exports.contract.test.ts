@@ -63,6 +63,7 @@ import type {
   TaskAction,
   TaskCard,
   TaskCreateInput,
+  TaskDirectMergeInput,
   TaskDirectMergeResult,
   TaskDocumentPresence,
   TaskDocumentSummary,
@@ -193,6 +194,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "taskApprovalContextSchema",
   "taskCardSchema",
   "taskCreateInputSchema",
+  "taskDirectMergeInputSchema",
   "taskDirectMergeResultSchema",
   "taskPullRequestDetectResultSchema",
   "taskMetadataDocumentSchema",
@@ -273,6 +275,7 @@ type ExportedTypeContract = {
   TaskAction: TaskAction;
   TaskCard: TaskCard;
   TaskCreateInput: TaskCreateInput;
+  TaskDirectMergeInput: TaskDirectMergeInput;
   TaskDirectMergeResult: TaskDirectMergeResult;
   TaskDocumentPresence: TaskDocumentPresence;
   TaskDocumentSummary: TaskDocumentSummary;

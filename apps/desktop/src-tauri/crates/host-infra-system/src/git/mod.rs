@@ -141,6 +141,24 @@ impl GitPort for GitCliPort {
         self.resolve_upstream_target_impl(repo_path)
     }
 
+    fn suggested_squash_commit_message(
+        &self,
+        repo_path: &Path,
+        source_branch: &str,
+        target_branch: &str,
+    ) -> Result<Option<String>> {
+        self.suggested_squash_commit_message_impl(repo_path, source_branch, target_branch)
+    }
+
+    fn is_ancestor(
+        &self,
+        repo_path: &Path,
+        ancestor_ref: &str,
+        descendant_ref: &str,
+    ) -> Result<bool> {
+        self.is_ancestor_impl(repo_path, ancestor_ref, descendant_ref)
+    }
+
     fn commits_ahead_behind(
         &self,
         repo_path: &Path,

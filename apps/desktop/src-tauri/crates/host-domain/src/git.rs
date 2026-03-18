@@ -148,6 +148,7 @@ pub struct TaskApprovalContext {
     pub uncommitted_file_count: u32,
     pub pull_request: Option<PullRequestRecord>,
     pub direct_merge: Option<DirectMergeRecord>,
+    pub suggested_squash_commit_message: Option<String>,
     pub providers: Vec<GitProviderAvailability>,
 }
 
@@ -376,6 +377,7 @@ pub struct GitMergeBranchRequest {
     pub target_branch: String,
     pub source_working_directory: Option<String>,
     pub method: GitMergeMethod,
+    pub squash_commit_message: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -436,6 +438,18 @@ pub trait GitPort: Send + Sync {
         diff_scope: GitDiffScope,
     ) -> Result<GitWorktreeStatusSummaryData>;
     fn resolve_upstream_target(&self, repo_path: &Path) -> Result<Option<String>>;
+    fn suggested_squash_commit_message(
+        &self,
+        repo_path: &Path,
+        source_branch: &str,
+        target_branch: &str,
+    ) -> Result<Option<String>>;
+    fn is_ancestor(
+        &self,
+        repo_path: &Path,
+        ancestor_ref: &str,
+        descendant_ref: &str,
+    ) -> Result<bool>;
     fn commits_ahead_behind(&self, repo_path: &Path, target_branch: &str)
         -> Result<GitAheadBehind>;
     fn commit_all(

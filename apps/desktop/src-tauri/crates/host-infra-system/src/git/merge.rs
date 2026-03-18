@@ -41,9 +41,12 @@ impl GitCliPort {
             GitMergeMethod::MergeCommit => {
                 self.merge_with_commit(repo_path, source_branch.as_str(), before_head.as_str())
             }
-            GitMergeMethod::Squash => {
-                self.merge_with_squash(repo_path, source_branch.as_str(), before_head.as_str())
-            }
+            GitMergeMethod::Squash => self.merge_with_squash(
+                repo_path,
+                source_branch.as_str(),
+                before_head.as_str(),
+                request.squash_commit_message.as_deref(),
+            ),
             GitMergeMethod::Rebase => self.merge_with_rebase(
                 repo_path,
                 request.source_working_directory.as_deref(),
@@ -75,7 +78,12 @@ impl GitCliPort {
         repo_path: &Path,
         source_branch: &str,
         before_head: &str,
+        squash_commit_message: Option<&str>,
     ) -> Result<GitMergeBranchResult> {
+        let commit_message = normalize_non_empty(
+            squash_commit_message.unwrap_or_default(),
+            "squash commit message",
+        )?;
         let args = ["merge", "--squash", source_branch];
         let (ok, stdout, stderr) = self.run_git_allow_failure(repo_path, &args)?;
         let output = combine_output(stdout, stderr);
@@ -89,7 +97,6 @@ impl GitCliPort {
             return Ok(GitMergeBranchResult::UpToDate { output });
         }
 
-        let commit_message = format!("Squash merge branch '{source_branch}'");
         let (commit_ok, commit_stdout, commit_stderr) =
             self.run_git_allow_failure(repo_path, &["commit", "-m", commit_message.as_str()])?;
         let commit_output = combine_output(commit_stdout, commit_stderr);
@@ -109,6 +116,73 @@ impl GitCliPort {
         };
 
         self.finish_merge_result(repo_path, before_head, merged_output)
+    }
+
+    pub(super) fn suggested_squash_commit_message_impl(
+        &self,
+        repo_path: &Path,
+        source_branch: &str,
+        target_branch: &str,
+    ) -> Result<Option<String>> {
+        self.ensure_repository(repo_path)?;
+
+        let source_branch = normalize_non_empty(source_branch, "source branch")?;
+        let target_branch = normalize_non_empty(target_branch, "target branch")?;
+        let oldest_commit = self.run_git(
+            repo_path,
+            &[
+                "rev-list",
+                "--reverse",
+                &format!("{target_branch}..{source_branch}"),
+            ],
+        )?;
+        let oldest_commit = oldest_commit
+            .lines()
+            .map(str::trim)
+            .find(|line| !line.is_empty());
+        let Some(oldest_commit) = oldest_commit else {
+            return Ok(None);
+        };
+
+        let output = self.run_git(repo_path, &["show", "-s", "--format=%B", oldest_commit])?;
+        let trimmed = output.trim();
+        if trimmed.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(trimmed.to_string()))
+    }
+
+    pub(super) fn is_ancestor_impl(
+        &self,
+        repo_path: &Path,
+        ancestor_ref: &str,
+        descendant_ref: &str,
+    ) -> Result<bool> {
+        self.ensure_repository(repo_path)?;
+
+        let ancestor_ref = normalize_non_empty(ancestor_ref, "ancestor ref")?;
+        let descendant_ref = normalize_non_empty(descendant_ref, "descendant ref")?;
+        let (ok, _, stderr) = self.run_git_allow_failure(
+            repo_path,
+            &[
+                "merge-base",
+                "--is-ancestor",
+                &ancestor_ref,
+                &descendant_ref,
+            ],
+        )?;
+        if ok {
+            return Ok(true);
+        }
+        if stderr.trim().is_empty() {
+            return Ok(false);
+        }
+
+        Err(anyhow!(
+            "git merge-base --is-ancestor failed: {}",
+            stderr.trim()
+        ))
     }
 
     fn merge_with_rebase(

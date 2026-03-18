@@ -115,6 +115,13 @@ pub(crate) struct PullRequestContentPayload {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct TaskDirectMergePayload {
+    merge_method: host_domain::GitMergeMethod,
+    squash_commit_message: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct RepoConfigPayload {
     default_runtime_kind: Option<String>,
     worktree_base_path: Option<String>,
@@ -609,6 +616,40 @@ mod tests {
             error.to_string().contains("invalid type"),
             "expected serde type error, got: {error}"
         );
+    }
+
+    #[test]
+    fn task_direct_merge_payload_deserializes_camel_case_fields() {
+        let payload = json!({
+            "mergeMethod": "squash",
+            "squashCommitMessage": "feat: add Microsoft login"
+        });
+        let parsed = serde_json::from_value::<TaskDirectMergePayload>(payload)
+            .expect("direct merge payload should deserialize");
+
+        assert!(matches!(
+            parsed.merge_method,
+            host_domain::GitMergeMethod::Squash
+        ));
+        assert_eq!(
+            parsed.squash_commit_message.as_deref(),
+            Some("feat: add Microsoft login")
+        );
+    }
+
+    #[test]
+    fn task_direct_merge_payload_allows_missing_squash_commit_message() {
+        let payload = json!({
+            "mergeMethod": "merge_commit"
+        });
+        let parsed = serde_json::from_value::<TaskDirectMergePayload>(payload)
+            .expect("direct merge payload without squash message should deserialize");
+
+        assert!(matches!(
+            parsed.merge_method,
+            host_domain::GitMergeMethod::MergeCommit
+        ));
+        assert_eq!(parsed.squash_commit_message, None);
     }
 
     #[test]

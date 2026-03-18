@@ -10,7 +10,7 @@ use crate::{
     run_service_blocking_tokio, startup_phase_service_bootstrap, startup_phase_shutdown_hooks,
     startup_phase_tracing, BuildCompletePayload, MarkdownPayload, PlanPayload,
     PullRequestContentPayload, RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload,
-    SettingsSnapshotResponsePayload, TaskCreatePayload, TaskUpdatePayload,
+    SettingsSnapshotResponsePayload, TaskCreatePayload, TaskDirectMergePayload, TaskUpdatePayload,
 };
 use anyhow::{anyhow, Context};
 use axum::extract::{Path, State};
@@ -24,7 +24,7 @@ use host_application::{
     AppService, BuildResponseAction, CleanupMode, HookTrustConfirmationPort,
     HookTrustConfirmationRequest, RepoConfigUpdate, RepoSettingsUpdate, RunEmitter,
 };
-use host_domain::{AgentRuntimeKind, GitMergeMethod};
+use host_domain::AgentRuntimeKind;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -450,7 +450,7 @@ struct BuildCompletedArgs {
 struct TaskDirectMergeArgs {
     repo_path: String,
     task_id: String,
-    merge_method: GitMergeMethod,
+    input: TaskDirectMergePayload,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1807,12 +1807,17 @@ fn handle_task_direct_merge(state: &HeadlessState, args: Value) -> CommandResult
     let TaskDirectMergeArgs {
         repo_path,
         task_id,
-        merge_method,
+        input,
     } = deserialize_args(args)?;
     serialize_value(
         state
             .service
-            .task_direct_merge(&repo_path, &task_id, merge_method)
+            .task_direct_merge(
+                &repo_path,
+                &task_id,
+                input.merge_method,
+                input.squash_commit_message,
+            )
             .map_err(service_error)?,
     )
 }

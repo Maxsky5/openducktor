@@ -1,10 +1,10 @@
 use crate::{
     as_error, run_emitter, run_service_blocking, AppState, BuildCompletePayload,
-    PullRequestContentPayload,
+    PullRequestContentPayload, TaskDirectMergePayload,
 };
 use host_application::{BuildResponseAction, CleanupMode};
 use host_domain::{
-    AgentRuntimeKind, GitMergeMethod, PullRequestRecord, RunSummary, TaskApprovalContext, TaskCard,
+    AgentRuntimeKind, PullRequestRecord, RunSummary, TaskApprovalContext, TaskCard,
     TaskDirectMergeResult, TaskPullRequestDetectResult,
 };
 use tauri::{AppHandle, State};
@@ -126,13 +126,19 @@ pub async fn task_direct_merge(
     state: State<'_, AppState>,
     repo_path: String,
     task_id: String,
-    merge_method: GitMergeMethod,
+    input: TaskDirectMergePayload,
 ) -> Result<TaskDirectMergeResult, String> {
-    as_error(
-        state
-            .service
-            .task_direct_merge(&repo_path, &task_id, merge_method),
-    )
+    let service = state.service.clone();
+    let result = run_service_blocking("task_direct_merge", move || {
+        service.task_direct_merge(
+            &repo_path,
+            &task_id,
+            input.merge_method,
+            input.squash_commit_message,
+        )
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]

@@ -3,7 +3,6 @@ import {
   type BuildContinuationTarget,
   beadsCheckSchema,
   buildContinuationTargetSchema,
-  gitMergeMethodSchema,
   pullRequestSchema,
   type RunSummary,
   type RuntimeCheck,
@@ -17,9 +16,11 @@ import {
   type SystemCheck,
   systemCheckSchema,
   type TaskCard,
+  type TaskDirectMergeInput,
   type TaskDirectMergeResult,
   taskApprovalContextSchema,
   taskCardSchema,
+  taskDirectMergeInputSchema,
   taskDirectMergeResultSchema,
   taskPullRequestDetectResultSchema,
 } from "@openducktor/contracts";
@@ -192,12 +193,13 @@ export const taskDirectMerge = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
-  mergeMethod: string,
+  input: TaskDirectMergeInput,
 ): Promise<TaskDirectMergeResult> => {
+  const parsedInput = taskDirectMergeInputSchema.parse(input);
   const payload = await invokeFn("task_direct_merge", {
     repoPath,
     taskId,
-    mergeMethod: gitMergeMethodSchema.parse(mergeMethod),
+    input: parsedInput,
   });
   return taskDirectMergeResultSchema.parse(payload);
 };
@@ -365,9 +367,9 @@ export class TauriAgentClient {
   async taskDirectMerge(
     repoPath: string,
     taskId: string,
-    mergeMethod: string,
+    input: TaskDirectMergeInput,
   ): Promise<TaskDirectMergeResult> {
-    const result = await taskDirectMerge(this.invokeFn, repoPath, taskId, mergeMethod);
+    const result = await taskDirectMerge(this.invokeFn, repoPath, taskId, input);
     this.metadataCache?.invalidate(repoPath, taskId);
     return result;
   }

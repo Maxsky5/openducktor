@@ -185,11 +185,20 @@ export function TaskApprovalModal({
     model.pullRequestAvailable &&
     model.pullRequestDraftMode === "manual" &&
     (model.title.trim().length === 0 || model.body.trim().length === 0);
+  const hasSquashCommitMessageSubmitError =
+    model.stage === "approval" &&
+    model.mode === "direct_merge" &&
+    model.mergeMethod === "squash" &&
+    model.squashCommitMessage.trim().length === 0;
+  const showSquashCommitMessageValidationError =
+    hasSquashCommitMessageSubmitError &&
+    (model.hasSuggestedSquashCommitMessage || model.squashCommitMessageTouched);
   const confirmDisabled =
     model.isLoading ||
     model.isSubmitting ||
     model.hasUncommittedChanges ||
-    hasManualPullRequestValidationError;
+    hasManualPullRequestValidationError ||
+    hasSquashCommitMessageSubmitError;
   const isCompletionStage = model.stage === "complete_direct_merge";
   const hasPublishTarget = model.publishTarget !== null;
   const hasCompletionBranchContext = model.targetBranch !== null;
@@ -280,16 +289,16 @@ export function TaskApprovalModal({
             ) : (
               <>
                 {model.hasUncommittedChanges ? (
-                  <div className="grid gap-1 rounded-2xl border border-border bg-muted p-4 text-foreground">
+                  <div className="grid gap-1 rounded-2xl border border-warning-border bg-warning-surface p-4 text-warning-surface-foreground">
                     <p className="text-sm font-semibold">Uncommitted changes detected</p>
                     <p className="text-sm">{dirtyWorktreeMessage}</p>
                   </div>
                 ) : null}
 
                 {model.errorMessage ? (
-                  <div className="grid gap-1 rounded-2xl border border-destructive/20 bg-destructive/10 p-4 text-destructive">
+                  <div className="grid gap-1 rounded-2xl border border-destructive-border bg-destructive-surface p-4 text-destructive-surface-foreground">
                     <p className="text-sm font-semibold">Approval failed</p>
-                    <p className="text-sm">{model.errorMessage}</p>
+                    <p className="text-sm text-destructive-muted">{model.errorMessage}</p>
                   </div>
                 ) : null}
 
@@ -325,6 +334,37 @@ export function TaskApprovalModal({
                         />
                       ))}
                     </div>
+
+                    {model.mergeMethod === "squash" ? (
+                      <div className="grid gap-2 rounded-2xl border border-border bg-card p-5">
+                        <Label htmlFor="task-approval-squash-commit-message">
+                          Squash Commit Message
+                        </Label>
+                        <Textarea
+                          id="task-approval-squash-commit-message"
+                          className="min-h-28"
+                          placeholder="e.g. feat: add Microsoft login"
+                          value={model.squashCommitMessage}
+                          disabled={model.isSubmitting}
+                          onChange={(event) =>
+                            model.onSquashCommitMessageChange(event.currentTarget.value)
+                          }
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          OpenDucktor prefills this from the oldest commit unique to the builder
+                          branch. Edit it before creating the single squash commit on{" "}
+                          <span className="font-mono text-[13px] text-foreground">
+                            {model.targetBranch?.branch ?? "the target branch"}
+                          </span>
+                          .
+                        </p>
+                        {showSquashCommitMessageValidationError ? (
+                          <p className="text-sm text-destructive">
+                            Enter the squash commit message before merging locally.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="space-y-5">
@@ -396,9 +436,9 @@ export function TaskApprovalModal({
         {isCompletionStage ? (
           <div className="grid gap-4 px-6 py-6 sm:px-8">
             {completionErrorMessage ? (
-              <div className="grid gap-1 rounded-2xl border border-destructive/20 bg-destructive/10 p-4 text-destructive">
+              <div className="grid gap-1 rounded-2xl border border-destructive-border bg-destructive-surface p-4 text-destructive-surface-foreground">
                 <p className="text-sm font-semibold">Direct merge completion failed</p>
-                <p className="text-sm">{completionErrorMessage}</p>
+                <p className="text-sm text-destructive-muted">{completionErrorMessage}</p>
               </div>
             ) : null}
 
