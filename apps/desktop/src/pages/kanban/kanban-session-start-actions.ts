@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { kickoffPromptForScenario } from "@/features/session-start";
 import { resolveBuildWorkingDirectoryOverride } from "@/lib/build-worktree-overrides";
 import type { AgentStateContextValue } from "@/types/state-slices";
-import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
+import { loadEffectivePromptOverrides } from "../../state/operations/shared/prompt-overrides";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { renderSessionStartedToastAction } from "./session-started-toast-action";
 

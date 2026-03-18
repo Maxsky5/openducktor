@@ -7,6 +7,7 @@ import type {
   AgentSessionLoadOptions,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
+import { host } from "../shared/host";
 import {
   attachAgentSessionListener,
   createAgentSessionActions,
@@ -18,15 +19,11 @@ import {
   loadTaskDocuments,
   runOrchestratorSideEffect,
   toPersistedSessionRecord,
-} from "./agent-orchestrator";
-import { createOrchestratorPublicOperations } from "./agent-orchestrator/handlers/public-operations";
-import type { StartAgentSessionInput } from "./agent-orchestrator/handlers/start-session";
-import { useOrchestratorSessionState } from "./agent-orchestrator/hooks/use-orchestrator-session-state";
-import {
-  createLoadSessionModelCatalog,
-  createLoadSessionTodos,
-} from "./agent-orchestrator/lifecycle/session-loaders";
-import { host } from "./host";
+} from ".";
+import { createOrchestratorPublicOperations } from "./handlers/public-operations";
+import type { StartAgentSessionInput } from "./handlers/start-session";
+import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
+import { createLoadSessionModelCatalog, createLoadSessionTodos } from "./lifecycle/session-loaders";
 
 type UseAgentOrchestratorOperationsArgs = {
   activeRepo: string | null;

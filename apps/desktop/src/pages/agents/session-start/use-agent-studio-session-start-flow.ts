@@ -13,7 +13,7 @@ import type {
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
-import { loadEffectivePromptOverrides } from "../../../state/operations/prompt-overrides";
+import { loadEffectivePromptOverrides } from "../../../state/operations/shared/prompt-overrides";
 import { kickoffPromptForScenario } from "../agents-page-constants";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
 import { useAgentStudioHumanReviewFeedbackFlow } from "../use-agent-studio-human-review-feedback-flow";

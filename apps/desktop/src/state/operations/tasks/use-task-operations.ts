@@ -12,9 +12,9 @@ import { errorMessage } from "@/lib/errors";
 import { appQueryClient } from "@/lib/query-client";
 import { documentQueryKeys } from "@/state/queries/documents";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
-import { agentSessionQueryKeys } from "../queries/agent-sessions";
-import { invalidateRepoTaskQueries, loadRepoTaskDataFromQuery } from "../queries/tasks";
-import { host } from "./host";
+import { agentSessionQueryKeys } from "../../queries/agent-sessions";
+import { invalidateRepoTaskQueries, loadRepoTaskDataFromQuery } from "../../queries/tasks";
+import { host } from "../shared/host";
 import {
   DEFERRED_BY_USER_REASON,
   requireActiveRepo,

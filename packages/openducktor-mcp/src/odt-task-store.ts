@@ -3,7 +3,11 @@ import { nowIso, type TimeProvider } from "./beads-runtime";
 import { BeadsRuntimeClient, type BeadsRuntimeClientDeps } from "./beads-runtime-client";
 import { EpicSubtaskReplacementService } from "./epic-subtask-replacement";
 import { createSubtask, deleteTaskById } from "./epic-subtasks";
-import { createOdtTaskStoreUseCases, type OdtTaskStoreUseCases } from "./odt-task-store-use-cases";
+import {
+  createOdtTaskStoreUseCases,
+  type OdtTaskStoreUseCase,
+  type OdtTaskStoreUseCases,
+} from "./odt-task-store-use-cases";
 import type { OdtStoreOptions } from "./store-context";
 import { type TaskDocumentPort, TaskDocumentStore } from "./task-document-store";
 import { TaskIndexCache } from "./task-index-cache";
@@ -86,63 +90,71 @@ export class OdtTaskStore {
     return new BeadsPersistence(beadsClient, options.metadataNamespace);
   }
 
+  private executeUseCase<Input, Output>(
+    rawInput: unknown,
+    schema: { parse: (input: unknown) => Input },
+    useCase: OdtTaskStoreUseCase<Input, Output>,
+  ): Promise<Output> {
+    return useCase.execute(schema.parse(rawInput));
+  }
+
   async readTask(
     rawInput: unknown,
   ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["readTask"]["execute"]>>> {
-    return this.useCases.readTask.execute(ReadTaskInputSchema.parse(rawInput));
+    return this.executeUseCase(rawInput, ReadTaskInputSchema, this.useCases.readTask);
   }
 
   async createTask(
     rawInput: unknown,
   ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["createTask"]["execute"]>>> {
-    return this.useCases.createTask.execute(CreateTaskInputSchema.parse(rawInput));
+    return this.executeUseCase(rawInput, CreateTaskInputSchema, this.useCases.createTask);
   }
 
   async searchTasks(
     rawInput: unknown,
   ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["searchTasks"]["execute"]>>> {
-    return this.useCases.searchTasks.execute(SearchTasksInputSchema.parse(rawInput));
+    return this.executeUseCase(rawInput, SearchTasksInputSchema, this.useCases.searchTasks);
   }
 
   async setSpec(
     rawInput: unknown,
   ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["setSpec"]["execute"]>>> {
-    return this.useCases.setSpec.execute(SetSpecInputSchema.parse(rawInput));
+    return this.executeUseCase(rawInput, SetSpecInputSchema, this.useCases.setSpec);
   }
 
   async setPlan(
     rawInput: unknown,
   ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["setPlan"]["execute"]>>> {
-    return this.useCases.setPlan.execute(SetPlanInputSchema.parse(rawInput));
+    return this.executeUseCase(rawInput, SetPlanInputSchema, this.useCases.setPlan);
   }
 
   async buildBlocked(
     rawInput: unknown,
   ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["buildBlocked"]["execute"]>>> {
-    return this.useCases.buildBlocked.execute(BuildBlockedInputSchema.parse(rawInput));
+    return this.executeUseCase(rawInput, BuildBlockedInputSchema, this.useCases.buildBlocked);
   }
 
   async buildResumed(
     rawInput: unknown,
   ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["buildResumed"]["execute"]>>> {
-    return this.useCases.buildResumed.execute(BuildResumedInputSchema.parse(rawInput));
+    return this.executeUseCase(rawInput, BuildResumedInputSchema, this.useCases.buildResumed);
   }
 
   async buildCompleted(
     rawInput: unknown,
   ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["buildCompleted"]["execute"]>>> {
-    return this.useCases.buildCompleted.execute(BuildCompletedInputSchema.parse(rawInput));
+    return this.executeUseCase(rawInput, BuildCompletedInputSchema, this.useCases.buildCompleted);
   }
 
   async qaApproved(
     rawInput: unknown,
   ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["qaApproved"]["execute"]>>> {
-    return this.useCases.qaApproved.execute(QaApprovedInputSchema.parse(rawInput));
+    return this.executeUseCase(rawInput, QaApprovedInputSchema, this.useCases.qaApproved);
   }
 
   async qaRejected(
     rawInput: unknown,
   ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["qaRejected"]["execute"]>>> {
-    return this.useCases.qaRejected.execute(QaRejectedInputSchema.parse(rawInput));
+    return this.executeUseCase(rawInput, QaRejectedInputSchema, this.useCases.qaRejected);
   }
 }

@@ -4,7 +4,7 @@ import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
-import { host } from "./host";
+import { host } from "../shared/host";
 import { useTaskOperations } from "./use-task-operations";
 
 const reactActEnvironment = globalThis as typeof globalThis & {

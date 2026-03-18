@@ -5,7 +5,7 @@ import { createElement, useEffect, useRef, useState } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
-import { host } from "./host";
+import { host } from "../shared/host";
 import { useWorkspaceOperations } from "./use-workspace-operations";
 
 const reactActEnvironment = globalThis as typeof globalThis & {

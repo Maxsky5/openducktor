@@ -17,8 +17,8 @@ import {
   loadRuntimeCheckFromQuery,
   repoRuntimeHealthQueryOptions,
   runtimeCheckQueryOptions,
-} from "../queries/checks";
-import { host } from "./host";
+} from "../../queries/checks";
+import { host } from "../shared/host";
 
 type UseChecksArgs = {
   activeRepo: string | null;

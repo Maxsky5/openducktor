@@ -5,7 +5,7 @@ import TestRenderer, { act } from "react-test-renderer";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import { host } from "./host";
+import { host } from "../shared/host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
 
 const reactActEnvironment = globalThis as typeof globalThis & {

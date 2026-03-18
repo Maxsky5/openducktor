@@ -1,5 +1,5 @@
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
-import { isRunningToolStatus } from "../../agent-tool-messages";
+import { isRunningToolStatus } from "../agent-tool-messages";
 
 export const normalizeToolInput = (
   input: Record<string, unknown> | undefined,

@@ -1,4 +1,4 @@
-import type { AgentChatMessage } from "../../types/agent-orchestrator";
+import type { AgentChatMessage } from "../../../types/agent-orchestrator";
 
 type ToolStatus = "pending" | "running" | "completed" | "error";
 type ToolCompletionOutcome = "completed" | "error";

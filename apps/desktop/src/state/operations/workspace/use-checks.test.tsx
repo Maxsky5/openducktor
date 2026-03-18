@@ -10,7 +10,7 @@ import TestRenderer, { act } from "react-test-renderer";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
-import { host } from "./host";
+import { host } from "../shared/host";
 
 const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;

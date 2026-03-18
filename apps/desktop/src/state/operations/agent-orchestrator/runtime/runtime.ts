@@ -14,8 +14,8 @@ import {
   loadSpecDocumentFromQuery,
 } from "../../../queries/documents";
 import { loadRepoConfigFromQuery } from "../../../queries/workspace";
-import { host } from "../../host";
-import { loadEffectivePromptOverrides } from "../../prompt-overrides";
+import { host } from "../../shared/host";
+import { loadEffectivePromptOverrides } from "../../shared/prompt-overrides";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { normalizeWorkingDirectory, runningStates, toBaseUrl } from "../support/core";
 

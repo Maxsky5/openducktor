@@ -15,9 +15,9 @@ import {
   settingsSnapshotQueryOptions,
   toRepoSettingsInput,
   workspaceQueryKeys,
-} from "../queries/workspace";
-import { host } from "./host";
-import { requireActiveRepo } from "./task-operations-model";
+} from "../../queries/workspace";
+import { host } from "../shared/host";
+import { requireActiveRepo } from "../tasks/task-operations-model";
 
 type UseRepoSettingsOperationsArgs = {
   activeRepo: string | null;

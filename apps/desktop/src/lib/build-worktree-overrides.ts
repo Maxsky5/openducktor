@@ -1,5 +1,5 @@
 import type { AgentRole, AgentScenario } from "@openducktor/core";
-import { host } from "@/state/operations/host";
+import { host } from "@/state/operations/shared/host";
 
 export const isBuildFollowUpScenario = (role: AgentRole, scenario: AgentScenario): boolean => {
   return (

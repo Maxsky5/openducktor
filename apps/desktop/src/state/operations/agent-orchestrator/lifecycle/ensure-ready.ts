@@ -3,7 +3,7 @@ import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core"
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { requireActiveRepo } from "../../task-operations-model";
+import { requireActiveRepo } from "../../tasks/task-operations-model";
 import { type RuntimeInfo, resolveRuntimeConnection, type TaskDocuments } from "../runtime/runtime";
 import { runOrchestratorTask } from "../support/async-side-effects";
 import {

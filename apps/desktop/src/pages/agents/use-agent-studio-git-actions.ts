@@ -9,7 +9,7 @@ import type {
   GitConflictOperation,
 } from "@/features/agent-studio-git";
 import { getGitConflictCopy } from "@/features/git-conflict-resolution";
-import { host } from "@/state/operations/host";
+import { host } from "@/state/operations/shared/host";
 
 type AgentStudioGitActionState = {
   isCommitting: boolean;

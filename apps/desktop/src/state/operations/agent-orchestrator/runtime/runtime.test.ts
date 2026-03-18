@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { RunSummary } from "@openducktor/contracts";
 import { agentPromptTemplateIdValues, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { clearAppQueryClient } from "@/lib/query-client";
-import { host } from "../../host";
+import { host } from "../../shared/host";
 import { createDeferred, withTimeout } from "../test-utils";
 import {
   createEnsureRuntime,

@@ -8,13 +8,13 @@ import {
   gitQueryKeys,
   loadCurrentBranchFromQuery,
   loadRepoBranchesFromQuery,
-} from "../queries/git";
+} from "../../queries/git";
 import {
   loadRepoConfigFromQuery,
   loadWorkspaceListFromQuery,
   workspaceQueryKeys,
-} from "../queries/workspace";
-import { host } from "./host";
+} from "../../queries/workspace";
+import { host } from "../shared/host";
 import {
   BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
   BRANCH_SYNC_INTERVAL_MS,

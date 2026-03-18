@@ -1,1 +1,1 @@
-export { hostClient as host } from "@/lib/host-client";
+export { host } from "./shared/host";
