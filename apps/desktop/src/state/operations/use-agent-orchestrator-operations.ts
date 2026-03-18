@@ -39,6 +39,7 @@ type UseAgentOrchestratorOperationsArgs = {
 type UseAgentOrchestratorOperationsResult = {
   sessions: AgentSessionState[];
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
+  removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
   startAgentSession: (input: StartAgentSessionInput) => Promise<string>;
   forkAgentSession: (input: {
     parentSessionId: string;
@@ -214,6 +215,52 @@ export function useAgentOrchestratorOperations({
     ],
   );
 
+  const removeAgentSessions = useCallback(
+    ({ taskId, roles }: { taskId: string; roles?: AgentSessionState["role"][] }): void => {
+      const matchingRoles = roles ? new Set(roles) : null;
+      const sessionIds = Object.values(sessionsRef.current)
+        .filter(
+          (session) =>
+            session.taskId === taskId &&
+            (matchingRoles === null || matchingRoles.has(session.role)),
+        )
+        .map((session) => session.sessionId);
+      if (sessionIds.length === 0) {
+        return;
+      }
+
+      for (const sessionId of sessionIds) {
+        const unsubscribe = unsubscribersRef.current.get(sessionId);
+        unsubscribe?.();
+        unsubscribersRef.current.delete(sessionId);
+
+        const flushTimeout = refBridges.draftFlushTimeoutBySessionRef.current[sessionId];
+        if (flushTimeout !== undefined) {
+          clearTimeout(flushTimeout);
+        }
+        delete refBridges.draftFlushTimeoutBySessionRef.current[sessionId];
+        delete refBridges.draftRawBySessionRef.current[sessionId];
+        delete refBridges.draftSourceBySessionRef.current[sessionId];
+        delete refBridges.draftMessageIdBySessionRef.current[sessionId];
+        delete refBridges.turnStartedAtBySessionRef.current[sessionId];
+        delete refBridges.turnModelBySessionRef.current[sessionId];
+      }
+
+      commitSessions((current) => {
+        let hasChanges = false;
+        const next = { ...current };
+        for (const sessionId of sessionIds) {
+          if (next[sessionId]) {
+            delete next[sessionId];
+            hasChanges = true;
+          }
+        }
+        return hasChanges ? next : current;
+      });
+    },
+    [commitSessions, refBridges, sessionsRef, unsubscribersRef],
+  );
+
   const attachSessionListener = useCallback(
     (repoPath: string, sessionId: string): void => {
       const unsubscribe = attachAgentSessionListener({
@@ -308,8 +355,9 @@ export function useAgentOrchestratorOperations({
       createOrchestratorPublicOperations({
         sessionsById,
         loadAgentSessions,
+        removeAgentSessions,
         sessionActions,
       }),
-    [sessionsById, loadAgentSessions, sessionActions],
+    [sessionsById, loadAgentSessions, removeAgentSessions, sessionActions],
   );
 }

@@ -100,6 +100,7 @@ pub enum TaskAction {
     QaStart,
     OpenBuilder,
     OpenQa,
+    ResetImplementation,
     DeferIssue,
     ResumeDeferred,
     HumanRequestChanges,

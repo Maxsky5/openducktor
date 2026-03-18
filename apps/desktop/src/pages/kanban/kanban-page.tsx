@@ -9,6 +9,7 @@ import { KanbanPageContent } from "./kanban-page-content";
 import { KanbanPageHeader } from "./kanban-page-header";
 import { KanbanSessionStartModal } from "./kanban-session-start-modal";
 import { TaskApprovalModal } from "./task-approval-modal";
+import { TaskResetImplementationModal } from "./task-reset-implementation-modal";
 import { useKanbanPageModels } from "./use-kanban-page-models";
 
 export function KanbanPage(): ReactElement {
@@ -16,8 +17,12 @@ export function KanbanPage(): ReactElement {
   const handleOpenDetails = useCallback((taskId: string): void => {
     taskDetailsSheetRef.current?.openTask(taskId);
   }, []);
+  const handleCloseDetails = useCallback((): void => {
+    taskDetailsSheetRef.current?.close();
+  }, []);
   const models = useKanbanPageModels({
     onOpenDetails: handleOpenDetails,
+    onCloseDetails: handleCloseDetails,
   });
 
   return (
@@ -28,6 +33,7 @@ export function KanbanPage(): ReactElement {
       <TaskDetailsSheetController ref={taskDetailsSheetRef} {...models.taskDetailsController} />
       <HumanReviewFeedbackModal model={models.humanReviewFeedbackModal} />
       <TaskApprovalModal model={models.taskApprovalModal} />
+      <TaskResetImplementationModal model={models.resetImplementationModal} />
       <KanbanSessionStartModal model={models.sessionStartModal} />
     </div>
   );

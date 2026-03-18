@@ -214,6 +214,91 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("resetTaskImplementation refreshes task data after host reset completes", async () => {
+    const taskResetImplementation = mock(async () => makeTask("A", "ready_for_dev"));
+    const tasksList = mock(async () => [makeTask("A", "in_progress")]);
+    tasksList.mockImplementationOnce(async () => [makeTask("A", "in_progress")]);
+    tasksList.mockImplementationOnce(async () => [makeTask("A", "ready_for_dev")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskResetImplementation: host.taskResetImplementation,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.taskResetImplementation = taskResetImplementation;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.refreshTaskData("/repo");
+      });
+      expect(harness.getLatest().tasks[0]?.status).toBe("in_progress");
+
+      await harness.run(async (value) => {
+        await value.resetTaskImplementation("A");
+      });
+
+      expect(taskResetImplementation).toHaveBeenCalledWith("/repo", "A");
+      expect(harness.getLatest().tasks[0]?.status).toBe("ready_for_dev");
+    } finally {
+      await harness.unmount();
+      host.taskResetImplementation = original.taskResetImplementation;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
+  test("resetTaskImplementation surfaces a toast and rethrows when reset fails", async () => {
+    const taskResetImplementation = mock(async () => {
+      throw new Error("reset failed");
+    });
+    const toastError = mock(() => {});
+
+    const original = {
+      taskResetImplementation: host.taskResetImplementation,
+      toastError: toast.error,
+    };
+    host.taskResetImplementation = taskResetImplementation;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await expect(
+        harness.run(async (value) => {
+          await value.resetTaskImplementation("A");
+        }),
+      ).rejects.toThrow("reset failed");
+      expect(toastError).toHaveBeenCalledWith("Failed to reset implementation", {
+        description: "reset failed",
+      });
+    } finally {
+      await harness.unmount();
+      host.taskResetImplementation = original.taskResetImplementation;
+      toast.error = original.toastError;
+    }
+  });
+
   test("ignores stale refreshTaskData results after active repo switches", async () => {
     const deferredTasks = createDeferred<TaskCard[]>();
     const deferredRuns = createDeferred<RunSummary[]>();

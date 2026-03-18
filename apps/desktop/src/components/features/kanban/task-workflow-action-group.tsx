@@ -5,9 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { resolveTaskCardActions, type TaskWorkflowAction } from "./kanban-task-workflow";
-import { TASK_ACTION_ICON, taskActionLabel, taskPrimaryActionVariant } from "./task-action-ui";
+import {
+  TASK_ACTION_ICON,
+  taskActionIsDestructive,
+  taskActionLabel,
+  taskPrimaryActionVariant,
+} from "./task-action-ui";
 
 const EMPTY_EXTRA_MENU_ACTIONS: readonly ExtraTaskMenuAction[] = [];
+const DESTRUCTIVE_MENU_ITEM_CLASS_NAME =
+  "text-destructive-muted hover:border-destructive-border/60 hover:bg-destructive-surface/70 hover:text-destructive-surface-foreground dark:hover:bg-destructive-surface/55";
 
 type ExtraTaskMenuAction = {
   id: string;
@@ -118,7 +125,10 @@ export function TaskWorkflowActionGroup({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-full justify-start"
+                  className={cn(
+                    "h-8 w-full justify-start border border-transparent",
+                    taskActionIsDestructive(action) ? DESTRUCTIVE_MENU_ITEM_CLASS_NAME : "",
+                  )}
                   onClick={() => {
                     onAction(action);
                     setMenuOpen(false);
@@ -138,10 +148,8 @@ export function TaskWorkflowActionGroup({
                   variant="ghost"
                   size="sm"
                   className={cn(
-                    "h-8 w-full justify-start",
-                    action.destructive
-                      ? "text-destructive-muted hover:bg-destructive-surface hover:text-destructive-surface-foreground"
-                      : "",
+                    "h-8 w-full justify-start border border-transparent",
+                    action.destructive ? DESTRUCTIVE_MENU_ITEM_CLASS_NAME : "",
                   )}
                   disabled={action.disabled}
                   onClick={() => {

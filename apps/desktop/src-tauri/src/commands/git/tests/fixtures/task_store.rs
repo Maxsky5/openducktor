@@ -136,6 +136,23 @@ impl TaskStore for CommandTaskStore {
         Ok(())
     }
 
+    fn clear_agent_sessions_by_roles(
+        &self,
+        _repo_path: &Path,
+        _task_id: &str,
+        _roles: &[&str],
+    ) -> anyhow::Result<()> {
+        Err(anyhow!(
+            "unexpected task store clear_agent_sessions_by_roles call in git command tests"
+        ))
+    }
+
+    fn clear_qa_reports(&self, _repo_path: &Path, _task_id: &str) -> anyhow::Result<()> {
+        Err(anyhow!(
+            "unexpected task store clear_qa_reports call in git command tests"
+        ))
+    }
+
     fn set_pull_request(
         &self,
         _repo_path: &Path,

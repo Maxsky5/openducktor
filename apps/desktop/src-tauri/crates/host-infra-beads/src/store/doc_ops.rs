@@ -271,4 +271,26 @@ impl BeadsTaskStore {
 
         self.show_task(repo_path, task_id)
     }
+
+    pub(super) fn clear_qa_reports_impl(&self, repo_path: &Path, task_id: &str) -> Result<()> {
+        let (mut root, namespace_key, mut namespace_map) =
+            self.load_namespace(repo_path, task_id)?;
+        let Some(mut documents_map) = namespace_map
+            .get("documents")
+            .and_then(Value::as_object)
+            .cloned()
+        else {
+            return Ok(());
+        };
+
+        documents_map.remove("qaReports");
+        if documents_map.is_empty() {
+            namespace_map.remove("documents");
+        } else {
+            namespace_map.insert("documents".to_string(), Value::Object(documents_map));
+        }
+
+        self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
+        Ok(())
+    }
 }

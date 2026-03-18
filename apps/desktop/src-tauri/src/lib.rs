@@ -294,6 +294,7 @@ fn startup_phase_command_registration(
         task_create,
         task_update,
         task_delete,
+        task_reset_implementation,
         task_transition,
         task_defer,
         task_resume_deferred,

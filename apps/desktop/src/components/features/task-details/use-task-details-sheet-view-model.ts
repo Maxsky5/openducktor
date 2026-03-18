@@ -62,6 +62,7 @@ type UseTaskDetailsSheetViewModelOptions = {
   onResumeDeferred: TaskDetailsSheetProps["onResumeDeferred"] | undefined;
   onHumanApprove: TaskDetailsSheetProps["onHumanApprove"] | undefined;
   onHumanRequestChanges: TaskDetailsSheetProps["onHumanRequestChanges"] | undefined;
+  onResetImplementation: TaskDetailsSheetProps["onResetImplementation"] | undefined;
   onDelete: TaskDetailsSheetProps["onDelete"] | undefined;
 };
 
@@ -79,6 +80,7 @@ export function useTaskDetailsSheetViewModel({
   onResumeDeferred,
   onHumanApprove,
   onHumanRequestChanges,
+  onResetImplementation,
   onDelete,
 }: UseTaskDetailsSheetViewModelOptions): TaskDetailsSheetViewModel {
   const taskId = task?.id ?? null;
@@ -124,6 +126,7 @@ export function useTaskDetailsSheetViewModel({
         onResumeDeferred,
         onHumanApprove,
         onHumanRequestChanges,
+        onResetImplementation,
       });
     },
     [
@@ -135,6 +138,7 @@ export function useTaskDetailsSheetViewModel({
       onPlan,
       onQaOpen,
       onQaStart,
+      onResetImplementation,
       onResumeDeferred,
       taskId,
     ],

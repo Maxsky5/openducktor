@@ -10,7 +10,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { appQueryClient } from "@/lib/query-client";
+import { documentQueryKeys } from "@/state/queries/documents";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
+import { agentSessionQueryKeys } from "../queries/agent-sessions";
 import { invalidateRepoTaskQueries, loadRepoTaskDataFromQuery } from "../queries/tasks";
 import { host } from "./host";
 import {
@@ -40,6 +42,7 @@ type UseTaskOperationsResult = {
   createTask: (input: TaskCreateInput) => Promise<void>;
   updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
   deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
+  resetTaskImplementation: (taskId: string) => Promise<void>;
   transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
   deferTask: (taskId: string) => Promise<void>;
   resumeDeferredTask: (taskId: string) => Promise<void>;
@@ -239,6 +242,47 @@ export function useTaskOperations({
     [runTaskMutation],
   );
 
+  const resetTaskImplementation = useCallback(
+    async (taskId: string): Promise<void> => {
+      const repoPath = requireActiveRepo(activeRepo);
+      try {
+        await host.taskResetImplementation(repoPath, taskId);
+        await Promise.all([
+          appQueryClient.invalidateQueries({
+            queryKey: agentSessionQueryKeys.list(repoPath, taskId),
+            exact: true,
+            refetchType: "none",
+          }),
+          appQueryClient.invalidateQueries({
+            queryKey: documentQueryKeys.qaReport(repoPath, taskId),
+            exact: true,
+            refetchType: "none",
+          }),
+          appQueryClient.invalidateQueries({
+            queryKey: documentQueryKeys.spec(repoPath, taskId),
+            exact: true,
+            refetchType: "none",
+          }),
+          appQueryClient.invalidateQueries({
+            queryKey: documentQueryKeys.plan(repoPath, taskId),
+            exact: true,
+            refetchType: "none",
+          }),
+        ]);
+        await refreshTaskData(repoPath);
+        toast.success("Implementation reset", {
+          description: taskId,
+        });
+      } catch (error) {
+        toast.error("Failed to reset implementation", {
+          description: errorMessage(error),
+        });
+        throw error;
+      }
+    },
+    [activeRepo, refreshTaskData],
+  );
+
   const transitionTask = useCallback(
     async (taskId: string, status: TaskStatus, reason?: string): Promise<void> => {
       await runTaskMutation({
@@ -331,6 +375,7 @@ export function useTaskOperations({
     createTask,
     updateTask,
     deleteTask,
+    resetTaskImplementation,
     transitionTask,
     deferTask,
     resumeDeferredTask,

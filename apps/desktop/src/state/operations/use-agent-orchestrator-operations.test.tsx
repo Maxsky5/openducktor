@@ -1392,4 +1392,51 @@ describe("use-agent-orchestrator-operations", () => {
       }
     });
   });
+
+  test("removeAgentSessions prunes only matching task roles from local state", async () => {
+    await withSuppressedRendererWarning(async () => {
+      const harness = createHookHarness({
+        activeRepo: "/tmp/repo",
+        tasks: [taskFixture],
+        runs: [],
+        refreshTaskData: async () => {},
+      });
+      const originalAgentSessionsList = host.agentSessionsList;
+      host.agentSessionsList = async () => [
+        persistedSessionFixture,
+        {
+          ...persistedSessionFixture,
+          sessionId: "session-spec",
+          externalSessionId: "external-spec",
+          role: "spec",
+          scenario: "spec_initial",
+        },
+      ];
+
+      try {
+        await harness.mount();
+        await harness.run(async () => {
+          await harness.getLatest().loadAgentSessions("task-1");
+        });
+
+        expect(
+          harness
+            .getLatest()
+            .sessions.map((session) => session.sessionId)
+            .sort(),
+        ).toEqual(["session-1", "session-spec"]);
+
+        await harness.run(async () => {
+          harness.getLatest().removeAgentSessions({ taskId: "task-1", roles: ["build"] });
+        });
+
+        expect(harness.getLatest().sessions.map((session) => session.sessionId)).toEqual([
+          "session-spec",
+        ]);
+      } finally {
+        host.agentSessionsList = originalAgentSessionsList;
+        await harness.unmount();
+      }
+    });
+  });
 });

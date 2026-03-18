@@ -53,6 +53,7 @@ fn module_derive_available_actions_exposes_qa_start_for_review_states() {
         let actions = derive_available_actions(&task, std::slice::from_ref(&task));
 
         assert!(actions.contains(&TaskAction::QaStart));
+        assert!(actions.contains(&TaskAction::ResetImplementation));
         assert!(!actions.contains(&TaskAction::BuildStart));
     }
 }
@@ -81,6 +82,19 @@ fn module_derive_available_actions_exposes_review_actions_during_review_states()
         assert!(actions.contains(&TaskAction::HumanRequestChanges));
         assert!(actions.contains(&TaskAction::HumanApprove));
     }
+}
+
+#[test]
+fn module_derive_available_actions_exposes_reset_for_in_progress_only_and_not_blocked() {
+    let in_progress = make_task("task-1", "task", TaskStatus::InProgress);
+    let blocked = make_task("task-2", "task", TaskStatus::Blocked);
+
+    let in_progress_actions =
+        derive_available_actions(&in_progress, std::slice::from_ref(&in_progress));
+    let blocked_actions = derive_available_actions(&blocked, std::slice::from_ref(&blocked));
+
+    assert!(in_progress_actions.contains(&TaskAction::ResetImplementation));
+    assert!(!blocked_actions.contains(&TaskAction::ResetImplementation));
 }
 
 #[test]

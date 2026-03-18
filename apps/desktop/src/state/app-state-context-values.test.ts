@@ -99,6 +99,7 @@ describe("app-state-context-values", () => {
       createTask: async () => {},
       updateTask: async () => {},
       deleteTask: async () => {},
+      resetTaskImplementation: async () => {},
       transitionTask: async () => {},
       deferTask: async () => {},
       resumeDeferredTask: async () => {},
@@ -124,6 +125,7 @@ describe("app-state-context-values", () => {
     const agentValue: AgentStateContextValue = {
       sessions: [],
       loadAgentSessions: async () => {},
+      removeAgentSessions: () => {},
       startAgentSession: async () => "session",
       forkAgentSession: async () => "session-forked",
       sendAgentMessage: async () => {},

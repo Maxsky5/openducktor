@@ -28,6 +28,7 @@ const model: KanbanPageContentModel = {
   onBuild: () => {},
   onHumanApprove: () => {},
   onHumanRequestChanges: () => {},
+  onResetImplementation: () => {},
 };
 
 describe("KanbanPageContent", () => {

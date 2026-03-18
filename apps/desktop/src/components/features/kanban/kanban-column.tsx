@@ -24,6 +24,7 @@ type KanbanColumnProps = {
   onBuild: (taskId: string) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
+  onResetImplementation?: (taskId: string) => void;
 };
 
 const laneCountLabel = (count: number): string => (count === 1 ? "1 task" : `${count} tasks`);
@@ -38,6 +39,7 @@ type TaskCardHandlers = Pick<
   | "onBuild"
   | "onHumanApprove"
   | "onHumanRequestChanges"
+  | "onResetImplementation"
 >;
 
 const MeasuredTaskCard = memo(function MeasuredTaskCard({
@@ -54,6 +56,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   onBuild,
   onHumanApprove,
   onHumanRequestChanges,
+  onResetImplementation,
 }: {
   task: KanbanColumnData["tasks"][number];
   runState: RunSummary["state"] | undefined;
@@ -132,6 +135,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
         {...(onQaOpen ? { onQaOpen } : {})}
         {...(onHumanApprove ? { onHumanApprove } : {})}
         {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
+        {...(onResetImplementation ? { onResetImplementation } : {})}
       />
     </div>
   );
@@ -192,6 +196,7 @@ export function KanbanColumn({
   onBuild,
   onHumanApprove,
   onHumanRequestChanges,
+  onResetImplementation,
 }: KanbanColumnProps): ReactElement {
   const theme = laneTheme(column.id);
   const {
@@ -237,6 +242,7 @@ export function KanbanColumn({
                   {...(onQaOpen ? { onQaOpen } : {})}
                   {...(onHumanApprove ? { onHumanApprove } : {})}
                   {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
+                  {...(onResetImplementation ? { onResetImplementation } : {})}
                 />
               ))}
             </div>
@@ -262,6 +268,7 @@ export function KanbanColumn({
                 {...(onQaOpen ? { onQaOpen } : {})}
                 {...(onHumanApprove ? { onHumanApprove } : {})}
                 {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
+                {...(onResetImplementation ? { onResetImplementation } : {})}
               />
             ))}
           </div>

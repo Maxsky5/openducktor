@@ -90,6 +90,7 @@ export type TasksStateContextValue = {
   createTask: (input: TaskCreateInput) => Promise<void>;
   updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
   deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
+  resetTaskImplementation: (taskId: string) => Promise<void>;
   transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
   deferTask: (taskId: string) => Promise<void>;
   resumeDeferredTask: (taskId: string) => Promise<void>;
@@ -118,6 +119,7 @@ export type SpecStateContextValue = {
 export type AgentStateContextValue = {
   sessions: AgentSessionState[];
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
+  removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => void;
   startAgentSession: (input: {
     taskId: string;
     role: AgentRole;

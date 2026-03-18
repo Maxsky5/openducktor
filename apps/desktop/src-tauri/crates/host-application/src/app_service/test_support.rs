@@ -95,6 +95,9 @@ pub(crate) struct TaskStoreState {
     pub(crate) latest_qa_report: Option<QaReportDocument>,
     pub(crate) agent_sessions: Vec<AgentSessionDocument>,
     pub(crate) upserted_sessions: Vec<(String, AgentSessionDocument)>,
+    pub(crate) cleared_session_roles: Vec<(String, Vec<String>)>,
+    pub(crate) clear_agent_sessions_error: Option<String>,
+    pub(crate) cleared_qa_reports: Vec<String>,
     pub(crate) pull_requests: HashMap<String, PullRequestRecord>,
     pub(crate) direct_merge_records: HashMap<String, DirectMergeRecord>,
 }
@@ -338,6 +341,37 @@ impl TaskStore for FakeTaskStore {
             state.agent_sessions[index] = session;
         } else {
             state.agent_sessions.push(session);
+        }
+        Ok(())
+    }
+
+    fn clear_agent_sessions_by_roles(
+        &self,
+        _repo_path: &Path,
+        task_id: &str,
+        roles: &[&str],
+    ) -> Result<()> {
+        let mut state = self.state.lock().expect("task store lock poisoned");
+        if let Some(message) = state.clear_agent_sessions_error.as_ref() {
+            return Err(anyhow!(message.clone()));
+        }
+        state.cleared_session_roles.push((
+            task_id.to_string(),
+            roles.iter().map(|role| (*role).to_string()).collect(),
+        ));
+        state.agent_sessions.retain(|session| {
+            session.task_id.as_deref() != Some(task_id)
+                || !roles.iter().any(|role| session.role == *role)
+        });
+        Ok(())
+    }
+
+    fn clear_qa_reports(&self, _repo_path: &Path, task_id: &str) -> Result<()> {
+        let mut state = self.state.lock().expect("task store lock poisoned");
+        state.cleared_qa_reports.push(task_id.to_string());
+        state.latest_qa_report = None;
+        if let Some(task) = state.tasks.iter_mut().find(|task| task.id == task_id) {
+            task.document_summary.qa_report = TaskDocumentSummary::default().qa_report;
         }
         Ok(())
     }
@@ -854,6 +888,9 @@ pub(crate) fn build_service_with_git_state_enforced(
         latest_qa_report: None,
         agent_sessions: Vec::new(),
         upserted_sessions: Vec::new(),
+        cleared_session_roles: Vec::new(),
+        clear_agent_sessions_error: None,
+        cleared_qa_reports: Vec::new(),
         pull_requests: HashMap::new(),
         direct_merge_records: HashMap::new(),
     }));
@@ -922,6 +959,9 @@ pub(crate) fn build_service_with_git_state(
         latest_qa_report: None,
         agent_sessions: Vec::new(),
         upserted_sessions: Vec::new(),
+        cleared_session_roles: Vec::new(),
+        clear_agent_sessions_error: None,
+        cleared_qa_reports: Vec::new(),
         pull_requests: HashMap::new(),
         direct_merge_records: HashMap::new(),
     }));
@@ -1341,6 +1381,9 @@ pub(crate) fn build_service_with_store(
         latest_qa_report: None,
         agent_sessions: Vec::new(),
         upserted_sessions: Vec::new(),
+        cleared_session_roles: Vec::new(),
+        clear_agent_sessions_error: None,
+        cleared_qa_reports: Vec::new(),
         pull_requests: HashMap::new(),
         direct_merge_records: HashMap::new(),
     }));

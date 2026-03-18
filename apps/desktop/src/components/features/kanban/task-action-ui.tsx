@@ -4,6 +4,7 @@ import {
   CircleCheckBig,
   Pause,
   Play,
+  RotateCcw,
   ScrollText,
   ShieldCheck,
   Sparkles,
@@ -26,6 +27,9 @@ export const taskActionLabel = (action: TaskWorkflowAction, task: TaskCard): str
   }
   if (action === "open_qa") {
     return "Open QA";
+  }
+  if (action === "reset_implementation") {
+    return "Reset Implementation";
   }
   if (action === "build_start") {
     return isQaRejectedTask(task) ? "Address QA Feedbacks" : "Start Builder";
@@ -50,6 +54,7 @@ export const TASK_ACTION_ICON: Record<TaskWorkflowAction, ReactElement> = {
   set_plan: <ScrollText className="size-3.5" />,
   open_builder: <ArrowUpRightFromSquare className="size-3.5" />,
   open_qa: <ArrowUpRightFromSquare className="size-3.5" />,
+  reset_implementation: <RotateCcw className="size-3.5" />,
   build_start: <Wrench className="size-3.5" />,
   qa_start: <ShieldCheck className="size-3.5" />,
   human_approve: <CircleCheckBig className="size-3.5" />,
@@ -69,8 +74,11 @@ export const taskPrimaryActionVariant = (
   ) {
     return "default";
   }
-  if (action === "human_request_changes" || action === "defer_issue") {
+  if (action === "reset_implementation") {
     return "destructive";
   }
   return "outline";
 };
+
+export const taskActionIsDestructive = (action: TaskWorkflowAction): boolean =>
+  action === "reset_implementation";

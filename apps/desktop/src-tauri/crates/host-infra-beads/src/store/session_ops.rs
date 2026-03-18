@@ -107,6 +107,46 @@ impl BeadsTaskStore {
         Ok(())
     }
 
+    pub(super) fn clear_agent_sessions_by_roles_impl(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        roles: &[&str],
+    ) -> Result<()> {
+        let role_set = roles.iter().map(|role| role.trim()).collect::<HashSet<_>>();
+        if role_set.is_empty() {
+            return Ok(());
+        }
+
+        let (mut root, namespace_key, mut namespace_map) =
+            self.load_namespace(repo_path, task_id)?;
+        let sessions = namespace_map
+            .get("agentSessions")
+            .and_then(parse_agent_sessions)
+            .unwrap_or_default();
+        let filtered_sessions = sessions
+            .into_iter()
+            .filter(|session| !role_set.contains(session.role.trim()))
+            .collect::<Vec<_>>();
+
+        if filtered_sessions.is_empty() {
+            namespace_map.remove("agentSessions");
+        } else {
+            namespace_map.insert(
+                "agentSessions".to_string(),
+                Value::Array(
+                    filtered_sessions
+                        .iter()
+                        .map(serde_json::to_value)
+                        .collect::<std::result::Result<Vec<_>, _>>()?,
+                ),
+            );
+        }
+
+        self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
+        Ok(())
+    }
+
     pub(super) fn set_pull_request_impl(
         &self,
         repo_path: &Path,

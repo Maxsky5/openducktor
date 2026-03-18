@@ -7,16 +7,22 @@ import { useKanbanBoardModel } from "./use-kanban-board-model";
 import { useKanbanSessionStartFlow } from "./use-kanban-session-start-flow";
 import { useKanbanTaskDialogs } from "./use-kanban-task-dialogs";
 import { useTaskApprovalFlow } from "./use-task-approval-flow";
+import { useTaskResetFlow } from "./use-task-reset-flow";
 
 type UseKanbanPageModelsArgs = {
   onOpenDetails: (taskId: string) => void;
+  onCloseDetails: () => void;
 };
 
-export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs): KanbanPageModels {
+export function useKanbanPageModels({
+  onOpenDetails,
+  onCloseDetails,
+}: UseKanbanPageModelsArgs): KanbanPageModels {
   const { activeRepo, isSwitchingWorkspace, loadRepoSettings } = useWorkspaceState();
   const {
     sessions,
     loadAgentSessions,
+    removeAgentSessions,
     startAgentSession,
     forkAgentSession,
     sendAgentMessage,
@@ -32,6 +38,7 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
     detectingPullRequestTaskId,
     unlinkingPullRequestTaskId,
     deleteTask,
+    resetTaskImplementation,
     deferTask,
     resumeDeferredTask,
     humanRequestChangesTask,
@@ -96,6 +103,15 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
     [openTaskApproval],
   );
 
+  const { resetImplementationModal, openResetImplementation } = useTaskResetFlow({
+    tasks,
+    sessions,
+    loadAgentSessions,
+    removeAgentSessions,
+    resetTaskImplementation,
+    closeTaskDetails: onCloseDetails,
+  });
+
   const taskDialogs = useKanbanTaskDialogs({
     tasks,
   });
@@ -114,6 +130,7 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
     onBuild,
     onHumanApprove,
     onHumanRequestChanges,
+    onResetImplementation: openResetImplementation,
   });
 
   return {
@@ -142,6 +159,7 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
       },
       onHumanApprove,
       onHumanRequestChanges,
+      onResetImplementation: openResetImplementation,
       onDetectPullRequest,
       onUnlinkPullRequest,
       detectingPullRequestTaskId,
@@ -150,6 +168,7 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
     },
     humanReviewFeedbackModal,
     taskApprovalModal,
+    resetImplementationModal,
     sessionStartModal,
   };
 }
