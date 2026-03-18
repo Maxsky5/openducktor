@@ -37,6 +37,24 @@ export const toRuntimeConnection = (
   workingDirectory,
 });
 
+export const resolveRuntimeEndpoint = (runtimeRoute: RuntimeRoute): string => {
+  switch (runtimeRoute.type) {
+    case "local_http":
+      return runtimeRoute.endpoint;
+  }
+};
+
+export const resolveRuntimeRouteConnection = (
+  runtimeRoute: RuntimeRoute,
+  workingDirectory: string,
+): { runtimeEndpoint: string; runtimeConnection: AgentRuntimeConnection } => {
+  const runtimeEndpoint = resolveRuntimeEndpoint(runtimeRoute);
+  return {
+    runtimeEndpoint,
+    runtimeConnection: toRuntimeConnection(runtimeEndpoint, workingDirectory),
+  };
+};
+
 export const resolveRuntimeConnection = (runtime: RuntimeInfo): AgentRuntimeConnection => {
   return (
     runtime.runtimeConnection ??
@@ -167,12 +185,15 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
         }
 
         const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
-        const runtimeEndpoint = resolveRuntimeEndpoint(runtime.runtimeRoute);
+        const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
+          runtime.runtimeRoute,
+          workingDirectoryOverride,
+        );
         return {
           runtimeKind,
           runtimeId: runtime.runtimeId,
           runId: null,
-          runtimeConnection: toRuntimeConnection(runtimeEndpoint, workingDirectoryOverride),
+          runtimeConnection,
           runtimeEndpoint,
           workingDirectory: workingDirectoryOverride,
         };
@@ -228,12 +249,15 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
       }
 
       const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
-      const runtimeEndpoint = resolveRuntimeEndpoint(runtime.runtimeRoute);
+      const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
+        runtime.runtimeRoute,
+        workingDirectory,
+      );
       return {
         runtimeKind,
         runtimeId: runtime.runtimeId,
         runId: null,
-        runtimeConnection: toRuntimeConnection(runtimeEndpoint, workingDirectory),
+        runtimeConnection,
         runtimeEndpoint,
         workingDirectory,
       };
@@ -241,21 +265,17 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
 
     const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
     const workingDirectory = workingDirectoryOverride || runtime.workingDirectory;
-    const runtimeEndpoint = resolveRuntimeEndpoint(runtime.runtimeRoute);
+    const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
+      runtime.runtimeRoute,
+      workingDirectory,
+    );
     return {
       runtimeKind,
       runtimeId: runtime.runtimeId,
       runId: null,
-      runtimeConnection: toRuntimeConnection(runtimeEndpoint, workingDirectory),
+      runtimeConnection,
       runtimeEndpoint,
       workingDirectory,
     };
   };
-};
-
-const resolveRuntimeEndpoint = (runtimeRoute: RuntimeRoute): string => {
-  switch (runtimeRoute.type) {
-    case "local_http":
-      return runtimeRoute.endpoint;
-  }
 };
