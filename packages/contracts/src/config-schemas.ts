@@ -55,7 +55,7 @@ export type RepoAgentDefaults = z.infer<typeof repoAgentDefaultsSchema>;
 export const repoConfigSchema = z.object({
   defaultRuntimeKind: runtimeKindSchema.default("opencode"),
   worktreeBasePath: nullableToOptional(z.string().min(1)),
-  branchPrefix: z.string().min(1).default("obp"),
+  branchPrefix: z.string().min(1).default("odt"),
   defaultTargetBranch: gitTargetBranchSchema.default({ remote: "origin", branch: "main" }),
   git: repoGitConfigSchema.default({ providers: {} }),
   trustedHooks: z.boolean().default(false),

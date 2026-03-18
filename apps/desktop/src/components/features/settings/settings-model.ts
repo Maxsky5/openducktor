@@ -1,4 +1,4 @@
-export const DEFAULT_BRANCH_PREFIX = "obp";
+export const DEFAULT_BRANCH_PREFIX = "odt";
 
 export const parseHookLines = (value: string): string[] =>
   value

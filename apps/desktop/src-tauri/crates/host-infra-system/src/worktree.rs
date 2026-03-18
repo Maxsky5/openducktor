@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use host_domain::DEFAULT_BRANCH_PREFIX;
 use std::net::TcpListener;
 use std::path::Path;
 use std::process::Command;
@@ -16,7 +17,7 @@ pub fn slugify_title(value: &str) -> String {
 }
 
 pub fn build_branch_name(prefix: &str, task_id: &str, title: &str) -> String {
-    let clean_prefix = if prefix.is_empty() { "obp" } else { prefix };
+    let clean_prefix = if prefix.is_empty() { DEFAULT_BRANCH_PREFIX } else { prefix };
     let slug = slugify_title(title);
     if slug.is_empty() {
         format!("{}/{}", clean_prefix, task_id)
@@ -54,6 +55,7 @@ pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{build_branch_name, pick_free_port, remove_worktree, slugify_title};
+    use host_domain::DEFAULT_BRANCH_PREFIX;
     use std::fs;
     use std::net::TcpListener;
     use std::path::{Path, PathBuf};
@@ -120,7 +122,7 @@ mod tests {
     #[test]
     fn build_branch_name_applies_defaults() {
         let branch = build_branch_name("", "task-123", "Implement feature");
-        assert!(branch.starts_with("obp/"));
+        assert!(branch.starts_with(&format!("{}/", DEFAULT_BRANCH_PREFIX)));
         assert!(branch.contains("task-123-implement-feature"));
     }
 

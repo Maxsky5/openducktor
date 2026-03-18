@@ -147,7 +147,7 @@ describe("settings-modal-normalization", () => {
     const normalized = normalizeRepoConfigForSave(createRepoConfig());
 
     expect(normalized.defaultRuntimeKind).toBe("opencode");
-    expect(normalized.branchPrefix).toBe("obp");
+    expect(normalized.branchPrefix).toBe("odt");
     expect(normalized.defaultTargetBranch).toEqual({ remote: "origin", branch: "main" });
     expect(normalized.worktreeBasePath).toBe("/tmp/worktrees");
     expect(normalized.hooks).toEqual({

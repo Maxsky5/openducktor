@@ -1,3 +1,4 @@
+use host_domain::DEFAULT_BRANCH_PREFIX;
 use serde::{Deserialize, Deserializer, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -254,7 +255,7 @@ pub struct RepoConfig {
 }
 
 pub(super) fn default_branch_prefix() -> String {
-    "obp".to_string()
+    DEFAULT_BRANCH_PREFIX.to_string()
 }
 
 pub(super) fn default_runtime_kind() -> String {
