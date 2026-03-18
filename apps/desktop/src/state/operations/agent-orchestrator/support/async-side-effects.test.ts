@@ -96,4 +96,33 @@ describe("agent-orchestrator/support/async-side-effects", () => {
     expect(errorCalls.length).toBe(0);
     expect(warnCalls.length).toBe(0);
   });
+
+  test("rethrows the original task error when onFailure throws", async () => {
+    const originalWarn = console.warn;
+    const warnCalls: unknown[][] = [];
+    console.warn = (...args: unknown[]) => {
+      warnCalls.push(args);
+    };
+
+    try {
+      await expect(
+        runOrchestratorTask(
+          "task-callback-throws",
+          async () => {
+            throw new Error("task boom");
+          },
+          {
+            onFailure: () => {
+              throw new Error("callback boom");
+            },
+          },
+        ),
+      ).rejects.toThrow("task boom");
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    expect(warnCalls).toHaveLength(1);
+    expect(String(warnCalls[0]?.[1] ?? "")).toBe("task-callback-throws-onFailure");
+  });
 });

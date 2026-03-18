@@ -77,4 +77,29 @@ describe("useSessionStartModalRequestActivation", () => {
       await harness.unmount();
     }
   });
+
+  test("retries the same request when modal opening throws", async () => {
+    const failingOpenStartModal = mock(() => {
+      throw new Error("open failed");
+    });
+    const retryingOpenStartModal = mock(() => {});
+    const request = createRequest("session-start-0");
+    const harness = createHookHarness({
+      request,
+      openStartModal: failingOpenStartModal,
+    });
+
+    try {
+      await expect(harness.mount()).rejects.toThrow("open failed");
+
+      await harness.update({
+        request,
+        openStartModal: retryingOpenStartModal,
+      });
+
+      expect(retryingOpenStartModal).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

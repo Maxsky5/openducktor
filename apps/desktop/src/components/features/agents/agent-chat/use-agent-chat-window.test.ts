@@ -745,7 +745,7 @@ describe("useAgentChatWindow", () => {
     expect(callback).not.toHaveBeenCalled();
   });
 
-  test("clamps the window when the row count decreases", async () => {
+  test("rebuilds the bottom window when the row count decreases while pinned", async () => {
     const harness = await mountHarness({
       rows: createRows(80),
       activeSessionId: "session-1",
@@ -760,9 +760,9 @@ describe("useAgentChatWindow", () => {
     });
 
     const result = getLatestResult(harness.latestResultRef);
-    expect(result.windowStart).toBe(20);
+    expect(result.windowStart).toBe(0);
     expect(result.windowEnd).toBe(29);
-    expect(result.windowedRows).toEqual(nextRows.slice(20, 30));
+    expect(result.windowedRows).toEqual(nextRows);
 
     await harness.unmount();
   });
@@ -938,6 +938,52 @@ describe("useAgentChatWindow", () => {
       top: container.scrollHeight,
       behavior: "auto",
     });
+
+    await harness.unmount();
+  });
+
+  test("restores bottom pinning when downward shifts reach the latest rows", async () => {
+    const harness = await mountHarness({
+      rows: createRows(80),
+      activeSessionId: "session-1",
+      isSessionViewLoading: false,
+    });
+
+    await act(async () => {
+      getLatestResult(harness.latestResultRef).scrollToTop();
+      await flush();
+    });
+
+    const sentinelElement = createMessagesContainer();
+    await act(async () => {
+      getLatestResult(harness.latestResultRef).bottomSentinelRef(sentinelElement);
+      await flush();
+    });
+
+    const observer = mockIntersectionObservers.at(-1);
+    if (!observer) {
+      throw new Error("Expected bottom sentinel observer");
+    }
+
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    await harness.update({
+      rows: createRows(81),
+      activeSessionId: "session-1",
+      isSessionViewLoading: false,
+    });
+
+    const result = getLatestResult(harness.latestResultRef);
+    expect(result.windowStart).toBe(21);
+    expect(result.windowEnd).toBe(80);
+    const lastRow = result.windowedRows.at(-1);
+    if (!lastRow || lastRow.kind !== "message") {
+      throw new Error("Expected the final window row to be a message");
+    }
+    expect(lastRow.message.id).toBe("msg-80");
 
     await harness.unmount();
   });

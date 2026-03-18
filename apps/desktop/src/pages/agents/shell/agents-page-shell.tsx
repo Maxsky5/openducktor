@@ -38,7 +38,7 @@ export function AgentsPageShell({
               <p className="font-medium text-destructive">
                 Agent Studio couldn&apos;t restore saved navigation context.
               </p>
-              <p>{`Repository: ${activeRepo}`}</p>
+              {activeRepo ? <p>{`Repository: ${activeRepo}`}</p> : null}
               <p className="break-words font-mono text-xs">{navigationPersistenceError.message}</p>
             </div>
           </div>

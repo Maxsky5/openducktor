@@ -96,7 +96,7 @@ describe("useAgentStudioQuerySessionSync", () => {
     }
   });
 
-  test("clears stale session param when selected session belongs to another task", async () => {
+  test("corrects the task when a resolved session belongs to another task", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
     const selectedSession = createSession("task-2", "session-2");
     const harness = createHookHarness(
@@ -114,7 +114,7 @@ describe("useAgentStudioQuerySessionSync", () => {
       await harness.mount();
 
       expect(scheduleQueryUpdate).toHaveBeenCalledTimes(1);
-      expect(scheduleQueryUpdate.mock.calls[0]).toEqual([{ session: undefined }]);
+      expect(scheduleQueryUpdate.mock.calls[0]).toEqual([{ task: "task-2" }]);
     } finally {
       await harness.unmount();
     }

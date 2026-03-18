@@ -78,7 +78,14 @@ export const runOrchestratorTask = async <T>(
   } catch (error) {
     const failure = createOrchestratorAsyncFailure(operation, error, options?.tags);
     logOrchestratorAsyncFailure(failure, options?.logLevel ?? "error");
-    options?.onFailure?.(failure);
+    try {
+      options?.onFailure?.(failure);
+    } catch (callbackError) {
+      logOrchestratorAsyncFailure(
+        createOrchestratorAsyncFailure(`${operation}-onFailure`, callbackError, options?.tags),
+        "warn",
+      );
+    }
     throw error;
   }
 };

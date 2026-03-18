@@ -64,7 +64,11 @@ const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
       }
     }
     return next;
-  } catch {
+  } catch (error) {
+    console.error("[agent-studio-right-panel] Failed to parse persisted panel state.", {
+      raw,
+      error,
+    });
     return cloneDefaultOpenByRole();
   }
 };

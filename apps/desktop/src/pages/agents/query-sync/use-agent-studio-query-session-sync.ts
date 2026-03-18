@@ -60,7 +60,7 @@ export function useAgentStudioQuerySessionSync({
       return;
     }
     if (selectedSessionById && taskId && selectedSessionById.taskId !== taskId) {
-      scheduleQueryUpdate({ [AGENT_STUDIO_QUERY_KEYS.session]: undefined });
+      scheduleQueryUpdate({ [AGENT_STUDIO_QUERY_KEYS.task]: selectedSessionById.taskId });
       return;
     }
     if (!taskId || !isActiveTaskHydrated) {

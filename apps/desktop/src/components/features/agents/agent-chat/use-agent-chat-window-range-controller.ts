@@ -109,6 +109,12 @@ export function useAgentChatWindowRangeController({
     }
 
     if (rowCount < previousRowCount) {
+      if (isPinnedToBottomRef.current) {
+        const nextWindow = createBottomAnchoredWindow(rowCount);
+        setWindowRange(nextWindow);
+        setBottomAnchoredState(nextWindow.start);
+        return;
+      }
       setWindowRange((current) => clampWindowRange(current, rowCount));
       return;
     }
@@ -199,6 +205,9 @@ export function useAgentChatWindowRangeController({
         return current;
       }
 
+      if (nextRange.end === rowCount - 1) {
+        setBottomAnchoredState(nextRange.start);
+      }
       releaseWindowUpdateLock();
       return nextRange;
     });

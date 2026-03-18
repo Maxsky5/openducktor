@@ -180,6 +180,47 @@ describe("useRepoNavigationPersistence", () => {
     }
   });
 
+  test("persists a null role without synthesizing spec", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+      });
+
+      await harness.mount();
+      await harness.run((latest) => {
+        latest.setNavigation({
+          taskId: "task-without-role",
+          sessionId: "session-without-role",
+          role: null,
+        });
+      });
+
+      await harness.unmount();
+
+      const stored = memoryStorage.getItem(toContextStorageKey("/repo"));
+      if (!stored) {
+        throw new Error("Expected persisted context payload");
+      }
+
+      expect(JSON.parse(stored)).toEqual({
+        taskId: "task-without-role",
+        sessionId: "session-without-role",
+      });
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
   test("surfaces malformed persisted context as retryable error", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;
@@ -429,4 +470,5 @@ describe("useRepoNavigationPersistence", () => {
       });
     }
   });
+
 });

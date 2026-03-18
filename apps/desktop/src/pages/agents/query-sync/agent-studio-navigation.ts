@@ -190,10 +190,9 @@ export const restoreNavigationFromPersistedContext = (
 };
 
 export const serializePersistedContext = (navigation: AgentStudioNavigationState): string => {
-  const roleForContext = navigation.role ?? "spec";
   const payload = {
     [AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.taskId]: navigation.taskId || undefined,
-    [AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.role]: roleForContext,
+    [AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.role]: navigation.role ?? undefined,
     [AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.sessionId]: navigation.sessionId || undefined,
   };
 

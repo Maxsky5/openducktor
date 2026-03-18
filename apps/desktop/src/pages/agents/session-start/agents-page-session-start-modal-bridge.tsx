@@ -32,8 +32,7 @@ export function useSessionStartModalRequestActivation({
     if (openedRequestIdRef.current === request.requestId) {
       return;
     }
-    openedRequestIdRef.current = request.requestId;
-
+    const nextRequestId = request.requestId;
     openStartModal({
       source: "agent_studio",
       taskId: request.taskId,
@@ -43,6 +42,7 @@ export function useSessionStartModalRequestActivation({
       selectedModel: request.selectedModel,
       postStartAction: toSessionStartPostAction(request.reason),
     });
+    openedRequestIdRef.current = nextRequestId;
   }, [openStartModal, request]);
 }
 

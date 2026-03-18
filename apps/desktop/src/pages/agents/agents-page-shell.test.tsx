@@ -23,6 +23,24 @@ describe("AgentsPageShell", () => {
     expect(html).not.toContain("workspace");
   });
 
+  test("omits the repository label when no active repo is selected", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentsPageShell, {
+        activeRepo: null,
+        navigationPersistenceError: new Error("restore failed"),
+        chatSettingsLoadError: null,
+        activeTabValue: "task-1",
+        onRetryNavigationPersistence: () => {},
+        onRetryChatSettingsLoad: () => {},
+        onTabValueChange: () => {},
+        taskTabs: createElement("div", undefined, "tabs"),
+        workspace: createElement("div", undefined, "workspace"),
+      }),
+    );
+
+    expect(html).not.toContain("Repository: null");
+  });
+
   test("renders the workspace when no navigation error is present", () => {
     const html = renderToStaticMarkup(
       createElement(AgentsPageShell, {

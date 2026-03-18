@@ -83,11 +83,13 @@ export function useRepoNavigationPersistence({
     setPersistenceError(cause instanceof Error ? cause : new Error(errorMessage(cause)));
   }, []);
 
-  const flushPendingContextPersistSafely = useCallback((): void => {
+  const tryFlushPendingContextPersist = useCallback((): boolean => {
     try {
       flushPendingContextPersist();
+      return true;
     } catch (cause) {
       surfacePersistenceWriteError(cause);
+      return false;
     }
   }, [flushPendingContextPersist, surfacePersistenceWriteError]);
 
@@ -104,12 +106,14 @@ export function useRepoNavigationPersistence({
 
   useEffect(() => {
     if (!activeRepo) {
-      flushPendingContextPersist();
+      if (!tryFlushPendingContextPersist()) {
+        return;
+      }
       restoredContextRepoRef.current = null;
       persistedContextPayloadRef.current = null;
       setPersistenceError(null);
     }
-  }, [activeRepo, flushPendingContextPersist]);
+  }, [activeRepo, tryFlushPendingContextPersist]);
 
   useEffect(() => {
     if (!activeRepo) {
@@ -187,15 +191,15 @@ export function useRepoNavigationPersistence({
 
     return () => {
       if (pendingPersistTimeoutIdRef.current === timeoutId) {
-        flushPendingContextPersist();
+        tryFlushPendingContextPersist();
       }
     };
   }, [
     activeRepo,
-    flushPendingContextPersist,
     navigation,
     persistenceError,
     surfacePersistenceWriteError,
+    tryFlushPendingContextPersist,
   ]);
 
   useEffect(() => {
@@ -205,18 +209,18 @@ export function useRepoNavigationPersistence({
 
     const handleVisibilityChange = (): void => {
       if (document.visibilityState === "hidden") {
-        flushPendingContextPersistSafely();
+        tryFlushPendingContextPersist();
       }
     };
 
-    window.addEventListener("pagehide", flushPendingContextPersistSafely);
+    window.addEventListener("pagehide", tryFlushPendingContextPersist);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.removeEventListener("pagehide", flushPendingContextPersistSafely);
+      window.removeEventListener("pagehide", tryFlushPendingContextPersist);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [flushPendingContextPersistSafely]);
+  }, [tryFlushPendingContextPersist]);
 
   return {
     persistenceError,
