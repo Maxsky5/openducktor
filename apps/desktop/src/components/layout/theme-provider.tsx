@@ -1,7 +1,7 @@
 import type { SettingsSnapshot, Theme } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { createHostClient } from "@/lib/host-client";
+import { hostBridge } from "@/lib/host-client";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { applyThemeToDocument, readDocumentTheme } from "./theme-dom";
 
@@ -21,8 +21,6 @@ const initialState: ThemeProviderState = {
 };
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
-
-const hostClient = createHostClient();
 
 export function ThemeProvider({ children, defaultTheme = "light", ...props }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<Theme>(() => readDocumentTheme(defaultTheme));
@@ -64,7 +62,7 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
             };
           },
         );
-        void hostClient.setTheme(newTheme).catch((error) => {
+        void hostBridge.client.setTheme(newTheme).catch((error) => {
           console.error("Failed to persist theme change.", error);
           setThemeState(previousTheme);
           if (previousSnapshot) {
