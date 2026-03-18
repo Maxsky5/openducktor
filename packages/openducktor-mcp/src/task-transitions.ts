@@ -62,12 +62,20 @@ export const applyTransition = async (input: {
   invalidateTaskIndex: () => void;
   metadataNamespace: string;
 }): Promise<RefreshedTaskState> => {
-  if (input.task.status !== input.nextStatus) {
+  const mutated = input.task.status !== input.nextStatus;
+  if (mutated) {
     await input.runBdJson(["update", input.task.id, "--status", input.nextStatus]);
   }
 
-  const issue = await input.showRawIssue(input.task.id);
-  input.invalidateTaskIndex();
+  let issue: RawIssue;
+  try {
+    issue = await input.showRawIssue(input.task.id);
+  } finally {
+    if (mutated) {
+      input.invalidateTaskIndex();
+    }
+  }
+
   return {
     issue,
     task: issueToTaskCard(issue, input.metadataNamespace),

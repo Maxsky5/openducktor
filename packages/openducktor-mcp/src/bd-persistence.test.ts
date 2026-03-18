@@ -314,7 +314,9 @@ describe("BdPersistence", () => {
         issueType: "task",
         priority: 2,
       }),
-    ).rejects.toThrow("Task task-55 was created, but post-create metadata sync failed");
+    ).rejects.toThrow(
+      "Task task-55 was created, but post-create metadata sync failed: metadata write failed",
+    );
   });
 
   test("writeNamespace updates metadata under namespace key", async () => {

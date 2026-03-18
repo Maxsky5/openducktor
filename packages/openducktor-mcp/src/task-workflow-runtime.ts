@@ -51,8 +51,13 @@ class DefaultOdtTaskWorkflowRuntime implements OdtTaskWorkflowRuntimePort {
   async applyTaskUpdate(taskId: string, input: TaskUpdateInput): Promise<RefreshedTaskState> {
     await this.persistence.updateTask(taskId, input);
 
-    const issue = await this.persistence.showRawIssue(taskId);
-    this.taskLookup.invalidate();
+    let issue: RawIssue;
+    try {
+      issue = await this.persistence.showRawIssue(taskId);
+    } finally {
+      this.taskLookup.invalidate();
+    }
+
     return {
       issue,
       task: issueToTaskCard(issue, this.metadataNamespace),

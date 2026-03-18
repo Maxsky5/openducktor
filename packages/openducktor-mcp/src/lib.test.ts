@@ -321,6 +321,14 @@ describe("openducktor-mcp lib", () => {
         assignee: "max",
       }),
     ).toThrow();
+    expect(() =>
+      ODT_TOOL_SCHEMAS.create_task.parse({
+        title: "No blank description",
+        issueType: "task",
+        priority: 2,
+        description: "   ",
+      }),
+    ).toThrow();
   });
 
   test("schema validates search_tasks limit and active status filters", () => {

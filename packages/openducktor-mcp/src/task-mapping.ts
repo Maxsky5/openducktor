@@ -28,6 +28,7 @@ export const ensureObject = (value: unknown): JsonObject => {
 
 const RevisionSchema = z.number().int().positive();
 const UpdatedAtSchema = z.string().datetime({ offset: true });
+const BeadsTimestampSchema = z.string().datetime({ offset: true });
 
 const MarkdownEntrySchema = z.object({
   markdown: z.string(),
@@ -101,11 +102,16 @@ const parseTimestamp = (
   fieldName: "created_at" | "updated_at",
   value: unknown,
 ): string => {
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (BeadsTimestampSchema.safeParse(trimmed).success) {
+      return trimmed;
+    }
   }
 
-  throw new Error(`Invalid Beads ${fieldName} for task ${taskId}: expected a non-empty string.`);
+  throw new Error(
+    `Invalid Beads ${fieldName} for task ${taskId}: expected a valid ISO-8601 timestamp string.`,
+  );
 };
 
 const normalizeParentId = (issue: RawIssue): string | undefined => {

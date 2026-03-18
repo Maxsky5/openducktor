@@ -82,7 +82,7 @@ export const CreateTaskInputSchema = z
     priority: taskPrioritySchema.describe(
       "Task priority. Valid values: 0 (P0 Critical), 1 (P1 High), 2 (P2 Normal), 3 (P3 Low), 4 (P4 Very low).",
     ),
-    description: z.string().optional().describe("Optional task description."),
+    description: z.string().trim().min(1).optional().describe("Optional task description."),
     labels: z.array(labelStringSchema).optional().describe("Optional task labels."),
     aiReviewEnabled: z
       .boolean()
