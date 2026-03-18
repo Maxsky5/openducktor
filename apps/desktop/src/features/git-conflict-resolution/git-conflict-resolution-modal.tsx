@@ -1,4 +1,4 @@
-import { type ReactElement, useEffect, useState } from "react";
+import { type ReactElement, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -37,26 +37,52 @@ const formatConflictResolutionSessionMeta = (session: AgentSessionState): string
   return `${startedAtLabel} · ${session.status} · ${session.sessionId.slice(0, 8)}`;
 };
 
+type GitConflictResolutionModalState = {
+  requestKey: string;
+  mode: "existing" | "new";
+  selectedSessionId: string;
+};
+
+const getRequestKey = (request: PendingGitConflictResolutionRequest): string =>
+  `${request.requestId}:${request.defaultMode}:${request.defaultSessionId ?? ""}`;
+
+const createModalState = (
+  request: PendingGitConflictResolutionRequest,
+): GitConflictResolutionModalState => ({
+  requestKey: getRequestKey(request),
+  mode: request.defaultMode,
+  selectedSessionId: request.defaultSessionId ?? "",
+});
+
 export function useGitConflictResolutionModalState(
   request: PendingGitConflictResolutionRequest,
 ): UseGitConflictResolutionModalStateResult {
-  const [mode, setMode] = useState<"existing" | "new">(request.defaultMode);
-  const [selectedSessionId, setSelectedSessionId] = useState(request.defaultSessionId ?? "");
+  const requestKey = getRequestKey(request);
+  const [state, setState] = useState<GitConflictResolutionModalState>(() => createModalState(request));
+  const currentState = state.requestKey === requestKey ? state : createModalState(request);
   const hasExistingSessions = request.builderSessions.length > 0;
-  const confirmDisabled = mode === "existing" && selectedSessionId.trim().length === 0;
-
-  useEffect(() => {
-    setMode(request.defaultMode);
-    setSelectedSessionId(request.defaultSessionId ?? "");
-  }, [request]);
+  const confirmDisabled =
+    currentState.mode === "existing" && currentState.selectedSessionId.trim().length === 0;
 
   return {
-    mode,
-    selectedSessionId,
+    mode: currentState.mode,
+    selectedSessionId: currentState.selectedSessionId,
     hasExistingSessions,
     confirmDisabled,
-    setMode,
-    setSelectedSessionId,
+    setMode: (mode) => {
+      setState((previousState) => {
+        const baseState =
+          previousState.requestKey === requestKey ? previousState : createModalState(request);
+        return { ...baseState, mode };
+      });
+    },
+    setSelectedSessionId: (selectedSessionId) => {
+      setState((previousState) => {
+        const baseState =
+          previousState.requestKey === requestKey ? previousState : createModalState(request);
+        return { ...baseState, selectedSessionId };
+      });
+    },
   };
 }
 
