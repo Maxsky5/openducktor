@@ -261,7 +261,53 @@ describe("agents-page-session-tabs", () => {
     expect(states.qa.availability).toBe("blocked");
   });
 
-  test("marks workflow role as in_progress when latest role session is started but not completed", () => {
+  test("does not mark builder as in_progress when stopped session exists but builder is not available", () => {
+    const roleSessionByRole = buildRoleSessionSummaryMap([
+      buildSession({ role: "build", status: "stopped", scenario: "build_implementation_start" }),
+    ]);
+    const states = buildWorkflowStateByRole({
+      task: null,
+      roleWorkflowsByTask: {
+        spec: { required: true, canSkip: false, available: false, completed: false },
+        planner: { required: true, canSkip: false, available: false, completed: false },
+        build: { required: true, canSkip: false, available: false, completed: false },
+        qa: { required: false, canSkip: true, available: false, completed: false },
+      },
+      roleSessionByRole,
+    });
+
+    expect(states.build).toEqual({
+      tone: "blocked",
+      availability: "blocked",
+      completion: "not_started",
+      liveSession: "stopped",
+    });
+  });
+
+  test("marks builder as in_progress when builder session exists but is stopped without build_completed", () => {
+    const roleSessionByRole = buildRoleSessionSummaryMap([
+      buildSession({ role: "build", status: "stopped", scenario: "build_implementation_start" }),
+    ]);
+    const states = buildWorkflowStateByRole({
+      task: null,
+      roleWorkflowsByTask: {
+        spec: { required: true, canSkip: false, available: false, completed: false },
+        planner: { required: true, canSkip: false, available: false, completed: false },
+        build: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: false, canSkip: true, available: false, completed: false },
+      },
+      roleSessionByRole,
+    });
+
+    expect(states.build).toEqual({
+      tone: "in_progress",
+      availability: "available",
+      completion: "in_progress",
+      liveSession: "stopped",
+    });
+  });
+
+  test("marks builder as in_progress when latest role session is started but not completed", () => {
     const roleSessionByRole = buildRoleSessionSummaryMap([
       buildSession({ role: "planner", status: "idle" }),
     ]);
