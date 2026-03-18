@@ -145,9 +145,11 @@ fn update_repo_config_normalizes_remote_qualified_default_target_branch_values()
 
 #[test]
 fn load_normalizes_legacy_blank_repo_config_values() {
+    let _env_lock = lock_env();
     let harness = TestStoreHarness::new("normalize-legacy");
     let store = harness.store();
     let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
     let repo = root.join("repo");
     let repo_str = repo.to_string_lossy().to_string();
 

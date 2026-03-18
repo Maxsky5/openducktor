@@ -197,6 +197,7 @@ impl AppService {
                 anyhow!("Task {task_id} does not have a locally applied direct merge to complete.")
             })?;
         let repo_path = self.resolve_task_repo_path(repo_path)?;
+        self.ensure_direct_merge_publish_completed(repo_path.as_str(), task_id, &direct_merge)?;
 
         let task = if context.task.status == TaskStatus::Closed {
             context.task
@@ -215,6 +216,49 @@ impl AppService {
             direct_merge.source_branch.as_str(),
         )?;
         Ok(task)
+    }
+
+    fn ensure_direct_merge_publish_completed(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+        direct_merge: &DirectMergeRecord,
+    ) -> Result<()> {
+        let Some(publish_target) = direct_merge.publish_target() else {
+            return Ok(());
+        };
+
+        let current_branch = self.git_port.get_current_branch(Path::new(repo_path))?;
+        let current_branch_name = current_branch
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| {
+                anyhow!(
+                    "Cannot finish the direct merge for task {task_id} because the target branch checkout is not active."
+                )
+            })?;
+        let expected_branch = publish_target.checkout_branch();
+        if current_branch_name != expected_branch {
+            return Err(anyhow!(
+                "Cannot finish the direct merge for task {task_id} until branch {} is checked out locally.",
+                expected_branch
+            ));
+        }
+
+        let publish_target_ref = publish_target.canonical();
+        let publish_sync = self
+            .git_port
+            .commits_ahead_behind(Path::new(repo_path), publish_target_ref.as_str())?;
+        if publish_sync.ahead != 0 || publish_sync.behind != 0 {
+            return Err(anyhow!(
+                "Cannot finish the direct merge for task {task_id} until {} is fully published and synchronized.",
+                publish_target_ref
+            ));
+        }
+
+        Ok(())
     }
 
     pub fn task_pull_request_upsert(
@@ -837,45 +881,56 @@ fn latest_builder_cleanup_target(
     preferred_source_branch: Option<&str>,
 ) -> Result<Option<BuilderCleanupTarget>> {
     let sessions = service.agent_sessions_list(repo_path, task_id)?;
-    let latest_builder_session = sessions
+    let mut builder_sessions = sessions
         .into_iter()
         .filter(|session| session.role == "build")
-        .max_by(|left, right| {
-            let left_key = left
-                .updated_at
-                .as_deref()
-                .unwrap_or(left.started_at.as_str());
-            let right_key = right
-                .updated_at
-                .as_deref()
-                .unwrap_or(right.started_at.as_str());
-            left_key
-                .cmp(right_key)
-                .then_with(|| left.started_at.cmp(&right.started_at))
-                .then_with(|| left.session_id.cmp(&right.session_id))
-        });
+        .collect::<Vec<_>>();
+    builder_sessions.sort_by(|left, right| {
+        let left_key = left
+            .updated_at
+            .as_deref()
+            .unwrap_or(left.started_at.as_str());
+        let right_key = right
+            .updated_at
+            .as_deref()
+            .unwrap_or(right.started_at.as_str());
+        left_key
+            .cmp(right_key)
+            .then_with(|| left.started_at.cmp(&right.started_at))
+            .then_with(|| left.session_id.cmp(&right.session_id))
+    });
+    builder_sessions.reverse();
 
-    let Some(session) = latest_builder_session else {
-        return Ok(None);
-    };
-
-    let working_directory = session.working_directory.trim().to_string();
-    if working_directory.is_empty() {
-        return Ok(None);
-    }
-
-    if preferred_source_branch.is_none() {
+    for session in builder_sessions {
+        let working_directory = session.working_directory.trim().to_string();
+        if working_directory.is_empty() {
+            continue;
+        }
         if !Path::new(working_directory.as_str()).exists() {
-            return Ok(None);
+            continue;
         }
         let current_branch = service
             .git_port
             .get_current_branch(Path::new(working_directory.as_str()))?;
-        match current_branch.name {
-            Some(name) if !name.trim().is_empty() => {}
-            _ => return Ok(None),
+        let current_branch_name = match current_branch.name {
+            Some(name) => {
+                let trimmed = name.trim().to_string();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                trimmed
+            }
+            None => continue,
+        };
+        if preferred_source_branch
+            .map(str::trim)
+            .is_some_and(|expected| current_branch_name != expected)
+        {
+            continue;
         }
+
+        return Ok(Some(BuilderCleanupTarget { working_directory }));
     }
 
-    Ok(Some(BuilderCleanupTarget { working_directory }))
+    Ok(None)
 }

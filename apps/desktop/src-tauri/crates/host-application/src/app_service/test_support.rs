@@ -522,6 +522,10 @@ pub(crate) enum GitCall {
         target_branch: String,
         diff_scope: GitDiffScope,
     },
+    CommitsAheadBehind {
+        repo_path: String,
+        target_branch: String,
+    },
 }
 
 #[derive(Debug)]
@@ -541,6 +545,7 @@ pub(crate) struct GitState {
     pub(crate) rebase_abort_result: GitRebaseAbortResult,
     pub(crate) conflict_abort_result: GitConflictAbortResult,
     pub(crate) merge_branch_result: GitMergeBranchResult,
+    pub(crate) commits_ahead_behind_result: GitAheadBehind,
 }
 
 #[derive(Clone)]
@@ -866,13 +871,15 @@ impl GitPort for FakeGitPort {
 
     fn commits_ahead_behind(
         &self,
-        _repo_path: &Path,
-        _target_branch: &str,
+        repo_path: &Path,
+        target_branch: &str,
     ) -> Result<GitAheadBehind> {
-        Ok(GitAheadBehind {
-            ahead: 0,
-            behind: 0,
-        })
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::CommitsAheadBehind {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            target_branch: target_branch.to_string(),
+        });
+        Ok(state.commits_ahead_behind_result.clone())
     }
 }
 
@@ -952,6 +959,10 @@ pub(crate) fn build_service_with_git_state_enforced(
         merge_branch_result: GitMergeBranchResult::Merged {
             output: "merge completed".to_string(),
         },
+        commits_ahead_behind_result: GitAheadBehind {
+            ahead: 0,
+            behind: 0,
+        },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
         state: task_state.clone(),
@@ -1025,6 +1036,10 @@ pub(crate) fn build_service_with_git_state(
         },
         merge_branch_result: GitMergeBranchResult::Merged {
             output: "merge completed".to_string(),
+        },
+        commits_ahead_behind_result: GitAheadBehind {
+            ahead: 0,
+            behind: 0,
         },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
@@ -1450,6 +1465,10 @@ pub(crate) fn build_service_with_store(
         },
         merge_branch_result: GitMergeBranchResult::Merged {
             output: "merge completed".to_string(),
+        },
+        commits_ahead_behind_result: GitAheadBehind {
+            ahead: 0,
+            behind: 0,
         },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {

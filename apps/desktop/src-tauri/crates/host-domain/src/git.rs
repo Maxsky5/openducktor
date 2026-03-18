@@ -116,6 +116,15 @@ pub struct DirectMergeRecord {
     pub merged_at: String,
 }
 
+impl DirectMergeRecord {
+    pub fn publish_target(&self) -> Option<GitTargetBranch> {
+        if self.target_branch.remote.is_some() {
+            return Some(self.target_branch.clone());
+        }
+        None
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct GitProviderAvailability {
