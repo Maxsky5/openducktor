@@ -206,4 +206,64 @@ describe("useAgentStudioSelectionController", () => {
       await harness.unmount();
     }
   });
+
+  test("tab shows working status when newer idle session exists but older session is running", async () => {
+    const olderRunningSession = createSession("task-1", "session-old", {
+      role: "build",
+      scenario: "build_implementation_start",
+      startedAt: "2026-02-22T10:00:00.000Z",
+      status: "running",
+    });
+    const newerIdleSession = createSession("task-1", "session-new", {
+      role: "build",
+      scenario: "build_implementation_start",
+      startedAt: "2026-02-22T11:00:00.000Z",
+      status: "idle",
+    });
+
+    const harness = createHookHarness(
+      createBaseArgs({
+        sessions: [olderRunningSession, newerIdleSession],
+        taskIdParam: "task-1",
+        hasExplicitRoleParam: false,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      const task1Tab = latest.taskTabs.find((tab) => tab.taskId === "task-1");
+      expect(task1Tab?.status).toBe("working");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("idle session is included in latestSessionByTaskId for navigation", async () => {
+    const idleSession = createSession("task-1", "session-idle", {
+      role: "build",
+      scenario: "build_implementation_start",
+      startedAt: "2026-02-22T11:00:00.000Z",
+      status: "idle",
+    });
+
+    const harness = createHookHarness(
+      createBaseArgs({
+        sessions: [idleSession],
+        taskIdParam: "task-1",
+        hasExplicitRoleParam: false,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      const task1Tab = latest.taskTabs.find((tab) => tab.taskId === "task-1");
+      expect(task1Tab?.status).toBe("idle");
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

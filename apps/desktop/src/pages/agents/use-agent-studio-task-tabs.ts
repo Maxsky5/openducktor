@@ -77,6 +77,7 @@ export function useAgentStudioTaskTabs(args: {
   tasks: TaskCard[];
   isLoadingTasks: boolean;
   latestSessionByTaskId: Map<string, AgentSessionState>;
+  activeSessionByTaskId?: Map<string, AgentSessionState>;
   updateQuery: (updates: QueryUpdate) => void;
   clearComposerInput: () => void;
   onContextSwitchIntent?: () => void;
@@ -96,6 +97,7 @@ export function useAgentStudioTaskTabs(args: {
     tasks,
     isLoadingTasks,
     latestSessionByTaskId,
+    activeSessionByTaskId,
     updateQuery,
     clearComposerInput,
     onContextSwitchIntent,
@@ -186,10 +188,10 @@ export function useAgentStudioTaskTabs(args: {
       buildTaskTabs({
         tabTaskIds,
         tasks,
-        latestSessionByTaskId,
+        latestSessionByTaskId: activeSessionByTaskId ?? latestSessionByTaskId,
         activeTaskId: activeTaskTabId,
       }),
-    [activeTaskTabId, latestSessionByTaskId, tabTaskIds, tasks],
+    [activeTaskTabId, activeSessionByTaskId, latestSessionByTaskId, tabTaskIds, tasks],
   );
 
   const { handleCreateTab, handleCloseTab } = useTaskTabActions({
