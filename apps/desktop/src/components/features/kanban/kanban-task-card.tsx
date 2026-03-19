@@ -356,6 +356,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
           className="flex w-full min-w-0 cursor-pointer items-start justify-between gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           onClick={() => onOpenDetails(task.id)}
           onKeyDown={(e) => {
+            if (e.target !== e.currentTarget) return;
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
               onOpenDetails(task.id);
@@ -369,7 +370,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
             >
               {task.title}
             </p>
-            <TaskIdBadge taskId={task.id} className="truncate" />
+            <TaskIdBadge taskId={task.id} />
           </div>
           <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] text-muted-foreground transition group-hover:border-border group-hover:bg-muted group-hover:text-muted-foreground">
             <ExternalLink className="size-3" />

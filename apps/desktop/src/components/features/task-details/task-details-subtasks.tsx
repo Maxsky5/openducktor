@@ -30,7 +30,7 @@ export const TaskDetailsSubtasks = memo(
                     <p className="truncate text-sm font-semibold text-foreground">
                       {subtask.title}
                     </p>
-                    <TaskIdBadge taskId={subtask.id} className="mt-1 truncate" />
+                    <TaskIdBadge taskId={subtask.id} className="mt-1" />
                   </div>
                   <Badge variant="outline" className={statusBadgeClassName(subtask.status)}>
                     {statusLabel(subtask.status)}
