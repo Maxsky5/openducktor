@@ -2,8 +2,8 @@ import type { GitTargetBranch, RunSummary, TaskCard } from "@openducktor/contrac
 import type { AgentRole, AgentScenario, KanbanColumn as KanbanColumnData } from "@openducktor/core";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type {
-  KanbanActiveSession,
   KanbanTaskActivityState,
+  KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
 import type { GitConflict, GitConflictAction } from "@/features/agent-studio-git";
 import type {
@@ -74,7 +74,7 @@ export type KanbanPageContentModel = {
   isSwitchingWorkspace: boolean;
   columns: KanbanColumnData[];
   runStateByTaskId: Map<string, RunSummary["state"]>;
-  activeSessionsByTaskId: Map<string, KanbanActiveSession[]>;
+  taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;

@@ -18,7 +18,7 @@ describe("KanbanTaskCard active sessions", () => {
         createElement(KanbanTaskCard, {
           task,
           taskActivityState: "active",
-          activeSessions: [
+          taskSessions: [
             {
               runtimeKind: "opencode",
               sessionId: "session-build",
@@ -46,7 +46,7 @@ describe("KanbanTaskCard active sessions", () => {
 
     expect(html).toContain("kanban-active-session-card");
     expect(html).toContain("kanban-active-session-ray");
-    expect(html).toContain("Active sessions");
+    expect(html).toContain("Sessions");
     expect(html).toContain("Builder");
     expect(html).toContain("Running");
     expect(html).toContain("QA");
@@ -70,7 +70,7 @@ describe("KanbanTaskCard active sessions", () => {
         createElement(KanbanTaskCard, {
           task,
           taskActivityState: "idle",
-          activeSessions: [],
+          taskSessions: [],
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
@@ -80,7 +80,7 @@ describe("KanbanTaskCard active sessions", () => {
     );
 
     expect(html).not.toContain("kanban-active-session-card");
-    expect(html).not.toContain("Active sessions");
+    expect(html).not.toContain("Sessions");
     expect(html).not.toContain("Active agent session");
   });
 
@@ -94,7 +94,7 @@ describe("KanbanTaskCard active sessions", () => {
         createElement(KanbanTaskCard, {
           task,
           taskActivityState: "waiting_input",
-          activeSessions: [
+          taskSessions: [
             {
               runtimeKind: "opencode",
               sessionId: "session-build",
@@ -123,6 +123,7 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).toContain("kanban-waiting-input-card");
     expect(html).not.toContain("kanban-active-session-ray");
     expect(html).toContain("Waiting input");
+    expect(html).toContain("Sessions");
     expect(html).toContain("border-warning-border");
     expect(html).toContain("bg-warning-surface");
     expect(html).toContain("Builder");
@@ -148,7 +149,7 @@ describe("KanbanTaskCard active sessions", () => {
         createElement(KanbanTaskCard, {
           task,
           taskActivityState: "idle",
-          activeSessions: [],
+          taskSessions: [],
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
@@ -184,7 +185,7 @@ describe("KanbanTaskCard active sessions", () => {
         createElement(KanbanTaskCard, {
           task,
           taskActivityState: "idle",
-          activeSessions: [],
+          taskSessions: [],
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
@@ -208,7 +209,7 @@ describe("KanbanTaskCard active sessions", () => {
           task,
           runState: "completed",
           taskActivityState: "idle",
-          activeSessions: [],
+          taskSessions: [],
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
@@ -226,7 +227,7 @@ describe("KanbanTaskCard active sessions", () => {
           task,
           runState: "stopped",
           taskActivityState: "idle",
-          activeSessions: [],
+          taskSessions: [],
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
@@ -248,7 +249,7 @@ describe("KanbanTaskCard active sessions", () => {
           task,
           runState: "running",
           taskActivityState: "idle",
-          activeSessions: [],
+          taskSessions: [],
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
@@ -268,7 +269,7 @@ describe("KanbanTaskCard active sessions", () => {
           task,
           runState: "starting",
           taskActivityState: "idle",
-          activeSessions: [],
+          taskSessions: [],
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
@@ -292,7 +293,7 @@ describe("KanbanTaskCard active sessions", () => {
           task,
           runState: "awaiting_done_confirmation",
           taskActivityState: "idle",
-          activeSessions: [],
+          taskSessions: [],
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,

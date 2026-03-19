@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
-  buildActiveSessionsByTaskId,
   buildRunStateByTaskId,
   buildTaskActivityStateByTaskId,
+  buildTaskSessionsByTaskId,
   sortTasksByActivityState,
 } from "./use-kanban-board-model";
 
@@ -110,8 +110,8 @@ describe("use-kanban-board-model helpers", () => {
     expect(runStateByTaskId.get("task-2")).toBe("blocked");
   });
 
-  test("buildActiveSessionsByTaskId filters non-active sessions, sorts active ones, and derives waiting input", () => {
-    const activeSessionsByTaskId = buildActiveSessionsByTaskId([
+  test("buildTaskSessionsByTaskId keeps waiting-input sessions even when they are idle", () => {
+    const taskSessionsByTaskId = buildTaskSessionsByTaskId([
       createSession({
         sessionId: "session-starting",
         status: "starting",
@@ -142,12 +142,24 @@ describe("use-kanban-board-model helpers", () => {
       createSession({
         sessionId: "session-idle",
         status: "idle",
+        pendingPermissions: [
+          {
+            requestId: "permission-2",
+            permission: "tool",
+            patterns: ["odt_build_completed"],
+          },
+        ],
       }),
     ]);
 
-    expect(activeSessionsByTaskId.get("task-1")).toEqual([
+    expect(taskSessionsByTaskId.get("task-1")).toEqual([
       expect.objectContaining({
         sessionId: "session-running-newer",
+        presentationState: "waiting_input",
+      }),
+      expect.objectContaining({
+        sessionId: "session-idle",
+        status: "idle",
         presentationState: "waiting_input",
       }),
       expect.objectContaining({
@@ -168,7 +180,7 @@ describe("use-kanban-board-model helpers", () => {
       createTaskCard({ id: "task-with-session" }),
       createTaskCard({ id: "task-another-no-session" }),
     ];
-    const activeSessionsByTaskId = buildActiveSessionsByTaskId([
+    const taskSessionsByTaskId = buildTaskSessionsByTaskId([
       createSession({
         taskId: "task-waiting",
         pendingPermissions: [
@@ -181,7 +193,7 @@ describe("use-kanban-board-model helpers", () => {
       }),
       createSession({ taskId: "task-with-session", sessionId: "session-2" }),
     ]);
-    const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(activeSessionsByTaskId);
+    const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId);
 
     const sorted = sortTasksByActivityState(tasks, taskActivityStateByTaskId);
 
@@ -202,7 +214,7 @@ describe("use-kanban-board-model helpers", () => {
       createTaskCard({ id: "task-5-active" }),
       createTaskCard({ id: "task-6-idle" }),
     ];
-    const activeSessionsByTaskId = buildActiveSessionsByTaskId([
+    const taskSessionsByTaskId = buildTaskSessionsByTaskId([
       createSession({
         taskId: "task-1-waiting",
         sessionId: "session-1",
@@ -233,7 +245,7 @@ describe("use-kanban-board-model helpers", () => {
       }),
       createSession({ taskId: "task-5-active", sessionId: "session-5" }),
     ]);
-    const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(activeSessionsByTaskId);
+    const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId);
 
     const sorted = sortTasksByActivityState(tasks, taskActivityStateByTaskId);
 
@@ -265,12 +277,18 @@ describe("use-kanban-board-model helpers", () => {
     expect(sorted.map((t) => t.id)).toEqual(["task-1", "task-2"]);
   });
 
-  test("buildTaskActivityStateByTaskId marks tasks as waiting input when any active session is waiting", () => {
-    const activeSessionsByTaskId = buildActiveSessionsByTaskId([
+  test("buildTaskActivityStateByTaskId marks tasks as waiting input when any displayed session is waiting", () => {
+    const tasks = [
+      createTaskCard({ id: "task-waiting" }),
+      createTaskCard({ id: "task-active" }),
+      createTaskCard({ id: "task-idle" }),
+    ];
+    const taskSessionsByTaskId = buildTaskSessionsByTaskId([
       createSession({ taskId: "task-waiting", sessionId: "session-waiting" }),
       createSession({
         taskId: "task-waiting",
         sessionId: "session-question",
+        status: "idle",
         pendingQuestions: [
           {
             requestId: "question-2",
@@ -287,9 +305,10 @@ describe("use-kanban-board-model helpers", () => {
       createSession({ taskId: "task-active", sessionId: "session-active" }),
     ]);
 
-    const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(activeSessionsByTaskId);
+    const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId);
 
     expect(taskActivityStateByTaskId.get("task-waiting")).toBe("waiting_input");
     expect(taskActivityStateByTaskId.get("task-active")).toBe("active");
+    expect(taskActivityStateByTaskId.get("task-idle")).toBe("idle");
   });
 });

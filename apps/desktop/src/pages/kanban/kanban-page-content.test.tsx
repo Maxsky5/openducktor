@@ -19,7 +19,7 @@ const model: KanbanPageContentModel = {
     },
   ],
   runStateByTaskId: new Map(),
-  activeSessionsByTaskId: new Map(),
+  taskSessionsByTaskId: new Map(),
   taskActivityStateByTaskId: new Map(),
   onOpenDetails: () => {},
   onDelegate: () => {},

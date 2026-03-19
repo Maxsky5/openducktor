@@ -5,7 +5,7 @@ export type KanbanSessionPresentationState = "active" | "waiting_input";
 
 export type KanbanTaskActivityState = "idle" | "active" | "waiting_input";
 
-export type KanbanActiveSession = Pick<
+export type KanbanTaskSession = Pick<
   AgentSessionState,
   "sessionId" | "role" | "scenario" | "status"
 > & {
@@ -13,7 +13,7 @@ export type KanbanActiveSession = Pick<
   presentationState: KanbanSessionPresentationState;
 };
 
-export const isKanbanSessionWaitingInput = (
+const isKanbanSessionWaitingInput = (
   session: Pick<AgentSessionState, "pendingPermissions" | "pendingQuestions">,
 ): boolean => isAgentSessionWaitingInput(session);
 
@@ -23,18 +23,13 @@ export const toKanbanSessionPresentationState = (
   isKanbanSessionWaitingInput(session) ? "waiting_input" : "active";
 
 export const toKanbanTaskActivityState = (
-  activeSessions:
-    | Array<
-        | Pick<KanbanActiveSession, "presentationState">
-        | { presentationState?: KanbanSessionPresentationState }
-      >
-    | undefined,
+  taskSessions: Array<Pick<KanbanTaskSession, "presentationState">> | undefined,
 ): KanbanTaskActivityState => {
-  if (!activeSessions || activeSessions.length === 0) {
+  if (!taskSessions || taskSessions.length === 0) {
     return "idle";
   }
 
-  return activeSessions.some((session) => session.presentationState === "waiting_input")
+  return taskSessions.some((session) => session.presentationState === "waiting_input")
     ? "waiting_input"
     : "active";
 };

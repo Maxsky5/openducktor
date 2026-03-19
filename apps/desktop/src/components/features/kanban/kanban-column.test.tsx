@@ -1,10 +1,10 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { ComponentProps, ReactElement } from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type {
-  KanbanActiveSession,
   KanbanTaskActivityState,
+  KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
 import type { KanbanTaskCard } from "./kanban-task-card";
@@ -36,13 +36,16 @@ mock.module("@/components/features/kanban/use-kanban-virtualization", () => ({
 const noop = (): void => {};
 
 describe("KanbanColumn", () => {
-  test("passes waiting-input ordering data through to rendered task cards", async () => {
+  beforeEach(() => {
     renderedCards.length = 0;
+  });
+
+  test("passes waiting-input ordering data through to rendered task cards", async () => {
     const { KanbanColumn } = await import("./kanban-column");
     const waitingTask = createTaskCardFixture({ id: "TASK-WAITING", title: "Need answer" });
     const activeTask = createTaskCardFixture({ id: "TASK-ACTIVE", title: "Still running" });
     const idleTask = createTaskCardFixture({ id: "TASK-IDLE", title: "Queued" });
-    const activeSessionsByTaskId = new Map<string, KanbanActiveSession[]>([
+    const taskSessionsByTaskId = new Map<string, KanbanTaskSession[]>([
       [
         "TASK-WAITING",
         [
@@ -84,7 +87,7 @@ describe("KanbanColumn", () => {
           tasks: [waitingTask, activeTask, idleTask],
         },
         runStateByTaskId: new Map(),
-        activeSessionsByTaskId,
+        taskSessionsByTaskId,
         taskActivityStateByTaskId,
         onOpenDetails: noop,
         onDelegate: noop,

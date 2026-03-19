@@ -49,6 +49,7 @@ describe("KanbanTaskCard memoization", () => {
         role: "build",
         scenario: "build_implementation_start",
         status: "running",
+        presentationState: "active",
       } as const,
     ];
 
@@ -60,7 +61,7 @@ describe("KanbanTaskCard memoization", () => {
             task={task}
             runState="running"
             taskActivityState="active"
-            activeSessions={activeSessions}
+            taskSessions={activeSessions}
             onOpenDetails={noop}
             onDelegate={noop}
             onPlan={noop}
@@ -79,7 +80,7 @@ describe("KanbanTaskCard memoization", () => {
             task={{ ...task }}
             runState="running"
             taskActivityState="active"
-            activeSessions={activeSessions.map((session) => ({ ...session }))}
+            taskSessions={activeSessions.map((session) => ({ ...session }))}
             onOpenDetails={noop}
             onDelegate={noop}
             onPlan={noop}
@@ -114,7 +115,7 @@ describe("KanbanTaskCard memoization", () => {
             task={task}
             runState="running"
             taskActivityState="idle"
-            activeSessions={[]}
+            taskSessions={[]}
             onOpenDetails={noop}
             onDelegate={noop}
             onPlan={noop}
@@ -137,7 +138,7 @@ describe("KanbanTaskCard memoization", () => {
             }}
             runState="running"
             taskActivityState="idle"
-            activeSessions={[]}
+            taskSessions={[]}
             onOpenDetails={noop}
             onDelegate={noop}
             onPlan={noop}
@@ -172,7 +173,7 @@ describe("KanbanTaskCard memoization", () => {
             task={task}
             runState="running"
             taskActivityState="active"
-            activeSessions={[
+            taskSessions={[
               {
                 runtimeKind: "opencode",
                 sessionId: "session-1",
@@ -200,7 +201,7 @@ describe("KanbanTaskCard memoization", () => {
             task={task}
             runState="running"
             taskActivityState="waiting_input"
-            activeSessions={[
+            taskSessions={[
               {
                 runtimeKind: "opencode",
                 sessionId: "session-1",
