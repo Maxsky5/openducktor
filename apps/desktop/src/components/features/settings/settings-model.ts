@@ -1,4 +1,4 @@
-export const DEFAULT_BRANCH_PREFIX = "obp";
+export { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 
 export const parseHookLines = (value: string): string[] =>
   value

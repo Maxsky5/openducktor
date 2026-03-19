@@ -1,5 +1,6 @@
 use super::{lock_env, EnvVarGuard, RepoConfig, TestStoreHarness};
 use crate::GitTargetBranch;
+use host_domain::DEFAULT_BRANCH_PREFIX;
 use serde_json::json;
 use std::fs;
 #[cfg(unix)]
@@ -224,7 +225,7 @@ fn load_normalizes_legacy_blank_repo_config_values() {
         .repo_config(workspaces[0].path.as_str())
         .expect("repo config");
     assert!(repo_config.worktree_base_path.is_none());
-    assert_eq!(repo_config.branch_prefix, "obp");
+    assert_eq!(repo_config.branch_prefix, DEFAULT_BRANCH_PREFIX);
     assert_eq!(repo_config.default_target_branch.canonical(), "origin/main");
     assert_eq!(repo_config.hooks.pre_start, vec!["echo pre".to_string()]);
     assert_eq!(

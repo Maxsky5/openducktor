@@ -106,6 +106,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "parseAgentSessionTodoPayloadList",
   "beadsCheckSchema",
   "chatSettingsSchema",
+  "DEFAULT_BRANCH_PREFIX",
   "gitCommitAllRequestSchema",
   "gitCommitAllResultSchema",
   "gitConflictAbortRequestSchema",

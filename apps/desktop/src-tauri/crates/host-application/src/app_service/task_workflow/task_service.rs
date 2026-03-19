@@ -5,8 +5,8 @@ use crate::app_service::workflow_rules::{
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentSessionDocument, CreateTaskInput, QaWorkflowVerdict, RunState, RuntimeRole, TaskCard,
-    TaskMetadata, TaskStatus, UpdateTaskPatch,
+    AgentSessionDocument, CreateTaskInput, DEFAULT_BRANCH_PREFIX, QaWorkflowVerdict, RunState,
+    RuntimeRole, TaskCard, TaskMetadata, TaskStatus, UpdateTaskPatch,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -706,7 +706,7 @@ fn is_managed_task_worktree_session(
 
 fn is_related_task_branch(branch_name: &str, branch_prefix: &str, task_id: &str) -> bool {
     let clean_prefix = if branch_prefix.trim().is_empty() {
-        "obp"
+        DEFAULT_BRANCH_PREFIX
     } else {
         branch_prefix.trim()
     };

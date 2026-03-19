@@ -34,6 +34,7 @@ pub use task::{
 };
 
 pub const TASK_METADATA_NAMESPACE: &str = "openducktor";
+pub const DEFAULT_BRANCH_PREFIX: &str = "odt";
 
 pub fn now_rfc3339() -> String {
     chrono::Utc::now().to_rfc3339()
