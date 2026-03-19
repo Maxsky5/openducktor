@@ -4,6 +4,7 @@ import { isAgentKickoffScenario } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { RequestNewSessionStart } from "@/features/session-start";
+import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { SCENARIO_LABELS } from "./agents-page-constants";
@@ -73,6 +74,7 @@ export function useAgentStudioSessionActions({
   isSending: boolean;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   isSessionWorking: boolean;
+  isWaitingInput: boolean;
   canKickoffNewSession: boolean;
   kickoffLabel: string;
   canStopSession: boolean;
@@ -104,6 +106,7 @@ export function useAgentStudioSessionActions({
     ((activeSession?.status ?? "stopped") === "running" ||
       (activeSession?.status ?? "stopped") === "starting" ||
       isSending);
+  const isWaitingInput = Boolean(activeSession && isAgentSessionWaitingInput(activeSession));
 
   const {
     isStarting,
@@ -382,6 +385,7 @@ export function useAgentStudioSessionActions({
     isSending,
     isSubmittingQuestionByRequestId,
     isSessionWorking,
+    isWaitingInput,
     canKickoffNewSession,
     kickoffLabel,
     canStopSession,

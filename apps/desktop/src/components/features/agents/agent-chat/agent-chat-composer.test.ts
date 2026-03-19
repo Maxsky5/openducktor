@@ -15,6 +15,7 @@ const buildModel = () => ({
   isSending: false,
   isStarting: false,
   isSessionWorking: false,
+  isWaitingInput: false,
   isModelSelectionPending: false,
   selectedModelSelection: buildModelSelection(),
   isSelectionCatalogLoading: false,
@@ -114,6 +115,24 @@ describe("AgentChatComposer", () => {
     expect(html).toContain('class="odt-border-ray"');
     expect(html).toContain("--odt-border-ray-color:#d97706");
     expect(html).toContain("--odt-border-ray-stroke-width:2.6");
+  });
+
+  test("uses the waiting-input shell and suppresses the border ray while input is pending", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          isSessionWorking: true,
+          isWaitingInput: true,
+        },
+      }),
+    );
+
+    expect(html).toContain("odt-waiting-input-card");
+    expect(html).toContain("border-warning-border");
+    expect(html).not.toContain('class="odt-border-ray"');
+    expect(html).not.toContain("border-l-4");
+    expect(html).not.toContain("border-left-color:#d97706");
   });
 
   test("renders read-only mode when selected role is unavailable", () => {

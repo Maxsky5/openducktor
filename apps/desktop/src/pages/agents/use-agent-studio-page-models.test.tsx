@@ -120,6 +120,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       isStarting: false,
       isSending: false,
       isSessionWorking: true,
+      isWaitingInput: false,
       canKickoffNewSession: false,
       kickoffLabel: "Start Spec",
       canStopSession: true,
@@ -627,6 +628,72 @@ describe("useAgentStudioPageModels", () => {
 
     const nextComposerModel = harness.getLatest().agentChatModel.composer;
     expect(nextComposerModel).toBe(initialComposerModel);
+
+    await harness.unmount();
+  });
+
+  test("updates composer model when a running session starts waiting for input", async () => {
+    const initialSession = createSession("session-1", "external-1", {
+      role: "spec",
+      status: "running",
+      pendingQuestions: [],
+      isLoadingModelCatalog: false,
+    });
+    const baseProps = createHookArgs({
+      core: {
+        activeSession: initialSession,
+        sessionsForTask: [initialSession],
+      },
+      composer: {
+        input: "draft",
+      },
+      sessionActions: {
+        isSessionWorking: true,
+        isWaitingInput: false,
+      },
+    });
+    const harness = createHookHarness(baseProps);
+
+    await harness.mount();
+    const initialComposerModel = harness.getLatest().agentChatModel.composer;
+    expect(initialComposerModel.isWaitingInput).toBe(false);
+
+    const waitingSession = createSession("session-1", "external-1", {
+      role: "spec",
+      status: "running",
+      pendingQuestions: [
+        {
+          requestId: "question-1",
+          questions: [
+            {
+              header: "Question",
+              question: "Need input",
+              options: [{ label: "Reply", description: "Provide input" }],
+            },
+          ],
+        },
+      ],
+      isLoadingModelCatalog: false,
+    });
+    await harness.update(
+      createHookArgs({
+        ...baseProps,
+        core: {
+          ...baseProps.core,
+          activeSession: waitingSession,
+          sessionsForTask: [waitingSession],
+        },
+        sessionActions: {
+          ...baseProps.sessionActions,
+          isSessionWorking: true,
+          isWaitingInput: true,
+        },
+      }),
+    );
+
+    const nextComposerModel = harness.getLatest().agentChatModel.composer;
+    expect(nextComposerModel).not.toBe(initialComposerModel);
+    expect(nextComposerModel.isWaitingInput).toBe(true);
 
     await harness.unmount();
   });

@@ -2,20 +2,24 @@ import type { RunSummary } from "@openducktor/contracts";
 import type { KanbanColumn as KanbanColumnData, KanbanColumnId } from "@openducktor/core";
 import { Inbox } from "lucide-react";
 import { type ComponentProps, memo, type ReactElement, useEffect, useRef } from "react";
+import type {
+  KanbanTaskActivityState,
+  KanbanTaskSession,
+} from "@/components/features/kanban/kanban-task-activity";
 import { KanbanTaskCard } from "@/components/features/kanban/kanban-task-card";
 import { laneTheme } from "@/components/features/kanban/kanban-theme";
 import { useKanbanVirtualization } from "@/components/features/kanban/use-kanban-virtualization";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 
-type RunningTaskSessions = NonNullable<ComponentProps<typeof KanbanTaskCard>["activeSessions"]>;
-const EMPTY_ACTIVE_SESSIONS: RunningTaskSessions = [];
+type TaskSessions = NonNullable<ComponentProps<typeof KanbanTaskCard>["taskSessions"]>;
+const EMPTY_TASK_SESSIONS: TaskSessions = [];
 
 type KanbanColumnProps = {
   column: KanbanColumnData;
   runStateByTaskId: Map<string, RunSummary["state"]>;
-  activeSessionsByTaskId: Map<string, AgentSessionState[]>;
+  taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
+  taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
@@ -28,6 +32,18 @@ type KanbanColumnProps = {
 };
 
 const laneCountLabel = (count: number): string => (count === 1 ? "1 task" : `${count} tasks`);
+
+const getRequiredTaskActivityState = (
+  taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>,
+  taskId: string,
+): KanbanTaskActivityState => {
+  const taskActivityState = taskActivityStateByTaskId.get(taskId);
+  if (!taskActivityState) {
+    throw new Error(`Missing Kanban task activity state for task ${taskId}`);
+  }
+
+  return taskActivityState;
+};
 
 type TaskCardHandlers = Pick<
   KanbanColumnProps,
@@ -45,7 +61,8 @@ type TaskCardHandlers = Pick<
 const MeasuredTaskCard = memo(function MeasuredTaskCard({
   task,
   runState,
-  activeSessions,
+  taskSessions,
+  taskActivityState,
   measurementVersion,
   onMeasuredHeight,
   onOpenDetails,
@@ -60,7 +77,8 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
 }: {
   task: KanbanColumnData["tasks"][number];
   runState: RunSummary["state"] | undefined;
-  activeSessions: RunningTaskSessions | undefined;
+  taskSessions: TaskSessions | undefined;
+  taskActivityState: KanbanTaskActivityState;
   measurementVersion: number;
   onMeasuredHeight: (taskId: string, height: number) => void;
 } & TaskCardHandlers): ReactElement {
@@ -77,17 +95,19 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
     task.pullRequest?.state ?? "",
     task.pullRequest?.url ?? "",
   ].join("|");
-  const activeSessionsMeasurementKey =
-    activeSessions
+  const taskSessionsMeasurementKey =
+    taskSessions
       ?.map(
-        (session) => `${session.sessionId}:${session.role}:${session.scenario}:${session.status}`,
+        (session) =>
+          `${session.sessionId}:${session.role}:${session.scenario}:${session.status}:${session.presentationState}`,
       )
       .join("|") ?? "";
   const measurementTrigger = [
     measurementVersion,
     runState ?? "",
+    taskActivityState,
     taskMeasurementKey,
-    activeSessionsMeasurementKey,
+    taskSessionsMeasurementKey,
   ].join("::");
 
   useEffect(() => {
@@ -126,7 +146,8 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
       <KanbanTaskCard
         task={task}
         runState={runState}
-        activeSessions={activeSessions}
+        taskSessions={taskSessions}
+        taskActivityState={taskActivityState}
         onOpenDetails={onOpenDetails}
         onDelegate={onDelegate}
         onPlan={onPlan}
@@ -187,7 +208,8 @@ function LaneEmptyState({ id }: { id: KanbanColumnId }): ReactElement {
 export function KanbanColumn({
   column,
   runStateByTaskId,
-  activeSessionsByTaskId,
+  taskSessionsByTaskId,
+  taskActivityStateByTaskId,
   onOpenDetails,
   onDelegate,
   onPlan,
@@ -231,7 +253,11 @@ export function KanbanColumn({
                   key={task.id}
                   task={task}
                   runState={runStateByTaskId.get(task.id)}
-                  activeSessions={activeSessionsByTaskId.get(task.id) ?? EMPTY_ACTIVE_SESSIONS}
+                  taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
+                  taskActivityState={getRequiredTaskActivityState(
+                    taskActivityStateByTaskId,
+                    task.id,
+                  )}
                   measurementVersion={measurementVersion}
                   onMeasuredHeight={handleMeasuredHeight}
                   onOpenDetails={onOpenDetails}
@@ -259,7 +285,8 @@ export function KanbanColumn({
                 key={task.id}
                 task={task}
                 runState={runStateByTaskId.get(task.id)}
-                activeSessions={activeSessionsByTaskId.get(task.id) ?? EMPTY_ACTIVE_SESSIONS}
+                taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
+                taskActivityState={getRequiredTaskActivityState(taskActivityStateByTaskId, task.id)}
                 onOpenDetails={onOpenDetails}
                 onDelegate={onDelegate}
                 onPlan={onPlan}

@@ -1,10 +1,25 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import { mapToKanbanColumns } from "@openducktor/core";
 import { useMemo } from "react";
+import {
+  type KanbanTaskActivityState,
+  type KanbanTaskSession,
+  toKanbanSessionPresentationState,
+  toKanbanTaskActivityState,
+} from "@/components/features/kanban/kanban-task-activity";
+import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
 
 const ACTIVE_SESSION_STATUS = new Set<AgentSessionState["status"]>(["starting", "running"]);
+
+const shouldDisplayKanbanTaskSession = (session: AgentSessionState): boolean => {
+  if (isAgentSessionWaitingInput(session)) {
+    return true;
+  }
+
+  return ACTIVE_SESSION_STATUS.has(session.status);
+};
 
 const compareRunRecency = (left: RunSummary, right: RunSummary): number => {
   if (left.startedAt !== right.startedAt) {
@@ -16,10 +31,32 @@ const compareRunRecency = (left: RunSummary, right: RunSummary): number => {
   return left.runId > right.runId ? -1 : 1;
 };
 
-const compareActiveSessionOrder = (left: AgentSessionState, right: AgentSessionState): number => {
-  if (left.status !== right.status) {
-    return left.status === "running" ? -1 : 1;
+const compareTaskSessionOrder = (left: AgentSessionState, right: AgentSessionState): number => {
+  const leftPresentationState = toKanbanSessionPresentationState(left);
+  const rightPresentationState = toKanbanSessionPresentationState(right);
+
+  if (leftPresentationState !== rightPresentationState) {
+    return leftPresentationState === "waiting_input" ? -1 : 1;
   }
+
+  if (left.status !== right.status) {
+    if (left.status === "running") {
+      return -1;
+    }
+
+    if (right.status === "running") {
+      return 1;
+    }
+
+    if (left.status === "starting") {
+      return -1;
+    }
+
+    if (right.status === "starting") {
+      return 1;
+    }
+  }
+
   if (left.startedAt !== right.startedAt) {
     return left.startedAt > right.startedAt ? -1 : 1;
   }
@@ -44,33 +81,62 @@ export const buildRunStateByTaskId = (runs: RunSummary[]): Map<string, RunSummar
   );
 };
 
-/**
- * Partitions tasks so that those with active sessions appear first, followed by those without.
- * Uses O(N) single-pass partitioning instead of O(N log N) sorting.
- * Relative order within each partition is preserved.
- */
-export const sortTasksByActiveSession = (
+export const buildTaskActivityStateByTaskId = (
   tasks: TaskCard[],
-  activeSessionsByTaskId: Map<string, AgentSessionState[]>,
-): TaskCard[] => {
-  const activeTasks: TaskCard[] = [];
-  const inactiveTasks: TaskCard[] = [];
-  for (const task of tasks) {
-    if (activeSessionsByTaskId.has(task.id)) {
-      activeTasks.push(task);
-    } else {
-      inactiveTasks.push(task);
-    }
+  taskSessionsByTaskId: Map<string, KanbanTaskSession[]>,
+): Map<string, KanbanTaskActivityState> =>
+  new Map(
+    tasks.map((task) => [task.id, toKanbanTaskActivityState(taskSessionsByTaskId.get(task.id))]),
+  );
+
+const getRequiredTaskActivityState = (
+  taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>,
+  taskId: string,
+): KanbanTaskActivityState => {
+  const taskActivityState = taskActivityStateByTaskId.get(taskId);
+  if (!taskActivityState) {
+    throw new Error(`Missing Kanban task activity state for task ${taskId}`);
   }
-  return [...activeTasks, ...inactiveTasks];
+
+  return taskActivityState;
 };
 
-export const buildActiveSessionsByTaskId = (
+/**
+ * Partitions tasks so that waiting-input tasks appear first, followed by other active tasks,
+ * followed by tasks without active sessions. Uses O(N) single-pass partitioning instead of
+ * O(N log N) sorting. Relative order within each partition is preserved.
+ */
+export const sortTasksByActivityState = (
+  tasks: TaskCard[],
+  taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>,
+): TaskCard[] => {
+  const waitingInputTasks: TaskCard[] = [];
+  const activeTasks: TaskCard[] = [];
+  const idleTasks: TaskCard[] = [];
+
+  for (const task of tasks) {
+    const activityState = getRequiredTaskActivityState(taskActivityStateByTaskId, task.id);
+    if (activityState === "waiting_input") {
+      waitingInputTasks.push(task);
+      continue;
+    }
+    if (activityState === "active") {
+      activeTasks.push(task);
+      continue;
+    }
+
+    idleTasks.push(task);
+  }
+
+  return [...waitingInputTasks, ...activeTasks, ...idleTasks];
+};
+
+export const buildTaskSessionsByTaskId = (
   sessions: AgentSessionState[],
-): Map<string, AgentSessionState[]> => {
+): Map<string, KanbanTaskSession[]> => {
   const sessionsByTaskId = new Map<string, AgentSessionState[]>();
   for (const session of sessions) {
-    if (!ACTIVE_SESSION_STATUS.has(session.status)) {
+    if (!shouldDisplayKanbanTaskSession(session)) {
       continue;
     }
 
@@ -83,10 +149,22 @@ export const buildActiveSessionsByTaskId = (
   }
 
   for (const taskSessions of sessionsByTaskId.values()) {
-    taskSessions.sort(compareActiveSessionOrder);
+    taskSessions.sort(compareTaskSessionOrder);
   }
 
-  return sessionsByTaskId;
+  return new Map(
+    Array.from(sessionsByTaskId.entries()).map(([taskId, taskSessions]) => [
+      taskId,
+      taskSessions.map((session) => ({
+        ...(session.runtimeKind ? { runtimeKind: session.runtimeKind } : {}),
+        sessionId: session.sessionId,
+        role: session.role,
+        scenario: session.scenario,
+        status: session.status,
+        presentationState: toKanbanSessionPresentationState(session),
+      })),
+    ]),
+  );
 };
 
 type UseKanbanBoardModelArgs = {
@@ -126,15 +204,20 @@ export function useKanbanBoardModel({
 
   const runStateByTaskId = useMemo(() => buildRunStateByTaskId(runs), [runs]);
 
-  const activeSessionsByTaskId = useMemo(() => buildActiveSessionsByTaskId(sessions), [sessions]);
+  const taskSessionsByTaskId = useMemo(() => buildTaskSessionsByTaskId(sessions), [sessions]);
+
+  const taskActivityStateByTaskId = useMemo(
+    () => buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId),
+    [tasks, taskSessionsByTaskId],
+  );
 
   const columnsWithSortedTasks = useMemo(
     () =>
       columns.map((col) => ({
         ...col,
-        tasks: sortTasksByActiveSession(col.tasks, activeSessionsByTaskId),
+        tasks: sortTasksByActivityState(col.tasks, taskActivityStateByTaskId),
       })),
-    [columns, activeSessionsByTaskId],
+    [columns, taskActivityStateByTaskId],
   );
 
   return {
@@ -142,7 +225,8 @@ export function useKanbanBoardModel({
     isSwitchingWorkspace,
     columns: columnsWithSortedTasks,
     runStateByTaskId,
-    activeSessionsByTaskId,
+    taskSessionsByTaskId,
+    taskActivityStateByTaskId,
     onOpenDetails,
     onDelegate,
     onPlan,
