@@ -3,6 +3,8 @@ import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { gitTargetBranchSchema, globalGitConfigSchema, repoGitConfigSchema } from "./git-schemas";
 import { repoPromptOverridesSchema } from "./prompt-schemas";
 
+export const DEFAULT_BRANCH_PREFIX = "odt";
+
 const DEFAULT_SOFT_GUARDRAILS = {
   cpuHighWatermarkPercent: 85,
   minFreeMemoryMb: 2048,
@@ -55,7 +57,7 @@ export type RepoAgentDefaults = z.infer<typeof repoAgentDefaultsSchema>;
 export const repoConfigSchema = z.object({
   defaultRuntimeKind: runtimeKindSchema.default("opencode"),
   worktreeBasePath: nullableToOptional(z.string().min(1)),
-  branchPrefix: z.string().min(1).default("odt"),
+  branchPrefix: z.string().min(1).default(DEFAULT_BRANCH_PREFIX),
   defaultTargetBranch: gitTargetBranchSchema.default({ remote: "origin", branch: "main" }),
   git: repoGitConfigSchema.default({ providers: {} }),
   trustedHooks: z.boolean().default(false),
