@@ -4,6 +4,9 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
+#[cfg(windows)]
+const DEFAULT_WINDOWS_EXECUTABLE_EXTENSIONS: [&str; 4] = [".exe", ".cmd", ".bat", ".com"];
+
 fn command_env_override_name(program: &str) -> String {
     let sanitized = program
         .chars()
@@ -56,15 +59,106 @@ pub fn bundled_command(program: &str) -> Option<String> {
     bundled_command_path(program)
 }
 
-fn command_file_name(program: &str) -> OsString {
+#[cfg(windows)]
+fn command_file_names(program: &str) -> Vec<OsString> {
+    if Path::new(program).extension().is_some() {
+        return vec![OsString::from(program)];
+    }
+
+    let configured_extensions = env::var_os("PATHEXT")
+        .map(|value| value.to_string_lossy().to_string())
+        .map(|value| {
+            value
+                .split(';')
+                .map(str::trim)
+                .filter(|extension| !extension.is_empty())
+                .map(|extension| {
+                    let normalized = if extension.starts_with('.') {
+                        extension.to_ascii_lowercase()
+                    } else {
+                        format!(".{extension}").to_ascii_lowercase()
+                    };
+                    OsString::from(format!("{program}{normalized}"))
+                })
+                .collect::<Vec<_>>()
+        })
+        .filter(|extensions| !extensions.is_empty())
+        .unwrap_or_else(|| {
+            DEFAULT_WINDOWS_EXECUTABLE_EXTENSIONS
+                .iter()
+                .map(|extension| OsString::from(format!("{program}{extension}")))
+                .collect()
+        });
+
+    let mut file_names = vec![OsString::from(program)];
+    for candidate in configured_extensions {
+        if file_names.iter().any(|existing| existing == &candidate) {
+            continue;
+        }
+        file_names.push(candidate);
+    }
+
+    file_names
+}
+
+#[cfg(not(windows))]
+fn command_file_names(program: &str) -> Vec<OsString> {
+    vec![OsString::from(program)]
+}
+
+fn home_directory() -> Option<PathBuf> {
     #[cfg(windows)]
     {
-        OsString::from(format!("{program}.exe"))
+        env::var_os("USERPROFILE")
+            .or_else(|| env::var_os("HOME"))
+            .map(PathBuf::from)
     }
     #[cfg(not(windows))]
     {
-        OsString::from(program)
+        env::var_os("HOME").map(PathBuf::from)
     }
+}
+
+fn common_user_search_directories() -> Vec<PathBuf> {
+    let mut directories = Vec::new();
+
+    if let Some(home) = home_directory() {
+        directories.push(home.join(".cargo").join("bin"));
+        directories.push(home.join(".bun").join("bin"));
+        directories.push(home.join(".local").join("bin"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
+            let local_app_data = PathBuf::from(local_app_data);
+            directories.push(
+                local_app_data
+                    .join("Microsoft")
+                    .join("WinGet")
+                    .join("Links"),
+            );
+            directories.push(local_app_data.join("Programs").join("GitHub CLI"));
+            directories.push(
+                local_app_data
+                    .join("Programs")
+                    .join("GitHub CLI")
+                    .join("bin"),
+            );
+        }
+        if let Some(program_files) = env::var_os("ProgramFiles") {
+            let program_files = PathBuf::from(program_files);
+            directories.push(program_files.join("GitHub CLI"));
+            directories.push(program_files.join("GitHub CLI").join("bin"));
+        }
+        if let Some(program_files_x86) = env::var_os("ProgramFiles(x86)") {
+            let program_files_x86 = PathBuf::from(program_files_x86);
+            directories.push(program_files_x86.join("GitHub CLI"));
+            directories.push(program_files_x86.join("GitHub CLI").join("bin"));
+        }
+    }
+
+    unique_path_entries(directories)
 }
 
 fn existing_file_path(path: PathBuf) -> Option<String> {
@@ -104,7 +198,7 @@ fn unique_path_entries(entries: impl IntoIterator<Item = PathBuf>) -> Vec<PathBu
 }
 
 fn standard_search_directories() -> Vec<PathBuf> {
-    let mut directories = Vec::new();
+    let mut directories = common_user_search_directories();
 
     #[cfg(target_os = "macos")]
     {
@@ -170,11 +264,15 @@ fn standard_command_directories(program: &str) -> Vec<PathBuf> {
 }
 
 fn command_path_from_directories(program: &str, directories: &[PathBuf]) -> Option<String> {
-    let file_name = command_file_name(program);
+    let file_names = command_file_names(program);
     directories
         .iter()
         .filter(|directory| !directory.as_os_str().is_empty())
-        .find_map(|directory| existing_file_path(directory.join(&file_name)))
+        .find_map(|directory| {
+            file_names
+                .iter()
+                .find_map(|file_name| existing_file_path(directory.join(file_name)))
+        })
 }
 
 fn command_path_from_environment_path(
@@ -227,6 +325,10 @@ fn resolve_command_path_with_path_override(
 
 pub fn resolve_command_path(program: &str) -> Result<Option<String>> {
     resolve_command_path_with_path_override(program, None)
+}
+
+pub fn subprocess_path_env() -> Option<OsString> {
+    augmented_process_path(None)
 }
 
 fn configured_command(
@@ -332,10 +434,7 @@ pub fn run_command_allow_failure_with_env(
     ))
 }
 
-/// Resolves a command name using the active shell's PATH lookup.
-///
-/// The lookup script is static and `program` is passed as a positional shell
-/// argument (`$1`) to avoid shell interpolation of untrusted input.
+/// Resolves a command name using the same augmented PATH used for subprocesses.
 pub fn command_path(program: &str) -> Option<String> {
     command_path_from_environment_path(program, augmented_process_path(None))
 }
@@ -359,14 +458,46 @@ pub fn version_command(program: &str, args: &[&str]) -> Option<String> {
 mod tests {
     use super::{
         bundled_command_path_from_executable, command_env_override_name, command_exists,
-        command_file_name, command_path, explicit_command_override, resolve_command_path,
-        run_command, run_command_allow_failure, run_command_allow_failure_with_env,
-        run_command_with_env, version_command,
+        command_path, explicit_command_override, resolve_command_path, run_command,
+        run_command_allow_failure, run_command_allow_failure_with_env, run_command_with_env,
+        version_command,
     };
     use std::{
+        ffi::OsString,
         fs,
+        sync::{Mutex, MutexGuard, OnceLock},
         time::{SystemTime, UNIX_EPOCH},
     };
+
+    fn lock_env() -> MutexGuard<'static, ()> {
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("env lock should not be poisoned")
+    }
+
+    struct EnvVarGuard {
+        key: &'static str,
+        previous: Option<OsString>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let previous = std::env::var_os(key);
+            std::env::set_var(key, value);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
 
     #[test]
     fn run_command_returns_stdout() {
@@ -461,7 +592,10 @@ mod tests {
         let executable_dir = root.join("MacOS");
         fs::create_dir_all(&executable_dir).expect("temp executable dir should be created");
         let fake_executable = executable_dir.join("openducktor-desktop");
-        let fake_bd = executable_dir.join(command_file_name("bd"));
+        #[cfg(windows)]
+        let fake_bd = executable_dir.join("bd.exe");
+        #[cfg(not(windows))]
+        let fake_bd = executable_dir.join("bd");
         fs::write(&fake_executable, "").expect("fake executable should be writable");
         fs::write(&fake_bd, "").expect("fake bundled command should be writable");
 
@@ -540,6 +674,42 @@ mod tests {
 
         assert_eq!(output, "path-override-ok");
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_command_searches_common_user_toolchain_directories() {
+        let _env_lock = lock_env();
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        let program = format!("bd-home-{nonce}");
+        let home = std::env::temp_dir().join(format!("odt-home-search-{nonce}"));
+        let cargo_bin = home.join(".cargo").join("bin");
+        fs::create_dir_all(&cargo_bin).expect("toolchain bin dir should be created");
+
+        let script = cargo_bin.join(program.as_str());
+        fs::write(&script, "#!/bin/sh\nprintf 'home-search-ok'")
+            .expect("script should be writable");
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mut permissions = fs::metadata(&script)
+                .expect("script metadata should exist")
+                .permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(&script, permissions).expect("script should be executable");
+        }
+
+        let _home_guard = EnvVarGuard::set("HOME", home.to_string_lossy().as_ref());
+        let _path_guard = EnvVarGuard::set("PATH", "/usr/bin:/bin");
+
+        let output = run_command(program.as_str(), &[], None)
+            .expect("command in common user toolchain dir should execute");
+
+        assert_eq!(output, "home-search-ok");
+        let _ = fs::remove_dir_all(home);
     }
 
     #[test]

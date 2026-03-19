@@ -138,7 +138,9 @@ pub(crate) fn parse_agent_sessions(value: &Value) -> Option<Vec<AgentSessionDocu
     let entries = value
         .as_array()?
         .iter()
-        .filter_map(|entry| AgentSessionDocument::deserialize(normalize_agent_session_entry(entry)).ok())
+        .filter_map(|entry| {
+            AgentSessionDocument::deserialize(normalize_agent_session_entry(entry)).ok()
+        })
         .collect::<Vec<_>>();
     Some(entries)
 }

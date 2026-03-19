@@ -30,10 +30,10 @@ export const GitConflictStrip = memo(function GitConflictStrip({
 }: GitConflictStripProps): ReactElement {
   return (
     <div
-      className="border-b border-border bg-muted/40 px-4 py-4"
+      className="border-b border-border bg-muted/40 p-2"
       data-testid={GIT_CONFLICT_TEST_IDS.strip}
     >
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+      <div className="flex flex-col gap-2">
         <div className="flex min-w-0 items-start gap-3">
           <div className="rounded-full border border-warning-border bg-warning-surface p-2.5 text-warning-muted">
             <AlertTriangle className="size-4" />
@@ -56,7 +56,7 @@ export const GitConflictStrip = memo(function GitConflictStrip({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+        <div className="flex flex-wrap items-center gap-2 justify-between">
           <Button
             type="button"
             variant="outline"
