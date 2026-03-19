@@ -49,6 +49,8 @@ export type AgentStudioSelectionControllerResult = {
   isViewSessionHistoryHydrating: boolean;
 };
 
+const ACTIVE_SESSION_STATUS = new Set<AgentSessionState["status"]>(["starting", "running"]);
+
 const compareSessionsByRecency = (left: AgentSessionState, right: AgentSessionState): number => {
   if (left.startedAt !== right.startedAt) {
     return left.startedAt > right.startedAt ? -1 : 1;
@@ -193,6 +195,19 @@ export function useAgentStudioSelectionController({
     return latestByTask;
   }, [sessionsByTaskId]);
 
+  const activeSessionByTaskId = useMemo(() => {
+    const activeByTask = new Map<string, AgentSessionState>();
+    for (const [taskKey, taskSessions] of sessionsByTaskId) {
+      const activeSession = taskSessions.find((session) =>
+        ACTIVE_SESSION_STATUS.has(session.status),
+      );
+      if (activeSession) {
+        activeByTask.set(taskKey, activeSession);
+      }
+    }
+    return activeByTask;
+  }, [sessionsByTaskId]);
+
   const {
     activeTaskTabId,
     availableTabTasks,
@@ -207,6 +222,7 @@ export function useAgentStudioSelectionController({
     tasks,
     isLoadingTasks,
     latestSessionByTaskId,
+    activeSessionByTaskId,
     updateQuery,
     clearComposerInput,
     ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
