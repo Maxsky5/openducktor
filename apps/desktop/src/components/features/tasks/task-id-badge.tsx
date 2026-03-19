@@ -1,5 +1,5 @@
 import { Check, Copy } from "lucide-react";
-import { memo, type ReactElement, useEffect, useState } from "react";
+import { memo, type ReactElement, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -23,21 +23,25 @@ function TaskIdBadgeComponent({
     return () => clearTimeout(timeoutId);
   }, [copied]);
 
-  const handleCopy = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    navigator.clipboard
-      .writeText(taskId)
-      .then(() => {
-        setCopied(true);
-        toast.success("Copied!", { description: taskId });
-      })
-      .catch((err) => {
-        console.error("[TaskIdBadge] Clipboard write failed:", err);
-        const message = err instanceof DOMException ? getClipboardErrorMessage(err) : "Copy failed";
-        toast.error(message);
-      });
-  };
+  const handleCopy = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      navigator.clipboard
+        .writeText(taskId)
+        .then(() => {
+          setCopied(true);
+          toast.success("Copied!", { description: taskId });
+        })
+        .catch((err) => {
+          console.error("[TaskIdBadge] Clipboard write failed:", err);
+          const message =
+            err instanceof DOMException ? getClipboardErrorMessage(err) : "Copy failed";
+          toast.error(message);
+        });
+    },
+    [taskId],
+  );
 
   return (
     <div className={cn("inline-flex items-center gap-1", className)}>
