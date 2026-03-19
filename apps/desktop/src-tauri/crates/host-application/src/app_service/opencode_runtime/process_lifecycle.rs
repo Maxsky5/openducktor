@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use host_infra_system::{bundled_command, resolve_command_path};
+use host_infra_system::{bundled_command, resolve_command_path, subprocess_path_env};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -12,6 +12,9 @@ pub(crate) fn read_opencode_version(binary: &str) -> Option<String> {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
+    if let Some(path_value) = subprocess_path_env() {
+        command.env("PATH", path_value);
+    }
     configure_process_group(&mut command);
 
     let mut child = command.spawn().ok()?;
@@ -285,6 +288,9 @@ fn spawn_opencode_server_with_binary(
         .current_dir(working_directory)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if let Some(path_value) = subprocess_path_env() {
+        command.env("PATH", path_value);
+    }
     configure_process_group(&mut command);
     let child = command.spawn().with_context(|| {
         format!(
@@ -305,6 +311,7 @@ fn spawn_opencode_server_with_binary(
 #[cfg(unix)]
 mod tests {
     use super::terminate_child_process;
+    use crate::app_service::test_support::{lock_env, set_env_var};
     use anyhow::{Context, Result};
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
@@ -337,8 +344,25 @@ mod tests {
         ))
     }
 
+    fn wait_for_marker(path: &Path, marker: &str) -> Result<String> {
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while std::time::Instant::now() < deadline {
+            if let Ok(contents) = fs::read_to_string(path) {
+                if contents.contains(marker) {
+                    return Ok(contents);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        Err(anyhow::anyhow!(
+            "timed out waiting for marker {marker} in {}",
+            path.display()
+        ))
+    }
+
     #[test]
     fn spawn_with_config_injects_config_content_and_args() -> Result<()> {
+        let _env_lock = lock_env();
         let sandbox = temp_test_dir("spawn-with-config")?;
         let output_path = sandbox.join("captured.txt");
         let script_path = sandbox.join("fake-opencode.sh");
@@ -379,6 +403,59 @@ sleep 5
             "captured output: {captured}"
         );
         assert!(captured.contains("args=serve --hostname 127.0.0.1 --port 43123"));
+
+        terminate_child_process(&mut child);
+        fs::remove_dir_all(&sandbox).ok();
+        Ok(())
+    }
+
+    #[test]
+    fn spawn_with_config_augments_path_for_common_user_toolchains() -> Result<()> {
+        let _env_lock = lock_env();
+        let sandbox = temp_test_dir("spawn-with-config-path")?;
+        let home = sandbox.join("home");
+        fs::create_dir_all(home.join(".bun").join("bin"))?;
+        fs::create_dir_all(home.join(".cargo").join("bin"))?;
+
+        let output_path = sandbox.join("captured-path.txt");
+        let script_path = sandbox.join("fake-opencode.sh");
+        let script = format!(
+            r#"#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "opencode-fake 0.0.1"
+  exit 0
+fi
+echo "path=$PATH" > "{}"
+sleep 5
+"#,
+            output_path.display()
+        );
+        fs::write(&script_path, script)
+            .with_context(|| format!("failed writing {}", script_path.display()))?;
+        fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))
+            .with_context(|| format!("failed chmod {}", script_path.display()))?;
+
+        let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
+        let _path_guard = set_env_var("PATH", "/usr/bin:/bin");
+
+        let mut child = super::spawn_opencode_server_with_binary(
+            script_path.to_string_lossy().as_ref(),
+            sandbox.as_path(),
+            r#"{"logLevel":"INFO"}"#,
+            43124,
+        )?;
+
+        let captured = wait_for_marker(output_path.as_path(), "path=")?;
+        assert!(
+            captured.contains(home.join(".bun").join("bin").to_string_lossy().as_ref()),
+            "captured PATH: {captured}"
+        );
+        assert!(
+            captured.contains(home.join(".cargo").join("bin").to_string_lossy().as_ref()),
+            "captured PATH: {captured}"
+        );
+        assert!(captured.contains("/usr/bin"), "captured PATH: {captured}");
+        assert!(captured.contains("/bin"), "captured PATH: {captured}");
 
         terminate_child_process(&mut child);
         fs::remove_dir_all(&sandbox).ok();

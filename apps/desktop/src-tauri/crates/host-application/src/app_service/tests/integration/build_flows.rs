@@ -29,7 +29,7 @@ use crate::app_service::test_support::{
     lock_env, make_emitter, make_session, make_task, prepend_path, process_is_alive, set_env_var,
     spawn_sleep_process, unique_temp_path, wait_for_orphaned_opencode_process,
     wait_for_path_exists, wait_for_process_exit, write_executable_script, write_private_file,
-    FakeTaskStore, GitCall, TaskStoreState,
+    EnvVarGuard, FakeTaskStore, GitCall, TaskStoreState,
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
@@ -64,32 +64,6 @@ fn run_command_in(current_dir: &Path, program: &str, args: &[&str]) -> Result<()
         current_dir.display(),
         status
     ))
-}
-
-#[cfg(unix)]
-struct EnvVarGuard {
-    key: &'static str,
-    previous: Option<OsString>,
-}
-
-#[cfg(unix)]
-impl EnvVarGuard {
-    fn set_os(key: &'static str, value: OsString) -> Self {
-        let previous = std::env::var_os(key);
-        std::env::set_var(key, &value);
-        Self { key, previous }
-    }
-}
-
-#[cfg(unix)]
-impl Drop for EnvVarGuard {
-    fn drop(&mut self) {
-        if let Some(previous) = self.previous.clone() {
-            std::env::set_var(self.key, previous);
-        } else {
-            std::env::remove_var(self.key);
-        }
-    }
 }
 
 #[test]

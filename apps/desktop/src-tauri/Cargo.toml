@@ -12,6 +12,7 @@ members = [
   "crates/host-domain",
   "crates/host-infra-beads",
   "crates/host-infra-system",
+  "crates/host-test-support",
 ]
 resolver = "2"
 

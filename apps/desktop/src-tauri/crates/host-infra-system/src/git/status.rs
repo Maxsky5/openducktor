@@ -11,8 +11,7 @@ use super::GitCliPort;
 
 const UPSTREAM_TARGET_BRANCH: &str = "@{upstream}";
 const EMPTY_TREE_SHA1: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
-const EMPTY_TREE_SHA256: &str =
-    "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
+const EMPTY_TREE_SHA256: &str = "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
 
 fn resolve_effective_target_branch(
     requested_target_branch: &str,
@@ -96,13 +95,9 @@ impl GitCliPort {
                             GitDiffScope::Target => self
                                 .load_branch_changes_diff_payload_unchecked(
                                     repo_path,
-                                    effective_target_branch
-                                        .as_deref()
-                                        .ok_or_else(|| {
-                                            anyhow!(
-                                                "target scope requires an effective target branch"
-                                            )
-                                        })?,
+                                    effective_target_branch.as_deref().ok_or_else(|| {
+                                        anyhow!("target scope requires an effective target branch")
+                                    })?,
                                 )
                                 .map(Some),
                             GitDiffScope::Uncommitted => self

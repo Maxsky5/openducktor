@@ -18,3 +18,6 @@ shell-words = "1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[dev-dependencies]
+host-test-support = { path = "../host-test-support" }
