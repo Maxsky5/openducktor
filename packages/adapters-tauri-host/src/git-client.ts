@@ -19,6 +19,8 @@ import {
   type GitRebaseAbortResult,
   type GitRebaseBranchRequest,
   type GitRebaseBranchResult,
+  type GitResetWorktreeSelectionRequest,
+  type GitResetWorktreeSelectionResult,
   type GitWorktreeStatus,
   type GitWorktreeStatusSummary,
   type GitWorktreeSummary,
@@ -31,6 +33,8 @@ import {
   gitPushBranchResultSchema,
   gitRebaseAbortResultSchema,
   gitRebaseBranchResultSchema,
+  gitResetWorktreeSelectionRequestSchema,
+  gitResetWorktreeSelectionResultSchema,
   gitWorktreeStatusSchema,
   gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
@@ -228,6 +232,21 @@ const gitCommitAll = async (
   return gitCommitAllResultSchema.parse(payload);
 };
 
+const gitResetWorktreeSelection = async (
+  invokeFn: InvokeFn,
+  request: GitResetWorktreeSelectionRequest,
+): Promise<GitResetWorktreeSelectionResult> => {
+  const parsedRequest = gitResetWorktreeSelectionRequestSchema.parse(request);
+  const payload = await invokeFn("git_reset_worktree_selection", {
+    repoPath: parsedRequest.repoPath,
+    workingDir: parsedRequest.workingDir ?? null,
+    targetBranch: parsedRequest.targetBranch,
+    snapshot: parsedRequest.snapshot,
+    selection: parsedRequest.selection,
+  });
+  return gitResetWorktreeSelectionResultSchema.parse(payload);
+};
+
 const gitRebaseBranch = async (
   invokeFn: InvokeFn,
   repoPath: string,
@@ -385,6 +404,12 @@ export class TauriGitClient {
     workingDir?: string,
   ): Promise<GitCommitAllResult> {
     return gitCommitAll(this.invokeFn, repoPath, message, workingDir);
+  }
+
+  async gitResetWorktreeSelection(
+    request: GitResetWorktreeSelectionRequest,
+  ): Promise<GitResetWorktreeSelectionResult> {
+    return gitResetWorktreeSelection(this.invokeFn, request);
   }
 
   async gitRebaseBranch(

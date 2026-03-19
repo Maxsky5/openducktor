@@ -4,8 +4,9 @@ use host_domain::{
     BeadsCheck, GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult,
     GitConflictAbortRequest, GitConflictAbortResult, GitCurrentBranch, GitFileDiff, GitFileStatus,
     GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
-    GitRebaseBranchRequest, GitRebaseBranchResult, GitWorktreeSummary, RuntimeCheck, RuntimeHealth,
-    SystemCheck, WorkspaceRecord,
+    GitRebaseBranchRequest, GitRebaseBranchResult, GitResetWorktreeSelectionRequest,
+    GitResetWorktreeSelectionResult, GitWorktreeSummary, RuntimeCheck, RuntimeHealth, SystemCheck,
+    WorkspaceRecord,
 };
 use host_infra_system::{
     command_exists, hook_set_fingerprint, resolve_central_beads_dir,
@@ -472,6 +473,19 @@ impl AppService {
                 message: message.to_string(),
             },
         )
+    }
+
+    pub fn git_reset_worktree_selection(
+        &self,
+        repo_path: &str,
+        request: GitResetWorktreeSelectionRequest,
+    ) -> Result<GitResetWorktreeSelectionResult> {
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
+        let execution_path =
+            resolve_execution_path(repo_path.as_str(), request.working_dir.as_deref());
+
+        self.git_port
+            .reset_worktree_selection(Path::new(&execution_path), request)
     }
 
     pub fn git_rebase_branch(

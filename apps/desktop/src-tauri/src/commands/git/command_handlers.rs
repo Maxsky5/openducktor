@@ -364,6 +364,31 @@ pub async fn git_commit_all(
 }
 
 #[tauri::command]
+pub async fn git_reset_worktree_selection(
+    state: State<'_, AppState>,
+    repo_path: String,
+    target_branch: String,
+    snapshot: host_domain::GitResetSnapshot,
+    selection: host_domain::GitResetWorktreeSelection,
+    working_dir: Option<String>,
+) -> Result<host_domain::GitResetWorktreeSelectionResult, String> {
+    let scope = authorize_git_scope(&state, &repo_path, working_dir.as_deref())?;
+    let trimmed_target = require_target_branch(&target_branch)?.to_string();
+    let request = host_domain::GitResetWorktreeSelectionRequest {
+        working_dir: Some(scope.effective_working_dir),
+        target_branch: trimmed_target,
+        snapshot,
+        selection,
+    };
+    let service = state.service.clone();
+    let result = run_service_blocking("git_reset_worktree_selection", move || {
+        service.git_reset_worktree_selection(&scope.repo_path, request)
+    })
+    .await;
+    as_error(result)
+}
+
+#[tauri::command]
 pub async fn git_pull_branch(
     state: State<'_, AppState>,
     repo_path: String,

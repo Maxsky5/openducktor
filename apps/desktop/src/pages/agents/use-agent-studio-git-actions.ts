@@ -1,9 +1,10 @@
-import type { CommitsAheadBehind } from "@openducktor/contracts";
+import type { CommitsAheadBehind, GitResetWorktreeSelection } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type {
   AgentStudioPendingForcePush,
   AgentStudioPendingPullRebase,
+  AgentStudioPendingReset,
   GitConflict,
   GitConflictAction,
   GitConflictOperation,
@@ -15,6 +16,9 @@ type AgentStudioGitActionState = {
   isCommitting: boolean;
   isPushing: boolean;
   isRebasing: boolean;
+  isResetting: boolean;
+  isResetDisabled: boolean;
+  resetDisabledReason: string | null;
   isHandlingGitConflict: boolean;
   gitConflictAction: GitConflictAction;
   gitConflictAutoOpenNonce: number;
@@ -25,10 +29,16 @@ type AgentStudioGitActionState = {
   gitConflict: GitConflict | null;
   pendingForcePush: AgentStudioPendingForcePush | null;
   pendingPullRebase: AgentStudioPendingPullRebase | null;
+  pendingReset: AgentStudioPendingReset | null;
   commitError: string | null;
   pushError: string | null;
   rebaseError: string | null;
+  resetError: string | null;
   commitAll: (message: string) => Promise<boolean>;
+  requestFileReset: (filePath: string) => void;
+  requestHunkReset: (filePath: string, hunkIndex: number) => void;
+  confirmReset: () => Promise<void>;
+  cancelReset: () => void;
   pushBranch: () => Promise<void>;
   confirmForcePush: () => Promise<void>;
   cancelForcePush: () => void;
@@ -45,10 +55,14 @@ type UseAgentStudioGitActionsInput = {
   workingDir: string | null;
   branch: string | null;
   targetBranch: string;
+  hashVersion: number | null;
+  statusHash: string | null;
+  diffHash: string | null;
   upstreamAheadBehind?: CommitsAheadBehind | null;
   detectedConflictedFiles?: string[];
   worktreeStatusSnapshotKey?: string | null;
   refreshDiffData: () => void | Promise<void>;
+  isDiffDataLoading?: boolean;
   isBuilderSessionWorking?: boolean;
   onResolveGitConflict?: (conflict: GitConflict) => Promise<boolean>;
 };
@@ -93,10 +107,14 @@ export function useAgentStudioGitActions({
   workingDir,
   branch,
   targetBranch,
+  hashVersion,
+  statusHash,
+  diffHash,
   upstreamAheadBehind = null,
   detectedConflictedFiles = [],
   worktreeStatusSnapshotKey = null,
   refreshDiffData,
+  isDiffDataLoading = false,
   isBuilderSessionWorking = false,
   onResolveGitConflict,
 }: UseAgentStudioGitActionsInput): AgentStudioGitActionState {
@@ -104,6 +122,7 @@ export function useAgentStudioGitActions({
   const [isCommitting, setIsCommitting] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
   const [isRebasing, setIsRebasing] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [isHandlingGitConflict, setIsHandlingGitConflict] = useState(false);
   const [gitConflictAction, setGitConflictAction] = useState<GitConflictAction>(null);
   const [gitConflictAutoOpenNonce, setGitConflictAutoOpenNonce] = useState(0);
@@ -115,10 +134,13 @@ export function useAgentStudioGitActions({
   const [pendingPullRebase, setPendingPullRebase] = useState<AgentStudioPendingPullRebase | null>(
     null,
   );
+  const [pendingReset, setPendingReset] = useState<AgentStudioPendingReset | null>(null);
   const [commitError, setCommitError] = useState<string | null>(null);
   const [pushError, setPushError] = useState<string | null>(null);
   const [rebaseError, setRebaseError] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
   const gitConflictSnapshotKeyRef = useRef<string | null>(null);
+  const resetSnapshotKeyRef = useRef<string | null>(null);
 
   const detectedConflict = useMemo(
     () =>
@@ -146,7 +168,22 @@ export function useAgentStudioGitActions({
     setCommitError(null);
     setPushError(null);
     setRebaseError(null);
+    setResetError(null);
   }, []);
+
+  useEffect(() => {
+    if (worktreeStatusSnapshotKey == null) {
+      resetSnapshotKeyRef.current = null;
+      return;
+    }
+
+    const previousSnapshotKey = resetSnapshotKeyRef.current;
+    resetSnapshotKeyRef.current = worktreeStatusSnapshotKey;
+
+    if (previousSnapshotKey !== null && previousSnapshotKey !== worktreeStatusSnapshotKey) {
+      setResetError(null);
+    }
+  }, [worktreeStatusSnapshotKey]);
 
   useEffect(() => {
     if (gitConflict == null || isHandlingGitConflict || worktreeStatusSnapshotKey == null) {
@@ -201,6 +238,156 @@ export function useAgentStudioGitActions({
     },
     [gitActionsLockReason, isGitActionsLocked],
   );
+
+  const getResetBlockedReason = useCallback((): string | null => {
+    if (isBuilderSessionWorking) {
+      return BUILDER_LOCK_REASON;
+    }
+
+    if (activeGitConflict != null) {
+      return CONFLICT_LOCK_REASON;
+    }
+
+    if (isDiffDataLoading) {
+      return "Cannot reset while git diff data is loading.";
+    }
+
+    if (isResetting) {
+      return "Reset is already in progress.";
+    }
+
+    return null;
+  }, [activeGitConflict, isBuilderSessionWorking, isDiffDataLoading, isResetting]);
+
+  const resetDisabledReason = useMemo((): string | null => {
+    if (!repoPath) {
+      return "Cannot reset because no repository is selected.";
+    }
+
+    const blockedReason = getResetBlockedReason();
+    if (blockedReason) {
+      return blockedReason;
+    }
+
+    if (hashVersion == null || statusHash == null || diffHash == null) {
+      return "Displayed diff is unavailable. Refresh and try again.";
+    }
+
+    if (targetBranch.trim().length === 0) {
+      return "Cannot reset because target branch is not configured.";
+    }
+
+    return null;
+  }, [diffHash, getResetBlockedReason, hashVersion, repoPath, statusHash, targetBranch]);
+  const isResetDisabled = resetDisabledReason != null;
+
+  const buildResetRequest = useCallback(
+    (selection: GitResetWorktreeSelection) => {
+      if (resetDisabledReason != null) {
+        return {
+          error: resetDisabledReason,
+        } as const;
+      }
+
+      const resolvedRepoPath = repoPath;
+      const resolvedHashVersion = hashVersion;
+      const resolvedStatusHash = statusHash;
+      const resolvedDiffHash = diffHash;
+      if (
+        resolvedRepoPath == null ||
+        resolvedHashVersion == null ||
+        resolvedStatusHash == null ||
+        resolvedDiffHash == null
+      ) {
+        return {
+          error: "Displayed diff is unavailable. Refresh and try again.",
+        } as const;
+      }
+
+      return {
+        request: {
+          repoPath: resolvedRepoPath,
+          workingDir: workingDir ?? undefined,
+          targetBranch,
+          snapshot: {
+            hashVersion: resolvedHashVersion,
+            statusHash: resolvedStatusHash,
+            diffHash: resolvedDiffHash,
+          },
+          selection,
+        },
+      } as const;
+    },
+    [diffHash, hashVersion, repoPath, resetDisabledReason, statusHash, targetBranch, workingDir],
+  );
+
+  const requestResetSelection = useCallback(
+    (selection: GitResetWorktreeSelection): void => {
+      const built = buildResetRequest(selection);
+      if ("error" in built) {
+        setResetError(built.error);
+        return;
+      }
+
+      setResetError(null);
+      setPendingReset(selection);
+    },
+    [buildResetRequest],
+  );
+
+  const requestFileReset = useCallback(
+    (filePath: string): void => {
+      requestResetSelection({ kind: "file", filePath });
+    },
+    [requestResetSelection],
+  );
+
+  const requestHunkReset = useCallback(
+    (filePath: string, hunkIndex: number): void => {
+      requestResetSelection({ kind: "hunk", filePath, hunkIndex });
+    },
+    [requestResetSelection],
+  );
+
+  const confirmReset = useCallback(async (): Promise<void> => {
+    if (pendingReset == null) {
+      return;
+    }
+
+    const built = buildResetRequest(pendingReset);
+    if ("error" in built) {
+      setResetError(built.error);
+      toast.error("Reset failed", { description: built.error });
+      return;
+    }
+
+    setIsResetting(true);
+    setResetError(null);
+    try {
+      const result = await host.gitResetWorktreeSelection(built.request);
+      clearActionErrors();
+      setPendingReset(null);
+      await refreshDiffData();
+      const affectedCount = result.affectedPaths.length;
+      toast.success(pendingReset.kind === "file" ? "File reset" : "Hunk reset", {
+        description:
+          affectedCount === 1
+            ? result.affectedPaths[0]
+            : `${affectedCount} paths updated in the worktree.`,
+      });
+    } catch (error) {
+      const message = toErrorMessage(error, "Reset failed.");
+      setResetError(message);
+      toast.error("Reset failed", { description: message });
+    } finally {
+      setIsResetting(false);
+    }
+  }, [buildResetRequest, clearActionErrors, pendingReset, refreshDiffData]);
+
+  const cancelReset = useCallback((): void => {
+    setPendingReset(null);
+    setResetError(null);
+  }, []);
 
   const commitAll = useCallback(
     async (message: string): Promise<boolean> => {
@@ -613,6 +800,9 @@ export function useAgentStudioGitActions({
     isCommitting,
     isPushing,
     isRebasing,
+    isResetting,
+    isResetDisabled,
+    resetDisabledReason,
     isHandlingGitConflict,
     gitConflictAction,
     gitConflictAutoOpenNonce,
@@ -623,10 +813,16 @@ export function useAgentStudioGitActions({
     gitConflict: activeGitConflict,
     pendingForcePush,
     pendingPullRebase,
+    pendingReset,
     commitError,
     pushError,
     rebaseError,
+    resetError,
     commitAll,
+    requestFileReset,
+    requestHunkReset,
+    confirmReset,
+    cancelReset,
     pushBranch,
     confirmForcePush,
     cancelForcePush,

@@ -10,6 +10,7 @@ use host_domain::{
     GitConflictAbortResult, GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus,
     GitMergeBranchRequest, GitMergeBranchResult, GitPullRequest, GitPullResult, GitPushResult,
     GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
+    GitResetWorktreeSelection, GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
     GitWorktreeStatusData, GitWorktreeStatusSummaryData,
 };
 
@@ -22,6 +23,12 @@ pub(crate) enum WorktreeStatusResult {
 #[derive(Clone)]
 pub(crate) enum WorktreeStatusSummaryResult {
     Ok(GitWorktreeStatusSummaryData),
+    Err(String),
+}
+
+#[derive(Clone)]
+pub(crate) enum ResetWorktreeSelectionResult {
+    Ok(GitResetWorktreeSelectionResult),
     Err(String),
 }
 
@@ -54,11 +61,21 @@ pub(crate) struct RemoveWorktreeCall {
     pub(crate) force: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ResetWorktreeSelectionCall {
+    pub(crate) repo_path: String,
+    pub(crate) working_dir: Option<String>,
+    pub(crate) target_branch: String,
+    pub(crate) selection: GitResetWorktreeSelection,
+}
+
 pub(crate) struct CommandGitPortState {
     pub(crate) worktree_status_result: WorktreeStatusResult,
     pub(crate) worktree_status_calls: Vec<WorktreeStatusCall>,
     pub(crate) worktree_status_summary_result: WorktreeStatusSummaryResult,
     pub(crate) worktree_status_summary_calls: Vec<WorktreeStatusSummaryCall>,
+    pub(crate) reset_worktree_selection_result: ResetWorktreeSelectionResult,
+    pub(crate) reset_worktree_selection_calls: Vec<ResetWorktreeSelectionCall>,
     pub(crate) worktree_mutation_allowed: bool,
     pub(crate) create_worktree_calls: Vec<CreateWorktreeCall>,
     pub(crate) remove_worktree_calls: Vec<RemoveWorktreeCall>,
@@ -80,6 +97,12 @@ impl CommandGitPort {
                 worktree_status_calls: Vec::new(),
                 worktree_status_summary_result: summary_result,
                 worktree_status_summary_calls: Vec::new(),
+                reset_worktree_selection_result: ResetWorktreeSelectionResult::Ok(
+                    GitResetWorktreeSelectionResult {
+                        affected_paths: vec!["src/main.rs".to_string()],
+                    },
+                ),
+                reset_worktree_selection_calls: Vec::new(),
                 worktree_mutation_allowed,
                 create_worktree_calls: Vec::new(),
                 remove_worktree_calls: Vec::new(),
@@ -294,6 +317,29 @@ impl GitPort for CommandGitPort {
         _request: GitCommitAllRequest,
     ) -> anyhow::Result<host_domain::GitCommitAllResult> {
         panic!("unexpected call: commit_all");
+    }
+
+    fn reset_worktree_selection(
+        &self,
+        repo_path: &Path,
+        request: GitResetWorktreeSelectionRequest,
+    ) -> anyhow::Result<GitResetWorktreeSelectionResult> {
+        let mut state = self
+            .state
+            .lock()
+            .expect("command git port state lock should not be poisoned");
+        state
+            .reset_worktree_selection_calls
+            .push(ResetWorktreeSelectionCall {
+                repo_path: repo_path.to_string_lossy().to_string(),
+                working_dir: request.working_dir,
+                target_branch: request.target_branch,
+                selection: request.selection,
+            });
+        match state.reset_worktree_selection_result.clone() {
+            ResetWorktreeSelectionResult::Ok(payload) => Ok(payload),
+            ResetWorktreeSelectionResult::Err(message) => Err(anyhow!(message)),
+        }
     }
 
     fn rebase_branch(

@@ -1,3 +1,4 @@
+import { Undo2 } from "lucide-react";
 import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -9,9 +10,11 @@ import {
   GitConflictStrip,
 } from "@/features/git-conflict-resolution";
 import { CommitComposer } from "./commit-composer";
+import { INLINE_CODE_CLASS_NAME } from "./constants";
 import { EmptyDiffState } from "./empty-diff-state";
 import { FileDiffList } from "./file-diff-list";
 import { ForcePushDialog } from "./force-push-dialog";
+import { GitConfirmationDialog } from "./git-confirmation-dialog";
 import { GitInfoHeader } from "./git-info-header";
 import { PullRebaseDialog } from "./pull-rebase-dialog";
 import { ReviewActions } from "./review-actions";
@@ -41,6 +44,10 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
   const uncommittedFileCount = model.uncommittedFileCount;
   const hasUncommittedFiles = uncommittedFileCount > 0;
   const hasFiles = model.fileDiffs.length > 0;
+  const pendingReset = model.pendingReset ?? null;
+  const canResetFiles = model.diffScope === "uncommitted" && model.requestFileReset != null;
+  const isResetDisabled = model.isResetDisabled ?? true;
+  const resetDisabledReason = model.resetDisabledReason ?? null;
   const conflictedFiles = useMemo(
     () =>
       new Set(
@@ -199,6 +206,41 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
     }
   }, [gitConflictAutoOpenNonce, gitConflictCloseNonce, hasGitConflict]);
 
+  const resetDialogTitle =
+    pendingReset?.kind === "hunk" ? "Confirm hunk reset" : "Confirm file reset";
+  const resetDialogDescription =
+    pendingReset?.kind === "hunk" ? (
+      <>
+        This discards the selected uncommitted diff hunk in{" "}
+        <code className={INLINE_CODE_CLASS_NAME}>{pendingReset.filePath}</code> and restores it to
+        <code className={INLINE_CODE_CLASS_NAME}> HEAD</code>.
+      </>
+    ) : (
+      <>
+        This discards all local uncommitted changes in{" "}
+        <code className={INLINE_CODE_CLASS_NAME}>{pendingReset?.filePath ?? ""}</code> and restores
+        the file to <code className={INLINE_CODE_CLASS_NAME}>HEAD</code>.
+      </>
+    );
+  const resetDialogBody = pendingReset ? (
+    <div
+      className="rounded-xl border border-border bg-muted/50 px-4 py-4"
+      data-testid="agent-studio-git-reset-safety-note"
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        Reset target
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm leading-6 text-muted-foreground">
+        <code className={INLINE_CODE_CLASS_NAME}>{pendingReset.filePath}</code>
+        {pendingReset.kind === "hunk" ? (
+          <span>Hunk {pendingReset.hunkIndex + 1}</span>
+        ) : (
+          <span>Entire file</span>
+        )}
+      </div>
+    </div>
+  ) : null;
+
   return (
     <TooltipProvider>
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -253,6 +295,11 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
               setDiffStyle={setDiffStyle}
               expandedFiles={expandedFiles}
               onToggleFile={toggleFile}
+              canResetFiles={canResetFiles}
+              isResetDisabled={isResetDisabled}
+              resetDisabledReason={resetDisabledReason}
+              onRequestFileReset={model.requestFileReset}
+              onRequestHunkReset={model.requestHunkReset}
             />
           ) : (
             <EmptyDiffState
@@ -302,6 +349,36 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
           onCancel={() => model.cancelPullRebase?.()}
           onConfirm={() => void model.confirmPullRebase?.()}
         />
+
+        <GitConfirmationDialog
+          open={pendingReset != null}
+          onOpenChange={(open) => {
+            if (model.isResetting) {
+              return;
+            }
+            if (!open) {
+              model.cancelReset?.();
+            }
+          }}
+          title={resetDialogTitle}
+          description={resetDialogDescription}
+          closeLabel="Keep changes"
+          closeDisabled={model.isResetting ?? false}
+          onClose={() => model.cancelReset?.()}
+          closeTestId="agent-studio-git-cancel-reset-button"
+          confirmLabel={pendingReset?.kind === "hunk" ? "Reset hunk" : "Reset file"}
+          confirmPendingLabel={
+            pendingReset?.kind === "hunk" ? "Resetting hunk..." : "Resetting file..."
+          }
+          confirmPending={model.isResetting ?? false}
+          confirmDisabled={model.isResetting ?? false}
+          onConfirm={() => void model.confirmReset?.()}
+          confirmTestId="agent-studio-git-confirm-reset-button"
+          confirmIcon={Undo2}
+          contentTestId="agent-studio-git-reset-modal"
+        >
+          {resetDialogBody}
+        </GitConfirmationDialog>
       </div>
     </TooltipProvider>
   );

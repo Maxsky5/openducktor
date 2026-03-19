@@ -97,6 +97,7 @@ const GIT_METHODS = [
   "gitCommitsAheadBehind",
   "gitGetWorktreeStatus",
   "gitGetWorktreeStatusSummary",
+  "gitResetWorktreeSelection",
 ] as const satisfies readonly MethodName<TauriGitClient>[];
 
 type WorkspaceMethodName = (typeof WORKSPACE_METHODS)[number];

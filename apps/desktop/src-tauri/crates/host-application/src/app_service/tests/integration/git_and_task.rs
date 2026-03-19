@@ -4,7 +4,8 @@ use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentSessionDocument, CreateTaskInput, GitAheadBehind, GitBranch, GitCommitAllRequest,
     GitCommitAllResult, GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus, GitPort,
-    GitPullRequest, GitPullResult, GitRebaseBranchRequest, GitRebaseBranchResult,
+    GitPullRequest, GitPullResult, GitRebaseBranchRequest, GitRebaseBranchResult, GitResetSnapshot,
+    GitResetWorktreeSelection, GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
     GitUpstreamAheadBehind, GitWorktreeStatusData, PlanSubtaskInput, QaReportDocument, QaVerdict,
     RunEvent, RunState, RunSummary, RuntimeInstanceSummary, TaskAction, TaskStatus, TaskStore,
     UpdateTaskPatch,
@@ -480,6 +481,77 @@ fn git_commit_all_returns_no_changes() -> Result<()> {
             repo_path: repo_path.to_string(),
             working_dir: None,
             message: "commit all".to_string(),
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn git_reset_worktree_selection_forwards_request_fields_to_git_port() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-reset";
+    let (service, _task_state, git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    {
+        let mut state = git_state.lock().expect("git state lock poisoned");
+        state.reset_worktree_selection_result = GitResetWorktreeSelectionResult {
+            affected_paths: vec!["src/main.ts".to_string()],
+        };
+    }
+
+    let result = service.git_reset_worktree_selection(
+        repo_path,
+        GitResetWorktreeSelectionRequest {
+            working_dir: Some("/tmp/odt-repo-reset-worktree".to_string()),
+            target_branch: "  origin/main  ".to_string(),
+            snapshot: GitResetSnapshot {
+                hash_version: 1,
+                status_hash: "0123456789abcdef".to_string(),
+                diff_hash: "fedcba9876543210".to_string(),
+            },
+            selection: GitResetWorktreeSelection::Hunk {
+                file_path: "src/main.ts".to_string(),
+                hunk_index: 2,
+            },
+        },
+    )?;
+
+    assert_eq!(
+        result,
+        GitResetWorktreeSelectionResult {
+            affected_paths: vec!["src/main.ts".to_string()],
+        }
+    );
+
+    assert_eq!(
+        git_state
+            .lock()
+            .expect("git lock poisoned")
+            .calls
+            .last()
+            .cloned()
+            .expect("expected reset call"),
+        GitCall::ResetWorktreeSelection {
+            repo_path: "/tmp/odt-repo-reset-worktree".to_string(),
+            working_dir: Some("/tmp/odt-repo-reset-worktree".to_string()),
+            target_branch: "  origin/main  ".to_string(),
+            snapshot: GitResetSnapshot {
+                hash_version: 1,
+                status_hash: "0123456789abcdef".to_string(),
+                diff_hash: "fedcba9876543210".to_string(),
+            },
+            selection: GitResetWorktreeSelection::Hunk {
+                file_path: "src/main.ts".to_string(),
+                hunk_index: 2,
+            },
         }
     );
 

@@ -1,7 +1,9 @@
 mod branch;
 mod commit;
+mod hash;
 mod merge;
 mod remote;
+mod reset;
 mod status;
 #[cfg(test)]
 mod tests;
@@ -14,7 +16,8 @@ use host_domain::{
     GitConflictAbortResult, GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus,
     GitMergeBranchRequest, GitMergeBranchResult, GitPort, GitPullRequest, GitPullResult,
     GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest,
-    GitRebaseBranchResult, GitWorktreeStatusData, GitWorktreeStatusSummaryData,
+    GitRebaseBranchResult, GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
+    GitWorktreeStatusData, GitWorktreeStatusSummaryData,
 };
 use std::path::Path;
 
@@ -173,6 +176,14 @@ impl GitPort for GitCliPort {
         request: GitCommitAllRequest,
     ) -> Result<GitCommitAllResult> {
         self.commit_all_impl(repo_path, request)
+    }
+
+    fn reset_worktree_selection(
+        &self,
+        repo_path: &Path,
+        request: GitResetWorktreeSelectionRequest,
+    ) -> Result<GitResetWorktreeSelectionResult> {
+        self.reset_worktree_selection_impl(repo_path, request)
     }
 
     fn rebase_branch(

@@ -317,6 +317,42 @@ export const gitWorktreeStatusSummarySchema = z.object({
 });
 export type GitWorktreeStatusSummary = z.infer<typeof gitWorktreeStatusSummarySchema>;
 
+export const gitResetSnapshotSchema = z.object({
+  hashVersion: z.number().int().positive(),
+  statusHash: z.string().regex(/^[0-9a-f]{16}$/),
+  diffHash: z.string().regex(/^[0-9a-f]{16}$/),
+});
+export type GitResetSnapshot = z.infer<typeof gitResetSnapshotSchema>;
+
+export const gitResetWorktreeSelectionSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("file"),
+    filePath: z.string(),
+  }),
+  z.object({
+    kind: z.literal("hunk"),
+    filePath: z.string(),
+    hunkIndex: z.number().int().nonnegative(),
+  }),
+]);
+export type GitResetWorktreeSelection = z.infer<typeof gitResetWorktreeSelectionSchema>;
+
+export const gitResetWorktreeSelectionRequestSchema = z.object({
+  repoPath: z.string(),
+  workingDir: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+  targetBranch: z.string().trim().min(1),
+  snapshot: gitResetSnapshotSchema,
+  selection: gitResetWorktreeSelectionSchema,
+});
+export type GitResetWorktreeSelectionRequest = z.infer<
+  typeof gitResetWorktreeSelectionRequestSchema
+>;
+
+export const gitResetWorktreeSelectionResultSchema = z.object({
+  affectedPaths: z.array(z.string()).min(1),
+});
+export type GitResetWorktreeSelectionResult = z.infer<typeof gitResetWorktreeSelectionResultSchema>;
+
 export const gitCommitAllRequestSchema = z.object({
   repoPath: z.string(),
   workingDir: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),

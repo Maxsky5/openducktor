@@ -90,12 +90,16 @@ export function useAgentsPageRightPanelModel({
     workingDir: diffData.worktreePath,
     branch: resolvedGitPanelBranch,
     targetBranch: diffData.targetBranch,
+    hashVersion: diffData.hashVersion,
+    statusHash: diffData.statusHash,
+    diffHash: diffData.diffHash,
     upstreamAheadBehind: diffData.upstreamAheadBehind ?? null,
     detectedConflictedFiles: diffData.fileStatuses
       .filter((status) => status.status === "unmerged")
       .map((status) => status.path),
     worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
     refreshDiffData: diffData.refresh,
+    isDiffDataLoading: diffData.isLoading,
     isBuilderSessionWorking: isActiveBuilderWorking,
     ...(onResolveGitConflict ? { onResolveGitConflict } : {}),
   });

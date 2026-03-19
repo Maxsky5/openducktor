@@ -8,8 +8,8 @@ pub(super) use app::{
     setup_command_git_fixture_with_summary,
 };
 pub(super) use git_port::{
-    WorktreeStatusCall, WorktreeStatusResult, WorktreeStatusSummaryCall,
-    WorktreeStatusSummaryResult,
+    ResetWorktreeSelectionCall, ResetWorktreeSelectionResult, WorktreeStatusCall,
+    WorktreeStatusResult, WorktreeStatusSummaryCall, WorktreeStatusSummaryResult,
 };
 pub(super) use repo::{
     clear_authorized_worktree_cache_for_repo, init_repo, run_git, sample_worktree_status_data,

@@ -22,11 +22,12 @@ use host_domain::{
     GitConflictAbortResult, GitConflictOperation, GitCurrentBranch, GitDiffScope, GitFileDiff,
     GitFileStatus, GitFileStatusCounts, GitMergeBranchRequest, GitMergeBranchResult,
     GitMergeMethod, GitPort, GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest,
-    GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind,
-    GitWorktreeStatusData, GitWorktreeStatusSummaryData, IssueType, PlanSubtaskInput,
-    PullRequestRecord, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState,
-    RunSummary, RuntimeInstanceSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary,
-    TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult, GitResetSnapshot,
+    GitResetWorktreeSelection, GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
+    GitUpstreamAheadBehind, GitWorktreeStatusData, GitWorktreeStatusSummaryData, IssueType,
+    PlanSubtaskInput, PullRequestRecord, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent,
+    RunState, RunSummary, RuntimeInstanceSummary, SpecDocument, TaskAction, TaskCard,
+    TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -493,6 +494,13 @@ pub(crate) enum GitCall {
         working_dir: Option<String>,
         message: String,
     },
+    ResetWorktreeSelection {
+        repo_path: String,
+        working_dir: Option<String>,
+        target_branch: String,
+        snapshot: GitResetSnapshot,
+        selection: GitResetWorktreeSelection,
+    },
     RebaseBranch {
         repo_path: String,
         working_dir: Option<String>,
@@ -553,6 +561,7 @@ pub(crate) struct GitState {
     pub(crate) push_branch_result: GitPushResult,
     pub(crate) pull_branch_result: GitPullResult,
     pub(crate) commit_all_result: GitCommitAllResult,
+    pub(crate) reset_worktree_selection_result: GitResetWorktreeSelectionResult,
     pub(crate) rebase_branch_result: GitRebaseBranchResult,
     pub(crate) rebase_abort_result: GitRebaseAbortResult,
     pub(crate) conflict_abort_result: GitConflictAbortResult,
@@ -693,6 +702,22 @@ impl GitPort for FakeGitPort {
             message: request.message,
         });
         Ok(state.commit_all_result.clone())
+    }
+
+    fn reset_worktree_selection(
+        &self,
+        repo_path: &Path,
+        request: GitResetWorktreeSelectionRequest,
+    ) -> Result<GitResetWorktreeSelectionResult> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::ResetWorktreeSelection {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            working_dir: request.working_dir,
+            target_branch: request.target_branch,
+            snapshot: request.snapshot,
+            selection: request.selection,
+        });
+        Ok(state.reset_worktree_selection_result.clone())
     }
 
     fn rebase_branch(
@@ -992,6 +1017,9 @@ pub(crate) fn build_service_with_git_state_enforced(
             commit_hash: "deadbeef".to_string(),
             output: "ok".to_string(),
         },
+        reset_worktree_selection_result: GitResetWorktreeSelectionResult {
+            affected_paths: vec!["README.md".to_string()],
+        },
         rebase_branch_result: GitRebaseBranchResult::Rebased {
             output: "rebase completed".to_string(),
         },
@@ -1071,6 +1099,9 @@ pub(crate) fn build_service_with_git_state(
         commit_all_result: GitCommitAllResult::Committed {
             commit_hash: "deadbeef".to_string(),
             output: "ok".to_string(),
+        },
+        reset_worktree_selection_result: GitResetWorktreeSelectionResult {
+            affected_paths: vec!["README.md".to_string()],
         },
         rebase_branch_result: GitRebaseBranchResult::Rebased {
             output: "rebase completed".to_string(),
@@ -1462,6 +1493,9 @@ pub(crate) fn build_service_with_store(
         commit_all_result: GitCommitAllResult::Committed {
             commit_hash: "deadbeef".to_string(),
             output: "ok".to_string(),
+        },
+        reset_worktree_selection_result: GitResetWorktreeSelectionResult {
+            affected_paths: vec!["README.md".to_string()],
         },
         rebase_branch_result: GitRebaseBranchResult::Rebased {
             output: "rebase completed".to_string(),

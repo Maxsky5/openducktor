@@ -13,6 +13,8 @@ import {
   gitPullBranchResultSchema,
   gitRebaseBranchRequestSchema,
   gitRebaseBranchResultSchema,
+  gitResetWorktreeSelectionRequestSchema,
+  gitResetWorktreeSelectionResultSchema,
   gitUpstreamAheadBehindSchema,
   gitWorktreeStatusSchema,
   gitWorktreeStatusSnapshotSchema,
@@ -378,6 +380,83 @@ describe("runtime schemas", () => {
         output: "needs files",
       }),
     ).toThrow();
+  });
+
+  test("git reset worktree selection schemas parse file and hunk requests", () => {
+    const fileReset = gitResetWorktreeSelectionRequestSchema.parse({
+      repoPath: "/repo",
+      workingDir: null,
+      targetBranch: "origin/main",
+      snapshot: {
+        hashVersion: 1,
+        statusHash: "0123456789abcdef",
+        diffHash: "fedcba9876543210",
+      },
+      selection: {
+        kind: "file",
+        filePath: "src/main.ts",
+      },
+    });
+    const hunkReset = gitResetWorktreeSelectionRequestSchema.parse({
+      repoPath: "/repo",
+      targetBranch: "origin/main",
+      snapshot: {
+        hashVersion: 1,
+        statusHash: "0123456789abcdef",
+        diffHash: "fedcba9876543210",
+      },
+      selection: {
+        kind: "hunk",
+        filePath: "src/main.ts",
+        hunkIndex: 2,
+      },
+    });
+    const result = gitResetWorktreeSelectionResultSchema.parse({
+      affectedPaths: ["src/main.ts"],
+    });
+
+    expect(fileReset.workingDir).toBeUndefined();
+    expect(fileReset.selection.kind).toBe("file");
+    expect(hunkReset.selection.kind).toBe("hunk");
+    expect(result.affectedPaths).toEqual(["src/main.ts"]);
+  });
+
+  test("git reset worktree selection schemas reject malformed snapshot and selection payloads", () => {
+    expect(() =>
+      gitResetWorktreeSelectionRequestSchema.parse({
+        repoPath: "/repo",
+        targetBranch: "origin/main",
+        snapshot: {
+          hashVersion: 0,
+          statusHash: "0123456789abcdef",
+          diffHash: "fedcba9876543210",
+        },
+        selection: {
+          kind: "file",
+          filePath: "src/main.ts",
+          hunkIndex: 1,
+        },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      gitResetWorktreeSelectionRequestSchema.parse({
+        repoPath: "/repo",
+        targetBranch: "origin/main",
+        snapshot: {
+          hashVersion: 1,
+          statusHash: "stale",
+          diffHash: "fedcba9876543210",
+        },
+        selection: {
+          kind: "hunk",
+          filePath: "src/main.ts",
+          hunkIndex: -1,
+        },
+      }),
+    ).toThrow();
+
+    expect(() => gitResetWorktreeSelectionResultSchema.parse({ affectedPaths: [] })).toThrow();
   });
 
   test("git schemas parse worktree payloads", () => {
