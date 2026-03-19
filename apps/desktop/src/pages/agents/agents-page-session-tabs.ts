@@ -267,7 +267,8 @@ export const buildWorkflowStateByRole = (params: {
       liveSession === "waiting_input" ||
       liveSession === "running" ||
       liveSession === "error" ||
-      (liveSession === "idle" && workflow.available)
+      (liveSession === "idle" && workflow.available) ||
+      (role === "build" && liveSession === "stopped" && workflow.available)
     ) {
       completion = "in_progress";
     }
