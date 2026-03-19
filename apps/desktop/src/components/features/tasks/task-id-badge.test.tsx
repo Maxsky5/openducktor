@@ -1,13 +1,6 @@
-import { describe, expect, mock, test } from "bun:test";
-import { createElement, type ReactNode } from "react";
+import { describe, expect, test } from "bun:test";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-
-mock.module("@/components/ui/tooltip", () => ({
-  TooltipProvider: ({ children }: { children: ReactNode }) => createElement("div", null, children),
-  Tooltip: ({ children }: { children: ReactNode }) => createElement("div", null, children),
-  TooltipTrigger: ({ children }: { children: ReactNode }) => createElement("div", null, children),
-  TooltipContent: ({ children }: { children: ReactNode }) => createElement("div", null, children),
-}));
 
 import { TaskIdBadge } from "./task-id-badge";
 
