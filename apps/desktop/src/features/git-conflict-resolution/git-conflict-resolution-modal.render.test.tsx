@@ -16,18 +16,25 @@ const reactActEnvironment = globalThis as typeof globalThis & {
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
 mock.module("@/components/ui/dialog", () => ({
-  Dialog: ({ children }: { children?: ReactNode }): ReactElement =>
-    createElement("div", {}, children),
-  DialogContent: ({ children }: { children?: ReactNode }): ReactElement =>
-    createElement("div", {}, children),
-  DialogDescription: ({ children }: { children?: ReactNode }): ReactElement =>
-    createElement("p", {}, children),
-  DialogFooter: ({ children }: { children?: ReactNode }): ReactElement =>
-    createElement("div", {}, children),
-  DialogHeader: ({ children }: { children?: ReactNode }): ReactElement =>
-    createElement("div", {}, children),
-  DialogTitle: ({ children }: { children?: ReactNode }): ReactElement =>
-    createElement("h2", {}, children),
+  Dialog: ({
+    children,
+    open,
+    ...props
+  }: {
+    children?: ReactNode;
+    open?: boolean;
+    [key: string]: unknown;
+  }): ReactElement | null => (open === false ? null : createElement("div", props, children)),
+  DialogContent: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) =>
+    createElement("div", props, children),
+  DialogDescription: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) =>
+    createElement("p", props, children),
+  DialogFooter: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) =>
+    createElement("div", props, children),
+  DialogHeader: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) =>
+    createElement("div", props, children),
+  DialogTitle: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) =>
+    createElement("h2", props, children),
 }));
 
 let GitConflictResolutionModal: typeof import("./git-conflict-resolution-modal").GitConflictResolutionModal;

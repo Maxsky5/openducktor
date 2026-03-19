@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   applyFullSnapshot,
   applyScopeError,
@@ -90,28 +90,42 @@ export function useAgentStudioDiffBatchState({
   diffScope,
   resetRequestTracking,
 }: UseAgentStudioDiffBatchStateArgs): UseAgentStudioDiffBatchStateResult {
-  const [controllerState, setControllerState] = useState<DiffControllerState>(
+  const [controllerState, setControllerStateState] = useState<DiffControllerState>(
     createInitialControllerState,
   );
+  const controllerStateRef = useRef(controllerState);
 
-  const setBatchLoading = useCallback((isLoading: boolean): void => {
-    setControllerState((previousState) =>
-      previousState.batchState.isLoading === isLoading
-        ? previousState
-        : {
-            ...previousState,
-            batchState: {
-              ...previousState.batchState,
-              isLoading,
-            },
-          },
-    );
+  const commitControllerState = useCallback((nextState: DiffControllerState): void => {
+    if (nextState === controllerStateRef.current) {
+      return;
+    }
+
+    controllerStateRef.current = nextState;
+    setControllerStateState(nextState);
   }, []);
+
+  const setBatchLoading = useCallback(
+    (isLoading: boolean): void => {
+      const previousState = controllerStateRef.current;
+      const nextState =
+        previousState.batchState.isLoading === isLoading
+          ? previousState
+          : {
+              ...previousState,
+              batchState: {
+                ...previousState.batchState,
+                isLoading,
+              },
+            };
+      commitControllerState(nextState);
+    },
+    [commitControllerState],
+  );
 
   const resetControllerState = useCallback((): void => {
     resetRequestTracking();
-    setControllerState(createInitialControllerState());
-  }, [resetRequestTracking]);
+    commitControllerState(createInitialControllerState());
+  }, [commitControllerState, resetRequestTracking]);
 
   const applySummaryResult = useCallback(
     ({
@@ -121,125 +135,119 @@ export function useAgentStudioDiffBatchState({
       scope,
       summaryFields,
     }: ApplySummaryResultArgs): void => {
-      setControllerState((previousState) => {
-        const { invalidatedScopes, nextLatestSharedSequence, nextState, shouldReloadFullScope } =
-          applySummarySnapshot({
-            state: previousState.batchState,
-            scope,
-            summaryFields,
-            requestSequence,
-            latestSharedSequence: previousState.latestSharedSequence,
-          });
+      const previousState = controllerStateRef.current;
+      const { invalidatedScopes, nextLatestSharedSequence, nextState, shouldReloadFullScope } =
+        applySummarySnapshot({
+          state: previousState.batchState,
+          scope,
+          summaryFields,
+          requestSequence,
+          latestSharedSequence: previousState.latestSharedSequence,
+        });
 
-        for (const invalidatedScope of invalidatedScopes) {
-          markScopeInvalidated(invalidatedScope);
-        }
+      for (const invalidatedScope of invalidatedScopes) {
+        markScopeInvalidated(invalidatedScope);
+      }
 
-        if (!shouldReloadFullScope) {
-          if (
-            nextState === previousState.batchState &&
-            nextLatestSharedSequence === previousState.latestSharedSequence
-          ) {
-            return previousState;
-          }
-
-          return {
-            ...previousState,
-            batchState: nextState,
-            latestSharedSequence: nextLatestSharedSequence,
-          };
-        }
-
-        const nextPendingFullReloads = enqueuePendingFullReload(
-          previousState.pendingFullReloads,
-          loadContext,
-        );
-
-        if (
+      if (!shouldReloadFullScope) {
+        commitControllerState(
           nextState === previousState.batchState &&
+            nextLatestSharedSequence === previousState.latestSharedSequence
+            ? previousState
+            : {
+                ...previousState,
+                batchState: nextState,
+                latestSharedSequence: nextLatestSharedSequence,
+              },
+        );
+        return;
+      }
+
+      const nextPendingFullReloads = enqueuePendingFullReload(
+        previousState.pendingFullReloads,
+        loadContext,
+      );
+
+      commitControllerState(
+        nextState === previousState.batchState &&
           nextLatestSharedSequence === previousState.latestSharedSequence &&
           nextPendingFullReloads === previousState.pendingFullReloads
-        ) {
-          return previousState;
-        }
-
-        return {
-          batchState: nextState,
-          latestSharedSequence: nextLatestSharedSequence,
-          pendingFullReloads: nextPendingFullReloads,
-        };
-      });
+          ? previousState
+          : {
+              batchState: nextState,
+              latestSharedSequence: nextLatestSharedSequence,
+              pendingFullReloads: nextPendingFullReloads,
+            },
+      );
     },
-    [],
+    [commitControllerState],
   );
 
   const applyFullResult = useCallback(
     ({ clearScopeInvalidation, requestSequence, scope, snapshot }: ApplyFullResultArgs): void => {
       clearScopeInvalidation(scope);
-      setControllerState((previousState) => {
-        const { nextLatestSharedSequence, nextState } = applyFullSnapshot({
-          state: previousState.batchState,
-          scope,
-          snapshot,
-          requestSequence,
-          latestSharedSequence: previousState.latestSharedSequence,
-        });
-
-        if (
-          nextState === previousState.batchState &&
-          nextLatestSharedSequence === previousState.latestSharedSequence
-        ) {
-          return previousState;
-        }
-
-        return {
-          ...previousState,
-          batchState: nextState,
-          latestSharedSequence: nextLatestSharedSequence,
-        };
+      const previousState = controllerStateRef.current;
+      const { nextLatestSharedSequence, nextState } = applyFullSnapshot({
+        state: previousState.batchState,
+        scope,
+        snapshot,
+        requestSequence,
+        latestSharedSequence: previousState.latestSharedSequence,
       });
+
+      commitControllerState(
+        nextState === previousState.batchState &&
+          nextLatestSharedSequence === previousState.latestSharedSequence
+          ? previousState
+          : {
+              ...previousState,
+              batchState: nextState,
+              latestSharedSequence: nextLatestSharedSequence,
+            },
+      );
     },
-    [],
+    [commitControllerState],
   );
 
   const applyScopeLoadError = useCallback(
     ({ error, mode, scope }: ApplyScopeLoadErrorArgs): void => {
-      setControllerState((previousState) => {
-        const nextBatchState = applyScopeError({
-          state: previousState.batchState,
-          scope,
-          mode,
-          error,
-        });
-
-        if (nextBatchState === previousState.batchState) {
-          return previousState;
-        }
-
-        return {
-          ...previousState,
-          batchState: nextBatchState,
-        };
+      const previousState = controllerStateRef.current;
+      const nextBatchState = applyScopeError({
+        state: previousState.batchState,
+        scope,
+        mode,
+        error,
       });
+
+      commitControllerState(
+        nextBatchState === previousState.batchState
+          ? previousState
+          : {
+              ...previousState,
+              batchState: nextBatchState,
+            },
+      );
     },
-    [],
+    [commitControllerState],
   );
 
   const pendingFullReload = controllerState.pendingFullReloads[0] ?? null;
 
-  const consumePendingFullReload = useCallback((loadContext: LoadRequestContext): void => {
-    setControllerState((previousState) => {
+  const consumePendingFullReload = useCallback(
+    (loadContext: LoadRequestContext): void => {
+      const previousState = controllerStateRef.current;
       const nextPendingFullReload = previousState.pendingFullReloads[0];
       if (!nextPendingFullReload || !sameLoadRequestContext(nextPendingFullReload, loadContext)) {
-        return previousState;
+        return;
       }
 
-      return {
+      commitControllerState({
         ...previousState,
         pendingFullReloads: previousState.pendingFullReloads.slice(1),
-      };
-    });
-  }, []);
+      });
+    },
+    [commitControllerState],
+  );
 
   const activeScopeState = controllerState.batchState.byScope[diffScope];
   const statusSnapshotKey = useMemo(

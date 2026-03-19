@@ -45,6 +45,7 @@ type RepositoryGitSectionUiAction =
       type: "set_detection_result";
       detectionMessage: string | null;
       isManualConfigOpen?: boolean;
+      isDetecting?: boolean;
     };
 
 type UseRepositoryGitSectionModelResult = {
@@ -116,6 +117,7 @@ const repositoryGitSectionUiReducer = (
       return {
         ...state,
         detectionMessage: action.detectionMessage,
+        ...(typeof action.isDetecting === "boolean" ? { isDetecting: action.isDetecting } : {}),
         ...(typeof action.isManualConfigOpen === "boolean"
           ? { isManualConfigOpen: action.isManualConfigOpen }
           : {}),
@@ -226,6 +228,19 @@ export function useRepositoryGitSectionModel({
     [onUpdateSelectedRepoConfig],
   );
 
+  const invalidateActiveDetection = useCallback(
+    (options: { clearMessage?: boolean; keepManualConfigOpen?: boolean } = {}): void => {
+      activeDetectionSequenceRef.current += 1;
+      dispatchUiState({
+        type: "set_detection_result",
+        detectionMessage: options.clearMessage ? null : uiState.detectionMessage,
+        ...(options.keepManualConfigOpen ? { isManualConfigOpen: true } : {}),
+        isDetecting: false,
+      });
+    },
+    [uiState.detectionMessage],
+  );
+
   const handleGithubEnabledChange = useCallback(
     (checked: boolean): void => {
       onUpdateSelectedRepoConfig((repoConfig) => ({
@@ -244,6 +259,9 @@ export function useRepositoryGitSectionModel({
 
   const handleRepositoryDraftFieldChange = useCallback(
     (field: keyof GithubRepositoryDraft, value: string): void => {
+      if (isDetecting) {
+        invalidateActiveDetection({ clearMessage: true, keepManualConfigOpen: true });
+      }
       const nextDraft = {
         ...repositoryDraftRef.current,
         [field]: value,
@@ -252,7 +270,7 @@ export function useRepositoryGitSectionModel({
       setRepositoryDraft(nextDraft);
       commitGithubRepositoryDraft(nextDraft);
     },
-    [commitGithubRepositoryDraft],
+    [commitGithubRepositoryDraft, invalidateActiveDetection, isDetecting],
   );
 
   const runDetection = useCallback(
@@ -337,7 +355,7 @@ export function useRepositoryGitSectionModel({
     hasInitializedRepoStateRef.current = true;
 
     if (hasRepoChanged) {
-      activeDetectionSequenceRef.current += 1;
+      invalidateActiveDetection({ clearMessage: true });
       dispatchUiState({
         type: "reset_for_repo",
         hasSelectedRepoPath: selectedRepoPath != null,
@@ -346,11 +364,26 @@ export function useRepositoryGitSectionModel({
       return;
     }
 
-    dispatchUiState({
-      type: "set_manual_config_open",
-      isManualConfigOpen: selectedRepoPath != null ? !hasRepositoryCoordinates : false,
-    });
-  }, [hasRepositoryCoordinates, selectedRepoPath]);
+    if (selectedRepoPath == null) {
+      dispatchUiState({
+        type: "set_manual_config_open",
+        isManualConfigOpen: false,
+      });
+      return;
+    }
+
+    if (!hasRepositoryCoordinates && !uiState.isManualConfigOpen) {
+      dispatchUiState({
+        type: "set_manual_config_open",
+        isManualConfigOpen: true,
+      });
+    }
+  }, [
+    hasRepositoryCoordinates,
+    invalidateActiveDetection,
+    selectedRepoPath,
+    uiState.isManualConfigOpen,
+  ]);
 
   useEffect(() => {
     const nextDraft = {
@@ -363,7 +396,13 @@ export function useRepositoryGitSectionModel({
   }, [github.repository?.host, github.repository?.name, github.repository?.owner]);
 
   useEffect(() => {
-    if (!selectedRepoPath || disabled || hasRepositoryCoordinates || isDetecting) {
+    if (
+      !selectedRepoPath ||
+      !selectedRepoConfig ||
+      disabled ||
+      hasRepositoryCoordinates ||
+      isDetecting
+    ) {
       return;
     }
     if (attemptedAutoDetectByRepoRef.current.has(selectedRepoPath)) {
@@ -372,7 +411,14 @@ export function useRepositoryGitSectionModel({
 
     attemptedAutoDetectByRepoRef.current.add(selectedRepoPath);
     void runDetection(false);
-  }, [disabled, hasRepositoryCoordinates, isDetecting, runDetection, selectedRepoPath]);
+  }, [
+    disabled,
+    hasRepositoryCoordinates,
+    isDetecting,
+    runDetection,
+    selectedRepoConfig,
+    selectedRepoPath,
+  ]);
 
   return {
     cliStatusLabel,
