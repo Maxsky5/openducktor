@@ -11,44 +11,30 @@ enableReactActEnvironment();
 type HookArgs = Parameters<typeof useAgentStudioThreadModel>[0];
 
 const createHookArgs = (showThinkingMessages = false): HookArgs => ({
-  session: {
-    threadSession: null,
-    showThinkingMessages,
-    isContextSwitching: false,
-    taskId: "task-1",
-    activeSessionAgentColors: {},
-  },
-  readiness: {
-    agentStudioReady: true,
-    agentStudioBlockedReason: "",
-    isLoadingChecks: false,
-    refreshChecks: async () => {},
-  },
-  kickoff: {
-    canKickoffNewSession: true,
-    selectedRoleAvailable: true,
-    kickoffLabel: "Start",
-    startScenarioKickoff: async () => {},
-    isStarting: false,
-    isSending: false,
-  },
-  questions: {
-    isSubmittingQuestionByRequestId: {},
-    onSubmitQuestionAnswers: async () => {},
-  },
-  permissions: {
-    isSubmittingPermissionByRequestId: {},
-    permissionReplyErrorByRequestId: {},
-    onReplyPermission: async () => {},
-  },
-  todoPanel: {
-    todoPanelCollapsed: false,
-    onToggleTodoPanel: () => {},
-    todoPanelBottomOffset: 0,
-  },
-  scroll: {
-    messagesContainerRef: createRef<HTMLDivElement>(),
-  },
+  threadSession: null,
+  showThinkingMessages,
+  isContextSwitching: false,
+  taskId: "task-1",
+  activeSessionAgentColors: {},
+  agentStudioReady: true,
+  agentStudioBlockedReason: "",
+  isLoadingChecks: false,
+  refreshChecks: async () => {},
+  canKickoffNewSession: true,
+  selectedRoleAvailable: true,
+  kickoffLabel: "Start",
+  startScenarioKickoff: async () => {},
+  isStarting: false,
+  isSending: false,
+  isSubmittingQuestionByRequestId: {},
+  onSubmitQuestionAnswers: async () => {},
+  isSubmittingPermissionByRequestId: {},
+  permissionReplyErrorByRequestId: {},
+  onReplyPermission: async () => {},
+  todoPanelCollapsed: false,
+  onToggleTodoPanel: () => {},
+  todoPanelBottomOffset: 0,
+  messagesContainerRef: createRef<HTMLDivElement>(),
 });
 
 const createHookHarness = (initialProps: HookArgs) =>

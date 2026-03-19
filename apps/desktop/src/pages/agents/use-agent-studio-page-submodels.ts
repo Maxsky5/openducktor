@@ -1,5 +1,9 @@
 import type { TaskCard } from "@openducktor/contracts";
+import type { AgentModelSelection } from "@openducktor/core";
+import type { RefObject } from "react";
 import { useCallback, useMemo } from "react";
+import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
+import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
@@ -9,18 +13,6 @@ import {
   buildAgentStudioHeaderModel,
 } from "./agents-page-view-model";
 import type {
-  AgentStudioComposerInteractionContext,
-  AgentStudioComposerLayoutContext,
-  AgentStudioComposerReadinessContext,
-  AgentStudioComposerSelectionContext,
-  AgentStudioComposerSessionContext,
-  AgentStudioThreadKickoffContext,
-  AgentStudioThreadPermissionsContext,
-  AgentStudioThreadQuestionsContext,
-  AgentStudioThreadReadinessContext,
-  AgentStudioThreadScrollContext,
-  AgentStudioThreadSessionContext,
-  AgentStudioThreadTodoPanelContext,
   AgentStudioWorkflowStepSelect,
   WorkflowHeaderContext,
 } from "./use-agent-studio-page-submodel-contracts";
@@ -97,186 +89,264 @@ export const useAgentStudioHeaderModel = ({
 };
 
 type UseAgentStudioThreadModelArgs = {
-  session: AgentStudioThreadSessionContext;
-  readiness: AgentStudioThreadReadinessContext;
-  kickoff: AgentStudioThreadKickoffContext;
-  questions: AgentStudioThreadQuestionsContext;
-  permissions: AgentStudioThreadPermissionsContext;
-  todoPanel: AgentStudioThreadTodoPanelContext;
-  scroll: AgentStudioThreadScrollContext;
+  threadSession: AgentSessionState | null;
+  showThinkingMessages: boolean;
+  isContextSwitching: boolean;
+  taskId: string;
+  activeSessionAgentColors: Record<string, string>;
+  agentStudioReady: boolean;
+  agentStudioBlockedReason: string | null;
+  isLoadingChecks: boolean;
+  refreshChecks: () => Promise<void>;
+  canKickoffNewSession: boolean;
+  selectedRoleAvailable: boolean;
+  kickoffLabel: string;
+  startScenarioKickoff: () => Promise<void>;
+  isStarting: boolean;
+  isSending: boolean;
+  isSubmittingQuestionByRequestId: Record<string, boolean>;
+  onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
+  isSubmittingPermissionByRequestId: Record<string, boolean>;
+  permissionReplyErrorByRequestId: Record<string, string>;
+  onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
+  todoPanelCollapsed: boolean;
+  onToggleTodoPanel: () => void;
+  todoPanelBottomOffset: number;
+  messagesContainerRef: RefObject<HTMLDivElement | null>;
 };
 
 export const useAgentStudioThreadModel = ({
-  session,
-  readiness,
-  kickoff,
-  questions,
-  permissions,
-  todoPanel,
-  scroll,
+  threadSession,
+  showThinkingMessages,
+  isContextSwitching,
+  taskId,
+  activeSessionAgentColors,
+  agentStudioReady,
+  agentStudioBlockedReason,
+  isLoadingChecks,
+  refreshChecks,
+  canKickoffNewSession,
+  selectedRoleAvailable,
+  kickoffLabel,
+  startScenarioKickoff,
+  isStarting,
+  isSending,
+  isSubmittingQuestionByRequestId,
+  onSubmitQuestionAnswers,
+  isSubmittingPermissionByRequestId,
+  permissionReplyErrorByRequestId,
+  onReplyPermission,
+  todoPanelCollapsed,
+  onToggleTodoPanel,
+  todoPanelBottomOffset,
+  messagesContainerRef,
 }: UseAgentStudioThreadModelArgs): ReturnType<typeof buildAgentChatThreadModel> => {
   const handleRefreshChecks = useCallback((): void => {
-    void readiness.refreshChecks();
-  }, [readiness.refreshChecks]);
+    void refreshChecks();
+  }, [refreshChecks]);
 
   const handleKickoff = useCallback((): void => {
-    void kickoff.startScenarioKickoff();
-  }, [kickoff.startScenarioKickoff]);
+    void startScenarioKickoff();
+  }, [startScenarioKickoff]);
 
   const handlePermissionReply = useCallback(
     (requestId: string, reply: "once" | "always" | "reject"): Promise<void> => {
-      return permissions.onReplyPermission(requestId, reply);
+      return onReplyPermission(requestId, reply);
     },
-    [permissions.onReplyPermission],
+    [onReplyPermission],
   );
 
   return useMemo(
     () =>
       buildAgentChatThreadModel({
-        activeSession: session.threadSession,
-        showThinkingMessages: session.showThinkingMessages,
-        isSessionViewLoading: session.isContextSwitching,
+        activeSession: threadSession,
+        showThinkingMessages,
+        isSessionViewLoading: isContextSwitching,
         roleOptions: ROLE_OPTIONS,
-        agentStudioReady: readiness.agentStudioReady,
-        agentStudioBlockedReason: readiness.agentStudioBlockedReason,
-        isLoadingChecks: readiness.isLoadingChecks,
+        agentStudioReady,
+        agentStudioBlockedReason,
+        isLoadingChecks,
         onRefreshChecks: handleRefreshChecks,
-        taskId: session.taskId,
-        canKickoffNewSession: kickoff.canKickoffNewSession && kickoff.selectedRoleAvailable,
-        kickoffLabel: kickoff.kickoffLabel,
+        taskId,
+        canKickoffNewSession: canKickoffNewSession && selectedRoleAvailable,
+        kickoffLabel,
         onKickoff: handleKickoff,
-        isStarting: kickoff.isStarting,
-        isSending: kickoff.isSending,
-        activeSessionAgentColors: session.activeSessionAgentColors,
-        isSubmittingQuestionByRequestId: questions.isSubmittingQuestionByRequestId,
-        onSubmitQuestionAnswers: questions.onSubmitQuestionAnswers,
-        isSubmittingPermissionByRequestId: permissions.isSubmittingPermissionByRequestId,
-        permissionReplyErrorByRequestId: permissions.permissionReplyErrorByRequestId,
+        isStarting,
+        isSending,
+        activeSessionAgentColors,
+        isSubmittingQuestionByRequestId,
+        onSubmitQuestionAnswers,
+        isSubmittingPermissionByRequestId,
+        permissionReplyErrorByRequestId,
         onReplyPermission: handlePermissionReply,
-        todoPanelCollapsed: todoPanel.todoPanelCollapsed,
-        onToggleTodoPanel: todoPanel.onToggleTodoPanel,
-        todoPanelBottomOffset: todoPanel.todoPanelBottomOffset,
-        messagesContainerRef: scroll.messagesContainerRef,
+        todoPanelCollapsed,
+        onToggleTodoPanel,
+        todoPanelBottomOffset,
+        messagesContainerRef,
       }),
     [
+      activeSessionAgentColors,
+      agentStudioBlockedReason,
+      agentStudioReady,
+      canKickoffNewSession,
       handleKickoff,
       handlePermissionReply,
       handleRefreshChecks,
-      kickoff.canKickoffNewSession,
-      kickoff.isSending,
-      kickoff.isStarting,
-      kickoff.kickoffLabel,
-      kickoff.selectedRoleAvailable,
-      permissions.isSubmittingPermissionByRequestId,
-      permissions.permissionReplyErrorByRequestId,
-      questions.isSubmittingQuestionByRequestId,
-      questions.onSubmitQuestionAnswers,
-      readiness.agentStudioBlockedReason,
-      readiness.agentStudioReady,
-      readiness.isLoadingChecks,
-      scroll.messagesContainerRef,
-      session.activeSessionAgentColors,
-      session.isContextSwitching,
-      session.showThinkingMessages,
-      session.taskId,
-      session.threadSession,
-      todoPanel.onToggleTodoPanel,
-      todoPanel.todoPanelBottomOffset,
-      todoPanel.todoPanelCollapsed,
+      isContextSwitching,
+      isLoadingChecks,
+      isSending,
+      isStarting,
+      isSubmittingPermissionByRequestId,
+      isSubmittingQuestionByRequestId,
+      kickoffLabel,
+      messagesContainerRef,
+      onSubmitQuestionAnswers,
+      permissionReplyErrorByRequestId,
+      selectedRoleAvailable,
+      showThinkingMessages,
+      taskId,
+      threadSession,
+      todoPanelBottomOffset,
+      todoPanelCollapsed,
+      onToggleTodoPanel,
     ],
   );
 };
 
 type UseAgentStudioComposerModelArgs = {
-  session: AgentStudioComposerSessionContext;
-  readiness: AgentStudioComposerReadinessContext;
-  interaction: AgentStudioComposerInteractionContext;
-  selection: AgentStudioComposerSelectionContext;
-  layout: AgentStudioComposerLayoutContext;
+  taskId: string;
+  activeSession: AgentSessionState | null;
+  isSessionWorking: boolean;
+  canStopSession: boolean;
+  stopAgentSession: (sessionId: string) => Promise<void>;
+  agentStudioReady: boolean;
+  selectedRoleAvailable: boolean;
+  selectedRoleReadOnlyReason: string | null;
+  input: string;
+  setInput: (value: string) => void;
+  onSend: () => Promise<void>;
+  isSending: boolean;
+  isStarting: boolean;
+  chatContextUsage: AgentChatModel["composer"]["contextUsage"];
+  selectedModelSelection: AgentModelSelection | null;
+  isSelectionCatalogLoading: boolean;
+  agentOptions: ComboboxOption[];
+  modelOptions: ComboboxOption[];
+  modelGroups: ComboboxGroup[];
+  variantOptions: ComboboxOption[];
+  onSelectAgent: (agent: string) => void;
+  onSelectModel: (model: string) => void;
+  onSelectVariant: (variant: string) => void;
+  activeSessionAgentColors: Record<string, string>;
+  composerFormRef: RefObject<HTMLFormElement | null>;
+  composerTextareaRef: RefObject<HTMLTextAreaElement | null>;
+  resizeComposerTextarea: () => void;
 };
 
 export const useAgentStudioComposerModel = ({
-  session,
-  readiness,
-  interaction,
-  selection,
-  layout,
+  taskId,
+  activeSession,
+  isSessionWorking,
+  canStopSession,
+  stopAgentSession,
+  agentStudioReady,
+  selectedRoleAvailable,
+  selectedRoleReadOnlyReason,
+  input,
+  setInput,
+  onSend,
+  isSending,
+  isStarting,
+  chatContextUsage,
+  selectedModelSelection,
+  isSelectionCatalogLoading,
+  agentOptions,
+  modelOptions,
+  modelGroups,
+  variantOptions,
+  onSelectAgent,
+  onSelectModel,
+  onSelectVariant,
+  activeSessionAgentColors,
+  composerFormRef,
+  composerTextareaRef,
+  resizeComposerTextarea,
 }: UseAgentStudioComposerModelArgs): ReturnType<typeof buildAgentChatComposerModel> => {
   const isModelSelectionPending = Boolean(
-    session.activeSession?.isLoadingModelCatalog && !session.activeSession?.selectedModel,
+    activeSession?.isLoadingModelCatalog && !activeSession?.selectedModel,
   );
-  const activeSessionId = session.activeSession?.sessionId;
+  const activeSessionId = activeSession?.sessionId;
 
   const handleSend = useCallback((): void => {
-    void interaction.onSend();
-  }, [interaction.onSend]);
+    void onSend();
+  }, [onSend]);
 
   const handleStopSession = useCallback((): void => {
     if (!activeSessionId) {
       return;
     }
-    void session.stopAgentSession(activeSessionId);
-  }, [activeSessionId, session.stopAgentSession]);
+    void stopAgentSession(activeSessionId);
+  }, [activeSessionId, stopAgentSession]);
 
   return useMemo(
     () =>
       buildAgentChatComposerModel({
-        taskId: session.taskId,
-        agentStudioReady: readiness.agentStudioReady,
-        isReadOnly: !readiness.workflow.selectedRoleAvailable,
-        readOnlyReason: readiness.workflow.selectedRoleReadOnlyReason,
-        input: interaction.input,
-        onInputChange: interaction.setInput,
+        taskId,
+        agentStudioReady,
+        isReadOnly: !selectedRoleAvailable,
+        readOnlyReason: selectedRoleReadOnlyReason,
+        input,
+        onInputChange: setInput,
         onSend: handleSend,
-        isSending: interaction.isSending,
-        isStarting: interaction.isStarting,
-        isSessionWorking: session.isSessionWorking,
+        isSending,
+        isStarting,
+        isSessionWorking,
         isModelSelectionPending,
-        selectedModelSelection: selection.selectedModelSelection,
-        isSelectionCatalogLoading: selection.isSelectionCatalogLoading,
-        agentOptions: selection.agentOptions,
-        modelOptions: selection.modelOptions,
-        modelGroups: selection.modelGroups,
-        variantOptions: selection.variantOptions,
-        onSelectAgent: selection.onSelectAgent,
-        onSelectModel: selection.onSelectModel,
-        onSelectVariant: selection.onSelectVariant,
-        activeSessionAgentColors: selection.activeSessionAgentColors,
-        contextUsage: interaction.chatContextUsage,
-        canStopSession: session.canStopSession,
+        selectedModelSelection,
+        isSelectionCatalogLoading,
+        agentOptions,
+        modelOptions,
+        modelGroups,
+        variantOptions,
+        onSelectAgent,
+        onSelectModel,
+        onSelectVariant,
+        activeSessionAgentColors,
+        contextUsage: chatContextUsage,
+        canStopSession,
         onStopSession: handleStopSession,
-        composerFormRef: layout.composerFormRef,
-        composerTextareaRef: layout.composerTextareaRef,
-        onComposerTextareaInput: layout.resizeComposerTextarea,
+        composerFormRef,
+        composerTextareaRef,
+        onComposerTextareaInput: resizeComposerTextarea,
       }),
     [
+      activeSessionAgentColors,
+      agentOptions,
+      agentStudioReady,
+      canStopSession,
+      chatContextUsage,
+      composerFormRef,
+      composerTextareaRef,
       handleSend,
       handleStopSession,
+      input,
       isModelSelectionPending,
-      interaction.chatContextUsage,
-      interaction.input,
-      interaction.isSending,
-      interaction.isStarting,
-      interaction.setInput,
-      layout.composerFormRef,
-      layout.composerTextareaRef,
-      layout.resizeComposerTextarea,
-      readiness.agentStudioReady,
-      readiness.workflow.selectedRoleAvailable,
-      readiness.workflow.selectedRoleReadOnlyReason,
-      selection.activeSessionAgentColors,
-      selection.agentOptions,
-      selection.isSelectionCatalogLoading,
-      selection.modelGroups,
-      selection.modelOptions,
-      selection.onSelectAgent,
-      selection.onSelectModel,
-      selection.onSelectVariant,
-      selection.selectedModelSelection,
-      selection.variantOptions,
-      session.canStopSession,
-      session.isSessionWorking,
-      session.taskId,
+      isSelectionCatalogLoading,
+      isSending,
+      isSessionWorking,
+      isStarting,
+      modelGroups,
+      modelOptions,
+      onSelectAgent,
+      onSelectModel,
+      onSelectVariant,
+      resizeComposerTextarea,
+      selectedModelSelection,
+      selectedRoleAvailable,
+      selectedRoleReadOnlyReason,
+      setInput,
+      taskId,
+      variantOptions,
     ],
   );
 };
