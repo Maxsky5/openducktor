@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { RepoConfig, RuntimeCheck } from "@openducktor/contracts";
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { act, create } from "react-test-renderer";
 import { SettingsGitSection } from "./settings-git-section";
@@ -259,5 +259,51 @@ describe("settings git sections", () => {
       owner: "acme",
       name: "widget",
     });
+  });
+
+  test("keeps successful origin-detection feedback visible after coordinates are saved", async () => {
+    const detectedMessage = "Detected acme/widget from origin. Save settings to keep this mapping.";
+
+    const ControlledRepositoryGitSection = (): ReturnType<typeof createElement> => {
+      const [repoConfig, setRepoConfig] = useState<RepoConfig>({
+        ...baseRepoConfig,
+        git: {
+          providers: {
+            github: {
+              enabled: true,
+              autoDetected: false,
+              repository: undefined,
+            },
+          },
+        },
+      });
+
+      return createElement(RepositoryGitSection, {
+        selectedRepoPath: "/repo",
+        selectedRepoConfig: repoConfig,
+        runtimeCheck: authenticatedRuntimeCheck,
+        disabled: false,
+        onDetectGithubRepository: async () => ({
+          host: "github.com",
+          owner: "acme",
+          name: "widget",
+        }),
+        onUpdateSelectedRepoConfig: (updater) => {
+          setRepoConfig(updater);
+        },
+      });
+    };
+
+    let renderer!: ReturnType<typeof create>;
+
+    await act(async () => {
+      renderer = create(createElement(ControlledRepositoryGitSection));
+    });
+
+    const matchingNodes = renderer.root.findAll((node) =>
+      flattenChildrenText(node.props.children).includes(detectedMessage),
+    );
+
+    expect(matchingNodes.length).toBeGreaterThan(0);
   });
 });

@@ -29,6 +29,10 @@ type RepositoryGitSectionUiAction =
       hasSelectedRepoPath: boolean;
     }
   | {
+      type: "set_manual_config_open";
+      isManualConfigOpen: boolean;
+    }
+  | {
       type: "toggle_manual_config_open";
     }
   | {
@@ -88,6 +92,11 @@ const repositoryGitSectionUiReducer = (
         isDetecting: false,
         isManualConfigOpen: action.hasSelectedRepoPath ? !action.hasRepositoryCoordinates : false,
       };
+    case "set_manual_config_open":
+      return {
+        ...state,
+        isManualConfigOpen: action.isManualConfigOpen,
+      };
     case "toggle_manual_config_open":
       return {
         ...state,
@@ -141,6 +150,8 @@ export function useRepositoryGitSectionModel({
   const attemptedAutoDetectByRepoRef = useRef<Set<string>>(new Set());
   const activeDetectionSequenceRef = useRef(0);
   const activeRepoPathRef = useRef<string | null>(selectedRepoPath);
+  const previousSelectedRepoPathRef = useRef<string | null>(null);
+  const hasInitializedRepoStateRef = useRef(false);
   const repositoryDraftRef = useRef<GithubRepositoryDraft>({
     host: "github.com",
     owner: "",
@@ -318,11 +329,26 @@ export function useRepositoryGitSectionModel({
 
   useEffect(() => {
     activeRepoPathRef.current = selectedRepoPath;
-    activeDetectionSequenceRef.current += 1;
+
+    const hasRepoChanged =
+      !hasInitializedRepoStateRef.current ||
+      previousSelectedRepoPathRef.current !== selectedRepoPath;
+    previousSelectedRepoPathRef.current = selectedRepoPath;
+    hasInitializedRepoStateRef.current = true;
+
+    if (hasRepoChanged) {
+      activeDetectionSequenceRef.current += 1;
+      dispatchUiState({
+        type: "reset_for_repo",
+        hasSelectedRepoPath: selectedRepoPath != null,
+        hasRepositoryCoordinates,
+      });
+      return;
+    }
+
     dispatchUiState({
-      type: "reset_for_repo",
-      hasSelectedRepoPath: selectedRepoPath != null,
-      hasRepositoryCoordinates,
+      type: "set_manual_config_open",
+      isManualConfigOpen: selectedRepoPath != null ? !hasRepositoryCoordinates : false,
     });
   }, [hasRepositoryCoordinates, selectedRepoPath]);
 
