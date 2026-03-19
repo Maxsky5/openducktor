@@ -2,10 +2,9 @@ use super::{
     hook_set_fingerprint, touch_recent, AppConfigStore, GlobalConfig, HookSet,
     OpencodeStartupReadinessConfig, RepoConfig, RuntimeConfig, RuntimeConfigStore,
 };
-use std::ffi::OsString;
+pub(super) use host_test_support::{lock_env, EnvVarGuard};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 mod constructors_and_io;
@@ -92,42 +91,4 @@ pub(super) fn unique_temp_path(name: &str) -> PathBuf {
 
 pub(super) fn fake_git_workspace(path: &Path) {
     fs::create_dir_all(path.join(".git")).expect("git directory should be created");
-}
-
-pub(super) fn lock_env() -> MutexGuard<'static, ()> {
-    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    ENV_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
-pub(super) struct EnvVarGuard {
-    key: &'static str,
-    previous: Option<OsString>,
-}
-
-impl EnvVarGuard {
-    pub(super) fn set(key: &'static str, value: &str) -> Self {
-        let previous = std::env::var_os(key);
-        std::env::set_var(key, value);
-        Self { key, previous }
-    }
-
-    #[cfg(unix)]
-    pub(super) fn set_os(key: &'static str, value: OsString) -> Self {
-        let previous = std::env::var_os(key);
-        std::env::set_var(key, &value);
-        Self { key, previous }
-    }
-}
-
-impl Drop for EnvVarGuard {
-    fn drop(&mut self) {
-        if let Some(previous) = self.previous.clone() {
-            std::env::set_var(self.key, previous);
-        } else {
-            std::env::remove_var(self.key);
-        }
-    }
 }

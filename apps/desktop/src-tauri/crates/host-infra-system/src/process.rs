@@ -283,23 +283,62 @@ fn command_path_from_environment_path(
     command_path_from_directories(program, &directories)
 }
 
-fn augmented_process_path(path_override: Option<&str>) -> Option<OsString> {
+fn explicit_command_override_directories() -> Vec<PathBuf> {
+    let directories = env::vars_os()
+        .filter_map(|(key, value)| {
+            let key = key.to_string_lossy();
+            if !key.starts_with("OPENDUCKTOR_") || !key.ends_with("_PATH") {
+                return None;
+            }
+
+            let path = PathBuf::from(value);
+            if !path.is_file() {
+                return None;
+            }
+
+            path.parent().map(Path::to_path_buf)
+        })
+        .collect::<Vec<_>>();
+    unique_path_entries(directories)
+}
+
+fn process_path_with_order(
+    path_override: Option<&str>,
+    bundled_dir_first: bool,
+) -> Option<OsString> {
     let bundled_dir = env::current_exe()
         .ok()
         .and_then(|path| path.parent().map(Path::to_path_buf));
+    let explicit_override_directories = explicit_command_override_directories();
     let inherited = path_entries_from_value(
         path_override
             .map(OsString::from)
             .or_else(|| env::var_os("PATH")),
     );
+    let standard = standard_search_directories();
 
-    let entries = unique_path_entries(
-        bundled_dir
-            .into_iter()
-            .chain(inherited)
-            .chain(standard_search_directories()),
-    );
+    let entries = if bundled_dir_first {
+        unique_path_entries(
+            bundled_dir
+                .into_iter()
+                .chain(explicit_override_directories)
+                .chain(inherited)
+                .chain(standard),
+        )
+    } else {
+        unique_path_entries(
+            explicit_override_directories
+                .into_iter()
+                .chain(inherited)
+                .chain(standard)
+                .chain(bundled_dir),
+        )
+    };
     path_value_from_entries(&entries)
+}
+
+fn augmented_process_path(path_override: Option<&str>) -> Option<OsString> {
+    process_path_with_order(path_override, true)
 }
 
 fn resolve_command_path_with_path_override(
@@ -328,7 +367,7 @@ pub fn resolve_command_path(program: &str) -> Result<Option<String>> {
 }
 
 pub fn subprocess_path_env() -> Option<OsString> {
-    augmented_process_path(None)
+    process_path_with_order(None, false)
 }
 
 fn configured_command(
@@ -460,44 +499,13 @@ mod tests {
         bundled_command_path_from_executable, command_env_override_name, command_exists,
         command_path, explicit_command_override, resolve_command_path, run_command,
         run_command_allow_failure, run_command_allow_failure_with_env, run_command_with_env,
-        version_command,
+        subprocess_path_env, version_command,
     };
+    use host_test_support::{lock_env, EnvVarGuard};
     use std::{
-        ffi::OsString,
         fs,
-        sync::{Mutex, MutexGuard, OnceLock},
         time::{SystemTime, UNIX_EPOCH},
     };
-
-    fn lock_env() -> MutexGuard<'static, ()> {
-        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        ENV_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .expect("env lock should not be poisoned")
-    }
-
-    struct EnvVarGuard {
-        key: &'static str,
-        previous: Option<OsString>,
-    }
-
-    impl EnvVarGuard {
-        fn set(key: &'static str, value: &str) -> Self {
-            let previous = std::env::var_os(key);
-            std::env::set_var(key, value);
-            Self { key, previous }
-        }
-    }
-
-    impl Drop for EnvVarGuard {
-        fn drop(&mut self) {
-            match &self.previous {
-                Some(value) => std::env::set_var(self.key, value),
-                None => std::env::remove_var(self.key),
-            }
-        }
-    }
 
     #[test]
     fn run_command_returns_stdout() {
@@ -710,6 +718,64 @@ mod tests {
 
         assert_eq!(output, "home-search-ok");
         let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn subprocess_path_env_prioritizes_override_and_inherited_directories() {
+        let _env_lock = lock_env();
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("odt-subprocess-path-{nonce}"));
+        let override_dir = root.join("override-bin");
+        let inherited_a = root.join("inherited-a");
+        let inherited_b = root.join("inherited-b");
+        fs::create_dir_all(&override_dir).expect("override dir should exist");
+        fs::create_dir_all(&inherited_a).expect("inherited dir should exist");
+        fs::create_dir_all(&inherited_b).expect("inherited dir should exist");
+
+        let override_file = override_dir.join("custom-bun");
+        fs::write(&override_file, "").expect("override file should exist");
+
+        let inherited_path = std::env::join_paths([inherited_a.as_path(), inherited_b.as_path()])
+            .expect("inherited path should join");
+        let _override_guard = EnvVarGuard::set(
+            "OPENDUCKTOR_BUN_PATH",
+            override_file.to_string_lossy().as_ref(),
+        );
+        let _path_guard = EnvVarGuard::set("PATH", inherited_path.to_string_lossy().as_ref());
+
+        let path = subprocess_path_env().expect("subprocess PATH should be assembled");
+        let entries = std::env::split_paths(&path).collect::<Vec<_>>();
+        let bundled_dir = std::env::current_exe()
+            .expect("current executable should resolve")
+            .parent()
+            .expect("current executable should have parent")
+            .to_path_buf();
+
+        let override_index = entries
+            .iter()
+            .position(|entry| entry == &override_dir)
+            .expect("override parent should be included");
+        let inherited_a_index = entries
+            .iter()
+            .position(|entry| entry == &inherited_a)
+            .expect("first inherited path should be included");
+        let inherited_b_index = entries
+            .iter()
+            .position(|entry| entry == &inherited_b)
+            .expect("second inherited path should be included");
+        let bundled_index = entries
+            .iter()
+            .position(|entry| entry == &bundled_dir)
+            .expect("bundled directory should be included");
+
+        assert!(override_index < bundled_index);
+        assert!(inherited_a_index < bundled_index);
+        assert!(inherited_b_index < bundled_index);
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

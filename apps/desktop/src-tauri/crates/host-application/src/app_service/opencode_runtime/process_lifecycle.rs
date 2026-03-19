@@ -311,12 +311,11 @@ fn spawn_opencode_server_with_binary(
 #[cfg(unix)]
 mod tests {
     use super::terminate_child_process;
+    use crate::app_service::test_support::{lock_env, set_env_var};
     use anyhow::{Context, Result};
-    use std::ffi::OsString;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
-    use std::sync::{Mutex, MutexGuard, OnceLock};
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     fn temp_test_dir(prefix: &str) -> Result<PathBuf> {
@@ -361,38 +360,9 @@ mod tests {
         ))
     }
 
-    fn lock_env() -> MutexGuard<'static, ()> {
-        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        ENV_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .expect("env lock should not be poisoned")
-    }
-
-    struct EnvVarGuard {
-        key: &'static str,
-        previous: Option<OsString>,
-    }
-
-    impl EnvVarGuard {
-        fn set(key: &'static str, value: &str) -> Self {
-            let previous = std::env::var_os(key);
-            std::env::set_var(key, value);
-            Self { key, previous }
-        }
-    }
-
-    impl Drop for EnvVarGuard {
-        fn drop(&mut self) {
-            match &self.previous {
-                Some(value) => std::env::set_var(self.key, value),
-                None => std::env::remove_var(self.key),
-            }
-        }
-    }
-
     #[test]
     fn spawn_with_config_injects_config_content_and_args() -> Result<()> {
+        let _env_lock = lock_env();
         let sandbox = temp_test_dir("spawn-with-config")?;
         let output_path = sandbox.join("captured.txt");
         let script_path = sandbox.join("fake-opencode.sh");
@@ -465,8 +435,8 @@ sleep 5
         fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))
             .with_context(|| format!("failed chmod {}", script_path.display()))?;
 
-        let _home_guard = EnvVarGuard::set("HOME", home.to_string_lossy().as_ref());
-        let _path_guard = EnvVarGuard::set("PATH", "/usr/bin:/bin");
+        let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
+        let _path_guard = set_env_var("PATH", "/usr/bin:/bin");
 
         let mut child = super::spawn_opencode_server_with_binary(
             script_path.to_string_lossy().as_ref(),
@@ -484,6 +454,8 @@ sleep 5
             captured.contains(home.join(".cargo").join("bin").to_string_lossy().as_ref()),
             "captured PATH: {captured}"
         );
+        assert!(captured.contains("/usr/bin"), "captured PATH: {captured}");
+        assert!(captured.contains("/bin"), "captured PATH: {captured}");
 
         terminate_child_process(&mut child);
         fs::remove_dir_all(&sandbox).ok();

@@ -14,3 +14,6 @@ sha2 = "0.10"
 rayon = "1"
 libc = "0.2"
 host-domain = { path = "../host-domain" }
+
+[dev-dependencies]
+host-test-support = { path = "../host-test-support" }

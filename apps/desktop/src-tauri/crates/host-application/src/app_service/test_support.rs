@@ -31,6 +31,7 @@ use host_domain::{
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
 };
+pub(crate) use host_test_support::{lock_env, EnvVarGuard};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -1118,12 +1119,7 @@ pub(crate) fn make_session(task_id: &str, session_id: &str) -> AgentSessionDocum
     }
 }
 
-pub(crate) static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 pub(crate) static UNIQUE_TEMP_PATH_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-pub(crate) fn lock_env<'a>() -> std::sync::MutexGuard<'a, ()> {
-    ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner())
-}
 
 pub(crate) fn unique_temp_path(name: &str) -> PathBuf {
     let nonce = UNIQUE_TEMP_PATH_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -1349,51 +1345,16 @@ echo "bd-fake"
     write_executable_script(path, script)
 }
 
-pub(crate) struct EnvVarGuard {
-    pub(crate) key: String,
-    pub(crate) previous: Option<OsString>,
-}
-
-impl Drop for EnvVarGuard {
-    fn drop(&mut self) {
-        if let Some(previous) = self.previous.clone() {
-            std::env::set_var(self.key.as_str(), previous);
-        } else {
-            std::env::remove_var(self.key.as_str());
-        }
-    }
-}
-
 pub(crate) fn set_env_var(key: &str, value: &str) -> EnvVarGuard {
-    let previous = std::env::var_os(key);
-    std::env::set_var(key, value);
-    EnvVarGuard {
-        key: key.to_string(),
-        previous,
-    }
+    EnvVarGuard::set(key, value)
 }
 
 pub(crate) fn remove_env_var(key: &str) -> EnvVarGuard {
-    let previous = std::env::var_os(key);
-    std::env::remove_var(key);
-    EnvVarGuard {
-        key: key.to_string(),
-        previous,
-    }
+    EnvVarGuard::remove(key)
 }
 
 pub(crate) fn prepend_path(path_prefix: &Path) -> EnvVarGuard {
-    let previous = std::env::var_os("PATH");
-    let mut parts = vec![path_prefix.to_string_lossy().to_string()];
-    if let Some(current) = previous.as_ref() {
-        parts.push(current.to_string_lossy().to_string());
-    }
-    let value = parts.join(":");
-    std::env::set_var("PATH", value);
-    EnvVarGuard {
-        key: "PATH".to_string(),
-        previous,
-    }
+    EnvVarGuard::prepend_path(path_prefix)
 }
 
 pub(crate) fn wait_for_path_exists(path: &Path, timeout: Duration) -> bool {
