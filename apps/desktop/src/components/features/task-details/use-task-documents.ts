@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSpecState } from "@/state";
+import type { TaskDocumentPayload } from "@/types/task-documents";
 import {
   createTaskDocumentLoadController,
   requestTaskDocumentLoad,
@@ -8,6 +9,7 @@ import {
   supersedeTaskDocumentLoad,
   type TaskDocumentSectionKey,
 } from "./task-document-load-controller";
+import { resolveLoadedDocumentState } from "./task-document-state";
 
 export type DocumentSectionKey = TaskDocumentSectionKey;
 
@@ -20,11 +22,6 @@ export type TaskDocumentState = {
 };
 
 type TaskDocumentsState = Record<DocumentSectionKey, TaskDocumentState>;
-
-type TaskDocumentPayload = {
-  markdown: string;
-  updatedAt: string | null;
-};
 
 type TaskDocumentLoaders = {
   loadSpecDocument: (taskId: string) => Promise<TaskDocumentPayload>;
@@ -172,13 +169,7 @@ export function useTaskDocuments(
 
           const successSnapshot: TaskDocumentsState = {
             ...documentsRef.current,
-            [section]: {
-              markdown: result.markdown,
-              updatedAt: result.updatedAt,
-              isLoading: false,
-              error: null,
-              loaded: true,
-            },
+            [section]: resolveLoadedDocumentState(documentsRef.current[section], result),
           };
           updateDocumentsSnapshot(successSnapshot);
           replayPendingForcedReload(settlement.shouldReplay);
