@@ -1,5 +1,5 @@
 import type { GitBranch, RepoConfig } from "@openducktor/contracts";
-import { FolderOpen } from "lucide-react";
+import { CircleAlert, FolderOpen } from "lucide-react";
 import type { ReactElement } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
@@ -211,10 +211,15 @@ export function RepositoryConfigurationSection({
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Saving configured scripts asks for confirmation automatically. Clear both script fields to
-        disable scripts for this repository.
-      </p>
+      <div className="flex items-center gap-3 rounded-md border border-info-border bg-info-surface p-3 text-sm text-info-surface-foreground">
+        <CircleAlert className="mt-0.5 size-4 shrink-0 text-info-muted" aria-hidden="true" />
+        <p className="leading-6">
+          OpenDucktor saves a fingerprint of the exact script commands you approve. This is a
+          security check: if something changes those scripts later without your consent, the
+          fingerprint no longer matches and OpenDucktor will ask you to confirm the scripts again
+          before they can run. Clear both script fields to disable scripts for this repository.
+        </p>
+      </div>
 
       <div className="grid gap-2">
         <Label htmlFor="repo-worktree-file-copies">Worktree file copies (one path per line)</Label>
