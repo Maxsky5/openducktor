@@ -32,7 +32,7 @@ const TASK_STATUS_PRESENTATION: Record<TaskCard["status"], TaskStatusPresentatio
       headerSurfaceClass: "bg-muted/80",
       headerAccentClass: "bg-muted/0",
       countBadgeClass: "border-input bg-card text-foreground",
-      emptyStateClass: "border-input/80 bg-card/80 text-muted-foreground",
+      emptyStateClass: "border-input bg-card/80 text-muted-foreground",
     },
   },
   spec_ready: {
@@ -46,7 +46,7 @@ const TASK_STATUS_PRESENTATION: Record<TaskCard["status"], TaskStatusPresentatio
       countBadgeClass:
         "border-violet-300 dark:border-violet-700 bg-card text-violet-700 dark:text-violet-300",
       emptyStateClass:
-        "border-violet-200/80 dark:border-violet-800/50 bg-card/80 text-violet-600 dark:text-violet-400",
+        "border-violet-300 dark:border-violet-800 bg-card/80 text-violet-700 dark:text-violet-300",
     },
   },
   ready_for_dev: {
@@ -58,7 +58,7 @@ const TASK_STATUS_PRESENTATION: Record<TaskCard["status"], TaskStatusPresentatio
       headerAccentClass: "bg-sky-500",
       countBadgeClass: "border-sky-300 dark:border-sky-700 bg-card text-sky-700 dark:text-sky-300",
       emptyStateClass:
-        "border-sky-200/80 dark:border-sky-800/50 bg-card/80 text-sky-700 dark:text-sky-300",
+        "border-sky-300 dark:border-sky-800 bg-card/80 text-sky-700 dark:text-sky-300",
     },
   },
   in_progress: {
@@ -72,7 +72,7 @@ const TASK_STATUS_PRESENTATION: Record<TaskCard["status"], TaskStatusPresentatio
       countBadgeClass:
         "border-amber-300 dark:border-amber-700 bg-card text-amber-700 dark:text-amber-300",
       emptyStateClass:
-        "border-amber-200/80 dark:border-amber-800/50 bg-card/80 text-amber-700 dark:text-amber-300",
+        "border-amber-300 dark:border-amber-800 bg-card/80 text-amber-700 dark:text-amber-300",
     },
   },
   blocked: {
@@ -86,7 +86,7 @@ const TASK_STATUS_PRESENTATION: Record<TaskCard["status"], TaskStatusPresentatio
       countBadgeClass:
         "border-rose-300 dark:border-rose-700 bg-card text-rose-700 dark:text-rose-300",
       emptyStateClass:
-        "border-rose-200/80 dark:border-rose-800/50 bg-card/80 text-rose-700 dark:text-rose-300",
+        "border-rose-300 dark:border-rose-800 bg-card/80 text-rose-700 dark:text-rose-300",
     },
   },
   ai_review: {
@@ -101,7 +101,7 @@ const TASK_STATUS_PRESENTATION: Record<TaskCard["status"], TaskStatusPresentatio
       countBadgeClass:
         "border-indigo-300 dark:border-indigo-700 bg-card text-indigo-700 dark:text-indigo-300",
       emptyStateClass:
-        "border-indigo-200/80 dark:border-indigo-800/50 bg-card/80 text-indigo-700 dark:text-indigo-300",
+        "border-indigo-300 dark:border-indigo-800 bg-card/80 text-indigo-700 dark:text-indigo-300",
     },
   },
   human_review: {
@@ -116,7 +116,7 @@ const TASK_STATUS_PRESENTATION: Record<TaskCard["status"], TaskStatusPresentatio
       countBadgeClass:
         "border-cyan-300 dark:border-cyan-700 bg-card text-cyan-700 dark:text-cyan-300",
       emptyStateClass:
-        "border-cyan-200/80 dark:border-cyan-800/50 bg-card/80 text-cyan-700 dark:text-cyan-300",
+        "border-cyan-300 dark:border-cyan-800 bg-card/80 text-cyan-700 dark:text-cyan-300",
     },
   },
   closed: {
@@ -130,7 +130,7 @@ const TASK_STATUS_PRESENTATION: Record<TaskCard["status"], TaskStatusPresentatio
       countBadgeClass:
         "border-emerald-300 dark:border-emerald-700 bg-card text-emerald-700 dark:text-emerald-300",
       emptyStateClass:
-        "border-emerald-200/80 dark:border-emerald-800/50 bg-card/80 text-emerald-700 dark:text-emerald-300",
+        "border-emerald-300 dark:border-emerald-800 bg-card/80 text-emerald-700 dark:text-emerald-300",
     },
   },
   deferred: {
