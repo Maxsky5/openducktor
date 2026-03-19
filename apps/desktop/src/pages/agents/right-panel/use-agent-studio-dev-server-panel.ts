@@ -156,6 +156,10 @@ export function useAgentStudioDevServerPanel({
   const configuredScripts = repoSettings?.devServers ?? [];
   const hasConfiguredScripts = configuredScripts.length > 0;
   const queryEnabled = enabled && repoPath !== null && taskId !== null && hasConfiguredScripts;
+  const queryActivationRef = useRef<{ enabled: boolean; since: number }>({
+    enabled: queryEnabled,
+    since: queryEnabled ? Date.now() : 0,
+  });
   const taskMemoryKey = repoPath && taskId ? buildTaskMemoryKey(repoPath, taskId) : null;
   const activeSessionRefreshKey = `${activeSession?.sessionId ?? ""}:${activeSession?.status ?? ""}:${activeSession?.workingDirectory ?? ""}`;
   const queryOptions =
@@ -168,6 +172,32 @@ export function useAgentStudioDevServerPanel({
     enabled: queryEnabled,
   });
 
+  if (queryActivationRef.current.enabled !== queryEnabled) {
+    queryActivationRef.current = {
+      enabled: queryEnabled,
+      since: queryEnabled ? Date.now() : 0,
+    };
+  }
+
+  const syncStateFromEvent = useCallback(
+    (event: DevServerEvent): void => {
+      if (!repoPath || !taskId) {
+        return;
+      }
+
+      const queryKey = devServerQueryKeys.state(repoPath, taskId);
+      const cachedState = queryClient.getQueryData<DevServerGroupState>(queryKey) ?? null;
+      setLiveState((current) => {
+        const nextState = applyDevServerEventToState(current ?? cachedState, event);
+        if (nextState) {
+          queryClient.setQueryData(queryKey, nextState);
+        }
+        return nextState;
+      });
+    },
+    [queryClient, repoPath, taskId],
+  );
+
   useEffect(() => {
     if (!queryEnabled) {
       setLiveState(null);
@@ -177,10 +207,10 @@ export function useAgentStudioDevServerPanel({
       return;
     }
 
-    if (stateQuery.data) {
+    if (stateQuery.data && stateQuery.dataUpdatedAt >= queryActivationRef.current.since) {
       setLiveState(stateQuery.data);
     }
-  }, [queryEnabled, stateQuery.data]);
+  }, [queryEnabled, stateQuery.data, stateQuery.dataUpdatedAt]);
 
   useEffect(() => {
     if (!queryEnabled || repoPath === null || taskId === null) {
@@ -207,7 +237,7 @@ export function useAgentStudioDevServerPanel({
         return;
       }
 
-      setLiveState((current) => applyDevServerEventToState(current, event));
+      syncStateFromEvent(event);
       setActionError(null);
     })
       .then((cleanup) => {
@@ -229,7 +259,7 @@ export function useAgentStudioDevServerPanel({
       cancelled = true;
       unsubscribe?.();
     };
-  }, [queryEnabled, repoPath, taskId]);
+  }, [queryEnabled, repoPath, syncStateFromEvent, taskId]);
 
   useEffect(() => {
     if (!queryEnabled || repoPath === null || taskId === null) {
@@ -323,7 +353,14 @@ export function useAgentStudioDevServerPanel({
     onSettled: invalidateState,
   });
 
-  const effectiveState = liveState ?? stateQuery.data ?? null;
+  const hasFreshQueryData =
+    stateQuery.data !== undefined && stateQuery.dataUpdatedAt >= queryActivationRef.current.since;
+  const effectiveState = liveState ?? (hasFreshQueryData ? (stateQuery.data ?? null) : null);
+  const isAwaitingFreshState =
+    queryEnabled &&
+    effectiveState == null &&
+    !stateQuery.error &&
+    (stateQuery.isPending || stateQuery.isFetching || stateQuery.data !== undefined);
   const rememberedScriptId = taskMemoryKey
     ? (selectionMemoryRef.current.get(taskMemoryKey) ?? null)
     : null;
@@ -367,7 +404,7 @@ export function useAgentStudioDevServerPanel({
       return "empty";
     }
 
-    if (queryEnabled && effectiveState == null && stateQuery.isLoading) {
+    if (isAwaitingFreshState) {
       return "loading";
     }
 
@@ -380,7 +417,7 @@ export function useAgentStudioDevServerPanel({
     }
 
     return "stopped";
-  }, [effectiveState, hasConfiguredScripts, isExpanded, queryEnabled, stateQuery.isLoading]);
+  }, [effectiveState, hasConfiguredScripts, isAwaitingFreshState, isExpanded]);
 
   const onSelectScript = useCallback(
     (scriptId: string): void => {
@@ -400,7 +437,7 @@ export function useAgentStudioDevServerPanel({
   return {
     mode,
     isExpanded,
-    isLoading: stateQuery.isLoading,
+    isLoading: isAwaitingFreshState || stateQuery.isLoading,
     repoPath,
     taskId,
     worktreePath: effectiveState?.worktreePath ?? null,
