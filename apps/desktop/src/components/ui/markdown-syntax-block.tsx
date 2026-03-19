@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactElement, useEffect, useState } from "react";
+import { type CSSProperties, type ReactElement, useEffect, useRef, useState } from "react";
 import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
 import javascript from "react-syntax-highlighter/dist/esm/languages/prism/javascript";
 import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
@@ -61,7 +61,6 @@ const SYNTAX_CODE_TAG_STYLE: CSSProperties = {
 
 type PrismTheme = typeof oneLight;
 type MarkdownSyntaxLoadFailure = {
-  kind: "language" | "theme";
   message: string;
 };
 type ThemeLoadResult = { status: "loaded"; theme: PrismTheme } | { status: "failed"; error: Error };
@@ -113,18 +112,24 @@ export default function MarkdownSyntaxBlock({
   const { theme } = useTheme();
   const [, setLanguageRegistrationVersion] = useState(0);
   const [oneDarkTheme, setOneDarkTheme] = useState<PrismTheme | null>(() => cachedOneDarkTheme);
-  const [loadFailure, setLoadFailure] = useState<MarkdownSyntaxLoadFailure | null>(null);
+  const [themeLoadFailure, setThemeLoadFailure] = useState<MarkdownSyntaxLoadFailure | null>(null);
+  const [grammarLoadFailure, setGrammarLoadFailure] = useState<MarkdownSyntaxLoadFailure | null>(
+    null,
+  );
   const normalizedLanguage = markdownSyntaxLanguageRegistry.normalizeLanguage(language);
+  const previousNormalizedLanguageRef = useRef(normalizedLanguage);
   const isSupportedLanguage =
     markdownSyntaxLanguageRegistry.isLanguageSupported(normalizedLanguage);
   const isLanguageRegistered =
     markdownSyntaxLanguageRegistry.isLanguageRegistered(normalizedLanguage);
   const isDark = theme === "dark";
+  const loadFailure = themeLoadFailure ?? grammarLoadFailure;
+  const loadFailureKind = themeLoadFailure ? "theme" : grammarLoadFailure ? "language" : undefined;
 
   const renderPlainCodeBlock = (): ReactElement => (
     <div
       className={cn("overflow-x-auto rounded-xl border border-border bg-muted/30", className)}
-      data-syntax-load-failure={loadFailure?.kind ?? undefined}
+      data-syntax-load-failure={loadFailureKind}
     >
       <pre className="p-3.5 font-mono text-xs leading-relaxed text-foreground">
         <code>{code}</code>
@@ -139,12 +144,12 @@ export default function MarkdownSyntaxBlock({
 
   useEffect(() => {
     if (!isDark) {
-      setLoadFailure((current) => (current?.kind === "theme" ? null : current));
+      setThemeLoadFailure(null);
       return;
     }
 
     if (oneDarkTheme) {
-      setLoadFailure((current) => (current?.kind === "theme" ? null : current));
+      setThemeLoadFailure(null);
       return;
     }
 
@@ -156,14 +161,13 @@ export default function MarkdownSyntaxBlock({
       }
 
       if (result.status === "failed") {
-        setLoadFailure({
-          kind: "theme",
+        setThemeLoadFailure({
           message: `failed to load the dark Prism theme (${errorMessage(result.error)})`,
         });
         return;
       }
 
-      setLoadFailure((current) => (current?.kind === "theme" ? null : current));
+      setThemeLoadFailure(null);
       setOneDarkTheme(result.theme);
     });
 
@@ -173,10 +177,11 @@ export default function MarkdownSyntaxBlock({
   }, [isDark, oneDarkTheme]);
 
   useEffect(() => {
-    if (!isSupportedLanguage || isLanguageRegistered) {
-      setLoadFailure((current) => (current?.kind === "language" ? null : current));
+    if (previousNormalizedLanguageRef.current !== normalizedLanguage) {
+      previousNormalizedLanguageRef.current = normalizedLanguage;
+      setGrammarLoadFailure(null);
     }
-  }, [isLanguageRegistered, isSupportedLanguage]);
+  }, [normalizedLanguage]);
 
   useEffect(() => {
     const shouldRegisterLanguage =
@@ -197,8 +202,7 @@ export default function MarkdownSyntaxBlock({
         }
 
         if (result.status === "failed") {
-          setLoadFailure({
-            kind: "language",
+          setGrammarLoadFailure({
             message: `failed to load the ${normalizedLanguage} grammar (${errorMessage(result.error)})`,
           });
           return;
@@ -208,7 +212,7 @@ export default function MarkdownSyntaxBlock({
           return;
         }
 
-        setLoadFailure((current) => (current?.kind === "language" ? null : current));
+        setGrammarLoadFailure(null);
         setLanguageRegistrationVersion((version) => version + 1);
       });
 
