@@ -43,7 +43,7 @@ const RAW_DIFF_FALLBACK_CLASS_NAME =
 const HUNK_RESET_ANNOTATION_CLASS_NAME = "pointer-events-none relative h-0";
 const HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME = "contents";
 const HUNK_RESET_BUTTON_CLASS_NAME =
-  "pointer-events-auto absolute right-3 top-1 h-7 gap-1.5 rounded-md border-input bg-background/95 px-2.5 text-[11px] font-medium shadow-sm backdrop-blur-sm";
+  "pointer-events-auto absolute right-3 top-1 h-7 gap-1.5 px-2.5 text-[11px] shadow-sm";
 const HUNK_RESET_FLOATING_CSS = `
 [data-line-annotation],
 [data-gutter-buffer='annotation'] {

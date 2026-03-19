@@ -488,47 +488,7 @@ fn git_commit_all_returns_no_changes() -> Result<()> {
 }
 
 #[test]
-fn git_reset_worktree_selection_rejects_empty_target_branch() {
-    let repo_path = "/tmp/odt-repo-reset-empty-target";
-    let (service, _task_state, git_state) = build_service_with_git_state(
-        vec![],
-        vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-    );
-
-    let error = service
-        .git_reset_worktree_selection(
-            repo_path,
-            GitResetWorktreeSelectionRequest {
-                working_dir: None,
-                target_branch: "   ".to_string(),
-                snapshot: GitResetSnapshot {
-                    hash_version: 1,
-                    status_hash: "0123456789abcdef".to_string(),
-                    diff_hash: "fedcba9876543210".to_string(),
-                },
-                selection: GitResetWorktreeSelection::File {
-                    file_path: "README.md".to_string(),
-                },
-            },
-        )
-        .expect_err("blank target branch should fail");
-
-    assert!(error.to_string().contains("target branch cannot be empty"));
-    assert!(!git_state
-        .lock()
-        .expect("git lock poisoned")
-        .calls
-        .iter()
-        .any(|call| matches!(call, GitCall::ResetWorktreeSelection { .. })));
-}
-
-#[test]
-fn git_reset_worktree_selection_forwards_trimmed_target_branch_and_working_dir() -> Result<()> {
+fn git_reset_worktree_selection_forwards_request_fields_to_git_port() -> Result<()> {
     let repo_path = "/tmp/odt-repo-reset";
     let (service, _task_state, git_state) = build_service_with_git_state(
         vec![],
@@ -582,7 +542,12 @@ fn git_reset_worktree_selection_forwards_trimmed_target_branch_and_working_dir()
         GitCall::ResetWorktreeSelection {
             repo_path: "/tmp/odt-repo-reset-worktree".to_string(),
             working_dir: Some("/tmp/odt-repo-reset-worktree".to_string()),
-            target_branch: "origin/main".to_string(),
+            target_branch: "  origin/main  ".to_string(),
+            snapshot: GitResetSnapshot {
+                hash_version: 1,
+                status_hash: "0123456789abcdef".to_string(),
+                diff_hash: "fedcba9876543210".to_string(),
+            },
             selection: GitResetWorktreeSelection::Hunk {
                 file_path: "src/main.ts".to_string(),
                 hunk_index: 2,

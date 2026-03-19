@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { getHunkResetAnnotations, getRenderableFileDiff } from "./pierre-diff-viewer";
 
+const requireFileDiff = (fileDiff: ReturnType<typeof getRenderableFileDiff>["fileDiff"]) => {
+  expect(fileDiff).not.toBeNull();
+  if (fileDiff == null) {
+    throw new Error("Expected parsed file diff metadata");
+  }
+  return fileDiff;
+};
+
 describe("getRenderableFileDiff", () => {
   test("parses valid git patches", () => {
     const patch =
@@ -51,9 +59,7 @@ describe("getRenderableFileDiff", () => {
       "",
     ].join("\n");
     const { fileDiff } = getRenderableFileDiff(patch, "src/app.ts");
-
-    expect(fileDiff).not.toBeNull();
-    const annotations = getHunkResetAnnotations(fileDiff!);
+    const annotations = getHunkResetAnnotations(requireFileDiff(fileDiff));
 
     expect(annotations).toEqual([
       {
@@ -81,8 +87,7 @@ describe("getRenderableFileDiff", () => {
     ].join("\n");
     const { fileDiff } = getRenderableFileDiff(patch, "src/app.ts");
 
-    expect(fileDiff).not.toBeNull();
-    expect(getHunkResetAnnotations(fileDiff!)).toEqual([
+    expect(getHunkResetAnnotations(requireFileDiff(fileDiff))).toEqual([
       {
         side: "deletions",
         lineNumber: 3,

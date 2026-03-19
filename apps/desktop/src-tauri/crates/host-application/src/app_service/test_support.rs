@@ -22,12 +22,12 @@ use host_domain::{
     GitConflictAbortResult, GitConflictOperation, GitCurrentBranch, GitDiffScope, GitFileDiff,
     GitFileStatus, GitFileStatusCounts, GitMergeBranchRequest, GitMergeBranchResult,
     GitMergeMethod, GitPort, GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest,
-    GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult, GitResetWorktreeSelection,
-    GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult, GitUpstreamAheadBehind,
-    GitWorktreeStatusData, GitWorktreeStatusSummaryData, IssueType, PlanSubtaskInput,
-    PullRequestRecord, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState,
-    RunSummary, RuntimeInstanceSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary,
-    TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult, GitResetSnapshot,
+    GitResetWorktreeSelection, GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
+    GitUpstreamAheadBehind, GitWorktreeStatusData, GitWorktreeStatusSummaryData, IssueType,
+    PlanSubtaskInput, PullRequestRecord, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent,
+    RunState, RunSummary, RuntimeInstanceSummary, SpecDocument, TaskAction, TaskCard,
+    TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -498,6 +498,7 @@ pub(crate) enum GitCall {
         repo_path: String,
         working_dir: Option<String>,
         target_branch: String,
+        snapshot: GitResetSnapshot,
         selection: GitResetWorktreeSelection,
     },
     RebaseBranch {
@@ -713,6 +714,7 @@ impl GitPort for FakeGitPort {
             repo_path: repo_path.to_string_lossy().to_string(),
             working_dir: request.working_dir,
             target_branch: request.target_branch,
+            snapshot: request.snapshot,
             selection: request.selection,
         });
         Ok(state.reset_worktree_selection_result.clone())

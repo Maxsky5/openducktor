@@ -483,20 +483,9 @@ impl AppService {
         let repo_path = self.resolve_authorized_repo_path(repo_path)?;
         let execution_path =
             resolve_execution_path(repo_path.as_str(), request.working_dir.as_deref());
-        let target_branch = request.target_branch.trim();
-        if target_branch.is_empty() {
-            return Err(anyhow!("target branch cannot be empty"));
-        }
 
-        self.git_port.reset_worktree_selection(
-            Path::new(&execution_path),
-            GitResetWorktreeSelectionRequest {
-                working_dir: request.working_dir,
-                target_branch: target_branch.to_string(),
-                snapshot: request.snapshot,
-                selection: request.selection,
-            },
-        )
+        self.git_port
+            .reset_worktree_selection(Path::new(&execution_path), request)
     }
 
     pub fn git_rebase_branch(

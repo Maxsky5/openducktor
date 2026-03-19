@@ -1,5 +1,6 @@
 mod branch;
 mod commit;
+mod hash;
 mod merge;
 mod remote;
 mod reset;

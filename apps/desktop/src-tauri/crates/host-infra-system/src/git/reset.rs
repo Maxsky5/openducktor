@@ -1,150 +1,72 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    GitAheadBehind, GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus, GitResetSnapshot,
-    GitResetWorktreeSelection, GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
-    GitUpstreamAheadBehind,
+    GitDiffScope, GitFileDiff, GitResetSnapshot, GitResetWorktreeSelection,
+    GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
 };
+use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
+use super::hash::{
+    hash_worktree_diff_payload, hash_worktree_status_payload, GIT_WORKTREE_HASH_VERSION,
+};
 use super::util::{combine_output, normalize_non_empty};
 use super::{GitCliPort, GIT_NON_INTERACTIVE_ENV};
 
-const GIT_WORKTREE_HASH_VERSION: u32 = 1;
-const FNV1A_64_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
-const FNV1A_64_PRIME: u64 = 0x100000001b3;
-
-struct Fnv1a64Hasher {
-    state: u64,
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HunkSpec {
+    old_start: u32,
+    old_count: u32,
+    new_start: u32,
+    new_count: u32,
 }
 
-impl Fnv1a64Hasher {
-    fn new() -> Self {
-        Self {
-            state: FNV1A_64_OFFSET_BASIS,
-        }
-    }
-
-    fn update_byte(&mut self, byte: u8) {
-        self.state ^= u64::from(byte);
-        self.state = self.state.wrapping_mul(FNV1A_64_PRIME);
-    }
-
-    fn update_bytes(&mut self, bytes: &[u8]) {
-        for byte in bytes {
-            self.update_byte(*byte);
-        }
-    }
-
-    fn update_bool(&mut self, value: bool) {
-        self.update_byte(u8::from(value));
-    }
-
-    fn update_u32(&mut self, value: u32) {
-        self.update_bytes(&value.to_le_bytes());
-    }
-
-    fn update_u64(&mut self, value: u64) {
-        self.update_bytes(&value.to_le_bytes());
-    }
-
-    fn update_str(&mut self, value: &str) {
-        self.update_u64(value.len() as u64);
-        self.update_bytes(value.as_bytes());
-    }
-
-    fn finish_hex(self) -> String {
-        format!("{:016x}", self.state)
-    }
+#[derive(Debug, Clone)]
+struct ParsedHunk {
+    text: String,
+    spec: HunkSpec,
 }
 
-fn hash_optional_str(hasher: &mut Fnv1a64Hasher, value: Option<&str>) {
-    match value {
-        Some(value) => {
-            hasher.update_byte(1);
-            hasher.update_str(value);
-        }
-        None => hasher.update_byte(0),
-    }
-}
-
-fn hash_upstream_ahead_behind(
-    hasher: &mut Fnv1a64Hasher,
-    upstream_ahead_behind: &GitUpstreamAheadBehind,
-) {
-    match upstream_ahead_behind {
-        GitUpstreamAheadBehind::Tracking { ahead, behind } => {
-            hasher.update_str("tracking");
-            hasher.update_u32(*ahead);
-            hasher.update_u32(*behind);
-        }
-        GitUpstreamAheadBehind::Untracked { ahead } => {
-            hasher.update_str("untracked");
-            hasher.update_u32(*ahead);
-        }
-        GitUpstreamAheadBehind::Error { message } => {
-            hasher.update_str("error");
-            hasher.update_str(message);
-        }
-    }
-}
-
-fn hash_worktree_status_payload(
-    current_branch: &GitCurrentBranch,
-    file_statuses: &[GitFileStatus],
-    target_ahead_behind: &GitAheadBehind,
-    upstream_ahead_behind: &GitUpstreamAheadBehind,
-) -> String {
-    let mut hasher = Fnv1a64Hasher::new();
-    hash_optional_str(&mut hasher, current_branch.name.as_deref());
-    hasher.update_bool(current_branch.detached);
-
-    hasher.update_u64(file_statuses.len() as u64);
-    for status in file_statuses {
-        hasher.update_str(&status.path);
-        hasher.update_str(&status.status);
-        hasher.update_bool(status.staged);
-    }
-
-    hasher.update_u32(target_ahead_behind.ahead);
-    hasher.update_u32(target_ahead_behind.behind);
-    hash_upstream_ahead_behind(&mut hasher, upstream_ahead_behind);
-    hasher.finish_hex()
-}
-
-fn hash_worktree_diff_payload(file_diffs: &[GitFileDiff]) -> String {
-    let mut hasher = Fnv1a64Hasher::new();
-    hasher.update_u64(file_diffs.len() as u64);
-
-    for diff in file_diffs {
-        hasher.update_str(&diff.file);
-        hasher.update_str(&diff.diff_type);
-        hasher.update_u32(diff.additions);
-        hasher.update_u32(diff.deletions);
-        hasher.update_str(&diff.diff);
-    }
-
-    hasher.finish_hex()
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RenamePaths {
+    old_path: String,
+    new_path: String,
 }
 
 #[derive(Debug)]
 struct ParsedPatch {
     header: String,
-    hunks: Vec<String>,
+    hunks: Vec<ParsedHunk>,
+    rename_paths: Option<RenamePaths>,
 }
 
-fn parse_patch_hunks(patch: &str) -> ParsedPatch {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PatchApplicationTarget {
+    Worktree,
+    Cached,
+}
+
+fn parse_patch_hunks(patch: &str) -> Result<ParsedPatch> {
     let mut header = String::new();
     let mut hunks = Vec::new();
     let mut current_hunk = String::new();
+    let mut current_spec: Option<HunkSpec> = None;
     let mut in_hunk = false;
 
     for line in patch.split_inclusive('\n') {
         if line.starts_with("@@ ") {
             if in_hunk && !current_hunk.is_empty() {
-                hunks.push(std::mem::take(&mut current_hunk));
+                let Some(spec) = current_spec.take() else {
+                    return Err(anyhow!("Patch hunk is missing parsed hunk metadata"));
+                };
+                hunks.push(ParsedHunk {
+                    text: std::mem::take(&mut current_hunk),
+                    spec,
+                });
             }
+
+            current_spec = Some(parse_hunk_spec(line)?);
             in_hunk = true;
         }
 
@@ -156,17 +78,172 @@ fn parse_patch_hunks(patch: &str) -> ParsedPatch {
     }
 
     if in_hunk && !current_hunk.is_empty() {
-        hunks.push(current_hunk);
+        let Some(spec) = current_spec.take() else {
+            return Err(anyhow!("Patch hunk is missing parsed hunk metadata"));
+        };
+        hunks.push(ParsedHunk {
+            text: current_hunk,
+            spec,
+        });
     }
 
-    ParsedPatch { header, hunks }
+    Ok(ParsedPatch {
+        rename_paths: parse_rename_paths(&header)
+            .or_else(|| parse_rename_paths_from_diff_header(&header)),
+        header,
+        hunks,
+    })
 }
 
-fn combine_patch_hunk(header: &str, hunk: &str) -> String {
-    let mut patch = String::with_capacity(header.len() + hunk.len());
+fn parse_hunk_spec(line: &str) -> Result<HunkSpec> {
+    let rest = line
+        .strip_prefix("@@ -")
+        .ok_or_else(|| anyhow!("Invalid hunk header: {line}"))?;
+    let (old_part, remaining) = rest
+        .split_once(" +")
+        .ok_or_else(|| anyhow!("Invalid hunk header: {line}"))?;
+    let (new_part, _tail) = remaining
+        .split_once(" @@")
+        .ok_or_else(|| anyhow!("Invalid hunk header: {line}"))?;
+
+    let (old_start, old_count) = parse_hunk_range(old_part)?;
+    let (new_start, new_count) = parse_hunk_range(new_part)?;
+    Ok(HunkSpec {
+        old_start,
+        old_count,
+        new_start,
+        new_count,
+    })
+}
+
+fn parse_hunk_range(input: &str) -> Result<(u32, u32)> {
+    let trimmed = input.trim();
+    let (start, count) = match trimmed.split_once(',') {
+        Some((start, count)) => (start, count),
+        None => (trimmed, "1"),
+    };
+    let start = start
+        .parse::<u32>()
+        .with_context(|| format!("Invalid hunk range start: {trimmed}"))?;
+    let count = count
+        .parse::<u32>()
+        .with_context(|| format!("Invalid hunk range count: {trimmed}"))?;
+    Ok((start, count))
+}
+
+fn parse_rename_paths(header: &str) -> Option<RenamePaths> {
+    let mut old_path: Option<String> = None;
+    let mut new_path: Option<String> = None;
+
+    for line in header.lines() {
+        if let Some(path) = line.strip_prefix("rename from ") {
+            old_path = Some(path.trim().to_string());
+        } else if let Some(path) = line.strip_prefix("rename to ") {
+            new_path = Some(path.trim().to_string());
+        }
+    }
+
+    Some(RenamePaths {
+        old_path: old_path?,
+        new_path: new_path?,
+    })
+}
+
+fn parse_rename_paths_from_diff_header(header: &str) -> Option<RenamePaths> {
+    let diff_line = header
+        .lines()
+        .find(|line| line.starts_with("diff --git "))?;
+    let rest = diff_line.strip_prefix("diff --git ")?;
+    let (old_path, remaining) = parse_diff_git_header_token(rest)?;
+    let (new_path, _tail) = parse_diff_git_header_token(remaining)?;
+    let old_path = old_path.strip_prefix("a/")?.to_string();
+    let new_path = new_path.strip_prefix("b/")?.to_string();
+    if old_path == new_path {
+        return None;
+    }
+    Some(RenamePaths { old_path, new_path })
+}
+
+fn parse_diff_git_header_token(input: &str) -> Option<(String, &str)> {
+    let input = input.trim_start();
+    if input.is_empty() {
+        return None;
+    }
+
+    if let Some(quoted) = input.strip_prefix('"') {
+        let mut escaped = false;
+        for (index, ch) in quoted.char_indices() {
+            if ch == '"' && !escaped {
+                let token = quoted[..index].to_string();
+                let remaining = &quoted[index + 1..];
+                return Some((token, remaining));
+            }
+
+            escaped = ch == '\\' && !escaped;
+        }
+        return None;
+    }
+
+    let token_end = input.find(' ').unwrap_or(input.len());
+    Some((input[..token_end].to_string(), &input[token_end..]))
+}
+
+fn combine_patch_hunk(header: &str, hunk: &ParsedHunk) -> String {
+    let mut patch = String::with_capacity(header.len() + hunk.text.len());
     patch.push_str(header);
-    patch.push_str(hunk);
+    patch.push_str(&hunk.text);
     patch
+}
+
+fn hunk_specs_overlap(left: &HunkSpec, right: &HunkSpec) -> bool {
+    range_overlaps(
+        left.old_start,
+        left.old_count,
+        right.old_start,
+        right.old_count,
+    ) || range_overlaps(
+        left.new_start,
+        left.new_count,
+        right.new_start,
+        right.new_count,
+    )
+}
+
+fn range_overlaps(start_a: u32, count_a: u32, start_b: u32, count_b: u32) -> bool {
+    let end_a = start_a.saturating_add(count_a.max(1)).saturating_sub(1);
+    let end_b = start_b.saturating_add(count_b.max(1)).saturating_sub(1);
+    !(end_a < start_b || end_b < start_a)
+}
+
+fn find_matching_cached_hunk<'a>(
+    cached_patch: &'a ParsedPatch,
+    selected_hunk: &ParsedHunk,
+) -> Result<Option<&'a ParsedHunk>> {
+    if let Some(exact_match) = cached_patch.hunks.iter().find(|candidate| {
+        candidate.spec == selected_hunk.spec
+            && hunk_body(candidate.text.as_str()) == hunk_body(selected_hunk.text.as_str())
+    }) {
+        return Ok(Some(exact_match));
+    }
+
+    if cached_patch
+        .hunks
+        .iter()
+        .any(|candidate| hunk_specs_overlap(&candidate.spec, &selected_hunk.spec))
+    {
+        return Err(anyhow!(
+            "Cannot reset a hunk that mixes staged and unstaged changes. Unstage it or reset the whole file instead."
+        ));
+    }
+
+    Ok(None)
+}
+
+fn hunk_body(text: &str) -> &str {
+    match text.find('\n') {
+        Some(index) => &text[index + 1..],
+        None => text,
+    }
 }
 
 impl GitCliPort {
@@ -210,9 +287,18 @@ impl GitCliPort {
         file_path: &str,
     ) -> Result<GitResetWorktreeSelectionResult> {
         let normalized_file = normalize_non_empty(file_path, "file path")?;
-        ensure_file_present(file_diffs, normalized_file.as_str())?;
+        let file_diff = find_file_diff(file_diffs, normalized_file.as_str())?;
 
-        if self.is_tracked_path(repo_path, normalized_file.as_str())? {
+        if file_diff.diff_type == "renamed" {
+            let parsed_patch = parse_patch_hunks(&file_diff.diff)?;
+            let rename_paths = parsed_patch.rename_paths.ok_or_else(|| {
+                anyhow!(
+                    "Cannot reset renamed file {} because rename metadata is unavailable.",
+                    normalized_file
+                )
+            })?;
+            self.reset_renamed_file_selection(repo_path, &rename_paths)
+        } else if self.is_tracked_path(repo_path, normalized_file.as_str())? {
             let args = [
                 "restore",
                 "--source=HEAD",
@@ -225,16 +311,60 @@ impl GitCliPort {
             if !ok {
                 return Err(anyhow!(combine_output(stdout, stderr)));
             }
+
+            Ok(GitResetWorktreeSelectionResult {
+                affected_paths: vec![normalized_file],
+            })
         } else {
             let args = ["clean", "-f", "--", normalized_file.as_str()];
             let (ok, stdout, stderr) = self.run_git_allow_failure(repo_path, &args)?;
             if !ok {
                 return Err(anyhow!(combine_output(stdout, stderr)));
             }
+
+            Ok(GitResetWorktreeSelectionResult {
+                affected_paths: vec![normalized_file],
+            })
+        }
+    }
+
+    fn reset_renamed_file_selection(
+        &self,
+        repo_path: &Path,
+        rename_paths: &RenamePaths,
+    ) -> Result<GitResetWorktreeSelectionResult> {
+        let restore_args = [
+            "restore",
+            "--source=HEAD",
+            "--staged",
+            "--worktree",
+            "--",
+            rename_paths.old_path.as_str(),
+        ];
+        let (restore_ok, restore_stdout, restore_stderr) =
+            self.run_git_allow_failure(repo_path, &restore_args)?;
+        if !restore_ok {
+            return Err(anyhow!(combine_output(restore_stdout, restore_stderr)));
         }
 
+        let remove_cached_args = [
+            "rm",
+            "--force",
+            "--cached",
+            "--ignore-unmatch",
+            "--",
+            rename_paths.new_path.as_str(),
+        ];
+        let (remove_ok, remove_stdout, remove_stderr) =
+            self.run_git_allow_failure(repo_path, &remove_cached_args)?;
+        if !remove_ok {
+            return Err(anyhow!(combine_output(remove_stdout, remove_stderr)));
+        }
+
+        remove_worktree_path(repo_path.join(rename_paths.new_path.as_str()))?;
+
         Ok(GitResetWorktreeSelectionResult {
-            affected_paths: vec![normalized_file],
+            affected_paths: vec![rename_paths.old_path.clone(), rename_paths.new_path.clone()],
         })
     }
 
@@ -246,20 +376,29 @@ impl GitCliPort {
         hunk_index: u32,
     ) -> Result<GitResetWorktreeSelectionResult> {
         let normalized_file = normalize_non_empty(file_path, "file path")?;
-        let file_diff = file_diffs
-            .iter()
-            .find(|candidate| candidate.file == normalized_file)
-            .ok_or_else(|| anyhow!("Displayed diff is stale. Refresh and try again."))?;
+        let file_diff = find_file_diff(file_diffs, normalized_file.as_str())?;
 
         if file_diff.diff.trim().is_empty() {
             return Err(anyhow!(
-                "Cannot reset chunk because diff content is unavailable for {}.",
+                "Cannot reset hunk because diff content is unavailable for {}.",
                 normalized_file
             ));
         }
 
-        let parsed_patch = parse_patch_hunks(&file_diff.diff);
-        let Some(hunk) = parsed_patch.hunks.get(hunk_index as usize) else {
+        if file_diff.diff_type == "renamed" {
+            return Err(anyhow!(
+                "Cannot reset an individual hunk for a renamed file. Reset the whole file instead."
+            ));
+        }
+
+        let parsed_patch = parse_patch_hunks(&file_diff.diff)?;
+        if parsed_patch.rename_paths.is_some() {
+            return Err(anyhow!(
+                "Cannot reset an individual hunk for a renamed file. Reset the whole file instead."
+            ));
+        }
+
+        let Some(selected_hunk) = parsed_patch.hunks.get(hunk_index as usize) else {
             return Err(anyhow!(
                 "Requested hunk {} does not exist for {}.",
                 hunk_index,
@@ -267,12 +406,65 @@ impl GitCliPort {
             ));
         };
 
-        let patch = combine_patch_hunk(&parsed_patch.header, hunk);
-        self.apply_reverse_patch(repo_path, &patch)?;
+        let worktree_patch = combine_patch_hunk(&parsed_patch.header, selected_hunk);
+        self.check_reverse_patch(repo_path, &worktree_patch, PatchApplicationTarget::Worktree)?;
+
+        let cached_patch_text = self.load_cached_patch(repo_path, normalized_file.as_str())?;
+        let unstaged_patch_text = self.load_unstaged_patch(repo_path, normalized_file.as_str())?;
+        let mut cached_reverse_patch: Option<String> = None;
+        if !cached_patch_text.trim().is_empty() {
+            if unstaged_patch_text.trim().is_empty() {
+                self.check_reverse_patch(
+                    repo_path,
+                    &worktree_patch,
+                    PatchApplicationTarget::Cached,
+                )?;
+                cached_reverse_patch = Some(worktree_patch.clone());
+            } else {
+                let cached_patch = parse_patch_hunks(&cached_patch_text)?;
+                if cached_patch.rename_paths.is_some() {
+                    return Err(anyhow!(
+                        "Cannot reset an individual hunk for a renamed file while staged changes are present. Reset the whole file instead."
+                    ));
+                }
+
+                if let Some(cached_hunk) = find_matching_cached_hunk(&cached_patch, selected_hunk)?
+                {
+                    let patch = combine_patch_hunk(&cached_patch.header, cached_hunk);
+                    self.check_reverse_patch(repo_path, &patch, PatchApplicationTarget::Cached)?;
+                    cached_reverse_patch = Some(patch);
+                }
+            }
+        }
+
+        if let Some(cached_patch) = cached_reverse_patch.as_deref() {
+            self.apply_reverse_patch(repo_path, cached_patch, PatchApplicationTarget::Cached)?;
+        }
+        self.apply_reverse_patch(repo_path, &worktree_patch, PatchApplicationTarget::Worktree)?;
 
         Ok(GitResetWorktreeSelectionResult {
             affected_paths: vec![normalized_file],
         })
+    }
+
+    fn load_cached_patch(&self, repo_path: &Path, file_path: &str) -> Result<String> {
+        let args = ["diff", "--cached", "--", file_path];
+        let (ok, stdout, stderr) = self.run_git_allow_failure(repo_path, &args)?;
+        if ok {
+            return Ok(stdout);
+        }
+
+        Err(anyhow!(combine_output(stdout, stderr)))
+    }
+
+    fn load_unstaged_patch(&self, repo_path: &Path, file_path: &str) -> Result<String> {
+        let args = ["diff", "--", file_path];
+        let (ok, stdout, stderr) = self.run_git_allow_failure(repo_path, &args)?;
+        if ok {
+            return Ok(stdout);
+        }
+
+        Err(anyhow!(combine_output(stdout, stderr)))
     }
 
     fn is_tracked_path(&self, repo_path: &Path, file_path: &str) -> Result<bool> {
@@ -290,10 +482,43 @@ impl GitCliPort {
         Err(anyhow!(output))
     }
 
-    fn apply_reverse_patch(&self, repo_path: &Path, patch: &str) -> Result<()> {
+    fn apply_reverse_patch(
+        &self,
+        repo_path: &Path,
+        patch: &str,
+        target: PatchApplicationTarget,
+    ) -> Result<()> {
+        self.run_reverse_patch(repo_path, patch, target, false)
+    }
+
+    fn check_reverse_patch(
+        &self,
+        repo_path: &Path,
+        patch: &str,
+        target: PatchApplicationTarget,
+    ) -> Result<()> {
+        self.run_reverse_patch(repo_path, patch, target, true)
+    }
+
+    fn run_reverse_patch(
+        &self,
+        repo_path: &Path,
+        patch: &str,
+        target: PatchApplicationTarget,
+        check_only: bool,
+    ) -> Result<()> {
         let mut command = Command::new("git");
+        let mut args = vec!["apply", "--reverse"];
+        if target == PatchApplicationTarget::Cached {
+            args.push("--cached");
+        }
+        if check_only {
+            args.push("--check");
+        }
+        args.push("-");
+
         command
-            .args(["apply", "--reverse", "--recount", "-"])
+            .args(args)
             .current_dir(repo_path)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -328,12 +553,30 @@ impl GitCliPort {
     }
 }
 
-fn ensure_file_present(file_diffs: &[GitFileDiff], file_path: &str) -> Result<()> {
-    if file_diffs.iter().any(|diff| diff.file == file_path) {
+fn find_file_diff<'a>(file_diffs: &'a [GitFileDiff], file_path: &str) -> Result<&'a GitFileDiff> {
+    file_diffs
+        .iter()
+        .find(|diff| diff.file == file_path)
+        .ok_or_else(|| anyhow!("Displayed diff is stale. Refresh and try again."))
+}
+
+fn remove_worktree_path(path: impl AsRef<Path>) -> Result<()> {
+    let path = path.as_ref();
+    if !path.exists() {
         return Ok(());
     }
 
-    Err(anyhow!("Displayed diff is stale. Refresh and try again."))
+    let metadata = fs::symlink_metadata(path)
+        .with_context(|| format!("Failed reading file metadata for {}", path.display()))?;
+    if metadata.is_dir() {
+        fs::remove_dir_all(path)
+            .with_context(|| format!("Failed removing directory {}", path.display()))?;
+    } else {
+        fs::remove_file(path)
+            .with_context(|| format!("Failed removing file {}", path.display()))?;
+    }
+
+    Ok(())
 }
 
 fn validate_snapshot_hash_version(snapshot: &GitResetSnapshot) -> Result<()> {

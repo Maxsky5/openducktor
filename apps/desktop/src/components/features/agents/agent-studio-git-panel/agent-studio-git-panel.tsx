@@ -377,7 +377,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
           confirmIcon={Undo2}
           contentTestId="agent-studio-git-reset-modal"
         >
-          {resetDialogBody ?? <div />}
+          {resetDialogBody}
         </GitConfirmationDialog>
       </div>
     </TooltipProvider>
