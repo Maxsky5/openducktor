@@ -22,18 +22,23 @@ function TaskIdBadgeComponent({
     return () => clearTimeout(timeoutId);
   }, [copied]);
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(taskId);
-      setCopied(true);
-      toast.success("Copied!", { description: taskId });
-    } catch {
-      toast.error("Copy failed");
-    }
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    navigator.clipboard
+      .writeText(taskId)
+      .then(() => {
+        setCopied(true);
+        toast.success("Copied!", { description: taskId });
+      })
+      .catch(() => {
+        toast.error("Copy failed");
+      });
   };
 
   return (
     <div className={`inline-flex items-center gap-1 ${className ?? ""}`}>
+      <span className="font-mono text-xs text-muted-foreground">{taskId}</span>
       <Button
         type="button"
         variant="ghost"
@@ -49,7 +54,6 @@ function TaskIdBadgeComponent({
           <Copy style={{ width: iconSize, height: iconSize }} />
         )}
       </Button>
-      <span className="font-mono text-xs text-muted-foreground">{taskId}</span>
     </div>
   );
 }

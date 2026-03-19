@@ -26,11 +26,11 @@ describe("TaskIdBadge", () => {
     expect(html).toContain("truncate");
   });
 
-  test("renders copy button to the left of task ID", () => {
+  test("renders copy button to the right of task ID", () => {
     const html = renderToStaticMarkup(createElement(TaskIdBadge, { taskId: "TASK-ABC" }));
 
     const copyIndex = html.indexOf('data-testid="copy-task-id"');
     const taskIdIndex = html.indexOf("TASK-ABC");
-    expect(copyIndex).toBeLessThan(taskIdIndex);
+    expect(copyIndex).toBeGreaterThan(taskIdIndex);
   });
 });
