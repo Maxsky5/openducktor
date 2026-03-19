@@ -270,11 +270,19 @@ describe("use-kanban-board-model helpers", () => {
 
   test("sortTasksByActivityState handles no active sessions gracefully", () => {
     const tasks = [createTaskCard({ id: "task-1" }), createTaskCard({ id: "task-2" })];
-    const taskActivityStateByTaskId = new Map<string, "idle" | "active" | "waiting_input">();
+    const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, new Map());
 
     const sorted = sortTasksByActivityState(tasks, taskActivityStateByTaskId);
 
     expect(sorted.map((t) => t.id)).toEqual(["task-1", "task-2"]);
+  });
+
+  test("sortTasksByActivityState throws when a task is missing activity state", () => {
+    const tasks = [createTaskCard({ id: "task-1" })];
+
+    expect(() => sortTasksByActivityState(tasks, new Map())).toThrow(
+      "Missing Kanban task activity state for task task-1",
+    );
   });
 
   test("buildTaskActivityStateByTaskId marks tasks as waiting input when any displayed session is waiting", () => {

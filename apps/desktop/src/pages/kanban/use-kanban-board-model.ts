@@ -89,6 +89,18 @@ export const buildTaskActivityStateByTaskId = (
     tasks.map((task) => [task.id, toKanbanTaskActivityState(taskSessionsByTaskId.get(task.id))]),
   );
 
+const getRequiredTaskActivityState = (
+  taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>,
+  taskId: string,
+): KanbanTaskActivityState => {
+  const taskActivityState = taskActivityStateByTaskId.get(taskId);
+  if (!taskActivityState) {
+    throw new Error(`Missing Kanban task activity state for task ${taskId}`);
+  }
+
+  return taskActivityState;
+};
+
 /**
  * Partitions tasks so that waiting-input tasks appear first, followed by other active tasks,
  * followed by tasks without active sessions. Uses O(N) single-pass partitioning instead of
@@ -103,7 +115,7 @@ export const sortTasksByActivityState = (
   const idleTasks: TaskCard[] = [];
 
   for (const task of tasks) {
-    const activityState = taskActivityStateByTaskId.get(task.id) ?? "idle";
+    const activityState = getRequiredTaskActivityState(taskActivityStateByTaskId, task.id);
     if (activityState === "waiting_input") {
       waitingInputTasks.push(task);
       continue;
