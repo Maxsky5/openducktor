@@ -44,6 +44,27 @@ export const buildRunStateByTaskId = (runs: RunSummary[]): Map<string, RunSummar
   );
 };
 
+/**
+ * Partitions tasks so that those with active sessions appear first, followed by those without.
+ * Uses O(N) single-pass partitioning instead of O(N log N) sorting.
+ * Relative order within each partition is preserved.
+ */
+export const sortTasksByActiveSession = (
+  tasks: TaskCard[],
+  activeSessionsByTaskId: Map<string, AgentSessionState[]>,
+): TaskCard[] => {
+  const activeTasks: TaskCard[] = [];
+  const inactiveTasks: TaskCard[] = [];
+  for (const task of tasks) {
+    if (activeSessionsByTaskId.has(task.id)) {
+      activeTasks.push(task);
+    } else {
+      inactiveTasks.push(task);
+    }
+  }
+  return [...activeTasks, ...inactiveTasks];
+};
+
 export const buildActiveSessionsByTaskId = (
   sessions: AgentSessionState[],
 ): Map<string, AgentSessionState[]> => {
@@ -107,10 +128,19 @@ export function useKanbanBoardModel({
 
   const activeSessionsByTaskId = useMemo(() => buildActiveSessionsByTaskId(sessions), [sessions]);
 
+  const columnsWithSortedTasks = useMemo(
+    () =>
+      columns.map((col) => ({
+        ...col,
+        tasks: sortTasksByActiveSession(col.tasks, activeSessionsByTaskId),
+      })),
+    [columns, activeSessionsByTaskId],
+  );
+
   return {
     isLoadingTasks,
     isSwitchingWorkspace,
-    columns,
+    columns: columnsWithSortedTasks,
     runStateByTaskId,
     activeSessionsByTaskId,
     onOpenDetails,

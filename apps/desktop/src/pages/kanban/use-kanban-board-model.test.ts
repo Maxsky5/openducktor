@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { RunSummary } from "@openducktor/contracts";
+import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { buildActiveSessionsByTaskId, buildRunStateByTaskId } from "./use-kanban-board-model";
+import {
+  buildActiveSessionsByTaskId,
+  buildRunStateByTaskId,
+  sortTasksByActiveSession,
+} from "./use-kanban-board-model";
 
 const createRun = (overrides: Partial<RunSummary> = {}): RunSummary => ({
   runId: "run-1",
@@ -18,6 +22,37 @@ const createRun = (overrides: Partial<RunSummary> = {}): RunSummary => ({
   state: "running",
   lastMessage: null,
   startedAt: "2026-03-17T10:00:00.000Z",
+  ...overrides,
+});
+
+const createTaskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
+  id: "task-1",
+  title: "Test Task",
+  description: "",
+  notes: "",
+  status: "in_progress",
+  priority: 2,
+  issueType: "task",
+  aiReviewEnabled: true,
+  availableActions: [],
+  labels: [],
+  assignee: undefined,
+  parentId: undefined,
+  subtaskIds: [],
+  pullRequest: undefined,
+  documentSummary: {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
+  agentWorkflows: {
+    spec: { required: false, canSkip: true, available: false, completed: false },
+    planner: { required: false, canSkip: true, available: false, completed: false },
+    builder: { required: true, canSkip: false, available: false, completed: false },
+    qa: { required: false, canSkip: true, available: false, completed: false },
+  },
+  updatedAt: "2026-03-17T10:00:00.000Z",
+  createdAt: "2026-03-17T10:00:00.000Z",
   ...overrides,
 });
 
@@ -102,5 +137,64 @@ describe("use-kanban-board-model helpers", () => {
       "session-running-older",
       "session-starting",
     ]);
+  });
+
+  test("sortTasksByActiveSession puts active tasks above inactive tasks", () => {
+    const tasks = [
+      createTaskCard({ id: "task-no-session" }),
+      createTaskCard({ id: "task-with-session" }),
+      createTaskCard({ id: "task-another-no-session" }),
+    ];
+    const activeSessionsByTaskId = new Map<string, AgentSessionState[]>([
+      ["task-with-session", [createSession({ taskId: "task-with-session" })]],
+    ]);
+
+    const sorted = sortTasksByActiveSession(tasks, activeSessionsByTaskId);
+
+    expect(sorted.map((t) => t.id)).toEqual([
+      "task-with-session",
+      "task-no-session",
+      "task-another-no-session",
+    ]);
+  });
+
+  test("sortTasksByActiveSession preserves relative order within groups (stable sort)", () => {
+    const tasks = [
+      createTaskCard({ id: "task-1-no-session" }),
+      createTaskCard({ id: "task-2-with-session" }),
+      createTaskCard({ id: "task-3-no-session" }),
+      createTaskCard({ id: "task-4-with-session" }),
+    ];
+    const activeSessionsByTaskId = new Map<string, AgentSessionState[]>([
+      ["task-2-with-session", [createSession({ taskId: "task-2-with-session" })]],
+      ["task-4-with-session", [createSession({ taskId: "task-4-with-session" })]],
+    ]);
+
+    const sorted = sortTasksByActiveSession(tasks, activeSessionsByTaskId);
+
+    expect(sorted.map((t) => t.id)).toEqual([
+      "task-2-with-session",
+      "task-4-with-session",
+      "task-1-no-session",
+      "task-3-no-session",
+    ]);
+  });
+
+  test("sortTasksByActiveSession handles empty columns gracefully", () => {
+    const tasks: TaskCard[] = [];
+    const activeSessionsByTaskId = new Map<string, AgentSessionState[]>();
+
+    const sorted = sortTasksByActiveSession(tasks, activeSessionsByTaskId);
+
+    expect(sorted).toEqual([]);
+  });
+
+  test("sortTasksByActiveSession handles no active sessions gracefully", () => {
+    const tasks = [createTaskCard({ id: "task-1" }), createTaskCard({ id: "task-2" })];
+    const activeSessionsByTaskId = new Map<string, AgentSessionState[]>();
+
+    const sorted = sortTasksByActiveSession(tasks, activeSessionsByTaskId);
+
+    expect(sorted.map((t) => t.id)).toEqual(["task-1", "task-2"]);
   });
 });
