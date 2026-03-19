@@ -184,33 +184,14 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   });
 
   const orchestration = useAgentStudioOrchestrationController({
-    workspace: {
-      activeRepo,
-    },
+    activeRepo,
     selection: {
-      viewTaskId: selection.viewTaskId,
-      viewRole: selection.viewRole,
-      viewScenario: selection.viewScenario,
-      viewSelectedTask: selection.viewSelectedTask,
-      viewSessionsForTask: selection.viewSessionsForTask,
-      viewActiveSession: selection.viewActiveSession,
-      activeTaskTabId: selection.activeTaskTabId,
-      taskTabs: selection.taskTabs,
-      availableTabTasks: selection.availableTabTasks,
+      ...selection,
       contextSwitchVersion,
-      isLoadingTasks,
-      isActiveTaskHydrated: selection.isActiveTaskHydrated,
-      isActiveTaskHydrationFailed: selection.isActiveTaskHydrationFailed,
-      isViewSessionHistoryHydrationFailed: selection.isViewSessionHistoryHydrationFailed,
-      isViewSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
-      onCreateTab: selection.handleCreateTab,
-      onCloseTab: selection.handleCloseTab,
     },
     readiness,
-    composer: {
-      input,
-      setInput,
-    },
+    input,
+    setInput,
     actions: {
       updateQuery: scheduleQueryUpdate,
       onContextSwitchIntent: signalContextSwitchIntent,

@@ -23,12 +23,13 @@ type UseAgentStudioSelectionControllerArgs = {
   onContextSwitchIntent?: () => void;
 };
 
-type UseAgentStudioSelectionControllerResult = {
+export type AgentStudioSelectionControllerResult = {
   selectedSessionById: AgentSessionState | null;
   taskId: string;
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionState[];
   activeSession: AgentSessionState | null;
+  isLoadingTasks: boolean;
   activeTaskTabId: string;
   availableTabTasks: TaskCard[];
   taskTabs: ReturnType<typeof useAgentStudioTaskTabs>["taskTabs"];
@@ -130,7 +131,7 @@ export function useAgentStudioSelectionController({
   loadAgentSessions,
   clearComposerInput,
   onContextSwitchIntent,
-}: UseAgentStudioSelectionControllerArgs): UseAgentStudioSelectionControllerResult {
+}: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
   const sessionsByTaskSortCacheRef = useRef<SessionsByTaskSortCache>(new Map());
 
   const tasksById = useMemo(() => {
@@ -285,6 +286,7 @@ export function useAgentStudioSelectionController({
     selectedTask,
     sessionsForTask,
     activeSession,
+    isLoadingTasks,
     activeTaskTabId,
     availableTabTasks,
     taskTabs,

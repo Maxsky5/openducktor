@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { RepoConfig, RuntimeCheck } from "@openducktor/contracts";
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { act, create } from "react-test-renderer";
 import { SettingsGitSection } from "./settings-git-section";
@@ -32,6 +32,17 @@ const authenticatedRuntimeCheck: RuntimeCheck = {
   ghAuthError: null,
   runtimes: [],
   errors: [],
+};
+
+const createDeferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+
+  return { promise, resolve, reject };
 };
 
 const baseRepoConfig: RepoConfig = {
@@ -145,34 +156,40 @@ describe("settings git sections", () => {
   });
 
   test("allows editing repository inputs without crashing when the field is temporarily blank", () => {
-    let renderer!: ReturnType<typeof create>;
-
-    act(() => {
-      renderer = create(
-        createElement(RepositoryGitSection, {
-          selectedRepoPath: "/repo",
-          selectedRepoConfig: {
-            ...baseRepoConfig,
-            git: {
-              providers: {
-                github: {
-                  enabled: true,
-                  autoDetected: false,
-                  repository: {
-                    host: "github.com",
-                    owner: "openai",
-                    name: "openducktor",
-                  },
-                },
+    const ControlledRepositoryGitSection = (): ReturnType<typeof createElement> => {
+      const [repoConfig, setRepoConfig] = useState<RepoConfig>({
+        ...baseRepoConfig,
+        git: {
+          providers: {
+            github: {
+              enabled: true,
+              autoDetected: false,
+              repository: {
+                host: "github.com",
+                owner: "openai",
+                name: "openducktor",
               },
             },
           },
-          runtimeCheck: authenticatedRuntimeCheck,
-          disabled: false,
-          onDetectGithubRepository: async () => null,
-          onUpdateSelectedRepoConfig: () => baseRepoConfig,
-        }),
-      );
+        },
+      });
+
+      return createElement(RepositoryGitSection, {
+        selectedRepoPath: "/repo",
+        selectedRepoConfig: repoConfig,
+        runtimeCheck: authenticatedRuntimeCheck,
+        disabled: false,
+        onDetectGithubRepository: async () => null,
+        onUpdateSelectedRepoConfig: (updater) => {
+          setRepoConfig(updater);
+        },
+      });
+    };
+
+    let renderer!: ReturnType<typeof create>;
+
+    act(() => {
+      renderer = create(createElement(ControlledRepositoryGitSection));
     });
 
     const editButton = renderer.root.find(
@@ -201,5 +218,256 @@ describe("settings git sections", () => {
         },
       });
     });
+
+    const manualToggle = renderer.root.find(
+      (node) =>
+        node.type === "button" &&
+        flattenChildrenText(node.props.children).includes("Hide manual edit"),
+    );
+
+    expect(manualToggle).toBeTruthy();
+  });
+
+  test("detecting from origin updates the repository draft that gets saved", async () => {
+    let renderer!: ReturnType<typeof create>;
+    let repoConfig: RepoConfig = {
+      ...baseRepoConfig,
+      git: {
+        providers: {
+          github: {
+            enabled: true,
+            autoDetected: false,
+            repository: {
+              host: "github.com",
+              owner: "before-click",
+              name: "before-click",
+            },
+          },
+        },
+      },
+    };
+
+    const onDetectGithubRepository = mock(async () => ({
+      host: "github.com",
+      owner: "acme",
+      name: "widget",
+    }));
+
+    const onUpdateSelectedRepoConfig = (
+      updater: (current: RepoConfig) => RepoConfig,
+    ): RepoConfig => {
+      repoConfig = updater(repoConfig);
+      return repoConfig;
+    };
+
+    await act(async () => {
+      renderer = create(
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: repoConfig,
+          runtimeCheck: authenticatedRuntimeCheck,
+          disabled: false,
+          onDetectGithubRepository,
+          onUpdateSelectedRepoConfig,
+        }),
+      );
+    });
+
+    expect(repoConfig.git.providers.github?.repository).toEqual({
+      host: "github.com",
+      owner: "before-click",
+      name: "before-click",
+    });
+    expect(onDetectGithubRepository).toHaveBeenCalledTimes(0);
+
+    const detectButton = renderer.root.find(
+      (node) =>
+        node.type === "button" &&
+        flattenChildrenText(node.props.children).includes("Detect from origin"),
+    );
+
+    await act(async () => {
+      await detectButton.props.onClick();
+    });
+
+    expect(repoConfig.git.providers.github?.repository).toEqual({
+      host: "github.com",
+      owner: "acme",
+      name: "widget",
+    });
+    expect(onDetectGithubRepository).toHaveBeenCalledTimes(1);
+  });
+
+  test("same-repo manual edits invalidate an in-flight origin detection", async () => {
+    let renderer!: ReturnType<typeof create>;
+    let repoConfig: RepoConfig = {
+      ...baseRepoConfig,
+      git: {
+        providers: {
+          github: {
+            enabled: true,
+            autoDetected: false,
+            repository: undefined,
+          },
+        },
+      },
+    };
+    const pendingDetection = createDeferred<{
+      host: string;
+      owner: string;
+      name: string;
+    } | null>();
+
+    const onUpdateSelectedRepoConfig = (
+      updater: (current: RepoConfig) => RepoConfig,
+    ): RepoConfig => {
+      repoConfig = updater(repoConfig);
+      return repoConfig;
+    };
+
+    await act(async () => {
+      renderer = create(
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: repoConfig,
+          runtimeCheck: authenticatedRuntimeCheck,
+          disabled: false,
+          onDetectGithubRepository: () => pendingDetection.promise,
+          onUpdateSelectedRepoConfig,
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    const ownerInput = renderer.root.findByProps({ id: "repo-github-owner" });
+    const repoInput = renderer.root.findByProps({ id: "repo-github-name" });
+
+    act(() => {
+      ownerInput.props.onChange({
+        currentTarget: {
+          value: "manual-owner",
+        },
+      });
+      repoInput.props.onChange({
+        currentTarget: {
+          value: "manual-repo",
+        },
+      });
+    });
+
+    await act(async () => {
+      pendingDetection.resolve({
+        host: "github.com",
+        owner: "detected-owner",
+        name: "detected-repo",
+      });
+      await pendingDetection.promise;
+      await Promise.resolve();
+    });
+
+    expect(repoConfig.git.providers.github?.repository).toEqual({
+      host: "github.com",
+      owner: "manual-owner",
+      name: "manual-repo",
+    });
+  });
+
+  test("keeps successful origin-detection feedback visible after coordinates are saved", async () => {
+    const detectedMessage = "Detected acme/widget from origin. Save settings to keep this mapping.";
+
+    const ControlledRepositoryGitSection = (): ReturnType<typeof createElement> => {
+      const [repoConfig, setRepoConfig] = useState<RepoConfig>({
+        ...baseRepoConfig,
+        git: {
+          providers: {
+            github: {
+              enabled: true,
+              autoDetected: false,
+              repository: undefined,
+            },
+          },
+        },
+      });
+
+      return createElement(RepositoryGitSection, {
+        selectedRepoPath: "/repo",
+        selectedRepoConfig: repoConfig,
+        runtimeCheck: authenticatedRuntimeCheck,
+        disabled: false,
+        onDetectGithubRepository: async () => ({
+          host: "github.com",
+          owner: "acme",
+          name: "widget",
+        }),
+        onUpdateSelectedRepoConfig: (updater) => {
+          setRepoConfig(updater);
+        },
+      });
+    };
+
+    let renderer!: ReturnType<typeof create>;
+
+    await act(async () => {
+      renderer = create(createElement(ControlledRepositoryGitSection));
+    });
+
+    const matchingNodes = renderer.root.findAll((node) =>
+      flattenChildrenText(node.props.children).includes(detectedMessage),
+    );
+
+    expect(matchingNodes.length).toBeGreaterThan(0);
+  });
+
+  test("auto-detect waits for repo config before consuming the repo attempt", async () => {
+    let renderer!: ReturnType<typeof create>;
+    const onDetectGithubRepository = mock(async () => ({
+      host: "github.com",
+      owner: "acme",
+      name: "widget",
+    }));
+
+    await act(async () => {
+      renderer = create(
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: null,
+          runtimeCheck: authenticatedRuntimeCheck,
+          disabled: false,
+          onDetectGithubRepository,
+          onUpdateSelectedRepoConfig: () => baseRepoConfig,
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(renderer.toJSON()).toBeTruthy();
+    expect(onDetectGithubRepository).toHaveBeenCalledTimes(0);
+
+    await act(async () => {
+      renderer.update(
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: {
+            ...baseRepoConfig,
+            git: {
+              providers: {
+                github: {
+                  enabled: true,
+                  autoDetected: false,
+                  repository: undefined,
+                },
+              },
+            },
+          },
+          runtimeCheck: authenticatedRuntimeCheck,
+          disabled: false,
+          onDetectGithubRepository,
+          onUpdateSelectedRepoConfig: () => baseRepoConfig,
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(onDetectGithubRepository).toHaveBeenCalledTimes(1);
   });
 });
