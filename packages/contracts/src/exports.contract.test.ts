@@ -53,6 +53,7 @@ import type {
   QaWorkflowVerdict,
   RepoAgentDefaults,
   RepoConfig,
+  RepoDevServerScript,
   RepoHooks,
   RepoPromptOverrides,
   RunEvent,
@@ -110,6 +111,12 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "parseAgentSessionTodoPayloadList",
   "beadsCheckSchema",
   "chatSettingsSchema",
+  "devServerEventSchema",
+  "devServerGroupStateSchema",
+  "devServerLogLineSchema",
+  "devServerLogStreamSchema",
+  "devServerScriptStateSchema",
+  "devServerScriptStatusSchema",
   "DEFAULT_BRANCH_PREFIX",
   "gitCommitAllRequestSchema",
   "gitCommitAllResultSchema",
@@ -160,6 +167,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "repoPromptOverridesSchema",
   "repoAgentDefaultsSchema",
   "repoConfigSchema",
+  "repoDevServerScriptSchema",
   "repoGitConfigSchema",
   "repoGitProviderConfigsSchema",
   "repoHooksSchema",
@@ -276,6 +284,7 @@ type ExportedTypeContract = {
   QaWorkflowVerdict: QaWorkflowVerdict;
   RepoAgentDefaults: RepoAgentDefaults;
   RepoConfig: RepoConfig;
+  RepoDevServerScript: RepoDevServerScript;
   RepoHooks: RepoHooks;
   RepoPromptOverrides: RepoPromptOverrides;
   RunEvent: RunEvent;

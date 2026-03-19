@@ -4,7 +4,7 @@ use super::persistence::{
     load_config_or_default, resolve_default_path, save_config,
     should_enforce_private_parent_permissions,
 };
-use super::types::{hook_set_fingerprint, GlobalConfig, HookSet, RepoConfig, RuntimeConfig};
+use super::types::{repo_script_fingerprint, GlobalConfig, HookSet, RepoConfig, RuntimeConfig};
 use crate::resolve_default_worktree_base_dir;
 use anyhow::{anyhow, Context, Result};
 use host_domain::WorkspaceRecord;
@@ -191,7 +191,8 @@ impl AppConfigStore {
                 repo.trusted_hooks = false;
                 repo.trusted_hooks_fingerprint = None;
             } else if repo.trusted_hooks {
-                repo.trusted_hooks_fingerprint = Some(hook_set_fingerprint(&repo.hooks));
+                repo.trusted_hooks_fingerprint =
+                    Some(repo_script_fingerprint(&repo.hooks, &repo.dev_servers));
             }
             Ok(())
         })

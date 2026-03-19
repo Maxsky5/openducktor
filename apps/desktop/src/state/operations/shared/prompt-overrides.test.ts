@@ -14,6 +14,7 @@ const createRepoConfig = (): RepoConfig => ({
   },
   trustedHooks: false,
   hooks: { preStart: [], postComplete: [] },
+  devServers: [],
   promptOverrides: {
     "kickoff.planner_initial": {
       template: "repo planner {{task.id}}",

@@ -16,6 +16,7 @@ const hostMock = {
       trustedHooks: false,
       trustedHooksFingerprint: undefined,
       hooks: { preStart: [], postComplete: [] },
+      devServers: [],
       worktreeFileCopies: [],
       promptOverrides: {},
       agentDefaults: {},
@@ -56,6 +57,7 @@ describe("useAgentStudioRepoSettings", () => {
       trustedHooks: false,
       preStartHooks: [],
       postCompleteHooks: [],
+      devServers: [],
       worktreeFileCopies: [],
       agentDefaults: {
         spec: null,
@@ -97,6 +99,7 @@ describe("useAgentStudioRepoSettings", () => {
         trustedHooks: false,
         trustedHooksFingerprint: undefined,
         hooks: { preStart: [], postComplete: [] },
+        devServers: [],
         worktreeFileCopies: [],
         promptOverrides: {},
         agentDefaults: {},

@@ -26,6 +26,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
       },
       trustedHooks: false,
       hooks: { preStart: [], postComplete: [] },
+      devServers: [],
       worktreeFileCopies: [],
       promptOverrides: {},
       agentDefaults: {},

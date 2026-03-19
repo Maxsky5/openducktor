@@ -16,8 +16,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::app_service::test_support::{
-    build_service_with_git_state, make_task, spawn_sleep_process, unique_temp_path,
-    write_private_file, FakeTaskStore, TaskStoreState,
+    build_service_with_git_state, make_task, spawn_sleep_process, spawn_sleep_process_group,
+    unique_temp_path, write_private_file, FakeTaskStore, TaskStoreState,
 };
 use crate::app_service::{
     allows_transition, build_opencode_startup_event_payload, can_set_plan,
@@ -25,10 +25,11 @@ use crate::app_service::{
     normalize_subtask_plan_inputs, terminate_child_process,
     validate_parent_relationships_for_create, validate_parent_relationships_for_update,
     validate_plan_subtask_rules, validate_transition, wait_for_local_server,
-    wait_for_local_server_with_process, AgentRuntimeProcess, AppService,
+    wait_for_local_server_with_process, AgentRuntimeProcess, AppService, DevServerGroupRuntime,
     OpencodeStartupMetricsSnapshot, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
     RuntimeCleanupTarget, StartupEventContext, StartupEventCorrelation, StartupEventPayload,
 };
+use host_domain::{DevServerGroupState, DevServerScriptState, DevServerScriptStatus};
 
 fn init_git_repo(path: &std::path::Path) -> Result<()> {
     let status = Command::new("git")
@@ -510,10 +511,71 @@ fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_
         );
     }
 
+    #[cfg(unix)]
+    let mut dev_server_child = {
+        let child = spawn_sleep_process_group(20);
+        let pid = child.id();
+        service
+            .dev_server_groups
+            .lock()
+            .expect("dev server lock poisoned")
+            .insert(
+                format!("{}::task-1", repo_path.to_string_lossy()),
+                DevServerGroupRuntime {
+                    state: DevServerGroupState {
+                        repo_path: repo_path.to_string_lossy().to_string(),
+                        task_id: "task-1".to_string(),
+                        worktree_path: Some(build_worktree.to_string_lossy().to_string()),
+                        scripts: vec![DevServerScriptState {
+                            script_id: "server-1".to_string(),
+                            name: "Server".to_string(),
+                            command: "sleep 20".to_string(),
+                            status: DevServerScriptStatus::Running,
+                            pid: Some(pid),
+                            started_at: Some("2026-03-19T12:00:00Z".to_string()),
+                            exit_code: None,
+                            last_error: None,
+                            buffered_log_lines: Vec::new(),
+                        }],
+                        updated_at: "2026-03-19T12:00:00Z".to_string(),
+                    },
+                    emitter: None,
+                },
+            );
+        child
+    };
+
     let updated = service.task_reset_implementation(&repo_path.to_string_lossy(), "task-1")?;
     assert_eq!(updated.status, TaskStatus::ReadyForDev);
     assert!(updated.pull_request.is_none());
     assert!(!updated.document_summary.qa_report.has);
+
+    #[cfg(unix)]
+    {
+        let pid = dev_server_child.id();
+        assert!(
+            crate::app_service::test_support::wait_for_process_exit(
+                pid as i32,
+                Duration::from_secs(2)
+            ),
+            "dev server process should exit during reset"
+        );
+        let _ = dev_server_child
+            .wait()
+            .context("failed waiting dev server child")?;
+        let groups = service
+            .dev_server_groups
+            .lock()
+            .expect("dev server lock poisoned");
+        let group = groups
+            .get(&format!("{}::task-1", repo_path.to_string_lossy()))
+            .expect("dev server group retained");
+        assert_eq!(
+            group.state.scripts[0].status,
+            DevServerScriptStatus::Stopped
+        );
+        assert_eq!(group.state.scripts[0].pid, None);
+    }
 
     let state = task_state.lock().expect("task store lock poisoned");
     assert_eq!(

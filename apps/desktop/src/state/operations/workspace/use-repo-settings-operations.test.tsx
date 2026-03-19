@@ -81,6 +81,7 @@ const inputFixture: RepoSettingsInput = {
   trustedHooks: true,
   preStartHooks: ["echo pre"],
   postCompleteHooks: ["echo post"],
+  devServers: [{ id: "frontend", name: "Frontend", command: " bun run dev " }],
   worktreeFileCopies: ["  .env  ", "  .env.local  "],
   agentDefaults: {
     spec: {
@@ -206,8 +207,10 @@ describe("use-repo-settings-operations", () => {
           defaultRuntimeKind: "opencode" as const,
           worktreeBasePath: undefined,
           branchPrefix: "codex/",
+          defaultTargetBranch: { remote: "origin", branch: "main" },
           trustedHooks: false,
           hooks: { preStart: ["a"], postComplete: ["b"] },
+          devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
           agentDefaults: {
             spec: { providerId: "openai", modelId: "gpt-5" },
             planner: undefined,
@@ -241,6 +244,7 @@ describe("use-repo-settings-operations", () => {
         trustedHooks: false,
         preStartHooks: ["a"],
         postCompleteHooks: ["b"],
+        devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
         worktreeFileCopies: [],
         agentDefaults: {
           spec: {
@@ -317,6 +321,7 @@ describe("use-repo-settings-operations", () => {
           preStart: ["echo pre"],
           postComplete: ["echo post"],
         },
+        devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
         worktreeFileCopies: [".env", ".env.local"],
         agentDefaults: {
           spec: {
@@ -374,6 +379,7 @@ describe("use-repo-settings-operations", () => {
           preStart: ["echo pre"],
           postComplete: ["echo post"],
         },
+        devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
         worktreeFileCopies: [".env", ".env.local"],
         agentDefaults: {
           spec: {
@@ -597,6 +603,7 @@ describe("use-repo-settings-operations", () => {
           },
           trustedHooks: false,
           hooks: { preStart: [], postComplete: [] },
+          devServers: [],
           worktreeFileCopies: [],
           promptOverrides: repoPromptOverrides,
           agentDefaults: {},

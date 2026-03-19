@@ -139,6 +139,9 @@ impl AppService {
                 "Failed terminating pending OpenCode processes: {error:#}"
             ));
         }
+        if let Err(error) = self.stop_all_dev_servers() {
+            cleanup_errors.push(format!("Failed stopping dev servers: {error:#}"));
+        }
 
         match self.runs.lock() {
             Ok(mut runs) => {

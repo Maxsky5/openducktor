@@ -27,6 +27,18 @@ const createRepoConfig = (): RepoConfig => ({
     preStart: [" npm ci ", " "],
     postComplete: [" npm test ", ""],
   },
+  devServers: [
+    {
+      id: "frontend",
+      name: " Frontend ",
+      command: " bun run dev ",
+    },
+    {
+      id: "backend",
+      name: " Backend ",
+      command: "   ",
+    },
+  ],
   worktreeFileCopies: [" .env ", " "],
   promptOverrides: {
     "kickoff.spec_initial": {
@@ -154,6 +166,13 @@ describe("settings-modal-normalization", () => {
       preStart: ["npm ci"],
       postComplete: ["npm test"],
     });
+    expect(normalized.devServers).toEqual([
+      {
+        id: "frontend",
+        name: "Frontend",
+        command: "bun run dev",
+      },
+    ]);
     expect(normalized.worktreeFileCopies).toEqual([".env"]);
     expect(normalized.promptOverrides).toEqual({
       "kickoff.spec_initial": {
@@ -189,6 +208,7 @@ describe("settings-modal-normalization", () => {
         preStart: ["   "],
         postComplete: [""],
       },
+      devServers: [],
     });
 
     expect(normalized.hooks).toEqual({
@@ -197,6 +217,32 @@ describe("settings-modal-normalization", () => {
     });
     expect(normalized.trustedHooks).toBe(false);
     expect(normalized.trustedHooksFingerprint).toBeUndefined();
+  });
+
+  test("disables trusted hooks when dev server commands are removed during normalization", () => {
+    const normalized = normalizeRepoConfigForSave({
+      ...createRepoConfig(),
+      trustedHooks: true,
+      trustedHooksFingerprint: "fingerprint",
+      hooks: {
+        preStart: [],
+        postComplete: [],
+      },
+      devServers: [{ id: "frontend", name: "Frontend", command: "   " }],
+    });
+
+    expect(normalized.devServers).toEqual([]);
+    expect(normalized.trustedHooks).toBe(false);
+    expect(normalized.trustedHooksFingerprint).toBeUndefined();
+  });
+
+  test("rejects blank dev server names when commands remain configured", () => {
+    expect(() =>
+      normalizeRepoConfigForSave({
+        ...createRepoConfig(),
+        devServers: [{ id: "frontend", name: "   ", command: "bun run dev" }],
+      }),
+    ).toThrow("Dev server names cannot be blank");
   });
 
   test("preserves explicit untrusted hooks when normalized hook commands exist", () => {
@@ -208,6 +254,7 @@ describe("settings-modal-normalization", () => {
         preStart: [" bun install "],
         postComplete: [],
       },
+      devServers: [],
     });
 
     expect(normalized.hooks).toEqual({
@@ -239,6 +286,13 @@ describe("settings-modal-normalization", () => {
     });
 
     expect(snapshot.repos["/repo-a"]?.hooks.preStart).toEqual(["npm ci"]);
+    expect(snapshot.repos["/repo-a"]?.devServers).toEqual([
+      {
+        id: "frontend",
+        name: "Frontend",
+        command: "bun run dev",
+      },
+    ]);
     expect(snapshot.chat.showThinkingMessages).toBe(true);
     expect(snapshot.globalPromptOverrides).toEqual({
       "kickoff.spec_initial": {

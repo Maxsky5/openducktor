@@ -6,6 +6,7 @@ import type {
   GitProviderRepository,
   GitTargetBranch,
   GlobalGitConfig,
+  RepoDevServerScript,
   RunEvent,
   RunSummary,
   RuntimeCheck,
@@ -38,6 +39,7 @@ export type RepoSettingsInput = {
   trustedHooks: boolean;
   preStartHooks: string[];
   postCompleteHooks: string[];
+  devServers: RepoDevServerScript[];
   /** Files copied from the main repo into a new worktree on creation. */
   worktreeFileCopies: string[];
   agentDefaults: {

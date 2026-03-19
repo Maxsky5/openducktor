@@ -23,9 +23,10 @@ pub use git::{
     GitWorktreeSummary, PullRequestRecord, TaskApprovalContext, TaskPullRequestDetectResult,
 };
 pub use runtime::{
-    AgentRuntimeKind, BuildContinuationTarget, BuildContinuationTargetSource, RunEvent, RunState,
-    RunSummary, RuntimeCapabilities, RuntimeDescriptor, RuntimeInstanceSummary,
-    RuntimeProvisioningMode, RuntimeRole, RuntimeSupportedScope,
+    AgentRuntimeKind, BuildContinuationTarget, BuildContinuationTargetSource, DevServerEvent,
+    DevServerGroupState, DevServerLogLine, DevServerLogStream, DevServerScriptState,
+    DevServerScriptStatus, RunEvent, RunState, RunSummary, RuntimeCapabilities, RuntimeDescriptor,
+    RuntimeInstanceSummary, RuntimeProvisioningMode, RuntimeRole, RuntimeSupportedScope,
 };
 pub use store::TaskStore;
 pub use system::{BeadsCheck, RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord};
@@ -106,11 +107,12 @@ mod tests {
         use super::{
             AgentSessionDocument, AgentSessionModelSelection, AgentWorkflowState, AgentWorkflows,
             BeadsCheck, BuildContinuationTarget, BuildContinuationTargetSource, CreateTaskInput,
-            GitBranch, GitCommitAllRequest, GitCommitAllResult, GitConflict,
-            GitConflictAbortRequest, GitConflictAbortResult, GitConflictOperation,
-            GitCurrentBranch, GitDiffScope, GitFileStatusCounts, GitPort, GitPullRequest,
-            GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
-            GitRebaseBranchRequest, GitRebaseBranchResult, GitResetSnapshot,
+            DevServerEvent, DevServerGroupState, DevServerLogLine, DevServerLogStream,
+            DevServerScriptState, DevServerScriptStatus, GitBranch, GitCommitAllRequest,
+            GitCommitAllResult, GitConflict, GitConflictAbortRequest, GitConflictAbortResult,
+            GitConflictOperation, GitCurrentBranch, GitDiffScope, GitFileStatusCounts, GitPort,
+            GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest,
+            GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult, GitResetSnapshot,
             GitResetWorktreeSelection, GitResetWorktreeSelectionRequest,
             GitResetWorktreeSelectionResult, GitUpstreamAheadBehind, GitWorktreeStatus,
             GitWorktreeStatusData, GitWorktreeStatusSnapshot, GitWorktreeStatusSummary,
@@ -171,6 +173,12 @@ mod tests {
             QaReportDocument,
             BuildContinuationTarget,
             BuildContinuationTargetSource,
+            DevServerEvent,
+            DevServerGroupState,
+            DevServerLogLine,
+            DevServerLogStream,
+            DevServerScriptState,
+            DevServerScriptStatus,
             QaVerdict,
             QaWorkflowVerdict,
             RunEvent,

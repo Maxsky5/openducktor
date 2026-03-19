@@ -1,7 +1,8 @@
 use super::types::{
-    default_branch_prefix, hook_set_fingerprint, normalize_git_target_branch_value,
+    default_branch_prefix, normalize_git_target_branch_value, repo_script_fingerprint,
     AgentModelDefault, GitProviderConfig, GitProviderRepository, GitTargetBranch, GlobalConfig,
-    HookSet, OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig, RuntimeConfig,
+    HookSet, OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig, RepoDevServerScript,
+    RuntimeConfig,
 };
 
 fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
@@ -25,6 +26,27 @@ fn normalize_hook_commands(commands: &mut Vec<String>) {
             } else {
                 Some(trimmed.to_string())
             }
+        })
+        .collect();
+}
+
+fn normalize_dev_servers(dev_servers: &mut Vec<RepoDevServerScript>) {
+    *dev_servers = std::mem::take(dev_servers)
+        .into_iter()
+        .filter_map(|mut dev_server| {
+            dev_server.id = dev_server.id.trim().to_string();
+            dev_server.name = dev_server.name.trim().to_string();
+            dev_server.command = dev_server.command.trim().to_string();
+
+            if dev_server.command.is_empty() {
+                return None;
+            }
+
+            if dev_server.id.is_empty() || dev_server.name.is_empty() {
+                return None;
+            }
+
+            Some(dev_server)
         })
         .collect();
 }
@@ -120,8 +142,9 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
         canonicalize_default_target_branch(std::mem::take(&mut repo.default_target_branch));
     normalize_git_provider_configs(&mut repo.git.providers);
     repo.hooks = normalize_hook_set(std::mem::take(&mut repo.hooks));
+    normalize_dev_servers(&mut repo.dev_servers);
     normalize_hook_commands(&mut repo.worktree_file_copies);
-    let current_fingerprint = hook_set_fingerprint(&repo.hooks);
+    let current_fingerprint = repo_script_fingerprint(&repo.hooks, &repo.dev_servers);
     if repo.trusted_hooks {
         if repo.trusted_hooks_fingerprint.as_deref() != Some(current_fingerprint.as_str()) {
             repo.trusted_hooks = false;

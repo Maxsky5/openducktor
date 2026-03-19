@@ -37,6 +37,13 @@ export const repoHooksSchema = z.object({
 });
 export type RepoHooks = z.infer<typeof repoHooksSchema>;
 
+export const repoDevServerScriptSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  command: z.string().min(1),
+});
+export type RepoDevServerScript = z.infer<typeof repoDevServerScriptSchema>;
+
 export const agentModelDefaultSchema = z.object({
   runtimeKind: runtimeKindSchema.default("opencode"),
   providerId: z.string().min(1),
@@ -63,6 +70,7 @@ export const repoConfigSchema = z.object({
   trustedHooks: z.boolean().default(false),
   trustedHooksFingerprint: nullableToOptional(z.string().min(1)),
   hooks: repoHooksSchema.default({ preStart: [], postComplete: [] }),
+  devServers: z.array(repoDevServerScriptSchema).default([]),
   worktreeFileCopies: z.array(z.string()).default([]),
   promptOverrides: repoPromptOverridesSchema.default({}),
   agentDefaults: repoAgentDefaultsSchema.default({

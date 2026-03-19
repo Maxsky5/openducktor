@@ -4,15 +4,16 @@ import type {
   AgentStudioRightPanelKind,
   AgentStudioRightPanelModel,
   AgentStudioRightPanelToggleModel,
-  AgentStudioWorkspaceSidebarModel,
 } from "@/components/features/agents";
+import type { AgentStudioDevServerPanelModel } from "@/components/features/agents/agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "@/components/features/agents/agent-studio-git-panel";
+import type { AgentStudioWorkspaceSidebarModel } from "@/components/features/agents/agent-studio-workspace-sidebar";
 import { toRightPanelStorageKey } from "../agents-page-selection";
 
 type UseAgentStudioRightPanelInput = {
   role: AgentRole;
   hasDocumentPanel: boolean;
-  hasDiffPanel?: boolean;
+  hasBuildToolsPanel?: boolean;
   hasTaskContext?: boolean;
 };
 
@@ -25,7 +26,7 @@ type UseAgentStudioRightPanelState = {
 const PANEL_KIND_BY_ROLE: Record<AgentRole, AgentStudioRightPanelKind> = {
   spec: "documents",
   planner: "documents",
-  build: "diff",
+  build: "build_tools",
   qa: "documents",
 };
 
@@ -75,24 +76,26 @@ const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
 
 const isRightPanelKindAvailable = (
   kind: AgentStudioRightPanelKind,
-  availability: { hasDocumentPanel: boolean; hasDiffPanel: boolean },
+  availability: { hasDocumentPanel: boolean; hasBuildToolsPanel: boolean },
 ): boolean => {
   if (kind === "documents") {
     return availability.hasDocumentPanel;
   }
-  return availability.hasDiffPanel;
+  return availability.hasBuildToolsPanel;
 };
 
 type BuildAgentStudioRightPanelModelInput = {
   panelKind: AgentStudioRightPanelKind | null;
   documentsModel: AgentStudioWorkspaceSidebarModel;
   diffModel: AgentStudioGitPanelModel;
+  devServerModel: AgentStudioDevServerPanelModel;
 };
 
 export const buildAgentStudioRightPanelModel = ({
   panelKind,
   documentsModel,
   diffModel,
+  devServerModel,
 }: BuildAgentStudioRightPanelModelInput): AgentStudioRightPanelModel | null => {
   if (!panelKind) {
     return null;
@@ -106,16 +109,16 @@ export const buildAgentStudioRightPanelModel = ({
   }
 
   return {
-    kind: "diff",
-    documentsModel,
+    kind: "build_tools",
     diffModel,
+    devServerModel,
   };
 };
 
 export function useAgentStudioRightPanel({
   role,
   hasDocumentPanel,
-  hasDiffPanel = false,
+  hasBuildToolsPanel = false,
   hasTaskContext = true,
 }: UseAgentStudioRightPanelInput): UseAgentStudioRightPanelState {
   const [isOpenByRole, setIsOpenByRole] = useState<Record<AgentRole, boolean>>(() => {
@@ -139,7 +142,7 @@ export function useAgentStudioRightPanel({
     hasTaskContext &&
     isRightPanelKindAvailable(panelKindForRole, {
       hasDocumentPanel,
-      hasDiffPanel,
+      hasBuildToolsPanel,
     });
   const panelKind = panelAvailable ? panelKindForRole : null;
   const isPanelOpen = panelKind ? isOpenByRole[role] : false;

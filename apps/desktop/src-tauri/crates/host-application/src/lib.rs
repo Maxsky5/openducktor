@@ -3,5 +3,6 @@ mod app_service;
 pub use app_service::build_orchestrator::{BuildResponseAction, CleanupMode};
 pub use app_service::{
     AppService, HookTrustConfirmationPort, HookTrustConfirmationRequest,
-    PreparedHookTrustChallenge, RepoConfigUpdate, RepoSettingsUpdate, RunEmitter,
+    PreparedHookTrustChallenge, RepoConfigUpdate, RepoSettingsUpdate, DevServerEmitter,
+    RunEmitter,
 };

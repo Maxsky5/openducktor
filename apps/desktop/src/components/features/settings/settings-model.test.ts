@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   hasConfiguredHookCommands,
+  hasConfiguredRepoScriptCommands,
+  normalizeDevServers,
   normalizeHooksWithTrust,
+  normalizeRepoScriptsWithTrust,
   parseHookLines,
 } from "./settings-model";
 
@@ -38,6 +41,15 @@ describe("settings-model", () => {
     ).toBe(false);
   });
 
+  test("hasConfiguredRepoScriptCommands includes dev server commands", () => {
+    expect(
+      hasConfiguredRepoScriptCommands({
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [{ id: "frontend", name: "Frontend", command: " bun run dev " }],
+      }),
+    ).toBe(true);
+  });
+
   test("normalizeHooksWithTrust trims commands and disables trust when commands are empty", () => {
     expect(
       normalizeHooksWithTrust(
@@ -69,6 +81,35 @@ describe("settings-model", () => {
         postComplete: [],
       },
       trustedHooks: false,
+    });
+  });
+
+  test("normalizeDevServers trims entries, removes blank commands, and rejects blank names", () => {
+    expect(
+      normalizeDevServers([
+        { id: "frontend", name: " Frontend ", command: " bun run dev " },
+        { id: "backend", name: " Backend ", command: "   " },
+      ]),
+    ).toEqual([{ id: "frontend", name: "Frontend", command: "bun run dev" }]);
+
+    expect(() =>
+      normalizeDevServers([{ id: "frontend", name: "   ", command: "bun run dev" }]),
+    ).toThrow("Dev server names cannot be blank");
+  });
+
+  test("normalizeRepoScriptsWithTrust preserves trust while scripts remain configured", () => {
+    expect(
+      normalizeRepoScriptsWithTrust(
+        {
+          hooks: { preStart: [], postComplete: [] },
+          devServers: [{ id: "frontend", name: " Frontend ", command: " bun run dev " }],
+        },
+        true,
+      ),
+    ).toEqual({
+      hooks: { preStart: [], postComplete: [] },
+      devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
+      trustedHooks: true,
     });
   });
 });

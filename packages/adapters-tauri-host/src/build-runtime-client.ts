@@ -3,6 +3,8 @@ import {
   type BuildContinuationTarget,
   beadsCheckSchema,
   buildContinuationTargetSchema,
+  type DevServerGroupState,
+  devServerGroupStateSchema,
   pullRequestSchema,
   type RunSummary,
   type RuntimeCheck,
@@ -106,6 +108,42 @@ const buildStart = async (
 ): Promise<RunSummary> => {
   const payload = await invokeFn("build_start", { repoPath, taskId, runtimeKind });
   return runSummarySchema.parse(payload);
+};
+
+const devServerGetState = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  taskId: string,
+): Promise<DevServerGroupState> => {
+  const payload = await invokeFn("dev_server_get_state", { repoPath, taskId });
+  return devServerGroupStateSchema.parse(payload);
+};
+
+const devServerStart = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  taskId: string,
+): Promise<DevServerGroupState> => {
+  const payload = await invokeFn("dev_server_start", { repoPath, taskId });
+  return devServerGroupStateSchema.parse(payload);
+};
+
+const devServerStop = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  taskId: string,
+): Promise<DevServerGroupState> => {
+  const payload = await invokeFn("dev_server_stop", { repoPath, taskId });
+  return devServerGroupStateSchema.parse(payload);
+};
+
+const devServerRestart = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  taskId: string,
+): Promise<DevServerGroupState> => {
+  const payload = await invokeFn("dev_server_restart", { repoPath, taskId });
+  return devServerGroupStateSchema.parse(payload);
 };
 
 const buildBlocked = async (
@@ -327,6 +365,22 @@ export class TauriAgentClient {
     runtimeKind: RuntimeKind,
   ): Promise<RunSummary> {
     return buildStart(this.invokeFn, repoPath, taskId, runtimeKind);
+  }
+
+  async devServerGetState(repoPath: string, taskId: string): Promise<DevServerGroupState> {
+    return devServerGetState(this.invokeFn, repoPath, taskId);
+  }
+
+  async devServerStart(repoPath: string, taskId: string): Promise<DevServerGroupState> {
+    return devServerStart(this.invokeFn, repoPath, taskId);
+  }
+
+  async devServerStop(repoPath: string, taskId: string): Promise<DevServerGroupState> {
+    return devServerStop(this.invokeFn, repoPath, taskId);
+  }
+
+  async devServerRestart(repoPath: string, taskId: string): Promise<DevServerGroupState> {
+    return devServerRestart(this.invokeFn, repoPath, taskId);
   }
 
   async buildBlocked(repoPath: string, taskId: string, reason: string): Promise<TaskCard> {

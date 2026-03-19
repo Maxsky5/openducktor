@@ -44,6 +44,7 @@ describe("agent-orchestrator-runtime", () => {
         preStart: [],
         postComplete: [],
       },
+      devServers: [],
       worktreeFileCopies: [],
       promptOverrides: {},
       agentDefaults: {},
@@ -396,6 +397,7 @@ describe("agent-orchestrator-runtime", () => {
         preStart: [],
         postComplete: [],
       },
+      devServers: [],
       worktreeFileCopies: [],
       promptOverrides: {},
       agentDefaults: {
@@ -438,6 +440,7 @@ describe("agent-orchestrator-runtime", () => {
         preStart: [],
         postComplete: [],
       },
+      devServers: [],
       worktreeFileCopies: [],
       promptOverrides: {
         "kickoff.planner_initial": {
@@ -519,6 +522,7 @@ describe("agent-orchestrator-runtime", () => {
         preStart: [],
         postComplete: [],
       },
+      devServers: [],
       worktreeFileCopies: [],
       promptOverrides: repoPromptOverrides,
       agentDefaults: {},

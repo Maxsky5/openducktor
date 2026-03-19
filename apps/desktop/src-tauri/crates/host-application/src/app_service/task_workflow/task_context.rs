@@ -45,7 +45,7 @@ impl AppService {
         Ok(TaskRepoContext { repo_path, tasks })
     }
 
-    pub(super) fn resolve_task_repo_path(&self, repo_path: &str) -> Result<String> {
+    pub(crate) fn resolve_task_repo_path(&self, repo_path: &str) -> Result<String> {
         self.resolve_initialized_repo_path(repo_path)
     }
 

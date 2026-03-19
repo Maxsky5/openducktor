@@ -3,8 +3,8 @@ use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use host_domain::WorkspaceRecord;
 use host_infra_system::{
-    hook_set_fingerprint, normalize_hook_set, AgentDefaults, ChatSettings, GitTargetBranch,
-    HookSet, PromptOverrides, RepoConfig, RepoGitConfig,
+    normalize_hook_set, repo_script_fingerprint, AgentDefaults, ChatSettings, GitTargetBranch,
+    HookSet, PromptOverrides, RepoConfig, RepoDevServerScript, RepoGitConfig,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -20,6 +20,7 @@ pub struct RepoConfigUpdate {
     pub branch_prefix: Option<String>,
     pub default_target_branch: Option<GitTargetBranch>,
     pub git: Option<RepoGitConfig>,
+    pub dev_servers: Option<Vec<RepoDevServerScript>>,
     pub worktree_file_copies: Option<Vec<String>>,
     pub prompt_overrides: Option<PromptOverrides>,
     pub agent_defaults: Option<AgentDefaults>,
@@ -34,6 +35,7 @@ pub struct RepoSettingsUpdate {
     pub git: Option<RepoGitConfig>,
     pub trusted_hooks: bool,
     pub hooks: Option<HookSet>,
+    pub dev_servers: Option<Vec<RepoDevServerScript>>,
     pub worktree_file_copies: Option<Vec<String>>,
     pub prompt_overrides: Option<PromptOverrides>,
     pub agent_defaults: Option<AgentDefaults>,
@@ -43,6 +45,7 @@ pub struct RepoSettingsUpdate {
 pub struct HookTrustConfirmationRequest {
     pub repo_path: String,
     pub hooks: HookSet,
+    pub dev_servers: Vec<RepoDevServerScript>,
 }
 
 pub trait HookTrustConfirmationPort: Send {
@@ -113,6 +116,10 @@ impl AppService {
                 .as_ref()
                 .map(|entry| entry.hooks.clone())
                 .unwrap_or_default(),
+            dev_servers: update
+                .dev_servers
+                .or_else(|| existing.as_ref().map(|entry| entry.dev_servers.clone()))
+                .unwrap_or_default(),
             worktree_file_copies: update
                 .worktree_file_copies
                 .or_else(|| {
@@ -148,12 +155,15 @@ impl AppService {
             .workspace_get_repo_config_optional(repo_path)?
             .unwrap_or_default();
 
-        let (normalized_hooks, trusted_hooks_fingerprint) = self
+        let (normalized_hooks, normalized_dev_servers, trusted_hooks_fingerprint) = self
             .normalize_hooks_with_trust_confirmation(
                 repo_path,
                 &existing,
                 settings.trusted_hooks,
                 settings.hooks.unwrap_or_else(|| existing.hooks.clone()),
+                settings
+                    .dev_servers
+                    .unwrap_or_else(|| existing.dev_servers.clone()),
                 confirmation_port,
             )?;
 
@@ -169,6 +179,7 @@ impl AppService {
             trusted_hooks: settings.trusted_hooks,
             trusted_hooks_fingerprint,
             hooks: normalized_hooks,
+            dev_servers: normalized_dev_servers,
             worktree_file_copies: settings
                 .worktree_file_copies
                 .unwrap_or(existing.worktree_file_copies),
@@ -187,7 +198,7 @@ impl AppService {
     ) -> Result<PreparedHookTrustChallenge> {
         let repo_config = self.workspace_get_repo_config(repo_path)?;
         let canonical_repo_path = canonical_repo_key(repo_path);
-        let fingerprint = hook_set_fingerprint(&repo_config.hooks);
+        let fingerprint = repo_script_fingerprint(&repo_config.hooks, &repo_config.dev_servers);
         let nonce = format!("hooks-trust-{}", Uuid::new_v4().simple());
         let expires_at = SystemTime::now()
             .checked_add(HOOK_TRUST_CHALLENGE_TTL)
@@ -232,15 +243,18 @@ impl AppService {
                 .workspace_get_repo_config_optional(repo_path)?
                 .unwrap_or_default();
             let submitted_hooks = std::mem::take(&mut repo_config.hooks);
-            let (normalized_hooks, trusted_hooks_fingerprint) = self
+            let submitted_dev_servers = std::mem::take(&mut repo_config.dev_servers);
+            let (normalized_hooks, normalized_dev_servers, trusted_hooks_fingerprint) = self
                 .normalize_hooks_with_trust_confirmation(
                     repo_path,
                     &existing,
                     repo_config.trusted_hooks,
                     submitted_hooks,
+                    submitted_dev_servers,
                     confirmation_port,
                 )?;
             repo_config.hooks = normalized_hooks;
+            repo_config.dev_servers = normalized_dev_servers;
             repo_config.trusted_hooks_fingerprint = trusted_hooks_fingerprint;
         }
 
@@ -292,7 +306,8 @@ impl AppService {
         };
 
         let repo_config = self.workspace_get_repo_config(repo_path)?;
-        let latest_fingerprint = hook_set_fingerprint(&repo_config.hooks);
+        let latest_fingerprint =
+            repo_script_fingerprint(&repo_config.hooks, &repo_config.dev_servers);
         if latest_fingerprint != challenge.fingerprint {
             return Err(anyhow!(
                 "Hook commands changed after challenge generation. Request trust confirmation again."
@@ -302,6 +317,7 @@ impl AppService {
         confirmation_port.confirm_trusted_hooks(&HookTrustConfirmationRequest {
             repo_path: canonical_repo_path,
             hooks: repo_config.hooks.clone(),
+            dev_servers: repo_config.dev_servers.clone(),
         })?;
 
         self.workspace_persist_trusted_hooks(repo_path, true, Some(challenge.fingerprint.as_str()))
@@ -313,18 +329,22 @@ impl AppService {
         existing: &RepoConfig,
         trusted_hooks: bool,
         hooks: HookSet,
+        dev_servers: Vec<RepoDevServerScript>,
         confirmation_port: &P,
-    ) -> Result<(HookSet, Option<String>)> {
+    ) -> Result<(HookSet, Vec<RepoDevServerScript>, Option<String>)> {
         let normalized_hooks = normalize_hook_set(hooks);
-        let hooks_fingerprint = hook_set_fingerprint(&normalized_hooks);
+        let normalized_dev_servers = normalize_dev_servers(dev_servers)?;
+        let hooks_fingerprint = repo_script_fingerprint(&normalized_hooks, &normalized_dev_servers);
         let trust_already_approved_for_same_hooks = existing.trusted_hooks
             && existing.hooks == normalized_hooks
+            && existing.dev_servers == normalized_dev_servers
             && existing.trusted_hooks_fingerprint.as_deref() == Some(hooks_fingerprint.as_str());
 
         if trusted_hooks && !trust_already_approved_for_same_hooks {
             confirmation_port.confirm_trusted_hooks(&HookTrustConfirmationRequest {
                 repo_path: canonical_repo_key(repo_path),
                 hooks: normalized_hooks.clone(),
+                dev_servers: normalized_dev_servers.clone(),
             })?;
         }
 
@@ -334,8 +354,40 @@ impl AppService {
             None
         };
 
-        Ok((normalized_hooks, trusted_hooks_fingerprint))
+        Ok((
+            normalized_hooks,
+            normalized_dev_servers,
+            trusted_hooks_fingerprint,
+        ))
     }
+}
+
+fn normalize_dev_servers(
+    dev_servers: Vec<RepoDevServerScript>,
+) -> Result<Vec<RepoDevServerScript>> {
+    let mut normalized = Vec::new();
+    for mut dev_server in dev_servers {
+        dev_server.id = dev_server.id.trim().to_string();
+        dev_server.name = dev_server.name.trim().to_string();
+        dev_server.command = dev_server.command.trim().to_string();
+
+        if dev_server.command.is_empty() {
+            continue;
+        }
+
+        if dev_server.id.is_empty() {
+            return Err(anyhow!("Dev server id cannot be blank."));
+        }
+        if dev_server.name.is_empty() {
+            return Err(anyhow!(
+                "Dev server names cannot be blank when a command is configured."
+            ));
+        }
+
+        normalized.push(dev_server);
+    }
+
+    Ok(normalized)
 }
 
 fn normalize_runtime_kind(value: Option<String>) -> Result<Option<String>> {

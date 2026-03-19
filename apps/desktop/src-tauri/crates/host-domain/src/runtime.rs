@@ -277,6 +277,79 @@ pub struct RuntimeInstanceSummary {
     pub descriptor: RuntimeDescriptor,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DevServerScriptStatus {
+    Stopped,
+    Starting,
+    Running,
+    Stopping,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DevServerLogStream {
+    Stdout,
+    Stderr,
+    System,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DevServerLogLine {
+    pub script_id: String,
+    pub stream: DevServerLogStream,
+    pub text: String,
+    pub timestamp: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DevServerScriptState {
+    pub script_id: String,
+    pub name: String,
+    pub command: String,
+    pub status: DevServerScriptStatus,
+    pub pid: Option<u32>,
+    pub started_at: Option<String>,
+    pub exit_code: Option<i32>,
+    pub last_error: Option<String>,
+    #[serde(default)]
+    pub buffered_log_lines: Vec<DevServerLogLine>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DevServerGroupState {
+    pub repo_path: String,
+    pub task_id: String,
+    pub worktree_path: Option<String>,
+    #[serde(default)]
+    pub scripts: Vec<DevServerScriptState>,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum DevServerEvent {
+    Snapshot {
+        state: DevServerGroupState,
+    },
+    ScriptStatusChanged {
+        repo_path: String,
+        task_id: String,
+        script: DevServerScriptState,
+        updated_at: String,
+    },
+    LogLine {
+        repo_path: String,
+        task_id: String,
+        log_line: DevServerLogLine,
+    },
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -333,8 +406,10 @@ pub enum RunEvent {
 #[cfg(test)]
 mod tests {
     use super::{
-        AgentRuntimeKind, RuntimeCapabilities, RuntimeDescriptor, RuntimeProvisioningMode,
-        RuntimeSupportedScope, REQUIRED_RUNTIME_SUPPORTED_SCOPES,
+        AgentRuntimeKind, DevServerEvent, DevServerGroupState, DevServerLogLine,
+        DevServerLogStream, DevServerScriptState, DevServerScriptStatus, RuntimeCapabilities,
+        RuntimeDescriptor, RuntimeProvisioningMode, RuntimeSupportedScope,
+        REQUIRED_RUNTIME_SUPPORTED_SCOPES,
     };
 
     fn capabilities_with_scopes(scopes: Vec<RuntimeSupportedScope>) -> RuntimeCapabilities {
@@ -421,5 +496,52 @@ mod tests {
                 "missing required workflow scopes: task, build".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn dev_server_event_serializes_with_expected_shape() {
+        let event = DevServerEvent::LogLine {
+            repo_path: "/repo".to_string(),
+            task_id: "task-1".to_string(),
+            log_line: DevServerLogLine {
+                script_id: "server-1".to_string(),
+                stream: DevServerLogStream::Stdout,
+                text: "ready".to_string(),
+                timestamp: "2026-03-19T00:00:00Z".to_string(),
+            },
+        };
+
+        let json = serde_json::to_value(event).expect("event should serialize");
+        assert_eq!(json["type"], "log_line");
+        assert_eq!(json["logLine"]["stream"], "stdout");
+    }
+
+    #[test]
+    fn dev_server_group_state_supports_buffered_logs() {
+        let state = DevServerGroupState {
+            repo_path: "/repo".to_string(),
+            task_id: "task-1".to_string(),
+            worktree_path: Some("/repo/.worktrees/task-1".to_string()),
+            scripts: vec![DevServerScriptState {
+                script_id: "server-1".to_string(),
+                name: "Backend".to_string(),
+                command: "bun run dev".to_string(),
+                status: DevServerScriptStatus::Running,
+                pid: Some(1234),
+                started_at: Some("2026-03-19T00:00:00Z".to_string()),
+                exit_code: None,
+                last_error: None,
+                buffered_log_lines: vec![DevServerLogLine {
+                    script_id: "server-1".to_string(),
+                    stream: DevServerLogStream::System,
+                    text: "started".to_string(),
+                    timestamp: "2026-03-19T00:00:00Z".to_string(),
+                }],
+            }],
+            updated_at: "2026-03-19T00:00:00Z".to_string(),
+        };
+
+        let json = serde_json::to_value(state).expect("state should serialize");
+        assert_eq!(json["scripts"][0]["bufferedLogLines"][0]["text"], "started");
     }
 }

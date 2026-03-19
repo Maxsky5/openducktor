@@ -13,6 +13,7 @@ import {
   buildAgentStudioGitPanelBranchIdentityKey,
   resolveAgentStudioGitPanelBranch,
 } from "./agents-page-git-panel";
+import { useAgentStudioDevServerPanel } from "./use-agent-studio-dev-server-panel";
 import { buildAgentStudioRightPanelModel } from "./use-agent-studio-right-panel";
 
 type UseAgentsPageRightPanelModelArgs = {
@@ -58,17 +59,18 @@ export function useAgentsPageRightPanelModel({
     gitPanelContextMode === "repository"
       ? { branch: UPSTREAM_TARGET_BRANCH }
       : (repoSettings?.defaultTargetBranch ?? normalizeTargetBranch(null));
-  const shouldLoadVisibleDiffPanel = viewRole === "build" && panelKind === "diff" && isPanelOpen;
+  const shouldLoadVisibleBuildToolsPanel =
+    viewRole === "build" && panelKind === "build_tools" && isPanelOpen;
   const diffData = useAgentStudioDiffData({
-    repoPath: shouldLoadVisibleDiffPanel ? activeRepo : null,
-    sessionWorkingDirectory: shouldLoadVisibleDiffPanel
+    repoPath: shouldLoadVisibleBuildToolsPanel ? activeRepo : null,
+    sessionWorkingDirectory: shouldLoadVisibleBuildToolsPanel
       ? (viewActiveSession?.workingDirectory ?? null)
       : null,
-    sessionRunId: shouldLoadVisibleDiffPanel ? (viewActiveSession?.runId ?? null) : null,
+    sessionRunId: shouldLoadVisibleBuildToolsPanel ? (viewActiveSession?.runId ?? null) : null,
     runCompletionRecoverySignal,
     defaultTargetBranch: diffComparisonTarget,
     branchIdentityKey: repositoryBranchIdentityKey,
-    enablePolling: shouldLoadVisibleDiffPanel && Boolean(viewActiveSession),
+    enablePolling: shouldLoadVisibleBuildToolsPanel && Boolean(viewActiveSession),
   });
   const resolvedGitPanelBranch = resolveAgentStudioGitPanelBranch({
     contextMode: gitPanelContextMode,
@@ -80,6 +82,14 @@ export function useAgentsPageRightPanelModel({
     viewRole,
     activeSession: viewActiveSession,
     refreshWorktree: diffData.refresh,
+  });
+
+  const devServerModel = useAgentStudioDevServerPanel({
+    repoPath: shouldLoadVisibleBuildToolsPanel ? activeRepo : null,
+    taskId: shouldLoadVisibleBuildToolsPanel ? (viewSelectedTask?.id ?? null) : null,
+    repoSettings,
+    activeSession: viewActiveSession,
+    enabled: shouldLoadVisibleBuildToolsPanel,
   });
 
   const isActiveBuilderWorking =
@@ -139,6 +149,7 @@ export function useAgentsPageRightPanelModel({
       panelKind,
       documentsModel,
       diffModel,
+      devServerModel,
     }),
   };
 }

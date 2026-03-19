@@ -97,6 +97,7 @@ const createRepoSettings = (
   trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],
+  devServers: [],
   worktreeFileCopies: [],
   agentDefaults: {
     spec: specDefault,

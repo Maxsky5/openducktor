@@ -17,7 +17,11 @@ pub fn slugify_title(value: &str) -> String {
 }
 
 pub fn build_branch_name(prefix: &str, task_id: &str, title: &str) -> String {
-    let clean_prefix = if prefix.is_empty() { DEFAULT_BRANCH_PREFIX } else { prefix };
+    let clean_prefix = if prefix.is_empty() {
+        DEFAULT_BRANCH_PREFIX
+    } else {
+        prefix
+    };
     let slug = slugify_title(title);
     if slug.is_empty() {
         format!("{}/{}", clean_prefix, task_id)

@@ -19,6 +19,7 @@ const baseRepoConfig: RepoConfig = {
     preStart: [],
     postComplete: [],
   },
+  devServers: [],
   worktreeFileCopies: [],
   promptOverrides: {},
   agentDefaults: {},
@@ -102,6 +103,7 @@ describe("RepositoryConfigurationSection", () => {
           preStart: ["bun install"],
           postComplete: [],
         },
+        devServers: [],
       },
       onUpdateSelectedRepoConfig,
     );
@@ -131,6 +133,7 @@ describe("RepositoryConfigurationSection", () => {
             preStart: ["bun install"],
             postComplete: [],
           },
+          devServers: [],
         }),
       ).toEqual({
         ...baseRepoConfig,
@@ -140,6 +143,50 @@ describe("RepositoryConfigurationSection", () => {
           preStart: [""],
           postComplete: [],
         },
+      });
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("marks scripts as trusted when a dev server command is entered", () => {
+    const updaters: Array<(current: RepoConfig) => RepoConfig> = [];
+    const onUpdateSelectedRepoConfig = mock((updater: (current: RepoConfig) => RepoConfig) => {
+      updaters.push(updater);
+    });
+    const renderer = renderSection(
+      {
+        ...baseRepoConfig,
+        devServers: [{ id: "frontend", name: "Frontend", command: "" }],
+      },
+      onUpdateSelectedRepoConfig,
+    );
+
+    try {
+      const commandInput = renderer.root.findByProps({ id: "repo-dev-server-command-frontend" });
+
+      act(() => {
+        commandInput.props.onChange({
+          currentTarget: {
+            value: "bun run dev",
+          },
+        });
+      });
+
+      const updater = updaters[0];
+      if (!updater) {
+        throw new Error("Expected repo config updater");
+      }
+
+      expect(
+        updater({
+          ...baseRepoConfig,
+          devServers: [{ id: "frontend", name: "Frontend", command: "" }],
+        }),
+      ).toEqual({
+        ...baseRepoConfig,
+        trustedHooks: true,
+        devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
       });
     } finally {
       renderer.unmount();

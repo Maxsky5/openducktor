@@ -39,6 +39,7 @@ const createSnapshot = (): SettingsSnapshot => ({
       },
       trustedHooks: false,
       hooks: { preStart: [], postComplete: [] },
+      devServers: [],
       worktreeFileCopies: [],
       promptOverrides: {
         "kickoff.build_implementation_start": {
@@ -59,6 +60,7 @@ const createSnapshot = (): SettingsSnapshot => ({
       },
       trustedHooks: false,
       hooks: { preStart: [], postComplete: [] },
+      devServers: [],
       worktreeFileCopies: [],
       promptOverrides: {},
       agentDefaults: {},

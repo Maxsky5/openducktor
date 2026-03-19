@@ -9,6 +9,7 @@ mock.module("@openducktor/adapters-tauri-host", () => ({
 
 mock.module("@/lib/browser-live-client", () => ({
   createBrowserLiveHostClient: () => ({}) as object,
+  subscribeBrowserLiveDevServerEvents: async () => () => {},
   subscribeBrowserLiveRunEvents: async () => () => {},
 }));
 
@@ -31,6 +32,14 @@ describe("host-client", () => {
 
     await expect(createHostBridge().subscribeRunEvents(() => {})).rejects.toThrow(
       "Run-event subscriptions require the desktop shell or browser live mode.",
+    );
+  });
+
+  test("fails fast when dev-server event subscriptions are unavailable in the current runtime", async () => {
+    const { createHostBridge } = await import("./host-client");
+
+    await expect(createHostBridge().subscribeDevServerEvents(() => {})).rejects.toThrow(
+      "Dev-server event subscriptions require the desktop shell or browser live mode.",
     );
   });
 });

@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context};
-use host_application::{AppService, RunEmitter};
+use host_application::{AppService, DevServerEmitter, RunEmitter};
 #[cfg(test)]
 use host_domain::TaskStatus;
-use host_domain::{RunEvent, TASK_METADATA_NAMESPACE};
+use host_domain::{DevServerEvent, RunEvent, TASK_METADATA_NAMESPACE};
 use host_infra_beads::BeadsTaskStore;
 use host_infra_system::{AppConfigStore, RuntimeConfigStore};
 use serde::Deserialize;
@@ -128,6 +128,7 @@ pub(crate) struct RepoConfigPayload {
     branch_prefix: Option<String>,
     default_target_branch: Option<host_infra_system::GitTargetBranch>,
     git: Option<host_infra_system::RepoGitConfig>,
+    dev_servers: Option<Vec<host_infra_system::RepoDevServerScript>>,
     worktree_file_copies: Option<Vec<String>>,
     prompt_overrides: Option<host_infra_system::PromptOverrides>,
     agent_defaults: Option<host_infra_system::AgentDefaults>,
@@ -143,6 +144,7 @@ pub(crate) struct RepoSettingsPayload {
     git: Option<host_infra_system::RepoGitConfig>,
     trusted_hooks: bool,
     hooks: Option<host_infra_system::HookSet>,
+    dev_servers: Option<Vec<host_infra_system::RepoDevServerScript>>,
     worktree_file_copies: Option<Vec<String>>,
     prompt_overrides: Option<host_infra_system::PromptOverrides>,
     agent_defaults: Option<host_infra_system::AgentDefaults>,
@@ -219,6 +221,12 @@ fn validate_startup_config(
 pub(crate) fn run_emitter(app: AppHandle) -> RunEmitter {
     Arc::new(move |event: RunEvent| {
         let _ = app.emit("openducktor://run-event", event);
+    })
+}
+
+pub(crate) fn dev_server_emitter(app: AppHandle) -> DevServerEmitter {
+    Arc::new(move |event: DevServerEvent| {
+        let _ = app.emit("openducktor://dev-server-event", event);
     })
 }
 
@@ -318,6 +326,10 @@ fn startup_phase_command_registration(
         qa_approved,
         qa_rejected,
         build_start,
+        dev_server_get_state,
+        dev_server_start,
+        dev_server_stop,
+        dev_server_restart,
         build_respond,
         build_stop,
         build_cleanup,

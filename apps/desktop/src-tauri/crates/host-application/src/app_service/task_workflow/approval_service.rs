@@ -607,6 +607,7 @@ impl AppService {
             if normalized_repo != normalized_working_directory
                 && Path::new(cleanup_target.working_directory.as_str()).exists()
             {
+                self.stop_dev_servers_for_task(repo_path, task_id)?;
                 let _ = self.git_remove_worktree(
                     repo_path,
                     cleanup_target.working_directory.as_str(),

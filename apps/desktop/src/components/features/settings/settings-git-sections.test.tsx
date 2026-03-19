@@ -69,6 +69,7 @@ const baseRepoConfig: RepoConfig = {
     preStart: [],
     postComplete: [],
   },
+  devServers: [],
   worktreeFileCopies: [],
   promptOverrides: {},
   agentDefaults: {},

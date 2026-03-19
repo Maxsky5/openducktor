@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context, Result};
 use fs2::FileExt;
 use host_domain::{
-    GitPort, RunEvent, RunSummary, RuntimeCheck, RuntimeInstanceSummary, RuntimeRole, TaskCard,
-    TaskStore,
+    DevServerEvent, DevServerGroupState, GitPort, RunEvent, RunSummary, RuntimeCheck,
+    RuntimeInstanceSummary, RuntimeRole, TaskCard, TaskStore,
 };
 use host_infra_system::{AppConfigStore, GitCliPort, RepoConfig, RuntimeConfigStore};
 use serde::{Deserialize, Serialize};
@@ -18,6 +18,7 @@ use std::time::Instant;
 
 pub mod build_orchestrator;
 
+mod dev_server_manager;
 mod events;
 mod git_provider;
 mod hook_security;
@@ -52,9 +53,10 @@ pub(crate) use process_registry::{
     OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
 pub(crate) use service_core::{
-    AgentRuntimeProcess, CachedRuntimeCheck, RunProcess, RuntimeCleanupTarget,
+    AgentRuntimeProcess, CachedRuntimeCheck, DevServerGroupRuntime, RunProcess,
+    RuntimeCleanupTarget,
 };
-pub use service_core::{AppService, RunEmitter};
+pub use service_core::{AppService, DevServerEmitter, RunEmitter};
 #[cfg(test)]
 pub(crate) use startup_metrics::{
     build_opencode_startup_event_payload, OpencodeStartupMetricsSnapshot,
