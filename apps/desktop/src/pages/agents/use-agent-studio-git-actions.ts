@@ -369,7 +369,7 @@ export function useAgentStudioGitActions({
       setPendingReset(null);
       await refreshDiffData();
       const affectedCount = result.affectedPaths.length;
-      toast.success(pendingReset.kind === "file" ? "File reset" : "Chunk reset", {
+      toast.success(pendingReset.kind === "file" ? "File reset" : "Hunk reset", {
         description:
           affectedCount === 1
             ? result.affectedPaths[0]

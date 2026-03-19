@@ -207,11 +207,11 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
   }, [gitConflictAutoOpenNonce, gitConflictCloseNonce, hasGitConflict]);
 
   const resetDialogTitle =
-    pendingReset?.kind === "hunk" ? "Confirm chunk reset" : "Confirm file reset";
+    pendingReset?.kind === "hunk" ? "Confirm hunk reset" : "Confirm file reset";
   const resetDialogDescription =
     pendingReset?.kind === "hunk" ? (
       <>
-        This discards the selected uncommitted diff chunk in{" "}
+        This discards the selected uncommitted diff hunk in{" "}
         <code className={INLINE_CODE_CLASS_NAME}>{pendingReset.filePath}</code> and restores it to
         <code className={INLINE_CODE_CLASS_NAME}> HEAD</code>.
       </>
@@ -233,7 +233,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
       <div className="mt-2 flex flex-wrap items-center gap-2 text-sm leading-6 text-muted-foreground">
         <code className={INLINE_CODE_CLASS_NAME}>{pendingReset.filePath}</code>
         {pendingReset.kind === "hunk" ? (
-          <span>Chunk {pendingReset.hunkIndex + 1}</span>
+          <span>Hunk {pendingReset.hunkIndex + 1}</span>
         ) : (
           <span>Entire file</span>
         )}
@@ -366,9 +366,9 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
           closeDisabled={model.isResetting ?? false}
           onClose={() => model.cancelReset?.()}
           closeTestId="agent-studio-git-cancel-reset-button"
-          confirmLabel={pendingReset?.kind === "hunk" ? "Reset chunk" : "Reset file"}
+          confirmLabel={pendingReset?.kind === "hunk" ? "Reset hunk" : "Reset file"}
           confirmPendingLabel={
-            pendingReset?.kind === "hunk" ? "Resetting chunk..." : "Resetting file..."
+            pendingReset?.kind === "hunk" ? "Resetting hunk..." : "Resetting file..."
           }
           confirmPending={model.isResetting ?? false}
           confirmDisabled={model.isResetting ?? false}

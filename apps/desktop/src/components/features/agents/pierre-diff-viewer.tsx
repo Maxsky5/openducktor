@@ -1,10 +1,11 @@
+import type { DiffLineAnnotation, FileDiffMetadata, Hunk } from "@pierre/diffs";
 import { getSingularPatch } from "@pierre/diffs";
-import { FileDiff, useWorkerPool } from "@pierre/diffs/react";
+import { FileDiff as PierreReactFileDiff, useWorkerPool } from "@pierre/diffs/react";
 import type { DiffRendererInstance } from "@pierre/diffs/worker";
 import { Undo2 } from "lucide-react";
 import { type CSSProperties, memo, type ReactElement, useEffect, useId, useMemo } from "react";
-import { createRoot } from "react-dom/client";
 import { useTheme } from "@/components/layout/theme-provider";
+import { Button } from "@/components/ui/button";
 import { selectRenderableDiff } from "./renderable-patch";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -39,57 +40,89 @@ const DIFF_WRAPPER_STYLE = {
 } as CSSProperties;
 const RAW_DIFF_FALLBACK_CLASS_NAME =
   "overflow-x-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[11px] leading-5 text-foreground";
-const HUNK_RESET_SEPARATOR_CLASS_NAME =
-  "flex items-center justify-between gap-3 border-b border-border/50 bg-muted/15 px-3 py-2 text-[11px] text-muted-foreground";
+const HUNK_RESET_ANNOTATION_CLASS_NAME = "pointer-events-none relative h-0";
+const HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME = "contents";
 const HUNK_RESET_BUTTON_CLASS_NAME =
-  "inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60";
+  "pointer-events-auto absolute right-3 top-1 h-7 gap-1.5 rounded-md border-input bg-background/95 px-2.5 text-[11px] font-medium shadow-sm backdrop-blur-sm";
+const HUNK_RESET_FLOATING_CSS = `
+[data-line-annotation],
+[data-gutter-buffer='annotation'] {
+  --diffs-line-bg: transparent;
+  min-height: 0 !important;
+  height: 0 !important;
+  overflow: visible !important;
+  background-color: transparent !important;
+}
 
-type CreateRootLike = (container: Element | DocumentFragment) => {
-  render: (node: ReactElement) => void;
+[data-line-annotation] [data-annotation-content] {
+  position: relative;
+  min-height: 0 !important;
+  height: 0 !important;
+  overflow: visible !important;
+  background-color: transparent !important;
+}
+`;
+
+type HunkResetAnnotationMetadata = {
+  hunkIndex: number;
 };
 
-export function buildHunkResetSeparator(
-  filePath: string,
+const resolveHunkResetAnchor = (
+  hunk: Hunk,
   hunkIndex: number,
-  disabled: boolean,
-  onResetHunk: (hunkIndex: number) => void,
-  documentRef: Pick<Document, "createElement"> = document,
-  createRootImpl: CreateRootLike = createRoot,
-): HTMLElement {
-  const container = documentRef.createElement("div");
-  container.className = HUNK_RESET_SEPARATOR_CLASS_NAME;
+): DiffLineAnnotation<HunkResetAnnotationMetadata> | null => {
+  let currentAdditionLine = hunk.additionStart;
+  let currentDeletionLine = hunk.deletionStart;
+  let lastAdditionLine: number | null = null;
+  let lastDeletionLine: number | null = null;
 
-  const label = documentRef.createElement("span");
-  label.className = "truncate font-medium text-foreground";
-  label.textContent = `Chunk ${hunkIndex + 1}`;
-
-  const button = documentRef.createElement("button");
-  button.className = HUNK_RESET_BUTTON_CLASS_NAME;
-  button.setAttribute("type", "button");
-  button.setAttribute("aria-label", "Reset chunk");
-  button.setAttribute("title", `Reset chunk in ${filePath}`);
-  button.setAttribute("data-testid", "agent-studio-git-reset-hunk-button");
-  button.disabled = disabled;
-
-  const iconHost = documentRef.createElement("span");
-  iconHost.className = "pointer-events-none inline-flex items-center";
-  createRootImpl(iconHost).render(<Undo2 className="size-3.5" />);
-
-  const labelText = documentRef.createElement("span");
-  labelText.textContent = "Reset chunk";
-
-  button.append(iconHost, labelText);
-  button.addEventListener("click", (event) => {
-    event.preventDefault();
-    if (button.disabled) {
-      return;
+  for (const segment of hunk.hunkContent) {
+    if (segment.type === "context") {
+      currentAdditionLine += segment.lines;
+      currentDeletionLine += segment.lines;
+      continue;
     }
-    onResetHunk(hunkIndex);
-  });
 
-  container.append(label, button);
-  return container;
-}
+    if (segment.additions > 0) {
+      lastAdditionLine = currentAdditionLine + segment.additions - 1;
+      currentAdditionLine += segment.additions;
+    }
+
+    if (segment.deletions > 0) {
+      lastDeletionLine = currentDeletionLine + segment.deletions - 1;
+      currentDeletionLine += segment.deletions;
+    }
+  }
+
+  if (lastAdditionLine != null) {
+    return {
+      side: "additions",
+      lineNumber: lastAdditionLine,
+      metadata: { hunkIndex },
+    };
+  }
+
+  if (lastDeletionLine != null) {
+    return {
+      side: "deletions",
+      lineNumber: lastDeletionLine,
+      metadata: { hunkIndex },
+    };
+  }
+
+  return null;
+};
+
+export const getHunkResetAnnotations = (
+  fileDiff: FileDiffMetadata,
+): DiffLineAnnotation<HunkResetAnnotationMetadata>[] => {
+  return fileDiff.hunks
+    .map((hunk, hunkIndex) => resolveHunkResetAnchor(hunk, hunkIndex))
+    .filter(
+      (annotation): annotation is DiffLineAnnotation<HunkResetAnnotationMetadata> =>
+        annotation != null,
+    );
+};
 
 const tryGetSingularPatch = (patch: string) => {
   try {
@@ -161,35 +194,64 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
     [filePath, patch],
   );
   const lineDiffType: "word-alt" | "none" = diffStyle === "split" ? "word-alt" : "none";
-  const hunkSeparators = useMemo(() => {
-    if (!enableHunkReset || fileDiff == null || onResetHunk == null) {
-      return "line-info" as const;
-    }
-
-    return (hunk: { hunkIndex: number }) =>
-      buildHunkResetSeparator(filePath, hunk.hunkIndex, isHunkResetDisabled, onResetHunk);
-  }, [enableHunkReset, fileDiff, filePath, isHunkResetDisabled, onResetHunk]);
+  const lineAnnotations = useMemo(
+    () =>
+      enableHunkReset && fileDiff != null && onResetHunk != null
+        ? getHunkResetAnnotations(fileDiff)
+        : [],
+    [enableHunkReset, fileDiff, onResetHunk],
+  );
   const options = useMemo(
     () => ({
       theme: DIFF_THEME,
       themeType: theme,
       diffStyle,
       diffIndicators: "bars" as const,
-      hunkSeparators,
+      hunkSeparators: "line-info" as const,
       lineDiffType,
       overflow: "wrap" as const,
       disableFileHeader: true,
       enableLineSelection,
+      ...(enableHunkReset ? { unsafeCSS: HUNK_RESET_FLOATING_CSS } : {}),
     }),
-    [diffStyle, enableLineSelection, hunkSeparators, lineDiffType, theme],
+    [diffStyle, enableHunkReset, enableLineSelection, lineDiffType, theme],
   );
+
+  let content: ReactElement;
+  if (fileDiff == null) {
+    content = <pre className={RAW_DIFF_FALLBACK_CLASS_NAME}>{fallbackPatch}</pre>;
+  } else {
+    content = (
+      <PierreReactFileDiff
+        fileDiff={fileDiff}
+        options={options}
+        lineAnnotations={lineAnnotations}
+        renderAnnotation={(annotation) => (
+          <div className={HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME}>
+            <div className={HUNK_RESET_ANNOTATION_CLASS_NAME}>
+              <Button
+                className={HUNK_RESET_BUTTON_CLASS_NAME}
+                variant="outline"
+                size="sm"
+                aria-label="Reset hunk"
+                title={`Reset hunk in ${filePath}`}
+                data-testid="agent-studio-git-reset-hunk-button"
+                disabled={isHunkResetDisabled}
+                onClick={() => onResetHunk?.(annotation.metadata.hunkIndex)}
+              >
+                <Undo2 className="size-3.5" />
+                <span>Reset hunk</span>
+              </Button>
+            </div>
+          </div>
+        )}
+      />
+    );
+  }
+
   return (
     <div className={className} style={DIFF_WRAPPER_STYLE}>
-      {fileDiff ? (
-        <FileDiff fileDiff={fileDiff} options={options} />
-      ) : (
-        <pre className={RAW_DIFF_FALLBACK_CLASS_NAME}>{fallbackPatch}</pre>
-      )}
+      {content}
     </div>
   );
 });

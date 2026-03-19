@@ -263,7 +263,7 @@ fn git_reset_worktree_selection_rejects_unauthorized_repo() {
             },
             "selection": {
                 "kind": "file",
-                "file_path": "src/main.rs"
+                "filePath": "src/main.rs"
             }
         }),
     )
@@ -326,8 +326,8 @@ fn git_reset_worktree_selection_forwards_trimmed_target_branch_and_effective_wor
             },
             "selection": {
                 "kind": "hunk",
-                "file_path": "src/main.rs",
-                "hunk_index": 2
+                "filePath": "src/main.rs",
+                "hunkIndex": 2
             }
         }),
     )
@@ -389,7 +389,7 @@ fn git_reset_worktree_selection_propagates_backend_failure() {
             },
             "selection": {
                 "kind": "file",
-                "file_path": "src/main.rs"
+                "filePath": "src/main.rs"
             }
         }),
     )

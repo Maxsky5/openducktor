@@ -1,44 +1,5 @@
-import { describe, expect, mock, test } from "bun:test";
-import { buildHunkResetSeparator, getRenderableFileDiff } from "./pierre-diff-viewer";
-
-class FakeElement {
-  tagName: string;
-  className = "";
-  textContent = "";
-  disabled = false;
-  attributes = new Map<string, string>();
-  children: Array<FakeElement | string> = [];
-  private clickListener: ((event: { preventDefault: () => void }) => void) | null = null;
-
-  constructor(tagName: string) {
-    this.tagName = tagName;
-  }
-
-  setAttribute(name: string, value: string): void {
-    this.attributes.set(name, value);
-  }
-
-  append(...nodes: Array<FakeElement | string>): void {
-    this.children.push(...nodes);
-  }
-
-  addEventListener(
-    eventName: string,
-    listener: (event: { preventDefault: () => void }) => void,
-  ): void {
-    if (eventName === "click") {
-      this.clickListener = listener;
-    }
-  }
-
-  click(): void {
-    this.clickListener?.({ preventDefault: () => {} });
-  }
-}
-
-const createFakeDocument = (): Pick<Document, "createElement"> => ({
-  createElement: (tagName: string) => new FakeElement(tagName) as unknown as HTMLElement,
-});
+import { describe, expect, test } from "bun:test";
+import { getHunkResetAnnotations, getRenderableFileDiff } from "./pierre-diff-viewer";
 
 describe("getRenderableFileDiff", () => {
   test("parses valid git patches", () => {
@@ -71,47 +32,62 @@ describe("getRenderableFileDiff", () => {
     expect(result.fallbackPatch).toBe("Index: src/app.ts\n=====\ninvalid diff body\n");
   });
 
-  test("builds hunk reset separators with an actionable reset button", () => {
-    const onResetHunk = mock((_hunkIndex: number) => {});
-    const renderIcon = mock((_node: unknown) => {});
-    const separator = buildHunkResetSeparator(
-      "src/app.ts",
-      2,
-      false,
-      onResetHunk,
-      createFakeDocument(),
-      () => ({ render: renderIcon }),
-    ) as unknown as FakeElement;
+  test("builds hunk reset annotations for the first and subsequent hunks", () => {
+    const patch = [
+      "diff --git a/src/app.ts b/src/app.ts",
+      "--- a/src/app.ts",
+      "+++ b/src/app.ts",
+      "@@ -1,3 +1,3 @@",
+      "-one",
+      "+one updated",
+      " two",
+      " three",
+      "@@ -8,3 +8,4 @@",
+      " eight",
+      "-nine",
+      "+nine updated",
+      "+ten added",
+      " eleven",
+      "",
+    ].join("\n");
+    const { fileDiff } = getRenderableFileDiff(patch, "src/app.ts");
 
-    expect(separator.className).toContain("border-border/50");
+    expect(fileDiff).not.toBeNull();
+    const annotations = getHunkResetAnnotations(fileDiff!);
 
-    const [label, button] = separator.children as [FakeElement, FakeElement];
-    expect(label.textContent).toBe("Chunk 3");
-    expect(button.attributes.get("aria-label")).toBe("Reset chunk");
-    expect(button.attributes.get("data-testid")).toBe("agent-studio-git-reset-hunk-button");
-    expect(renderIcon).toHaveBeenCalledTimes(1);
-
-    button.click();
-
-    expect(onResetHunk).toHaveBeenCalledWith(2);
+    expect(annotations).toEqual([
+      {
+        side: "additions",
+        lineNumber: 1,
+        metadata: { hunkIndex: 0 },
+      },
+      {
+        side: "additions",
+        lineNumber: 10,
+        metadata: { hunkIndex: 1 },
+      },
+    ]);
   });
 
-  test("keeps disabled hunk reset separators non-interactive", () => {
-    const onResetHunk = mock((_hunkIndex: number) => {});
-    const separator = buildHunkResetSeparator(
-      "src/app.ts",
-      0,
-      true,
-      onResetHunk,
-      createFakeDocument(),
-      () => ({ render: () => {} }),
-    ) as unknown as FakeElement;
+  test("falls back to deletion lines for delete-only hunks", () => {
+    const patch = [
+      "diff --git a/src/app.ts b/src/app.ts",
+      "--- a/src/app.ts",
+      "+++ b/src/app.ts",
+      "@@ -2,2 +2,0 @@",
+      "-removed one",
+      "-removed two",
+      "",
+    ].join("\n");
+    const { fileDiff } = getRenderableFileDiff(patch, "src/app.ts");
 
-    const button = separator.children[1] as FakeElement;
-    expect(button.disabled).toBe(true);
-
-    button.click();
-
-    expect(onResetHunk).toHaveBeenCalledTimes(0);
+    expect(fileDiff).not.toBeNull();
+    expect(getHunkResetAnnotations(fileDiff!)).toEqual([
+      {
+        side: "deletions",
+        lineNumber: 3,
+        metadata: { hunkIndex: 0 },
+      },
+    ]);
   });
 });

@@ -313,8 +313,16 @@ pub struct GitResetSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum GitResetWorktreeSelection {
-    File { file_path: String },
-    Hunk { file_path: String, hunk_index: u32 },
+    File {
+        #[serde(rename = "filePath")]
+        file_path: String,
+    },
+    Hunk {
+        #[serde(rename = "filePath")]
+        file_path: String,
+        #[serde(rename = "hunkIndex")]
+        hunk_index: u32,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
