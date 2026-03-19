@@ -1,7 +1,4 @@
-export type TaskDocumentPayload = {
-  markdown: string;
-  updatedAt: string | null;
-};
+import type { TaskDocumentPayload } from "@/types/task-documents";
 
 type TaskDocumentStateLike = {
   markdown: string;
@@ -27,8 +24,7 @@ export const resolveLoadedDocumentState = <TState extends TaskDocumentStateLike>
   const currentTimestamp = parseUpdatedAtTimestamp(current.updatedAt);
   const incomingTimestamp = parseUpdatedAtTimestamp(incoming.updatedAt);
   const shouldPreserveCurrentDocument =
-    currentTimestamp !== null &&
-    (incomingTimestamp === null || incomingTimestamp < currentTimestamp);
+    currentTimestamp !== null && incomingTimestamp !== null && incomingTimestamp < currentTimestamp;
 
   if (shouldPreserveCurrentDocument) {
     return {

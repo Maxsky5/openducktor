@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSpecState } from "@/state";
+import type { TaskDocumentPayload } from "@/types/task-documents";
 import {
   createTaskDocumentLoadController,
   requestTaskDocumentLoad,
@@ -8,7 +9,7 @@ import {
   supersedeTaskDocumentLoad,
   type TaskDocumentSectionKey,
 } from "./task-document-load-controller";
-import { resolveLoadedDocumentState, type TaskDocumentPayload } from "./task-document-state";
+import { resolveLoadedDocumentState } from "./task-document-state";
 
 export type DocumentSectionKey = TaskDocumentSectionKey;
 
