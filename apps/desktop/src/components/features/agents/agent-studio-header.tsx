@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
+import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Button } from "@/components/ui/button";
 import { CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox, type ComboboxGroup } from "@/components/ui/combobox";
@@ -229,9 +230,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
               </Button>
             ) : null}
           </div>
-          {hasTaskId ? (
-            <p className="font-mono text-[11px] text-muted-foreground">{normalizedTaskId}</p>
-          ) : null}
+          {hasTaskId ? <TaskIdBadge taskId={normalizedTaskId} /> : null}
         </div>
         <div className="flex min-w-56 max-w-full items-stretch gap-2 sm:min-w-[18rem]">
           <div className="min-w-0 flex-1">

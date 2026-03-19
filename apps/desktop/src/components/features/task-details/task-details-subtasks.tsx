@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import { GitBranch } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanban-task-badges";
+import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
 import { statusBadgeClassName, statusLabel } from "@/lib/task-display";
 
@@ -29,9 +30,7 @@ export const TaskDetailsSubtasks = memo(
                     <p className="truncate text-sm font-semibold text-foreground">
                       {subtask.title}
                     </p>
-                    <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
-                      {subtask.id}
-                    </p>
+                    <TaskIdBadge taskId={subtask.id} className="mt-1" />
                   </div>
                   <Badge variant="outline" className={statusBadgeClassName(subtask.status)}>
                     {statusLabel(subtask.status)}

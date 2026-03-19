@@ -15,6 +15,7 @@ import {
 } from "@/components/features/kanban/kanban-task-workflow";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
+import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
 import { BorderRay } from "@/components/ui/border-ray";
 import { cn } from "@/lib/utils";
@@ -347,11 +348,20 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
       ) : null}
 
       <div className="kanban-active-session-content flex min-w-0 flex-col space-y-2.5 p-3.5">
-        <button
-          type="button"
+        {/* biome-ignore lint/a11y/useSemanticElements: TaskIdBadge contains a button element */}
+        <div
+          role="button"
+          tabIndex={0}
           aria-label={`Open details for ${task.title}`}
           className="flex w-full min-w-0 cursor-pointer items-start justify-between gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           onClick={() => onOpenDetails(task.id)}
+          onKeyDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onOpenDetails(task.id);
+            }
+          }}
         >
           <div className="min-w-0 space-y-1">
             <p
@@ -360,20 +370,17 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
             >
               {task.title}
             </p>
-            <p className="truncate font-mono text-[11px] text-muted-foreground">{task.id}</p>
+            <TaskIdBadge taskId={task.id} />
           </div>
           <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] text-muted-foreground transition group-hover:border-border group-hover:bg-muted group-hover:text-muted-foreground">
             <ExternalLink className="size-3" />
             Open
           </span>
-        </button>
-
+        </div>
         <TaskMeta task={task} runState={visibleRunState} />
-
         {hasActiveSessions ? (
           <ActiveSessionsLine taskId={task.id} activeSessions={activeSessions} />
         ) : null}
-
         <TaskActions
           task={task}
           onPlan={onPlan}
