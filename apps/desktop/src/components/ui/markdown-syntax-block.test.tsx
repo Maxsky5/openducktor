@@ -13,6 +13,7 @@ const LIGHT_THEME = { themeName: "light" };
 const DARK_THEME = { themeName: "dark" };
 
 let currentTheme: Theme = "light";
+let yamlLanguageShouldFail = false;
 const registerLanguageMock = mock((_language: string, _grammar: unknown) => {});
 const syntaxHighlighterRenderMock = mock((_props: Record<string, unknown>) => {});
 const darkThemeModuleLoadMock = mock(() => DARK_THEME);
@@ -56,6 +57,16 @@ mock.module("react-syntax-highlighter/dist/esm/styles/prism/one-dark", () => ({
   default: darkThemeModuleLoadMock(),
 }));
 
+mock.module("react-syntax-highlighter/dist/esm/languages/prism/yaml", () => {
+  if (yamlLanguageShouldFail) {
+    throw new Error("missing yaml grammar");
+  }
+
+  return {
+    default: { grammar: "yaml" },
+  };
+});
+
 type MarkdownSyntaxBlockComponent = typeof import("./markdown-syntax-block").default;
 let MarkdownSyntaxBlock: MarkdownSyntaxBlockComponent;
 
@@ -73,6 +84,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   currentTheme = "light";
+  yamlLanguageShouldFail = false;
   syntaxHighlighterRenderMock.mockClear();
   darkThemeModuleLoadMock.mockClear();
 });
@@ -157,6 +169,38 @@ describe("MarkdownSyntaxBlock", () => {
     expect(nodes).toHaveLength(2);
     expect(nodes[0]?.props.style).toBe(DARK_THEME);
     expect(nodes[1]?.props.style).toBe(DARK_THEME);
+
+    act(() => {
+      renderer.unmount();
+    });
+  });
+
+  test("surfaces a fallback notice for grammar load failures and clears it after switching away", async () => {
+    yamlLanguageShouldFail = true;
+
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<MarkdownSyntaxBlock language="yaml" code={"name: OpenDucktor\n"} />);
+    });
+
+    await act(flushMicrotasks);
+
+    const fallback = renderer.root.findByProps({ "data-syntax-load-failure": "language" });
+    expect(fallback.findByType("p").children.join("")).toContain(
+      "Syntax highlighting unavailable: failed to load the yaml grammar (missing yaml grammar)",
+    );
+    expect(findSyntaxNodes(renderer)).toHaveLength(0);
+
+    act(() => {
+      renderer.update(<MarkdownSyntaxBlock language="elixir" code="IO.puts(:hello)" />);
+    });
+
+    await act(flushMicrotasks);
+
+    expect(
+      renderer.root.findAll((node) => node.props["data-syntax-load-failure"] !== undefined),
+    ).toHaveLength(0);
+    expect(renderer.root.findAllByType("p")).toHaveLength(0);
 
     act(() => {
       renderer.unmount();

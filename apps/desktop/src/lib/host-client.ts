@@ -12,8 +12,8 @@ export type HostBridge = {
   subscribeRunEvents: (listener: RunEventListener) => Promise<() => void>;
 };
 
-const RUN_EVENT_SUBSCRIPTIONS_UNAVAILABLE_WARNING =
-  "run-event subscriptions not available in this runtime, returning no-op";
+const RUN_EVENT_SUBSCRIPTIONS_UNAVAILABLE_ERROR =
+  "Run-event subscriptions require the desktop shell or browser live mode.";
 
 let tauriCoreModulePromise: Promise<typeof import("@tauri-apps/api/core")> | null = null;
 
@@ -48,8 +48,7 @@ const createRunEventSubscription = (): HostBridge["subscribeRunEvents"] => async
   }
 
   if (!isTauriRuntime()) {
-    console.warn(RUN_EVENT_SUBSCRIPTIONS_UNAVAILABLE_WARNING);
-    return () => {};
+    throw new Error(RUN_EVENT_SUBSCRIPTIONS_UNAVAILABLE_ERROR);
   }
 
   const events = await import("@tauri-apps/api/event");

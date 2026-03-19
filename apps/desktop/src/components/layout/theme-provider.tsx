@@ -1,6 +1,8 @@
 import type { SettingsSnapshot, Theme } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { applyThemeToDocument, readDocumentTheme } from "./theme-dom";
@@ -15,12 +17,7 @@ type ThemeProviderState = {
   setTheme: (theme: Theme) => void;
 };
 
-const initialState: ThemeProviderState = {
-  theme: "light",
-  setTheme: () => null,
-};
-
-const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
+const ThemeProviderContext = createContext<ThemeProviderState | undefined>(undefined);
 
 export function ThemeProvider({ children, defaultTheme = "light", ...props }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<Theme>(() => readDocumentTheme(defaultTheme));
@@ -68,6 +65,9 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
           if (previousSnapshot) {
             queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, previousSnapshot);
           }
+          toast.error("Theme change failed", {
+            description: errorMessage(error),
+          });
         });
       },
     }),
