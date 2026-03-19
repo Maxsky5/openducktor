@@ -176,6 +176,45 @@ describe("settings-modal-normalization", () => {
         profileId: "spec",
       },
     });
+    expect(normalized.trustedHooks).toBe(true);
+    expect(normalized.trustedHooksFingerprint).toBe("fingerprint");
+  });
+
+  test("disables trusted hooks when no hook commands remain after normalization", () => {
+    const normalized = normalizeRepoConfigForSave({
+      ...createRepoConfig(),
+      trustedHooks: true,
+      trustedHooksFingerprint: "fingerprint",
+      hooks: {
+        preStart: ["   "],
+        postComplete: [""],
+      },
+    });
+
+    expect(normalized.hooks).toEqual({
+      preStart: [],
+      postComplete: [],
+    });
+    expect(normalized.trustedHooks).toBe(false);
+    expect(normalized.trustedHooksFingerprint).toBeUndefined();
+  });
+
+  test("preserves explicit untrusted hooks when normalized hook commands exist", () => {
+    const normalized = normalizeRepoConfigForSave({
+      ...createRepoConfig(),
+      trustedHooks: false,
+      trustedHooksFingerprint: undefined,
+      hooks: {
+        preStart: [" bun install "],
+        postComplete: [],
+      },
+    });
+
+    expect(normalized.hooks).toEqual({
+      preStart: ["bun install"],
+      postComplete: [],
+    });
+    expect(normalized.trustedHooks).toBe(false);
   });
 
   test("normalizes snapshot repo map and global prompt overrides", () => {

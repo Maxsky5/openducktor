@@ -3,11 +3,10 @@ import { FolderOpen } from "lucide-react";
 import type { ReactElement } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
-import { parseHookLines } from "@/components/features/settings";
+import { hasConfiguredHookCommands, parseHookLines } from "@/components/features/settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 
@@ -169,24 +168,6 @@ export function RepositoryConfigurationSection({
         </div>
       </div>
 
-      <Label
-        htmlFor="repo-trusted-hooks"
-        className="flex items-center gap-2 text-sm text-foreground"
-      >
-        <Switch
-          id="repo-trusted-hooks"
-          checked={selectedRepoConfig.trustedHooks}
-          disabled={isLoadingSettings || isSaving}
-          onCheckedChange={(checked) =>
-            onUpdateSelectedRepoConfig((repoConfig) => ({
-              ...repoConfig,
-              trustedHooks: checked,
-            }))
-          }
-        />
-        Trust scripts for this repository
-      </Label>
-
       <div className="grid gap-3 md:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor="repo-pre-start-hooks">Worktree setup script (one command per line)</Label>
@@ -197,15 +178,25 @@ export function RepositoryConfigurationSection({
             disabled={isLoadingSettings || isSaving}
             onChange={(event) => {
               const preStartHooksInput = event.currentTarget.value;
-              onUpdateSelectedRepoConfig((repoConfig) => ({
-                ...repoConfig,
-                hooks: {
+              const preStart = parseHookLines(preStartHooksInput);
+              onUpdateSelectedRepoConfig((repoConfig) => {
+                const hooks = {
                   ...repoConfig.hooks,
-                  preStart: parseHookLines(preStartHooksInput),
-                },
-              }));
+                  preStart,
+                };
+
+                return {
+                  ...repoConfig,
+                  trustedHooks: hasConfiguredHookCommands(hooks),
+                  hooks,
+                };
+              });
             }}
           />
+          <p className="text-xs text-muted-foreground">
+            Saving configured scripts asks for confirmation automatically. Clear both script fields
+            to disable scripts for this repository.
+          </p>
         </div>
 
         <div className="grid gap-2">
@@ -219,13 +210,19 @@ export function RepositoryConfigurationSection({
             disabled={isLoadingSettings || isSaving}
             onChange={(event) => {
               const postCompleteHooksInput = event.currentTarget.value;
-              onUpdateSelectedRepoConfig((repoConfig) => ({
-                ...repoConfig,
-                hooks: {
+              const postComplete = parseHookLines(postCompleteHooksInput);
+              onUpdateSelectedRepoConfig((repoConfig) => {
+                const hooks = {
                   ...repoConfig.hooks,
-                  postComplete: parseHookLines(postCompleteHooksInput),
-                },
-              }));
+                  postComplete,
+                };
+
+                return {
+                  ...repoConfig,
+                  trustedHooks: hasConfiguredHookCommands(hooks),
+                  hooks,
+                };
+              });
             }}
           />
         </div>
