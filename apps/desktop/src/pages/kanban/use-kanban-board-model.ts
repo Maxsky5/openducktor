@@ -44,6 +44,14 @@ export const buildRunStateByTaskId = (runs: RunSummary[]): Map<string, RunSummar
   );
 };
 
+export const sortTasksByActiveSession = (
+  tasks: TaskCard[],
+  activeSessionsByTaskId: Map<string, AgentSessionState[]>,
+): TaskCard[] => {
+  const hasActive = (task: TaskCard) => activeSessionsByTaskId.has(task.id);
+  return [...tasks].sort((a, b) => Number(hasActive(b)) - Number(hasActive(a)));
+};
+
 export const buildActiveSessionsByTaskId = (
   sessions: AgentSessionState[],
 ): Map<string, AgentSessionState[]> => {
@@ -107,10 +115,19 @@ export function useKanbanBoardModel({
 
   const activeSessionsByTaskId = useMemo(() => buildActiveSessionsByTaskId(sessions), [sessions]);
 
+  const columnsWithSortedTasks = useMemo(
+    () =>
+      columns.map((col) => ({
+        ...col,
+        tasks: sortTasksByActiveSession(col.tasks, activeSessionsByTaskId),
+      })),
+    [columns, activeSessionsByTaskId],
+  );
+
   return {
     isLoadingTasks,
     isSwitchingWorkspace,
-    columns,
+    columns: columnsWithSortedTasks,
     runStateByTaskId,
     activeSessionsByTaskId,
     onOpenDetails,
