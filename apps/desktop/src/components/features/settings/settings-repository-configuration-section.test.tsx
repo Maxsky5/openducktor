@@ -97,6 +97,7 @@ describe("RepositoryConfigurationSection", () => {
       {
         ...baseRepoConfig,
         trustedHooks: true,
+        trustedHooksFingerprint: "fingerprint",
         hooks: {
           preStart: ["bun install"],
           postComplete: [],
@@ -125,6 +126,7 @@ describe("RepositoryConfigurationSection", () => {
         updater({
           ...baseRepoConfig,
           trustedHooks: true,
+          trustedHooksFingerprint: "fingerprint",
           hooks: {
             preStart: ["bun install"],
             postComplete: [],
@@ -133,6 +135,7 @@ describe("RepositoryConfigurationSection", () => {
       ).toEqual({
         ...baseRepoConfig,
         trustedHooks: false,
+        trustedHooksFingerprint: undefined,
         hooks: {
           preStart: [""],
           postComplete: [],

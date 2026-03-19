@@ -7,7 +7,7 @@ import type {
 } from "@openducktor/contracts";
 import {
   DEFAULT_BRANCH_PREFIX,
-  hasConfiguredHookCommands,
+  normalizeHooksWithTrust,
 } from "@/components/features/settings/settings-model";
 import { normalizeTargetBranch } from "@/lib/target-branch";
 import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
@@ -71,11 +71,7 @@ export const normalizeRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
   const planner = normalizeAgentDefaultForSave(repo.agentDefaults.planner);
   const build = normalizeAgentDefaultForSave(repo.agentDefaults.build);
   const qa = normalizeAgentDefaultForSave(repo.agentDefaults.qa);
-  const hooks = {
-    preStart: repo.hooks.preStart.map((entry) => entry.trim()).filter(Boolean),
-    postComplete: repo.hooks.postComplete.map((entry) => entry.trim()).filter(Boolean),
-  };
-  const trustedHooks = hasConfiguredHookCommands(hooks) ? repo.trustedHooks : false;
+  const { hooks, trustedHooks } = normalizeHooksWithTrust(repo.hooks, repo.trustedHooks);
 
   return {
     defaultRuntimeKind: repo.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND,

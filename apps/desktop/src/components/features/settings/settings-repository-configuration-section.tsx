@@ -73,6 +73,23 @@ export function RepositoryConfigurationSection({
     : selectedRepoBranchesError
       ? "Branches unavailable"
       : "Select branch...";
+  const updateHookDraft = (key: "preStart" | "postComplete", value: string): void => {
+    const nextHookLines = parseHookLines(value);
+    onUpdateSelectedRepoConfig((repoConfig) => {
+      const hooks = {
+        ...repoConfig.hooks,
+        [key]: nextHookLines,
+      };
+      const trustedHooks = hasConfiguredHookCommands(hooks);
+
+      return {
+        ...repoConfig,
+        trustedHooks,
+        trustedHooksFingerprint: trustedHooks ? repoConfig.trustedHooksFingerprint : undefined,
+        hooks,
+      };
+    });
+  };
 
   return (
     <div className="grid gap-4 p-4">
@@ -176,22 +193,7 @@ export function RepositoryConfigurationSection({
             rows={4}
             value={selectedRepoConfig.hooks.preStart.join("\n")}
             disabled={isLoadingSettings || isSaving}
-            onChange={(event) => {
-              const preStartHooksInput = event.currentTarget.value;
-              const preStart = parseHookLines(preStartHooksInput);
-              onUpdateSelectedRepoConfig((repoConfig) => {
-                const hooks = {
-                  ...repoConfig.hooks,
-                  preStart,
-                };
-
-                return {
-                  ...repoConfig,
-                  trustedHooks: hasConfiguredHookCommands(hooks),
-                  hooks,
-                };
-              });
-            }}
+            onChange={(event) => updateHookDraft("preStart", event.currentTarget.value)}
           />
           <p className="text-xs text-muted-foreground">
             Saving configured scripts asks for confirmation automatically. Clear both script fields
@@ -208,22 +210,7 @@ export function RepositoryConfigurationSection({
             rows={4}
             value={selectedRepoConfig.hooks.postComplete.join("\n")}
             disabled={isLoadingSettings || isSaving}
-            onChange={(event) => {
-              const postCompleteHooksInput = event.currentTarget.value;
-              const postComplete = parseHookLines(postCompleteHooksInput);
-              onUpdateSelectedRepoConfig((repoConfig) => {
-                const hooks = {
-                  ...repoConfig.hooks,
-                  postComplete,
-                };
-
-                return {
-                  ...repoConfig,
-                  trustedHooks: hasConfiguredHookCommands(hooks),
-                  hooks,
-                };
-              });
-            }}
+            onChange={(event) => updateHookDraft("postComplete", event.currentTarget.value)}
           />
         </div>
       </div>

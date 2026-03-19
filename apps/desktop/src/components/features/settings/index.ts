@@ -11,4 +11,8 @@ export {
   toRoleVariantOptions,
   updatePromptOverrideTemplate,
 } from "./settings-modal-model";
-export { hasConfiguredHookCommands, parseHookLines } from "./settings-model";
+export {
+  hasConfiguredHookCommands,
+  normalizeHooksWithTrust,
+  parseHookLines,
+} from "./settings-model";

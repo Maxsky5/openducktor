@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { hasConfiguredHookCommands, parseHookLines } from "./settings-model";
+import {
+  hasConfiguredHookCommands,
+  normalizeHooksWithTrust,
+  parseHookLines,
+} from "./settings-model";
 
 describe("settings-model", () => {
   test("parseHookLines preserves blank lines while trimming entered commands", () => {
@@ -25,5 +29,46 @@ describe("settings-model", () => {
         postComplete: [],
       }),
     ).toBe(true);
+
+    expect(
+      hasConfiguredHookCommands({
+        preStart: ["   "],
+        postComplete: [],
+      }),
+    ).toBe(false);
+  });
+
+  test("normalizeHooksWithTrust trims commands and disables trust when commands are empty", () => {
+    expect(
+      normalizeHooksWithTrust(
+        {
+          preStart: [" bun install ", " "],
+          postComplete: ["npm test"],
+        },
+        true,
+      ),
+    ).toEqual({
+      hooks: {
+        preStart: ["bun install"],
+        postComplete: ["npm test"],
+      },
+      trustedHooks: true,
+    });
+
+    expect(
+      normalizeHooksWithTrust(
+        {
+          preStart: [" "],
+          postComplete: [""],
+        },
+        true,
+      ),
+    ).toEqual({
+      hooks: {
+        preStart: [],
+        postComplete: [],
+      },
+      trustedHooks: false,
+    });
   });
 });
