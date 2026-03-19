@@ -70,6 +70,7 @@ export type AgentStudioComposerSessionContext = {
   taskId: string;
   activeSession: AgentSessionState | null;
   isSessionWorking: boolean;
+  isWaitingInput: boolean;
   canStopSession: boolean;
   stopAgentSession: (sessionId: string) => Promise<void>;
 };

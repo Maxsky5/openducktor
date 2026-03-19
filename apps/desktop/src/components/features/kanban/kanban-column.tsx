@@ -2,12 +2,15 @@ import type { RunSummary } from "@openducktor/contracts";
 import type { KanbanColumn as KanbanColumnData, KanbanColumnId } from "@openducktor/core";
 import { Inbox } from "lucide-react";
 import { type ComponentProps, memo, type ReactElement, useEffect, useRef } from "react";
+import type {
+  KanbanActiveSession,
+  KanbanTaskActivityState,
+} from "@/components/features/kanban/kanban-task-activity";
 import { KanbanTaskCard } from "@/components/features/kanban/kanban-task-card";
 import { laneTheme } from "@/components/features/kanban/kanban-theme";
 import { useKanbanVirtualization } from "@/components/features/kanban/use-kanban-virtualization";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 type RunningTaskSessions = NonNullable<ComponentProps<typeof KanbanTaskCard>["activeSessions"]>;
 const EMPTY_ACTIVE_SESSIONS: RunningTaskSessions = [];
@@ -15,7 +18,8 @@ const EMPTY_ACTIVE_SESSIONS: RunningTaskSessions = [];
 type KanbanColumnProps = {
   column: KanbanColumnData;
   runStateByTaskId: Map<string, RunSummary["state"]>;
-  activeSessionsByTaskId: Map<string, AgentSessionState[]>;
+  activeSessionsByTaskId: Map<string, KanbanActiveSession[]>;
+  taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
@@ -46,6 +50,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   task,
   runState,
   activeSessions,
+  taskActivityState,
   measurementVersion,
   onMeasuredHeight,
   onOpenDetails,
@@ -61,6 +66,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   task: KanbanColumnData["tasks"][number];
   runState: RunSummary["state"] | undefined;
   activeSessions: RunningTaskSessions | undefined;
+  taskActivityState: KanbanTaskActivityState;
   measurementVersion: number;
   onMeasuredHeight: (taskId: string, height: number) => void;
 } & TaskCardHandlers): ReactElement {
@@ -80,12 +86,14 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   const activeSessionsMeasurementKey =
     activeSessions
       ?.map(
-        (session) => `${session.sessionId}:${session.role}:${session.scenario}:${session.status}`,
+        (session) =>
+          `${session.sessionId}:${session.role}:${session.scenario}:${session.status}:${session.presentationState ?? "active"}`,
       )
       .join("|") ?? "";
   const measurementTrigger = [
     measurementVersion,
     runState ?? "",
+    taskActivityState,
     taskMeasurementKey,
     activeSessionsMeasurementKey,
   ].join("::");
@@ -127,6 +135,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
         task={task}
         runState={runState}
         activeSessions={activeSessions}
+        taskActivityState={taskActivityState}
         onOpenDetails={onOpenDetails}
         onDelegate={onDelegate}
         onPlan={onPlan}
@@ -188,6 +197,7 @@ export function KanbanColumn({
   column,
   runStateByTaskId,
   activeSessionsByTaskId,
+  taskActivityStateByTaskId,
   onOpenDetails,
   onDelegate,
   onPlan,
@@ -232,6 +242,7 @@ export function KanbanColumn({
                   task={task}
                   runState={runStateByTaskId.get(task.id)}
                   activeSessions={activeSessionsByTaskId.get(task.id) ?? EMPTY_ACTIVE_SESSIONS}
+                  taskActivityState={taskActivityStateByTaskId.get(task.id) ?? "idle"}
                   measurementVersion={measurementVersion}
                   onMeasuredHeight={handleMeasuredHeight}
                   onOpenDetails={onOpenDetails}
@@ -260,6 +271,7 @@ export function KanbanColumn({
                 task={task}
                 runState={runStateByTaskId.get(task.id)}
                 activeSessions={activeSessionsByTaskId.get(task.id) ?? EMPTY_ACTIVE_SESSIONS}
+                taskActivityState={taskActivityStateByTaskId.get(task.id) ?? "idle"}
                 onOpenDetails={onOpenDetails}
                 onDelegate={onDelegate}
                 onPlan={onPlan}

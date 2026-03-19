@@ -2,6 +2,10 @@ import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import { ExternalLink, PlayCircle } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import { Link } from "react-router-dom";
+import type {
+  KanbanSessionPresentationState,
+  KanbanTaskActivityState,
+} from "@/components/features/kanban/kanban-task-activity";
 import {
   IssueTypeBadge,
   PriorityBadge,
@@ -22,10 +26,10 @@ import { cn } from "@/lib/utils";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
-type RunningTaskSession = Pick<
-  AgentSessionState,
-  "sessionId" | "runtimeKind" | "role" | "scenario" | "status"
->;
+type RunningTaskSession = Pick<AgentSessionState, "sessionId" | "role" | "scenario" | "status"> & {
+  runtimeKind?: AgentSessionState["runtimeKind"];
+  presentationState?: KanbanSessionPresentationState;
+};
 
 const toVisibleKanbanRunState = (
   runState: RunSummary["state"] | undefined,
@@ -51,6 +55,7 @@ type KanbanTaskCardProps = {
   task: TaskCard;
   runState?: RunSummary["state"] | undefined;
   activeSessions?: RunningTaskSession[] | undefined;
+  taskActivityState: KanbanTaskActivityState;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
@@ -113,7 +118,8 @@ const areRunningTaskSessionsEqual = (
       leftSession.sessionId !== rightSession.sessionId ||
       leftSession.role !== rightSession.role ||
       leftSession.scenario !== rightSession.scenario ||
-      leftSession.status !== rightSession.status
+      leftSession.status !== rightSession.status ||
+      (leftSession.presentationState ?? "active") !== (rightSession.presentationState ?? "active")
     ) {
       return false;
     }
@@ -128,6 +134,7 @@ const areKanbanTaskCardPropsEqual = (
   areTaskCardsEquivalent(previous.task, next.task) &&
   previous.runState === next.runState &&
   areRunningTaskSessionsEqual(previous.activeSessions, next.activeSessions) &&
+  previous.taskActivityState === next.taskActivityState &&
   previous.onOpenDetails === next.onOpenDetails &&
   previous.onDelegate === next.onDelegate &&
   previous.onPlan === next.onPlan &&
@@ -164,16 +171,33 @@ const ActiveSessionChip = memo(
     session: RunningTaskSession;
   }): ReactElement {
     const roleLabel = AGENT_ROLE_LABELS[session.role] ?? session.role;
-    const statusLabel = session.status === "starting" ? "Starting" : "Running";
+    const isWaitingInput = session.presentationState === "waiting_input";
+    const statusLabel = isWaitingInput
+      ? "Waiting input"
+      : session.status === "starting"
+        ? "Starting"
+        : "Running";
 
     return (
       <Link
         to={toSessionHref({ taskId, session })}
-        className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-info-border bg-info-surface px-2 py-1 text-[11px] font-semibold text-info-muted transition hover:border-info-border hover:bg-info-surface"
+        className={cn(
+          "inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition",
+          isWaitingInput
+            ? "border-warning-border bg-warning-surface text-warning-muted hover:border-warning-border hover:bg-warning-surface"
+            : "border-info-border bg-info-surface text-info-muted hover:border-info-border hover:bg-info-surface",
+        )}
       >
         <PlayCircle className="size-3" />
         {roleLabel}
-        <span className="text-[10px] font-medium text-primary/90">{statusLabel}</span>
+        <span
+          className={cn(
+            "text-[10px] font-medium",
+            isWaitingInput ? "text-warning-surface-foreground" : "text-primary/90",
+          )}
+        >
+          {statusLabel}
+        </span>
       </Link>
     );
   },
@@ -182,18 +206,29 @@ const ActiveSessionChip = memo(
     previous.session.sessionId === next.session.sessionId &&
     previous.session.role === next.session.role &&
     previous.session.scenario === next.session.scenario &&
-    previous.session.status === next.session.status,
+    previous.session.status === next.session.status &&
+    (previous.session.presentationState ?? "active") ===
+      (next.session.presentationState ?? "active"),
 );
 
 function ActiveSessionsLine({
   taskId,
   activeSessions,
+  taskActivityState,
 }: {
   taskId: string;
   activeSessions: RunningTaskSession[];
+  taskActivityState: KanbanTaskActivityState;
 }): ReactElement {
+  const isWaitingInput = taskActivityState === "waiting_input";
+
   return (
-    <div className="space-y-1 border-t border-info-border pt-2">
+    <div
+      className={cn(
+        "space-y-1 border-t pt-2",
+        isWaitingInput ? "border-warning-border" : "border-info-border",
+      )}
+    >
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         Active sessions
       </p>
@@ -321,6 +356,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   task,
   runState,
   activeSessions = [],
+  taskActivityState,
   onOpenDetails,
   onDelegate,
   onPlan,
@@ -331,19 +367,22 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   onHumanRequestChanges,
   onResetImplementation,
 }: KanbanTaskCardProps): ReactElement {
-  const hasActiveSessions = activeSessions.length > 0;
+  const hasActiveSessions = taskActivityState !== "idle";
+  const isWaitingInput = taskActivityState === "waiting_input";
   const visibleRunState = toVisibleKanbanRunState(runState);
 
   return (
     <article
       className={cn(
         "group min-w-0 rounded-xl border border-border/90 bg-card/95 shadow-sm transition duration-150 hover:border-info-border hover:shadow-md",
-        hasActiveSessions
-          ? "kanban-active-session-card border-info-border shadow-info-border"
-          : undefined,
+        isWaitingInput
+          ? "kanban-waiting-input-card border-warning-border hover:border-warning-border"
+          : hasActiveSessions
+            ? "kanban-active-session-card border-info-border shadow-info-border"
+            : undefined,
       )}
     >
-      {hasActiveSessions ? (
+      {hasActiveSessions && !isWaitingInput ? (
         <BorderRay turnDurationMs={2500} strokeWidth={4.4} className="kanban-active-session-ray" />
       ) : null}
 
@@ -379,7 +418,11 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
         </div>
         <TaskMeta task={task} runState={visibleRunState} />
         {hasActiveSessions ? (
-          <ActiveSessionsLine taskId={task.id} activeSessions={activeSessions} />
+          <ActiveSessionsLine
+            taskId={task.id}
+            activeSessions={activeSessions}
+            taskActivityState={taskActivityState}
+          />
         ) : null}
         <TaskActions
           task={task}

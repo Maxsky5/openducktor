@@ -4,7 +4,8 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   buildActiveSessionsByTaskId,
   buildRunStateByTaskId,
-  sortTasksByActiveSession,
+  buildTaskActivityStateByTaskId,
+  sortTasksByActivityState,
 } from "./use-kanban-board-model";
 
 const createRun = (overrides: Partial<RunSummary> = {}): RunSummary => ({
@@ -109,7 +110,7 @@ describe("use-kanban-board-model helpers", () => {
     expect(runStateByTaskId.get("task-2")).toBe("blocked");
   });
 
-  test("buildActiveSessionsByTaskId filters non-active sessions and sorts active ones", () => {
+  test("buildActiveSessionsByTaskId filters non-active sessions, sorts active ones, and derives waiting input", () => {
     const activeSessionsByTaskId = buildActiveSessionsByTaskId([
       createSession({
         sessionId: "session-starting",
@@ -125,6 +126,18 @@ describe("use-kanban-board-model helpers", () => {
         sessionId: "session-running-newer",
         status: "running",
         startedAt: "2026-03-17T10:00:00.000Z",
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Approval",
+                question: "Need approval",
+                options: [{ label: "Approve", description: "Approve the change" }],
+              },
+            ],
+          },
+        ],
       }),
       createSession({
         sessionId: "session-idle",
@@ -132,69 +145,151 @@ describe("use-kanban-board-model helpers", () => {
       }),
     ]);
 
-    expect(activeSessionsByTaskId.get("task-1")?.map((session) => session.sessionId)).toEqual([
-      "session-running-newer",
-      "session-running-older",
-      "session-starting",
+    expect(activeSessionsByTaskId.get("task-1")).toEqual([
+      expect.objectContaining({
+        sessionId: "session-running-newer",
+        presentationState: "waiting_input",
+      }),
+      expect.objectContaining({
+        sessionId: "session-running-older",
+        presentationState: "active",
+      }),
+      expect.objectContaining({
+        sessionId: "session-starting",
+        presentationState: "active",
+      }),
     ]);
   });
 
-  test("sortTasksByActiveSession puts active tasks above inactive tasks", () => {
+  test("sortTasksByActivityState puts waiting-input tasks above active and inactive tasks", () => {
     const tasks = [
       createTaskCard({ id: "task-no-session" }),
+      createTaskCard({ id: "task-waiting" }),
       createTaskCard({ id: "task-with-session" }),
       createTaskCard({ id: "task-another-no-session" }),
     ];
-    const activeSessionsByTaskId = new Map<string, AgentSessionState[]>([
-      ["task-with-session", [createSession({ taskId: "task-with-session" })]],
+    const activeSessionsByTaskId = buildActiveSessionsByTaskId([
+      createSession({
+        taskId: "task-waiting",
+        pendingPermissions: [
+          {
+            requestId: "permission-1",
+            permission: "tool",
+            patterns: ["odt_read_task"],
+          },
+        ],
+      }),
+      createSession({ taskId: "task-with-session", sessionId: "session-2" }),
     ]);
+    const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(activeSessionsByTaskId);
 
-    const sorted = sortTasksByActiveSession(tasks, activeSessionsByTaskId);
+    const sorted = sortTasksByActivityState(tasks, taskActivityStateByTaskId);
 
     expect(sorted.map((t) => t.id)).toEqual([
+      "task-waiting",
       "task-with-session",
       "task-no-session",
       "task-another-no-session",
     ]);
   });
 
-  test("sortTasksByActiveSession preserves relative order within groups (stable sort)", () => {
+  test("sortTasksByActivityState preserves relative order within groups", () => {
     const tasks = [
-      createTaskCard({ id: "task-1-no-session" }),
-      createTaskCard({ id: "task-2-with-session" }),
-      createTaskCard({ id: "task-3-no-session" }),
-      createTaskCard({ id: "task-4-with-session" }),
+      createTaskCard({ id: "task-1-waiting" }),
+      createTaskCard({ id: "task-2-active" }),
+      createTaskCard({ id: "task-3-idle" }),
+      createTaskCard({ id: "task-4-waiting" }),
+      createTaskCard({ id: "task-5-active" }),
+      createTaskCard({ id: "task-6-idle" }),
     ];
-    const activeSessionsByTaskId = new Map<string, AgentSessionState[]>([
-      ["task-2-with-session", [createSession({ taskId: "task-2-with-session" })]],
-      ["task-4-with-session", [createSession({ taskId: "task-4-with-session" })]],
+    const activeSessionsByTaskId = buildActiveSessionsByTaskId([
+      createSession({
+        taskId: "task-1-waiting",
+        sessionId: "session-1",
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Approval",
+                question: "Need approval",
+                options: [{ label: "Approve", description: "Approve the change" }],
+              },
+            ],
+          },
+        ],
+      }),
+      createSession({ taskId: "task-2-active", sessionId: "session-2" }),
+      createSession({
+        taskId: "task-4-waiting",
+        sessionId: "session-4",
+        pendingPermissions: [
+          {
+            requestId: "permission-1",
+            permission: "tool",
+            patterns: ["odt_read_task"],
+          },
+        ],
+      }),
+      createSession({ taskId: "task-5-active", sessionId: "session-5" }),
     ]);
+    const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(activeSessionsByTaskId);
 
-    const sorted = sortTasksByActiveSession(tasks, activeSessionsByTaskId);
+    const sorted = sortTasksByActivityState(tasks, taskActivityStateByTaskId);
 
     expect(sorted.map((t) => t.id)).toEqual([
-      "task-2-with-session",
-      "task-4-with-session",
-      "task-1-no-session",
-      "task-3-no-session",
+      "task-1-waiting",
+      "task-4-waiting",
+      "task-2-active",
+      "task-5-active",
+      "task-3-idle",
+      "task-6-idle",
     ]);
   });
 
-  test("sortTasksByActiveSession handles empty columns gracefully", () => {
+  test("sortTasksByActivityState handles empty columns gracefully", () => {
     const tasks: TaskCard[] = [];
-    const activeSessionsByTaskId = new Map<string, AgentSessionState[]>();
+    const taskActivityStateByTaskId = new Map<string, "idle" | "active" | "waiting_input">();
 
-    const sorted = sortTasksByActiveSession(tasks, activeSessionsByTaskId);
+    const sorted = sortTasksByActivityState(tasks, taskActivityStateByTaskId);
 
     expect(sorted).toEqual([]);
   });
 
-  test("sortTasksByActiveSession handles no active sessions gracefully", () => {
+  test("sortTasksByActivityState handles no active sessions gracefully", () => {
     const tasks = [createTaskCard({ id: "task-1" }), createTaskCard({ id: "task-2" })];
-    const activeSessionsByTaskId = new Map<string, AgentSessionState[]>();
+    const taskActivityStateByTaskId = new Map<string, "idle" | "active" | "waiting_input">();
 
-    const sorted = sortTasksByActiveSession(tasks, activeSessionsByTaskId);
+    const sorted = sortTasksByActivityState(tasks, taskActivityStateByTaskId);
 
     expect(sorted.map((t) => t.id)).toEqual(["task-1", "task-2"]);
+  });
+
+  test("buildTaskActivityStateByTaskId marks tasks as waiting input when any active session is waiting", () => {
+    const activeSessionsByTaskId = buildActiveSessionsByTaskId([
+      createSession({ taskId: "task-waiting", sessionId: "session-waiting" }),
+      createSession({
+        taskId: "task-waiting",
+        sessionId: "session-question",
+        pendingQuestions: [
+          {
+            requestId: "question-2",
+            questions: [
+              {
+                header: "Question",
+                question: "Need answer",
+                options: [{ label: "Answer", description: "Answer the question" }],
+              },
+            ],
+          },
+        ],
+      }),
+      createSession({ taskId: "task-active", sessionId: "session-active" }),
+    ]);
+
+    const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(activeSessionsByTaskId);
+
+    expect(taskActivityStateByTaskId.get("task-waiting")).toBe("waiting_input");
+    expect(taskActivityStateByTaskId.get("task-active")).toBe("active");
   });
 });

@@ -1,13 +1,16 @@
 import type { GitTargetBranch, RunSummary, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario, KanbanColumn as KanbanColumnData } from "@openducktor/core";
 import type { SessionStartModalModel } from "@/components/features/agents";
+import type {
+  KanbanActiveSession,
+  KanbanTaskActivityState,
+} from "@/components/features/kanban/kanban-task-activity";
 import type { GitConflict, GitConflictAction } from "@/features/agent-studio-git";
 import type {
   GitConflictResolutionDecision,
   PendingGitConflictResolutionRequest,
 } from "@/features/git-conflict-resolution";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export type KanbanSessionStartIntent = {
   taskId: string;
@@ -71,7 +74,8 @@ export type KanbanPageContentModel = {
   isSwitchingWorkspace: boolean;
   columns: KanbanColumnData[];
   runStateByTaskId: Map<string, RunSummary["state"]>;
-  activeSessionsByTaskId: Map<string, AgentSessionState[]>;
+  activeSessionsByTaskId: Map<string, KanbanActiveSession[]>;
+  taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;

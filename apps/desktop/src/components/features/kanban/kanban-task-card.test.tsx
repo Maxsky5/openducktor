@@ -17,6 +17,7 @@ describe("KanbanTaskCard active sessions", () => {
         { initialEntries: ["/kanban"] },
         createElement(KanbanTaskCard, {
           task,
+          taskActivityState: "active",
           activeSessions: [
             {
               runtimeKind: "opencode",
@@ -24,6 +25,7 @@ describe("KanbanTaskCard active sessions", () => {
               role: "build",
               scenario: "build_implementation_start",
               status: "running",
+              presentationState: "active",
             },
             {
               runtimeKind: "opencode",
@@ -31,6 +33,7 @@ describe("KanbanTaskCard active sessions", () => {
               role: "qa",
               scenario: "qa_review",
               status: "starting",
+              presentationState: "active",
             },
           ],
           onOpenDetails: noop,
@@ -66,6 +69,7 @@ describe("KanbanTaskCard active sessions", () => {
         { initialEntries: ["/kanban"] },
         createElement(KanbanTaskCard, {
           task,
+          taskActivityState: "idle",
           activeSessions: [],
           onOpenDetails: noop,
           onDelegate: noop,
@@ -78,6 +82,51 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).not.toContain("kanban-active-session-card");
     expect(html).not.toContain("Active sessions");
     expect(html).not.toContain("Active agent session");
+  });
+
+  test("renders waiting-input card treatment and suppresses the animated ray", () => {
+    const task = createTaskCardFixture({ id: "TASK-WAITING", title: "Need approval" });
+
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          taskActivityState: "waiting_input",
+          activeSessions: [
+            {
+              runtimeKind: "opencode",
+              sessionId: "session-build",
+              role: "build",
+              scenario: "build_implementation_start",
+              status: "running",
+              presentationState: "waiting_input",
+            },
+            {
+              runtimeKind: "opencode",
+              sessionId: "session-qa",
+              role: "qa",
+              scenario: "qa_review",
+              status: "running",
+              presentationState: "active",
+            },
+          ],
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onPlan: noop,
+          onBuild: noop,
+        }),
+      ),
+    );
+
+    expect(html).toContain("kanban-waiting-input-card");
+    expect(html).not.toContain("kanban-active-session-ray");
+    expect(html).toContain("Waiting input");
+    expect(html).toContain("border-warning-border");
+    expect(html).toContain("bg-warning-surface");
+    expect(html).toContain("Builder");
+    expect(html).toContain("QA");
   });
 
   test("renders qa rejected badge for rework tasks", () => {
@@ -98,6 +147,7 @@ describe("KanbanTaskCard active sessions", () => {
         { initialEntries: ["/kanban"] },
         createElement(KanbanTaskCard, {
           task,
+          taskActivityState: "idle",
           activeSessions: [],
           onOpenDetails: noop,
           onDelegate: noop,
@@ -133,6 +183,7 @@ describe("KanbanTaskCard active sessions", () => {
         { initialEntries: ["/kanban"] },
         createElement(KanbanTaskCard, {
           task,
+          taskActivityState: "idle",
           activeSessions: [],
           onOpenDetails: noop,
           onDelegate: noop,
@@ -156,6 +207,7 @@ describe("KanbanTaskCard active sessions", () => {
         createElement(KanbanTaskCard, {
           task,
           runState: "completed",
+          taskActivityState: "idle",
           activeSessions: [],
           onOpenDetails: noop,
           onDelegate: noop,
@@ -173,6 +225,7 @@ describe("KanbanTaskCard active sessions", () => {
         createElement(KanbanTaskCard, {
           task,
           runState: "stopped",
+          taskActivityState: "idle",
           activeSessions: [],
           onOpenDetails: noop,
           onDelegate: noop,
@@ -194,6 +247,7 @@ describe("KanbanTaskCard active sessions", () => {
         createElement(KanbanTaskCard, {
           task,
           runState: "running",
+          taskActivityState: "idle",
           activeSessions: [],
           onOpenDetails: noop,
           onDelegate: noop,
@@ -213,6 +267,7 @@ describe("KanbanTaskCard active sessions", () => {
         createElement(KanbanTaskCard, {
           task,
           runState: "starting",
+          taskActivityState: "idle",
           activeSessions: [],
           onOpenDetails: noop,
           onDelegate: noop,
@@ -236,6 +291,7 @@ describe("KanbanTaskCard active sessions", () => {
         createElement(KanbanTaskCard, {
           task,
           runState: "awaiting_done_confirmation",
+          taskActivityState: "idle",
           activeSessions: [],
           onOpenDetails: noop,
           onDelegate: noop,

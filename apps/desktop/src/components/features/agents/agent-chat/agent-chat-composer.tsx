@@ -20,6 +20,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     isSending,
     isStarting,
     isSessionWorking,
+    isWaitingInput,
     isModelSelectionPending,
     selectedModelSelection,
     isSelectionCatalogLoading,
@@ -70,8 +71,14 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
   return (
     <form ref={composerFormRef} className="px-4 pb-4" action={handleSubmit}>
       <fieldset className="contents" disabled={isSubmitting}>
-        <div className="relative border border-input bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl">
-          {isSessionWorking ? (
+        <div
+          className={
+            isWaitingInput
+              ? "odt-waiting-input-card relative border border-warning-border bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl"
+              : "relative border border-input bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl"
+          }
+        >
+          {isSessionWorking && !isWaitingInput ? (
             <BorderRay
               strokeWidth={2.6}
               rayLengthRatio={0.12}
@@ -79,8 +86,12 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
             />
           ) : null}
           <div
-            className="relative z-10 border-l-4"
-            style={composerAccentColor ? { borderLeftColor: composerAccentColor } : undefined}
+            className={isWaitingInput ? "relative z-10" : "relative z-10 border-l-4"}
+            style={
+              composerAccentColor && !isWaitingInput
+                ? { borderLeftColor: composerAccentColor }
+                : undefined
+            }
           >
             <Textarea
               ref={composerTextareaRef}

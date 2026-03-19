@@ -115,6 +115,7 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
               column={column}
               runStateByTaskId={model.runStateByTaskId}
               activeSessionsByTaskId={model.activeSessionsByTaskId}
+              taskActivityStateByTaskId={model.taskActivityStateByTaskId}
               onOpenDetails={model.onOpenDetails}
               onDelegate={model.onDelegate}
               onPlan={model.onPlan}

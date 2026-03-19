@@ -57,6 +57,7 @@ type AgentStudioSessionActionsContext = {
   isStarting: boolean;
   isSending: boolean;
   isSessionWorking: boolean;
+  isWaitingInput: boolean;
   canKickoffNewSession: boolean;
   kickoffLabel: string;
   canStopSession: boolean;
@@ -297,6 +298,7 @@ export function useAgentStudioPageModels({
     taskId: core.taskId,
     activeSession: core.activeSession,
     isSessionWorking: sessionActions.isSessionWorking,
+    isWaitingInput: sessionActions.isWaitingInput,
     canStopSession: sessionActions.canStopSession,
     stopAgentSession: sessionActions.stopAgentSession,
     agentStudioReady: readiness.agentStudioReady,

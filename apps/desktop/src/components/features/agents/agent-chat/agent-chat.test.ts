@@ -45,6 +45,7 @@ const buildModel = () => ({
     isSending: false,
     isStarting: false,
     isSessionWorking: false,
+    isWaitingInput: false,
     isModelSelectionPending: false,
     selectedModelSelection: buildModelSelection(),
     isSelectionCatalogLoading: false,

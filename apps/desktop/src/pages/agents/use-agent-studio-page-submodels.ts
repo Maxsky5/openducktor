@@ -217,6 +217,7 @@ type UseAgentStudioComposerModelArgs = {
   taskId: string;
   activeSession: AgentSessionState | null;
   isSessionWorking: boolean;
+  isWaitingInput: boolean;
   canStopSession: boolean;
   stopAgentSession: (sessionId: string) => Promise<void>;
   agentStudioReady: boolean;
@@ -247,6 +248,7 @@ export const useAgentStudioComposerModel = ({
   taskId,
   activeSession,
   isSessionWorking,
+  isWaitingInput,
   canStopSession,
   stopAgentSession,
   agentStudioReady,
@@ -301,6 +303,7 @@ export const useAgentStudioComposerModel = ({
         isSending,
         isStarting,
         isSessionWorking,
+        isWaitingInput,
         isModelSelectionPending,
         selectedModelSelection,
         isSelectionCatalogLoading,
@@ -334,6 +337,7 @@ export const useAgentStudioComposerModel = ({
       isSelectionCatalogLoading,
       isSending,
       isSessionWorking,
+      isWaitingInput,
       isStarting,
       modelGroups,
       modelOptions,
