@@ -1,5 +1,5 @@
 import { Check, Copy } from "lucide-react";
-import { useState } from "react";
+import { memo, type ReactElement, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -10,19 +10,24 @@ type TaskIdBadgeProps = {
   iconSize?: number;
 };
 
-export function TaskIdBadge({
+function TaskIdBadgeComponent({
   taskId,
   className,
   iconSize = 12,
-}: TaskIdBadgeProps): React.ReactElement {
+}: TaskIdBadgeProps): ReactElement {
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timeoutId = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timeoutId);
+  }, [copied]);
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(taskId);
       setCopied(true);
       toast.success("Copied!", { description: taskId });
-      setTimeout(() => setCopied(false), 2000);
     } catch {
       toast.error("Copy failed");
     }
@@ -55,3 +60,5 @@ export function TaskIdBadge({
     </div>
   );
 }
+
+export const TaskIdBadge = memo(TaskIdBadgeComponent);
