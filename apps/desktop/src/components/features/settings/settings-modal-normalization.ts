@@ -5,7 +5,10 @@ import type {
   RepoPromptOverrides,
   SettingsSnapshot,
 } from "@openducktor/contracts";
-import { DEFAULT_BRANCH_PREFIX } from "@/components/features/settings/settings-model";
+import {
+  DEFAULT_BRANCH_PREFIX,
+  normalizeHooksWithTrust,
+} from "@/components/features/settings/settings-model";
 import { normalizeTargetBranch } from "@/lib/target-branch";
 import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 
@@ -68,6 +71,7 @@ export const normalizeRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
   const planner = normalizeAgentDefaultForSave(repo.agentDefaults.planner);
   const build = normalizeAgentDefaultForSave(repo.agentDefaults.build);
   const qa = normalizeAgentDefaultForSave(repo.agentDefaults.qa);
+  const { hooks, trustedHooks } = normalizeHooksWithTrust(repo.hooks, repo.trustedHooks);
 
   return {
     defaultRuntimeKind: repo.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND,
@@ -75,12 +79,9 @@ export const normalizeRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
     branchPrefix: trimNonEmpty(repo.branchPrefix) ?? DEFAULT_BRANCH_PREFIX,
     defaultTargetBranch: normalizeTargetBranch(repo.defaultTargetBranch),
     git: repo.git,
-    trustedHooks: repo.trustedHooks,
-    trustedHooksFingerprint: repo.trustedHooksFingerprint,
-    hooks: {
-      preStart: repo.hooks.preStart.map((entry) => entry.trim()).filter(Boolean),
-      postComplete: repo.hooks.postComplete.map((entry) => entry.trim()).filter(Boolean),
-    },
+    trustedHooks,
+    trustedHooksFingerprint: trustedHooks ? repo.trustedHooksFingerprint : undefined,
+    hooks,
     worktreeFileCopies: repo.worktreeFileCopies.map((entry) => entry.trim()).filter(Boolean),
     promptOverrides: normalizePromptOverridesForSave(repo.promptOverrides),
     agentDefaults: {

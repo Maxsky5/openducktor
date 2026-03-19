@@ -1,13 +1,12 @@
 import type { GitBranch, RepoConfig } from "@openducktor/contracts";
-import { FolderOpen } from "lucide-react";
+import { CircleAlert, FolderOpen } from "lucide-react";
 import type { ReactElement } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
-import { parseHookLines } from "@/components/features/settings";
+import { hasConfiguredHookCommands, parseHookLines } from "@/components/features/settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 
@@ -74,6 +73,23 @@ export function RepositoryConfigurationSection({
     : selectedRepoBranchesError
       ? "Branches unavailable"
       : "Select branch...";
+  const updateHookDraft = (key: "preStart" | "postComplete", value: string): void => {
+    const nextHookLines = parseHookLines(value);
+    onUpdateSelectedRepoConfig((repoConfig) => {
+      const hooks = {
+        ...repoConfig.hooks,
+        [key]: nextHookLines,
+      };
+      const trustedHooks = hasConfiguredHookCommands(hooks);
+
+      return {
+        ...repoConfig,
+        trustedHooks,
+        trustedHooksFingerprint: trustedHooks ? repoConfig.trustedHooksFingerprint : undefined,
+        hooks,
+      };
+    });
+  };
 
   return (
     <div className="grid gap-4 p-4">
@@ -169,24 +185,6 @@ export function RepositoryConfigurationSection({
         </div>
       </div>
 
-      <Label
-        htmlFor="repo-trusted-hooks"
-        className="flex items-center gap-2 text-sm text-foreground"
-      >
-        <Switch
-          id="repo-trusted-hooks"
-          checked={selectedRepoConfig.trustedHooks}
-          disabled={isLoadingSettings || isSaving}
-          onCheckedChange={(checked) =>
-            onUpdateSelectedRepoConfig((repoConfig) => ({
-              ...repoConfig,
-              trustedHooks: checked,
-            }))
-          }
-        />
-        Trust scripts for this repository
-      </Label>
-
       <div className="grid gap-3 md:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor="repo-pre-start-hooks">Worktree setup script (one command per line)</Label>
@@ -195,16 +193,7 @@ export function RepositoryConfigurationSection({
             rows={4}
             value={selectedRepoConfig.hooks.preStart.join("\n")}
             disabled={isLoadingSettings || isSaving}
-            onChange={(event) => {
-              const preStartHooksInput = event.currentTarget.value;
-              onUpdateSelectedRepoConfig((repoConfig) => ({
-                ...repoConfig,
-                hooks: {
-                  ...repoConfig.hooks,
-                  preStart: parseHookLines(preStartHooksInput),
-                },
-              }));
-            }}
+            onChange={(event) => updateHookDraft("preStart", event.currentTarget.value)}
           />
         </div>
 
@@ -217,18 +206,19 @@ export function RepositoryConfigurationSection({
             rows={4}
             value={selectedRepoConfig.hooks.postComplete.join("\n")}
             disabled={isLoadingSettings || isSaving}
-            onChange={(event) => {
-              const postCompleteHooksInput = event.currentTarget.value;
-              onUpdateSelectedRepoConfig((repoConfig) => ({
-                ...repoConfig,
-                hooks: {
-                  ...repoConfig.hooks,
-                  postComplete: parseHookLines(postCompleteHooksInput),
-                },
-              }));
-            }}
+            onChange={(event) => updateHookDraft("postComplete", event.currentTarget.value)}
           />
         </div>
+      </div>
+
+      <div className="flex items-center gap-3 rounded-md border border-info-border bg-info-surface p-3 text-sm text-info-surface-foreground">
+        <CircleAlert className="mt-0.5 size-4 shrink-0 text-info-muted" aria-hidden="true" />
+        <p className="leading-6">
+          OpenDucktor saves a fingerprint of the exact script commands you approve. This is a
+          security check: if something changes those scripts later without your consent, the
+          fingerprint no longer matches and OpenDucktor will ask you to confirm the scripts again
+          before they can run. Clear both script fields to disable scripts for this repository.
+        </p>
       </div>
 
       <div className="grid gap-2">

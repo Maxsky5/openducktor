@@ -341,6 +341,61 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
+  test("saveRepoSettings preserves explicit untrusted hook settings", async () => {
+    const applyWorkspaceRecords = mock(() => {});
+    const applyWorkspaceRecord = mock(() => {});
+    const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
+
+    const original = {
+      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
+    };
+    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      applyWorkspaceRecords,
+      applyWorkspaceRecord,
+    });
+
+    try {
+      await harness.mount();
+      await harness.getLatest().saveRepoSettings({
+        ...inputFixture,
+        trustedHooks: false,
+      });
+
+      expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("/repo-a", {
+        defaultRuntimeKind: "opencode" as const,
+        worktreeBasePath: "/tmp/worktrees",
+        branchPrefix: "codex/",
+        defaultTargetBranch: { remote: "origin", branch: "develop" },
+        trustedHooks: false,
+        hooks: {
+          preStart: ["echo pre"],
+          postComplete: ["echo post"],
+        },
+        worktreeFileCopies: [".env", ".env.local"],
+        agentDefaults: {
+          spec: {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "mini",
+            profileId: "spec",
+          },
+          qa: {
+            runtimeKind: "opencode",
+            providerId: "anthropic",
+            modelId: "claude-4",
+          },
+        },
+      });
+    } finally {
+      await harness.unmount();
+      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
+    }
+  });
+
   test("supports retry after update failure and preserves refresh invariant", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
