@@ -348,11 +348,19 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
       ) : null}
 
       <div className="kanban-active-session-content flex min-w-0 flex-col space-y-2.5 p-3.5">
-        <button
-          type="button"
+        {/* biome-ignore lint/a11y/useSemanticElements: TaskIdBadge contains a button element */}
+        <div
+          role="button"
+          tabIndex={0}
           aria-label={`Open details for ${task.title}`}
           className="flex w-full min-w-0 cursor-pointer items-start justify-between gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           onClick={() => onOpenDetails(task.id)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onOpenDetails(task.id);
+            }
+          }}
         >
           <div className="min-w-0 space-y-1">
             <p
@@ -367,14 +375,11 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
             <ExternalLink className="size-3" />
             Open
           </span>
-        </button>
-
+        </div>
         <TaskMeta task={task} runState={visibleRunState} />
-
         {hasActiveSessions ? (
           <ActiveSessionsLine taskId={task.id} activeSessions={activeSessions} />
         ) : null}
-
         <TaskActions
           task={task}
           onPlan={onPlan}
