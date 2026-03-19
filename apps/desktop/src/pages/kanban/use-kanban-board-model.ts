@@ -44,12 +44,25 @@ export const buildRunStateByTaskId = (runs: RunSummary[]): Map<string, RunSummar
   );
 };
 
+/**
+ * Partitions tasks so that those with active sessions appear first, followed by those without.
+ * Uses O(N) single-pass partitioning instead of O(N log N) sorting.
+ * Relative order within each partition is preserved.
+ */
 export const sortTasksByActiveSession = (
   tasks: TaskCard[],
   activeSessionsByTaskId: Map<string, AgentSessionState[]>,
 ): TaskCard[] => {
-  const hasActive = (task: TaskCard) => activeSessionsByTaskId.has(task.id);
-  return [...tasks].sort((a, b) => Number(hasActive(b)) - Number(hasActive(a)));
+  const activeTasks: TaskCard[] = [];
+  const inactiveTasks: TaskCard[] = [];
+  for (const task of tasks) {
+    if (activeSessionsByTaskId.has(task.id)) {
+      activeTasks.push(task);
+    } else {
+      inactiveTasks.push(task);
+    }
+  }
+  return [...activeTasks, ...inactiveTasks];
 };
 
 export const buildActiveSessionsByTaskId = (
