@@ -208,6 +208,165 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
+  test("resets transient sending state when switching task context", async () => {
+    const sendDeferred = createDeferred<void>();
+    const sendAgentMessage = mock(() => sendDeferred.promise);
+    const taskOneSession = createSession({
+      taskId: "task-1",
+      sessionId: "session-task-1",
+      status: "stopped",
+    });
+    const taskTwoSession = createSession({
+      taskId: "task-2",
+      sessionId: "session-task-2",
+      status: "stopped",
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: taskOneSession,
+      sessionsForTask: [taskOneSession],
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+
+    let sendPromise: Promise<void> | undefined;
+    await harness.run((state) => {
+      sendPromise = state.onSend();
+    });
+
+    await harness.waitFor((state) => state.isSending);
+    expect(harness.getLatest().isSessionWorking).toBe(true);
+
+    await harness.update({
+      ...createBaseArgs(),
+      taskId: "task-2",
+      activeSession: taskTwoSession,
+      sessionsForTask: [taskTwoSession],
+      sendAgentMessage,
+      input: "follow up",
+    });
+
+    const nextState = harness.getLatest();
+    expect(nextState.isSending).toBe(false);
+    expect(nextState.isSessionWorking).toBe(false);
+
+    sendDeferred.resolve();
+    await sendPromise;
+    await harness.unmount();
+  });
+
+  test("keeps the latest send active after switching away and back", async () => {
+    const firstSendDeferred = createDeferred<void>();
+    const secondSendDeferred = createDeferred<void>();
+    const sendPromises = [firstSendDeferred.promise, secondSendDeferred.promise];
+    const sendAgentMessage = mock(() => {
+      const nextPromise = sendPromises.shift();
+      return nextPromise ?? Promise.resolve();
+    });
+    const taskOneSession = createSession({
+      taskId: "task-1",
+      sessionId: "session-task-1",
+      status: "stopped",
+    });
+    const taskTwoSession = createSession({
+      taskId: "task-2",
+      sessionId: "session-task-2",
+      status: "stopped",
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: taskOneSession,
+      sessionsForTask: [taskOneSession],
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+
+    let firstSendPromise: Promise<void> | undefined;
+    await harness.run((state) => {
+      firstSendPromise = state.onSend();
+    });
+    await harness.waitFor((state) => state.isSending);
+
+    await harness.update({
+      ...createBaseArgs(),
+      taskId: "task-2",
+      activeSession: taskTwoSession,
+      sessionsForTask: [taskTwoSession],
+      sendAgentMessage,
+      input: "other task",
+    });
+    expect(harness.getLatest().isSending).toBe(false);
+
+    await harness.update({
+      ...createBaseArgs(),
+      activeSession: taskOneSession,
+      sessionsForTask: [taskOneSession],
+      sendAgentMessage,
+      input: "second send",
+    });
+
+    let secondSendPromise: Promise<void> | undefined;
+    await harness.run((state) => {
+      secondSendPromise = state.onSend();
+    });
+    await harness.waitFor((state) => state.isSending);
+
+    firstSendDeferred.resolve();
+    await firstSendPromise;
+    expect(harness.getLatest().isSending).toBe(true);
+
+    secondSendDeferred.resolve();
+    await secondSendPromise;
+    await harness.waitFor((state) => !state.isSending);
+    await harness.unmount();
+  });
+
+  test("keeps sending state while a newly created session becomes selected", async () => {
+    const sendDeferred = createDeferred<void>();
+    const sendAgentMessage = mock(() => sendDeferred.promise);
+    const startAgentSession = mock(async () => "session-new");
+    const nextSession = createSession({
+      taskId: "task-1",
+      sessionId: "session-new",
+      role: "spec",
+      status: "stopped",
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      startAgentSession,
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+
+    let sendPromise: Promise<void> | undefined;
+    await harness.run((state) => {
+      sendPromise = state.onSend();
+    });
+
+    await harness.waitFor((state) => state.isSending);
+
+    await harness.update({
+      ...createBaseArgs(),
+      activeSession: nextSession,
+      sessionsForTask: [nextSession],
+      startAgentSession,
+      sendAgentMessage,
+    });
+
+    expect(harness.getLatest().isSending).toBe(true);
+
+    sendDeferred.resolve();
+    await sendPromise;
+    await harness.waitFor((state) => !state.isSending);
+    await harness.unmount();
+  });
+
   test("onSend requests model selection before creating a new session", async () => {
     const requestedSelection = {
       runtimeKind: "opencode",
@@ -740,6 +899,26 @@ describe("useAgentStudioSessionActions", () => {
           description: "Create a new planner session from scratch",
           disabled: false,
         });
+      });
+
+      expect(harness.getLatest().isStarting).toBe(false);
+
+      await harness.update({
+        ...createBaseArgs(),
+        role: "planner",
+        scenario: "planner_initial",
+        activeSession: null,
+        selectedTask: createTask({
+          agentWorkflows: {
+            spec: { required: true, canSkip: false, available: true, completed: true },
+            planner: { required: true, canSkip: false, available: true, completed: false },
+            builder: { required: true, canSkip: false, available: true, completed: false },
+            qa: { required: true, canSkip: false, available: false, completed: false },
+          },
+        }),
+        startAgentSession,
+        sendAgentMessage,
+        updateQuery: () => {},
       });
 
       expect(harness.getLatest().isStarting).toBe(true);

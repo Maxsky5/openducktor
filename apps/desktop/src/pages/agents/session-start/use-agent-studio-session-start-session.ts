@@ -6,8 +6,11 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import {
   applyAgentStudioSelectionQuery,
+  buildAgentStudioAsyncActivityContextKey,
   buildCreateSessionStartKey,
   canStartSessionForRole,
+  decrementActivityCountRecord,
+  incrementActivityCountRecord,
   type QueryUpdate,
   resolveReusableSessionForStart,
 } from "../use-agent-studio-session-action-helpers";
@@ -24,7 +27,7 @@ type UseAgentStudioSessionStartSessionArgs = {
   isActiveTaskHydrated: boolean;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
-  setStartingActivityCount: Dispatch<SetStateAction<number>>;
+  setStartingActivityCountByContext: Dispatch<SetStateAction<Record<string, number>>>;
   startingSessionByTaskRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
   updateQuery: (updates: QueryUpdate) => void;
   resolveRequestedSelection: (
@@ -44,7 +47,7 @@ export function useAgentStudioSessionStartSession({
   isActiveTaskHydrated,
   startAgentSession,
   updateAgentSessionModel,
-  setStartingActivityCount,
+  setStartingActivityCountByContext,
   startingSessionByTaskRef,
   updateQuery,
   resolveRequestedSelection,
@@ -56,7 +59,15 @@ export function useAgentStudioSessionStartSession({
       reason: SessionStartRequestReason;
       startMode: "fresh" | "reuse_latest";
     }): Promise<string | undefined> => {
-      setStartingActivityCount((current) => current + 1);
+      const startContextKey = buildAgentStudioAsyncActivityContextKey({
+        activeRepo,
+        taskId,
+        role,
+        sessionId: null,
+      });
+      setStartingActivityCountByContext((current) =>
+        incrementActivityCountRecord(current, startContextKey),
+      );
       try {
         const selectedModel = await resolveRequestedSelection({
           taskId,
@@ -105,15 +116,17 @@ export function useAgentStudioSessionStartSession({
         });
         return sessionId;
       } finally {
-        setStartingActivityCount((current) => Math.max(0, current - 1));
+        setStartingActivityCountByContext((current) =>
+          decrementActivityCountRecord(current, startContextKey),
+        );
       }
     },
     [
+      activeRepo,
       resolveRequestedSelection,
       role,
       scenario,
-      activeRepo,
-      setStartingActivityCount,
+      setStartingActivityCountByContext,
       startAgentSession,
       updateQuery,
       taskId,

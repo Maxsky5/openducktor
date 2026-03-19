@@ -176,6 +176,133 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
+  test("resets transient starting state when switching task context", async () => {
+    const selectionDeferred = createDeferred<{
+      selectedModel: HookArgs["selectionForNewSession"];
+    } | null>();
+    const requestNewSessionStart = mock(() => selectionDeferred.promise);
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      requestNewSessionStart,
+    });
+
+    await harness.mount();
+
+    let startPromise: Promise<string | undefined> | undefined;
+    await harness.run((state) => {
+      startPromise = state.startSession("composer_send");
+    });
+
+    await harness.waitFor((state) => state.isStarting);
+
+    await harness.update({
+      ...createBaseArgs(),
+      taskId: "task-2",
+      requestNewSessionStart,
+    });
+
+    expect(harness.getLatest().isStarting).toBe(false);
+
+    selectionDeferred.resolve(null);
+    await startPromise;
+    await harness.unmount();
+  });
+
+  test("restores starting state when returning to the original task context", async () => {
+    const selectionDeferred = createDeferred<{
+      selectedModel: HookArgs["selectionForNewSession"];
+    } | null>();
+    const requestNewSessionStart = mock(() => selectionDeferred.promise);
+    const startAgentSession = mock(async () => "session-new");
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      requestNewSessionStart,
+      startAgentSession,
+    });
+
+    await harness.mount();
+
+    let firstStartPromise: Promise<string | undefined> | undefined;
+    await harness.run((state) => {
+      firstStartPromise = state.startSession("composer_send");
+    });
+
+    await harness.waitFor((state) => state.isStarting);
+
+    await harness.update({
+      ...createBaseArgs(),
+      taskId: "task-2",
+      requestNewSessionStart,
+      startAgentSession,
+    });
+    expect(harness.getLatest().isStarting).toBe(false);
+
+    await harness.update({
+      ...createBaseArgs(),
+      requestNewSessionStart,
+      startAgentSession,
+    });
+    expect(harness.getLatest().isStarting).toBe(true);
+
+    let resumedStartPromise: Promise<string | undefined> | undefined;
+    await harness.run((state) => {
+      resumedStartPromise = state.startSession("composer_send");
+    });
+
+    expect(requestNewSessionStart).toHaveBeenCalledTimes(1);
+    expect(harness.getLatest().isStarting).toBe(true);
+
+    selectionDeferred.resolve(null);
+    await firstStartPromise;
+    await resumedStartPromise;
+    expect(startAgentSession).toHaveBeenCalledTimes(0);
+    await harness.waitFor((state) => !state.isStarting);
+    await harness.unmount();
+  });
+
+  test("keeps starting state while fresh session creation switches to the draft role", async () => {
+    const startDeferred = createDeferred<string>();
+    const startAgentSession = mock(() => startDeferred.promise);
+    const sendAgentMessage = mock(async () => {});
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      startAgentSession,
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.handleCreateSession({
+        id: "planner:planner_initial:fresh",
+        role: "planner",
+        scenario: "planner_initial",
+        label: "Planner · New Session",
+        description: "Create a fresh planner session",
+        disabled: false,
+      });
+    });
+
+    await harness.update({
+      ...createBaseArgs(),
+      role: "planner",
+      scenario: "planner_initial",
+      startAgentSession,
+      sendAgentMessage,
+      activeSession: null,
+    });
+
+    await harness.waitFor((state) => state.isStarting);
+    expect(harness.getLatest().isStarting).toBe(true);
+
+    startDeferred.resolve("session-planner");
+    await harness.waitFor((state) => !state.isStarting);
+    await harness.unmount();
+  });
+
   test("handleCreateSession for qa rejection starts a fresh builder session in the existing worktree", async () => {
     const startAgentSession = mock(async () => "session-build-rework");
     const sendAgentMessage = mock(async () => {});
@@ -255,7 +382,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("keeps isStarting true until all parallel fresh-session starts finish", async () => {
+  test("tracks parallel fresh-session starts per visible draft role", async () => {
     const plannerStart = createDeferred<string>();
     const buildStart = createDeferred<string>();
     const startAgentSession = mock(async (params: { role: string }) =>
@@ -292,6 +419,16 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
 
     expect(startAgentSession).toHaveBeenCalledTimes(2);
+    expect(harness.getLatest().isStarting).toBe(false);
+
+    await harness.update({
+      ...createBaseArgs(),
+      role: "planner",
+      scenario: "planner_initial",
+      activeSession: null,
+      startAgentSession,
+      sendAgentMessage,
+    });
     expect(harness.getLatest().isStarting).toBe(true);
 
     await harness.run(async () => {
@@ -300,6 +437,16 @@ describe("useAgentStudioSessionStartFlow", () => {
       await Promise.resolve();
     });
 
+    expect(harness.getLatest().isStarting).toBe(false);
+
+    await harness.update({
+      ...createBaseArgs(),
+      role: "build",
+      scenario: "build_implementation_start",
+      activeSession: null,
+      startAgentSession,
+      sendAgentMessage,
+    });
     expect(harness.getLatest().isStarting).toBe(true);
 
     await harness.run(async () => {

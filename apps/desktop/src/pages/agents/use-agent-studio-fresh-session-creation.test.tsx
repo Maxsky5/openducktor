@@ -26,8 +26,10 @@ type HookArgs = Parameters<UseAgentStudioFreshSessionCreationHook>[0];
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioFreshSessionCreation, initialProps);
 
-const createSetStartingActivityCount = (): Dispatch<SetStateAction<number>> => {
-  let current = 0;
+const createSetStartingActivityCountByContext = (): Dispatch<
+  SetStateAction<Record<string, number>>
+> => {
+  let current: Record<string, number> = {};
   return (update) => {
     current = typeof update === "function" ? update(current) : update;
   };
@@ -45,7 +47,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   startAgentSession: async () => "session-new",
   sendAgentMessage: async () => {},
   updateQuery: () => {},
-  setStartingActivityCount: createSetStartingActivityCount(),
+  setStartingActivityCountByContext: createSetStartingActivityCountByContext(),
   startingSessionByTaskRef: {
     current: new Map<string, Promise<string | undefined>>(),
   } satisfies MutableRefObject<Map<string, Promise<string | undefined>>>,

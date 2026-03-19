@@ -18,6 +18,7 @@ import { kickoffPromptForScenario } from "../agents-page-constants";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
 import { useAgentStudioHumanReviewFeedbackFlow } from "../use-agent-studio-human-review-feedback-flow";
 import {
+  buildAgentStudioAsyncActivityContextKey,
   canStartSessionForRole,
   type QueryUpdate,
 } from "../use-agent-studio-session-action-helpers";
@@ -74,8 +75,18 @@ export function useAgentStudioSessionStartFlow({
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
   const queryClient = useQueryClient();
-  const [startingActivityCount, setStartingActivityCount] = useState(0);
-  const isStarting = startingActivityCount > 0;
+  const [startingActivityCountByContext, setStartingActivityCountByContext] = useState<
+    Record<string, number>
+  >({});
+  const isStarting =
+    (startingActivityCountByContext[
+      buildAgentStudioAsyncActivityContextKey({
+        activeRepo,
+        taskId,
+        role,
+        sessionId: activeSession?.sessionId ?? null,
+      })
+    ] ?? 0) > 0;
 
   const previousRepoForSessionRefs = useRef<string | null>(activeRepo);
   const startingSessionByTaskRef = useRef(new Map<string, Promise<string | undefined>>());
@@ -121,7 +132,7 @@ export function useAgentStudioSessionStartFlow({
     isActiveTaskHydrated,
     startAgentSession,
     updateAgentSessionModel,
-    setStartingActivityCount,
+    setStartingActivityCountByContext,
     startingSessionByTaskRef,
     updateQuery,
     resolveRequestedSelection,
@@ -215,7 +226,7 @@ export function useAgentStudioSessionStartFlow({
     sendAgentMessage,
     updateQuery,
     ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
-    setStartingActivityCount,
+    setStartingActivityCountByContext,
     startingSessionByTaskRef,
     resolveRequestedSelection,
   });
