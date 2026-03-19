@@ -3,6 +3,7 @@ import { Link2, Sparkles, Unlink } from "lucide-react";
 import type { ReactElement } from "react";
 import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanban-task-badges";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
+import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { canUnlinkTaskPullRequest, statusBadgeClassName, statusLabel } from "@/lib/task-display";
@@ -57,7 +58,7 @@ export function TaskDetailsSheetHeader({
               {task.title}
             </span>
           </h2>
-          <p className="truncate font-mono text-xs text-muted-foreground">{task.id}</p>
+          <TaskIdBadge taskId={task.id} />
         </div>
         <Badge variant="outline" className={statusBadgeClassName(task.status)}>
           {statusLabel(task.status)}

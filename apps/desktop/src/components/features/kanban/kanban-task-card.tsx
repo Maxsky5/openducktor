@@ -15,6 +15,7 @@ import {
 } from "@/components/features/kanban/kanban-task-workflow";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
+import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
 import { BorderRay } from "@/components/ui/border-ray";
 import { cn } from "@/lib/utils";
@@ -360,7 +361,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
             >
               {task.title}
             </p>
-            <p className="truncate font-mono text-[11px] text-muted-foreground">{task.id}</p>
+            <TaskIdBadge taskId={task.id} className="truncate" />
           </div>
           <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] text-muted-foreground transition group-hover:border-border group-hover:bg-muted group-hover:text-muted-foreground">
             <ExternalLink className="size-3" />
