@@ -46,8 +46,8 @@ const baseArgs: BuildArgs = {
     taskTabs: [],
     availableTabTasks: [task],
     isLoadingTasks: false,
-    onCreateTab,
-    onCloseTab,
+    handleCreateTab: onCreateTab,
+    handleCloseTab: onCloseTab,
   },
   documents: {
     specDoc: taskDocument,

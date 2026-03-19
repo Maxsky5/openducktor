@@ -1,9 +1,6 @@
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario } from "@openducktor/core";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { RequestNewSessionStart } from "@/features/session-start";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
@@ -13,30 +10,11 @@ import { useAgentStudioModelSelection } from "./use-agent-studio-model-selection
 import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
 import { useAgentStudioRepoSettings } from "./use-agent-studio-repo-settings";
 import { useAgentStudioRightPanel } from "./use-agent-studio-right-panel";
+import type { AgentStudioSelectionControllerResult } from "./use-agent-studio-selection-controller";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
 
-export type AgentStudioOrchestrationWorkspaceContext = {
-  activeRepo: string | null;
-};
-
-export type AgentStudioOrchestrationSelectionContext = {
-  viewTaskId: string;
-  viewRole: AgentRole;
-  viewScenario: AgentScenario;
-  viewSelectedTask: TaskCard | null;
-  viewSessionsForTask: AgentSessionState[];
-  viewActiveSession: AgentSessionState | null;
-  activeTaskTabId: string;
-  taskTabs: AgentStudioTaskTabsModel["tabs"];
-  availableTabTasks: TaskCard[];
+export type AgentStudioOrchestrationSelectionContext = AgentStudioSelectionControllerResult & {
   contextSwitchVersion: number;
-  isLoadingTasks: boolean;
-  isActiveTaskHydrated: boolean;
-  isActiveTaskHydrationFailed: boolean;
-  isViewSessionHistoryHydrationFailed: boolean;
-  isViewSessionHistoryHydrating: boolean;
-  onCreateTab: (taskId: string) => void;
-  onCloseTab: (taskId: string) => void;
 };
 
 export type AgentStudioOrchestrationReadinessContext = {
@@ -66,10 +44,11 @@ export type AgentStudioOrchestrationActionsContext = {
   requestNewSessionStart?: RequestNewSessionStart;
 };
 export type UseAgentStudioOrchestrationControllerArgs = {
-  workspace: AgentStudioOrchestrationWorkspaceContext;
+  activeRepo: string | null;
   selection: AgentStudioOrchestrationSelectionContext;
   readiness: AgentStudioOrchestrationReadinessContext;
-  composer: AgentStudioOrchestrationComposerContext;
+  input: string;
+  setInput: (value: string) => void;
   actions: AgentStudioOrchestrationActionsContext;
 };
 
@@ -111,8 +90,8 @@ type AgentStudioPageModelsTabsContext = Pick<
   | "taskTabs"
   | "availableTabTasks"
   | "isLoadingTasks"
-  | "onCreateTab"
-  | "onCloseTab"
+  | "handleCreateTab"
+  | "handleCloseTab"
 >;
 
 type AgentStudioPageModelsDocumentsContext = Pick<
@@ -166,7 +145,7 @@ export const buildAgentStudioPageModelsArgs = ({
   chatSettings,
   composer,
 }: BuildAgentStudioPageModelsArgsInput): Parameters<typeof useAgentStudioPageModels>[0] => {
-  const { activeTaskTabId, ...taskTabs } = tabs;
+  const { activeTaskTabId, handleCreateTab, handleCloseTab, ...taskTabs } = tabs;
   const { handleSelectAgent, handleSelectModel, handleSelectVariant, ...restOfModelSelection } =
     modelSelection;
 
@@ -186,7 +165,11 @@ export const buildAgentStudioPageModelsArgs = ({
       isSessionHistoryHydrationFailed: view.isViewSessionHistoryHydrationFailed,
       contextSwitchVersion: view.contextSwitchVersion,
     },
-    taskTabs,
+    taskTabs: {
+      ...taskTabs,
+      onCreateTab: handleCreateTab,
+      onCloseTab: handleCloseTab,
+    },
     documents,
     readiness,
     sessionActions,
@@ -203,13 +186,13 @@ export const buildAgentStudioPageModelsArgs = ({
 };
 
 export function useAgentStudioOrchestrationController({
-  workspace,
+  activeRepo,
   selection,
   readiness,
-  composer,
+  input,
+  setInput,
   actions,
 }: UseAgentStudioOrchestrationControllerArgs): UseAgentStudioOrchestrationControllerResult {
-  const { activeRepo } = workspace;
   const {
     viewTaskId,
     viewRole,
@@ -223,11 +206,10 @@ export function useAgentStudioOrchestrationController({
     contextSwitchVersion,
     isLoadingTasks,
     isActiveTaskHydrated,
-    onCreateTab,
-    onCloseTab,
+    handleCreateTab,
+    handleCloseTab,
   } = selection;
   const { agentStudioReady } = readiness;
-  const { input, setInput } = composer;
   const {
     updateQuery,
     onContextSwitchIntent,
@@ -341,8 +323,8 @@ export function useAgentStudioOrchestrationController({
       taskTabs,
       availableTabTasks,
       isLoadingTasks,
-      onCreateTab,
-      onCloseTab,
+      handleCreateTab,
+      handleCloseTab,
     },
     documents: {
       specDoc,
@@ -388,7 +370,10 @@ export function useAgentStudioOrchestrationController({
     chatSettings: {
       showThinkingMessages,
     },
-    composer,
+    composer: {
+      input,
+      setInput,
+    },
   });
 
   const {
