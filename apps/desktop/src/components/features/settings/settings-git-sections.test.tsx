@@ -202,4 +202,62 @@ describe("settings git sections", () => {
       });
     });
   });
+
+  test("detecting from origin updates the repository draft that gets saved", async () => {
+    let renderer!: ReturnType<typeof create>;
+    let repoConfig: RepoConfig = {
+      ...baseRepoConfig,
+      git: {
+        providers: {
+          github: {
+            enabled: true,
+            autoDetected: false,
+            repository: undefined,
+          },
+        },
+      },
+    };
+
+    const onDetectGithubRepository = async () => ({
+      host: "github.com",
+      owner: "acme",
+      name: "widget",
+    });
+
+    const onUpdateSelectedRepoConfig = (
+      updater: (current: RepoConfig) => RepoConfig,
+    ): RepoConfig => {
+      repoConfig = updater(repoConfig);
+      return repoConfig;
+    };
+
+    await act(async () => {
+      renderer = create(
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: repoConfig,
+          runtimeCheck: authenticatedRuntimeCheck,
+          disabled: false,
+          onDetectGithubRepository,
+          onUpdateSelectedRepoConfig,
+        }),
+      );
+    });
+
+    const detectButton = renderer.root.find(
+      (node) =>
+        node.type === "button" &&
+        flattenChildrenText(node.props.children).includes("Detect from origin"),
+    );
+
+    await act(async () => {
+      await detectButton.props.onClick();
+    });
+
+    expect(repoConfig.git.providers.github?.repository).toEqual({
+      host: "github.com",
+      owner: "acme",
+      name: "widget",
+    });
+  });
 });
