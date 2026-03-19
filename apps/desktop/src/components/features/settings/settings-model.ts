@@ -5,10 +5,10 @@ type HookDraftInput = {
   postComplete: string[];
 };
 
-// Preserve blank draft rows so controlled multi-line inputs do not collapse trailing newlines
-// while the user is still editing. Save-time normalization removes blank commands.
-export const parseHookLines = (value: string): string[] =>
-  value.split("\n").map((entry) => entry.trim());
+// Preserve blank draft rows and raw spacing so controlled multi-line inputs do not collapse
+// trailing newlines or strip characters while the user is still editing. Save-time
+// normalization removes blank commands and trims persisted values.
+export const parseHookLines = (value: string): string[] => value.split("\n");
 
 const normalizeHookCommands = (commands: string[]): string[] =>
   commands.map((entry) => entry.trim()).filter(Boolean);

@@ -6,11 +6,11 @@ import {
 } from "./settings-model";
 
 describe("settings-model", () => {
-  test("parseHookLines preserves blank lines while trimming entered commands", () => {
+  test("parseHookLines preserves blank lines and raw spacing while editing", () => {
     expect(parseHookLines(" bun install \n\n npm test \n")).toEqual([
-      "bun install",
+      " bun install ",
       "",
-      "npm test",
+      " npm test ",
       "",
     ]);
   });

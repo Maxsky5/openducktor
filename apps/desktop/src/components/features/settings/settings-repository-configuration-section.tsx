@@ -195,10 +195,6 @@ export function RepositoryConfigurationSection({
             disabled={isLoadingSettings || isSaving}
             onChange={(event) => updateHookDraft("preStart", event.currentTarget.value)}
           />
-          <p className="text-xs text-muted-foreground">
-            Saving configured scripts asks for confirmation automatically. Clear both script fields
-            to disable scripts for this repository.
-          </p>
         </div>
 
         <div className="grid gap-2">
@@ -214,6 +210,11 @@ export function RepositoryConfigurationSection({
           />
         </div>
       </div>
+
+      <p className="text-xs text-muted-foreground">
+        Saving configured scripts asks for confirmation automatically. Clear both script fields to
+        disable scripts for this repository.
+      </p>
 
       <div className="grid gap-2">
         <Label htmlFor="repo-worktree-file-copies">Worktree file copies (one path per line)</Label>
