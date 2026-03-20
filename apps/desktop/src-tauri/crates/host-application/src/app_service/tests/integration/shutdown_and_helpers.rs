@@ -163,7 +163,8 @@ fn shutdown_terminates_pending_opencode_processes() -> Result<()> {
     let root = unique_temp_path("shutdown-pending-opencode");
     let orphanable_opencode = root.join("opencode");
     create_orphanable_opencode(&orphanable_opencode)?;
-    let mut pending_child = Command::new(orphanable_opencode.as_path())
+    let mut pending_child = Command::new("/bin/sh")
+        .arg(orphanable_opencode.as_path())
         .arg("serve")
         .arg("--hostname")
         .arg("127.0.0.1")
