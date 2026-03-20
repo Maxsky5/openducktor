@@ -314,6 +314,168 @@ describe("agent-orchestrator/support/persistence", () => {
     ]);
   });
 
+  test("removes recovered questions when a later tool update carries answers for the same request", () => {
+    const recovered = recoverPendingQuestionsFromHistory([
+      {
+        messageId: "m-assistant-question",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:00.000Z",
+        text: "Need input",
+        parts: [
+          {
+            kind: "tool",
+            messageId: "m-assistant-question",
+            partId: "p-question",
+            callId: "call-question",
+            tool: "question",
+            status: "running",
+            metadata: {
+              requestId: "question-1",
+              questions: [{ header: "Confirm", question: "Ship it?" }],
+            },
+          },
+        ],
+      },
+      {
+        messageId: "m-assistant-answered",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:05.000Z",
+        text: "Answered",
+        parts: [
+          {
+            kind: "tool",
+            messageId: "m-assistant-answered",
+            partId: "p-question-answered",
+            callId: "call-question",
+            tool: "question",
+            status: "completed",
+            metadata: {
+              requestId: "question-1",
+              questions: [{ header: "Confirm", question: "Ship it?" }],
+              answers: [["Yes"]],
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(recovered).toEqual([]);
+  });
+
+  test("treats output response payloads as answered question state", () => {
+    const recovered = recoverPendingQuestionsFromHistory([
+      {
+        messageId: "m-assistant-question",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:00.000Z",
+        text: "Need input",
+        parts: [
+          {
+            kind: "tool",
+            messageId: "m-assistant-question",
+            partId: "p-question",
+            callId: "call-question",
+            tool: "question",
+            status: "completed",
+            output: JSON.stringify({
+              requestId: "question-1",
+              questions: [{ header: "Confirm", question: "Ship it?" }],
+              response: [["Yes"]],
+            }),
+          },
+        ],
+      },
+    ]);
+
+    expect(recovered).toEqual([]);
+  });
+
+  test("matches synthetic answers to the correct recovered request when the answer text is unique", () => {
+    const recovered = recoverPendingQuestionsFromHistory([
+      {
+        messageId: "m-assistant-question-1",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:00.000Z",
+        text: "Need first input",
+        parts: [
+          {
+            kind: "tool",
+            messageId: "m-assistant-question-1",
+            partId: "p-question-1",
+            callId: "call-question-1",
+            tool: "question",
+            status: "completed",
+            metadata: {
+              requestId: "question-1",
+              questions: [
+                {
+                  header: "First",
+                  question: "Choose first",
+                  options: [{ label: "Alpha", description: "Pick alpha" }],
+                },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        messageId: "m-assistant-question-2",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        text: "Need second input",
+        parts: [
+          {
+            kind: "tool",
+            messageId: "m-assistant-question-2",
+            partId: "p-question-2",
+            callId: "call-question-2",
+            tool: "question",
+            status: "completed",
+            metadata: {
+              requestId: "question-2",
+              questions: [
+                {
+                  header: "Second",
+                  question: "Choose second",
+                  options: [{ label: "Beta", description: "Pick beta" }],
+                },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        messageId: "m-user-answer",
+        role: "user",
+        timestamp: "2026-02-22T08:00:05.000Z",
+        text: "Beta",
+        parts: [
+          {
+            kind: "text",
+            messageId: "m-user-answer",
+            partId: "p-answer",
+            text: "Beta",
+            synthetic: true,
+            completed: true,
+          },
+        ],
+      },
+    ]);
+
+    expect(recovered).toEqual([
+      {
+        requestId: "question-1",
+        questions: [
+          {
+            header: "First",
+            question: "Choose first",
+            options: [{ label: "Alpha", description: "Pick alpha" }],
+          },
+        ],
+      },
+    ]);
+  });
+
   test("maps history parts into chat timeline entries", () => {
     const messages = historyToChatMessages(
       [

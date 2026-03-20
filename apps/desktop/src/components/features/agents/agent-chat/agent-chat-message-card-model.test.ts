@@ -229,6 +229,14 @@ describe("agent-chat-message-card-model", () => {
   describe("question tool parsing", () => {
     test("returns empty details for non-question tools and empty question payloads", () => {
       expect(questionToolDetails(createToolMeta({ tool: "read" }))).toEqual([]);
+      expect(
+        questionToolDetails(
+          createToolMeta({
+            tool: "question_parser",
+            metadata: { questions: [{ question: "Should be ignored" }] },
+          }),
+        ),
+      ).toEqual([]);
       expect(questionToolDetails(createToolMeta({ tool: "question", output: "{broken" }))).toEqual(
         [],
       );

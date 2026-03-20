@@ -1,5 +1,8 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
+const pendingInputNoun = (count: number, singular: string, plural: string): string =>
+  count === 1 ? singular : plural;
+
 export const isAgentSessionWaitingInput = (
   session: Pick<AgentSessionState, "pendingPermissions" | "pendingQuestions">,
 ): boolean => session.pendingPermissions.length > 0 || session.pendingQuestions.length > 0;
@@ -15,15 +18,15 @@ export const getAgentSessionWaitingInputPlaceholder = (
   }
 
   if (pendingQuestionCount > 0) {
-    return pendingQuestionCount === 1
-      ? "Answer the pending question above to continue"
-      : "Answer the pending questions above to continue";
+    return `Answer the pending ${pendingInputNoun(pendingQuestionCount, "question", "questions")} above to continue`;
   }
 
   if (pendingPermissionCount > 0) {
-    return pendingPermissionCount === 1
-      ? "Respond to the pending permission request above to continue"
-      : "Respond to the pending permission requests above to continue";
+    return `Respond to the pending ${pendingInputNoun(
+      pendingPermissionCount,
+      "permission request",
+      "permission requests",
+    )} above to continue`;
   }
 
   return null;

@@ -6,12 +6,16 @@ import type {
   AgentSessionHistoryMessage,
 } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
+import { isQuestionToolName } from "@/lib/question-tools";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
+type RecoveredPendingQuestionRequest = AgentSessionState["pendingQuestions"][number] & {
+  answered: boolean;
+};
 
 const normalizePersistedPendingPermissions = (
   permissions: AgentSessionRecord["pendingPermissions"],
@@ -52,7 +56,7 @@ const parseJsonRecord = (value: string | undefined): Record<string, unknown> | n
     return null;
   }
   const trimmed = value.trim();
-  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+  if (!trimmed.startsWith("{")) {
     return null;
   }
   try {
@@ -131,17 +135,108 @@ const normalizeRecoveredQuestions = (
   });
 };
 
-const isQuestionTool = (toolName: string): boolean => {
-  const normalized = toolName.trim().toLowerCase();
-  return (
-    normalized === "question" || normalized.endsWith("_question") || normalized.includes("question")
+const normalizeAnswerValues = (value: unknown): string[] => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? [trimmed] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => normalizeAnswerValues(entry));
+  }
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+  const record = value as Record<string, unknown>;
+  return normalizeAnswerValues(
+    record.answers ??
+      record.answer ??
+      record.response ??
+      record.responses ??
+      record.value ??
+      record.text,
   );
+};
+
+const normalizeAnswerGroups = (value: unknown): string[][] => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeAnswerValues(entry));
+  }
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+  const record = value as Record<string, unknown>;
+  const nested =
+    record.answers ??
+    record.answer ??
+    record.responses ??
+    record.response ??
+    record.result ??
+    record.value;
+  if (nested === undefined) {
+    return Object.values(record)
+      .map((entry) => normalizeAnswerValues(entry))
+      .filter((entry) => entry.length > 0);
+  }
+  return normalizeAnswerGroups(nested);
+};
+
+const hasQuestionAnswers = (
+  metadata: Record<string, unknown> | null,
+  input: Record<string, unknown> | null,
+  output: Record<string, unknown> | null,
+): boolean => {
+  const answerCandidates = [
+    output?.answers,
+    output?.answer,
+    output?.responses,
+    output?.response,
+    output?.result,
+    output?.value,
+    metadata?.answers,
+    metadata?.answer,
+    metadata?.responses,
+    metadata?.response,
+    input?.answers,
+    input?.answer,
+    input?.responses,
+    input?.response,
+  ];
+
+  return answerCandidates.some((candidate) =>
+    normalizeAnswerGroups(candidate).some((group) =>
+      group.some((entry) => entry.trim().length > 0),
+    ),
+  );
+};
+
+const normalizeComparableText = (value: string): string => value.trim().toLowerCase();
+
+const findSyntheticAnsweredRequestId = (
+  pendingQueue: AgentSessionState["pendingQuestions"],
+  message: AgentSessionHistoryMessage,
+): string | null => {
+  const answerText = normalizeComparableText(message.text);
+  if (answerText.length === 0) {
+    return null;
+  }
+
+  const matches = pendingQueue.filter((request) =>
+    request.questions.some((question) =>
+      question.options.some((option) => {
+        const label = normalizeComparableText(option.label);
+        const description = normalizeComparableText(option.description);
+        return label === answerText || description === answerText;
+      }),
+    ),
+  );
+
+  return matches.length === 1 ? (matches[0]?.requestId ?? null) : null;
 };
 
 const readPendingQuestionRequest = (
   part: Extract<HistoryPart, { kind: "tool" }>,
-): AgentSessionState["pendingQuestions"][number] | null => {
-  if (!isQuestionTool(part.tool)) {
+): RecoveredPendingQuestionRequest | null => {
+  if (!isQuestionToolName(part.tool)) {
     return null;
   }
 
@@ -165,6 +260,7 @@ const readPendingQuestionRequest = (
   return {
     requestId,
     questions,
+    answered: hasQuestionAnswers(metadata, input, output),
   };
 };
 
@@ -183,16 +279,40 @@ export const recoverPendingQuestionsFromHistory = (
         continue;
       }
 
+      if (request.answered) {
+        const answeredIndex = pendingQueue.findIndex(
+          (entry) => entry.requestId === request.requestId,
+        );
+        if (answeredIndex >= 0) {
+          pendingQueue.splice(answeredIndex, 1);
+        }
+        continue;
+      }
+
       const existingIndex = pendingQueue.findIndex(
         (entry) => entry.requestId === request.requestId,
       );
       if (existingIndex >= 0) {
         pendingQueue.splice(existingIndex, 1);
       }
-      pendingQueue.push(request);
+      pendingQueue.push({
+        requestId: request.requestId,
+        questions: request.questions,
+      });
     }
 
     if (isSyntheticHistoryUserMessage(message) && pendingQueue.length > 0) {
+      const answeredRequestId = findSyntheticAnsweredRequestId(pendingQueue, message);
+      if (answeredRequestId) {
+        const answeredIndex = pendingQueue.findIndex(
+          (entry) => entry.requestId === answeredRequestId,
+        );
+        if (answeredIndex >= 0) {
+          pendingQueue.splice(answeredIndex, 1);
+          continue;
+        }
+      }
+
       pendingQueue.shift();
     }
   }
