@@ -1367,12 +1367,19 @@ mod tests {
         let task_id = "task-path";
         let sandbox = unique_temp_path("dev-server-path");
         let home = sandbox.join("home");
-        let bun_bin = home.join(".bun").join("bin");
-        fs::create_dir_all(&bun_bin).expect("create bun bin path");
-        let pnpm_path = bun_bin.join("pnpm");
+        let login_bin = sandbox.join("login-bin");
+        fs::create_dir_all(&login_bin).expect("create login shell path");
+        let pnpm_path = login_bin.join("pnpm");
+        let node_path = login_bin.join("node");
+        let shell_path = sandbox.join("fake-shell");
         let marker_path = sandbox.join("pnpm-marker");
         write_executable_script(
             pnpm_path.as_path(),
+            "#!/usr/bin/env node\nconsole.log('pnpm shim');\n",
+        )
+        .expect("write fake pnpm");
+        write_executable_script(
+            node_path.as_path(),
             format!(
                 r#"#!/bin/sh
 touch "{}"
@@ -1382,7 +1389,16 @@ sleep 5
             )
             .as_str(),
         )
-        .expect("write fake pnpm");
+        .expect("write fake node");
+        write_executable_script(
+            shell_path.as_path(),
+            format!(
+                "#!/bin/sh\nprintf 'shell startup noise\\n'\nprintf '__OPENDUCKTOR_ENV_START__\\0PATH={}\\0'\n",
+                login_bin.display()
+            )
+            .as_str(),
+        )
+        .expect("write fake shell");
 
         let worktree_path = sandbox.join("worktree");
         fs::create_dir_all(&worktree_path).expect("create worktree path");
@@ -1412,6 +1428,9 @@ sleep 5
             );
 
         let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
+        let _shell_guard = set_env_var("SHELL", shell_path.to_string_lossy().as_ref());
+        let _user_guard = set_env_var("USER", "odt-test");
+        let _logname_guard = set_env_var("LOGNAME", "odt-test");
         let _path_guard = set_env_var("PATH", "/usr/bin:/bin");
 
         let pid = service
@@ -1422,11 +1441,11 @@ sleep 5
                 worktree_path.as_str(),
                 script,
             )
-            .expect("fake pnpm from augmented PATH should start");
+            .expect("fake pnpm and node from augmented PATH should start");
 
         assert!(
             wait_for_path_exists(marker_path.as_path(), Duration::from_secs(5)),
-            "expected fake pnpm from augmented PATH to run"
+            "expected fake pnpm script to resolve node from augmented PATH"
         );
         stop_process_group(pid, DEV_SERVER_STOP_TIMEOUT).expect("stop dev server");
     }

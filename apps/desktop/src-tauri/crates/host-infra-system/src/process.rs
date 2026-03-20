@@ -3,9 +3,30 @@ use std::env;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+#[cfg(not(test))]
+use std::sync::OnceLock;
 
 #[cfg(windows)]
 const DEFAULT_WINDOWS_EXECUTABLE_EXTENSIONS: [&str; 4] = [".exe", ".cmd", ".bat", ".com"];
+
+#[cfg(unix)]
+const LOGIN_SHELL_ENV_MARKER: &[u8] = b"__OPENDUCKTOR_ENV_START__\0";
+
+#[cfg(not(test))]
+#[cfg(unix)]
+static LOGIN_SHELL_PATH_CACHE: OnceLock<Option<OsString>> = OnceLock::new();
+
+#[cfg(not(test))]
+static PROCESS_PATH_CACHE: OnceLock<ProcessPathCache> = OnceLock::new();
+
+#[derive(Clone, Default)]
+struct ProcessPathCache {
+    explicit_override_directories: Vec<PathBuf>,
+    login_shell_entries: Vec<PathBuf>,
+    inherited_entries: Vec<PathBuf>,
+    standard_entries: Vec<PathBuf>,
+    bundled_dir: Option<PathBuf>,
+}
 
 fn command_env_override_name(program: &str) -> String {
     let sanitized = program
@@ -106,61 +127,6 @@ fn command_file_names(program: &str) -> Vec<OsString> {
     vec![OsString::from(program)]
 }
 
-fn home_directory() -> Option<PathBuf> {
-    #[cfg(windows)]
-    {
-        env::var_os("USERPROFILE")
-            .or_else(|| env::var_os("HOME"))
-            .map(PathBuf::from)
-    }
-    #[cfg(not(windows))]
-    {
-        env::var_os("HOME").map(PathBuf::from)
-    }
-}
-
-fn common_user_search_directories() -> Vec<PathBuf> {
-    let mut directories = Vec::new();
-
-    if let Some(home) = home_directory() {
-        directories.push(home.join(".cargo").join("bin"));
-        directories.push(home.join(".bun").join("bin"));
-        directories.push(home.join(".local").join("bin"));
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
-            let local_app_data = PathBuf::from(local_app_data);
-            directories.push(
-                local_app_data
-                    .join("Microsoft")
-                    .join("WinGet")
-                    .join("Links"),
-            );
-            directories.push(local_app_data.join("Programs").join("GitHub CLI"));
-            directories.push(
-                local_app_data
-                    .join("Programs")
-                    .join("GitHub CLI")
-                    .join("bin"),
-            );
-        }
-        if let Some(program_files) = env::var_os("ProgramFiles") {
-            let program_files = PathBuf::from(program_files);
-            directories.push(program_files.join("GitHub CLI"));
-            directories.push(program_files.join("GitHub CLI").join("bin"));
-        }
-        if let Some(program_files_x86) = env::var_os("ProgramFiles(x86)") {
-            let program_files_x86 = PathBuf::from(program_files_x86);
-            directories.push(program_files_x86.join("GitHub CLI"));
-            directories.push(program_files_x86.join("GitHub CLI").join("bin"));
-        }
-    }
-
-    unique_path_entries(directories)
-}
-
 fn existing_file_path(path: PathBuf) -> Option<String> {
     path.is_file().then(|| path.to_string_lossy().to_string())
 }
@@ -197,70 +163,56 @@ fn unique_path_entries(entries: impl IntoIterator<Item = PathBuf>) -> Vec<PathBu
     deduped
 }
 
+fn build_process_path_cache() -> ProcessPathCache {
+    ProcessPathCache {
+        explicit_override_directories: explicit_command_override_directories(),
+        login_shell_entries: path_entries_from_value(login_shell_path()),
+        inherited_entries: path_entries_from_value(env::var_os("PATH")),
+        standard_entries: standard_search_directories(),
+        bundled_dir: current_executable_directory(),
+    }
+}
+
+#[cfg(unix)]
 fn standard_search_directories() -> Vec<PathBuf> {
-    let mut directories = common_user_search_directories();
+    let mut directories = vec![
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/usr/bin"),
+        PathBuf::from("/bin"),
+        PathBuf::from("/usr/sbin"),
+        PathBuf::from("/sbin"),
+    ];
 
-    #[cfg(target_os = "macos")]
+    if let Some(home) = env::var_os("HOME")
+        .map(PathBuf::from)
+        .or_else(dirs::home_dir)
     {
-        directories.push(PathBuf::from("/opt/homebrew/bin"));
-        directories.push(PathBuf::from("/usr/local/bin"));
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        directories.push(PathBuf::from("/usr/local/bin"));
-        directories.push(PathBuf::from("/usr/bin"));
-        directories.push(PathBuf::from("/snap/bin"));
-        if let Some(home) = env::var_os("HOME") {
-            directories.push(PathBuf::from(home).join(".local").join("bin"));
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
-            directories.push(PathBuf::from(local_app_data).join("Programs"));
-        }
-        if let Some(program_files) = env::var_os("ProgramFiles") {
-            directories.push(PathBuf::from(program_files));
-        }
-        if let Some(program_files_x86) = env::var_os("ProgramFiles(x86)") {
-            directories.push(PathBuf::from(program_files_x86));
-        }
+        directories.push(home.join(".local/bin"));
+        directories.push(home.join(".cargo/bin"));
+        directories.push(home.join(".bun/bin"));
     }
 
     unique_path_entries(directories)
 }
 
-fn standard_command_directories(program: &str) -> Vec<PathBuf> {
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
-    let mut directories = standard_search_directories();
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    let directories = standard_search_directories();
+#[cfg(not(unix))]
+fn standard_search_directories() -> Vec<PathBuf> {
+    Vec::new()
+}
 
-    #[cfg(target_os = "macos")]
+fn process_path_cache() -> ProcessPathCache {
+    #[cfg(test)]
     {
-        directories.push(PathBuf::from(format!("/opt/homebrew/opt/{program}/bin")));
-        directories.push(PathBuf::from(format!("/usr/local/opt/{program}/bin")));
+        build_process_path_cache()
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(not(test))]
     {
-        if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
-            directories.push(PathBuf::from(local_app_data).join("Programs").join(program));
-        }
-        if let Some(program_files) = env::var_os("ProgramFiles") {
-            directories.push(PathBuf::from(program_files).join(program));
-        }
-        if let Some(program_files_x86) = env::var_os("ProgramFiles(x86)") {
-            directories.push(PathBuf::from(program_files_x86).join(program));
-        }
+        PROCESS_PATH_CACHE
+            .get_or_init(build_process_path_cache)
+            .clone()
     }
-
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    let _ = program;
-
-    unique_path_entries(directories)
 }
 
 fn command_path_from_directories(program: &str, directories: &[PathBuf]) -> Option<String> {
@@ -273,14 +225,6 @@ fn command_path_from_directories(program: &str, directories: &[PathBuf]) -> Opti
                 .iter()
                 .find_map(|file_name| existing_file_path(directory.join(file_name)))
         })
-}
-
-fn command_path_from_environment_path(
-    program: &str,
-    path_value: Option<OsString>,
-) -> Option<String> {
-    let directories = path_entries_from_value(path_value);
-    command_path_from_directories(program, &directories)
 }
 
 fn explicit_command_override_directories() -> Vec<PathBuf> {
@@ -302,35 +246,172 @@ fn explicit_command_override_directories() -> Vec<PathBuf> {
     unique_path_entries(directories)
 }
 
+fn current_executable_directory() -> Option<PathBuf> {
+    env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+}
+
+#[cfg(unix)]
+fn current_user_shell() -> Option<PathBuf> {
+    use std::ffi::CStr;
+    use std::os::unix::ffi::OsStringExt;
+
+    if let Some(shell) = env::var_os("SHELL") {
+        let shell = PathBuf::from(shell);
+        if shell.is_absolute() {
+            return Some(shell);
+        }
+    }
+
+    let uid = unsafe { libc::geteuid() };
+    let mut passwd = unsafe { std::mem::zeroed::<libc::passwd>() };
+    let mut result = std::ptr::null_mut();
+    let mut buffer = vec![0_u8; 4096];
+    let status = unsafe {
+        libc::getpwuid_r(
+            uid,
+            &mut passwd,
+            buffer.as_mut_ptr() as *mut libc::c_char,
+            buffer.len(),
+            &mut result,
+        )
+    };
+    if status != 0 || result.is_null() || passwd.pw_shell.is_null() {
+        return None;
+    }
+
+    let shell = unsafe { CStr::from_ptr(passwd.pw_shell) };
+    let shell = shell.to_bytes();
+    if shell.is_empty() {
+        return None;
+    }
+
+    Some(PathBuf::from(OsString::from_vec(shell.to_vec())))
+}
+
+#[cfg(unix)]
+fn parse_login_shell_environment(stdout: &[u8]) -> Option<Vec<(OsString, OsString)>> {
+    use std::os::unix::ffi::OsStringExt;
+
+    let start = stdout
+        .windows(LOGIN_SHELL_ENV_MARKER.len())
+        .position(|window| window == LOGIN_SHELL_ENV_MARKER)?;
+    let payload = &stdout[start + LOGIN_SHELL_ENV_MARKER.len()..];
+
+    let mut environment = Vec::new();
+    for entry in payload.split(|byte| *byte == 0) {
+        if entry.is_empty() {
+            continue;
+        }
+        let separator = entry.iter().position(|byte| *byte == b'=')?;
+        let key = OsString::from_vec(entry[..separator].to_vec());
+        let value = OsString::from_vec(entry[separator + 1..].to_vec());
+        environment.push((key, value));
+    }
+    Some(environment)
+}
+
+#[cfg(unix)]
+fn read_login_shell_path() -> Option<OsString> {
+    use std::os::unix::process::CommandExt;
+
+    let shell = current_user_shell()?;
+    let shell_name = shell.file_name()?.to_string_lossy().to_string();
+    let mut command = Command::new(&shell);
+    command
+        .arg("-i")
+        .arg("-c")
+        .arg("printf '__OPENDUCKTOR_ENV_START__\\0'; /usr/bin/env -0")
+        .arg0(format!("-{shell_name}"))
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+        .env("TERM", "dumb")
+        .env("SHELL", &shell);
+
+    if let Some(home) = env::var_os("HOME") {
+        command.env("HOME", home);
+    }
+    if let Some(user) = env::var_os("USER") {
+        command.env("USER", &user);
+        command.env("LOGNAME", user);
+    } else if let Some(logname) = env::var_os("LOGNAME") {
+        command.env("LOGNAME", logname);
+    }
+
+    let output = command.output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    parse_login_shell_environment(&output.stdout).and_then(|environment| {
+        environment
+            .into_iter()
+            .find_map(|(key, value)| (key == "PATH").then_some(value))
+    })
+}
+
+#[cfg(unix)]
+fn login_shell_path() -> Option<OsString> {
+    #[cfg(test)]
+    {
+        read_login_shell_path()
+    }
+
+    #[cfg(not(test))]
+    {
+        LOGIN_SHELL_PATH_CACHE
+            .get_or_init(read_login_shell_path)
+            .clone()
+    }
+}
+
+#[cfg(not(unix))]
+fn login_shell_path() -> Option<OsString> {
+    None
+}
+
 fn process_path_with_order(
     path_override: Option<&str>,
     bundled_dir_first: bool,
 ) -> Option<OsString> {
-    let bundled_dir = env::current_exe()
-        .ok()
-        .and_then(|path| path.parent().map(Path::to_path_buf));
-    let explicit_override_directories = explicit_command_override_directories();
-    let inherited = path_entries_from_value(
-        path_override
-            .map(OsString::from)
-            .or_else(|| env::var_os("PATH")),
-    );
-    let standard = standard_search_directories();
+    let cache = process_path_cache();
+    let explicit_override_directories = cache.explicit_override_directories;
+    let bundled_dir = cache.bundled_dir;
+    let (login_shell_entries, inherited_entries, standard_entries) =
+        if let Some(path_override) = path_override {
+            (
+                Vec::new(),
+                path_entries_from_value(Some(OsString::from(path_override))),
+                Vec::new(),
+            )
+        } else {
+            (
+                cache.login_shell_entries,
+                cache.inherited_entries,
+                cache.standard_entries,
+            )
+        };
 
     let entries = if bundled_dir_first {
         unique_path_entries(
             bundled_dir
                 .into_iter()
                 .chain(explicit_override_directories)
-                .chain(inherited)
-                .chain(standard),
+                .chain(login_shell_entries)
+                .chain(inherited_entries)
+                .chain(standard_entries),
         )
     } else {
         unique_path_entries(
             explicit_override_directories
                 .into_iter()
-                .chain(inherited)
-                .chain(standard)
+                .chain(login_shell_entries)
+                .chain(inherited_entries)
+                .chain(standard_entries)
                 .chain(bundled_dir),
         )
     };
@@ -354,11 +435,10 @@ fn resolve_command_path_with_path_override(
         return Ok(Some(explicit_path));
     }
 
-    let resolved = bundled_command_path(program)
-        .or_else(|| {
-            command_path_from_environment_path(program, augmented_process_path(path_override))
-        })
-        .or_else(|| command_path_from_directories(program, &standard_command_directories(program)));
+    let resolved = command_path_from_directories(
+        program,
+        &path_entries_from_value(augmented_process_path(path_override)),
+    );
     Ok(resolved)
 }
 
@@ -473,14 +553,12 @@ pub fn run_command_allow_failure_with_env(
     ))
 }
 
-/// Resolves a command name using the same augmented PATH used for subprocesses.
 pub fn command_path(program: &str) -> Option<String> {
-    command_path_from_environment_path(program, augmented_process_path(None))
+    resolve_command_path(program).ok().flatten()
 }
 
-/// Returns whether `program` can be resolved on PATH by [`command_path`].
 pub fn command_exists(program: &str) -> bool {
-    resolve_command_path(program).ok().flatten().is_some()
+    command_path(program).is_some()
 }
 
 pub fn version_command(program: &str, args: &[&str]) -> Option<String> {
@@ -504,8 +582,41 @@ mod tests {
     use host_test_support::{lock_env, EnvVarGuard};
     use std::{
         fs,
+        path::{Path, PathBuf},
         time::{SystemTime, UNIX_EPOCH},
     };
+
+    fn unique_temp_path(prefix: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("{prefix}-{nonce}"))
+    }
+
+    #[cfg(unix)]
+    fn write_executable(path: &Path, body: &str) {
+        use std::os::unix::fs::PermissionsExt;
+
+        fs::write(path, body).expect("script should be writable");
+        let mut permissions = fs::metadata(path)
+            .expect("script metadata should exist")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(path, permissions).expect("script should be executable");
+    }
+
+    #[cfg(unix)]
+    fn write_fake_login_shell(shell_path: &Path, login_path: &Path) {
+        write_executable(
+            shell_path,
+            format!(
+                "#!/bin/sh\nprintf 'shell startup noise\\n'\nprintf '__OPENDUCKTOR_ENV_START__\\0PATH={}\\0'\n",
+                login_path.display()
+            )
+            .as_str(),
+        );
+    }
 
     #[test]
     fn run_command_returns_stdout() {
@@ -576,11 +687,7 @@ mod tests {
 
     #[test]
     fn command_path_does_not_execute_shell_substitution_payloads() {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock should be after unix epoch")
-            .as_nanos();
-        let marker = std::env::temp_dir().join(format!("odt-command-path-marker-{nonce}"));
+        let marker = unique_temp_path("odt-command-path-marker");
         let payload = format!("definitely_not_real_$(touch {})", marker.display());
 
         assert!(command_path(payload.as_str()).is_none());
@@ -592,11 +699,7 @@ mod tests {
 
     #[test]
     fn bundled_command_path_resolves_sibling_binary() {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock should be after unix epoch")
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("odt-bundled-command-{nonce}"));
+        let root = unique_temp_path("odt-bundled-command");
         let executable_dir = root.join("MacOS");
         fs::create_dir_all(&executable_dir).expect("temp executable dir should be created");
         let fake_executable = executable_dir.join("openducktor-desktop");
@@ -624,20 +727,10 @@ mod tests {
             .expect("system clock should be after unix epoch")
             .as_nanos();
         let program = format!("bd-override-{nonce}");
-        let root = std::env::temp_dir().join(format!("odt-command-override-{nonce}"));
+        let root = unique_temp_path("odt-command-override");
         fs::create_dir_all(&root).expect("temp dir should be created");
         let script = root.join(format!("fake-{program}"));
-        fs::write(&script, "#!/bin/sh\nprintf 'override-ok'").expect("script should be writable");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-
-            let mut permissions = fs::metadata(&script)
-                .expect("script metadata should exist")
-                .permissions();
-            permissions.set_mode(0o755);
-            fs::set_permissions(&script, permissions).expect("script should be executable");
-        }
+        write_executable(&script, "#!/bin/sh\nprintf 'override-ok'");
 
         let env_name = command_env_override_name(program.as_str());
         std::env::set_var(&env_name, &script);
@@ -652,28 +745,14 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn run_command_with_env_prefers_supplied_path_for_lookup() {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock should be after unix epoch")
-            .as_nanos();
-        let program = format!("bd-path-{nonce}");
-        let root = std::env::temp_dir().join(format!("odt-command-path-override-{nonce}"));
+        let program = "bd-path-test";
+        let root = unique_temp_path("odt-command-path-override");
         fs::create_dir_all(&root).expect("temp dir should be created");
-        let script = root.join(program.as_str());
-        fs::write(&script, "#!/bin/sh\nprintf 'path-override-ok'")
-            .expect("script should be writable");
-        {
-            use std::os::unix::fs::PermissionsExt;
-
-            let mut permissions = fs::metadata(&script)
-                .expect("script metadata should exist")
-                .permissions();
-            permissions.set_mode(0o755);
-            fs::set_permissions(&script, permissions).expect("script should be executable");
-        }
+        let script = root.join(program);
+        write_executable(&script, "#!/bin/sh\nprintf 'path-override-ok'");
 
         let output = run_command_with_env(
-            program.as_str(),
+            program,
             &[],
             None,
             &[("PATH", root.to_string_lossy().as_ref())],
@@ -686,65 +765,88 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn run_command_searches_common_user_toolchain_directories() {
+    fn run_command_uses_standard_user_toolchain_dirs_when_login_shell_lookup_fails() {
         let _env_lock = lock_env();
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock should be after unix epoch")
-            .as_nanos();
-        let program = format!("bd-home-{nonce}");
-        let home = std::env::temp_dir().join(format!("odt-home-search-{nonce}"));
-        let cargo_bin = home.join(".cargo").join("bin");
-        fs::create_dir_all(&cargo_bin).expect("toolchain bin dir should be created");
+        let root = unique_temp_path("odt-standard-user-path");
+        let home = root.join("home");
+        let bun_bin = home.join(".bun").join("bin");
+        fs::create_dir_all(&bun_bin).expect("standard bun directory should exist");
+        let program = "odt-standard-path-cli";
+        let script = bun_bin.join(program);
+        write_executable(&script, "#!/bin/sh\nprintf 'standard-path-ok'");
 
-        let script = cargo_bin.join(program.as_str());
-        fs::write(&script, "#!/bin/sh\nprintf 'home-search-ok'")
-            .expect("script should be writable");
-        {
-            use std::os::unix::fs::PermissionsExt;
-
-            let mut permissions = fs::metadata(&script)
-                .expect("script metadata should exist")
-                .permissions();
-            permissions.set_mode(0o755);
-            fs::set_permissions(&script, permissions).expect("script should be executable");
-        }
-
-        let _home_guard = EnvVarGuard::set("HOME", home.to_string_lossy().as_ref());
+        let _shell_guard = EnvVarGuard::set("SHELL", "/tmp/odt-missing-shell");
         let _path_guard = EnvVarGuard::set("PATH", "/usr/bin:/bin");
+        let _home_guard = EnvVarGuard::set("HOME", home.to_string_lossy().as_ref());
+        let _user_guard = EnvVarGuard::set("USER", "odt-test");
+        let _logname_guard = EnvVarGuard::set("LOGNAME", "odt-test");
 
-        let output = run_command(program.as_str(), &[], None)
-            .expect("command in common user toolchain dir should execute");
+        let output = run_command(program, &[], None)
+            .expect("standard toolchain directories should be used for lookup");
 
-        assert_eq!(output, "home-search-ok");
-        let _ = fs::remove_dir_all(home);
+        assert_eq!(output, "standard-path-ok");
+        let _ = fs::remove_dir_all(root);
     }
 
+    #[cfg(unix)]
     #[test]
-    fn subprocess_path_env_prioritizes_override_and_inherited_directories() {
+    fn run_command_uses_login_shell_path_for_lookup() {
         let _env_lock = lock_env();
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock should be after unix epoch")
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("odt-subprocess-path-{nonce}"));
+        let root = unique_temp_path("odt-login-shell-command");
+        let login_bin = root.join("login-bin");
+        fs::create_dir_all(&login_bin).expect("login path should exist");
+        let shell = root.join("fake-shell");
+        let program = "node";
+        let script = login_bin.join(program);
+        write_executable(&script, "#!/bin/sh\nprintf 'login-shell-ok'");
+        write_fake_login_shell(&shell, &login_bin);
+
+        let _shell_guard = EnvVarGuard::set("SHELL", shell.to_string_lossy().as_ref());
+        let _path_guard = EnvVarGuard::set("PATH", "/usr/bin:/bin");
+        let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+        let _user_guard = EnvVarGuard::set("USER", "odt-test");
+        let _logname_guard = EnvVarGuard::set("LOGNAME", "odt-test");
+
+        let output =
+            run_command(program, &[], None).expect("login shell path should resolve command");
+
+        assert_eq!(output, "login-shell-ok");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn subprocess_path_env_combines_override_login_shell_inherited_and_bundled_dirs() {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("odt-subprocess-path");
         let override_dir = root.join("override-bin");
-        let inherited_a = root.join("inherited-a");
-        let inherited_b = root.join("inherited-b");
+        let login_dir = root.join("login-bin");
+        let inherited_dir = root.join("inherited-bin");
+        let standard_cargo_dir = root.join(".cargo").join("bin");
+        let standard_bun_dir = root.join(".bun").join("bin");
+        let standard_local_dir = root.join(".local").join("bin");
         fs::create_dir_all(&override_dir).expect("override dir should exist");
-        fs::create_dir_all(&inherited_a).expect("inherited dir should exist");
-        fs::create_dir_all(&inherited_b).expect("inherited dir should exist");
+        fs::create_dir_all(&login_dir).expect("login dir should exist");
+        fs::create_dir_all(&inherited_dir).expect("inherited dir should exist");
+        fs::create_dir_all(&standard_cargo_dir).expect("standard cargo dir should exist");
+        fs::create_dir_all(&standard_bun_dir).expect("standard bun dir should exist");
+        fs::create_dir_all(&standard_local_dir).expect("standard local dir should exist");
 
         let override_file = override_dir.join("custom-bun");
         fs::write(&override_file, "").expect("override file should exist");
 
-        let inherited_path = std::env::join_paths([inherited_a.as_path(), inherited_b.as_path()])
-            .expect("inherited path should join");
+        let shell = root.join("fake-shell");
+        write_fake_login_shell(&shell, &login_dir);
+
         let _override_guard = EnvVarGuard::set(
             "OPENDUCKTOR_BUN_PATH",
             override_file.to_string_lossy().as_ref(),
         );
-        let _path_guard = EnvVarGuard::set("PATH", inherited_path.to_string_lossy().as_ref());
+        let _shell_guard = EnvVarGuard::set("SHELL", shell.to_string_lossy().as_ref());
+        let _path_guard = EnvVarGuard::set("PATH", inherited_dir.to_string_lossy().as_ref());
+        let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+        let _user_guard = EnvVarGuard::set("USER", "odt-test");
+        let _logname_guard = EnvVarGuard::set("LOGNAME", "odt-test");
 
         let path = subprocess_path_env().expect("subprocess PATH should be assembled");
         let entries = std::env::split_paths(&path).collect::<Vec<_>>();
@@ -758,33 +860,45 @@ mod tests {
             .iter()
             .position(|entry| entry == &override_dir)
             .expect("override parent should be included");
-        let inherited_a_index = entries
+        let login_index = entries
             .iter()
-            .position(|entry| entry == &inherited_a)
-            .expect("first inherited path should be included");
-        let inherited_b_index = entries
+            .position(|entry| entry == &login_dir)
+            .expect("login shell path should be included");
+        let inherited_index = entries
             .iter()
-            .position(|entry| entry == &inherited_b)
-            .expect("second inherited path should be included");
+            .position(|entry| entry == &inherited_dir)
+            .expect("inherited path should be included");
+        let standard_local_index = entries
+            .iter()
+            .position(|entry| entry == &standard_local_dir)
+            .expect("standard local bin should be included");
+        let standard_cargo_index = entries
+            .iter()
+            .position(|entry| entry == &standard_cargo_dir)
+            .expect("standard cargo bin should be included");
+        let standard_bun_index = entries
+            .iter()
+            .position(|entry| entry == &standard_bun_dir)
+            .expect("standard bun bin should be included");
         let bundled_index = entries
             .iter()
             .position(|entry| entry == &bundled_dir)
             .expect("bundled directory should be included");
 
-        assert!(override_index < bundled_index);
-        assert!(inherited_a_index < bundled_index);
-        assert!(inherited_b_index < bundled_index);
+        assert!(override_index < login_index);
+        assert!(login_index < inherited_index);
+        assert!(inherited_index < standard_local_index);
+        assert!(standard_local_index <= standard_cargo_index);
+        assert!(standard_cargo_index <= standard_bun_index);
+        assert!(inherited_index < bundled_index);
+        assert!(standard_bun_index < bundled_index);
 
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
     fn explicit_command_override_reports_invalid_path() {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock should be after unix epoch")
-            .as_nanos();
-        let program = format!("bd-missing-{nonce}");
+        let program = format!("bd-missing-{}", unique_temp_path("nonce").display());
         let env_name = command_env_override_name(program.as_str());
         std::env::set_var(&env_name, "/tmp/odt-missing-command-override");
 
@@ -797,11 +911,7 @@ mod tests {
 
     #[test]
     fn resolve_command_path_requires_explicit_paths_to_exist() {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock should be after unix epoch")
-            .as_nanos();
-        let missing = std::env::temp_dir().join(format!("odt-missing-explicit-command-{nonce}"));
+        let missing = unique_temp_path("odt-missing-explicit-command");
         let missing_str = missing.to_string_lossy().to_string();
 
         let resolved =
