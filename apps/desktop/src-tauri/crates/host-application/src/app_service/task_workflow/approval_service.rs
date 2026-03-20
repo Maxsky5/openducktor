@@ -515,10 +515,8 @@ impl AppService {
                 "Task {task_id} can only link a merged pull request from detection results."
             ));
         }
-        if metadata.pull_request.is_some() {
-            if !same_existing_pull_request {
-                return Err(anyhow!("Task {task_id} already has a linked pull request."));
-            }
+        if metadata.pull_request.is_some() && !same_existing_pull_request {
+            return Err(anyhow!("Task {task_id} already has a linked pull request."));
         }
 
         let repo_path = self.resolve_task_repo_path(repo_path)?;
