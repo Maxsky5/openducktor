@@ -9,6 +9,13 @@ type HookDraftInput = {
 
 type RepoDevServerDraftInput = RepoDevServerScript;
 
+export type DevServerDraftValidationErrors = {
+  name?: string;
+  command?: string;
+};
+
+export type DevServerDraftValidationMap = Record<string, DevServerDraftValidationErrors>;
+
 type RepoScriptDraftInput = {
   hooks: HookDraftInput;
   devServers: RepoDevServerDraftInput[];
@@ -26,27 +33,59 @@ const normalizeDevServerName = (name: string): string => name.trim();
 
 const normalizeDevServerCommand = (command: string): string => command.trim();
 
+export const getDevServerDraftValidationErrors = (
+  devServer: RepoDevServerDraftInput,
+): DevServerDraftValidationErrors | null => {
+  const errors: DevServerDraftValidationErrors = {};
+
+  if (!normalizeDevServerName(devServer.name)) {
+    errors.name = "Tab label is required.";
+  }
+  if (!normalizeDevServerCommand(devServer.command)) {
+    errors.command = "Command is required.";
+  }
+
+  return Object.keys(errors).length > 0 ? errors : null;
+};
+
+export const buildDevServerDraftValidationMap = (
+  devServers: RepoDevServerDraftInput[],
+): DevServerDraftValidationMap =>
+  Object.fromEntries(
+    devServers.flatMap((devServer) => {
+      const errors = getDevServerDraftValidationErrors(devServer);
+      return errors ? [[devServer.id, errors] as const] : [];
+    }),
+  );
+
+export const countDevServerDraftValidationErrors = (
+  devServers: RepoDevServerDraftInput[],
+): number =>
+  devServers.reduce((count, devServer) => {
+    const errors = getDevServerDraftValidationErrors(devServer);
+    return count + (errors?.name ? 1 : 0) + (errors?.command ? 1 : 0);
+  }, 0);
+
 export const normalizeDevServers = (
   devServers: RepoDevServerDraftInput[],
 ): RepoDevServerDraftInput[] =>
-  devServers.flatMap((devServer) => {
+  devServers.map((devServer) => {
+    const validationErrors = getDevServerDraftValidationErrors(devServer);
+    if (validationErrors?.name) {
+      throw new Error("Dev server tab labels cannot be blank.");
+    }
+    if (validationErrors?.command) {
+      throw new Error("Dev server commands cannot be blank.");
+    }
+
     const command = normalizeDevServerCommand(devServer.command);
-    if (!command) {
-      return [];
-    }
-
     const name = normalizeDevServerName(devServer.name);
-    if (!name) {
-      throw new Error("Dev server names cannot be blank when a command is configured.");
-    }
 
-    return [
-      {
-        id: devServer.id,
-        name,
-        command,
-      },
-    ];
+    return {
+      id: devServer.id,
+      name,
+      command,
+    };
   });
 
 export const hasConfiguredHookCommands = (hooks: HookDraftInput): boolean =>

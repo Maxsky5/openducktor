@@ -6,13 +6,19 @@ use host_domain::{
 };
 use host_infra_system::{RepoConfig, RepoDevServerScript};
 use std::collections::HashMap;
+#[cfg(unix)]
+use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
+#[cfg(unix)]
+use std::os::fd::FromRawFd;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Duration;
 
 const DEV_SERVER_LOG_BUFFER_LIMIT: usize = 2_000;
 const DEV_SERVER_STOP_TIMEOUT: Duration = Duration::from_secs(3);
+const DEV_SERVER_START_GRACE_PERIOD: Duration = Duration::from_millis(150);
 
 impl AppService {
     pub fn dev_server_get_state(
@@ -226,6 +232,7 @@ impl AppService {
             state.started_at = None;
             state.exit_code = None;
             state.last_error = None;
+            state.buffered_log_lines.clear();
         })?;
         self.append_log(
             group_key,
@@ -237,27 +244,36 @@ impl AppService {
         );
 
         let mut spawned_pid = None;
+        let mut start_failure_already_recorded = false;
         let start_result = (|| -> Result<()> {
-            let parsed = shell_words::split(script.command.as_str()).map_err(|error| {
-                anyhow!(
-                    "Invalid dev server command syntax for {}. Use argv tokens, or explicitly invoke a shell (for example: sh -lc '...'): {error}",
-                    script.name
-                )
-            })?;
-            let (program, args) = parsed.split_first().ok_or_else(|| {
-                anyhow!(
-                    "Dev server command is empty for {}. Provide an executable name.",
-                    script.name
-                )
-            })?;
-
-            let mut command = Command::new(program);
-            command.args(args);
+            let mut command =
+                build_dev_server_command(script.command.as_str(), script.name.as_str())?;
             command.current_dir(worktree_path);
-            command.stdout(Stdio::piped());
-            command.stderr(Stdio::piped());
             configure_process_group(&mut command);
 
+            #[cfg(unix)]
+            let (stdout, stderr): (Box<dyn Read + Send>, Box<dyn Read + Send>) = {
+                let (stdout_reader, stdout_writer) = open_pty_pair()?;
+                let (stderr_reader, stderr_writer) = open_pty_pair()?;
+                command.stdout(Stdio::from(stdout_writer));
+                command.stderr(Stdio::from(stderr_writer));
+                (Box::new(stdout_reader), Box::new(stderr_reader))
+            };
+
+            #[cfg(not(unix))]
+            command.stdout(Stdio::piped());
+            #[cfg(not(unix))]
+            command.stderr(Stdio::piped());
+
+            #[cfg(unix)]
+            let mut child = command.spawn().with_context(|| {
+                format!(
+                    "Failed to start dev server {} in {} using command `{}`",
+                    script.name, worktree_path, script.command
+                )
+            })?;
+
+            #[cfg(not(unix))]
             let mut child = command.spawn().with_context(|| {
                 format!(
                     "Failed to start dev server {} in {} using command `{}`",
@@ -266,21 +282,17 @@ impl AppService {
             })?;
             let pid = child.id();
             spawned_pid = Some(pid);
+
+            #[cfg(not(unix))]
             let stdout = child.stdout.take().ok_or_else(|| {
                 anyhow!("Failed capturing stdout for dev server {}.", script.name)
             })?;
+
+            #[cfg(not(unix))]
             let stderr = child.stderr.take().ok_or_else(|| {
                 anyhow!("Failed capturing stderr for dev server {}.", script.name)
             })?;
             let started_at = now_rfc3339();
-
-            self.update_script_state(group_key, script.id.as_str(), |state| {
-                state.status = DevServerScriptStatus::Running;
-                state.pid = Some(pid);
-                state.started_at = Some(started_at.clone());
-                state.exit_code = None;
-                state.last_error = None;
-            })?;
 
             spawn_log_forwarder(
                 self.dev_server_groups.clone(),
@@ -300,6 +312,40 @@ impl AppService {
                 DevServerLogStream::Stderr,
                 stderr,
             );
+
+            self.update_script_state(group_key, script.id.as_str(), |state| {
+                state.status = DevServerScriptStatus::Starting;
+                state.pid = Some(pid);
+                state.started_at = Some(started_at.clone());
+                state.exit_code = None;
+                state.last_error = None;
+            })?;
+
+            if let Some(status) =
+                wait_for_immediate_dev_server_exit(&mut child, DEV_SERVER_START_GRACE_PERIOD)?
+            {
+                let message = dev_server_exit_message(status.code());
+                self.mark_dev_server_start_exit_failed(
+                    group_key,
+                    repo_path,
+                    task_id,
+                    script.id.as_str(),
+                    status.code(),
+                    message.as_str(),
+                );
+                spawned_pid = None;
+                start_failure_already_recorded = true;
+                return Err(anyhow!(message));
+            }
+
+            self.update_script_state(group_key, script.id.as_str(), |state| {
+                state.status = DevServerScriptStatus::Running;
+                state.pid = Some(pid);
+                state.started_at = Some(started_at.clone());
+                state.exit_code = None;
+                state.last_error = None;
+            })?;
+
             spawn_waiter(
                 self.dev_server_groups.clone(),
                 group_key.to_string(),
@@ -322,13 +368,15 @@ impl AppService {
                     );
                 }
             }
-            self.mark_dev_server_start_failed(
-                group_key,
-                repo_path,
-                task_id,
-                script.id.as_str(),
-                message.as_str(),
-            );
+            if !start_failure_already_recorded {
+                self.mark_dev_server_start_failed(
+                    group_key,
+                    repo_path,
+                    task_id,
+                    script.id.as_str(),
+                    message.as_str(),
+                );
+            }
             return Err(anyhow!(message));
         }
 
@@ -348,10 +396,20 @@ impl AppService {
         let mut targets = Vec::new();
         let mut changed_scripts = Vec::new();
         for script in &mut runtime.state.scripts {
+            script.buffered_log_lines.clear();
             if let Some(pid) = script.pid {
                 script.status = DevServerScriptStatus::Stopping;
                 script.last_error = None;
                 targets.push((script.script_id.clone(), pid));
+                changed_scripts.push(script.clone());
+            } else if script.status != DevServerScriptStatus::Stopped
+                || script.last_error.is_some()
+                || script.exit_code.is_some()
+            {
+                script.status = DevServerScriptStatus::Stopped;
+                script.started_at = None;
+                script.exit_code = None;
+                script.last_error = None;
                 changed_scripts.push(script.clone());
             }
         }
@@ -420,6 +478,32 @@ impl AppService {
             state.pid = None;
             state.started_at = None;
             state.exit_code = None;
+            state.last_error = Some(message.to_string());
+        });
+        self.append_log(
+            group_key,
+            repo_path,
+            task_id,
+            script_id,
+            DevServerLogStream::System,
+            message.to_string(),
+        );
+    }
+
+    fn mark_dev_server_start_exit_failed(
+        &self,
+        group_key: &str,
+        repo_path: &str,
+        task_id: &str,
+        script_id: &str,
+        exit_code: Option<i32>,
+        message: &str,
+    ) {
+        let _ = self.update_script_state(group_key, script_id, |state| {
+            state.status = DevServerScriptStatus::Failed;
+            state.pid = None;
+            state.started_at = None;
+            state.exit_code = exit_code;
             state.last_error = Some(message.to_string());
         });
         self.append_log(
@@ -647,6 +731,7 @@ fn spawn_log_forwarder<R>(
             let Ok(line) = line else {
                 break;
             };
+            let text = line.trim_end_matches('\r').to_string();
             emit_log_line(
                 &groups,
                 group_key.as_str(),
@@ -655,12 +740,98 @@ fn spawn_log_forwarder<R>(
                 DevServerLogLine {
                     script_id: script_id.clone(),
                     stream: stream.clone(),
-                    text: line,
+                    text,
                     timestamp: now_rfc3339(),
                 },
             );
         }
     });
+}
+
+fn wait_for_immediate_dev_server_exit(
+    child: &mut std::process::Child,
+    timeout: Duration,
+) -> Result<Option<std::process::ExitStatus>> {
+    let poll_interval = Duration::from_millis(25);
+    let mut waited = Duration::ZERO;
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(Some(status));
+        }
+        if waited >= timeout {
+            return Ok(None);
+        }
+        thread::sleep(poll_interval);
+        waited = waited.saturating_add(poll_interval);
+    }
+}
+
+fn dev_server_exit_message(exit_code: Option<i32>) -> String {
+    if let Some(code) = exit_code {
+        format!("Dev server exited with code {code}.")
+    } else {
+        "Dev server exited after receiving a signal.".to_string()
+    }
+}
+
+#[cfg(unix)]
+fn build_dev_server_command(command: &str, script_name: &str) -> Result<Command> {
+    if command.trim().is_empty() {
+        return Err(anyhow!(
+            "Dev server command is empty for {}. Provide a command to run.",
+            script_name
+        ));
+    }
+
+    let mut process = Command::new("/bin/sh");
+    process.arg("-c");
+    process.arg(command);
+    Ok(process)
+}
+
+#[cfg(not(unix))]
+fn build_dev_server_command(command: &str, script_name: &str) -> Result<Command> {
+    let parsed = shell_words::split(command).map_err(|error| {
+        anyhow!(
+            "Invalid dev server command syntax for {}. Use argv tokens, or explicitly invoke a shell (for example: sh -lc '...'): {error}",
+            script_name
+        )
+    })?;
+    let (program, args) = parsed.split_first().ok_or_else(|| {
+        anyhow!(
+            "Dev server command is empty for {}. Provide an executable name.",
+            script_name
+        )
+    })?;
+
+    let mut process = Command::new(program);
+    process.args(args);
+    Ok(process)
+}
+
+#[cfg(unix)]
+fn open_pty_pair() -> Result<(File, File)> {
+    let mut master_fd = 0;
+    let mut slave_fd = 0;
+    let result = unsafe {
+        libc::openpty(
+            &mut master_fd,
+            &mut slave_fd,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    if result != 0 {
+        return Err(anyhow!(
+            "Failed creating pseudo terminal for dev server logs: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+
+    let master = unsafe { File::from_raw_fd(master_fd) };
+    let slave = unsafe { File::from_raw_fd(slave_fd) };
+    Ok((master, slave))
 }
 
 fn spawn_waiter(
@@ -675,14 +846,7 @@ fn spawn_waiter(
     std::thread::spawn(move || {
         let status = child.wait();
         let (exit_code, message) = match status {
-            Ok(status) => (
-                status.code(),
-                if let Some(code) = status.code() {
-                    format!("Dev server exited with code {code}.")
-                } else {
-                    "Dev server exited after receiving a signal.".to_string()
-                },
-            ),
+            Ok(status) => (status.code(), dev_server_exit_message(status.code())),
             Err(error) => (None, format!("Failed waiting for dev server exit: {error}")),
         };
 
@@ -800,6 +964,8 @@ mod tests {
     use crate::app_service::test_support::{build_service_with_state, unique_temp_path};
     use std::fs;
     use std::sync::{Arc, Mutex};
+    use std::thread;
+    use std::time::Duration;
 
     fn repo_config(dev_servers: Vec<RepoDevServerScript>) -> RepoConfig {
         RepoConfig {
@@ -946,7 +1112,7 @@ mod tests {
     }
 
     #[test]
-    fn start_dev_server_script_marks_parse_failures_as_failed() {
+    fn start_dev_server_script_rejects_blank_commands() {
         let (service, _task_state, _git_state) = build_service_with_state(Vec::new());
         let repo_path = "/repo";
         let task_id = "task-parse";
@@ -954,7 +1120,7 @@ mod tests {
         let script = RepoDevServerScript {
             id: "frontend".to_string(),
             name: "Frontend".to_string(),
-            command: "'".to_string(),
+            command: "   ".to_string(),
         };
 
         service
@@ -982,11 +1148,11 @@ mod tests {
                 "/tmp/worktree",
                 script,
             )
-            .expect_err("invalid command should fail");
+            .expect_err("blank command should fail");
 
         assert!(error
             .to_string()
-            .contains("Invalid dev server command syntax for Frontend"));
+            .contains("Dev server command is empty for Frontend"));
 
         let groups = service
             .dev_server_groups
@@ -1000,15 +1166,15 @@ mod tests {
         assert_eq!(script.exit_code, None);
         assert!(matches!(
             script.last_error.as_deref(),
-            Some(message) if message.contains("Invalid dev server command syntax for Frontend")
+            Some(message) if message.contains("Dev server command is empty for Frontend")
         ));
         assert!(script.buffered_log_lines.iter().any(|line| line
             .text
-            .contains("Invalid dev server command syntax for Frontend")));
+            .contains("Dev server command is empty for Frontend")));
     }
 
     #[test]
-    fn start_dev_server_script_marks_spawn_failures_as_failed() {
+    fn start_dev_server_script_reports_immediate_shell_failures() {
         let (service, _task_state, _git_state) = build_service_with_state(Vec::new());
         let repo_path = "/repo";
         let task_id = "task-spawn";
@@ -1047,11 +1213,11 @@ mod tests {
                 worktree_path.as_str(),
                 script,
             )
-            .expect_err("missing executable should fail");
+            .expect_err("missing command should fail during startup");
 
         assert!(error
             .to_string()
-            .contains("Failed to start dev server Backend"));
+            .contains("Dev server exited with code 127"));
 
         let groups = service
             .dev_server_groups
@@ -1062,14 +1228,195 @@ mod tests {
         assert_eq!(script.status, DevServerScriptStatus::Failed);
         assert_eq!(script.pid, None);
         assert_eq!(script.started_at, None);
-        assert_eq!(script.exit_code, None);
+        assert_eq!(script.exit_code, Some(127));
         assert!(matches!(
             script.last_error.as_deref(),
-            Some(message) if message.contains("Failed to start dev server Backend")
+            Some(message) if message.contains("Dev server exited with code")
         ));
         assert!(script
             .buffered_log_lines
             .iter()
-            .any(|line| line.text.contains("Failed to start dev server Backend")));
+            .any(|line| line.text.contains("Dev server exited with code")));
+    }
+
+    #[test]
+    fn start_dev_server_script_streams_logs_before_process_exit_and_clears_old_logs() {
+        let (service, _task_state, _git_state) = build_service_with_state(Vec::new());
+        let repo_path = "/repo";
+        let task_id = "task-stream";
+        let worktree_path = unique_temp_path("dev-server-stream-worktree");
+        fs::create_dir_all(&worktree_path).expect("create worktree path");
+        let worktree_path = worktree_path.to_string_lossy().to_string();
+        let group_key = dev_server_group_key(repo_path, task_id);
+        let script = RepoDevServerScript {
+            id: "frontend".to_string(),
+            name: "Frontend".to_string(),
+            command: "printf 'db generated\\n' && /usr/bin/python3 -c \"import time; print('ready'); time.sleep(5)\""
+                .to_string(),
+        };
+
+        let mut state = build_group_state(
+            repo_path,
+            task_id,
+            Some(worktree_path.clone()),
+            &repo_config(vec![script.clone()]),
+        );
+        state.scripts[0].buffered_log_lines.push(DevServerLogLine {
+            script_id: "frontend".to_string(),
+            stream: DevServerLogStream::Stdout,
+            text: "stale log".to_string(),
+            timestamp: "2026-03-19T10:00:00Z".to_string(),
+        });
+
+        service
+            .dev_server_groups
+            .lock()
+            .expect("group lock poisoned")
+            .insert(
+                group_key.clone(),
+                DevServerGroupRuntime {
+                    state,
+                    emitter: None,
+                },
+            );
+
+        service
+            .start_dev_server_script(
+                group_key.as_str(),
+                repo_path,
+                task_id,
+                worktree_path.as_str(),
+                script,
+            )
+            .expect("dev server should start");
+
+        let mut saw_ready_log = false;
+        let mut saw_setup_log = false;
+        let mut pid = None;
+        for _ in 0..30 {
+            thread::sleep(Duration::from_millis(100));
+            let groups = service
+                .dev_server_groups
+                .lock()
+                .expect("group lock poisoned");
+            let runtime = groups.get(&group_key).expect("runtime present");
+            let script = &runtime.state.scripts[0];
+            pid = script.pid;
+            assert!(script
+                .buffered_log_lines
+                .iter()
+                .all(|line| line.text != "stale log"));
+            saw_setup_log = script
+                .buffered_log_lines
+                .iter()
+                .any(|line| line.text.contains("db generated"));
+            saw_ready_log = script
+                .buffered_log_lines
+                .iter()
+                .any(|line| line.text.contains("ready"));
+            if saw_setup_log && saw_ready_log {
+                break;
+            }
+        }
+
+        assert!(
+            saw_setup_log,
+            "expected chained shell setup log before process exit"
+        );
+        assert!(saw_ready_log, "expected log line before process exit");
+
+        let pid = pid.expect("dev server pid missing");
+        stop_process_group(pid, DEV_SERVER_STOP_TIMEOUT).expect("stop streamed dev server");
+        for _ in 0..30 {
+            thread::sleep(Duration::from_millis(50));
+            let groups = service
+                .dev_server_groups
+                .lock()
+                .expect("group lock poisoned");
+            let runtime = groups.get(&group_key).expect("runtime present");
+            if runtime.state.scripts[0].pid.is_none() {
+                break;
+            }
+        }
+    }
+
+    #[test]
+    fn mark_dev_servers_stopping_clears_logs_and_resets_failed_scripts() {
+        let (service, _task_state, _git_state) = build_service_with_state(Vec::new());
+        let group_key = "repo::task-stop".to_string();
+        service
+            .dev_server_groups
+            .lock()
+            .expect("group lock poisoned")
+            .insert(
+                group_key.clone(),
+                DevServerGroupRuntime {
+                    state: DevServerGroupState {
+                        repo_path: "repo".to_string(),
+                        task_id: "task-stop".to_string(),
+                        worktree_path: Some("/tmp/worktree".to_string()),
+                        scripts: vec![
+                            DevServerScriptState {
+                                script_id: "frontend".to_string(),
+                                name: "Frontend".to_string(),
+                                command: "bun run dev".to_string(),
+                                status: DevServerScriptStatus::Running,
+                                pid: Some(4242),
+                                started_at: Some("2026-03-19T10:00:00Z".to_string()),
+                                exit_code: None,
+                                last_error: None,
+                                buffered_log_lines: vec![DevServerLogLine {
+                                    script_id: "frontend".to_string(),
+                                    stream: DevServerLogStream::Stdout,
+                                    text: "ready".to_string(),
+                                    timestamp: "2026-03-19T10:00:00Z".to_string(),
+                                }],
+                            },
+                            DevServerScriptState {
+                                script_id: "backend".to_string(),
+                                name: "Backend".to_string(),
+                                command: "bun run api".to_string(),
+                                status: DevServerScriptStatus::Failed,
+                                pid: None,
+                                started_at: None,
+                                exit_code: Some(1),
+                                last_error: Some("boom".to_string()),
+                                buffered_log_lines: vec![DevServerLogLine {
+                                    script_id: "backend".to_string(),
+                                    stream: DevServerLogStream::System,
+                                    text: "boom".to_string(),
+                                    timestamp: "2026-03-19T10:00:01Z".to_string(),
+                                }],
+                            },
+                        ],
+                        updated_at: "2026-03-19T10:00:00Z".to_string(),
+                    },
+                    emitter: None,
+                },
+            );
+
+        let targets = service
+            .mark_dev_servers_stopping(group_key.as_str())
+            .expect("stop mark should succeed");
+
+        assert_eq!(targets, vec![("frontend".to_string(), 4242)]);
+
+        let groups = service
+            .dev_server_groups
+            .lock()
+            .expect("group lock poisoned");
+        let runtime = groups.get(&group_key).expect("runtime present");
+        assert_eq!(
+            runtime.state.scripts[0].status,
+            DevServerScriptStatus::Stopping
+        );
+        assert!(runtime.state.scripts[0].buffered_log_lines.is_empty());
+        assert_eq!(
+            runtime.state.scripts[1].status,
+            DevServerScriptStatus::Stopped
+        );
+        assert_eq!(runtime.state.scripts[1].last_error, None);
+        assert_eq!(runtime.state.scripts[1].exit_code, None);
+        assert!(runtime.state.scripts[1].buffered_log_lines.is_empty());
     }
 }

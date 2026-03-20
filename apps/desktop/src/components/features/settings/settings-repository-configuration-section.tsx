@@ -3,7 +3,11 @@ import { ChevronDown, ChevronUp, CircleAlert, FolderOpen, Plus, Trash2 } from "l
 import type { ReactElement } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
-import { hasConfiguredRepoScriptCommands, parseHookLines } from "@/components/features/settings";
+import {
+  buildDevServerDraftValidationMap,
+  hasConfiguredRepoScriptCommands,
+  parseHookLines,
+} from "@/components/features/settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +16,8 @@ import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-b
 
 type RepositoryConfigurationSectionProps = {
   selectedRepoConfig: RepoConfig | null;
+  selectedRepoDevServerValidationErrors?: Record<string, { name?: string; command?: string }>;
+  showDevServerValidationErrors?: boolean;
   selectedRepoEffectiveWorktreeBasePath: string | null;
   selectedRepoBranches: GitBranch[];
   selectedRepoBranchesError: string | null;
@@ -26,6 +32,8 @@ type RepositoryConfigurationSectionProps = {
 
 export function RepositoryConfigurationSection({
   selectedRepoConfig,
+  selectedRepoDevServerValidationErrors,
+  showDevServerValidationErrors = false,
   selectedRepoEffectiveWorktreeBasePath,
   selectedRepoBranches,
   selectedRepoBranchesError,
@@ -98,6 +106,10 @@ export function RepositoryConfigurationSection({
       },
     }));
   };
+  const devServerValidationErrors = showDevServerValidationErrors
+    ? (selectedRepoDevServerValidationErrors ??
+      buildDevServerDraftValidationMap(selectedRepoConfig.devServers ?? []))
+    : {};
 
   return (
     <div className="grid gap-4 p-4">
@@ -222,7 +234,7 @@ export function RepositoryConfigurationSection({
       <div className="grid gap-3">
         <div className="flex items-start justify-between gap-3">
           <div className="grid gap-1">
-            <Label>Builder dev servers</Label>
+            <Label>Dev server</Label>
             <p className="text-xs text-muted-foreground">
               Add one named command per long-running service. OpenDucktor starts these scripts in
               the builder worktree and keeps the saved order for terminal tabs.
@@ -260,123 +272,154 @@ export function RepositoryConfigurationSection({
             No dev servers configured yet.
           </div>
         ) : (
-          <div className="grid gap-3">
-            {selectedRepoConfig.devServers.map((devServer, index) => (
-              <div
-                key={devServer.id}
-                className="grid gap-3 rounded-md border border-border bg-card p-3 md:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)_auto] md:items-end"
-              >
-                <div className="grid gap-2">
-                  <Label htmlFor={`repo-dev-server-name-${devServer.id}`}>Tab label</Label>
-                  <Input
-                    id={`repo-dev-server-name-${devServer.id}`}
-                    value={devServer.name}
-                    disabled={isLoadingSettings || isSaving}
-                    onChange={(event) => {
-                      const name = event.currentTarget.value;
-                      updateScriptDraft((repoConfig) => ({
-                        ...repoConfig,
-                        devServers: repoConfig.devServers.map((entry) =>
-                          entry.id === devServer.id ? { ...entry, name } : entry,
-                        ),
-                      }));
-                    }}
-                  />
-                </div>
+          <div className="overflow-hidden rounded-md border border-border bg-card">
+            <div className="hidden grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)_auto] gap-3 border-b border-border bg-muted/30 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground md:grid">
+              <span>Tab label</span>
+              <span>Command</span>
+              <span className="text-right">Actions</span>
+            </div>
+            <div className="grid gap-0 divide-y divide-border">
+              {selectedRepoConfig.devServers.map((devServer, index) => {
+                const validationErrors = devServerValidationErrors[devServer.id];
+                const rowErrors = [validationErrors?.name, validationErrors?.command].filter(
+                  Boolean,
+                );
 
-                <div className="grid gap-2">
-                  <Label htmlFor={`repo-dev-server-command-${devServer.id}`}>Command</Label>
-                  <Input
-                    id={`repo-dev-server-command-${devServer.id}`}
-                    placeholder="bun run dev"
-                    value={devServer.command}
-                    disabled={isLoadingSettings || isSaving}
-                    onChange={(event) => {
-                      const command = event.currentTarget.value;
-                      updateScriptDraft((repoConfig) => ({
-                        ...repoConfig,
-                        devServers: repoConfig.devServers.map((entry) =>
-                          entry.id === devServer.id ? { ...entry, command } : entry,
-                        ),
-                      }));
-                    }}
-                  />
-                </div>
+                return (
+                  <div
+                    key={devServer.id}
+                    className="grid gap-3 p-3 md:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)_auto] md:items-center"
+                  >
+                    <div className="grid gap-2">
+                      <Label
+                        className="md:sr-only"
+                        htmlFor={`repo-dev-server-name-${devServer.id}`}
+                      >
+                        Tab label
+                      </Label>
+                      <Input
+                        id={`repo-dev-server-name-${devServer.id}`}
+                        value={devServer.name}
+                        aria-invalid={validationErrors?.name ? true : undefined}
+                        disabled={isLoadingSettings || isSaving}
+                        onChange={(event) => {
+                          const name = event.currentTarget.value;
+                          updateScriptDraft((repoConfig) => ({
+                            ...repoConfig,
+                            devServers: repoConfig.devServers.map((entry) =>
+                              entry.id === devServer.id ? { ...entry, name } : entry,
+                            ),
+                          }));
+                        }}
+                      />
+                    </div>
 
-                <div className="flex items-center justify-end gap-1 md:self-center">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    disabled={isLoadingSettings || isSaving || index === 0}
-                    onClick={() => {
-                      updateScriptDraft((repoConfig) => {
-                        const devServers = [...repoConfig.devServers];
-                        const [entry] = devServers.splice(index, 1);
-                        if (!entry) {
-                          return repoConfig;
+                    <div className="grid gap-2">
+                      <Label
+                        className="md:sr-only"
+                        htmlFor={`repo-dev-server-command-${devServer.id}`}
+                      >
+                        Command
+                      </Label>
+                      <Input
+                        id={`repo-dev-server-command-${devServer.id}`}
+                        placeholder="bun run dev"
+                        value={devServer.command}
+                        aria-invalid={validationErrors?.command ? true : undefined}
+                        disabled={isLoadingSettings || isSaving}
+                        onChange={(event) => {
+                          const command = event.currentTarget.value;
+                          updateScriptDraft((repoConfig) => ({
+                            ...repoConfig,
+                            devServers: repoConfig.devServers.map((entry) =>
+                              entry.id === devServer.id ? { ...entry, command } : entry,
+                            ),
+                          }));
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-end gap-1 md:self-center">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        disabled={isLoadingSettings || isSaving || index === 0}
+                        onClick={() => {
+                          updateScriptDraft((repoConfig) => {
+                            const devServers = [...repoConfig.devServers];
+                            const [entry] = devServers.splice(index, 1);
+                            if (!entry) {
+                              return repoConfig;
+                            }
+                            devServers.splice(index - 1, 0, entry);
+                            return {
+                              ...repoConfig,
+                              devServers,
+                            };
+                          });
+                        }}
+                        aria-label={`Move ${devServer.name || `dev server ${index + 1}`} up`}
+                        title="Move up"
+                      >
+                        <ChevronUp className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        disabled={
+                          isLoadingSettings ||
+                          isSaving ||
+                          index === selectedRepoConfig.devServers.length - 1
                         }
-                        devServers.splice(index - 1, 0, entry);
-                        return {
-                          ...repoConfig,
-                          devServers,
-                        };
-                      });
-                    }}
-                    aria-label={`Move ${devServer.name || `dev server ${index + 1}`} up`}
-                    title="Move up"
-                  >
-                    <ChevronUp className="size-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    disabled={
-                      isLoadingSettings ||
-                      isSaving ||
-                      index === selectedRepoConfig.devServers.length - 1
-                    }
-                    onClick={() => {
-                      updateScriptDraft((repoConfig) => {
-                        const devServers = [...repoConfig.devServers];
-                        const [entry] = devServers.splice(index, 1);
-                        if (!entry) {
-                          return repoConfig;
-                        }
-                        devServers.splice(index + 1, 0, entry);
-                        return {
-                          ...repoConfig,
-                          devServers,
-                        };
-                      });
-                    }}
-                    aria-label={`Move ${devServer.name || `dev server ${index + 1}`} down`}
-                    title="Move down"
-                  >
-                    <ChevronDown className="size-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    disabled={isLoadingSettings || isSaving}
-                    onClick={() => {
-                      updateScriptDraft((repoConfig) => ({
-                        ...repoConfig,
-                        devServers: repoConfig.devServers.filter(
-                          (entry) => entry.id !== devServer.id,
-                        ),
-                      }));
-                    }}
-                    aria-label={`Delete ${devServer.name || `dev server ${index + 1}`}`}
-                    title="Delete dev server"
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
+                        onClick={() => {
+                          updateScriptDraft((repoConfig) => {
+                            const devServers = [...repoConfig.devServers];
+                            const [entry] = devServers.splice(index, 1);
+                            if (!entry) {
+                              return repoConfig;
+                            }
+                            devServers.splice(index + 1, 0, entry);
+                            return {
+                              ...repoConfig,
+                              devServers,
+                            };
+                          });
+                        }}
+                        aria-label={`Move ${devServer.name || `dev server ${index + 1}`} down`}
+                        title="Move down"
+                      >
+                        <ChevronDown className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        disabled={isLoadingSettings || isSaving}
+                        onClick={() => {
+                          updateScriptDraft((repoConfig) => ({
+                            ...repoConfig,
+                            devServers: repoConfig.devServers.filter(
+                              (entry) => entry.id !== devServer.id,
+                            ),
+                          }));
+                        }}
+                        aria-label={`Delete ${devServer.name || `dev server ${index + 1}`}`}
+                        title="Delete dev server"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                    {rowErrors.length > 0 ? (
+                      <div className="text-xs text-destructive-muted md:col-span-3">
+                        {rowErrors.join(" ")}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
@@ -387,8 +430,8 @@ export function RepositoryConfigurationSection({
           OpenDucktor saves a fingerprint of the exact setup, cleanup, and dev server commands you
           approve. This is a security check: if something changes those scripts later without your
           consent, the fingerprint no longer matches and OpenDucktor will ask you to confirm the
-          scripts again before they can run. Clear every script command to disable trusted scripts
-          for this repository.
+          scripts again before they can run. Remove dev server rows and clear every other script
+          command to disable trusted scripts for this repository.
         </p>
       </div>
 

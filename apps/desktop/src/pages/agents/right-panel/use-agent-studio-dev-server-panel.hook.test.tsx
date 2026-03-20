@@ -78,7 +78,7 @@ const repoSettings: RepoSettingsInput = {
 
 let devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
   buildState();
-let subscribedDevServerListener: ((payload: unknown) => void) | null = null;
+let _subscribedDevServerListener: ((payload: unknown) => void) | null = null;
 
 mock.module("@/lib/host-client", () => ({
   hostClient: {
@@ -88,9 +88,9 @@ mock.module("@/lib/host-client", () => ({
     devServerRestart: async () => buildState(),
   },
   subscribeDevServerEvents: async (listener: (payload: unknown) => void) => {
-    subscribedDevServerListener = listener;
+    _subscribedDevServerListener = listener;
     return () => {
-      subscribedDevServerListener = null;
+      _subscribedDevServerListener = null;
     };
   },
 }));
@@ -98,7 +98,7 @@ mock.module("@/lib/host-client", () => ({
 beforeEach(() => {
   devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
     buildState();
-  subscribedDevServerListener = null;
+  _subscribedDevServerListener = null;
 });
 
 describe("useAgentStudioDevServerPanel", () => {

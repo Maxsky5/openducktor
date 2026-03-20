@@ -12,6 +12,9 @@ export {
   updatePromptOverrideTemplate,
 } from "./settings-modal-model";
 export {
+  buildDevServerDraftValidationMap,
+  countDevServerDraftValidationErrors,
+  getDevServerDraftValidationErrors,
   hasConfiguredHookCommands,
   hasConfiguredRepoScriptCommands,
   normalizeDevServers,

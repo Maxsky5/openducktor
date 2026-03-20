@@ -7,12 +7,14 @@ type SettingsModalFooterProps = {
   isSaving: boolean;
   isLoadingSettings: boolean;
   hasPromptValidationErrors: boolean;
+  hasRepoScriptValidationErrors: boolean;
   settingsError: string | null;
   saveError: string | null;
   catalogError: string | null;
   section: SettingsSectionId;
   repositorySection: RepositorySectionId;
   promptValidationState: PromptValidationState;
+  repoScriptValidationErrorCount: number;
   hasSnapshotDraft: boolean;
   onCancel: () => void;
   onSave: () => void;
@@ -22,12 +24,14 @@ export function SettingsModalFooter({
   isSaving,
   isLoadingSettings,
   hasPromptValidationErrors,
+  hasRepoScriptValidationErrors,
   settingsError,
   saveError,
   catalogError,
   section,
   repositorySection,
   promptValidationState,
+  repoScriptValidationErrorCount,
   hasSnapshotDraft,
   onCancel,
   onSave,
@@ -37,7 +41,8 @@ export function SettingsModalFooter({
     isLoadingSettings ||
     !hasSnapshotDraft ||
     Boolean(settingsError) ||
-    hasPromptValidationErrors;
+    hasPromptValidationErrors ||
+    hasRepoScriptValidationErrors;
 
   return (
     <div className="mt-0 flex shrink-0 items-center justify-start border-t border-border px-6 pb-4 pt-4">
@@ -53,6 +58,12 @@ export function SettingsModalFooter({
           <span className="text-destructive-muted">
             {promptValidationState.totalErrorCount} prompt placeholder error
             {promptValidationState.totalErrorCount > 1 ? "s" : ""}.
+          </span>
+        ) : null}
+        {!saveError && !hasPromptValidationErrors && hasRepoScriptValidationErrors ? (
+          <span className="text-destructive-muted">
+            {repoScriptValidationErrorCount} dev server field error
+            {repoScriptValidationErrorCount > 1 ? "s" : ""}.
           </span>
         ) : null}
         {catalogError && section === "repositories" && repositorySection === "configuration" ? (

@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use host_domain::{
     AgentSessionDocument, CreateTaskInput, GitBranch, IssueType, PlanSubtaskInput,
     PullRequestRecord, QaWorkflowVerdict, RuntimeRole, TaskAction, TaskStatus, TaskStore,

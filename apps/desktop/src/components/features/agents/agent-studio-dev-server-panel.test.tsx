@@ -74,6 +74,25 @@ const backendScript: DevServerScriptState = {
   ],
 };
 
+const failedScript: DevServerScriptState = {
+  scriptId: "failed",
+  name: "Failed server",
+  command: "bun run broken",
+  status: "failed",
+  pid: null,
+  startedAt: null,
+  exitCode: 1,
+  lastError: "Process exited",
+  bufferedLogLines: [
+    {
+      scriptId: "failed",
+      stream: "stderr",
+      text: "Process exited",
+      timestamp: "2026-03-19T15:32:01.000Z",
+    },
+  ],
+};
+
 describe("AgentStudioDevServerPanel", () => {
   test("renders compact start row while stopped", () => {
     const html = renderToStaticMarkup(
@@ -81,7 +100,7 @@ describe("AgentStudioDevServerPanel", () => {
     );
 
     expect(html).toContain("Start dev servers");
-    expect(html).toContain("Start the configured builder dev servers for this task worktree.");
+    expect(html).not.toContain("Start the configured builder dev servers for this task worktree.");
     expect(html).not.toContain("Restart");
   });
 
@@ -114,10 +133,12 @@ describe("AgentStudioDevServerPanel", () => {
       }),
     );
 
-    expect(html).toContain("Builder dev servers");
     expect(html).toContain("Stop");
     expect(html).toContain("Restart");
     expect(html).toContain("Frontend");
+    expect(html).toContain("bun run dev");
+    expect(html).toContain("bg-black");
+    expect(html).toContain("h-9 w-auto max-w-[320px]");
     expect(html).toContain("ready on http://localhost:5173");
     expect(html).toContain("[stdout]");
   });
@@ -138,5 +159,23 @@ describe("AgentStudioDevServerPanel", () => {
     expect(html).toContain("Backend");
     expect(html).toContain("api ready");
     expect(html).not.toContain("ready on http://localhost:5173");
+  });
+
+  test("renders failed dev server tabs with failed status styling", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioDevServerPanel, {
+        model: baseModel({
+          mode: "active",
+          isExpanded: true,
+          scripts: [failedScript],
+          selectedScriptId: failedScript.scriptId,
+          selectedScript: failedScript,
+        }),
+      }),
+    );
+
+    expect(html).toContain("Failed server");
+    expect(html).toContain("bg-rose-400");
+    expect(html).not.toContain("bg-emerald-400");
   });
 });

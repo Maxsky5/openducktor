@@ -305,6 +305,7 @@ fn build_continuation_target_get_prefers_active_build_run() -> Result<()> {
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),
+                dev_servers: Vec::new(),
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),

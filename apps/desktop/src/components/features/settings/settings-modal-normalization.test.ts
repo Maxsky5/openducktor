@@ -33,11 +33,6 @@ const createRepoConfig = (): RepoConfig => ({
       name: " Frontend ",
       command: " bun run dev ",
     },
-    {
-      id: "backend",
-      name: " Backend ",
-      command: "   ",
-    },
   ],
   worktreeFileCopies: [" .env ", " "],
   promptOverrides: {
@@ -219,7 +214,7 @@ describe("settings-modal-normalization", () => {
     expect(normalized.trustedHooksFingerprint).toBeUndefined();
   });
 
-  test("disables trusted hooks when dev server commands are removed during normalization", () => {
+  test("disables trusted hooks when no dev server rows remain", () => {
     const normalized = normalizeRepoConfigForSave({
       ...createRepoConfig(),
       trustedHooks: true,
@@ -228,7 +223,7 @@ describe("settings-modal-normalization", () => {
         preStart: [],
         postComplete: [],
       },
-      devServers: [{ id: "frontend", name: "Frontend", command: "   " }],
+      devServers: [],
     });
 
     expect(normalized.devServers).toEqual([]);
@@ -242,7 +237,16 @@ describe("settings-modal-normalization", () => {
         ...createRepoConfig(),
         devServers: [{ id: "frontend", name: "   ", command: "bun run dev" }],
       }),
-    ).toThrow("Dev server names cannot be blank");
+    ).toThrow("Dev server tab labels cannot be blank");
+  });
+
+  test("rejects blank dev server commands", () => {
+    expect(() =>
+      normalizeRepoConfigForSave({
+        ...createRepoConfig(),
+        devServers: [{ id: "frontend", name: "Frontend", command: "   " }],
+      }),
+    ).toThrow("Dev server commands cannot be blank");
   });
 
   test("preserves explicit untrusted hooks when normalized hook commands exist", () => {

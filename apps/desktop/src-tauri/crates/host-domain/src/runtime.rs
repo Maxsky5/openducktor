@@ -333,6 +333,7 @@ pub struct DevServerGroupState {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
+#[serde(rename_all_fields = "camelCase")]
 pub enum DevServerEvent {
     Snapshot {
         state: DevServerGroupState,
@@ -513,6 +514,8 @@ mod tests {
 
         let json = serde_json::to_value(event).expect("event should serialize");
         assert_eq!(json["type"], "log_line");
+        assert_eq!(json["repoPath"], "/repo");
+        assert_eq!(json["taskId"], "task-1");
         assert_eq!(json["logLine"]["stream"], "stdout");
     }
 

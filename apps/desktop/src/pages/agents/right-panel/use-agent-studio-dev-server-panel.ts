@@ -130,9 +130,9 @@ export const selectDefaultDevServerTab = (
 
 export const isDevServerPanelExpanded = (
   scripts: DevServerScriptState[],
-  isStartPending: boolean,
+  shouldKeepOpen: boolean,
 ): boolean => {
-  if (isStartPending) {
+  if (shouldKeepOpen) {
     return true;
   }
 
@@ -396,7 +396,7 @@ export function useAgentStudioDevServerPanel({
     effectiveState?.scripts.find((script) => script.scriptId === effectiveSelectedScriptId) ?? null;
   const isExpanded = isDevServerPanelExpanded(
     effectiveState?.scripts ?? [],
-    startMutation.isPending,
+    startMutation.isPending || restartMutation.isPending,
   );
 
   const mode: AgentStudioDevServerPanelMode = useMemo(() => {

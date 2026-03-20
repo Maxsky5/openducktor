@@ -158,7 +158,7 @@ describe("AgentStudioRightPanel", () => {
     expect(html).toContain("Current");
     expect(html).toContain("Target");
     expect(html).toContain("origin/main");
-    expect(html).toContain("Builder dev servers");
+    expect(html).toContain("Stop");
     expect(html).toContain("ready in 120ms");
   });
 });

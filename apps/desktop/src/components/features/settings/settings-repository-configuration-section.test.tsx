@@ -28,6 +28,7 @@ const baseRepoConfig: RepoConfig = {
 const renderSection = (
   selectedRepoConfig: RepoConfig,
   onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void,
+  options?: { showDevServerValidationErrors?: boolean },
 ): ReturnType<typeof create> => {
   let renderer!: ReturnType<typeof create>;
 
@@ -45,6 +46,9 @@ const renderSection = (
         onRetrySelectedRepoBranchesLoad: () => {},
         onPickWorktreeBasePath: async () => {},
         onUpdateSelectedRepoConfig,
+        ...(options?.showDevServerValidationErrors !== undefined
+          ? { showDevServerValidationErrors: options.showDevServerValidationErrors }
+          : {}),
       }),
     );
   });
@@ -188,6 +192,33 @@ describe("RepositoryConfigurationSection", () => {
         trustedHooks: true,
         devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
       });
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("shows inline validation for blank dev server fields", () => {
+    const renderer = renderSection(
+      {
+        ...baseRepoConfig,
+        devServers: [{ id: "frontend", name: "", command: "" }],
+      },
+      () => {},
+      { showDevServerValidationErrors: true },
+    );
+
+    try {
+      const nameInput = renderer.root.findByProps({ id: "repo-dev-server-name-frontend" });
+      const commandInput = renderer.root.findByProps({ id: "repo-dev-server-command-frontend" });
+      const textNodes = renderer.root.findAll(
+        (node) => typeof node.props.children === "string" && node.props.children.length > 0,
+      );
+      const textContent = textNodes.map((node) => node.props.children as string).join(" ");
+
+      expect(nameInput.props["aria-invalid"]).toBe(true);
+      expect(commandInput.props["aria-invalid"]).toBe(true);
+      expect(textContent).toContain("Tab label is required.");
+      expect(textContent).toContain("Command is required.");
     } finally {
       renderer.unmount();
     }

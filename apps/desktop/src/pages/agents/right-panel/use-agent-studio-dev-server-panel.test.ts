@@ -83,7 +83,7 @@ describe("useAgentStudioDevServerPanel helpers", () => {
     expect(selected).toBe("backend");
   });
 
-  test("expands when start is pending or a script is failed", () => {
+  test("expands when start or restart is pending or a script is failed", () => {
     expect(isDevServerPanelExpanded([buildScript()], true)).toBe(true);
     expect(isDevServerPanelExpanded([buildScript({ status: "failed" })], false)).toBe(true);
     expect(isDevServerPanelExpanded([buildScript()], false)).toBe(false);
