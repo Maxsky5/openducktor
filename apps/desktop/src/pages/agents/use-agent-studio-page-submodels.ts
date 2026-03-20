@@ -4,6 +4,7 @@ import type { RefObject } from "react";
 import { useCallback, useMemo } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
@@ -278,6 +279,9 @@ export const useAgentStudioComposerModel = ({
     activeSession?.isLoadingModelCatalog && !activeSession?.selectedModel,
   );
   const activeSessionId = activeSession?.sessionId;
+  const waitingInputPlaceholder = activeSession
+    ? getAgentSessionWaitingInputPlaceholder(activeSession)
+    : null;
 
   const handleSend = useCallback((): void => {
     void onSend();
@@ -304,6 +308,7 @@ export const useAgentStudioComposerModel = ({
         isStarting,
         isSessionWorking,
         isWaitingInput,
+        waitingInputPlaceholder,
         isModelSelectionPending,
         selectedModelSelection,
         isSelectionCatalogLoading,
@@ -339,6 +344,7 @@ export const useAgentStudioComposerModel = ({
       isSessionWorking,
       isWaitingInput,
       isStarting,
+      waitingInputPlaceholder,
       modelGroups,
       modelOptions,
       onSelectAgent,

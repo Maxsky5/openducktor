@@ -143,6 +143,7 @@ type AgentChatComposerModelArgs = {
   isStarting: boolean;
   isSessionWorking: boolean;
   isWaitingInput: boolean;
+  waitingInputPlaceholder?: string | null;
   isModelSelectionPending: boolean;
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;
@@ -205,6 +206,7 @@ export const buildAgentChatComposerModel = (
   isStarting: args.isStarting,
   isSessionWorking: args.isSessionWorking,
   isWaitingInput: args.isWaitingInput,
+  waitingInputPlaceholder: args.waitingInputPlaceholder ?? null,
   isModelSelectionPending: args.isModelSelectionPending,
   selectedModelSelection: args.selectedModelSelection,
   isSelectionCatalogLoading: args.isSelectionCatalogLoading,

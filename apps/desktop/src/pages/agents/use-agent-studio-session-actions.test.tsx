@@ -157,6 +157,45 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
+  test("onSend does not send while the active session is waiting for answers", async () => {
+    const sendAgentMessage = mock(async () => {});
+    const startAgentSession = mock(async () => "session-new");
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createSession({
+        sessionId: "session-existing",
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Confirm",
+                question: "Need answer",
+                options: [],
+                multiple: false,
+                custom: true,
+              },
+            ],
+          },
+        ],
+      }),
+      sendAgentMessage,
+      startAgentSession,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.onSend();
+    });
+
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).not.toHaveBeenCalled();
+    expect(harness.getLatest().isWaitingInput).toBe(true);
+
+    await harness.unmount();
+  });
+
   test("onSend clears composer input immediately before send settles", async () => {
     const sendDeferred = createDeferred<void>();
     const sendAgentMessage = mock(() => sendDeferred.promise);

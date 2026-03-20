@@ -306,6 +306,24 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Input needed");
   });
 
+  test("keeps pending question cards visible after the session becomes idle", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...baseModel,
+          session: buildSession({
+            status: "idle",
+            messages: [buildMessage("assistant", "Need your input", { id: "assistant-idle-1" })],
+            pendingQuestions: [buildQuestionRequest()],
+          }),
+        },
+      }),
+    );
+
+    expect(html).toContain("Need your input");
+    expect(html).toContain("Input needed");
+  });
+
   test("renders permission cards for pending permission requests", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {

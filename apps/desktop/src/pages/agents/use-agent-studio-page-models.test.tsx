@@ -694,6 +694,9 @@ describe("useAgentStudioPageModels", () => {
     const nextComposerModel = harness.getLatest().agentChatModel.composer;
     expect(nextComposerModel).not.toBe(initialComposerModel);
     expect(nextComposerModel.isWaitingInput).toBe(true);
+    expect(nextComposerModel.waitingInputPlaceholder).toBe(
+      "Answer the pending question above to continue",
+    );
 
     await harness.unmount();
   });
