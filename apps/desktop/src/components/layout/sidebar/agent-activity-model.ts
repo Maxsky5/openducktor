@@ -56,11 +56,12 @@ export const summarizeAgentActivity = ({
       startedAt: session.startedAt,
     };
 
-    if (ACTIVE_SESSION_STATUS.has(session.status)) {
-      activeSessions.push(sessionItem);
-    }
-    if (session.pendingPermissions.length > 0 || session.pendingQuestions.length > 0) {
+    const isWaiting = session.pendingPermissions.length > 0 || session.pendingQuestions.length > 0;
+
+    if (isWaiting) {
       waitingForInputSessions.push(sessionItem);
+    } else if (ACTIVE_SESSION_STATUS.has(session.status)) {
+      activeSessions.push(sessionItem);
     }
   }
 

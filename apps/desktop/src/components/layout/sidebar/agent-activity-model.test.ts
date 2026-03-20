@@ -100,7 +100,7 @@ describe("summarizeAgentActivity", () => {
       ],
     });
 
-    expect(summary.activeSessionCount).toBe(1);
+    expect(summary.activeSessionCount).toBe(0);
     expect(summary.waitingForInputCount).toBe(2);
     expect(summary.waitingForInputSessions).toHaveLength(2);
     expect(summary.waitingForInputSessions[0]?.sessionId).toBe("session-2");
