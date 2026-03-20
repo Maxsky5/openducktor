@@ -7,8 +7,8 @@ use super::super::{
 use anyhow::{anyhow, Context, Result};
 use host_domain::{TaskStatus, TASK_METADATA_NAMESPACE};
 use host_infra_system::{
-    build_branch_name, pick_free_port, remove_worktree, resolve_effective_worktree_base_dir,
-    RepoConfig,
+    build_branch_name, copy_configured_worktree_files, pick_free_port, remove_worktree,
+    resolve_effective_worktree_base_dir, run_command, RepoConfig,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -180,6 +180,22 @@ impl AppService {
             Some(repo_path_ref),
         )?;
 
+        if let Err(error) = copy_configured_worktree_files(
+            repo_path_ref,
+            worktree_dir.as_path(),
+            prerequisites.repo_config.worktree_file_copies.as_slice(),
+        ) {
+            let cleanup_error = self.rollback_failed_build_worktree(
+                repo_path_ref,
+                worktree_dir.as_path(),
+                prerequisites.branch.as_str(),
+            );
+            return Err(anyhow!(
+                "Configured worktree file copy failed: {error}{}",
+                cleanup_error
+            ));
+        }
+
         self.run_pre_start_hooks(
             prerequisites,
             repo_path_ref,
@@ -195,29 +211,58 @@ impl AppService {
         prerequisites: &BuildPrerequisites,
         repo_path_ref: &Path,
         worktree_dir: &Path,
-        task_id: &str,
+        _task_id: &str,
     ) -> Result<()> {
         for hook in &prerequisites.repo_config.hooks.pre_start {
             let (ok, _stdout, stderr) = run_parsed_hook_command_allow_failure(hook, worktree_dir);
             if !ok {
-                let _ = self.task_transition(
-                    prerequisites.repo_path.as_str(),
-                    task_id,
-                    TaskStatus::Blocked,
-                    Some("Worktree setup script failed"),
+                let cleanup_error = self.rollback_failed_build_worktree(
+                    repo_path_ref,
+                    worktree_dir,
+                    prerequisites.branch.as_str(),
                 );
-                let cleanup_error = remove_worktree(repo_path_ref, worktree_dir)
-                    .err()
-                    .map(|error| error.to_string());
                 return Err(anyhow!(
                     "Worktree setup script command failed: {hook}\n{stderr}{}",
                     cleanup_error
-                        .map(|error| format!("\nAlso failed to remove worktree: {error}"))
-                        .unwrap_or_default()
                 ));
             }
         }
         Ok(())
+    }
+
+    fn rollback_failed_build_worktree(
+        &self,
+        repo_path_ref: &Path,
+        worktree_dir: &Path,
+        branch: &str,
+    ) -> String {
+        let mut cleanup_errors = Vec::new();
+
+        if let Err(error) = remove_worktree(repo_path_ref, worktree_dir) {
+            cleanup_errors.push(format!("Also failed to remove worktree: {error}"));
+        }
+        if let Err(error) = run_command(
+            "git",
+            &["worktree", "prune", "--expire", "now"],
+            Some(repo_path_ref),
+        ) {
+            cleanup_errors.push(format!("Also failed to prune worktree metadata: {error}"));
+        }
+        if let Err(error) = run_command(
+            "git",
+            &["branch", "-D", "--end-of-options", branch],
+            Some(repo_path_ref),
+        ) {
+            cleanup_errors.push(format!(
+                "Also failed to delete created branch {branch}: {error}"
+            ));
+        }
+
+        if cleanup_errors.is_empty() {
+            String::new()
+        } else {
+            format!("\n{}", cleanup_errors.join("\n"))
+        }
     }
 
     pub(super) fn spawn_and_wait_for_agent(

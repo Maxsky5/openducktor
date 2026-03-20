@@ -1,4 +1,5 @@
 use std::{
+    fs,
     path::Path,
     sync::{Arc, Mutex},
 };
@@ -149,6 +150,7 @@ impl GitPort for CommandGitPort {
             branch: branch.to_string(),
             create_branch,
         });
+        fs::create_dir_all(worktree_path)?;
         Ok(())
     }
 

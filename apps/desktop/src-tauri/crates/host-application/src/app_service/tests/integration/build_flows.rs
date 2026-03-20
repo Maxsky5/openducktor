@@ -66,6 +66,26 @@ fn run_command_in(current_dir: &Path, program: &str, args: &[&str]) -> Result<()
     ))
 }
 
+fn assert_branch_missing(repo_path: &Path, branch: &str) -> Result<()> {
+    let output = Command::new("git")
+        .current_dir(repo_path)
+        .args(["branch", "--list", branch])
+        .output()
+        .with_context(|| format!("failed listing branch {branch} in {}", repo_path.display()))?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "git branch --list failed for {branch} in {}",
+            repo_path.display()
+        ));
+    }
+
+    assert!(
+        String::from_utf8_lossy(&output.stdout).trim().is_empty(),
+        "branch {branch} should have been removed"
+    );
+    Ok(())
+}
+
 #[test]
 fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
     let _env_lock = lock_env();
@@ -286,6 +306,70 @@ fn build_start_bases_worktree_on_configured_target_branch() -> Result<()> {
 }
 
 #[test]
+fn build_start_copies_configured_worktree_files_into_new_worktree() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("build-copy-configured-files");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    write_private_file(repo.join(".env").as_path(), "API_KEY=builder-secret\n")?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _opencode_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        fake_opencode.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("builder-worktrees");
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: vec![".env".to_string()],
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+
+    let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
+    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
+    let worktree_path = Path::new(run.worktree_path.as_str());
+    assert_eq!(
+        fs::read_to_string(worktree_path.join(".env"))?,
+        "API_KEY=builder-secret\n"
+    );
+
+    assert!(service.build_stop(run.run_id.as_str(), emitter.clone())?);
+    assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
 fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
     let root = unique_temp_path("build-failure");
     let repo = root.join("repo");
@@ -366,10 +450,12 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
     assert!(service.runs_list(Some(repo_path.as_str()))?.is_empty());
 
     let state = task_state.lock().expect("task lock poisoned");
-    assert!(state
-        .updated_patches
-        .iter()
-        .any(|(_, patch)| patch.status == Some(TaskStatus::Blocked)));
+    assert!(
+        state.updated_patches.iter().any(
+            |(task_id, patch)| task_id == "task-1" && patch.status == Some(TaskStatus::Blocked)
+        ),
+        "run failure should block the active task"
+    );
     drop(state);
 
     let _ = fs::remove_dir_all(root);
@@ -482,11 +568,29 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
     assert!(invalid_mode.to_string().contains("Run not found"));
 
     let state = task_state.lock().expect("task lock poisoned");
-    assert!(state
-        .updated_patches
-        .iter()
-        .any(|(_, patch)| patch.status == Some(TaskStatus::Blocked)));
+    assert!(
+        state
+            .updated_patches
+            .iter()
+            .all(|(task_id, _)| task_id != "task-1"),
+        "pre-start hook failure should not update task status before the build starts"
+    );
+    assert!(
+        state.updated_patches.iter().any(|(task_id, patch)| {
+            task_id == "task-2" && patch.status == Some(TaskStatus::InProgress)
+        }),
+        "successful build start should move task-2 into progress"
+    );
+    assert!(
+        state.updated_patches.iter().any(
+            |(task_id, patch)| task_id == "task-2" && patch.status == Some(TaskStatus::Blocked)
+        ),
+        "post-complete hook failure should block task-2"
+    );
     drop(state);
+
+    let failed_branch = host_infra_system::build_branch_name("odt", "task-1", "Task task-1");
+    assert_branch_missing(repo.as_path(), failed_branch.as_str())?;
 
     let emitted = events.lock().expect("events lock poisoned");
     assert!(emitted
@@ -508,6 +612,87 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
         "post-hook-started event should be emitted before post-hook-failed"
     );
     drop(emitted);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn build_start_cleans_up_when_configured_worktree_file_copy_fails() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("build-copy-configured-files-failure");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _opencode_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        fake_opencode.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("builder-worktrees");
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: vec![".env".to_string()],
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+
+    let error = service
+        .build_start(
+            repo_path.as_str(),
+            "task-1",
+            "opencode",
+            make_emitter(Arc::new(Mutex::new(Vec::new()))),
+        )
+        .expect_err("missing configured worktree file should fail build startup");
+    let message = error.to_string();
+    assert!(message.contains("Configured worktree file copy failed"));
+    assert!(message.contains(".env"));
+    assert!(
+        !worktree_base.join("task-1").exists(),
+        "failed worktree setup should clean up the created worktree"
+    );
+
+    let state = task_state.lock().expect("task lock poisoned");
+    assert!(
+        state
+            .updated_patches
+            .iter()
+            .all(|(task_id, _)| task_id != "task-1"),
+        "configured file copy failure should not change task status before build start"
+    );
+    drop(state);
+
+    let failed_branch = host_infra_system::build_branch_name("odt", "task-1", "Task task-1");
+    assert_branch_missing(repo.as_path(), failed_branch.as_str())?;
 
     let _ = fs::remove_dir_all(root);
     Ok(())

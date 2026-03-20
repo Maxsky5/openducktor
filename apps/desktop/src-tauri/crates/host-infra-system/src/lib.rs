@@ -22,4 +22,7 @@ pub use process::{
     run_command_allow_failure, run_command_allow_failure_with_env, run_command_with_env,
     subprocess_path_env, version_command,
 };
-pub use worktree::{build_branch_name, pick_free_port, remove_worktree, slugify_title};
+pub use worktree::{
+    build_branch_name, copy_configured_worktree_files, pick_free_port, remove_worktree,
+    slugify_title,
+};
