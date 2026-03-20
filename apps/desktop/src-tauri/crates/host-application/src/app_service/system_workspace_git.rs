@@ -359,11 +359,11 @@ impl AppService {
         create_branch: bool,
     ) -> Result<GitWorktreeSummary> {
         let repo_path = self.resolve_authorized_repo_path(repo_path)?;
-        let repo_config = self.config_store.repo_config(repo_path.as_str())?;
         let worktree = worktree_path.trim();
         if worktree.is_empty() {
             return Err(anyhow!("worktree path cannot be empty"));
         }
+        let repo_config = self.config_store.repo_config(repo_path.as_str())?;
 
         self.git_port.create_worktree(
             Path::new(&repo_path),
