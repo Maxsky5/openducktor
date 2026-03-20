@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 
 use crate::app_service::test_support::{
     build_service_with_git_state, make_task, spawn_sleep_process, spawn_sleep_process_group,
-    unique_temp_path, write_private_file, FakeTaskStore, TaskStoreState,
+    unique_temp_path, wait_for_process_exit, write_private_file, FakeTaskStore, TaskStoreState,
 };
 use crate::app_service::{
     allows_transition, build_opencode_startup_event_payload, can_set_plan,
@@ -513,7 +513,7 @@ fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_
     }
 
     #[cfg(unix)]
-    let mut dev_server_child = {
+    let (mut dev_server_child, dev_server_pid) = {
         let child = spawn_sleep_process_group(20);
         let pid = child.id();
         service
@@ -543,45 +543,58 @@ fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_
                     emitter: None,
                 },
             );
-        child
+        (child, pid)
     };
 
-    let updated = service.task_reset_implementation(canonical_repo_path.as_str(), "task-1")?;
-    assert_eq!(updated.status, TaskStatus::ReadyForDev);
-    assert!(updated.pull_request.is_none());
-    assert!(!updated.document_summary.qa_report.has);
+    let reset_result = service.task_reset_implementation(canonical_repo_path.as_str(), "task-1");
 
     #[cfg(unix)]
     {
-        let deadline = Instant::now() + Duration::from_secs(2);
-        let exited = loop {
-            if dev_server_child
-                .try_wait()
-                .context("failed checking dev server child status")?
-                .is_some()
-            {
-                break true;
+        let unix_cleanup_result = (|| -> Result<()> {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            let exited = loop {
+                if dev_server_child
+                    .try_wait()
+                    .context("failed checking dev server child status")?
+                    .is_some()
+                {
+                    break true;
+                }
+                if Instant::now() >= deadline {
+                    break false;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            };
+            if !exited {
+                terminate_child_process(&mut dev_server_child);
+            } else {
+                let _ = dev_server_child
+                    .wait()
+                    .context("failed waiting dev server child")?;
             }
-            if Instant::now() >= deadline {
-                break false;
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        };
-        if !exited {
-            let _ = dev_server_child.kill();
-        }
-        let _ = dev_server_child
-            .wait()
-            .context("failed waiting dev server child")?;
-        let groups = service
-            .dev_server_groups
-            .lock()
-            .expect("dev server lock poisoned");
-        let group = groups
-            .get(&format!("{}::task-1", canonical_repo_path))
-            .expect("dev server group retained");
-        assert!(group.state.scripts.is_empty());
+
+            assert!(wait_for_process_exit(
+                dev_server_pid as i32,
+                Duration::from_secs(2)
+            ));
+
+            let groups = service
+                .dev_server_groups
+                .lock()
+                .expect("dev server lock poisoned");
+            let group = groups
+                .get(&format!("{}::task-1", canonical_repo_path))
+                .expect("dev server group retained");
+            assert!(group.state.scripts.is_empty());
+            Ok(())
+        })();
+        unix_cleanup_result?;
     }
+
+    let updated = reset_result?;
+    assert_eq!(updated.status, TaskStatus::ReadyForDev);
+    assert!(updated.pull_request.is_none());
+    assert!(!updated.document_summary.qa_report.has);
 
     let state = task_state.lock().expect("task store lock poisoned");
     assert_eq!(

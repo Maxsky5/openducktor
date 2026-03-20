@@ -148,6 +148,7 @@ export function useAgentStudioDevServerPanel({
 }: UseAgentStudioDevServerPanelArgs): AgentStudioDevServerPanelModel {
   const queryClient = useQueryClient();
   const selectionMemoryRef = useRef<SelectedScriptMemory>(new Map());
+  const previousTaskMemoryKeyRef = useRef<string | null | undefined>(undefined);
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
   const [liveState, setLiveState] = useState<DevServerGroupState | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -197,7 +198,9 @@ export function useAgentStudioDevServerPanel({
       const queryKey = devServerQueryKeys.state(repoPath, taskId);
       const cachedState = queryClient.getQueryData<DevServerGroupState>(queryKey) ?? null;
       setLiveState((current) => {
-        const nextState = applyDevServerEventToState(current ?? cachedState, event);
+        const scopedCurrent =
+          current && current.repoPath === repoPath && current.taskId === taskId ? current : null;
+        const nextState = applyDevServerEventToState(cachedState ?? scopedCurrent, event);
         if (nextState) {
           queryClient.setQueryData(queryKey, nextState);
         }
@@ -208,6 +211,16 @@ export function useAgentStudioDevServerPanel({
   );
 
   useEffect(() => {
+    const scopeChanged = previousTaskMemoryKeyRef.current !== taskMemoryKey;
+    previousTaskMemoryKeyRef.current = taskMemoryKey;
+
+    if (scopeChanged) {
+      setLiveState(null);
+      setSelectedScriptId(null);
+      setActionError(null);
+      setSubscriptionError(null);
+    }
+
     if (!queryEnabled) {
       setLiveState(null);
       setActionError(null);
@@ -229,6 +242,7 @@ export function useAgentStudioDevServerPanel({
     queryEnabled,
     stateQuery.data,
     stateQuery.dataUpdatedAt,
+    taskMemoryKey,
   ]);
 
   useEffect(() => {
@@ -242,6 +256,16 @@ export function useAgentStudioDevServerPanel({
     void subscribeDevServerEvents((payload) => {
       const parsed = devServerEventSchema.safeParse(payload);
       if (!parsed.success) {
+        console.error(
+          "[agent-studio-dev-server-panel] Received invalid dev server event payload.",
+          {
+            payload,
+            error: parsed.error,
+          },
+        );
+        setSubscriptionError(
+          `Received invalid dev server event payload: ${errorMessage(parsed.error)}`,
+        );
         return;
       }
 
@@ -258,6 +282,7 @@ export function useAgentStudioDevServerPanel({
 
       syncStateFromEvent(event);
       setActionError(null);
+      setSubscriptionError(null);
     })
       .then((cleanup) => {
         if (cancelled) {

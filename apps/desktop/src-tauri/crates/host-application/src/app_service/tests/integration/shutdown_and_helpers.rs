@@ -320,11 +320,12 @@ fn shutdown_stops_running_dev_server_process_groups() -> Result<()> {
             revision: None,
         },
     );
-    service.workspace_add(&repo_path.to_string_lossy())?;
+    let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
+    let canonical_repo_path = workspace.path;
 
     let mut child = spawn_sleep_process_group(20);
     let pid = child.id();
-    let repo_path_string = repo_path.to_string_lossy().to_string();
+    let repo_path_string = canonical_repo_path;
     service
         .dev_server_groups
         .lock()
@@ -370,11 +371,7 @@ fn shutdown_stops_running_dev_server_process_groups() -> Result<()> {
     let group = groups
         .get(&format!("{}::task-1", repo_path_string))
         .expect("dev server group retained");
-    assert_eq!(
-        group.state.scripts[0].status,
-        DevServerScriptStatus::Stopped
-    );
-    assert_eq!(group.state.scripts[0].pid, None);
+    assert!(group.state.scripts.is_empty());
     drop(groups);
 
     let _ = fs::remove_dir_all(repo_path);
