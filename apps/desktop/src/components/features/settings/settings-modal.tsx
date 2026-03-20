@@ -92,6 +92,7 @@ export function SettingsModal({
   const isInteractionDisabled = controller.isLoadingSettings || controller.isSaving;
 
   const handleSave = (): void => {
+    controller.markRepoScriptSaveAttempt();
     void controller.submit().then((saved) => {
       if (saved) {
         dispatch({ type: "set_open", open: false });

@@ -121,10 +121,24 @@ export function useRepoSettingsOperations({
       await queryClient.invalidateQueries({
         queryKey: workspaceQueryKeys.repoConfig(repo),
       });
+      await queryClient.invalidateQueries({
+        queryKey: settingsSnapshotQueryKey,
+      });
+      queryClient.removeQueries({
+        queryKey: settingsSnapshotQueryKey,
+        exact: true,
+      });
       syncWorkspaceListRecord(workspace);
       applyWorkspaceRecord(workspace);
     },
-    [activeRepo, applyWorkspaceRecord, queryClient, syncWorkspaceListRecord, toConfigDefault],
+    [
+      activeRepo,
+      applyWorkspaceRecord,
+      queryClient,
+      settingsSnapshotQueryKey,
+      syncWorkspaceListRecord,
+      toConfigDefault,
+    ],
   );
 
   const loadSettingsSnapshot = useCallback(async (): Promise<SettingsSnapshot> => {

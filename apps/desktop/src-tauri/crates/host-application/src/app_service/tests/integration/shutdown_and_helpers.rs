@@ -353,13 +353,15 @@ fn shutdown_stops_running_dev_server_process_groups() -> Result<()> {
             },
         );
 
-    service.shutdown()?;
-
-    assert!(
-        wait_for_process_exit(pid as i32, Duration::from_secs(2)),
-        "dev server process should exit during shutdown"
-    );
+    let shutdown_result = service.shutdown();
+    let exited = wait_for_process_exit(pid as i32, Duration::from_secs(2));
+    if !exited {
+        let _ = child.kill();
+    }
     let _ = child.wait().context("failed waiting dev server child")?;
+    shutdown_result?;
+
+    assert!(exited, "dev server process should exit during shutdown");
 
     let groups = service
         .dev_server_groups

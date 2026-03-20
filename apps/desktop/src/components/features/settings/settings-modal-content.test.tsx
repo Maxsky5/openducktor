@@ -56,6 +56,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   selectedRepoPromptRoleTabErrorCounts: { shared: 0, spec: 0, planner: 0, build: 0, qa: 0 },
   settingsSectionErrorCountById: { general: 0, git: 0, repositories: 0, prompts: 0, chat: 0 },
   setSelectedRepoPath: () => {},
+  markRepoScriptSaveAttempt: () => {},
   retrySelectedRepoBranchesLoad: () => {},
   detectSelectedRepoGithubRepository: async () => null,
   updateSelectedRepoConfig: () => {},

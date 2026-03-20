@@ -83,6 +83,7 @@ export type SettingsModalController = {
   showRepoScriptValidationErrors: boolean;
   selectedRepoDevServerValidationErrors: Record<string, { name?: string; command?: string }>;
   setSelectedRepoPath: (next: string) => void;
+  markRepoScriptSaveAttempt: () => void;
   retrySelectedRepoBranchesLoad: () => void;
   detectSelectedRepoGithubRepository: () => Promise<GitProviderRepository | null>;
   updateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
@@ -215,31 +216,41 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
 
     return buildDevServerDraftValidationMap(selectedRepoConfig.devServers ?? []);
   }, [selectedRepoConfig]);
-  const invalidRepoPathsWithDevServerErrors = useMemo(() => {
+  const repoScriptValidationSummary = useMemo(() => {
     if (!snapshotDraft) {
-      return [];
+      return {
+        invalidRepoPathsWithDevServerErrors: [] as string[],
+        repoScriptValidationErrorCount: 0,
+      };
     }
 
-    return Object.entries(snapshotDraft.repos)
-      .filter(
-        ([, repoConfig]) => countDevServerDraftValidationErrors(repoConfig.devServers ?? []) > 0,
-      )
-      .map(([repoPath]) => repoPath)
-      .sort();
+    const invalidRepoPathsWithDevServerErrors: string[] = [];
+    let repoScriptValidationErrorCount = 0;
+
+    for (const [repoPath, repoConfig] of Object.entries(snapshotDraft.repos)) {
+      const errorCount = countDevServerDraftValidationErrors(repoConfig.devServers ?? []);
+      if (errorCount > 0) {
+        invalidRepoPathsWithDevServerErrors.push(repoPath);
+        repoScriptValidationErrorCount += errorCount;
+      }
+    }
+
+    invalidRepoPathsWithDevServerErrors.sort();
+
+    return {
+      invalidRepoPathsWithDevServerErrors,
+      repoScriptValidationErrorCount,
+    };
   }, [snapshotDraft]);
-  const repoScriptValidationErrorCount = useMemo(
-    () =>
-      snapshotDraft
-        ? invalidRepoPathsWithDevServerErrors.reduce((count, repoPath) => {
-            const repoConfig = snapshotDraft.repos[repoPath];
-            return count + countDevServerDraftValidationErrors(repoConfig?.devServers ?? []);
-          }, 0)
-        : 0,
-    [invalidRepoPathsWithDevServerErrors, snapshotDraft],
-  );
+  const { invalidRepoPathsWithDevServerErrors, repoScriptValidationErrorCount } =
+    repoScriptValidationSummary;
   const hasRepoScriptValidationErrors = repoScriptValidationErrorCount > 0;
   const showRepoScriptValidationErrors =
     hasAttemptedRepoScriptSubmit && hasRepoScriptValidationErrors;
+
+  const markRepoScriptSaveAttempt = useCallback((): void => {
+    setHasAttemptedRepoScriptSubmit(true);
+  }, []);
 
   const markDirty = useCallback((section: keyof DirtySections): void => {
     setSaveError(null);
@@ -524,6 +535,7 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     showRepoScriptValidationErrors,
     selectedRepoDevServerValidationErrors,
     setSelectedRepoPath,
+    markRepoScriptSaveAttempt,
     retrySelectedRepoBranchesLoad,
     detectSelectedRepoGithubRepository,
     updateSelectedRepoConfig,

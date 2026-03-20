@@ -346,6 +346,50 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
+  test("saveRepoSettings invalidates cached settings snapshots", async () => {
+    const applyWorkspaceRecords = mock(() => {});
+    const applyWorkspaceRecord = mock(() => {});
+    const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
+    const workspaceGetSettingsSnapshot = mock(async () => ({
+      theme: "light" as const,
+      git: {
+        defaultMergeMethod: "merge_commit" as const,
+      },
+      chat: {
+        showThinkingMessages: false,
+      },
+      repos: {},
+      globalPromptOverrides: {},
+    }));
+
+    const original = {
+      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+    };
+    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      applyWorkspaceRecords,
+      applyWorkspaceRecord,
+    });
+
+    try {
+      await harness.mount();
+      await harness.getLatest().loadSettingsSnapshot();
+      await harness.getLatest().saveRepoSettings(inputFixture);
+      await harness.getLatest().loadSettingsSnapshot();
+
+      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(2);
+    } finally {
+      await harness.unmount();
+      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+      await clearAppQueryClient();
+    }
+  });
+
   test("saveRepoSettings preserves explicit untrusted hook settings", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});

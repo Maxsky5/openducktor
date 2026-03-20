@@ -46,7 +46,8 @@ where
         .with_context(|| format!("Failed reading config file {}", path.display()))?;
     let mut parsed: T = serde_json::from_str(&data)
         .with_context(|| format!("Failed parsing config file {}", path.display()))?;
-    normalize(&mut parsed)?;
+    normalize(&mut parsed)
+        .with_context(|| format!("Failed normalizing config file {}", path.display()))?;
     post_load(&mut parsed);
     Ok(parsed)
 }
@@ -68,7 +69,8 @@ where
     }
 
     let mut normalized = config.clone();
-    normalize(&mut normalized)?;
+    normalize(&mut normalized)
+        .with_context(|| format!("Failed normalizing config file {}", path.display()))?;
     let payload = serde_json::to_string_pretty(&normalized)?;
     write_config_file(path, payload.as_bytes())?;
     validate_config_access(path, enforce_private_parent_permissions)?;

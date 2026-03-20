@@ -78,10 +78,12 @@ impl AppService {
     ) -> Result<WorkspaceRecord> {
         let existing = self.workspace_get_repo_config_optional(repo_path)?;
         let defaults = RepoConfig::default();
-        let dev_servers = update
-            .dev_servers
-            .or_else(|| existing.as_ref().map(|entry| entry.dev_servers.clone()))
-            .unwrap_or_default();
+        let dev_servers = normalize_dev_servers(
+            update
+                .dev_servers
+                .or_else(|| existing.as_ref().map(|entry| entry.dev_servers.clone()))
+                .unwrap_or_default(),
+        )?;
         let keep_existing_trust = existing
             .as_ref()
             .is_some_and(|entry| entry.dev_servers == dev_servers);
@@ -319,7 +321,7 @@ impl AppService {
             repo_script_fingerprint(&repo_config.hooks, &repo_config.dev_servers);
         if latest_fingerprint != challenge.fingerprint {
             return Err(anyhow!(
-                "Hook commands changed after challenge generation. Request trust confirmation again."
+                "Hook commands or dev servers changed after challenge generation. Request trust confirmation again."
             ));
         }
 
@@ -658,6 +660,75 @@ mod tests {
             .workspace_get_repo_config(&fixture.repo_path)?;
         assert!(!updated.trusted_hooks);
         assert!(updated.trusted_hooks_fingerprint.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_merge_repo_config_keeps_trust_for_whitespace_only_dev_server_changes() -> Result<()>
+    {
+        let fixture = setup_fixture(
+            "merge-repo-config-dev-servers-whitespace",
+            HookSet::default(),
+        );
+        let fingerprint = repo_script_fingerprint(
+            &HookSet::default(),
+            &[RepoDevServerScript {
+                id: "frontend".to_string(),
+                name: "Frontend".to_string(),
+                command: "bun run dev".to_string(),
+            }],
+        );
+        fixture.service.workspace_update_repo_config(
+            fixture.repo_path.as_str(),
+            RepoConfig {
+                trusted_hooks: true,
+                trusted_hooks_fingerprint: Some(fingerprint.clone()),
+                dev_servers: vec![RepoDevServerScript {
+                    id: "frontend".to_string(),
+                    name: "Frontend".to_string(),
+                    command: "bun run dev".to_string(),
+                }],
+                ..fixture
+                    .service
+                    .workspace_get_repo_config(&fixture.repo_path)?
+            },
+        )?;
+
+        fixture.service.workspace_merge_repo_config(
+            fixture.repo_path.as_str(),
+            RepoConfigUpdate {
+                dev_servers: Some(vec![
+                    RepoDevServerScript {
+                        id: " frontend ".to_string(),
+                        name: " Frontend ".to_string(),
+                        command: " bun run dev ".to_string(),
+                    },
+                    RepoDevServerScript {
+                        id: "ignored".to_string(),
+                        name: "Ignored".to_string(),
+                        command: "   ".to_string(),
+                    },
+                ]),
+                ..RepoConfigUpdate::default()
+            },
+        )?;
+
+        let updated = fixture
+            .service
+            .workspace_get_repo_config(&fixture.repo_path)?;
+        assert!(updated.trusted_hooks);
+        assert_eq!(
+            updated.trusted_hooks_fingerprint.as_deref(),
+            Some(fingerprint.as_str())
+        );
+        assert_eq!(
+            updated.dev_servers,
+            vec![RepoDevServerScript {
+                id: "frontend".to_string(),
+                name: "Frontend".to_string(),
+                command: "bun run dev".to_string(),
+            }]
+        );
         Ok(())
     }
 
@@ -1046,7 +1117,7 @@ mod tests {
             .expect_err("stale challenge should fail");
         assert!(stale
             .to_string()
-            .contains("Hook commands changed after challenge generation"));
+            .contains("Hook commands or dev servers changed after challenge generation"));
         Ok(())
     }
 

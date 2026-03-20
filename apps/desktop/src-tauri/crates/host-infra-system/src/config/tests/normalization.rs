@@ -381,7 +381,10 @@ fn load_rejects_invalid_persisted_dev_server_rows() {
     let error = store
         .load()
         .expect_err("invalid persisted dev server rows should fail");
-    assert!(error
-        .to_string()
-        .contains("Dev server id cannot be blank when a command is configured."));
+    let display = format!("{error:#}");
+    assert!(
+        display.contains("Failed normalizing config file")
+            && display.contains("Dev server id cannot be blank when a command is configured."),
+        "expected normalization failure context, got: {display}"
+    );
 }

@@ -258,7 +258,10 @@ fn format_dev_server_list(dev_servers: &[host_infra_system::RepoDevServerScript]
         })
         .collect::<Vec<_>>();
     if dev_servers.len() > preview_limit {
-        lines.push(format!("- ... and {} more", dev_servers.len() - preview_limit));
+        lines.push(format!(
+            "- ... and {} more",
+            dev_servers.len() - preview_limit
+        ));
     }
     lines.join("\n")
 }

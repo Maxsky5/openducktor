@@ -1,13 +1,11 @@
 use crate::{
     as_error, dev_server_emitter, run_emitter, run_service_blocking, AppState,
-    BuildCompletePayload,
-    PullRequestContentPayload, TaskDirectMergePayload,
+    BuildCompletePayload, PullRequestContentPayload, TaskDirectMergePayload,
 };
 use host_application::{BuildResponseAction, CleanupMode};
 use host_domain::{
     AgentRuntimeKind, DevServerGroupState, PullRequestRecord, RunSummary, TaskApprovalContext,
-    TaskCard,
-    TaskDirectMergeResult, TaskPullRequestDetectResult,
+    TaskCard, TaskDirectMergeResult, TaskPullRequestDetectResult,
 };
 use tauri::{AppHandle, State};
 
