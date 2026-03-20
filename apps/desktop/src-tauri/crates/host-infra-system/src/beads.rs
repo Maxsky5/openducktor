@@ -99,6 +99,7 @@ mod tests {
         compute_repo_id, compute_repo_slug, resolve_central_beads_dir,
         resolve_default_worktree_base_dir, resolve_effective_worktree_base_dir,
     };
+    use host_test_support::lock_env;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -131,6 +132,7 @@ mod tests {
 
     #[test]
     fn central_beads_dir_uses_expected_layout_suffix() {
+        let _env_lock = lock_env();
         let resolved =
             resolve_central_beads_dir(Path::new("/tmp/openducktor-test/repo")).expect("beads dir");
         let as_string = resolved.to_string_lossy();
@@ -140,6 +142,7 @@ mod tests {
 
     #[test]
     fn central_beads_dir_resolution_does_not_create_directories() {
+        let _env_lock = lock_env();
         let home = dirs::home_dir().expect("home directory should resolve");
 
         for attempt in 0..64 {
@@ -172,6 +175,7 @@ mod tests {
 
     #[test]
     fn default_worktree_base_dir_uses_expected_layout() {
+        let _env_lock = lock_env();
         let resolved = resolve_default_worktree_base_dir(Path::new("/tmp/openducktor-test/repo"))
             .expect("worktree base dir");
         let as_string = resolved.to_string_lossy();
@@ -192,6 +196,7 @@ mod tests {
 
     #[test]
     fn effective_worktree_base_dir_uses_default_when_override_missing() {
+        let _env_lock = lock_env();
         let resolved =
             resolve_effective_worktree_base_dir(Path::new("/tmp/openducktor-test/repo"), None)
                 .expect("effective worktree base dir");

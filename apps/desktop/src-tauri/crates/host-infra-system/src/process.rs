@@ -4,6 +4,8 @@ use std::ffi::OsString;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use std::process::Child;
 use std::process::{Command, Output, Stdio};
 #[cfg(all(unix, not(test)))]
 use std::sync::Mutex;
@@ -320,6 +322,20 @@ fn parse_login_shell_environment(stdout: &[u8]) -> Option<Vec<(OsString, OsStrin
 }
 
 #[cfg(unix)]
+fn terminate_login_shell_probe(child: &mut Child) {
+    let pid = child.id() as i32;
+    let killed_group = if pid > 0 {
+        unsafe { libc::killpg(pid, libc::SIGKILL) == 0 }
+    } else {
+        false
+    };
+    if !killed_group {
+        let _ = child.kill();
+    }
+    let _ = child.wait();
+}
+
+#[cfg(unix)]
 fn read_login_shell_path() -> Option<OsString> {
     use std::os::unix::process::CommandExt;
 
@@ -349,6 +365,8 @@ fn read_login_shell_path() -> Option<OsString> {
         command.env("LOGNAME", logname);
     }
 
+    command.process_group(0);
+
     let mut child = command.spawn().ok()?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     let output = loop {
@@ -361,15 +379,13 @@ fn read_login_shell_path() -> Option<OsString> {
             }
             Ok(None) => {
                 if std::time::Instant::now() >= deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    terminate_login_shell_probe(&mut child);
                     return env::var_os("PATH");
                 }
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
             Err(_) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                terminate_login_shell_probe(&mut child);
                 return None;
             }
         }
@@ -434,7 +450,7 @@ fn process_path_with_order(
             (
                 Vec::new(),
                 path_entries_from_value(Some(OsString::from(path_override))),
-                Vec::new(),
+                standard_search_directories(),
             )
         } else {
             (
@@ -770,6 +786,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn run_command_prefers_env_override_for_command_lookup() {
+        let _env_lock = lock_env();
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("system clock should be after unix epoch")
@@ -781,10 +798,9 @@ mod tests {
         write_executable(&script, "#!/bin/sh\nprintf 'override-ok'");
 
         let env_name = command_env_override_name(program.as_str());
-        std::env::set_var(&env_name, &script);
+        let _override_guard = EnvVarGuard::set(&env_name, script.to_string_lossy().as_ref());
         let output =
             run_command(program.as_str(), &[], None).expect("override command should execute");
-        std::env::remove_var(&env_name);
 
         assert_eq!(output, "override-ok");
         let _ = fs::remove_dir_all(root);
@@ -976,13 +992,13 @@ mod tests {
 
     #[test]
     fn explicit_command_override_reports_invalid_path() {
+        let _env_lock = lock_env();
         let program = format!("bd-missing-{}", unique_temp_path("nonce").display());
         let env_name = command_env_override_name(program.as_str());
-        std::env::set_var(&env_name, "/tmp/odt-missing-command-override");
+        let _override_guard = EnvVarGuard::set(&env_name, "/tmp/odt-missing-command-override");
 
         let error =
             explicit_command_override(program.as_str()).expect_err("invalid override should fail");
-        std::env::remove_var(&env_name);
 
         assert!(error.to_string().contains("Configured command override"));
     }
