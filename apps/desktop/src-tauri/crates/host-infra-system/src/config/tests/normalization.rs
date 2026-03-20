@@ -43,6 +43,7 @@ fn update_repo_config_normalizes_blank_worktree_path() {
                 trusted_hooks: false,
                 trusted_hooks_fingerprint: None,
                 hooks: Default::default(),
+                dev_servers: Vec::new(),
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
@@ -61,6 +62,44 @@ fn update_repo_config_normalizes_blank_worktree_path() {
     assert!(loaded.worktree_base_path.is_none());
     assert_eq!(loaded.branch_prefix, "duck");
     assert_eq!(loaded.default_target_branch.canonical(), "origin/main");
+}
+
+#[test]
+fn update_repo_config_rejects_duplicate_dev_server_ids() {
+    let _env_lock = lock_env();
+    let harness = TestStoreHarness::new("duplicate-dev-server-ids");
+    let store = harness.store();
+    let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+    let repo = root.join("repo");
+    fs::create_dir_all(repo.join(".git")).expect("repo");
+    let repo_str = repo.to_string_lossy().to_string();
+
+    store.add_workspace(&repo_str).expect("add workspace");
+    let error = store
+        .update_repo_config(
+            &repo_str,
+            RepoConfig {
+                dev_servers: vec![
+                    crate::RepoDevServerScript {
+                        id: "frontend".to_string(),
+                        name: "Frontend".to_string(),
+                        command: "bun run dev".to_string(),
+                    },
+                    crate::RepoDevServerScript {
+                        id: " frontend ".to_string(),
+                        name: "Backend".to_string(),
+                        command: "bun run api".to_string(),
+                    },
+                ],
+                ..RepoConfig::default()
+            },
+        )
+        .expect_err("duplicate ids should fail");
+
+    assert!(error
+        .to_string()
+        .contains("Duplicate dev server id: frontend"));
 }
 
 #[test]
@@ -90,6 +129,7 @@ fn update_repo_config_preserves_explicit_local_default_target_branch() {
                 trusted_hooks: false,
                 trusted_hooks_fingerprint: None,
                 hooks: Default::default(),
+                dev_servers: Vec::new(),
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
@@ -128,6 +168,7 @@ fn update_repo_config_normalizes_remote_qualified_default_target_branch_values()
                 trusted_hooks: false,
                 trusted_hooks_fingerprint: None,
                 hooks: Default::default(),
+                dev_servers: Vec::new(),
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
@@ -292,5 +333,58 @@ fn load_rejects_legacy_string_default_target_branch_values() {
     assert!(
         error.to_string().contains("Failed parsing config file"),
         "expected parse failure, got: {error}"
+    );
+}
+
+#[test]
+fn load_rejects_invalid_persisted_dev_server_rows() {
+    let _env_lock = lock_env();
+    let harness = TestStoreHarness::new("reject-invalid-dev-server-row");
+    let store = harness.store();
+    let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+    let repo = root.join("repo");
+    let repo_str = repo.to_string_lossy().to_string();
+
+    fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
+    let payload = json!({
+        "version": 1,
+        "activeRepo": repo_str,
+        "repos": {
+            repo_str.clone(): {
+                "trustedHooks": false,
+                "hooks": { "preStart": [], "postComplete": [] },
+                "devServers": [
+                    {
+                        "id": "  ",
+                        "name": "Frontend",
+                        "command": "bun run dev"
+                    }
+                ]
+            }
+        }
+    });
+    fs::write(
+        store.path(),
+        serde_json::to_string_pretty(&payload).expect("serialize payload"),
+    )
+    .expect("write config");
+    #[cfg(unix)]
+    {
+        let parent = store.path().parent().expect("config parent");
+        fs::set_permissions(parent, Permissions::from_mode(0o700))
+            .expect("config directory should be private");
+        fs::set_permissions(store.path(), Permissions::from_mode(0o600))
+            .expect("config file should be private");
+    }
+
+    let error = store
+        .load()
+        .expect_err("invalid persisted dev server rows should fail");
+    let display = format!("{error:#}");
+    assert!(
+        display.contains("Failed normalizing config file")
+            && display.contains("Dev server id cannot be blank when a command is configured."),
+        "expected normalization failure context, got: {display}"
     );
 }

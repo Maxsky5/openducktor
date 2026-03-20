@@ -595,6 +595,8 @@ impl AppService {
         source_branch: &str,
         force_delete_source_branch: bool,
     ) -> Result<()> {
+        self.stop_dev_servers_for_task(repo_path, task_id)?;
+
         if let Some(cleanup_target) =
             latest_builder_cleanup_target(self, repo_path, task_id, Some(source_branch))?
         {

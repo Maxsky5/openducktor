@@ -43,11 +43,9 @@ export const createBrowserLiveHostClient = (): TauriHostClient => {
   return createTauriHostClient(createHttpInvoke());
 };
 
-export const subscribeBrowserLiveRunEvents = async (
-  listener: (payload: unknown) => void,
-): Promise<() => void> => {
+const subscribeSseChannel = (path: string, listener: (payload: unknown) => void): (() => void) => {
   const baseUrl = getBrowserBackendUrl().replace(/\/$/, "");
-  const eventSource = new EventSource(`${baseUrl}/events`);
+  const eventSource = new EventSource(`${baseUrl}/${path}`);
 
   const handleMessage = (event: MessageEvent<string>): void => {
     try {
@@ -63,4 +61,16 @@ export const subscribeBrowserLiveRunEvents = async (
     eventSource.removeEventListener("message", handleMessage as EventListener);
     eventSource.close();
   };
+};
+
+export const subscribeBrowserLiveRunEvents = async (
+  listener: (payload: unknown) => void,
+): Promise<() => void> => {
+  return subscribeSseChannel("events", listener);
+};
+
+export const subscribeBrowserLiveDevServerEvents = async (
+  listener: (payload: unknown) => void,
+): Promise<() => void> => {
+  return subscribeSseChannel("dev-server-events", listener);
 };

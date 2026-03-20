@@ -21,7 +21,7 @@ use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use host_application::{
-    AppService, BuildResponseAction, CleanupMode, HookTrustConfirmationPort,
+    AppService, BuildResponseAction, CleanupMode, DevServerEmitter, HookTrustConfirmationPort,
     HookTrustConfirmationRequest, RepoConfigUpdate, RepoSettingsUpdate, RunEmitter,
 };
 use host_domain::AgentRuntimeKind;
@@ -50,6 +50,7 @@ const EVENT_BUFFER_CAPACITY: usize = 256;
 struct HeadlessState {
     service: Arc<AppService>,
     events: HeadlessEventBus,
+    dev_server_events: HeadlessEventBus,
 }
 
 #[derive(Clone, Debug)]
@@ -503,12 +504,18 @@ pub async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
     let service = startup_phase_service_bootstrap()?;
     startup_phase_shutdown_hooks(service.clone());
     let events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
+    let dev_server_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let app = Router::new()
         .route("/health", get(health_handler))
         .route("/events", get(events_handler))
+        .route("/dev-server-events", get(dev_server_events_handler))
         .route("/invoke/{command}", post(invoke_handler))
         .layer(browser_backend_cors_layer()?)
-        .with_state(HeadlessState { service, events });
+        .with_state(HeadlessState {
+            service,
+            events,
+            dev_server_events,
+        });
 
     let listener = TcpListener::bind((DEFAULT_BROWSER_BACKEND_HOST, port))
         .await
@@ -560,6 +567,34 @@ async fn events_handler(
     Ok(Sse::new(replay_stream.chain(live_stream)).keep_alive(KeepAlive::default()))
 }
 
+async fn dev_server_events_handler(
+    State(state): State<HeadlessState>,
+    headers: HeaderMap,
+) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, HeadlessCommandError>
+{
+    let last_event_id = parse_last_event_id(&headers)?;
+    let replay_stream = tokio_stream::iter(
+        state
+            .dev_server_events
+            .replay_since(last_event_id)
+            .into_iter()
+            .map(|event| to_sse_event(&event)),
+    );
+    let live_stream =
+        BroadcastStream::new(state.dev_server_events.subscribe()).map(|message| match message {
+            Ok(event) => to_sse_event(&event),
+            Err(BroadcastStreamRecvError::Lagged(skipped)) => Ok(
+                Event::default()
+                    .event("stream-warning")
+                    .data(format!(
+                        "Browser dev server event stream skipped {skipped} events; reconnect will replay buffered events."
+                    )),
+            ),
+        });
+
+    Ok(Sse::new(replay_stream.chain(live_stream)).keep_alive(KeepAlive::default()))
+}
+
 async fn invoke_handler(
     Path(command): Path<String>,
     State(state): State<HeadlessState>,
@@ -592,6 +627,21 @@ fn make_emitter(events: HeadlessEventBus) -> RunEmitter {
                 target: "openducktor.browser-backend",
                 error = %error,
                 "Failed to serialize run event for browser SSE"
+            );
+        }
+    })
+}
+
+fn make_dev_server_emitter(events: HeadlessEventBus) -> DevServerEmitter {
+    Arc::new(move |event| match serde_json::to_string(&event) {
+        Ok(payload) => {
+            events.emit(payload);
+        }
+        Err(error) => {
+            tracing::warn!(
+                target: "openducktor.browser-backend",
+                error = %error,
+                "Failed to serialize dev server event for browser SSE"
             );
         }
     })
@@ -891,6 +941,10 @@ async fn dispatch_runtime_command(
 ) -> Option<CommandResult> {
     match command {
         "build_start" => Some(handle_build_start(state, args).await),
+        "dev_server_get_state" => Some(handle_dev_server_get_state(state, args).await),
+        "dev_server_start" => Some(handle_dev_server_start(state, args).await),
+        "dev_server_stop" => Some(handle_dev_server_stop(state, args).await),
+        "dev_server_restart" => Some(handle_dev_server_restart(state, args).await),
         "build_respond" => Some(handle_build_respond(state, args)),
         "build_stop" => Some(handle_build_stop(state, args)),
         "build_cleanup" => Some(handle_build_cleanup(state, args)),
@@ -1064,6 +1118,7 @@ fn handle_workspace_update_repo_config(state: &HeadlessState, args: Value) -> Co
                     branch_prefix: config.branch_prefix,
                     default_target_branch: config.default_target_branch,
                     git: config.git,
+                    dev_servers: config.dev_servers,
                     worktree_file_copies: config.worktree_file_copies,
                     prompt_overrides: config.prompt_overrides,
                     agent_defaults: config.agent_defaults,
@@ -1088,6 +1143,7 @@ async fn handle_workspace_save_repo_settings(state: &HeadlessState, args: Value)
         git: settings.git,
         trusted_hooks: settings.trusted_hooks,
         hooks: settings.hooks,
+        dev_servers: settings.dev_servers,
         worktree_file_copies: settings.worktree_file_copies,
         prompt_overrides: settings.prompt_overrides,
         agent_defaults: settings.agent_defaults,
@@ -1943,6 +1999,56 @@ async fn handle_build_start(state: &HeadlessState, args: Value) -> CommandResult
     serialize_value(
         run_service_blocking_tokio("build_start", move || {
             service.build_start(&repo_path, &task_id, runtime_kind.as_str(), emitter)
+        })
+        .await
+        .map_err(service_error)?,
+    )
+}
+
+async fn handle_dev_server_get_state(state: &HeadlessState, args: Value) -> CommandResult {
+    let RepoTaskArgs { repo_path, task_id } = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        run_service_blocking_tokio("dev_server_get_state", move || {
+            service.dev_server_get_state(&repo_path, &task_id)
+        })
+        .await
+        .map_err(service_error)?,
+    )
+}
+
+async fn handle_dev_server_start(state: &HeadlessState, args: Value) -> CommandResult {
+    let RepoTaskArgs { repo_path, task_id } = deserialize_args(args)?;
+    let service = state.service.clone();
+    let emitter = make_dev_server_emitter(state.dev_server_events.clone());
+    serialize_value(
+        run_service_blocking_tokio("dev_server_start", move || {
+            service.dev_server_start(&repo_path, &task_id, emitter)
+        })
+        .await
+        .map_err(service_error)?,
+    )
+}
+
+async fn handle_dev_server_stop(state: &HeadlessState, args: Value) -> CommandResult {
+    let RepoTaskArgs { repo_path, task_id } = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        run_service_blocking_tokio("dev_server_stop", move || {
+            service.dev_server_stop(&repo_path, &task_id)
+        })
+        .await
+        .map_err(service_error)?,
+    )
+}
+
+async fn handle_dev_server_restart(state: &HeadlessState, args: Value) -> CommandResult {
+    let RepoTaskArgs { repo_path, task_id } = deserialize_args(args)?;
+    let service = state.service.clone();
+    let emitter = make_dev_server_emitter(state.dev_server_events.clone());
+    serialize_value(
+        run_service_blocking_tokio("dev_server_restart", move || {
+            service.dev_server_restart(&repo_path, &task_id, emitter)
         })
         .await
         .map_err(service_error)?,

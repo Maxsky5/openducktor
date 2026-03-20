@@ -165,11 +165,39 @@ pub struct HookSet {
     pub post_complete: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoDevServerScript {
+    pub id: String,
+    pub name: String,
+    pub command: String,
+}
+
 pub fn hook_set_fingerprint(hooks: &HookSet) -> String {
     let mut hasher = Sha256::new();
     hasher.update(b"openducktor-hookset-fingerprint-v2");
     update_hasher_with_hook_group(&mut hasher, b"pre_start", &hooks.pre_start);
     update_hasher_with_hook_group(&mut hasher, b"post_complete", &hooks.post_complete);
+    format!("{:x}", hasher.finalize())
+}
+
+pub fn repo_script_fingerprint(hooks: &HookSet, dev_servers: &[RepoDevServerScript]) -> String {
+    if dev_servers.is_empty() {
+        return hook_set_fingerprint(hooks);
+    }
+
+    let mut hasher = Sha256::new();
+    hasher.update(b"openducktor-repo-script-fingerprint-v3");
+    update_hasher_with_hook_group(&mut hasher, b"pre_start", &hooks.pre_start);
+    update_hasher_with_hook_group(&mut hasher, b"post_complete", &hooks.post_complete);
+    hasher.update(b"dev_servers");
+    hasher.update([0u8]);
+    hasher.update((dev_servers.len() as u64).to_be_bytes());
+    for dev_server in dev_servers {
+        let bytes = dev_server.command.as_bytes();
+        hasher.update((bytes.len() as u64).to_be_bytes());
+        hasher.update(bytes);
+    }
     format!("{:x}", hasher.finalize())
 }
 
@@ -247,6 +275,8 @@ pub struct RepoConfig {
     #[serde(default)]
     pub hooks: HookSet,
     #[serde(default)]
+    pub dev_servers: Vec<RepoDevServerScript>,
+    #[serde(default)]
     pub worktree_file_copies: Vec<String>,
     #[serde(default)]
     pub prompt_overrides: PromptOverrides,
@@ -273,6 +303,7 @@ impl Default for RepoConfig {
             trusted_hooks: false,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
+            dev_servers: Vec::new(),
             worktree_file_copies: Vec::new(),
             prompt_overrides: PromptOverrides::default(),
             agent_defaults: AgentDefaults::default(),
@@ -421,7 +452,9 @@ impl Default for RuntimeConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{hook_set_fingerprint, HookSet, RepoConfig};
+    use super::{
+        hook_set_fingerprint, repo_script_fingerprint, HookSet, RepoConfig, RepoDevServerScript,
+    };
 
     #[test]
     fn hook_set_fingerprint_changes_with_command_boundaries() {
@@ -463,5 +496,47 @@ mod tests {
     fn repo_config_default_target_branch_is_origin_main() {
         let config = RepoConfig::default();
         assert_eq!(config.default_target_branch.canonical(), "origin/main");
+    }
+
+    #[test]
+    fn repo_script_fingerprint_ignores_dev_server_names_but_tracks_commands() {
+        let hooks = HookSet::default();
+        let renamed = vec![RepoDevServerScript {
+            id: "frontend".to_string(),
+            name: "Frontend".to_string(),
+            command: "bun run dev".to_string(),
+        }];
+        let same_command_new_name = vec![RepoDevServerScript {
+            id: "frontend".to_string(),
+            name: "Web".to_string(),
+            command: "bun run dev".to_string(),
+        }];
+        let changed_command = vec![RepoDevServerScript {
+            id: "frontend".to_string(),
+            name: "Frontend".to_string(),
+            command: "bun run start".to_string(),
+        }];
+
+        assert_eq!(
+            repo_script_fingerprint(&hooks, &renamed),
+            repo_script_fingerprint(&hooks, &same_command_new_name)
+        );
+        assert_ne!(
+            repo_script_fingerprint(&hooks, &renamed),
+            repo_script_fingerprint(&hooks, &changed_command)
+        );
+    }
+
+    #[test]
+    fn repo_script_fingerprint_matches_legacy_hook_fingerprint_without_dev_servers() {
+        let hooks = HookSet {
+            pre_start: vec!["echo pre".to_string()],
+            post_complete: vec!["echo post".to_string()],
+        };
+
+        assert_eq!(
+            hook_set_fingerprint(&hooks),
+            repo_script_fingerprint(&hooks, &[])
+        );
     }
 }

@@ -2,7 +2,8 @@
 
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentRuntimeKind, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch, GitPort,
+    AgentRuntimeKind, AgentSessionDocument, CreateTaskInput, DevServerGroupState,
+    DevServerScriptState, DevServerScriptStatus, GitBranch, GitCurrentBranch, GitPort,
     PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary,
     RuntimeInstanceSummary, RuntimeRole, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
 };
@@ -21,7 +22,7 @@ use crate::app_service::test_support::{
     build_service_with_git_state, build_service_with_store, create_failing_opencode,
     create_fake_bd, create_fake_opencode, create_orphanable_opencode, empty_patch, init_git_repo,
     lock_env, make_emitter, make_session, make_task, prepend_path, process_is_alive,
-    remove_env_var, set_env_var, spawn_sleep_process, unique_temp_path,
+    remove_env_var, set_env_var, spawn_sleep_process, spawn_sleep_process_group, unique_temp_path,
     wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
     write_executable_script, FakeTaskStore, GitCall, TaskStoreState,
 };
@@ -30,8 +31,8 @@ use crate::app_service::{
     find_openducktor_workspace_root, parse_mcp_command_json, read_opencode_process_registry,
     read_opencode_version, resolve_mcp_command, resolve_opencode_binary_path,
     terminate_child_process, terminate_process_by_pid, validate_parent_relationships_for_update,
-    with_locked_opencode_process_registry, AgentRuntimeProcess, OpencodeProcessRegistryInstance,
-    RunProcess, RuntimeCleanupTarget, TrackedOpencodeProcessGuard,
+    with_locked_opencode_process_registry, AgentRuntimeProcess, DevServerGroupRuntime,
+    OpencodeProcessRegistryInstance, RunProcess, RuntimeCleanupTarget, TrackedOpencodeProcessGuard,
     OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
 
@@ -102,6 +103,7 @@ fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),
+                dev_servers: Vec::new(),
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
@@ -247,6 +249,7 @@ fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Re
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),
+                dev_servers: Vec::new(),
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
@@ -298,6 +301,80 @@ fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Re
     assert!(wait_for_process_exit(runtime_pid, Duration::from_secs(2)));
 
     let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn shutdown_stops_running_dev_server_process_groups() -> Result<()> {
+    let repo_path = unique_temp_path("shutdown-dev-server-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let (service, _task_state, _git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
+    let canonical_repo_path = workspace.path;
+
+    let mut child = spawn_sleep_process_group(20);
+    let pid = child.id();
+    let repo_path_string = canonical_repo_path;
+    service
+        .dev_server_groups
+        .lock()
+        .expect("dev server lock poisoned")
+        .insert(
+            format!("{}::task-1", repo_path_string),
+            DevServerGroupRuntime {
+                state: DevServerGroupState {
+                    repo_path: repo_path_string.clone(),
+                    task_id: "task-1".to_string(),
+                    worktree_path: Some(repo_path_string.clone()),
+                    scripts: vec![DevServerScriptState {
+                        script_id: "server-1".to_string(),
+                        name: "Server".to_string(),
+                        command: "sleep 20".to_string(),
+                        status: DevServerScriptStatus::Running,
+                        pid: Some(pid),
+                        started_at: Some("2026-03-19T12:00:00Z".to_string()),
+                        exit_code: None,
+                        last_error: None,
+                        buffered_log_lines: Vec::new(),
+                    }],
+                    updated_at: "2026-03-19T12:00:00Z".to_string(),
+                },
+                emitter: None,
+            },
+        );
+
+    let shutdown_result = service.shutdown();
+    let exited = wait_for_process_exit(pid as i32, Duration::from_secs(2));
+    if !exited {
+        let _ = child.kill();
+    }
+    let _ = child.wait().context("failed waiting dev server child")?;
+    shutdown_result?;
+
+    assert!(exited, "dev server process should exit during shutdown");
+
+    let groups = service
+        .dev_server_groups
+        .lock()
+        .expect("dev server lock poisoned");
+    let group = groups
+        .get(&format!("{}::task-1", repo_path_string))
+        .expect("dev server group retained");
+    assert!(group.state.scripts.is_empty());
+    drop(groups);
+
+    let _ = fs::remove_dir_all(repo_path);
     Ok(())
 }
 

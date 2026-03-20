@@ -19,6 +19,12 @@ const DEFAULT_THEME = "light" as const;
 const nullableToOptional = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => (value === null ? undefined : value), schema.optional());
 
+const trimmedRequiredString = (field: string) =>
+  z
+    .string()
+    .transform((value) => value.trim())
+    .refine((value) => value.length > 0, `${field} cannot be blank.`);
+
 export const softGuardrailsSchema = z.object({
   cpuHighWatermarkPercent: z
     .number()
@@ -36,6 +42,13 @@ export const repoHooksSchema = z.object({
   postComplete: z.array(z.string()).default([]),
 });
 export type RepoHooks = z.infer<typeof repoHooksSchema>;
+
+export const repoDevServerScriptSchema = z.object({
+  id: trimmedRequiredString("Dev server id"),
+  name: trimmedRequiredString("Dev server name"),
+  command: trimmedRequiredString("Dev server command"),
+});
+export type RepoDevServerScript = z.infer<typeof repoDevServerScriptSchema>;
 
 export const agentModelDefaultSchema = z.object({
   runtimeKind: runtimeKindSchema.default("opencode"),
@@ -63,6 +76,22 @@ export const repoConfigSchema = z.object({
   trustedHooks: z.boolean().default(false),
   trustedHooksFingerprint: nullableToOptional(z.string().min(1)),
   hooks: repoHooksSchema.default({ preStart: [], postComplete: [] }),
+  devServers: z
+    .array(repoDevServerScriptSchema)
+    .superRefine((devServers, context) => {
+      const seenIds = new Set<string>();
+      for (const [index, devServer] of devServers.entries()) {
+        if (seenIds.has(devServer.id)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Duplicate dev server id: ${devServer.id}`,
+            path: [index, "id"],
+          });
+        }
+        seenIds.add(devServer.id);
+      }
+    })
+    .default([]),
   worktreeFileCopies: z.array(z.string()).default([]),
   promptOverrides: repoPromptOverridesSchema.default({}),
   agentDefaults: repoAgentDefaultsSchema.default({

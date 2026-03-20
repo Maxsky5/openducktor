@@ -92,6 +92,7 @@ export function SettingsModal({
   const isInteractionDisabled = controller.isLoadingSettings || controller.isSaving;
 
   const handleSave = (): void => {
+    controller.markRepoScriptSaveAttempt();
     void controller.submit().then((saved) => {
       if (saved) {
         dispatch({ type: "set_open", open: false });
@@ -167,12 +168,14 @@ export function SettingsModal({
           isSaving={controller.isSaving}
           isLoadingSettings={controller.isLoadingSettings}
           hasPromptValidationErrors={controller.hasPromptValidationErrors}
+          hasRepoScriptValidationErrors={controller.hasRepoScriptValidationErrors}
           settingsError={controller.settingsError}
           saveError={controller.saveError}
           catalogError={controller.runtimeDefinitionsError}
           section={section}
           repositorySection={repositorySection}
           promptValidationState={controller.promptValidationState}
+          repoScriptValidationErrorCount={controller.repoScriptValidationErrorCount}
           hasSnapshotDraft={Boolean(controller.snapshotDraft)}
           onCancel={() => dispatch({ type: "set_open", open: false })}
           onSave={handleSave}

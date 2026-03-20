@@ -4,6 +4,7 @@ use super::workspace_policy::HookTrustChallenge;
 use super::*;
 
 pub type RunEmitter = Arc<dyn Fn(RunEvent) + Send + Sync + 'static>;
+pub type DevServerEmitter = Arc<dyn Fn(DevServerEvent) + Send + Sync + 'static>;
 
 #[derive(Clone)]
 pub struct AppService {
@@ -22,6 +23,7 @@ pub struct AppService {
     pub(super) startup_metrics: Arc<Mutex<OpencodeStartupMetrics>>,
     pub(super) enforce_repo_allowlist: bool,
     pub(super) hook_trust_challenges: Arc<Mutex<HashMap<String, HookTrustChallenge>>>,
+    pub(super) dev_server_groups: Arc<Mutex<HashMap<String, DevServerGroupRuntime>>>,
 }
 
 pub(crate) struct RunProcess {
@@ -50,6 +52,11 @@ pub(crate) struct RuntimeCleanupTarget {
 pub(crate) struct CachedRuntimeCheck {
     pub(super) checked_at: Instant,
     pub(super) value: RuntimeCheck,
+}
+
+pub(crate) struct DevServerGroupRuntime {
+    pub(super) state: DevServerGroupState,
+    pub(super) emitter: Option<DevServerEmitter>,
 }
 
 impl Drop for AppService {
@@ -99,6 +106,7 @@ impl AppService {
             startup_metrics: Arc::new(Mutex::new(OpencodeStartupMetrics::default())),
             enforce_repo_allowlist,
             hook_trust_challenges: Arc::new(Mutex::new(HashMap::new())),
+            dev_server_groups: Arc::new(Mutex::new(HashMap::new())),
         };
         if let Err(error) = service.reconcile_opencode_process_registry_on_startup() {
             eprintln!(

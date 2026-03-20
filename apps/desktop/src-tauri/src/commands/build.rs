@@ -1,11 +1,11 @@
 use crate::{
-    as_error, run_emitter, run_service_blocking, AppState, BuildCompletePayload,
-    PullRequestContentPayload, TaskDirectMergePayload,
+    as_error, dev_server_emitter, run_emitter, run_service_blocking, AppState,
+    BuildCompletePayload, PullRequestContentPayload, TaskDirectMergePayload,
 };
 use host_application::{BuildResponseAction, CleanupMode};
 use host_domain::{
-    AgentRuntimeKind, PullRequestRecord, RunSummary, TaskApprovalContext, TaskCard,
-    TaskDirectMergeResult, TaskPullRequestDetectResult,
+    AgentRuntimeKind, DevServerGroupState, PullRequestRecord, RunSummary, TaskApprovalContext,
+    TaskCard, TaskDirectMergeResult, TaskPullRequestDetectResult,
 };
 use tauri::{AppHandle, State};
 
@@ -21,6 +21,66 @@ pub async fn build_start(
     let emitter = run_emitter(app);
     let result = run_service_blocking("build_start", move || {
         service.build_start(&repo_path, &task_id, runtime_kind.as_str(), emitter)
+    })
+    .await;
+    as_error(result)
+}
+
+#[tauri::command]
+pub async fn dev_server_get_state(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+) -> Result<DevServerGroupState, String> {
+    let service = state.service.clone();
+    let result = run_service_blocking("dev_server_get_state", move || {
+        service.dev_server_get_state(&repo_path, &task_id)
+    })
+    .await;
+    as_error(result)
+}
+
+#[tauri::command]
+pub async fn dev_server_start(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    repo_path: String,
+    task_id: String,
+) -> Result<DevServerGroupState, String> {
+    let service = state.service.clone();
+    let emitter = dev_server_emitter(app);
+    let result = run_service_blocking("dev_server_start", move || {
+        service.dev_server_start(&repo_path, &task_id, emitter)
+    })
+    .await;
+    as_error(result)
+}
+
+#[tauri::command]
+pub async fn dev_server_stop(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+) -> Result<DevServerGroupState, String> {
+    let service = state.service.clone();
+    let result = run_service_blocking("dev_server_stop", move || {
+        service.dev_server_stop(&repo_path, &task_id)
+    })
+    .await;
+    as_error(result)
+}
+
+#[tauri::command]
+pub async fn dev_server_restart(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    repo_path: String,
+    task_id: String,
+) -> Result<DevServerGroupState, String> {
+    let service = state.service.clone();
+    let emitter = dev_server_emitter(app);
+    let result = run_service_blocking("dev_server_restart", move || {
+        service.dev_server_restart(&repo_path, &task_id, emitter)
     })
     .await;
     as_error(result)

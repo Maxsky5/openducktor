@@ -1544,6 +1544,22 @@ pub(crate) fn spawn_sleep_process(seconds: u64) -> std::process::Child {
         .expect("spawn sleep process")
 }
 
+#[cfg(unix)]
+pub(crate) fn spawn_sleep_process_group(seconds: u64) -> std::process::Child {
+    use std::os::unix::process::CommandExt;
+
+    Command::new("/bin/sh")
+        .arg("-c")
+        .arg(format!(
+            "trap 'kill 0 2>/dev/null || true' EXIT TERM INT; sleep {seconds} & wait"
+        ))
+        .process_group(0)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn sleep process group")
+}
+
 pub(crate) fn empty_patch() -> UpdateTaskPatch {
     UpdateTaskPatch {
         title: None,

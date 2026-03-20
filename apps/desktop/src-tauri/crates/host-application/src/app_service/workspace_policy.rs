@@ -3,8 +3,9 @@ use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use host_domain::WorkspaceRecord;
 use host_infra_system::{
-    hook_set_fingerprint, normalize_hook_set, AgentDefaults, ChatSettings, GitTargetBranch,
-    HookSet, PromptOverrides, RepoConfig, RepoGitConfig,
+    normalize_hook_set, normalize_repo_dev_servers, repo_script_fingerprint, AgentDefaults,
+    ChatSettings, GitTargetBranch, HookSet, PromptOverrides, RepoConfig, RepoDevServerScript,
+    RepoGitConfig,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -20,6 +21,7 @@ pub struct RepoConfigUpdate {
     pub branch_prefix: Option<String>,
     pub default_target_branch: Option<GitTargetBranch>,
     pub git: Option<RepoGitConfig>,
+    pub dev_servers: Option<Vec<RepoDevServerScript>>,
     pub worktree_file_copies: Option<Vec<String>>,
     pub prompt_overrides: Option<PromptOverrides>,
     pub agent_defaults: Option<AgentDefaults>,
@@ -34,6 +36,7 @@ pub struct RepoSettingsUpdate {
     pub git: Option<RepoGitConfig>,
     pub trusted_hooks: bool,
     pub hooks: Option<HookSet>,
+    pub dev_servers: Option<Vec<RepoDevServerScript>>,
     pub worktree_file_copies: Option<Vec<String>>,
     pub prompt_overrides: Option<PromptOverrides>,
     pub agent_defaults: Option<AgentDefaults>,
@@ -43,6 +46,7 @@ pub struct RepoSettingsUpdate {
 pub struct HookTrustConfirmationRequest {
     pub repo_path: String,
     pub hooks: HookSet,
+    pub dev_servers: Vec<RepoDevServerScript>,
 }
 
 pub trait HookTrustConfirmationPort: Send {
@@ -75,6 +79,15 @@ impl AppService {
     ) -> Result<WorkspaceRecord> {
         let existing = self.workspace_get_repo_config_optional(repo_path)?;
         let defaults = RepoConfig::default();
+        let dev_servers = normalize_dev_servers(
+            update
+                .dev_servers
+                .or_else(|| existing.as_ref().map(|entry| entry.dev_servers.clone()))
+                .unwrap_or_default(),
+        )?;
+        let keep_existing_trust = existing
+            .as_ref()
+            .is_some_and(|entry| entry.dev_servers == dev_servers);
         let repo_config = RepoConfig {
             default_runtime_kind: update
                 .default_runtime_kind
@@ -105,14 +118,20 @@ impl AppService {
                 .git
                 .or_else(|| existing.as_ref().map(|entry| entry.git.clone()))
                 .unwrap_or_default(),
-            trusted_hooks: existing.as_ref().is_some_and(|entry| entry.trusted_hooks),
-            trusted_hooks_fingerprint: existing
-                .as_ref()
-                .and_then(|entry| entry.trusted_hooks_fingerprint.clone()),
+            trusted_hooks: keep_existing_trust
+                && existing.as_ref().is_some_and(|entry| entry.trusted_hooks),
+            trusted_hooks_fingerprint: if keep_existing_trust {
+                existing
+                    .as_ref()
+                    .and_then(|entry| entry.trusted_hooks_fingerprint.clone())
+            } else {
+                None
+            },
             hooks: existing
                 .as_ref()
                 .map(|entry| entry.hooks.clone())
                 .unwrap_or_default(),
+            dev_servers,
             worktree_file_copies: update
                 .worktree_file_copies
                 .or_else(|| {
@@ -148,12 +167,15 @@ impl AppService {
             .workspace_get_repo_config_optional(repo_path)?
             .unwrap_or_default();
 
-        let (normalized_hooks, trusted_hooks_fingerprint) = self
+        let (normalized_hooks, normalized_dev_servers, trusted_hooks_fingerprint) = self
             .normalize_hooks_with_trust_confirmation(
                 repo_path,
                 &existing,
                 settings.trusted_hooks,
                 settings.hooks.unwrap_or_else(|| existing.hooks.clone()),
+                settings
+                    .dev_servers
+                    .unwrap_or_else(|| existing.dev_servers.clone()),
                 confirmation_port,
             )?;
 
@@ -169,6 +191,7 @@ impl AppService {
             trusted_hooks: settings.trusted_hooks,
             trusted_hooks_fingerprint,
             hooks: normalized_hooks,
+            dev_servers: normalized_dev_servers,
             worktree_file_copies: settings
                 .worktree_file_copies
                 .unwrap_or(existing.worktree_file_copies),
@@ -187,7 +210,7 @@ impl AppService {
     ) -> Result<PreparedHookTrustChallenge> {
         let repo_config = self.workspace_get_repo_config(repo_path)?;
         let canonical_repo_path = canonical_repo_key(repo_path);
-        let fingerprint = hook_set_fingerprint(&repo_config.hooks);
+        let fingerprint = repo_script_fingerprint(&repo_config.hooks, &repo_config.dev_servers);
         let nonce = format!("hooks-trust-{}", Uuid::new_v4().simple());
         let expires_at = SystemTime::now()
             .checked_add(HOOK_TRUST_CHALLENGE_TTL)
@@ -232,15 +255,18 @@ impl AppService {
                 .workspace_get_repo_config_optional(repo_path)?
                 .unwrap_or_default();
             let submitted_hooks = std::mem::take(&mut repo_config.hooks);
-            let (normalized_hooks, trusted_hooks_fingerprint) = self
+            let submitted_dev_servers = std::mem::take(&mut repo_config.dev_servers);
+            let (normalized_hooks, normalized_dev_servers, trusted_hooks_fingerprint) = self
                 .normalize_hooks_with_trust_confirmation(
                     repo_path,
                     &existing,
                     repo_config.trusted_hooks,
                     submitted_hooks,
+                    submitted_dev_servers,
                     confirmation_port,
                 )?;
             repo_config.hooks = normalized_hooks;
+            repo_config.dev_servers = normalized_dev_servers;
             repo_config.trusted_hooks_fingerprint = trusted_hooks_fingerprint;
         }
 
@@ -292,16 +318,18 @@ impl AppService {
         };
 
         let repo_config = self.workspace_get_repo_config(repo_path)?;
-        let latest_fingerprint = hook_set_fingerprint(&repo_config.hooks);
+        let latest_fingerprint =
+            repo_script_fingerprint(&repo_config.hooks, &repo_config.dev_servers);
         if latest_fingerprint != challenge.fingerprint {
             return Err(anyhow!(
-                "Hook commands changed after challenge generation. Request trust confirmation again."
+                "Hook commands or dev servers changed after challenge generation. Request trust confirmation again."
             ));
         }
 
         confirmation_port.confirm_trusted_hooks(&HookTrustConfirmationRequest {
             repo_path: canonical_repo_path,
             hooks: repo_config.hooks.clone(),
+            dev_servers: repo_config.dev_servers.clone(),
         })?;
 
         self.workspace_persist_trusted_hooks(repo_path, true, Some(challenge.fingerprint.as_str()))
@@ -313,18 +341,22 @@ impl AppService {
         existing: &RepoConfig,
         trusted_hooks: bool,
         hooks: HookSet,
+        dev_servers: Vec<RepoDevServerScript>,
         confirmation_port: &P,
-    ) -> Result<(HookSet, Option<String>)> {
+    ) -> Result<(HookSet, Vec<RepoDevServerScript>, Option<String>)> {
         let normalized_hooks = normalize_hook_set(hooks);
-        let hooks_fingerprint = hook_set_fingerprint(&normalized_hooks);
+        let normalized_dev_servers = normalize_dev_servers(dev_servers)?;
+        let hooks_fingerprint = repo_script_fingerprint(&normalized_hooks, &normalized_dev_servers);
         let trust_already_approved_for_same_hooks = existing.trusted_hooks
             && existing.hooks == normalized_hooks
+            && existing.dev_servers == normalized_dev_servers
             && existing.trusted_hooks_fingerprint.as_deref() == Some(hooks_fingerprint.as_str());
 
         if trusted_hooks && !trust_already_approved_for_same_hooks {
             confirmation_port.confirm_trusted_hooks(&HookTrustConfirmationRequest {
                 repo_path: canonical_repo_key(repo_path),
                 hooks: normalized_hooks.clone(),
+                dev_servers: normalized_dev_servers.clone(),
             })?;
         }
 
@@ -334,8 +366,20 @@ impl AppService {
             None
         };
 
-        Ok((normalized_hooks, trusted_hooks_fingerprint))
+        Ok((
+            normalized_hooks,
+            normalized_dev_servers,
+            trusted_hooks_fingerprint,
+        ))
     }
+}
+
+fn normalize_dev_servers(
+    dev_servers: Vec<RepoDevServerScript>,
+) -> Result<Vec<RepoDevServerScript>> {
+    let mut normalized = dev_servers;
+    normalize_repo_dev_servers(&mut normalized)?;
+    Ok(normalized)
 }
 
 fn normalize_runtime_kind(value: Option<String>) -> Result<Option<String>> {
@@ -397,8 +441,8 @@ mod tests {
     use anyhow::{anyhow, Result};
     use host_domain::TaskStore;
     use host_infra_system::{
-        hook_set_fingerprint, AppConfigStore, ChatSettings, GitCliPort, HookSet, PromptOverride,
-        RepoConfig,
+        hook_set_fingerprint, repo_script_fingerprint, AppConfigStore, ChatSettings, GitCliPort,
+        HookSet, PromptOverride, RepoConfig, RepoDevServerScript,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -551,6 +595,121 @@ mod tests {
     }
 
     #[test]
+    fn workspace_merge_repo_config_clears_trust_when_dev_servers_change() -> Result<()> {
+        let fixture = setup_fixture("merge-repo-config-dev-servers", HookSet::default());
+        fixture.service.workspace_update_repo_config(
+            fixture.repo_path.as_str(),
+            RepoConfig {
+                trusted_hooks: true,
+                trusted_hooks_fingerprint: Some(repo_script_fingerprint(
+                    &HookSet::default(),
+                    &[RepoDevServerScript {
+                        id: "frontend".to_string(),
+                        name: "Frontend".to_string(),
+                        command: "bun run dev".to_string(),
+                    }],
+                )),
+                dev_servers: vec![RepoDevServerScript {
+                    id: "frontend".to_string(),
+                    name: "Frontend".to_string(),
+                    command: "bun run dev".to_string(),
+                }],
+                ..fixture
+                    .service
+                    .workspace_get_repo_config(&fixture.repo_path)?
+            },
+        )?;
+
+        fixture.service.workspace_merge_repo_config(
+            fixture.repo_path.as_str(),
+            RepoConfigUpdate {
+                dev_servers: Some(vec![RepoDevServerScript {
+                    id: "frontend".to_string(),
+                    name: "Frontend".to_string(),
+                    command: "bun run web".to_string(),
+                }]),
+                ..RepoConfigUpdate::default()
+            },
+        )?;
+
+        let updated = fixture
+            .service
+            .workspace_get_repo_config(&fixture.repo_path)?;
+        assert!(!updated.trusted_hooks);
+        assert!(updated.trusted_hooks_fingerprint.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_merge_repo_config_keeps_trust_for_whitespace_only_dev_server_changes() -> Result<()>
+    {
+        let fixture = setup_fixture(
+            "merge-repo-config-dev-servers-whitespace",
+            HookSet::default(),
+        );
+        let fingerprint = repo_script_fingerprint(
+            &HookSet::default(),
+            &[RepoDevServerScript {
+                id: "frontend".to_string(),
+                name: "Frontend".to_string(),
+                command: "bun run dev".to_string(),
+            }],
+        );
+        fixture.service.workspace_update_repo_config(
+            fixture.repo_path.as_str(),
+            RepoConfig {
+                trusted_hooks: true,
+                trusted_hooks_fingerprint: Some(fingerprint.clone()),
+                dev_servers: vec![RepoDevServerScript {
+                    id: "frontend".to_string(),
+                    name: "Frontend".to_string(),
+                    command: "bun run dev".to_string(),
+                }],
+                ..fixture
+                    .service
+                    .workspace_get_repo_config(&fixture.repo_path)?
+            },
+        )?;
+
+        fixture.service.workspace_merge_repo_config(
+            fixture.repo_path.as_str(),
+            RepoConfigUpdate {
+                dev_servers: Some(vec![
+                    RepoDevServerScript {
+                        id: " frontend ".to_string(),
+                        name: " Frontend ".to_string(),
+                        command: " bun run dev ".to_string(),
+                    },
+                    RepoDevServerScript {
+                        id: "ignored".to_string(),
+                        name: "Ignored".to_string(),
+                        command: "   ".to_string(),
+                    },
+                ]),
+                ..RepoConfigUpdate::default()
+            },
+        )?;
+
+        let updated = fixture
+            .service
+            .workspace_get_repo_config(&fixture.repo_path)?;
+        assert!(updated.trusted_hooks);
+        assert_eq!(
+            updated.trusted_hooks_fingerprint.as_deref(),
+            Some(fingerprint.as_str())
+        );
+        assert_eq!(
+            updated.dev_servers,
+            vec![RepoDevServerScript {
+                id: "frontend".to_string(),
+                name: "Frontend".to_string(),
+                command: "bun run dev".to_string(),
+            }]
+        );
+        Ok(())
+    }
+
+    #[test]
     fn workspace_save_repo_settings_rejects_blank_default_runtime_kind() {
         let fixture = setup_fixture("blank-runtime-kind", HookSet::default());
         let confirmation = RecordingHookTrustConfirmationPort::default();
@@ -567,6 +726,7 @@ mod tests {
                     git: None,
                     trusted_hooks: false,
                     hooks: None,
+                    dev_servers: None,
                     worktree_file_copies: None,
                     prompt_overrides: None,
                     agent_defaults: None,
@@ -578,6 +738,48 @@ mod tests {
         assert!(error
             .to_string()
             .contains("defaultRuntimeKind cannot be blank"));
+    }
+
+    #[test]
+    fn workspace_save_repo_settings_rejects_duplicate_dev_server_ids() {
+        let fixture = setup_fixture("duplicate-dev-server-ids", HookSet::default());
+        let confirmation = RecordingHookTrustConfirmationPort::default();
+
+        let error = fixture
+            .service
+            .workspace_save_repo_settings(
+                fixture.repo_path.as_str(),
+                RepoSettingsUpdate {
+                    default_runtime_kind: None,
+                    worktree_base_path: None,
+                    branch_prefix: None,
+                    default_target_branch: None,
+                    git: None,
+                    trusted_hooks: false,
+                    hooks: None,
+                    dev_servers: Some(vec![
+                        RepoDevServerScript {
+                            id: "frontend".to_string(),
+                            name: "Frontend".to_string(),
+                            command: "bun run dev".to_string(),
+                        },
+                        RepoDevServerScript {
+                            id: " frontend ".to_string(),
+                            name: "Backend".to_string(),
+                            command: "bun run api".to_string(),
+                        },
+                    ]),
+                    worktree_file_copies: None,
+                    prompt_overrides: None,
+                    agent_defaults: None,
+                },
+                &confirmation,
+            )
+            .expect_err("duplicate ids should fail");
+
+        assert!(error
+            .to_string()
+            .contains("Duplicate dev server id: frontend"));
     }
 
     #[test]
@@ -595,6 +797,7 @@ mod tests {
                 git: None,
                 trusted_hooks: false,
                 hooks: None,
+                dev_servers: None,
                 worktree_file_copies: None,
                 prompt_overrides: None,
                 agent_defaults: None,
@@ -637,6 +840,7 @@ mod tests {
                         pre_start: vec!["  echo pre  ".to_string()],
                         post_complete: vec!["echo post".to_string()],
                     }),
+                    dev_servers: None,
                     worktree_file_copies: None,
                     prompt_overrides: None,
                     agent_defaults: None,
@@ -890,7 +1094,7 @@ mod tests {
             .expect_err("stale challenge should fail");
         assert!(stale
             .to_string()
-            .contains("Hook commands changed after challenge generation"));
+            .contains("Hook commands or dev servers changed after challenge generation"));
         Ok(())
     }
 

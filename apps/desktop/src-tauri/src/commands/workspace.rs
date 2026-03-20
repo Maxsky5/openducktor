@@ -51,6 +51,7 @@ pub async fn workspace_update_repo_config(
             branch_prefix: config.branch_prefix,
             default_target_branch: config.default_target_branch,
             git: config.git,
+            dev_servers: config.dev_servers,
             worktree_file_copies: config.worktree_file_copies,
             prompt_overrides: config.prompt_overrides,
             agent_defaults: config.agent_defaults,
@@ -77,6 +78,7 @@ pub async fn workspace_save_repo_settings<R: tauri::Runtime>(
         git: settings.git,
         trusted_hooks: settings.trusted_hooks,
         hooks: settings.hooks,
+        dev_servers: settings.dev_servers,
         worktree_file_copies: settings.worktree_file_copies,
         prompt_overrides: settings.prompt_overrides,
         agent_defaults: settings.agent_defaults,
@@ -238,6 +240,32 @@ fn format_hook_list(commands: &[String]) -> String {
     lines.join("\n")
 }
 
+fn format_dev_server_list(dev_servers: &[host_infra_system::RepoDevServerScript]) -> String {
+    if dev_servers.is_empty() {
+        return "(none)".to_string();
+    }
+
+    let preview_limit = 5;
+    let mut lines = dev_servers
+        .iter()
+        .take(preview_limit)
+        .map(|dev_server| {
+            format!(
+                "- {}: {}",
+                sanitize_hook_preview(&dev_server.name),
+                sanitize_hook_preview(&dev_server.command)
+            )
+        })
+        .collect::<Vec<_>>();
+    if dev_servers.len() > preview_limit {
+        lines.push(format!(
+            "- ... and {} more",
+            dev_servers.len() - preview_limit
+        ));
+    }
+    lines.join("\n")
+}
+
 fn sanitize_hook_preview(command: &str) -> String {
     const PREVIEW_LIMIT: usize = 240;
     let mut escaped = String::new();
@@ -249,8 +277,8 @@ fn sanitize_hook_preview(command: &str) -> String {
             _ if ch.is_control() => escaped.push_str(&format!("\\u{{{:04X}}}", ch as u32)),
             _ => escaped.push(ch),
         }
-        if escaped.len() > PREVIEW_LIMIT {
-            escaped.truncate(PREVIEW_LIMIT);
+        if escaped.chars().count() > PREVIEW_LIMIT {
+            escaped = escaped.chars().take(PREVIEW_LIMIT).collect();
             escaped.push_str("...");
             return escaped;
         }
@@ -290,10 +318,11 @@ impl<R: tauri::Runtime> HookTrustConfirmationPort for TauriHookTrustConfirmation
         }
 
         let dialog_message = format!(
-            "Approve trusted scripts for this workspace?\n\nRepository:\n{repo}\n\nWorktree setup script commands:\n{pre}\n\nWorktree cleanup script commands:\n{post}\n\nTrusted scripts can execute shell commands on this machine.",
+            "Approve trusted scripts for this workspace?\n\nRepository:\n{repo}\n\nWorktree setup script commands:\n{pre}\n\nWorktree cleanup script commands:\n{post}\n\nBuilder dev server commands:\n{dev_servers}\n\nTrusted scripts can execute shell commands on this machine.",
             repo = request.repo_path,
             pre = format_hook_list(&request.hooks.pre_start),
             post = format_hook_list(&request.hooks.post_complete),
+            dev_servers = format_dev_server_list(&request.dev_servers),
         );
 
         let confirmed = self
@@ -847,6 +876,7 @@ mod tests {
                 git: None,
                 trusted_hooks: false,
                 hooks: None,
+                dev_servers: None,
                 worktree_file_copies: None,
                 prompt_overrides: None,
                 agent_defaults: None,
@@ -875,6 +905,7 @@ mod tests {
                 git: None,
                 trusted_hooks: false,
                 hooks: None,
+                dev_servers: None,
                 worktree_file_copies: None,
                 prompt_overrides: None,
                 agent_defaults: None,
@@ -1081,6 +1112,10 @@ mod tests {
         let preview = sanitize_hook_preview(long.as_str());
         assert!(preview.ends_with("..."));
         assert!(preview.len() <= 243);
+
+        let unicode = "é".repeat(300);
+        let preview = sanitize_hook_preview(unicode.as_str());
+        assert!(preview.ends_with("..."));
     }
 
     #[test]

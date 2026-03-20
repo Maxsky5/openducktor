@@ -4,6 +4,7 @@ import {
   type GlobalGitConfig,
   gitProviderRepositorySchema,
   type RepoConfig,
+  type RepoDevServerScript,
   type RepoGitConfig,
   type RepoPromptOverrides,
   type RuntimeKind,
@@ -36,6 +37,7 @@ export type WorkspaceRepoConfigInput = {
   branchPrefix?: string;
   defaultTargetBranch?: GitTargetBranch;
   git?: RepoGitConfig;
+  devServers?: RepoDevServerScript[];
   worktreeFileCopies?: string[];
   agentDefaults?: WorkspaceAgentDefaults;
   promptOverrides?: RepoPromptOverrides;

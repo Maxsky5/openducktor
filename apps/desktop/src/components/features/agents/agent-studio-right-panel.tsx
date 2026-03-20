@@ -1,13 +1,18 @@
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import {
+  AgentStudioDevServerPanel,
+  type AgentStudioDevServerPanelModel,
+} from "./agent-studio-dev-server-panel";
 import { AgentStudioGitPanel, type AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import {
   AgentStudioWorkspaceSidebar,
   type AgentStudioWorkspaceSidebarModel,
 } from "./agent-studio-workspace-sidebar";
 
-export type AgentStudioRightPanelKind = "documents" | "diff";
+export type AgentStudioRightPanelKind = "documents" | "build_tools";
 
 export type AgentStudioRightPanelToggleModel = {
   kind: AgentStudioRightPanelKind;
@@ -21,17 +26,48 @@ export type AgentStudioRightPanelModel =
       documentsModel: AgentStudioWorkspaceSidebarModel;
     }
   | {
-      kind: "diff";
-      documentsModel: AgentStudioWorkspaceSidebarModel;
+      kind: "build_tools";
       diffModel: AgentStudioGitPanelModel;
+      devServerModel: AgentStudioDevServerPanelModel;
     };
 
 const rightPanelLabel = (kind: AgentStudioRightPanelKind): string => {
   if (kind === "documents") {
     return "documents";
   }
-  return "file diff";
+  return "builder tools";
 };
+
+function AgentStudioBuildToolsPanel({
+  diffModel,
+  devServerModel,
+}: {
+  diffModel: AgentStudioGitPanelModel;
+  devServerModel: AgentStudioDevServerPanelModel;
+}): ReactElement {
+  if (!devServerModel.isExpanded) {
+    return (
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <AgentStudioGitPanel model={diffModel} />
+        </div>
+        <AgentStudioDevServerPanel model={devServerModel} />
+      </div>
+    );
+  }
+
+  return (
+    <ResizablePanelGroup direction="vertical">
+      <ResizablePanel defaultSize={60} minSize={30}>
+        <AgentStudioGitPanel model={diffModel} />
+      </ResizablePanel>
+      <ResizableHandle withHandle />
+      <ResizablePanel defaultSize={40} minSize={20}>
+        <AgentStudioDevServerPanel model={devServerModel} />
+      </ResizablePanel>
+    </ResizablePanelGroup>
+  );
+}
 
 export function AgentStudioRightPanelToggleButton({
   model,
@@ -68,5 +104,7 @@ export function AgentStudioRightPanel({
     return <AgentStudioWorkspaceSidebar model={model.documentsModel} />;
   }
 
-  return <AgentStudioGitPanel model={model.diffModel} />;
+  return (
+    <AgentStudioBuildToolsPanel diffModel={model.diffModel} devServerModel={model.devServerModel} />
+  );
 }

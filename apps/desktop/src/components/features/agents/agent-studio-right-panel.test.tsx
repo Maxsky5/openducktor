@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import type { DevServerScriptState } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import {
   AgentStudioRightPanel,
@@ -47,6 +49,45 @@ const diffModel: AgentStudioGitPanelModel = {
   rebaseOntoTarget: async () => {},
 };
 
+const selectedScript: DevServerScriptState = {
+  scriptId: "frontend",
+  name: "Frontend",
+  command: "bun run dev",
+  status: "running",
+  pid: 123,
+  startedAt: "2026-03-19T10:00:00.000Z",
+  exitCode: null,
+  lastError: null,
+  bufferedLogLines: [
+    {
+      scriptId: "frontend",
+      stream: "stdout",
+      text: "ready in 120ms",
+      timestamp: "2026-03-19T10:00:01.000Z",
+    },
+  ],
+};
+
+const devServerModel: AgentStudioDevServerPanelModel = {
+  mode: "active",
+  isExpanded: true,
+  isLoading: false,
+  repoPath: "/repo",
+  taskId: "task-12",
+  worktreePath: "/tmp/worktree/task-12",
+  scripts: [selectedScript],
+  selectedScriptId: selectedScript.scriptId,
+  selectedScript,
+  error: null,
+  isStartPending: false,
+  isStopPending: false,
+  isRestartPending: false,
+  onSelectScript: () => {},
+  onStart: () => {},
+  onStop: () => {},
+  onRestart: () => {},
+};
+
 describe("AgentStudioRightPanelToggleButton", () => {
   test("renders hide label when documents panel is open", () => {
     const html = renderToStaticMarkup(
@@ -62,18 +103,18 @@ describe("AgentStudioRightPanelToggleButton", () => {
     expect(html).toContain("Hide documents panel");
   });
 
-  test("renders show label when diff panel is closed", () => {
+  test("renders show label when builder tools panel is closed", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioRightPanelToggleButton, {
         model: {
-          kind: "diff",
+          kind: "build_tools",
           isOpen: false,
           onToggle: () => {},
         },
       }),
     );
 
-    expect(html).toContain("Show file diff panel");
+    expect(html).toContain("Show builder tools panel");
   });
 });
 
@@ -103,13 +144,13 @@ describe("AgentStudioRightPanel", () => {
     expect(html).toContain("Spec");
   });
 
-  test("renders enhanced git panel model when diff panel kind is selected", () => {
+  test("renders builder tools panel with git and dev server content", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioRightPanel, {
         model: {
-          kind: "diff",
-          documentsModel: { activeDocument: null },
+          kind: "build_tools",
           diffModel,
+          devServerModel,
         },
       }),
     );
@@ -117,6 +158,7 @@ describe("AgentStudioRightPanel", () => {
     expect(html).toContain("Current");
     expect(html).toContain("Target");
     expect(html).toContain("origin/main");
-    expect(html).not.toContain("Commit all");
+    expect(html).toContain("Stop");
+    expect(html).toContain("ready in 120ms");
   });
 });

@@ -6,7 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { normalizeHooksWithTrust } from "@/components/features/settings";
+import { normalizeRepoScriptsWithTrust } from "@/components/features/settings/settings-model";
 import { normalizeTargetBranch } from "@/lib/target-branch";
 import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
@@ -89,10 +89,13 @@ export function useRepoSettingsOperations({
       const normalizedWorktreeBasePath = input.worktreeBasePath.trim();
       const normalizedBranchPrefix = input.branchPrefix.trim();
       const normalizedTargetBranch = normalizeTargetBranch(input.defaultTargetBranch);
-      const { hooks, trustedHooks } = normalizeHooksWithTrust(
+      const { hooks, devServers, trustedHooks } = normalizeRepoScriptsWithTrust(
         {
-          preStart: input.preStartHooks,
-          postComplete: input.postCompleteHooks,
+          hooks: {
+            preStart: input.preStartHooks,
+            postComplete: input.postCompleteHooks,
+          },
+          devServers: input.devServers,
         },
         input.trustedHooks,
       );
@@ -110,6 +113,7 @@ export function useRepoSettingsOperations({
         defaultTargetBranch: normalizedTargetBranch,
         trustedHooks,
         hooks,
+        devServers,
         worktreeFileCopies: input.worktreeFileCopies.map((f) => f.trim()).filter(Boolean),
         agentDefaults,
       });
@@ -117,10 +121,21 @@ export function useRepoSettingsOperations({
       await queryClient.invalidateQueries({
         queryKey: workspaceQueryKeys.repoConfig(repo),
       });
+      queryClient.removeQueries({
+        queryKey: settingsSnapshotQueryKey,
+        exact: true,
+      });
       syncWorkspaceListRecord(workspace);
       applyWorkspaceRecord(workspace);
     },
-    [activeRepo, applyWorkspaceRecord, queryClient, syncWorkspaceListRecord, toConfigDefault],
+    [
+      activeRepo,
+      applyWorkspaceRecord,
+      queryClient,
+      settingsSnapshotQueryKey,
+      syncWorkspaceListRecord,
+      toConfigDefault,
+    ],
   );
 
   const loadSettingsSnapshot = useCallback(async (): Promise<SettingsSnapshot> => {

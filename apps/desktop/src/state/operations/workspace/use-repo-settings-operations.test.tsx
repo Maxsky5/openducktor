@@ -81,6 +81,7 @@ const inputFixture: RepoSettingsInput = {
   trustedHooks: true,
   preStartHooks: ["echo pre"],
   postCompleteHooks: ["echo post"],
+  devServers: [{ id: "frontend", name: "Frontend", command: " bun run dev " }],
   worktreeFileCopies: ["  .env  ", "  .env.local  "],
   agentDefaults: {
     spec: {
@@ -206,8 +207,10 @@ describe("use-repo-settings-operations", () => {
           defaultRuntimeKind: "opencode" as const,
           worktreeBasePath: undefined,
           branchPrefix: "codex/",
+          defaultTargetBranch: { remote: "origin", branch: "main" },
           trustedHooks: false,
           hooks: { preStart: ["a"], postComplete: ["b"] },
+          devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
           agentDefaults: {
             spec: { providerId: "openai", modelId: "gpt-5" },
             planner: undefined,
@@ -241,6 +244,7 @@ describe("use-repo-settings-operations", () => {
         trustedHooks: false,
         preStartHooks: ["a"],
         postCompleteHooks: ["b"],
+        devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
         worktreeFileCopies: [],
         agentDefaults: {
           spec: {
@@ -317,6 +321,7 @@ describe("use-repo-settings-operations", () => {
           preStart: ["echo pre"],
           postComplete: ["echo post"],
         },
+        devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
         worktreeFileCopies: [".env", ".env.local"],
         agentDefaults: {
           spec: {
@@ -338,6 +343,50 @@ describe("use-repo-settings-operations", () => {
     } finally {
       await harness.unmount();
       host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
+    }
+  });
+
+  test("saveRepoSettings invalidates cached settings snapshots", async () => {
+    const applyWorkspaceRecords = mock(() => {});
+    const applyWorkspaceRecord = mock(() => {});
+    const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
+    const workspaceGetSettingsSnapshot = mock(async () => ({
+      theme: "light" as const,
+      git: {
+        defaultMergeMethod: "merge_commit" as const,
+      },
+      chat: {
+        showThinkingMessages: false,
+      },
+      repos: {},
+      globalPromptOverrides: {},
+    }));
+
+    const original = {
+      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+    };
+    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      applyWorkspaceRecords,
+      applyWorkspaceRecord,
+    });
+
+    try {
+      await harness.mount();
+      await harness.getLatest().loadSettingsSnapshot();
+      await harness.getLatest().saveRepoSettings(inputFixture);
+      await harness.getLatest().loadSettingsSnapshot();
+
+      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(2);
+    } finally {
+      await harness.unmount();
+      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+      await clearAppQueryClient();
     }
   });
 
@@ -374,6 +423,7 @@ describe("use-repo-settings-operations", () => {
           preStart: ["echo pre"],
           postComplete: ["echo post"],
         },
+        devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
         worktreeFileCopies: [".env", ".env.local"],
         agentDefaults: {
           spec: {
@@ -429,6 +479,37 @@ describe("use-repo-settings-operations", () => {
       await harness.getLatest().saveRepoSettings(inputFixture);
       expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(2);
       expect(applyWorkspaceRecord).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
+    }
+  });
+
+  test("saveRepoSettings rejects blank dev server commands", async () => {
+    const applyWorkspaceRecords = mock(() => {});
+    const applyWorkspaceRecord = mock(() => {});
+    const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
+
+    const original = {
+      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
+    };
+    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      applyWorkspaceRecords,
+      applyWorkspaceRecord,
+    });
+
+    try {
+      await harness.mount();
+      await expect(
+        harness.getLatest().saveRepoSettings({
+          ...inputFixture,
+          devServers: [{ id: "frontend", name: "Frontend", command: "   " }],
+        }),
+      ).rejects.toThrow("Dev server commands cannot be blank.");
+      expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
       host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
@@ -597,6 +678,7 @@ describe("use-repo-settings-operations", () => {
           },
           trustedHooks: false,
           hooks: { preStart: [], postComplete: [] },
+          devServers: [],
           worktreeFileCopies: [],
           promptOverrides: repoPromptOverrides,
           agentDefaults: {},

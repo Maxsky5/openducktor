@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use host_domain::{
     AgentSessionDocument, CreateTaskInput, GitBranch, IssueType, PlanSubtaskInput,
     PullRequestRecord, QaWorkflowVerdict, RuntimeRole, TaskAction, TaskStatus, TaskStore,
@@ -16,8 +16,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::app_service::test_support::{
-    build_service_with_git_state, make_task, spawn_sleep_process, unique_temp_path,
-    write_private_file, FakeTaskStore, TaskStoreState,
+    build_service_with_git_state, make_task, spawn_sleep_process, spawn_sleep_process_group,
+    unique_temp_path, wait_for_process_exit, write_private_file, FakeTaskStore, TaskStoreState,
 };
 use crate::app_service::{
     allows_transition, build_opencode_startup_event_payload, can_set_plan,
@@ -25,10 +25,11 @@ use crate::app_service::{
     normalize_subtask_plan_inputs, terminate_child_process,
     validate_parent_relationships_for_create, validate_parent_relationships_for_update,
     validate_plan_subtask_rules, validate_transition, wait_for_local_server,
-    wait_for_local_server_with_process, AgentRuntimeProcess, AppService,
+    wait_for_local_server_with_process, AgentRuntimeProcess, AppService, DevServerGroupRuntime,
     OpencodeStartupMetricsSnapshot, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
     RuntimeCleanupTarget, StartupEventContext, StartupEventCorrelation, StartupEventPayload,
 };
+use host_domain::{DevServerGroupState, DevServerScriptState, DevServerScriptStatus};
 
 fn init_git_repo(path: &std::path::Path) -> Result<()> {
     let status = Command::new("git")
@@ -422,13 +423,14 @@ fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_
             revision: None,
         },
     );
-    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
+    let canonical_repo_path = workspace.path.clone();
     let repo_config = host_infra_system::RepoConfig {
         branch_prefix: "odt".to_string(),
         worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
         ..Default::default()
     };
-    service.workspace_update_repo_config(&repo_path.to_string_lossy(), repo_config)?;
+    service.workspace_update_repo_config(canonical_repo_path.as_str(), repo_config)?;
     {
         let mut state = git_state.lock().expect("git state lock poisoned");
         state.current_branches_by_path.insert(
@@ -510,7 +512,86 @@ fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_
         );
     }
 
-    let updated = service.task_reset_implementation(&repo_path.to_string_lossy(), "task-1")?;
+    #[cfg(unix)]
+    let (mut dev_server_child, dev_server_pid) = {
+        let child = spawn_sleep_process_group(20);
+        let pid = child.id();
+        service
+            .dev_server_groups
+            .lock()
+            .expect("dev server lock poisoned")
+            .insert(
+                format!("{}::task-1", canonical_repo_path),
+                DevServerGroupRuntime {
+                    state: DevServerGroupState {
+                        repo_path: canonical_repo_path.clone(),
+                        task_id: "task-1".to_string(),
+                        worktree_path: Some(build_worktree.to_string_lossy().to_string()),
+                        scripts: vec![DevServerScriptState {
+                            script_id: "server-1".to_string(),
+                            name: "Server".to_string(),
+                            command: "sleep 20".to_string(),
+                            status: DevServerScriptStatus::Running,
+                            pid: Some(pid),
+                            started_at: Some("2026-03-19T12:00:00Z".to_string()),
+                            exit_code: None,
+                            last_error: None,
+                            buffered_log_lines: Vec::new(),
+                        }],
+                        updated_at: "2026-03-19T12:00:00Z".to_string(),
+                    },
+                    emitter: None,
+                },
+            );
+        (child, pid)
+    };
+
+    let reset_result = service.task_reset_implementation(canonical_repo_path.as_str(), "task-1");
+
+    #[cfg(unix)]
+    {
+        let unix_cleanup_result = (|| -> Result<()> {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            let exited = loop {
+                if dev_server_child
+                    .try_wait()
+                    .context("failed checking dev server child status")?
+                    .is_some()
+                {
+                    break true;
+                }
+                if Instant::now() >= deadline {
+                    break false;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            };
+            if !exited {
+                terminate_child_process(&mut dev_server_child);
+            } else {
+                let _ = dev_server_child
+                    .wait()
+                    .context("failed waiting dev server child")?;
+            }
+
+            assert!(wait_for_process_exit(
+                dev_server_pid as i32,
+                Duration::from_secs(2)
+            ));
+
+            let groups = service
+                .dev_server_groups
+                .lock()
+                .expect("dev server lock poisoned");
+            let group = groups
+                .get(&format!("{}::task-1", canonical_repo_path))
+                .expect("dev server group retained");
+            assert!(group.state.scripts.is_empty());
+            Ok(())
+        })();
+        unix_cleanup_result?;
+    }
+
+    let updated = reset_result?;
     assert_eq!(updated.status, TaskStatus::ReadyForDev);
     assert!(updated.pull_request.is_none());
     assert!(!updated.document_summary.qa_report.has);

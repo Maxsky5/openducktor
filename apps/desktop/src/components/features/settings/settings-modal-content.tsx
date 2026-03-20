@@ -58,6 +58,8 @@ export function SettingsModalContent({
     selectedRepoBranches,
     isLoadingSelectedRepoBranches,
     selectedRepoBranchesError,
+    showRepoScriptValidationErrors,
+    selectedRepoDevServerValidationErrors,
     promptValidationState,
     selectedRepoPromptValidationErrors,
     selectedRepoPromptValidationErrorCount,
@@ -172,6 +174,8 @@ export function SettingsModalContent({
             isLoadingSelectedRepoBranches={isLoadingSelectedRepoBranches}
             onRetrySelectedRepoBranchesLoad={retrySelectedRepoBranchesLoad}
             onPickWorktreeBasePath={pickWorktreeBasePath}
+            showDevServerValidationErrors={showRepoScriptValidationErrors}
+            selectedRepoDevServerValidationErrors={selectedRepoDevServerValidationErrors}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
           />
         ) : null}

@@ -26,6 +26,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
       },
       trustedHooks: false,
       hooks: { preStart: [], postComplete: [] },
+      devServers: [],
       worktreeFileCopies: [],
       promptOverrides: {},
       agentDefaults: {},
@@ -204,6 +205,47 @@ describe("useSettingsModalController", () => {
       expect(harness.getLatest().selectedRepoEffectiveWorktreeBasePath).toBe(
         "/tmp/override-worktrees",
       );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("blocks saving when a dev server draft has blank required fields", async () => {
+    saveSettingsSnapshot = mock(async () => {});
+
+    const harness = createHookHarness(true);
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+
+      await harness.run((state) => {
+        state.updateSelectedRepoConfig((repoConfig) => ({
+          ...repoConfig,
+          devServers: [{ id: "frontend", name: "Frontend", command: "" }],
+        }));
+      });
+
+      expect(harness.getLatest().hasRepoScriptValidationErrors).toBe(true);
+      expect(harness.getLatest().showRepoScriptValidationErrors).toBe(false);
+      expect(harness.getLatest().repoScriptValidationErrorCount).toBe(1);
+      expect(harness.getLatest().selectedRepoDevServerValidationErrors).toEqual({
+        frontend: {
+          command: "Command is required.",
+        },
+      });
+
+      let didSave = true;
+      await harness.run(async (state) => {
+        didSave = await state.submit();
+      });
+
+      expect(didSave).toBe(false);
+      expect(harness.getLatest().showRepoScriptValidationErrors).toBe(true);
+      expect(harness.getLatest().saveError).toBe(
+        "Fix 1 dev server field error in the selected repository before saving.",
+      );
+      expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
     }

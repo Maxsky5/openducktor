@@ -13,6 +13,10 @@ import type {
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import {
+  buildDevServerDraftValidationMap,
+  countDevServerDraftValidationErrors,
+} from "@/components/features/settings";
 import { errorMessage } from "@/lib/errors";
 import { pickRepositoryDirectory } from "@/lib/repo-directory";
 import { useChecksState, useWorkspaceState } from "@/state";
@@ -74,7 +78,12 @@ export type SettingsModalController = {
   globalPromptRoleTabErrorCounts: Record<PromptRoleTabId, number>;
   selectedRepoPromptRoleTabErrorCounts: Record<PromptRoleTabId, number>;
   settingsSectionErrorCountById: Record<SettingsSectionId, number>;
+  hasRepoScriptValidationErrors: boolean;
+  repoScriptValidationErrorCount: number;
+  showRepoScriptValidationErrors: boolean;
+  selectedRepoDevServerValidationErrors: Record<string, { name?: string; command?: string }>;
   setSelectedRepoPath: (next: string) => void;
+  markRepoScriptSaveAttempt: () => void;
   retrySelectedRepoBranchesLoad: () => void;
   detectSelectedRepoGithubRepository: () => Promise<GitProviderRepository | null>;
   updateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
@@ -116,6 +125,7 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
   const [isSaving, setIsSaving] = useState(false);
   const [isPickingWorktreeBasePath, setIsPickingWorktreeBasePath] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [hasAttemptedRepoScriptSubmit, setHasAttemptedRepoScriptSubmit] = useState(false);
   const [dirtySections, setDirtySections] = useState<DirtySections>(EMPTY_DIRTY_SECTIONS);
 
   const {
@@ -199,8 +209,51 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
 
     return selectedRepoDefaultWorktreeBasePath;
   }, [selectedRepoConfig?.worktreeBasePath, selectedRepoDefaultWorktreeBasePath]);
+  const selectedRepoDevServerValidationErrors = useMemo(() => {
+    if (!selectedRepoConfig) {
+      return {};
+    }
+
+    return buildDevServerDraftValidationMap(selectedRepoConfig.devServers ?? []);
+  }, [selectedRepoConfig]);
+  const repoScriptValidationSummary = useMemo(() => {
+    if (!snapshotDraft) {
+      return {
+        invalidRepoPathsWithDevServerErrors: [] as string[],
+        repoScriptValidationErrorCount: 0,
+      };
+    }
+
+    const invalidRepoPathsWithDevServerErrors: string[] = [];
+    let repoScriptValidationErrorCount = 0;
+
+    for (const [repoPath, repoConfig] of Object.entries(snapshotDraft.repos)) {
+      const errorCount = countDevServerDraftValidationErrors(repoConfig.devServers ?? []);
+      if (errorCount > 0) {
+        invalidRepoPathsWithDevServerErrors.push(repoPath);
+        repoScriptValidationErrorCount += errorCount;
+      }
+    }
+
+    invalidRepoPathsWithDevServerErrors.sort();
+
+    return {
+      invalidRepoPathsWithDevServerErrors,
+      repoScriptValidationErrorCount,
+    };
+  }, [snapshotDraft]);
+  const { invalidRepoPathsWithDevServerErrors, repoScriptValidationErrorCount } =
+    repoScriptValidationSummary;
+  const hasRepoScriptValidationErrors = repoScriptValidationErrorCount > 0;
+  const showRepoScriptValidationErrors =
+    hasAttemptedRepoScriptSubmit && hasRepoScriptValidationErrors;
+
+  const markRepoScriptSaveAttempt = useCallback((): void => {
+    setHasAttemptedRepoScriptSubmit(true);
+  }, []);
 
   const markDirty = useCallback((section: keyof DirtySections): void => {
+    setSaveError(null);
     setDirtySections((current) => {
       if (current[section]) {
         return current;
@@ -276,6 +329,7 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     if (!open) {
       setDirtySections(EMPTY_DIRTY_SECTIONS);
       setSaveError(null);
+      setHasAttemptedRepoScriptSubmit(false);
       clearSettingsError();
     }
   }, [clearSettingsError, open]);
@@ -285,7 +339,14 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
       return;
     }
     setDirtySections(EMPTY_DIRTY_SECTIONS);
+    setHasAttemptedRepoScriptSubmit(false);
   }, [loadedSnapshot, open]);
+
+  useEffect(() => {
+    if (!hasRepoScriptValidationErrors) {
+      setHasAttemptedRepoScriptSubmit(false);
+    }
+  }, [hasRepoScriptValidationErrors]);
 
   const pickWorktreeBasePath = useCallback(async (): Promise<void> => {
     setIsPickingWorktreeBasePath(true);
@@ -360,6 +421,22 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
       return false;
     }
 
+    if (hasRepoScriptValidationErrors) {
+      setHasAttemptedRepoScriptSubmit(true);
+      const suffix = repoScriptValidationErrorCount > 1 ? "s" : "";
+      const invalidRepoSummary = invalidRepoPathsWithDevServerErrors
+        .map((repoPath) =>
+          repoPath === selectedRepoPath ? "the selected repository" : `\`${repoPath}\``,
+        )
+        .join(", ");
+      const reason = `Fix ${repoScriptValidationErrorCount} dev server field error${suffix} in ${invalidRepoSummary} before saving.`;
+      setSaveError(reason);
+      toast.error("Cannot save settings", {
+        description: reason,
+      });
+      return false;
+    }
+
     setIsSaving(true);
     setSaveError(null);
 
@@ -411,8 +488,12 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     dirtySections.globalPromptOverrides,
     dirtySections.repoSettings,
     hasPromptValidationErrors,
+    hasRepoScriptValidationErrors,
+    invalidRepoPathsWithDevServerErrors,
     loadedSnapshot,
     promptValidationState.totalErrorCount,
+    repoScriptValidationErrorCount,
+    selectedRepoPath,
     saveGlobalGitConfig,
     saveSettingsSnapshot,
     snapshotDraft,
@@ -449,7 +530,12 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     globalPromptRoleTabErrorCounts,
     selectedRepoPromptRoleTabErrorCounts,
     settingsSectionErrorCountById,
+    hasRepoScriptValidationErrors,
+    repoScriptValidationErrorCount,
+    showRepoScriptValidationErrors,
+    selectedRepoDevServerValidationErrors,
     setSelectedRepoPath,
+    markRepoScriptSaveAttempt,
     retrySelectedRepoBranchesLoad,
     detectSelectedRepoGithubRepository,
     updateSelectedRepoConfig,

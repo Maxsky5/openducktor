@@ -107,6 +107,7 @@ const REPO_SETTINGS_FIXTURE: RepoSettingsInput = {
   trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],
+  devServers: [],
   worktreeFileCopies: [],
   agentDefaults: {
     spec: {
@@ -142,6 +143,7 @@ const createRepoConfigFixture = (promptOverrides: RepoPromptOverrides = {}): Rep
     preStart: [],
     postComplete: [],
   },
+  devServers: [],
   worktreeFileCopies: [],
   promptOverrides,
   agentDefaults: {

@@ -6,6 +6,7 @@ export type {
   AgentRoleOption,
 } from "./agent-chat";
 export { AgentRuntimeCombobox } from "./agent-runtime-combobox";
+export type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
 export type { AgentStudioHeaderModel } from "./agent-studio-header";
 export type {
   AgentStudioRightPanelKind,

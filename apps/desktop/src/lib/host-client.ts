@@ -1,6 +1,7 @@
 import { createTauriHostClient, type TauriHostClient } from "@openducktor/adapters-tauri-host";
 import {
   createBrowserLiveHostClient,
+  subscribeBrowserLiveDevServerEvents,
   subscribeBrowserLiveRunEvents,
 } from "@/lib/browser-live-client";
 import { isBrowserAppMode } from "@/lib/browser-mode";
@@ -10,10 +11,13 @@ export type RunEventListener = (payload: unknown) => void;
 export type HostBridge = {
   client: TauriHostClient;
   subscribeRunEvents: (listener: RunEventListener) => Promise<() => void>;
+  subscribeDevServerEvents: (listener: RunEventListener) => Promise<() => void>;
 };
 
 const RUN_EVENT_SUBSCRIPTIONS_UNAVAILABLE_ERROR =
   "Run-event subscriptions require the desktop shell or browser live mode.";
+const DEV_SERVER_EVENT_SUBSCRIPTIONS_UNAVAILABLE_ERROR =
+  "Dev-server event subscriptions require the desktop shell or browser live mode.";
 
 let tauriCoreModulePromise: Promise<typeof import("@tauri-apps/api/core")> | null = null;
 
@@ -57,9 +61,26 @@ const createRunEventSubscription = (): HostBridge["subscribeRunEvents"] => async
   });
 };
 
+const createDevServerEventSubscription =
+  (): HostBridge["subscribeDevServerEvents"] => async (listener) => {
+    if (isBrowserAppMode()) {
+      return subscribeBrowserLiveDevServerEvents(listener);
+    }
+
+    if (!isTauriRuntime()) {
+      throw new Error(DEV_SERVER_EVENT_SUBSCRIPTIONS_UNAVAILABLE_ERROR);
+    }
+
+    const events = await import("@tauri-apps/api/event");
+    return events.listen("openducktor://dev-server-event", (event) => {
+      listener(event.payload);
+    });
+  };
+
 export const createHostBridge = (): HostBridge => ({
   client: createHostCommands(),
   subscribeRunEvents: createRunEventSubscription(),
+  subscribeDevServerEvents: createDevServerEventSubscription(),
 });
 
 export const hostBridge = createHostBridge();
@@ -69,3 +90,4 @@ export const createHostClient = (): TauriHostClient => createHostCommands();
 export const hostClient = hostBridge.client;
 
 export const subscribeRunEvents = hostBridge.subscribeRunEvents;
+export const subscribeDevServerEvents = hostBridge.subscribeDevServerEvents;

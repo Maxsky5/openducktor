@@ -5,8 +5,8 @@ use crate::app_service::workflow_rules::{
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentSessionDocument, CreateTaskInput, DEFAULT_BRANCH_PREFIX, QaWorkflowVerdict, RunState,
-    RuntimeRole, TaskCard, TaskMetadata, TaskStatus, UpdateTaskPatch,
+    AgentSessionDocument, CreateTaskInput, QaWorkflowVerdict, RunState, RuntimeRole, TaskCard,
+    TaskMetadata, TaskStatus, UpdateTaskPatch, DEFAULT_BRANCH_PREFIX,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -90,6 +90,10 @@ impl AppService {
         let mut seen_worktree_keys = HashSet::new();
 
         for target_task in target_tasks {
+            self.stop_dev_servers_for_task(
+                context.repo.repo_path.as_str(),
+                target_task.id.as_str(),
+            )?;
             let sessions =
                 self.agent_sessions_list(context.repo.repo_path.as_str(), target_task.id.as_str())?;
             for session in sessions {
@@ -172,6 +176,7 @@ impl AppService {
             &sessions,
             true,
         )?;
+        self.stop_dev_servers_for_task(context.repo.repo_path.as_str(), task_id)?;
         let mut removed_worktrees = Vec::new();
         let mut deleted_branches = Vec::new();
 

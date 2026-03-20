@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import type { AgentStudioDevServerPanelModel } from "@/components/features/agents/agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "@/components/features/agents/agent-studio-git-panel";
 import {
   createHookHarness as createSharedHookHarness,
@@ -93,21 +94,43 @@ const diffModel: AgentStudioGitPanelModel = {
   rebaseOntoTarget: async () => {},
 };
 
+const devServerModel: AgentStudioDevServerPanelModel = {
+  mode: "stopped",
+  isExpanded: false,
+  isLoading: false,
+  repoPath: "/repo",
+  taskId: "task-12",
+  worktreePath: "/tmp/worktree/task-12",
+  scripts: [],
+  selectedScriptId: null,
+  selectedScript: null,
+  error: null,
+  isStartPending: false,
+  isStopPending: false,
+  isRestartPending: false,
+  onSelectScript: () => {},
+  onStart: () => {},
+  onStop: () => {},
+  onRestart: () => {},
+};
+
 describe("useAgentStudioRightPanel", () => {
-  test("builds enhanced diff panel model when panel kind is diff", () => {
+  test("builds builder tools panel model when panel kind is build_tools", () => {
     const model = buildAgentStudioRightPanelModel({
-      panelKind: "diff",
+      panelKind: "build_tools",
       documentsModel,
       diffModel,
+      devServerModel,
     });
 
     expect(model).not.toBeNull();
-    expect(model?.kind).toBe("diff");
-    if (model?.kind === "diff") {
+    expect(model?.kind).toBe("build_tools");
+    if (model?.kind === "build_tools") {
       expect(model.diffModel.diffScope).toBe("target");
       expect(model.diffModel.commitAll).toBe(diffModel.commitAll);
       expect(model.diffModel.rebaseOntoTarget).toBe(diffModel.rebaseOntoTarget);
       expect(model.diffModel.pushBranch).toBe(diffModel.pushBranch);
+      expect(model.devServerModel.mode).toBe("stopped");
     }
   });
 
@@ -116,6 +139,7 @@ describe("useAgentStudioRightPanel", () => {
       panelKind: "documents",
       documentsModel,
       diffModel,
+      devServerModel,
     });
 
     expect(model).toEqual({
@@ -187,7 +211,7 @@ describe("useAgentStudioRightPanel", () => {
     const harness = createHookHarness({
       role: "build",
       hasDocumentPanel: false,
-      hasDiffPanel: false,
+      hasBuildToolsPanel: false,
     });
 
     await harness.mount();
@@ -199,15 +223,15 @@ describe("useAgentStudioRightPanel", () => {
     await harness.unmount();
   });
 
-  test("uses diff panel state for build role when available", async () => {
+  test("uses build tools panel state for build role when available", async () => {
     const harness = createHookHarness({
       role: "build",
       hasDocumentPanel: false,
-      hasDiffPanel: true,
+      hasBuildToolsPanel: true,
     });
 
     await harness.mount();
-    expect(harness.getLatest().panelKind).toBe("diff");
+    expect(harness.getLatest().panelKind).toBe("build_tools");
     expect(harness.getLatest().isPanelOpen).toBe(true);
 
     await harness.run((state) => {
@@ -218,7 +242,7 @@ describe("useAgentStudioRightPanel", () => {
     await harness.update({
       role: "spec",
       hasDocumentPanel: true,
-      hasDiffPanel: true,
+      hasBuildToolsPanel: true,
     });
     expect(harness.getLatest().panelKind).toBe("documents");
     expect(harness.getLatest().isPanelOpen).toBe(true);
@@ -226,9 +250,9 @@ describe("useAgentStudioRightPanel", () => {
     await harness.update({
       role: "build",
       hasDocumentPanel: false,
-      hasDiffPanel: true,
+      hasBuildToolsPanel: true,
     });
-    expect(harness.getLatest().panelKind).toBe("diff");
+    expect(harness.getLatest().panelKind).toBe("build_tools");
     expect(harness.getLatest().isPanelOpen).toBe(false);
 
     await harness.unmount();
@@ -238,7 +262,7 @@ describe("useAgentStudioRightPanel", () => {
     const harness = createHookHarness({
       role: "build",
       hasDocumentPanel: false,
-      hasDiffPanel: true,
+      hasBuildToolsPanel: true,
     });
 
     await harness.mount();
@@ -259,7 +283,7 @@ describe("useAgentStudioRightPanel", () => {
     const secondHarness = createHookHarness({
       role: "build",
       hasDocumentPanel: false,
-      hasDiffPanel: true,
+      hasBuildToolsPanel: true,
     });
 
     await secondHarness.mount();

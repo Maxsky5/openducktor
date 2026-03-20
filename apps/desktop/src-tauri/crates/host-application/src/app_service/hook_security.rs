@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use host_infra_system::{hook_set_fingerprint, run_command_allow_failure, RepoConfig};
+use host_infra_system::{repo_script_fingerprint, run_command_allow_failure, RepoConfig};
 use std::path::Path;
 
 pub(crate) fn run_parsed_hook_command_allow_failure(
@@ -39,7 +39,10 @@ pub(crate) fn run_parsed_hook_command_allow_failure(
 }
 
 pub(crate) fn validate_hook_trust(repo_path: &str, repo_config: &RepoConfig) -> Result<()> {
-    if repo_config.hooks.pre_start.is_empty() && repo_config.hooks.post_complete.is_empty() {
+    if repo_config.hooks.pre_start.is_empty()
+        && repo_config.hooks.post_complete.is_empty()
+        && repo_config.dev_servers.is_empty()
+    {
         return Ok(());
     }
 
@@ -49,7 +52,7 @@ pub(crate) fn validate_hook_trust(repo_path: &str, repo_config: &RepoConfig) -> 
         ));
     }
 
-    let current_fingerprint = hook_set_fingerprint(&repo_config.hooks);
+    let current_fingerprint = repo_script_fingerprint(&repo_config.hooks, &repo_config.dev_servers);
     if repo_config.trusted_hooks_fingerprint.as_deref() != Some(current_fingerprint.as_str()) {
         return Err(anyhow!(
             "Scripts changed since last approval for {repo_path}. Reconfirm trust before running scripts."
