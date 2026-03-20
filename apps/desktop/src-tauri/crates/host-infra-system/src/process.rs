@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Context, Result};
 use std::env;
 use std::ffi::OsString;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 #[cfg(all(unix, not(test)))]
@@ -145,7 +147,19 @@ fn command_file_names(program: &str) -> Vec<OsString> {
 }
 
 fn existing_file_path(path: PathBuf) -> Option<String> {
-    path.is_file().then(|| path.to_string_lossy().to_string())
+    is_executable_file(path.as_path()).then(|| path.to_string_lossy().to_string())
+}
+
+#[cfg(unix)]
+fn is_executable_file(path: &Path) -> bool {
+    path.metadata()
+        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn is_executable_file(path: &Path) -> bool {
+    path.is_file()
 }
 
 fn path_entries_from_value(path_value: Option<OsString>) -> Vec<PathBuf> {
@@ -435,16 +449,16 @@ fn process_path_with_order(
             bundled_dir
                 .into_iter()
                 .chain(explicit_override_directories)
-                .chain(login_shell_entries)
                 .chain(inherited_entries)
+                .chain(login_shell_entries)
                 .chain(standard_entries),
         )
     } else {
         unique_path_entries(
             explicit_override_directories
                 .into_iter()
-                .chain(login_shell_entries)
                 .chain(inherited_entries)
+                .chain(login_shell_entries)
                 .chain(standard_entries)
                 .chain(bundled_dir),
         )
@@ -949,8 +963,8 @@ mod tests {
             .position(|entry| entry == &bundled_dir)
             .expect("bundled directory should be included");
 
-        assert!(override_index < login_index);
-        assert!(login_index < inherited_index);
+        assert!(override_index < inherited_index);
+        assert!(inherited_index < login_index);
         assert!(inherited_index < standard_local_index);
         assert!(standard_local_index <= standard_cargo_index);
         assert!(standard_cargo_index <= standard_bun_index);

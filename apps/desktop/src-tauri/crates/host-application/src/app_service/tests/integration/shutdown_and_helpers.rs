@@ -626,7 +626,7 @@ fn resolve_opencode_binary_path_uses_home_fallback_when_override_and_path_missin
 }
 
 #[test]
-fn resolve_opencode_binary_path_prefers_path_before_home_fallback() -> Result<()> {
+fn resolve_opencode_binary_path_prefers_home_fallback_before_path() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("opencode-path-priority");
     let path_bin = root.join("path-bin");
@@ -645,7 +645,7 @@ fn resolve_opencode_binary_path_prefers_path_before_home_fallback() -> Result<()
     let resolved = resolve_opencode_binary_path();
     assert_eq!(
         resolved.as_deref(),
-        Some(path_opencode.to_string_lossy().as_ref())
+        Some(home_opencode.to_string_lossy().as_ref())
     );
 
     let _ = fs::remove_dir_all(root);
