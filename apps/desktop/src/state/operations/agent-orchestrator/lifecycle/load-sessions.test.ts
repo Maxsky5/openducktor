@@ -105,6 +105,20 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
+        pendingPermissions: [{ requestId: "permission-1", permission: "read", patterns: ["**/*"] }],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Question",
+                question: "Need answer",
+                options: [],
+                custom: true,
+              },
+            ],
+          },
+        ],
       },
     ];
 
@@ -116,6 +130,144 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(Object.keys(state)).toContain("session-1");
     expect(state["session-1"]?.status).toBe("stopped");
+    expect(state["session-1"]?.pendingPermissions).toEqual([
+      { requestId: "permission-1", permission: "read", patterns: ["**/*"] },
+    ]);
+    expect(state["session-1"]?.pendingQuestions).toEqual([
+      {
+        requestId: "question-1",
+        questions: [
+          {
+            header: "Question",
+            question: "Need answer",
+            options: [],
+            custom: true,
+          },
+        ],
+      },
+    ]);
+  });
+
+  test("merges persisted pending input into an existing session entry", async () => {
+    const existingSession: AgentSessionState = {
+      sessionId: "session-1",
+      externalSessionId: "external-1",
+      taskId: "task-1",
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "idle",
+      startedAt: "2026-02-22T08:00:00.000Z",
+      runtimeKind: "opencode",
+      runtimeId: null,
+      runId: null,
+      runtimeEndpoint: "",
+      workingDirectory: "/tmp/repo",
+      messages: [
+        {
+          id: "message-1",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:01.000Z",
+          content: "Existing history",
+          meta: { kind: "assistant", agentRole: "build", isFinal: true },
+        },
+      ],
+      draftAssistantText: "",
+      draftAssistantMessageId: null,
+      draftReasoningText: "",
+      draftReasoningMessageId: null,
+      contextUsage: null,
+      pendingPermissions: [],
+      pendingQuestions: [],
+      todos: [],
+      modelCatalog: null,
+      selectedModel: null,
+      isLoadingModelCatalog: false,
+      promptOverrides: {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: { "session-1": existingSession },
+    };
+    let state: Record<string, AgentSessionState> = sessionsRef.current;
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: {
+        loadSessionHistory: async () => [],
+      },
+      repoEpochRef: { current: 2 },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession: () => {},
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const hostModule = await import("../../shared/host");
+    const originalList = hostModule.host.agentSessionsList;
+    hostModule.host.agentSessionsList = async () => [
+      {
+        runtimeKind: "opencode",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:02.000Z",
+        workingDirectory: "/tmp/repo",
+        pendingPermissions: [{ requestId: "permission-1", permission: "read", patterns: ["**/*"] }],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Question",
+                question: "Need answer",
+                options: [],
+                custom: true,
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    try {
+      await loadAgentSessions("task-1");
+    } finally {
+      hostModule.host.agentSessionsList = originalList;
+    }
+
+    expect(state["session-1"]?.messages).toEqual(existingSession.messages);
+    expect(state["session-1"]?.pendingPermissions).toEqual([
+      { requestId: "permission-1", permission: "read", patterns: ["**/*"] },
+    ]);
+    expect(state["session-1"]?.pendingQuestions).toEqual([
+      {
+        requestId: "question-1",
+        questions: [
+          {
+            header: "Question",
+            question: "Need answer",
+            options: [],
+            custom: true,
+          },
+        ],
+      },
+    ]);
   });
 
   test("does not eagerly hydrate session history or runtime connections without an explicit target session", async () => {

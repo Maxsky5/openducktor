@@ -15,11 +15,12 @@ import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-o
 import { host } from "../../shared/host";
 import { resolveRuntimeRouteConnection, toRuntimeConnection } from "../runtime/runtime";
 import { createRepoStaleGuard, normalizeWorkingDirectory } from "../support/core";
-import { normalizePersistedSelection } from "../support/models";
+import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
 import {
   defaultScenarioForRole,
   fromPersistedSessionRecord,
   historyToChatMessages,
+  recoverPendingQuestionsFromHistory,
 } from "../support/persistence";
 import { buildSessionPreludeMessages, buildSessionSystemPrompt } from "../support/session-prompt";
 import { warmSessionData } from "../support/session-warmup";
@@ -35,6 +36,29 @@ type SessionHistoryAdapter = Pick<AgentEnginePort, "loadSessionHistory">;
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 const SESSION_HISTORY_HYDRATION_CONCURRENCY = 3;
 type PersistedSessionRecord = Awaited<ReturnType<typeof loadAgentSessionListFromQuery>>[number];
+
+const mergePersistedSessionRecord = (
+  current: AgentSessionState,
+  record: PersistedSessionRecord,
+  taskId: string,
+  promptOverrides: RepoPromptOverrides,
+): AgentSessionState => {
+  const persisted = fromPersistedSessionRecord(record, taskId);
+
+  return {
+    ...current,
+    externalSessionId: persisted.externalSessionId,
+    taskId: persisted.taskId,
+    role: persisted.role,
+    scenario: persisted.scenario,
+    startedAt: persisted.startedAt,
+    workingDirectory: persisted.workingDirectory,
+    pendingPermissions: persisted.pendingPermissions,
+    pendingQuestions: persisted.pendingQuestions,
+    selectedModel: mergeModelSelection(current.selectedModel, persisted.selectedModel ?? undefined),
+    promptOverrides,
+  };
+};
 
 const readPersistedRuntimeKind = ({
   sessionId,
@@ -147,7 +171,14 @@ export const createLoadAgentSessions = ({
       }
       const next = { ...current };
       for (const record of persisted) {
-        if (next[record.sessionId]) {
+        const existingSession = next[record.sessionId];
+        if (existingSession) {
+          next[record.sessionId] = mergePersistedSessionRecord(
+            existingSession,
+            record,
+            taskId,
+            repoPromptOverrides,
+          );
           continue;
         }
         next[record.sessionId] = {
@@ -481,6 +512,8 @@ export const createLoadAgentSessions = ({
         externalSessionId,
         limit: INITIAL_SESSION_HISTORY_LIMIT,
       });
+      const recoveredPendingQuestions =
+        (record.pendingQuestions?.length ?? 0) > 0 ? record.pendingQuestions : undefined;
       if (isStaleRepoOperation()) {
         return;
       }
@@ -493,6 +526,10 @@ export const createLoadAgentSessions = ({
           runtimeEndpoint,
           workingDirectory,
           promptOverrides: repoPromptOverrides,
+          pendingQuestions:
+            recoveredPendingQuestions && recoveredPendingQuestions.length > 0
+              ? current.pendingQuestions
+              : recoverPendingQuestionsFromHistory(history),
           messages: [
             ...preludeMessages,
             ...historyToChatMessages(history, {

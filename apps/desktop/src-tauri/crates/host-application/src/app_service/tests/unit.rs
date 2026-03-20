@@ -465,6 +465,8 @@ fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_
                 ended_at: None,
                 runtime_kind: "opencode".to_string(),
                 working_directory: repo_path.to_string_lossy().to_string(),
+                pending_permissions: Vec::new(),
+                pending_questions: Vec::new(),
                 selected_model: None,
             },
             AgentSessionDocument {
@@ -479,6 +481,8 @@ fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_
                 ended_at: None,
                 runtime_kind: "opencode".to_string(),
                 working_directory: build_worktree.to_string_lossy().to_string(),
+                pending_permissions: Vec::new(),
+                pending_questions: Vec::new(),
                 selected_model: None,
             },
             AgentSessionDocument {
@@ -493,6 +497,8 @@ fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_
                 ended_at: None,
                 runtime_kind: "opencode".to_string(),
                 working_directory: qa_worktree.to_string_lossy().to_string(),
+                pending_permissions: Vec::new(),
+                pending_questions: Vec::new(),
                 selected_model: None,
             },
         ];
@@ -704,6 +710,8 @@ fn task_reset_implementation_rejects_active_builder_or_qa_sessions() -> Result<(
         ended_at: None,
         runtime_kind: "opencode".to_string(),
         working_directory: repo_path.to_string_lossy().to_string(),
+        pending_permissions: Vec::new(),
+        pending_questions: Vec::new(),
         selected_model: None,
     }];
 
@@ -756,6 +764,8 @@ fn task_reset_implementation_rejects_live_runtime_even_without_persisted_session
         ended_at: None,
         runtime_kind: "opencode".to_string(),
         working_directory: repo_path.to_string_lossy().to_string(),
+        pending_permissions: Vec::new(),
+        pending_questions: Vec::new(),
         selected_model: None,
     }];
     service
@@ -874,6 +884,8 @@ fn task_reset_implementation_only_removes_task_managed_worktrees() -> Result<()>
             ended_at: None,
             runtime_kind: "opencode".to_string(),
             working_directory: managed_worktree.to_string_lossy().to_string(),
+            pending_permissions: Vec::new(),
+            pending_questions: Vec::new(),
             selected_model: None,
         },
         AgentSessionDocument {
@@ -888,6 +900,8 @@ fn task_reset_implementation_only_removes_task_managed_worktrees() -> Result<()>
             ended_at: None,
             runtime_kind: "opencode".to_string(),
             working_directory: unrelated_worktree.to_string_lossy().to_string(),
+            pending_permissions: Vec::new(),
+            pending_questions: Vec::new(),
             selected_model: None,
         },
     ];
@@ -968,6 +982,8 @@ fn task_reset_implementation_fails_before_cleanup_when_task_branch_is_checked_ou
         ended_at: None,
         runtime_kind: "opencode".to_string(),
         working_directory: build_worktree.to_string_lossy().to_string(),
+        pending_permissions: Vec::new(),
+        pending_questions: Vec::new(),
         selected_model: None,
     }];
 
@@ -1048,6 +1064,8 @@ fn task_reset_implementation_reports_partial_cleanup_progress_when_branch_delete
         ended_at: None,
         runtime_kind: "opencode".to_string(),
         working_directory: build_worktree.to_string_lossy().to_string(),
+        pending_permissions: Vec::new(),
+        pending_questions: Vec::new(),
         selected_model: None,
     }];
 
@@ -1124,6 +1142,8 @@ fn task_reset_implementation_reports_partial_cleanup_progress_when_store_cleanup
             ended_at: None,
             runtime_kind: "opencode".to_string(),
             working_directory: build_worktree.to_string_lossy().to_string(),
+            pending_permissions: Vec::new(),
+            pending_questions: Vec::new(),
             selected_model: None,
         }];
     }

@@ -16,6 +16,7 @@ const buildModel = () => ({
   isStarting: false,
   isSessionWorking: false,
   isWaitingInput: false,
+  waitingInputPlaceholder: null,
   isModelSelectionPending: false,
   selectedModelSelection: buildModelSelection(),
   isSelectionCatalogLoading: false,
@@ -124,15 +125,36 @@ describe("AgentChatComposer", () => {
           ...buildModel(),
           isSessionWorking: true,
           isWaitingInput: true,
+          waitingInputPlaceholder: "Answer the pending question above to continue",
         },
       }),
     );
 
     expect(html).toContain("odt-waiting-input-card");
     expect(html).toContain("border-warning-border");
+    expect(html).toContain("Answer the pending question above to continue");
+    expect(html).toContain('aria-label="Send message" disabled');
+    expect(html).toContain(
+      'placeholder="Answer the pending question above to continue" disabled=""',
+    );
     expect(html).not.toContain('class="odt-border-ray"');
     expect(html).not.toContain("border-l-4");
     expect(html).not.toContain("border-left-color:#d97706");
+  });
+
+  test("uses a permission-specific waiting placeholder when input is blocked by permissions", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          isWaitingInput: true,
+          waitingInputPlaceholder: "Respond to the pending permission request above to continue",
+        },
+      }),
+    );
+
+    expect(html).toContain("Respond to the pending permission request above to continue");
+    expect(html).toContain('aria-label="Send message" disabled');
   });
 
   test("renders read-only mode when selected role is unavailable", () => {

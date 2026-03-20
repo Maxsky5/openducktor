@@ -141,7 +141,7 @@ export function useAgentStudioSessionActions({
   }, [input]);
 
   const onSend = useCallback(async (): Promise<void> => {
-    if (isSending || isStarting || !agentStudioReady) {
+    if (isSending || isStarting || !agentStudioReady || isWaitingInput) {
       return;
     }
     if (!canStartSessionForRole(selectedTask, role)) {
@@ -216,6 +216,7 @@ export function useAgentStudioSessionActions({
     input,
     isSending,
     isStarting,
+    isWaitingInput,
     role,
     selectedTask,
     sendAgentMessage,

@@ -50,6 +50,7 @@ export type AgentChatComposerModel = {
   isStarting: boolean;
   isSessionWorking: boolean;
   isWaitingInput: boolean;
+  waitingInputPlaceholder?: string | null;
   isModelSelectionPending: boolean;
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;

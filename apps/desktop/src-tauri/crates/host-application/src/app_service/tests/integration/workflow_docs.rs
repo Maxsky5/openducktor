@@ -1577,6 +1577,19 @@ fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
 
     let mut upsert_session = make_session("wrong-task", "session-2");
     upsert_session.working_directory = repo_path.to_string();
+    upsert_session.pending_questions = vec![host_domain::AgentSessionQuestionRequestDocument {
+        request_id: "question-1".to_string(),
+        questions: vec![host_domain::AgentSessionQuestionItemDocument {
+            header: "Confirm".to_string(),
+            question: "Need answer".to_string(),
+            options: vec![host_domain::AgentSessionQuestionOptionDocument {
+                label: "Yes".to_string(),
+                description: "Confirm".to_string(),
+            }],
+            multiple: None,
+            custom: Some(true),
+        }],
+    }];
     let upserted = service.agent_session_upsert(repo_path, "task-1", upsert_session)?;
     assert!(upserted);
 
@@ -1587,6 +1600,7 @@ fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
         task_state.upserted_sessions[0].1.task_id.as_deref(),
         Some("task-1")
     );
+    assert_eq!(task_state.upserted_sessions[0].1.pending_questions.len(), 1);
     Ok(())
 }
 

@@ -1,3 +1,4 @@
+import { isQuestionToolName } from "@/lib/question-tools";
 import type { AgentChatMessage, AgentQuestionRequest } from "@/types/agent-orchestrator";
 
 type AnsweredQuestion = AgentQuestionRequest["questions"][number] & {
@@ -17,10 +18,7 @@ export const annotateQuestionToolMessage = (
       continue;
     }
 
-    const toolName = message.meta.tool.toLowerCase();
-    const isQuestionTool =
-      toolName === "question" || toolName.endsWith("_question") || toolName.includes("question");
-    if (!isQuestionTool) {
+    if (!isQuestionToolName(message.meta.tool)) {
       continue;
     }
 

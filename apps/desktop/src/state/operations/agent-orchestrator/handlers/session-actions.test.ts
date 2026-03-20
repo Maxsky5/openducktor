@@ -419,8 +419,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
   test("updates selected model and removes resolved permission", async () => {
     const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalUpdateSessionModel = adapter.updateSessionModel;
     const originalReplyPermission = adapter.replyPermission;
     let replyCalls = 0;
+    adapter.hasSession = () => true;
+    adapter.updateSessionModel = () => {};
     adapter.replyPermission = async () => {
       replyCalls += 1;
     };
@@ -482,14 +486,18 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(replyCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
     } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.updateSessionModel = originalUpdateSessionModel;
       adapter.replyPermission = originalReplyPermission;
     }
   });
 
   test("answers question and annotates matching tool message metadata", async () => {
     const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
     const originalReplyQuestion = adapter.replyQuestion;
     let replyCalls = 0;
+    adapter.hasSession = () => true;
     adapter.replyQuestion = async () => {
       replyCalls += 1;
     };
@@ -579,6 +587,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(message.meta.metadata?.requestId).toBe("question-1");
       expect(message.meta.metadata?.answers).toEqual([["yes"]]);
     } finally {
+      adapter.hasSession = originalHasSession;
       adapter.replyQuestion = originalReplyQuestion;
     }
   });
@@ -659,6 +668,79 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(latest.meta.modelId).toBe("gpt-5.3-codex");
       expect(latest.meta.variant).toBe("high");
       expect(latest.meta.profileId).toBe("Hephaestus (Deep Agent)");
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("does not send free-form messages while waiting for pending input", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalSendUserMessage = adapter.sendUserMessage;
+    let sendCalls = 0;
+
+    adapter.hasSession = () => true;
+    adapter.sendUserMessage = async () => {
+      sendCalls += 1;
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          status: "idle",
+          pendingQuestions: [
+            {
+              requestId: "question-1",
+              questions: [{ header: "Confirm", question: "Confirm", options: [] }],
+            },
+          ],
+        }),
+      },
+    };
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[sessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+    });
+
+    try {
+      await actions.sendAgentMessage("session-1", " hello ");
+      expect(sendCalls).toBe(0);
+      expect(sessionsRef.current["session-1"]?.messages).toHaveLength(0);
+      expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(1);
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.sendUserMessage = originalSendUserMessage;

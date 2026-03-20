@@ -21,6 +21,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     isStarting,
     isSessionWorking,
     isWaitingInput,
+    waitingInputPlaceholder,
     isModelSelectionPending,
     selectedModelSelection,
     isSelectionCatalogLoading,
@@ -44,6 +45,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     isSending ||
     isStarting ||
     isSessionWorking ||
+    isWaitingInput ||
     isModelSelectionPending ||
     isReadOnly ||
     !taskId ||
@@ -67,6 +69,13 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     onSend();
   };
   const isSubmitting = isSending || isStarting || isModelSelectionPending;
+  const isComposerInputDisabled =
+    !agentStudioReady || isReadOnly || isModelSelectionPending || isWaitingInput;
+  const composerPlaceholder = isWaitingInput
+    ? (waitingInputPlaceholder ?? "Resolve the pending request above to continue")
+    : isReadOnly && readOnlyReason
+      ? readOnlyReason
+      : "@ for files/agents; / for commands; ! for shell";
 
   return (
     <form ref={composerFormRef} className="px-4 pb-4" action={handleSubmit}>
@@ -96,14 +105,10 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
             <Textarea
               ref={composerTextareaRef}
               rows={1}
-              placeholder={
-                isReadOnly && readOnlyReason
-                  ? readOnlyReason
-                  : "@ for files/agents; / for commands; ! for shell"
-              }
+              placeholder={composerPlaceholder}
               value={input}
               className="!min-h-0 h-11 max-h-[220px] resize-none overflow-y-hidden border-0 bg-transparent px-3 py-2.5 text-[15px] leading-6 shadow-none focus-visible:ring-0"
-              disabled={!agentStudioReady || isReadOnly || isModelSelectionPending}
+              disabled={isComposerInputDisabled}
               onChange={(event) => onInputChange(event.currentTarget.value)}
               onInput={onComposerTextareaInput}
               onKeyDown={(event) => {

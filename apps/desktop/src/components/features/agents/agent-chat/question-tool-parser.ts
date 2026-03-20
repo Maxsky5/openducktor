@@ -1,3 +1,4 @@
+import { isQuestionToolName } from "@/lib/question-tools";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 
 export type QuestionToolDetail = {
@@ -19,9 +20,6 @@ const parseJsonIfPossible = (value: string | undefined): unknown => {
     return undefined;
   }
 };
-
-const isQuestionToolName = (tool: string): boolean =>
-  tool.toLowerCase() === "question" || tool.toLowerCase().endsWith("_question");
 
 const readQuestionPrompt = (value: unknown): string | null => {
   if (!value || typeof value !== "object") {
