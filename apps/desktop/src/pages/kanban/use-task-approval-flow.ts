@@ -20,6 +20,7 @@ import {
 import {
   invalidateTaskApprovalContextQuery,
   loadTaskApprovalContextFromQuery,
+  taskApprovalQueryKeys,
 } from "@/state/queries/task-approval";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { TaskApprovalModalModel } from "./kanban-page-model-types";
@@ -165,12 +166,25 @@ export function useTaskApprovalFlow({
 
       const task = tasks.find((entry) => entry.id === taskId);
       const requestVersion = ++approvalRequestVersionRef.current;
+
+      const determineDefaultMode = (
+        context: TaskApprovalContext | undefined,
+      ): "direct_merge" | "pull_request" => {
+        const githubProvider = context?.providers?.find((entry) => entry.providerId === "github");
+        return githubProvider?.available ? "pull_request" : "direct_merge";
+      };
+
+      const cachedContext = queryClient.getQueryData(
+        taskApprovalQueryKeys.context(activeRepo, taskId),
+      ) as TaskApprovalContext | undefined;
+      const effectiveMode = options?.mode ?? determineDefaultMode(cachedContext);
+
       setState({
         open: true,
         stage: "approval",
         taskId,
         isLoading: true,
-        mode: options?.mode ?? "direct_merge",
+        mode: effectiveMode,
         mergeMethod: "merge_commit",
         pullRequestDraftMode: options?.pullRequestDraftMode ?? "manual",
         title: task?.title ?? "",
@@ -192,12 +206,13 @@ export function useTaskApprovalFlow({
           if (approvalRequestVersionRef.current !== requestVersion) {
             return;
           }
+          const updatedEffectiveMode = options?.mode ?? determineDefaultMode(approvalContext);
           setState({
             open: true,
             stage: resolveApprovalStage(approvalContext),
             taskId,
             isLoading: false,
-            mode: options?.mode ?? "direct_merge",
+            mode: updatedEffectiveMode,
             mergeMethod: approvalContext.defaultMergeMethod,
             pullRequestDraftMode: options?.pullRequestDraftMode ?? "manual",
             title: task?.title ?? "",

@@ -2,7 +2,7 @@ import type { TaskApprovalContext } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { host } from "../operations/host";
 
-const taskApprovalQueryKeys = {
+export const taskApprovalQueryKeys = {
   all: ["task-approval"] as const,
   context: (repoPath: string, taskId: string) =>
     [...taskApprovalQueryKeys.all, "context", repoPath, taskId] as const,
