@@ -131,6 +131,45 @@ pub struct AgentSessionModelSelection {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AgentSessionPermissionRequestDocument {
+    pub request_id: String,
+    pub permission: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub patterns: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionQuestionOptionDocument {
+    pub label: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionQuestionItemDocument {
+    pub header: String,
+    pub question: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub options: Vec<AgentSessionQuestionOptionDocument>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multiple: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionQuestionRequestDocument {
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub questions: Vec<AgentSessionQuestionItemDocument>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentSessionDocument {
     pub session_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -150,6 +189,10 @@ pub struct AgentSessionDocument {
     #[serde(default = "default_runtime_kind")]
     pub runtime_kind: String,
     pub working_directory: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_permissions: Vec<AgentSessionPermissionRequestDocument>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_questions: Vec<AgentSessionQuestionRequestDocument>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_model: Option<AgentSessionModelSelection>,
 }

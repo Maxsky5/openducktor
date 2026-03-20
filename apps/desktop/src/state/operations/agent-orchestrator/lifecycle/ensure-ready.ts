@@ -200,8 +200,6 @@ export const createEnsureSessionReady = ({
     updateSession(sessionId, (current) => ({
       ...current,
       status: "idle",
-      pendingPermissions: [],
-      pendingQuestions: [],
       runtimeKind: resolvedRuntimeKind,
       runtimeId: runtime.runtimeId,
       runId: runtime.runId,

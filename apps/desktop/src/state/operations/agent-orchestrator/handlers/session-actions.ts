@@ -5,6 +5,7 @@ import type {
   AgentRole,
   AgentRuntimeConnection,
 } from "@openducktor/core";
+import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
@@ -169,6 +170,9 @@ export const createAgentSessionActions = ({
       const task = taskRef.current.find((entry) => entry.id === currentSession.taskId);
       if (task && !isRoleAvailableForTask(task, currentSession.role)) {
         throw new Error(unavailableRoleErrorMessage(task, currentSession.role));
+      }
+      if (isAgentSessionWaitingInput(currentSession)) {
+        return;
       }
     }
 
@@ -467,6 +471,9 @@ export const createAgentSessionActions = ({
     reply: "once" | "always" | "reject",
     message?: string,
   ): Promise<void> => {
+    if (!adapter.hasSession(sessionId)) {
+      await ensureSessionReady(sessionId);
+    }
     markTurnStartedIfMissing(
       turnStartedAtBySessionRef,
       turnModelBySessionRef,
@@ -493,6 +500,9 @@ export const createAgentSessionActions = ({
     requestId: string,
     answers: string[][],
   ): Promise<void> => {
+    if (!adapter.hasSession(sessionId)) {
+      await ensureSessionReady(sessionId);
+    }
     markTurnStartedIfMissing(
       turnStartedAtBySessionRef,
       turnModelBySessionRef,

@@ -4,6 +4,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   fromPersistedSessionRecord,
   historyToChatMessages,
+  recoverPendingQuestionsFromHistory,
   toPersistedSessionRecord,
 } from "./persistence";
 
@@ -18,6 +19,8 @@ const recordFixture: AgentSessionRecord = {
   startedAt: "2026-02-22T08:00:00.000Z",
   updatedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/tmp/repo/worktree",
+  pendingPermissions: [],
+  pendingQuestions: [],
   selectedModel: {
     runtimeKind: "opencode",
     providerId: "openai",
@@ -35,6 +38,62 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(hydrated.selectedModel?.modelId).toBe("gpt-5");
   });
 
+  test("preserves pending input requests across persistence hydration", () => {
+    const hydrated = fromPersistedSessionRecord(
+      {
+        ...recordFixture,
+        pendingPermissions: [
+          {
+            requestId: "permission-1",
+            permission: "read",
+            patterns: ["**/*"],
+            metadata: { source: "tool" },
+          },
+        ],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Confirm",
+                question: "Need input",
+                options: [{ label: "Yes", description: "Confirm" }],
+                custom: true,
+              },
+            ],
+          },
+        ],
+      },
+      "task-1",
+    );
+
+    expect(hydrated.pendingPermissions).toEqual([
+      {
+        requestId: "permission-1",
+        permission: "read",
+        patterns: ["**/*"],
+        metadata: { source: "tool" },
+      },
+    ]);
+    expect(hydrated.pendingQuestions).toEqual([
+      {
+        requestId: "question-1",
+        questions: [
+          {
+            header: "Confirm",
+            question: "Need input",
+            options: [{ label: "Yes", description: "Confirm" }],
+            custom: true,
+          },
+        ],
+      },
+    ]);
+
+    const persisted = toPersistedSessionRecord(hydrated);
+    expect(persisted.pendingPermissions).toEqual(hydrated.pendingPermissions);
+    expect(persisted.pendingQuestions).toEqual(hydrated.pendingQuestions);
+  });
+
   test("persists compact session fields and keeps scenario", () => {
     const session: AgentSessionState = {
       ...fromPersistedSessionRecord(recordFixture, "task-1"),
@@ -44,6 +103,8 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(persisted.scenario).toBe("build_implementation_start");
     expect(persisted.runtimeKind).toBe("opencode");
     expect(persisted.endedAt).toBeUndefined();
+    expect(persisted.pendingPermissions).toEqual([]);
+    expect(persisted.pendingQuestions).toEqual([]);
     expect("runtimeId" in persisted).toBe(false);
     expect("runId" in persisted).toBe(false);
     expect("runtimeEndpoint" in persisted).toBe(false);
@@ -76,6 +137,181 @@ describe("agent-orchestrator/support/persistence", () => {
       selectedModel: null,
     });
     expect(messages).toEqual([]);
+  });
+
+  test("recovers unanswered pending questions from history tool metadata", () => {
+    const recovered = recoverPendingQuestionsFromHistory([
+      {
+        messageId: "m-assistant-question",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:00.000Z",
+        text: "Need input",
+        parts: [
+          {
+            kind: "tool",
+            messageId: "m-assistant-question",
+            partId: "p-question",
+            callId: "call-question",
+            tool: "question",
+            status: "completed",
+            metadata: {
+              requestId: "question-1",
+              questions: [
+                {
+                  header: "Confirm",
+                  question: "Which runtime should we use?",
+                  options: [{ label: "OpenCode", description: "Use OpenCode" }],
+                  custom: true,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(recovered).toEqual([
+      {
+        requestId: "question-1",
+        questions: [
+          {
+            header: "Confirm",
+            question: "Which runtime should we use?",
+            options: [{ label: "OpenCode", description: "Use OpenCode" }],
+            custom: true,
+          },
+        ],
+      },
+    ]);
+  });
+
+  test("clears recovered pending question after a synthetic answer message", () => {
+    const recovered = recoverPendingQuestionsFromHistory([
+      {
+        messageId: "m-assistant-question",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:00.000Z",
+        text: "Need input",
+        parts: [
+          {
+            kind: "tool",
+            messageId: "m-assistant-question",
+            partId: "p-question",
+            callId: "call-question",
+            tool: "question",
+            status: "completed",
+            input: {
+              requestID: "question-1",
+              questions: [{ header: "Confirm", question: "Which runtime should we use?" }],
+            },
+          },
+        ],
+      },
+      {
+        messageId: "m-user-answer",
+        role: "user",
+        timestamp: "2026-02-22T08:00:05.000Z",
+        text: "Use OpenCode",
+        parts: [
+          {
+            kind: "text",
+            messageId: "m-user-answer",
+            partId: "p-answer",
+            text: "Use OpenCode",
+            synthetic: true,
+            completed: true,
+          },
+        ],
+      },
+    ]);
+
+    expect(recovered).toEqual([]);
+  });
+
+  test("recovers pending questions from tool output when prompts have no separate header", () => {
+    const recovered = recoverPendingQuestionsFromHistory([
+      {
+        messageId: "m-assistant-question",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:00.000Z",
+        text: "Need input",
+        parts: [
+          {
+            kind: "tool",
+            messageId: "m-assistant-question",
+            partId: "p-question",
+            callId: "call-question",
+            tool: "question",
+            status: "completed",
+            output: JSON.stringify({
+              requestId: "question-2",
+              questions: [
+                {
+                  title: "What would you like me to do with this test task?",
+                  options: [{ label: "Write a spec" }],
+                },
+              ],
+            }),
+          },
+        ],
+      },
+    ]);
+
+    expect(recovered).toEqual([
+      {
+        requestId: "question-2",
+        questions: [
+          {
+            header: "What would you like me to do with this test task?",
+            question: "What would you like me to do with this test task?",
+            options: [{ label: "Write a spec", description: "Write a spec" }],
+          },
+        ],
+      },
+    ]);
+  });
+
+  test("recovers pending questions from running tool input when request id is absent", () => {
+    const recovered = recoverPendingQuestionsFromHistory([
+      {
+        messageId: "m-assistant-question",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:00.000Z",
+        text: "Need input",
+        parts: [
+          {
+            kind: "tool",
+            messageId: "m-assistant-question",
+            partId: "p-question",
+            callId: "call-question",
+            tool: "question",
+            status: "running",
+            input: {
+              questions: [
+                {
+                  header: "Task Action",
+                  question: "What should I do next?",
+                  options: [{ label: "Continue", description: "Keep going" }],
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(recovered).toEqual([
+      {
+        requestId: "call-question",
+        questions: [
+          {
+            header: "Task Action",
+            question: "What should I do next?",
+            options: [{ label: "Continue", description: "Keep going" }],
+          },
+        ],
+      },
+    ]);
   });
 
   test("maps history parts into chat timeline entries", () => {

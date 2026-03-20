@@ -23,6 +23,35 @@ export const agentSessionModelSelectionSchema = z.object({
 });
 export type AgentSessionModelSelection = z.infer<typeof agentSessionModelSelectionSchema>;
 
+export const agentSessionPermissionRequestSchema = z.object({
+  requestId: z.string(),
+  permission: z.string(),
+  patterns: z.array(z.string()).default([]),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+export type AgentSessionPermissionRequest = z.infer<typeof agentSessionPermissionRequestSchema>;
+
+export const agentSessionQuestionOptionSchema = z.object({
+  label: z.string(),
+  description: z.string(),
+});
+export type AgentSessionQuestionOption = z.infer<typeof agentSessionQuestionOptionSchema>;
+
+export const agentSessionQuestionItemSchema = z.object({
+  header: z.string(),
+  question: z.string(),
+  options: z.array(agentSessionQuestionOptionSchema).default([]),
+  multiple: z.boolean().optional(),
+  custom: z.boolean().optional(),
+});
+export type AgentSessionQuestionItem = z.infer<typeof agentSessionQuestionItemSchema>;
+
+export const agentSessionQuestionRequestSchema = z.object({
+  requestId: z.string(),
+  questions: z.array(agentSessionQuestionItemSchema).default([]),
+});
+export type AgentSessionQuestionRequest = z.infer<typeof agentSessionQuestionRequestSchema>;
+
 const optionalStringFromNullable = optionalFromNullable(z.string());
 
 export const agentSessionRecordSchema = z.object({
@@ -37,6 +66,8 @@ export const agentSessionRecordSchema = z.object({
   endedAt: optionalStringFromNullable,
   runtimeKind: runtimeKindSchema.default("opencode"),
   workingDirectory: z.string(),
+  pendingPermissions: optionalFromNullable(z.array(agentSessionPermissionRequestSchema)),
+  pendingQuestions: optionalFromNullable(z.array(agentSessionQuestionRequestSchema)),
   selectedModel: optionalFromNullable(agentSessionModelSelectionSchema),
 });
 export type AgentSessionRecord = z.infer<typeof agentSessionRecordSchema>;

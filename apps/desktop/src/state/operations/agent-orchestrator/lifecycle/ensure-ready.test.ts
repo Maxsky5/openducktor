@@ -178,7 +178,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     }
   });
 
-  test("recovers attached error session and clears pending requests", async () => {
+  test("recovers attached error session and preserves pending requests", async () => {
     let attachCalls = 0;
     let unsubscribeCalls = 0;
     let stopCalls = 0;
@@ -290,8 +290,23 @@ describe("agent-orchestrator-ensure-ready", () => {
       expect(todosCalls).toBe(1);
       expect(catalogCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.status).toBe("idle");
-      expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
-      expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
+      expect(sessionsRef.current["session-1"]?.pendingPermissions).toEqual([
+        { requestId: "perm-1", permission: "read", patterns: ["*"] },
+      ]);
+      expect(sessionsRef.current["session-1"]?.pendingQuestions).toEqual([
+        {
+          requestId: "question-1",
+          questions: [
+            {
+              header: "Confirm",
+              question: "Confirm",
+              options: [],
+              multiple: false,
+              custom: false,
+            },
+          ],
+        },
+      ]);
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;

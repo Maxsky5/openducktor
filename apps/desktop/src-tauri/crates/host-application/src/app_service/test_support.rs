@@ -1146,6 +1146,8 @@ pub(crate) fn make_session(task_id: &str, session_id: &str) -> AgentSessionDocum
         ended_at: None,
         runtime_kind: "opencode".to_string(),
         working_directory: "/tmp/repo".to_string(),
+        pending_permissions: Vec::new(),
+        pending_questions: Vec::new(),
         selected_model: None,
     }
 }

@@ -237,6 +237,8 @@ fn make_session(session_id: &str, started_at: &str, status: &str) -> AgentSessio
         ended_at: None,
         runtime_kind: "opencode".to_string(),
         working_directory: "/repo".to_string(),
+        pending_permissions: Vec::new(),
+        pending_questions: Vec::new(),
         selected_model: None,
     }
 }
@@ -510,6 +512,23 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
             "runId": null,
             "baseUrl": "http://127.0.0.1:4173",
             "workingDirectory": "/repo",
+            "pendingPermissions": [{
+                "requestId": "permission-1",
+                "permission": "read",
+                "patterns": ["**/*"]
+            }],
+            "pendingQuestions": [{
+                "requestId": "question-1",
+                "questions": [{
+                    "header": "Confirm",
+                    "question": "Need answer",
+                    "options": [{
+                        "label": "Yes",
+                        "description": "Confirm"
+                    }],
+                    "custom": true
+                }]
+            }],
             "selectedModel": {
                 "providerId": "openai",
                 "modelId": "gpt-5",
@@ -528,6 +547,8 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
         sessions[0].external_session_id.as_deref(),
         Some("session-opencode-1")
     );
+    assert_eq!(sessions[0].pending_permissions.len(), 1);
+    assert_eq!(sessions[0].pending_questions.len(), 1);
 
     let legacy_sessions = parse_agent_sessions(&json!([
         {

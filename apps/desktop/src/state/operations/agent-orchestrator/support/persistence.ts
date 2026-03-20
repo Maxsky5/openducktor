@@ -13,6 +13,193 @@ import { normalizeToolInput, normalizeToolText } from "./tool-messages";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
 
+const normalizePersistedPendingPermissions = (
+  permissions: AgentSessionRecord["pendingPermissions"],
+): AgentSessionState["pendingPermissions"] =>
+  (permissions ?? []).map((entry) => ({
+    requestId: entry.requestId,
+    permission: entry.permission,
+    patterns: [...entry.patterns],
+    ...(entry.metadata ? { metadata: entry.metadata } : {}),
+  }));
+
+const normalizePersistedPendingQuestions = (
+  questions: AgentSessionRecord["pendingQuestions"],
+): AgentSessionState["pendingQuestions"] =>
+  (questions ?? []).map((entry) => ({
+    requestId: entry.requestId,
+    questions: entry.questions.map((question) => ({
+      header: question.header,
+      question: question.question,
+      options: question.options.map((option) => ({
+        label: option.label,
+        description: option.description,
+      })),
+      ...(typeof question.multiple === "boolean" ? { multiple: question.multiple } : {}),
+      ...(typeof question.custom === "boolean" ? { custom: question.custom } : {}),
+    })),
+  }));
+
+const asRecord = (value: unknown): Record<string, unknown> | null => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+};
+
+const parseJsonRecord = (value: string | undefined): Record<string, unknown> | null => {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+    return null;
+  }
+  try {
+    return asRecord(JSON.parse(trimmed));
+  } catch {
+    return null;
+  }
+};
+
+const readString = (source: Record<string, unknown> | null, keys: string[]): string | null => {
+  if (!source) {
+    return null;
+  }
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
+};
+
+const readBoolean = (source: Record<string, unknown> | null, keys: string[]): boolean | null => {
+  if (!source) {
+    return null;
+  }
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+  return null;
+};
+
+const normalizeRecoveredQuestions = (
+  rawQuestions: unknown,
+): AgentSessionState["pendingQuestions"][number]["questions"] => {
+  if (!Array.isArray(rawQuestions)) {
+    return [];
+  }
+
+  return rawQuestions.flatMap((entry) => {
+    const question = asRecord(entry);
+    if (!question) {
+      return [];
+    }
+    const prompt = readString(question, ["question", "prompt", "header", "title", "label", "name"]);
+    if (!prompt) {
+      return [];
+    }
+    const header = readString(question, ["header", "title", "label", "name"]) ?? prompt;
+    const rawOptions = Array.isArray(question.options) ? question.options : [];
+    const options = rawOptions.flatMap((optionEntry) => {
+      const option = asRecord(optionEntry);
+      const label = readString(option, ["label"]);
+      if (!label) {
+        return [];
+      }
+      const description = readString(option, ["description"]) ?? label;
+      return [{ label, description }];
+    });
+
+    const multiple = readBoolean(question, ["multiple"]);
+    const custom = readBoolean(question, ["custom"]);
+
+    return [
+      {
+        header,
+        question: prompt,
+        options,
+        ...(typeof multiple === "boolean" ? { multiple } : {}),
+        ...(typeof custom === "boolean" ? { custom } : {}),
+      },
+    ];
+  });
+};
+
+const isQuestionTool = (toolName: string): boolean => {
+  const normalized = toolName.trim().toLowerCase();
+  return (
+    normalized === "question" || normalized.endsWith("_question") || normalized.includes("question")
+  );
+};
+
+const readPendingQuestionRequest = (
+  part: Extract<HistoryPart, { kind: "tool" }>,
+): AgentSessionState["pendingQuestions"][number] | null => {
+  if (!isQuestionTool(part.tool)) {
+    return null;
+  }
+
+  const metadata = asRecord(part.metadata);
+  const input = asRecord(part.input);
+  const output = parseJsonRecord(part.output);
+  const requestId =
+    readString(metadata, ["requestId", "requestID", "questionRequestId", "id"]) ??
+    readString(input, ["requestId", "requestID", "questionRequestId", "id"]) ??
+    readString(output, ["requestId", "requestID", "questionRequestId", "id"]) ??
+    part.callId ??
+    part.partId;
+
+  const questions = normalizeRecoveredQuestions(
+    metadata?.questions ?? input?.questions ?? output?.questions,
+  );
+  if (questions.length === 0) {
+    return null;
+  }
+
+  return {
+    requestId,
+    questions,
+  };
+};
+
+export const recoverPendingQuestionsFromHistory = (
+  history: AgentSessionHistoryMessage[],
+): AgentSessionState["pendingQuestions"] => {
+  const pendingQueue: AgentSessionState["pendingQuestions"] = [];
+
+  for (const message of history) {
+    for (const part of message.parts) {
+      if (part.kind !== "tool") {
+        continue;
+      }
+      const request = readPendingQuestionRequest(part);
+      if (!request) {
+        continue;
+      }
+
+      const existingIndex = pendingQueue.findIndex(
+        (entry) => entry.requestId === request.requestId,
+      );
+      if (existingIndex >= 0) {
+        pendingQueue.splice(existingIndex, 1);
+      }
+      pendingQueue.push(request);
+    }
+
+    if (isSyntheticHistoryUserMessage(message) && pendingQueue.length > 0) {
+      pendingQueue.shift();
+    }
+  }
+
+  return pendingQueue;
+};
+
 export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => ({
   sessionId: session.sessionId,
   externalSessionId: session.externalSessionId,
@@ -23,6 +210,8 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
   startedAt: session.startedAt,
   runtimeKind: session.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
   workingDirectory: session.workingDirectory,
+  pendingPermissions: session.pendingPermissions,
+  pendingQuestions: session.pendingQuestions,
   selectedModel: session.selectedModel
     ? {
         runtimeKind:
@@ -74,8 +263,8 @@ export const fromPersistedSessionRecord = (
     draftReasoningText: "",
     draftReasoningMessageId: null,
     contextUsage: null,
-    pendingPermissions: [],
-    pendingQuestions: [],
+    pendingPermissions: normalizePersistedPendingPermissions(session.pendingPermissions),
+    pendingQuestions: normalizePersistedPendingQuestions(session.pendingQuestions),
     todos: [],
     modelCatalog: null,
     selectedModel: normalizePersistedSelection(session.selectedModel),

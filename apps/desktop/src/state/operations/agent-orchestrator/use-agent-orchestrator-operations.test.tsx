@@ -963,7 +963,7 @@ describe("use-agent-orchestrator-operations", () => {
     });
   });
 
-  test("stops attached error session and resumes before sending", async () => {
+  test("blocks free-form sends while an attached error session is waiting for input", async () => {
     await withSuppressedRendererWarning(async () => {
       let subscribeCalls = 0;
       let unsubscribeCalls = 0;
@@ -1103,13 +1103,13 @@ describe("use-agent-orchestrator-operations", () => {
         const recoveredSession = harness
           .getLatest()
           .sessions.find((entry) => entry.sessionId === "session-1");
-        expect(stopCalls).toBe(1);
-        expect(resumeCalls).toBe(1);
+        expect(stopCalls).toBe(0);
+        expect(resumeCalls).toBe(0);
         expect(subscribeCalls).toBeGreaterThan(0);
-        expect(unsubscribeCalls).toBe(1);
-        expect(sendCalls).toBe(2);
-        expect(recoveredSession?.pendingPermissions).toHaveLength(0);
-        expect(recoveredSession?.pendingQuestions).toHaveLength(0);
+        expect(unsubscribeCalls).toBe(0);
+        expect(sendCalls).toBe(1);
+        expect(recoveredSession?.pendingPermissions).toHaveLength(1);
+        expect(recoveredSession?.pendingQuestions).toHaveLength(1);
       } finally {
         await harness.unmount();
 
