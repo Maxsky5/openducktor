@@ -17,10 +17,11 @@ pub fn slugify_title(value: &str) -> String {
 }
 
 pub fn build_branch_name(prefix: &str, task_id: &str, title: &str) -> String {
-    let clean_prefix = if prefix.is_empty() {
+    let trimmed_prefix = prefix.trim().trim_end_matches('/');
+    let clean_prefix = if trimmed_prefix.is_empty() {
         DEFAULT_BRANCH_PREFIX
     } else {
-        prefix
+        trimmed_prefix
     };
     let slug = slugify_title(title);
     if slug.is_empty() {
@@ -134,6 +135,12 @@ mod tests {
     fn build_branch_name_falls_back_when_slug_is_empty() {
         let branch = build_branch_name("custom", "task-9", "!!!");
         assert_eq!(branch, "custom/task-9");
+    }
+
+    #[test]
+    fn build_branch_name_trims_prefix_and_drops_trailing_slashes() {
+        let branch = build_branch_name(" feature/ ", "task-5", "Implement feature");
+        assert_eq!(branch, "feature/task-5-implement-feature");
     }
 
     #[test]

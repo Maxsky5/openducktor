@@ -462,7 +462,7 @@ describe("use-repo-settings-operations", () => {
       await expect(
         harness.getLatest().saveRepoSettings({
           ...inputFixture,
-          devServers: [{ id: "frontend", name: "Frontend", command: "" }],
+          devServers: [{ id: "frontend", name: "Frontend", command: "   " }],
         }),
       ).rejects.toThrow("Dev server commands cannot be blank.");
       expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(0);

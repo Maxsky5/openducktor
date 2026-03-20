@@ -1549,8 +1549,8 @@ pub(crate) fn spawn_sleep_process_group(seconds: u64) -> std::process::Child {
     use std::os::unix::process::CommandExt;
 
     Command::new("/bin/sh")
-        .arg("-lc")
-        .arg(format!("sleep {seconds}"))
+        .arg("-c")
+        .arg(format!("sleep {seconds} & wait"))
         .process_group(0)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

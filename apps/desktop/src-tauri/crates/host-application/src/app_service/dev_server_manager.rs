@@ -106,15 +106,26 @@ impl AppService {
         emit_group_snapshot(self.dev_server_groups.clone(), &key);
 
         let mut errors = Vec::new();
+        let mut started_scripts = Vec::new();
         for script in repo_config.dev_servers.iter().cloned() {
-            if let Err(error) = self.start_dev_server_script(
+            let script_id = script.id.clone();
+            match self.start_dev_server_script(
                 key.as_str(),
                 repo_path.as_str(),
                 task_id,
                 worktree_path.as_str(),
                 script,
             ) {
-                errors.push(error.to_string());
+                Ok(pid) => started_scripts.push((script_id, pid)),
+                Err(error) => errors.push(error.to_string()),
+            }
+        }
+
+        if !errors.is_empty() {
+            let rollback_errors =
+                self.rollback_started_dev_server_scripts(key.as_str(), started_scripts);
+            if !rollback_errors.is_empty() {
+                errors.extend(rollback_errors);
             }
         }
 
@@ -165,7 +176,7 @@ impl AppService {
                 errors.push(format!("Failed stopping dev server {script_id}: {error}"));
                 continue;
             }
-            self.mark_dev_server_stopped(key.as_str(), &script_id, pid, Some(0));
+            self.mark_dev_server_stopped(key.as_str(), &script_id, pid, None);
         }
 
         let state = self.dev_server_get_state(repo_path.as_str(), task_id)?;
@@ -225,7 +236,8 @@ impl AppService {
         task_id: &str,
         worktree_path: &str,
         script: RepoDevServerScript,
-    ) -> Result<()> {
+    ) -> Result<u32> {
+        let script_display_name = sanitize_dev_server_display_name(script.name.as_str());
         self.update_script_state(group_key, script.id.as_str(), |state| {
             state.status = DevServerScriptStatus::Starting;
             state.pid = None;
@@ -245,7 +257,7 @@ impl AppService {
 
         let mut spawned_pid = None;
         let mut start_failure_already_recorded = false;
-        let start_result = (|| -> Result<()> {
+        let start_result = (|| -> Result<u32> {
             let mut command =
                 build_dev_server_command(script.command.as_str(), script.name.as_str())?;
             command.current_dir(worktree_path);
@@ -269,7 +281,7 @@ impl AppService {
             let mut child = command.spawn().with_context(|| {
                 format!(
                     "Failed to start dev server {} in {} using command `{}`",
-                    script.name, worktree_path, script.command
+                    script_display_name, worktree_path, script.command
                 )
             })?;
 
@@ -277,11 +289,19 @@ impl AppService {
             let mut child = command.spawn().with_context(|| {
                 format!(
                     "Failed to start dev server {} in {} using command `{}`",
-                    script.name, worktree_path, script.command
+                    script_display_name, worktree_path, script.command
                 )
             })?;
             let pid = child.id();
             spawned_pid = Some(pid);
+
+            #[cfg(unix)]
+            if let Err(error) = spawn_dev_server_parent_death_watcher(std::process::id(), pid) {
+                eprintln!(
+                    "OpenDucktor warning: failed to attach dev server parent-death watcher for pid {}: {error:#}",
+                    pid
+                );
+            }
 
             #[cfg(not(unix))]
             let stdout = child.stdout.take().ok_or_else(|| {
@@ -355,7 +375,7 @@ impl AppService {
                 pid,
                 child,
             );
-            Ok(())
+            Ok(pid)
         })();
 
         if let Err(error) = start_result {
@@ -364,7 +384,7 @@ impl AppService {
                 if let Err(stop_error) = stop_process_group(pid, DEV_SERVER_STOP_TIMEOUT) {
                     message = format!(
                         "{message}\nFailed stopping partially started dev server {} (pid {pid}): {stop_error:#}",
-                        script.name
+                        script_display_name
                     );
                 }
             }
@@ -380,7 +400,34 @@ impl AppService {
             return Err(anyhow!(message));
         }
 
-        Ok(())
+        start_result
+    }
+
+    fn rollback_started_dev_server_scripts(
+        &self,
+        group_key: &str,
+        started_scripts: Vec<(String, u32)>,
+    ) -> Vec<String> {
+        let mut errors = Vec::new();
+
+        for (script_id, pid) in started_scripts {
+            if let Err(error) = stop_process_group(pid, DEV_SERVER_STOP_TIMEOUT) {
+                self.mark_dev_server_stop_failed(
+                    group_key,
+                    script_id.as_str(),
+                    pid,
+                    &error.to_string(),
+                );
+                errors.push(format!(
+                    "Failed rolling back partially started dev server {script_id}: {error}"
+                ));
+                continue;
+            }
+
+            self.mark_dev_server_stopped(group_key, script_id.as_str(), pid, None);
+        }
+
+        errors
     }
 
     fn mark_dev_servers_stopping(&self, group_key: &str) -> Result<Vec<(String, u32)>> {
@@ -774,9 +821,33 @@ fn dev_server_exit_message(exit_code: Option<i32>) -> String {
     }
 }
 
+fn sanitize_dev_server_display_name(script_name: &str) -> String {
+    const DISPLAY_NAME_LIMIT: usize = 80;
+
+    let mut sanitized = String::new();
+    for ch in script_name.chars() {
+        match ch {
+            '\n' => sanitized.push_str("\\n"),
+            '\r' => sanitized.push_str("\\r"),
+            '\t' => sanitized.push_str("\\t"),
+            _ if ch.is_control() => sanitized.push(' '),
+            _ => sanitized.push(ch),
+        }
+
+        if sanitized.chars().count() > DISPLAY_NAME_LIMIT {
+            sanitized = sanitized.chars().take(DISPLAY_NAME_LIMIT).collect();
+            sanitized.push_str("...");
+            return sanitized;
+        }
+    }
+
+    sanitized.trim().to_string()
+}
+
 #[cfg(unix)]
 fn build_dev_server_command(command: &str, script_name: &str) -> Result<Command> {
     if command.trim().is_empty() {
+        let script_name = sanitize_dev_server_display_name(script_name);
         return Err(anyhow!(
             "Dev server command is empty for {}. Provide a command to run.",
             script_name
@@ -791,6 +862,7 @@ fn build_dev_server_command(command: &str, script_name: &str) -> Result<Command>
 
 #[cfg(not(unix))]
 fn build_dev_server_command(command: &str, script_name: &str) -> Result<Command> {
+    let script_name = sanitize_dev_server_display_name(script_name);
     let parsed = shell_words::split(command).map_err(|error| {
         anyhow!(
             "Invalid dev server command syntax for {}. Use argv tokens, or explicitly invoke a shell (for example: sh -lc '...'): {error}",
@@ -928,21 +1000,58 @@ fn configure_process_group(command: &mut Command) {
 fn configure_process_group(_command: &mut Command) {}
 
 #[cfg(unix)]
+fn spawn_dev_server_parent_death_watcher(parent_pid: u32, child_pid: u32) -> Result<()> {
+    let watcher_script = format!(
+        r#"P={parent_pid}; C={child_pid}; while kill -0 "$P" 2>/dev/null && kill -0 "$C" 2>/dev/null; do sleep 1; done; if ! kill -0 "$P" 2>/dev/null && kill -0 "$C" 2>/dev/null; then kill -TERM -"$C" 2>/dev/null || true; sleep 1; kill -KILL -"$C" 2>/dev/null || true; kill -KILL "$C" 2>/dev/null || true; fi"#
+    );
+    Command::new("/bin/sh")
+        .arg("-c")
+        .arg(watcher_script)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .context("Failed to spawn dev server parent-death watcher")?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn spawn_dev_server_parent_death_watcher(_parent_pid: u32, _child_pid: u32) -> Result<()> {
+    Ok(())
+}
+
+#[cfg(unix)]
 fn stop_process_group(pid: u32, timeout: Duration) -> Result<()> {
-    let pid = pid as i32;
+    let pid =
+        i32::try_from(pid).map_err(|_| anyhow!("Invalid process id for dev server: {pid}"))?;
     if pid <= 0 {
-        return Err(anyhow!("Invalid process id for dev server"));
+        return Err(anyhow!("Invalid process id for dev server: {pid}"));
     }
-    unsafe {
-        libc::killpg(pid, libc::SIGTERM);
+    let wait_pid = pid as u32;
+    let term_result = unsafe { libc::killpg(pid, libc::SIGTERM) };
+    if term_result != 0 {
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() == Some(libc::ESRCH) {
+            return Ok(());
+        }
+        return Err(anyhow!(
+            "Failed sending SIGTERM to process group {pid}: {error}"
+        ));
     }
-    if super::wait_for_process_exit_by_pid(pid as u32, timeout) {
+    if super::wait_for_process_exit_by_pid(wait_pid, timeout) {
         return Ok(());
     }
-    unsafe {
-        libc::killpg(pid, libc::SIGKILL);
+    let kill_result = unsafe { libc::killpg(pid, libc::SIGKILL) };
+    if kill_result != 0 {
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() == Some(libc::ESRCH) {
+            return Ok(());
+        }
+        return Err(anyhow!(
+            "Failed sending SIGKILL to process group {pid}: {error}"
+        ));
     }
-    if super::wait_for_process_exit_by_pid(pid as u32, timeout) {
+    if super::wait_for_process_exit_by_pid(wait_pid, timeout) {
         return Ok(());
     }
     Err(anyhow!(
@@ -961,7 +1070,10 @@ fn stop_process_group(pid: u32, timeout: Duration) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app_service::test_support::{build_service_with_state, unique_temp_path};
+    use crate::app_service::test_support::{
+        build_service_with_state, spawn_sleep_process_group, unique_temp_path,
+        wait_for_process_exit,
+    };
     use std::fs;
     use std::sync::{Arc, Mutex};
     use std::thread;
@@ -1239,6 +1351,7 @@ mod tests {
             .any(|line| line.text.contains("Dev server exited with code")));
     }
 
+    #[cfg(unix)]
     #[test]
     fn start_dev_server_script_streams_logs_before_process_exit_and_clears_old_logs() {
         let (service, _task_state, _git_state) = build_service_with_state(Vec::new());
@@ -1251,7 +1364,7 @@ mod tests {
         let script = RepoDevServerScript {
             id: "frontend".to_string(),
             name: "Frontend".to_string(),
-            command: "printf 'db generated\\n' && /usr/bin/python3 -c \"import time; print('ready'); time.sleep(5)\""
+            command: "printf 'db generated\\n' && python3 -c \"import time; print('ready'); time.sleep(5)\""
                 .to_string(),
         };
 
@@ -1418,5 +1531,76 @@ mod tests {
         assert_eq!(runtime.state.scripts[1].last_error, None);
         assert_eq!(runtime.state.scripts[1].exit_code, None);
         assert!(runtime.state.scripts[1].buffered_log_lines.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rollback_started_dev_server_scripts_stops_live_processes() {
+        let (service, _task_state, _git_state) = build_service_with_state(Vec::new());
+        let mut child = spawn_sleep_process_group(20);
+        let pid = child.id();
+        let group_key = "repo::task-rollback";
+
+        service
+            .dev_server_groups
+            .lock()
+            .expect("group lock poisoned")
+            .insert(
+                group_key.to_string(),
+                DevServerGroupRuntime {
+                    state: DevServerGroupState {
+                        repo_path: "repo".to_string(),
+                        task_id: "task-rollback".to_string(),
+                        worktree_path: Some("/tmp/worktree".to_string()),
+                        scripts: vec![DevServerScriptState {
+                            script_id: "frontend".to_string(),
+                            name: "Frontend".to_string(),
+                            command: "sleep 20".to_string(),
+                            status: DevServerScriptStatus::Running,
+                            pid: Some(pid),
+                            started_at: Some("2026-03-19T10:00:00Z".to_string()),
+                            exit_code: None,
+                            last_error: None,
+                            buffered_log_lines: Vec::new(),
+                        }],
+                        updated_at: "2026-03-19T10:00:00Z".to_string(),
+                    },
+                    emitter: None,
+                },
+            );
+
+        let errors = service
+            .rollback_started_dev_server_scripts(group_key, vec![("frontend".to_string(), pid)]);
+
+        assert!(errors.is_empty());
+        assert!(wait_for_process_exit(pid as i32, Duration::from_secs(2)));
+        let groups = service
+            .dev_server_groups
+            .lock()
+            .expect("group lock poisoned");
+        let runtime = groups.get(group_key).expect("runtime present");
+        assert_eq!(
+            runtime.state.scripts[0].status,
+            DevServerScriptStatus::Stopped
+        );
+        assert_eq!(runtime.state.scripts[0].pid, None);
+        drop(groups);
+        let _ = child.wait().expect("failed waiting rollback child");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dev_server_parent_death_watcher_terminates_orphaned_process_group() {
+        let mut child = spawn_sleep_process_group(20);
+        let pid = child.id();
+
+        spawn_dev_server_parent_death_watcher(999_999, pid)
+            .expect("watcher should start for dev server process");
+
+        assert!(
+            wait_for_process_exit(pid as i32, Duration::from_secs(3)),
+            "dev server process group should exit when parent is already gone"
+        );
+        let _ = child.wait().expect("failed waiting dev server child");
     }
 }

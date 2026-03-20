@@ -242,7 +242,9 @@ describe("useSettingsModalController", () => {
 
       expect(didSave).toBe(false);
       expect(harness.getLatest().showRepoScriptValidationErrors).toBe(true);
-      expect(harness.getLatest().saveError).toBe("Fix 1 dev server field error before saving.");
+      expect(harness.getLatest().saveError).toBe(
+        "Fix 1 dev server field error in the selected repository before saving.",
+      );
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();

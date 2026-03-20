@@ -6,7 +6,7 @@ use host_infra_system::{
     normalize_hook_set, repo_script_fingerprint, AgentDefaults, ChatSettings, GitTargetBranch,
     HookSet, PromptOverrides, RepoConfig, RepoDevServerScript, RepoGitConfig,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
@@ -78,6 +78,13 @@ impl AppService {
     ) -> Result<WorkspaceRecord> {
         let existing = self.workspace_get_repo_config_optional(repo_path)?;
         let defaults = RepoConfig::default();
+        let dev_servers = update
+            .dev_servers
+            .or_else(|| existing.as_ref().map(|entry| entry.dev_servers.clone()))
+            .unwrap_or_default();
+        let keep_existing_trust = existing
+            .as_ref()
+            .is_some_and(|entry| entry.dev_servers == dev_servers);
         let repo_config = RepoConfig {
             default_runtime_kind: update
                 .default_runtime_kind
@@ -108,18 +115,20 @@ impl AppService {
                 .git
                 .or_else(|| existing.as_ref().map(|entry| entry.git.clone()))
                 .unwrap_or_default(),
-            trusted_hooks: existing.as_ref().is_some_and(|entry| entry.trusted_hooks),
-            trusted_hooks_fingerprint: existing
-                .as_ref()
-                .and_then(|entry| entry.trusted_hooks_fingerprint.clone()),
+            trusted_hooks: keep_existing_trust
+                && existing.as_ref().is_some_and(|entry| entry.trusted_hooks),
+            trusted_hooks_fingerprint: if keep_existing_trust {
+                existing
+                    .as_ref()
+                    .and_then(|entry| entry.trusted_hooks_fingerprint.clone())
+            } else {
+                None
+            },
             hooks: existing
                 .as_ref()
                 .map(|entry| entry.hooks.clone())
                 .unwrap_or_default(),
-            dev_servers: update
-                .dev_servers
-                .or_else(|| existing.as_ref().map(|entry| entry.dev_servers.clone()))
-                .unwrap_or_default(),
+            dev_servers,
             worktree_file_copies: update
                 .worktree_file_copies
                 .or_else(|| {
@@ -366,6 +375,7 @@ fn normalize_dev_servers(
     dev_servers: Vec<RepoDevServerScript>,
 ) -> Result<Vec<RepoDevServerScript>> {
     let mut normalized = Vec::new();
+    let mut seen_ids = HashSet::new();
     for mut dev_server in dev_servers {
         dev_server.id = dev_server.id.trim().to_string();
         dev_server.name = dev_server.name.trim().to_string();
@@ -382,6 +392,9 @@ fn normalize_dev_servers(
             return Err(anyhow!(
                 "Dev server names cannot be blank when a command is configured."
             ));
+        }
+        if !seen_ids.insert(dev_server.id.clone()) {
+            return Err(anyhow!("Duplicate dev server id: {}", dev_server.id));
         }
 
         normalized.push(dev_server);
@@ -449,8 +462,8 @@ mod tests {
     use anyhow::{anyhow, Result};
     use host_domain::TaskStore;
     use host_infra_system::{
-        hook_set_fingerprint, AppConfigStore, ChatSettings, GitCliPort, HookSet, PromptOverride,
-        RepoConfig,
+        hook_set_fingerprint, repo_script_fingerprint, AppConfigStore, ChatSettings, GitCliPort,
+        HookSet, PromptOverride, RepoConfig, RepoDevServerScript,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -603,6 +616,52 @@ mod tests {
     }
 
     #[test]
+    fn workspace_merge_repo_config_clears_trust_when_dev_servers_change() -> Result<()> {
+        let fixture = setup_fixture("merge-repo-config-dev-servers", HookSet::default());
+        fixture.service.workspace_update_repo_config(
+            fixture.repo_path.as_str(),
+            RepoConfig {
+                trusted_hooks: true,
+                trusted_hooks_fingerprint: Some(repo_script_fingerprint(
+                    &HookSet::default(),
+                    &[RepoDevServerScript {
+                        id: "frontend".to_string(),
+                        name: "Frontend".to_string(),
+                        command: "bun run dev".to_string(),
+                    }],
+                )),
+                dev_servers: vec![RepoDevServerScript {
+                    id: "frontend".to_string(),
+                    name: "Frontend".to_string(),
+                    command: "bun run dev".to_string(),
+                }],
+                ..fixture
+                    .service
+                    .workspace_get_repo_config(&fixture.repo_path)?
+            },
+        )?;
+
+        fixture.service.workspace_merge_repo_config(
+            fixture.repo_path.as_str(),
+            RepoConfigUpdate {
+                dev_servers: Some(vec![RepoDevServerScript {
+                    id: "frontend".to_string(),
+                    name: "Frontend".to_string(),
+                    command: "bun run web".to_string(),
+                }]),
+                ..RepoConfigUpdate::default()
+            },
+        )?;
+
+        let updated = fixture
+            .service
+            .workspace_get_repo_config(&fixture.repo_path)?;
+        assert!(!updated.trusted_hooks);
+        assert!(updated.trusted_hooks_fingerprint.is_none());
+        Ok(())
+    }
+
+    #[test]
     fn workspace_save_repo_settings_rejects_blank_default_runtime_kind() {
         let fixture = setup_fixture("blank-runtime-kind", HookSet::default());
         let confirmation = RecordingHookTrustConfirmationPort::default();
@@ -631,6 +690,48 @@ mod tests {
         assert!(error
             .to_string()
             .contains("defaultRuntimeKind cannot be blank"));
+    }
+
+    #[test]
+    fn workspace_save_repo_settings_rejects_duplicate_dev_server_ids() {
+        let fixture = setup_fixture("duplicate-dev-server-ids", HookSet::default());
+        let confirmation = RecordingHookTrustConfirmationPort::default();
+
+        let error = fixture
+            .service
+            .workspace_save_repo_settings(
+                fixture.repo_path.as_str(),
+                RepoSettingsUpdate {
+                    default_runtime_kind: None,
+                    worktree_base_path: None,
+                    branch_prefix: None,
+                    default_target_branch: None,
+                    git: None,
+                    trusted_hooks: false,
+                    hooks: None,
+                    dev_servers: Some(vec![
+                        RepoDevServerScript {
+                            id: "frontend".to_string(),
+                            name: "Frontend".to_string(),
+                            command: "bun run dev".to_string(),
+                        },
+                        RepoDevServerScript {
+                            id: " frontend ".to_string(),
+                            name: "Backend".to_string(),
+                            command: "bun run api".to_string(),
+                        },
+                    ]),
+                    worktree_file_copies: None,
+                    prompt_overrides: None,
+                    agent_defaults: None,
+                },
+                &confirmation,
+            )
+            .expect_err("duplicate ids should fail");
+
+        assert!(error
+            .to_string()
+            .contains("Duplicate dev server id: frontend"));
     }
 
     #[test]

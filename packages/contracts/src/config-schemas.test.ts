@@ -20,4 +20,41 @@ describe("config-schemas", () => {
       }),
     ).toThrow();
   });
+
+  test("trims dev server fields and rejects duplicate ids", () => {
+    const parsed = repoConfigSchema.parse({
+      devServers: [
+        {
+          id: " frontend ",
+          name: " Frontend ",
+          command: " bun run dev ",
+        },
+      ],
+    });
+
+    expect(parsed.devServers).toEqual([
+      {
+        id: "frontend",
+        name: "Frontend",
+        command: "bun run dev",
+      },
+    ]);
+
+    expect(() =>
+      repoConfigSchema.parse({
+        devServers: [
+          { id: "frontend", name: "Frontend", command: "bun run dev" },
+          { id: " frontend ", name: "Backend", command: "bun run api" },
+        ],
+      }),
+    ).toThrow("Duplicate dev server id: frontend");
+  });
+
+  test("rejects whitespace-only dev server fields", () => {
+    expect(() =>
+      repoConfigSchema.parse({
+        devServers: [{ id: "frontend", name: "Frontend", command: "   " }],
+      }),
+    ).toThrow("Dev server command cannot be blank.");
+  });
 });

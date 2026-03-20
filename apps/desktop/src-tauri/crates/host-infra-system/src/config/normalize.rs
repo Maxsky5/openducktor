@@ -4,6 +4,8 @@ use super::types::{
     HookSet, OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig, RepoDevServerScript,
     RuntimeConfig,
 };
+use anyhow::{anyhow, Result};
+use std::collections::HashSet;
 
 fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
     value.and_then(|entry| {
@@ -30,25 +32,37 @@ fn normalize_hook_commands(commands: &mut Vec<String>) {
         .collect();
 }
 
-fn normalize_dev_servers(dev_servers: &mut Vec<RepoDevServerScript>) {
-    *dev_servers = std::mem::take(dev_servers)
-        .into_iter()
-        .filter_map(|mut dev_server| {
-            dev_server.id = dev_server.id.trim().to_string();
-            dev_server.name = dev_server.name.trim().to_string();
-            dev_server.command = dev_server.command.trim().to_string();
+fn normalize_dev_servers(dev_servers: &mut Vec<RepoDevServerScript>) -> Result<()> {
+    let mut seen_ids = HashSet::new();
+    let mut normalized = Vec::with_capacity(dev_servers.len());
+    for mut dev_server in std::mem::take(dev_servers) {
+        dev_server.id = dev_server.id.trim().to_string();
+        dev_server.name = dev_server.name.trim().to_string();
+        dev_server.command = dev_server.command.trim().to_string();
 
-            if dev_server.command.is_empty() {
-                return None;
-            }
+        if dev_server.command.is_empty() {
+            continue;
+        }
 
-            if dev_server.id.is_empty() || dev_server.name.is_empty() {
-                return None;
-            }
+        if dev_server.id.is_empty() {
+            return Err(anyhow!(
+                "Dev server id cannot be blank when a command is configured."
+            ));
+        }
+        if dev_server.name.is_empty() {
+            return Err(anyhow!(
+                "Dev server name cannot be blank when a command is configured."
+            ));
+        }
+        if !seen_ids.insert(dev_server.id.clone()) {
+            return Err(anyhow!("Duplicate dev server id: {}", dev_server.id));
+        }
 
-            Some(dev_server)
-        })
-        .collect();
+        normalized.push(dev_server);
+    }
+
+    *dev_servers = normalized;
+    Ok(())
 }
 
 fn normalize_agent_model_default(value: &mut Option<AgentModelDefault>) {
@@ -130,7 +144,7 @@ pub fn normalize_hook_set(mut hooks: HookSet) -> HookSet {
     hooks
 }
 
-pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
+pub(super) fn normalize_repo_config(repo: &mut RepoConfig) -> Result<()> {
     repo.worktree_base_path = normalize_optional_non_empty(repo.worktree_base_path.take());
     let branch_prefix = repo.branch_prefix.trim();
     repo.branch_prefix = if branch_prefix.is_empty() {
@@ -142,7 +156,7 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
         canonicalize_default_target_branch(std::mem::take(&mut repo.default_target_branch));
     normalize_git_provider_configs(&mut repo.git.providers);
     repo.hooks = normalize_hook_set(std::mem::take(&mut repo.hooks));
-    normalize_dev_servers(&mut repo.dev_servers);
+    normalize_dev_servers(&mut repo.dev_servers)?;
     normalize_hook_commands(&mut repo.worktree_file_copies);
     let current_fingerprint = repo_script_fingerprint(&repo.hooks, &repo.dev_servers);
     if repo.trusted_hooks {
@@ -160,6 +174,7 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
     normalize_agent_model_default(&mut repo.agent_defaults.planner);
     normalize_agent_model_default(&mut repo.agent_defaults.build);
     normalize_agent_model_default(&mut repo.agent_defaults.qa);
+    Ok(())
 }
 
 pub(super) fn normalize_opencode_startup_readiness_config(
@@ -175,13 +190,15 @@ pub(super) fn normalize_opencode_startup_readiness_config(
     }
 }
 
-pub(super) fn normalize_global_config(config: &mut GlobalConfig) {
+pub(super) fn normalize_global_config(config: &mut GlobalConfig) -> Result<()> {
     normalize_prompt_overrides(&mut config.global_prompt_overrides);
     for repo in config.repos.values_mut() {
-        normalize_repo_config(repo);
+        normalize_repo_config(repo)?;
     }
+    Ok(())
 }
 
-pub(super) fn normalize_runtime_config(config: &mut RuntimeConfig) {
+pub(super) fn normalize_runtime_config(config: &mut RuntimeConfig) -> Result<()> {
     normalize_opencode_startup_readiness_config(&mut config.opencode_startup);
+    Ok(())
 }

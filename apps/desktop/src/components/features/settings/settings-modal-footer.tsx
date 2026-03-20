@@ -41,8 +41,7 @@ export function SettingsModalFooter({
     isLoadingSettings ||
     !hasSnapshotDraft ||
     Boolean(settingsError) ||
-    hasPromptValidationErrors ||
-    hasRepoScriptValidationErrors;
+    hasPromptValidationErrors;
 
   return (
     <div className="mt-0 flex shrink-0 items-center justify-start border-t border-border px-6 pb-4 pt-4">

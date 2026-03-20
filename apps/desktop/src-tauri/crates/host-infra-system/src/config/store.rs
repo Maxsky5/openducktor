@@ -150,7 +150,7 @@ impl AppConfigStore {
         repo_path: &str,
         mut repo_config: RepoConfig,
     ) -> Result<WorkspaceRecord> {
-        normalize_repo_config(&mut repo_config);
+        normalize_repo_config(&mut repo_config)?;
 
         let workspace_key = workspace_lookup_key(repo_path);
         self.update_workspace(workspace_key, move |config, workspace_key| {
@@ -177,7 +177,7 @@ impl AppConfigStore {
             hooks,
             ..RepoConfig::default()
         };
-        normalize_repo_config(&mut normalized_repo);
+        normalize_repo_config(&mut normalized_repo)?;
         hooks = normalized_repo.hooks;
 
         self.update_workspace(workspace_key, move |config, workspace_key| {

@@ -155,11 +155,14 @@ export function useAgentStudioDevServerPanel({
 
   const configuredScripts = repoSettings?.devServers ?? [];
   const hasConfiguredScripts = configuredScripts.length > 0;
-  const queryEnabled = enabled && repoPath !== null && taskId !== null && hasConfiguredScripts;
-  const queryActivationRef = useRef<{ enabled: boolean; since: number }>({
+  const queryEnabled = enabled && repoPath !== null && taskId !== null;
+  const [queryActivationState, setQueryActivationState] = useState<{
+    enabled: boolean;
+    since: number;
+  }>(() => ({
     enabled: queryEnabled,
     since: queryEnabled ? Date.now() : 0,
-  });
+  }));
   const taskMemoryKey = repoPath && taskId ? buildTaskMemoryKey(repoPath, taskId) : null;
   const activeSessionRefreshKey = `${activeSession?.sessionId ?? ""}:${activeSession?.status ?? ""}:${activeSession?.workingDirectory ?? ""}`;
   const queryOptions =
@@ -172,12 +175,18 @@ export function useAgentStudioDevServerPanel({
     enabled: queryEnabled,
   });
 
-  if (queryActivationRef.current.enabled !== queryEnabled) {
-    queryActivationRef.current = {
-      enabled: queryEnabled,
-      since: queryEnabled ? Date.now() : 0,
-    };
-  }
+  useEffect(() => {
+    setQueryActivationState((current) => {
+      if (current.enabled === queryEnabled) {
+        return current;
+      }
+
+      return {
+        enabled: queryEnabled,
+        since: queryEnabled ? Date.now() : 0,
+      };
+    });
+  }, [queryEnabled]);
 
   const syncStateFromEvent = useCallback(
     (event: DevServerEvent): void => {
@@ -207,10 +216,20 @@ export function useAgentStudioDevServerPanel({
       return;
     }
 
-    if (stateQuery.data && stateQuery.dataUpdatedAt >= queryActivationRef.current.since) {
+    if (
+      queryActivationState.enabled === queryEnabled &&
+      stateQuery.data &&
+      stateQuery.dataUpdatedAt >= queryActivationState.since
+    ) {
       setLiveState(stateQuery.data);
     }
-  }, [queryEnabled, stateQuery.data, stateQuery.dataUpdatedAt]);
+  }, [
+    queryActivationState.enabled,
+    queryActivationState.since,
+    queryEnabled,
+    stateQuery.data,
+    stateQuery.dataUpdatedAt,
+  ]);
 
   useEffect(() => {
     if (!queryEnabled || repoPath === null || taskId === null) {
@@ -354,8 +373,12 @@ export function useAgentStudioDevServerPanel({
   });
 
   const hasFreshQueryData =
-    stateQuery.data !== undefined && stateQuery.dataUpdatedAt >= queryActivationRef.current.since;
-  const effectiveState = liveState ?? (hasFreshQueryData ? (stateQuery.data ?? null) : null);
+    stateQuery.data !== undefined && stateQuery.dataUpdatedAt >= queryActivationState.since;
+  const shouldUseQueryData =
+    queryEnabled && hasFreshQueryData && queryActivationState.enabled === queryEnabled;
+  const currentLiveState = queryEnabled ? liveState : null;
+  const effectiveState =
+    currentLiveState ?? (shouldUseQueryData ? (stateQuery.data ?? null) : null);
   const isAwaitingFreshState =
     queryEnabled &&
     effectiveState == null &&
@@ -398,9 +421,10 @@ export function useAgentStudioDevServerPanel({
     effectiveState?.scripts ?? [],
     startMutation.isPending || restartMutation.isPending,
   );
+  const hasAvailableScripts = (effectiveState?.scripts.length ?? 0) > 0 || hasConfiguredScripts;
 
   const mode: AgentStudioDevServerPanelMode = useMemo(() => {
-    if (!hasConfiguredScripts) {
+    if (!hasAvailableScripts) {
       return "empty";
     }
 
@@ -417,7 +441,7 @@ export function useAgentStudioDevServerPanel({
     }
 
     return "stopped";
-  }, [effectiveState, hasConfiguredScripts, isAwaitingFreshState, isExpanded]);
+  }, [effectiveState, hasAvailableScripts, isAwaitingFreshState, isExpanded]);
 
   const onSelectScript = useCallback(
     (scriptId: string): void => {

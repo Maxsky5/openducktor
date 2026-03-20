@@ -274,8 +274,8 @@ fn sanitize_hook_preview(command: &str) -> String {
             _ if ch.is_control() => escaped.push_str(&format!("\\u{{{:04X}}}", ch as u32)),
             _ => escaped.push(ch),
         }
-        if escaped.len() > PREVIEW_LIMIT {
-            escaped.truncate(PREVIEW_LIMIT);
+        if escaped.chars().count() > PREVIEW_LIMIT {
+            escaped = escaped.chars().take(PREVIEW_LIMIT).collect();
             escaped.push_str("...");
             return escaped;
         }
@@ -1109,6 +1109,10 @@ mod tests {
         let preview = sanitize_hook_preview(long.as_str());
         assert!(preview.ends_with("..."));
         assert!(preview.len() <= 243);
+
+        let unicode = "é".repeat(300);
+        let preview = sanitize_hook_preview(unicode.as_str());
+        assert!(preview.ends_with("..."));
     }
 
     #[test]

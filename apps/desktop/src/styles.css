@@ -106,6 +106,20 @@
   /* agent studio chrome */
   --studio-chrome: oklch(0.446 0.043 257.281); /* ~slate-600 */
   --studio-chrome-foreground: oklch(0.968 0.007 247.896); /* ~slate-50 */
+
+  /* dev server terminal */
+  --dev-server-terminal-surface: oklch(0.2 0.02 260);
+  --dev-server-terminal-chrome: oklch(0.17 0.018 260);
+  --dev-server-terminal-tab-active: oklch(0.24 0.022 260);
+  --dev-server-terminal-panel: oklch(0.08 0.01 260);
+  --dev-server-terminal-panel-header: oklch(0.11 0.012 260);
+  --dev-server-terminal-border: oklch(0.3 0.018 260);
+  --dev-server-terminal-foreground: oklch(0.95 0.004 260);
+  --dev-server-terminal-muted: oklch(0.62 0.02 260);
+  --dev-server-terminal-subtle: oklch(0.5 0.015 260);
+  --dev-server-terminal-system: oklch(0.78 0.08 236);
+  --dev-server-terminal-stderr: oklch(0.76 0.12 18);
+  --dev-server-terminal-dot-stopped: oklch(0.35 0.012 260);
 }
 
 .dark {
@@ -195,6 +209,19 @@
 
   --studio-chrome: oklch(0.332 0.038 260.912); /* ~slate-700 */
   --studio-chrome-foreground: oklch(0.968 0.007 247.896); /* ~slate-50 */
+
+  --dev-server-terminal-surface: oklch(0.17 0.018 260);
+  --dev-server-terminal-chrome: oklch(0.145 0.016 260);
+  --dev-server-terminal-tab-active: oklch(0.205 0.02 260);
+  --dev-server-terminal-panel: oklch(0.06 0.008 260);
+  --dev-server-terminal-panel-header: oklch(0.09 0.01 260);
+  --dev-server-terminal-border: oklch(0.28 0.018 260);
+  --dev-server-terminal-foreground: oklch(0.95 0.004 260);
+  --dev-server-terminal-muted: oklch(0.64 0.02 260);
+  --dev-server-terminal-subtle: oklch(0.5 0.015 260);
+  --dev-server-terminal-system: oklch(0.8 0.08 236);
+  --dev-server-terminal-stderr: oklch(0.78 0.12 18);
+  --dev-server-terminal-dot-stopped: oklch(0.34 0.012 260);
 }
 
 /* Expose CSS variables as Tailwind v4 color utilities (bg-*, text-*, etc.) */

@@ -43,11 +43,9 @@ export const createBrowserLiveHostClient = (): TauriHostClient => {
   return createTauriHostClient(createHttpInvoke());
 };
 
-export const subscribeBrowserLiveRunEvents = async (
-  listener: (payload: unknown) => void,
-): Promise<() => void> => {
+const subscribeSseChannel = (path: string, listener: (payload: unknown) => void): (() => void) => {
   const baseUrl = getBrowserBackendUrl().replace(/\/$/, "");
-  const eventSource = new EventSource(`${baseUrl}/events`);
+  const eventSource = new EventSource(`${baseUrl}/${path}`);
 
   const handleMessage = (event: MessageEvent<string>): void => {
     try {
@@ -65,24 +63,14 @@ export const subscribeBrowserLiveRunEvents = async (
   };
 };
 
+export const subscribeBrowserLiveRunEvents = async (
+  listener: (payload: unknown) => void,
+): Promise<() => void> => {
+  return subscribeSseChannel("events", listener);
+};
+
 export const subscribeBrowserLiveDevServerEvents = async (
   listener: (payload: unknown) => void,
 ): Promise<() => void> => {
-  const baseUrl = getBrowserBackendUrl().replace(/\/$/, "");
-  const eventSource = new EventSource(`${baseUrl}/dev-server-events`);
-
-  const handleMessage = (event: MessageEvent<string>): void => {
-    try {
-      listener(JSON.parse(event.data));
-    } catch {
-      listener(event.data);
-    }
-  };
-
-  eventSource.addEventListener("message", handleMessage as EventListener);
-
-  return () => {
-    eventSource.removeEventListener("message", handleMessage as EventListener);
-    eventSource.close();
-  };
+  return subscribeSseChannel("dev-server-events", listener);
 };

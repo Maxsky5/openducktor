@@ -40,7 +40,7 @@ const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[
 };
 
 describe("SettingsModalFooter", () => {
-  test("disables save when dev server fields are invalid", () => {
+  test("keeps save enabled when only dev server fields are invalid", () => {
     const renderer = renderFooter({
       hasRepoScriptValidationErrors: true,
       repoScriptValidationErrorCount: 2,
@@ -49,7 +49,7 @@ describe("SettingsModalFooter", () => {
     try {
       const buttons = renderer.root.findAllByType("button");
       const saveButton = buttons.find((button) => button.props.children === "Save Settings");
-      expect(saveButton?.props.disabled).toBe(true);
+      expect(saveButton?.props.disabled).toBe(false);
     } finally {
       act(() => {
         renderer.unmount();

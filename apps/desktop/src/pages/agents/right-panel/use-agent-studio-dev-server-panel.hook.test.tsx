@@ -1,25 +1,11 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerGroupState, DevServerScriptState } from "@openducktor/contracts";
-import { createElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import { render, waitFor } from "@testing-library/react";
 import { QueryProvider } from "@/lib/query-provider";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
-const reactActEnvironment = globalThis as typeof globalThis & {
-  IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
-reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
-
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-};
-
-const flushEffects = async (): Promise<void> => {
-  await act(async () => {
-    await flush();
-  });
-};
+GlobalRegistrator.register();
 
 const createDeferred = <T,>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
@@ -78,7 +64,6 @@ const repoSettings: RepoSettingsInput = {
 
 let devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
   buildState();
-let _subscribedDevServerListener: ((payload: unknown) => void) | null = null;
 
 mock.module("@/lib/host-client", () => ({
   hostClient: {
@@ -87,18 +72,12 @@ mock.module("@/lib/host-client", () => ({
     devServerStop: async () => buildState(),
     devServerRestart: async () => buildState(),
   },
-  subscribeDevServerEvents: async (listener: (payload: unknown) => void) => {
-    _subscribedDevServerListener = listener;
-    return () => {
-      _subscribedDevServerListener = null;
-    };
-  },
+  subscribeDevServerEvents: async () => () => {},
 }));
 
 beforeEach(() => {
   devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
     buildState();
-  _subscribedDevServerListener = null;
 });
 
 describe("useAgentStudioDevServerPanel", () => {
@@ -155,8 +134,10 @@ describe("useAgentStudioDevServerPanel", () => {
       }
       return latest;
     };
+
     const Harness = ({ args }: { args: HookArgs }) => {
       latest = useAgentStudioDevServerPanel(args);
+
       return null;
     };
 
@@ -167,65 +148,53 @@ describe("useAgentStudioDevServerPanel", () => {
       activeSession: null,
       enabled: true,
     };
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness args={currentArgs} />
+      </QueryProvider>,
+    );
 
     try {
-      await act(async () => {
-        renderer = TestRenderer.create(
-          createElement(
-            QueryProvider,
-            { useIsolatedClient: true },
-            createElement(Harness, { args: currentArgs }),
-          ),
-        );
+      await waitFor(() => {
+        expect(getLatest().mode).toBe("active");
       });
-      await flushEffects();
-      await flushEffects();
-
-      expect(getLatest().mode).toBe("active");
       expect(getLatest().scripts[0]?.status).toBe("running");
 
       currentArgs = { ...currentArgs, enabled: false };
-      await act(async () => {
-        renderer?.update(
-          createElement(
-            QueryProvider,
-            { useIsolatedClient: true },
-            createElement(Harness, { args: currentArgs }),
-          ),
-        );
+      view.rerender(
+        <QueryProvider useIsolatedClient>
+          <Harness args={currentArgs} />
+        </QueryProvider>,
+      );
+      await waitFor(() => {
+        expect(getLatest().scripts).toHaveLength(0);
       });
-      await flushEffects();
 
       phase = "reopen";
       currentArgs = { ...currentArgs, enabled: true };
-      await act(async () => {
-        renderer?.update(
-          createElement(
-            QueryProvider,
-            { useIsolatedClient: true },
-            createElement(Harness, { args: currentArgs }),
-          ),
-        );
-      });
-      await flushEffects();
+      view.rerender(
+        <QueryProvider useIsolatedClient>
+          <Harness args={currentArgs} />
+        </QueryProvider>,
+      );
 
-      expect(getLatest().mode).toBe("loading");
+      await waitFor(() => {
+        expect(getLatest().mode).toBe("loading");
+      });
       expect(getLatest().isLoading).toBe(true);
       expect(getLatest().scripts).toHaveLength(0);
 
       phase = "steady";
       reopenFetch.resolve(refreshedState);
-      await flushEffects();
-      await flushEffects();
 
+      await waitFor(() => {
+        expect(getLatest().scripts[0]?.status).toBe("failed");
+      });
       expect(getLatest().mode).toBe("active");
-      expect(getLatest().scripts[0]?.status).toBe("failed");
       expect(getLatest().selectedScript?.lastError).toBe("Dev server exited with code 1.");
     } finally {
-      await act(async () => {
-        renderer?.unmount();
-      });
+      view.unmount();
     }
   });
 });

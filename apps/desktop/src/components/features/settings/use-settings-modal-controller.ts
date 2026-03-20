@@ -215,16 +215,27 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
 
     return buildDevServerDraftValidationMap(selectedRepoConfig.devServers ?? []);
   }, [selectedRepoConfig]);
+  const invalidRepoPathsWithDevServerErrors = useMemo(() => {
+    if (!snapshotDraft) {
+      return [];
+    }
+
+    return Object.entries(snapshotDraft.repos)
+      .filter(
+        ([, repoConfig]) => countDevServerDraftValidationErrors(repoConfig.devServers ?? []) > 0,
+      )
+      .map(([repoPath]) => repoPath)
+      .sort();
+  }, [snapshotDraft]);
   const repoScriptValidationErrorCount = useMemo(
     () =>
       snapshotDraft
-        ? Object.values(snapshotDraft.repos).reduce(
-            (count, repoConfig) =>
-              count + countDevServerDraftValidationErrors(repoConfig.devServers ?? []),
-            0,
-          )
+        ? invalidRepoPathsWithDevServerErrors.reduce((count, repoPath) => {
+            const repoConfig = snapshotDraft.repos[repoPath];
+            return count + countDevServerDraftValidationErrors(repoConfig?.devServers ?? []);
+          }, 0)
         : 0,
-    [snapshotDraft],
+    [invalidRepoPathsWithDevServerErrors, snapshotDraft],
   );
   const hasRepoScriptValidationErrors = repoScriptValidationErrorCount > 0;
   const showRepoScriptValidationErrors =
@@ -402,7 +413,12 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     if (hasRepoScriptValidationErrors) {
       setHasAttemptedRepoScriptSubmit(true);
       const suffix = repoScriptValidationErrorCount > 1 ? "s" : "";
-      const reason = `Fix ${repoScriptValidationErrorCount} dev server field error${suffix} before saving.`;
+      const invalidRepoSummary = invalidRepoPathsWithDevServerErrors
+        .map((repoPath) =>
+          repoPath === selectedRepoPath ? "the selected repository" : `\`${repoPath}\``,
+        )
+        .join(", ");
+      const reason = `Fix ${repoScriptValidationErrorCount} dev server field error${suffix} in ${invalidRepoSummary} before saving.`;
       setSaveError(reason);
       toast.error("Cannot save settings", {
         description: reason,
@@ -462,9 +478,11 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     dirtySections.repoSettings,
     hasPromptValidationErrors,
     hasRepoScriptValidationErrors,
+    invalidRepoPathsWithDevServerErrors,
     loadedSnapshot,
     promptValidationState.totalErrorCount,
     repoScriptValidationErrorCount,
+    selectedRepoPath,
     saveGlobalGitConfig,
     saveSettingsSnapshot,
     snapshotDraft,

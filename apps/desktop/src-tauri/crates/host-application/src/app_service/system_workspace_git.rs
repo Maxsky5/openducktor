@@ -9,7 +9,7 @@ use host_domain::{
     WorkspaceRecord,
 };
 use host_infra_system::{
-    command_exists, hook_set_fingerprint, resolve_central_beads_dir,
+    command_exists, repo_script_fingerprint, resolve_central_beads_dir,
     run_command_allow_failure_with_env, version_command, ChatSettings, GlobalGitConfig, HookSet,
     PromptOverrides, RepoConfig,
 };
@@ -302,7 +302,7 @@ impl AppService {
     ) -> Result<WorkspaceRecord> {
         if trusted {
             let config = self.config_store.repo_config(repo_path)?;
-            let current_fingerprint = hook_set_fingerprint(&config.hooks);
+            let current_fingerprint = repo_script_fingerprint(&config.hooks, &config.dev_servers);
             if let Some(expected) = expected_fingerprint {
                 if expected != current_fingerprint {
                     return Err(anyhow!(

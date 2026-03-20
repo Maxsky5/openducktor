@@ -54,14 +54,14 @@ const formatLogTimestamp = (timestamp: string): string => {
 
 const streamClassName = (stream: "stdout" | "stderr" | "system"): string => {
   if (stream === "stderr") {
-    return "text-rose-300";
+    return "text-[var(--dev-server-terminal-stderr)]";
   }
 
   if (stream === "system") {
-    return "text-sky-300";
+    return "text-[var(--dev-server-terminal-system)]";
   }
 
-  return "text-zinc-100";
+  return "text-[var(--dev-server-terminal-foreground)]";
 };
 
 const sanitizeLogText = (text: string): string => text.replace(ANSI_ESCAPE_SEQUENCE, "");
@@ -79,7 +79,31 @@ const statusIndicatorClassName = (status: DevServerScriptState["status"]): strin
     return "bg-rose-400";
   }
 
-  return "bg-zinc-700";
+  return "bg-[var(--dev-server-terminal-dot-stopped)]";
+};
+
+const getStartLabel = (isLoading: boolean, isStartPending: boolean): string => {
+  if (isLoading) {
+    return "Loading dev servers...";
+  }
+
+  if (isStartPending) {
+    return "Starting dev servers...";
+  }
+
+  return "Start dev servers";
+};
+
+const getEmptyLogMessage = (script: DevServerScriptState): string => {
+  if (script.status === "starting") {
+    return "Starting this dev server...";
+  }
+
+  if (script.status === "failed") {
+    return script.lastError ?? "This dev server exited before producing logs.";
+  }
+
+  return "Logs will appear here once this dev server writes output.";
 };
 
 export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel({
@@ -191,11 +215,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
     const isLoading = model.mode === "loading";
     const startDisabled = isEmpty || isDisabled || isLoading || isActionPending;
     const showCompactMessage = model.mode !== "stopped";
-    const startLabel = isLoading
-      ? "Loading dev servers..."
-      : model.isStartPending
-        ? "Starting dev servers..."
-        : "Start dev servers";
+    const startLabel = getStartLabel(isLoading, model.isStartPending);
 
     return (
       <div
@@ -292,18 +312,20 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
         onValueChange={model.onSelectScript}
         className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
       >
-        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#0d0d0d]">
-          <div className="border-b border-zinc-800 bg-[#111111] px-0">
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[var(--dev-server-terminal-surface)] text-[var(--dev-server-terminal-foreground)]">
+          <div className="border-b border-[var(--dev-server-terminal-border)] bg-[var(--dev-server-terminal-chrome)] px-0">
             <TabsList className="h-auto w-full justify-start gap-0 overflow-x-auto rounded-none border-0 bg-transparent p-0">
               {model.scripts.map((script) => {
                 return (
                   <TabsTrigger
                     key={script.scriptId}
                     value={script.scriptId}
-                    className="h-9 w-auto max-w-[320px] flex-none justify-start rounded-none border-r border-t-2 border-r-zinc-800 border-t-transparent bg-[#111111] px-3 py-1.5 font-mono text-[11px] text-zinc-400 data-[state=active]:border-t-sky-500 data-[state=active]:bg-[#1a1a1a] data-[state=active]:text-zinc-100"
+                    className="h-9 w-auto max-w-[320px] flex-none justify-start rounded-none border-r border-t-2 border-r-[var(--dev-server-terminal-border)] border-t-transparent bg-[var(--dev-server-terminal-chrome)] px-3 py-1.5 font-mono text-[11px] text-[var(--dev-server-terminal-muted)] data-[state=active]:border-t-primary data-[state=active]:bg-[var(--dev-server-terminal-tab-active)] data-[state=active]:text-[var(--dev-server-terminal-foreground)]"
                     data-testid={`agent-studio-dev-server-tab-${script.scriptId}`}
                   >
-                    <span className="mr-2 font-mono text-[11px] text-zinc-500">&gt;_</span>
+                    <span className="mr-2 font-mono text-[11px] text-[var(--dev-server-terminal-subtle)]">
+                      &gt;_
+                    </span>
                     <span className="truncate">{script.name}</span>
                     <span
                       className={cn(
@@ -323,16 +345,18 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
               value={selectedScriptContent.scriptId}
               className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden outline-none"
             >
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-black text-zinc-100">
-                <div className="border-b border-zinc-800 bg-[#050505] px-3 py-2 text-xs text-zinc-400">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--dev-server-terminal-panel)] text-[var(--dev-server-terminal-foreground)]">
+                <div className="border-b border-[var(--dev-server-terminal-border)] bg-[var(--dev-server-terminal-panel-header)] px-3 py-2 text-xs text-[var(--dev-server-terminal-muted)]">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-zinc-500">$</span>
-                    <span className="font-mono text-zinc-100">{selectedScriptContent.command}</span>
+                    <span className="font-mono text-[var(--dev-server-terminal-subtle)]">$</span>
+                    <span className="font-mono text-[var(--dev-server-terminal-foreground)]">
+                      {selectedScriptContent.command}
+                    </span>
                   </div>
                 </div>
 
                 <div ref={logViewportContainerRef} className="min-h-0 flex-1 overflow-hidden">
-                  <ScrollArea className="h-full min-h-0 bg-black">
+                  <ScrollArea className="h-full min-h-0 bg-[var(--dev-server-terminal-panel)]">
                     {selectedScriptContent.bufferedLogLines.length > 0 ? (
                       <div className="space-y-1 px-4 py-4 font-mono text-[11px] leading-5">
                         {renderedLogLines.map(({ key, logLine, displayText }) => (
@@ -341,10 +365,12 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
                             className="flex gap-3"
                             data-testid="agent-studio-dev-server-log-line"
                           >
-                            <span className="shrink-0 text-zinc-500">
+                            <span className="shrink-0 text-[var(--dev-server-terminal-subtle)]">
                               {formatLogTimestamp(logLine.timestamp)}
                             </span>
-                            <span className="shrink-0 text-zinc-600">[{logLine.stream}]</span>
+                            <span className="shrink-0 text-[var(--dev-server-terminal-muted)]">
+                              [{logLine.stream}]
+                            </span>
                             <span
                               className={cn(
                                 "min-w-0 whitespace-pre-wrap break-words",
@@ -358,15 +384,10 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
                       </div>
                     ) : (
                       <div
-                        className="flex h-full min-h-0 items-center justify-center px-6 py-8 text-center text-sm text-zinc-500"
+                        className="flex h-full min-h-0 items-center justify-center px-6 py-8 text-center text-sm text-[var(--dev-server-terminal-muted)]"
                         data-testid="agent-studio-dev-server-empty-log-state"
                       >
-                        {selectedScriptContent.status === "starting"
-                          ? "Starting this dev server..."
-                          : selectedScriptContent.status === "failed"
-                            ? (selectedScriptContent.lastError ??
-                              "This dev server exited before producing logs.")
-                            : "Logs will appear here once this dev server writes output."}
+                        {getEmptyLogMessage(selectedScriptContent)}
                       </div>
                     )}
                   </ScrollArea>
