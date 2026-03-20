@@ -9,9 +9,9 @@ use host_domain::{
     WorkspaceRecord,
 };
 use host_infra_system::{
-    command_exists, repo_script_fingerprint, resolve_central_beads_dir,
-    run_command_allow_failure_with_env, version_command, ChatSettings, GlobalGitConfig, HookSet,
-    PromptOverrides, RepoConfig,
+    command_exists, copy_configured_worktree_files, remove_worktree, repo_script_fingerprint,
+    resolve_central_beads_dir, run_command_allow_failure_with_env, version_command, ChatSettings,
+    GlobalGitConfig, HookSet, PromptOverrides, RepoConfig,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -370,6 +370,25 @@ impl AppService {
             branch,
             create_branch,
         )?;
+
+        let repo_config = self.config_store.repo_config(repo_path.as_str())?;
+        if let Err(error) = copy_configured_worktree_files(
+            Path::new(&repo_path),
+            Path::new(worktree),
+            repo_config.worktree_file_copies.as_slice(),
+        ) {
+            let cleanup_error = remove_worktree(Path::new(&repo_path), Path::new(worktree))
+                .err()
+                .map(|cleanup_error| cleanup_error.to_string());
+            return Err(anyhow!(
+                "Configured worktree file copy failed: {error}{}",
+                cleanup_error
+                    .map(|cleanup_error| {
+                        format!("\nAlso failed to remove worktree: {cleanup_error}")
+                    })
+                    .unwrap_or_default()
+            ));
+        }
 
         Ok(GitWorktreeSummary {
             branch: branch.trim().to_string(),

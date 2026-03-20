@@ -1,7 +1,8 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use host_domain::DEFAULT_BRANCH_PREFIX;
+use std::fs;
 use std::net::TcpListener;
-use std::path::Path;
+use std::path::{Component, Path};
 use std::process::Command;
 
 pub fn slugify_title(value: &str) -> String {
@@ -38,6 +39,80 @@ pub fn pick_free_port() -> Result<u16> {
     Ok(port)
 }
 
+pub fn copy_configured_worktree_files(
+    repo_path: &Path,
+    worktree_path: &Path,
+    configured_files: &[String],
+) -> Result<()> {
+    for configured_file in configured_files {
+        let relative_path = Path::new(configured_file);
+        validate_worktree_copy_path(relative_path, configured_file)?;
+
+        let source_path = repo_path.join(relative_path);
+        let source_metadata = fs::metadata(&source_path).with_context(|| {
+            format!(
+                "Configured worktree copy source is unavailable: {}",
+                source_path.display()
+            )
+        })?;
+        if !source_metadata.is_file() {
+            return Err(anyhow!(
+                "Configured worktree copy source is not a file: {}",
+                source_path.display()
+            ));
+        }
+
+        let destination_path = worktree_path.join(relative_path);
+        if let Some(parent) = destination_path.parent() {
+            fs::create_dir_all(parent).with_context(|| {
+                format!(
+                    "Failed creating configured worktree copy directory: {}",
+                    parent.display()
+                )
+            })?;
+        }
+
+        fs::copy(&source_path, &destination_path).with_context(|| {
+            format!(
+                "Failed copying configured worktree file {} to {}",
+                source_path.display(),
+                destination_path.display()
+            )
+        })?;
+    }
+
+    Ok(())
+}
+
+fn validate_worktree_copy_path(path: &Path, original: &str) -> Result<()> {
+    if original.trim().is_empty() {
+        return Err(anyhow!("Configured worktree copy path cannot be empty"));
+    }
+    if path.is_absolute() {
+        return Err(anyhow!(
+            "Configured worktree copy path must be relative: {original}"
+        ));
+    }
+
+    for component in path.components() {
+        match component {
+            Component::ParentDir => {
+                return Err(anyhow!(
+                    "Configured worktree copy path cannot traverse outside the repository: {original}"
+                ));
+            }
+            Component::RootDir | Component::Prefix(_) => {
+                return Err(anyhow!(
+                    "Configured worktree copy path must be relative: {original}"
+                ));
+            }
+            Component::CurDir | Component::Normal(_) => {}
+        }
+    }
+
+    Ok(())
+}
+
 pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
     let status = Command::new("git")
         .arg("worktree")
@@ -59,7 +134,10 @@ pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_branch_name, pick_free_port, remove_worktree, slugify_title};
+    use super::{
+        build_branch_name, copy_configured_worktree_files, pick_free_port, remove_worktree,
+        slugify_title,
+    };
     use host_domain::DEFAULT_BRANCH_PREFIX;
     use std::fs;
     use std::net::TcpListener;
@@ -148,6 +226,57 @@ mod tests {
         let port = pick_free_port().expect("free port should resolve");
         let listener = TcpListener::bind(("127.0.0.1", port)).expect("port should be bindable");
         drop(listener);
+    }
+
+    #[test]
+    fn copy_configured_worktree_files_copies_hidden_and_nested_files() {
+        let root = unique_temp_path("copy-configured-files");
+        let repo = root.join("repo");
+        let worktree = root.join("worktree");
+        fs::create_dir_all(repo.join("config")).expect("repo config directory should exist");
+        fs::create_dir_all(&worktree).expect("worktree directory should exist");
+        fs::write(repo.join(".env"), "TOKEN=secret\n").expect("hidden file should write");
+        fs::write(repo.join("config").join("local.json"), "{}\n")
+            .expect("nested file should write");
+
+        copy_configured_worktree_files(
+            &repo,
+            &worktree,
+            &[".env".to_string(), "config/local.json".to_string()],
+        )
+        .expect("configured files should copy");
+
+        assert_eq!(
+            fs::read_to_string(worktree.join(".env")).expect("copied hidden file should exist"),
+            "TOKEN=secret\n"
+        );
+        assert_eq!(
+            fs::read_to_string(worktree.join("config").join("local.json"))
+                .expect("copied nested file should exist"),
+            "{}\n"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn copy_configured_worktree_files_rejects_parent_traversal() {
+        let root = unique_temp_path("copy-configured-parent");
+        let repo = root.join("repo");
+        let worktree = root.join("worktree");
+        fs::create_dir_all(&repo).expect("repo directory should exist");
+        fs::create_dir_all(&worktree).expect("worktree directory should exist");
+
+        let error = copy_configured_worktree_files(&repo, &worktree, &["../.env".to_string()])
+            .expect_err("parent traversal should be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("cannot traverse outside the repository"),
+            "unexpected copy error: {error}"
+        );
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

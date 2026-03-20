@@ -27,15 +27,16 @@ use crate::app_service::test_support::{
     lock_env, make_emitter, make_session, make_task, prepend_path, process_is_alive,
     remove_env_var, set_env_var, spawn_sleep_process, unique_temp_path,
     wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
-    write_executable_script, FakeTaskStore, GitCall, TaskStoreState,
+    write_executable_script, write_private_file, FakeTaskStore, GitCall, TaskStoreState,
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
     parse_mcp_command_json, read_opencode_process_registry, read_opencode_version,
     resolve_mcp_command, resolve_opencode_binary_path, terminate_child_process,
     terminate_process_by_pid, validate_parent_relationships_for_update,
-    with_locked_opencode_process_registry, AgentRuntimeProcess, OpencodeProcessRegistryInstance,
-    RunProcess, TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+    with_locked_opencode_process_registry, AgentRuntimeProcess, AppService,
+    OpencodeProcessRegistryInstance, RunProcess, TrackedOpencodeProcessGuard,
+    OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
 
 #[test]
@@ -248,6 +249,62 @@ fn git_remove_worktree_rejects_repository_root() {
         .calls
         .iter()
         .any(|call| matches!(call, GitCall::RemoveWorktree { .. })));
+}
+
+#[test]
+fn git_create_worktree_copies_configured_files() -> Result<()> {
+    let root = unique_temp_path("git-create-worktree-copies-files");
+    let repo = root.join("repo");
+    let worktree = root.join("worktree");
+    init_git_repo(&repo)?;
+    write_private_file(repo.join(".env").as_path(), "API_KEY=manual-copy\n")?;
+
+    let task_state = Arc::new(Mutex::new(TaskStoreState::default()));
+    let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore { state: task_state });
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let service = AppService::new(task_store, config_store);
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(root.join("worktrees").to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: vec![".env".to_string()],
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+
+    service.git_create_worktree(
+        repo_path.as_str(),
+        worktree.to_string_lossy().as_ref(),
+        "feature/manual-copy",
+        true,
+    )?;
+
+    assert_eq!(
+        fs::read_to_string(worktree.join(".env"))?,
+        "API_KEY=manual-copy\n"
+    );
+
+    service.git_remove_worktree(
+        repo_path.as_str(),
+        worktree.to_string_lossy().as_ref(),
+        true,
+    )?;
+    let _ = fs::remove_dir_all(root);
+    Ok(())
 }
 
 #[test]
