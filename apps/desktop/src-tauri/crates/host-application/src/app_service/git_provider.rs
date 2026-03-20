@@ -86,6 +86,28 @@ pub(super) struct ResolvedPullRequest {
 }
 
 impl GithubGhCliProvider {
+    fn select_pull_request_for_branch(
+        mut pull_requests: Vec<ResolvedPullRequest>,
+        source_branch: &str,
+        state: Option<&str>,
+    ) -> Result<Option<ResolvedPullRequest>> {
+        if matches!(state, Some("all")) {
+            pull_requests.retain(|pull_request| pull_request.record.state == "merged");
+            pull_requests
+                .sort_by(|left, right| left.record.updated_at.cmp(&right.record.updated_at));
+            return Ok(pull_requests.pop());
+        }
+
+        match pull_requests.len() {
+            0 => Ok(None),
+            1 => Ok(pull_requests.pop()),
+            _ => Err(anyhow!(
+                "Multiple pull requests were found for branch {source_branch} while querying state={}.",
+                state.unwrap_or("default")
+            )),
+        }
+    }
+
     fn find_pull_request_list_entry_for_branch(
         repo_path: &Path,
         repository: &GitProviderRepository,
@@ -112,14 +134,8 @@ impl GithubGhCliProvider {
             Some(repository.host.as_str()),
             arg_refs.as_slice(),
         )?;
-        let mut pull_requests = Self::parse_pull_list_response(payload)?;
-        match pull_requests.len() {
-            0 => Ok(None),
-            1 => Ok(pull_requests.pop()),
-            _ => Err(anyhow!(
-                "Multiple pull requests were found for branch {source_branch}."
-            )),
-        }
+        let pull_requests = Self::parse_pull_list_response(payload)?;
+        Self::select_pull_request_for_branch(pull_requests, source_branch, state)
     }
 
     fn build_gh_args(host: Option<&str>, args: &[&str]) -> Vec<String> {

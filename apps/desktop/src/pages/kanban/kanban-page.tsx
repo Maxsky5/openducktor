@@ -47,8 +47,8 @@ export function KanbanPage(): ReactElement {
       <TaskCreateModal {...models.taskComposer} />
       {models.mergedPullRequestModal ? (
         <MergedPullRequestConfirmDialog
-          pullRequest={models.mergedPullRequestModal.pullRequest ?? null}
-          isLinking={models.mergedPullRequestModal.isSubmitting}
+          pullRequest={models.mergedPullRequestModal.pullRequest}
+          isLinking={models.mergedPullRequestModal.isLinking}
           onCancel={models.mergedPullRequestModal.onCancel}
           onConfirm={models.mergedPullRequestModal.onConfirm}
         />

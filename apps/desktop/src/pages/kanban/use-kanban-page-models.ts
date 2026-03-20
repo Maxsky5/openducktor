@@ -208,7 +208,7 @@ export function useKanbanPageModels({
     mergedPullRequestModal: pendingMergedPullRequest
       ? {
           pullRequest: pendingMergedPullRequest.pullRequest,
-          isSubmitting: pendingMergedPullRequest.taskId === linkingMergedPullRequestTaskId,
+          isLinking: pendingMergedPullRequest.taskId === linkingMergedPullRequestTaskId,
           onCancel: cancelLinkMergedPullRequest,
           onConfirm: () => {
             void linkMergedPullRequest();

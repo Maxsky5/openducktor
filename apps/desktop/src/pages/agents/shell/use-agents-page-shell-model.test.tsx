@@ -176,7 +176,6 @@ let readinessState: ReadinessState = {
 };
 const rightPanelToggleModel = { label: "Toggle panel" };
 const rightPanelModel = { kind: "documents" };
-const latestMergedPullRequestModalProps: Record<string, unknown> | null = null;
 let orchestrationState: OrchestrationState = {
   repoSettings: null,
   chatSettingsLoadError: new Error("chat settings failed"),

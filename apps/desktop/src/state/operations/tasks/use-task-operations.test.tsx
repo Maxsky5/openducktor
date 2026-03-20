@@ -732,6 +732,35 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("linkMergedPullRequest surfaces an actionable error when merged PR state is missing", async () => {
+    const originalToastError = toast.error;
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.linkMergedPullRequest();
+      });
+
+      expect(toastError).toHaveBeenCalledWith("Merged pull request state expired", {
+        description: "Re-run pull request detection and try again.",
+      });
+    } finally {
+      await harness.unmount();
+      toast.error = originalToastError;
+    }
+  });
+
   test("syncPullRequests warns when no pull request exists for the task branch", async () => {
     const taskPullRequestDetect = mock(async () => ({
       outcome: "not_found" as const,

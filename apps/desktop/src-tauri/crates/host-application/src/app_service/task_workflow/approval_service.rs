@@ -420,12 +420,14 @@ impl AppService {
     ) -> Result<TaskPullRequestDetectResult> {
         let context = self.load_task_context(repo_path, task_id)?;
         ensure_pull_request_management_status(&context.task.status)?;
-        if self
-            .task_metadata_get(context.repo.repo_path.as_str(), task_id)?
-            .pull_request
-            .is_some()
-        {
+        let metadata = self.task_metadata_get(context.repo.repo_path.as_str(), task_id)?;
+        if metadata.pull_request.is_some() {
             return Err(anyhow!("Task {task_id} already has a linked pull request."));
+        }
+        if metadata.direct_merge.is_some() {
+            return Err(anyhow!(
+                "A local direct merge is already recorded for task {task_id}. Finish the direct merge workflow before linking a merged pull request."
+            ));
         }
         let repo_config = self.workspace_get_repo_config(context.repo.repo_path.as_str())?;
         let working_directory = self
@@ -494,18 +496,29 @@ impl AppService {
         pull_request: PullRequestRecord,
     ) -> Result<TaskCard> {
         let context = self.load_task_context(repo_path, task_id)?;
-        ensure_pull_request_management_status(&context.task.status)?;
-        if self
-            .task_metadata_get(context.repo.repo_path.as_str(), task_id)?
-            .pull_request
-            .is_some()
-        {
-            return Err(anyhow!("Task {task_id} already has a linked pull request."));
+        let metadata = self.task_metadata_get(context.repo.repo_path.as_str(), task_id)?;
+        let same_existing_pull_request = metadata.pull_request.as_ref().is_some_and(|existing| {
+            existing.provider_id == pull_request.provider_id
+                && existing.number == pull_request.number
+                && existing.state == "merged"
+        });
+        if context.task.status != TaskStatus::Closed || !same_existing_pull_request {
+            ensure_pull_request_management_status(&context.task.status)?;
+        }
+        if metadata.direct_merge.is_some() {
+            return Err(anyhow!(
+                "A local direct merge is already recorded for task {task_id}. Finish the direct merge workflow before linking a merged pull request."
+            ));
         }
         if pull_request.state != "merged" {
             return Err(anyhow!(
                 "Task {task_id} can only link a merged pull request from detection results."
             ));
+        }
+        if metadata.pull_request.is_some() {
+            if !same_existing_pull_request {
+                return Err(anyhow!("Task {task_id} already has a linked pull request."));
+            }
         }
 
         let repo_path = self.resolve_task_repo_path(repo_path)?;
@@ -524,20 +537,26 @@ impl AppService {
             .name
             .ok_or_else(|| anyhow!("Pull request linking requires a builder branch name."))?;
 
-        self.store_linked_pull_request_metadata(
-            repo_path.as_str(),
-            task_id,
-            ResolvedPullRequest {
-                record: pull_request,
-                source_branch: source_branch.clone(),
-            },
-        )?;
-        let task = self.task_transition(
-            repo_path.as_str(),
-            task_id,
-            TaskStatus::Closed,
-            Some("Linked pull request merged"),
-        )?;
+        if metadata.pull_request.is_none() {
+            self.store_linked_pull_request_metadata(
+                repo_path.as_str(),
+                task_id,
+                ResolvedPullRequest {
+                    record: pull_request,
+                    source_branch: source_branch.clone(),
+                },
+            )?;
+        }
+        let task = if context.task.status == TaskStatus::Closed {
+            context.task
+        } else {
+            self.task_transition(
+                repo_path.as_str(),
+                task_id,
+                TaskStatus::Closed,
+                Some("Linked pull request merged"),
+            )?
+        };
         self.finalize_direct_merge_cleanup(
             repo_path.as_str(),
             task_id,

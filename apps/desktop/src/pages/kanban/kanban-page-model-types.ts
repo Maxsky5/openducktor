@@ -121,8 +121,8 @@ export type KanbanPageModels = {
   taskComposer: KanbanPageTaskComposerModel;
   taskDetailsController: KanbanPageTaskDetailsControllerModel;
   mergedPullRequestModal: {
-    pullRequest: TaskCard["pullRequest"];
-    isSubmitting: boolean;
+    pullRequest: NonNullable<TaskCard["pullRequest"]>;
+    isLinking: boolean;
     onCancel: () => void;
     onConfirm: () => void;
   } | null;

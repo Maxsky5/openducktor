@@ -197,6 +197,9 @@ export function useTaskOperations({
 
   const linkMergedPullRequest = useCallback(async (): Promise<void> => {
     if (!pendingMergedPullRequest) {
+      toast.error("Merged pull request state expired", {
+        description: "Re-run pull request detection and try again.",
+      });
       return;
     }
 
