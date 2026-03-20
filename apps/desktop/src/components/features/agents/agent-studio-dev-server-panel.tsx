@@ -1,14 +1,16 @@
 import type { DevServerScriptState } from "@openducktor/contracts";
-import { Play, RefreshCw, Square } from "lucide-react";
+import { Check, Copy, Play, RefreshCw, Square } from "lucide-react";
 import {
   memo,
   type ReactElement,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -66,6 +68,23 @@ const streamClassName = (stream: "stdout" | "stderr" | "system"): string => {
 
 const sanitizeLogText = (text: string): string => text.replace(ANSI_ESCAPE_SEQUENCE, "");
 
+const getClipboardErrorMessage = (error: unknown): string => {
+  if (!(error instanceof DOMException)) {
+    return "Copy failed";
+  }
+
+  switch (error.name) {
+    case "NotAllowedError":
+      return "Permission denied: clipboard access not allowed";
+    case "NotFoundError":
+      return "No clipboard available in this environment";
+    case "AbortError":
+      return "Copy operation was cancelled";
+    default:
+      return `Copy failed: ${error.message}`;
+  }
+};
+
 const statusIndicatorClassName = (status: DevServerScriptState["status"]): string => {
   if (status === "running") {
     return "bg-emerald-400";
@@ -114,6 +133,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
   const logViewportContainerRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const [logViewport, setLogViewport] = useState<HTMLElement | null>(null);
+  const [copiedWorktreePath, setCopiedWorktreePath] = useState(false);
   const selectedScript = model.selectedScript;
   const isActionPending = model.isStartPending || model.isStopPending || model.isRestartPending;
   const hasExpandedActions = model.mode === "active";
@@ -137,6 +157,15 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
       };
     });
   }, [selectedScriptContent]);
+
+  useEffect(() => {
+    if (!copiedWorktreePath) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => setCopiedWorktreePath(false), 2000);
+    return () => clearTimeout(timeoutId);
+  }, [copiedWorktreePath]);
 
   useLayoutEffect(() => {
     if (selectedTabsValue === "__none__") {
@@ -208,6 +237,23 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
       ? `Running in ${model.worktreePath}`
       : "Builder dev server logs stream here while the task worktree is active.";
   }, [model.mode, model.worktreePath]);
+
+  const handleCopyWorktreePath = useCallback(() => {
+    if (!model.worktreePath) {
+      return;
+    }
+
+    navigator.clipboard
+      .writeText(model.worktreePath)
+      .then(() => {
+        setCopiedWorktreePath(true);
+        toast.success("Copied!", { description: model.worktreePath });
+      })
+      .catch((error: unknown) => {
+        console.error("[AgentStudioDevServerPanel] Clipboard write failed:", error);
+        toast.error(getClipboardErrorMessage(error));
+      });
+  }, [model.worktreePath]);
 
   if (!hasExpandedActions) {
     const isEmpty = model.mode === "empty";
@@ -290,12 +336,35 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
           </Button>
         </div>
 
-        <p
-          className="mt-3 text-xs text-muted-foreground"
-          data-testid="agent-studio-dev-server-header-summary"
-        >
-          {headerSummary}
-        </p>
+        {model.worktreePath ? (
+          <div className="mt-3 inline-flex max-w-full items-center gap-1.5 text-xs text-muted-foreground">
+            <p className="min-w-0 truncate" data-testid="agent-studio-dev-server-header-summary">
+              {headerSummary}
+            </p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-6 shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={handleCopyWorktreePath}
+              data-testid="agent-studio-dev-server-copy-worktree-path"
+              aria-label="Copy working directory"
+            >
+              {copiedWorktreePath ? (
+                <Check className="size-3.5 text-emerald-500 dark:text-emerald-400" />
+              ) : (
+                <Copy className="size-3.5" />
+              )}
+            </Button>
+          </div>
+        ) : (
+          <p
+            className="mt-3 text-xs text-muted-foreground"
+            data-testid="agent-studio-dev-server-header-summary"
+          >
+            {headerSummary}
+          </p>
+        )}
       </div>
 
       {model.error ? (

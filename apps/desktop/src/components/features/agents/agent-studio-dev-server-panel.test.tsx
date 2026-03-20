@@ -137,6 +137,9 @@ describe("AgentStudioDevServerPanel", () => {
     expect(html).toContain("Restart");
     expect(html).toContain("Frontend");
     expect(html).toContain("bun run dev");
+    expect(html).toContain("Copy working directory");
+    expect(html).toContain("/tmp/worktree/task-7");
+    expect(html).toContain("inline-flex max-w-full items-center gap-1.5");
     expect(html).toContain("bg-[var(--dev-server-terminal-panel)]");
     expect(html).toContain("h-9 w-auto max-w-[320px]");
     expect(html).toContain("ready on http://localhost:5173");
