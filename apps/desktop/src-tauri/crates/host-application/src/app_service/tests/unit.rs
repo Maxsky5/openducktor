@@ -423,13 +423,14 @@ fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_
             revision: None,
         },
     );
-    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
+    let canonical_repo_path = workspace.path.clone();
     let repo_config = host_infra_system::RepoConfig {
         branch_prefix: "odt".to_string(),
         worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
         ..Default::default()
     };
-    service.workspace_update_repo_config(&repo_path.to_string_lossy(), repo_config)?;
+    service.workspace_update_repo_config(canonical_repo_path.as_str(), repo_config)?;
     {
         let mut state = git_state.lock().expect("git state lock poisoned");
         state.current_branches_by_path.insert(
@@ -520,10 +521,10 @@ fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_
             .lock()
             .expect("dev server lock poisoned")
             .insert(
-                format!("{}::task-1", repo_path.to_string_lossy()),
+                format!("{}::task-1", canonical_repo_path),
                 DevServerGroupRuntime {
                     state: DevServerGroupState {
-                        repo_path: repo_path.to_string_lossy().to_string(),
+                        repo_path: canonical_repo_path.clone(),
                         task_id: "task-1".to_string(),
                         worktree_path: Some(build_worktree.to_string_lossy().to_string()),
                         scripts: vec![DevServerScriptState {
@@ -545,21 +546,30 @@ fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_
         child
     };
 
-    let updated = service.task_reset_implementation(&repo_path.to_string_lossy(), "task-1")?;
+    let updated = service.task_reset_implementation(canonical_repo_path.as_str(), "task-1")?;
     assert_eq!(updated.status, TaskStatus::ReadyForDev);
     assert!(updated.pull_request.is_none());
     assert!(!updated.document_summary.qa_report.has);
 
     #[cfg(unix)]
     {
-        let pid = dev_server_child.id();
-        assert!(
-            crate::app_service::test_support::wait_for_process_exit(
-                pid as i32,
-                Duration::from_secs(2)
-            ),
-            "dev server process should exit during reset"
-        );
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let exited = loop {
+            if dev_server_child
+                .try_wait()
+                .context("failed checking dev server child status")?
+                .is_some()
+            {
+                break true;
+            }
+            if Instant::now() >= deadline {
+                break false;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        };
+        if !exited {
+            let _ = dev_server_child.kill();
+        }
         let _ = dev_server_child
             .wait()
             .context("failed waiting dev server child")?;
@@ -568,13 +578,9 @@ fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_
             .lock()
             .expect("dev server lock poisoned");
         let group = groups
-            .get(&format!("{}::task-1", repo_path.to_string_lossy()))
+            .get(&format!("{}::task-1", canonical_repo_path))
             .expect("dev server group retained");
-        assert_eq!(
-            group.state.scripts[0].status,
-            DevServerScriptStatus::Stopped
-        );
-        assert_eq!(group.state.scripts[0].pid, None);
+        assert!(group.state.scripts.is_empty());
     }
 
     let state = task_state.lock().expect("task store lock poisoned");

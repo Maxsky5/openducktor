@@ -5,7 +5,7 @@ mod security;
 mod store;
 mod types;
 
-pub use normalize::normalize_hook_set;
+pub use normalize::{normalize_hook_set, normalize_repo_dev_servers};
 pub use store::{AppConfigStore, RuntimeConfigStore};
 pub use types::{
     hook_set_fingerprint, repo_script_fingerprint, AgentDefaults, AgentModelDefault, ChatSettings,

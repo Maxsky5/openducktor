@@ -121,9 +121,6 @@ export function useRepoSettingsOperations({
       await queryClient.invalidateQueries({
         queryKey: workspaceQueryKeys.repoConfig(repo),
       });
-      await queryClient.invalidateQueries({
-        queryKey: settingsSnapshotQueryKey,
-      });
       queryClient.removeQueries({
         queryKey: settingsSnapshotQueryKey,
         exact: true,

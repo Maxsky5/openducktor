@@ -281,9 +281,8 @@ export function RepositoryConfigurationSection({
             <div className="grid gap-0 divide-y divide-border">
               {selectedRepoConfig.devServers.map((devServer, index) => {
                 const validationErrors = devServerValidationErrors[devServer.id];
-                const rowErrors = [validationErrors?.name, validationErrors?.command].filter(
-                  Boolean,
-                );
+                const nameErrorId = `repo-dev-server-name-${devServer.id}-error`;
+                const commandErrorId = `repo-dev-server-command-${devServer.id}-error`;
 
                 return (
                   <div
@@ -301,6 +300,7 @@ export function RepositoryConfigurationSection({
                         id={`repo-dev-server-name-${devServer.id}`}
                         value={devServer.name}
                         aria-invalid={validationErrors?.name ? true : undefined}
+                        aria-describedby={validationErrors?.name ? nameErrorId : undefined}
                         disabled={isLoadingSettings || isSaving}
                         onChange={(event) => {
                           const name = event.currentTarget.value;
@@ -312,6 +312,16 @@ export function RepositoryConfigurationSection({
                           }));
                         }}
                       />
+                      {validationErrors?.name ? (
+                        <span
+                          id={nameErrorId}
+                          role="alert"
+                          aria-live="polite"
+                          className="text-xs text-destructive-muted"
+                        >
+                          {validationErrors.name}
+                        </span>
+                      ) : null}
                     </div>
 
                     <div className="grid gap-2">
@@ -326,6 +336,7 @@ export function RepositoryConfigurationSection({
                         placeholder="bun run dev"
                         value={devServer.command}
                         aria-invalid={validationErrors?.command ? true : undefined}
+                        aria-describedby={validationErrors?.command ? commandErrorId : undefined}
                         disabled={isLoadingSettings || isSaving}
                         onChange={(event) => {
                           const command = event.currentTarget.value;
@@ -337,6 +348,16 @@ export function RepositoryConfigurationSection({
                           }));
                         }}
                       />
+                      {validationErrors?.command ? (
+                        <span
+                          id={commandErrorId}
+                          role="alert"
+                          aria-live="polite"
+                          className="text-xs text-destructive-muted"
+                        >
+                          {validationErrors.command}
+                        </span>
+                      ) : null}
                     </div>
 
                     <div className="flex items-center justify-end gap-1 md:self-center">
@@ -411,11 +432,6 @@ export function RepositoryConfigurationSection({
                         <Trash2 className="size-4" />
                       </Button>
                     </div>
-                    {rowErrors.length > 0 ? (
-                      <div className="text-xs text-destructive-muted md:col-span-3">
-                        {rowErrors.join(" ")}
-                      </div>
-                    ) : null}
                   </div>
                 );
               })}

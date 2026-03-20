@@ -3,10 +3,11 @@ use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use host_domain::WorkspaceRecord;
 use host_infra_system::{
-    normalize_hook_set, repo_script_fingerprint, AgentDefaults, ChatSettings, GitTargetBranch,
-    HookSet, PromptOverrides, RepoConfig, RepoDevServerScript, RepoGitConfig,
+    normalize_hook_set, normalize_repo_dev_servers, repo_script_fingerprint, AgentDefaults,
+    ChatSettings, GitTargetBranch, HookSet, PromptOverrides, RepoConfig, RepoDevServerScript,
+    RepoGitConfig,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
@@ -376,32 +377,8 @@ impl AppService {
 fn normalize_dev_servers(
     dev_servers: Vec<RepoDevServerScript>,
 ) -> Result<Vec<RepoDevServerScript>> {
-    let mut normalized = Vec::new();
-    let mut seen_ids = HashSet::new();
-    for mut dev_server in dev_servers {
-        dev_server.id = dev_server.id.trim().to_string();
-        dev_server.name = dev_server.name.trim().to_string();
-        dev_server.command = dev_server.command.trim().to_string();
-
-        if dev_server.command.is_empty() {
-            continue;
-        }
-
-        if dev_server.id.is_empty() {
-            return Err(anyhow!("Dev server id cannot be blank."));
-        }
-        if dev_server.name.is_empty() {
-            return Err(anyhow!(
-                "Dev server names cannot be blank when a command is configured."
-            ));
-        }
-        if !seen_ids.insert(dev_server.id.clone()) {
-            return Err(anyhow!("Duplicate dev server id: {}", dev_server.id));
-        }
-
-        normalized.push(dev_server);
-    }
-
+    let mut normalized = dev_servers;
+    normalize_repo_dev_servers(&mut normalized)?;
     Ok(normalized)
 }
 

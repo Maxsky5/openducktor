@@ -32,7 +32,7 @@ fn normalize_hook_commands(commands: &mut Vec<String>) {
         .collect();
 }
 
-fn normalize_dev_servers(dev_servers: &mut Vec<RepoDevServerScript>) -> Result<()> {
+pub fn normalize_repo_dev_servers(dev_servers: &mut Vec<RepoDevServerScript>) -> Result<()> {
     let mut seen_ids = HashSet::new();
     let mut normalized = Vec::with_capacity(dev_servers.len());
     for mut dev_server in std::mem::take(dev_servers) {
@@ -156,7 +156,7 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) -> Result<()> {
         canonicalize_default_target_branch(std::mem::take(&mut repo.default_target_branch));
     normalize_git_provider_configs(&mut repo.git.providers);
     repo.hooks = normalize_hook_set(std::mem::take(&mut repo.hooks));
-    normalize_dev_servers(&mut repo.dev_servers)?;
+    normalize_repo_dev_servers(&mut repo.dev_servers)?;
     normalize_hook_commands(&mut repo.worktree_file_copies);
     let current_fingerprint = repo_script_fingerprint(&repo.hooks, &repo.dev_servers);
     if repo.trusted_hooks {

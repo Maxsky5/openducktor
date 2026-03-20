@@ -285,7 +285,10 @@ export function useAgentStudioDevServerPanel({
       return;
     }
 
-    void activeSessionRefreshKey;
+    if (activeSessionRefreshKey) {
+      // Include activeSessionRefreshKey in the dependency list so session refreshes
+      // trigger a dev-server state refresh for the active task.
+    }
 
     void queryClient.invalidateQueries({
       queryKey: devServerQueryKeys.state(repoPath, taskId),
