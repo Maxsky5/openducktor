@@ -55,10 +55,6 @@ pub(crate) fn resolve_opencode_binary_path() -> Option<String> {
         return Some(resolved);
     }
 
-    if let Some(resolved) = resolve_opencode_binary_from_path() {
-        return Some(resolved);
-    }
-
     if let Some(home) = std::env::var_os("HOME") {
         let candidate = PathBuf::from(home)
             .join(".opencode")
@@ -70,17 +66,6 @@ pub(crate) fn resolve_opencode_binary_path() -> Option<String> {
     }
 
     resolve_command_path("opencode").ok().flatten()
-}
-
-fn resolve_opencode_binary_from_path() -> Option<String> {
-    let path_value = std::env::var_os("PATH")?;
-    for directory in std::env::split_paths(&path_value) {
-        let candidate = directory.join("opencode");
-        if candidate.is_file() && is_executable_path(candidate.as_path()) {
-            return candidate.to_str().map(|value| value.to_string());
-        }
-    }
-    None
 }
 
 #[cfg(unix)]

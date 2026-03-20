@@ -4,7 +4,7 @@ use host_domain::{
     now_rfc3339, DevServerEvent, DevServerGroupState, DevServerLogLine, DevServerLogStream,
     DevServerScriptState, DevServerScriptStatus,
 };
-use host_infra_system::{RepoConfig, RepoDevServerScript};
+use host_infra_system::{subprocess_path_env, RepoConfig, RepoDevServerScript};
 use std::collections::HashMap;
 #[cfg(unix)]
 use std::fs::File;
@@ -261,6 +261,13 @@ impl AppService {
             let mut command =
                 build_dev_server_command(script.command.as_str(), script.name.as_str())?;
             command.current_dir(worktree_path);
+            let path_value = subprocess_path_env().ok_or_else(|| {
+                anyhow!(
+                    "Failed to assemble subprocess PATH for dev server `{}`",
+                    script.name
+                )
+            })?;
+            command.env("PATH", path_value);
             configure_process_group(&mut command);
 
             #[cfg(unix)]
@@ -1071,8 +1078,8 @@ fn stop_process_group(pid: u32, timeout: Duration) -> Result<()> {
 mod tests {
     use super::*;
     use crate::app_service::test_support::{
-        build_service_with_state, spawn_sleep_process_group, unique_temp_path,
-        wait_for_process_exit,
+        build_service_with_state, lock_env, set_env_var, spawn_sleep_process_group,
+        unique_temp_path, wait_for_path_exists, wait_for_process_exit, write_executable_script,
     };
     use std::fs;
     use std::sync::{Arc, Mutex};
@@ -1349,6 +1356,98 @@ mod tests {
             .buffered_log_lines
             .iter()
             .any(|line| line.text.contains("Dev server exited with code")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn start_dev_server_script_uses_augmented_subprocess_path() {
+        let _env_lock = lock_env();
+        let (service, _task_state, _git_state) = build_service_with_state(Vec::new());
+        let repo_path = "/repo";
+        let task_id = "task-path";
+        let sandbox = unique_temp_path("dev-server-path");
+        let home = sandbox.join("home");
+        let login_bin = sandbox.join("login-bin");
+        fs::create_dir_all(&login_bin).expect("create login shell path");
+        let pnpm_path = login_bin.join("pnpm");
+        let node_path = login_bin.join("node");
+        let shell_path = sandbox.join("fake-shell");
+        let marker_path = sandbox.join("pnpm-marker");
+        write_executable_script(
+            pnpm_path.as_path(),
+            "#!/usr/bin/env node\nconsole.log('pnpm shim');\n",
+        )
+        .expect("write fake pnpm");
+        write_executable_script(
+            node_path.as_path(),
+            format!(
+                r#"#!/bin/sh
+touch "{}"
+sleep 5
+"#,
+                marker_path.display()
+            )
+            .as_str(),
+        )
+        .expect("write fake node");
+        write_executable_script(
+            shell_path.as_path(),
+            format!(
+                "#!/bin/sh\nprintf 'shell startup noise\\n'\nprintf '__OPENDUCKTOR_ENV_START__\\0PATH={}\\0'\n",
+                login_bin.display()
+            )
+            .as_str(),
+        )
+        .expect("write fake shell");
+
+        let worktree_path = sandbox.join("worktree");
+        fs::create_dir_all(&worktree_path).expect("create worktree path");
+        let worktree_path = worktree_path.to_string_lossy().to_string();
+        let group_key = dev_server_group_key(repo_path, task_id);
+        let script = RepoDevServerScript {
+            id: "frontend".to_string(),
+            name: "Frontend".to_string(),
+            command: "pnpm".to_string(),
+        };
+
+        service
+            .dev_server_groups
+            .lock()
+            .expect("group lock poisoned")
+            .insert(
+                group_key.clone(),
+                DevServerGroupRuntime {
+                    state: build_group_state(
+                        repo_path,
+                        task_id,
+                        Some(worktree_path.clone()),
+                        &repo_config(vec![script.clone()]),
+                    ),
+                    emitter: None,
+                },
+            );
+
+        let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
+        let _shell_guard = set_env_var("SHELL", shell_path.to_string_lossy().as_ref());
+        let _user_guard = set_env_var("USER", "odt-test");
+        let _logname_guard = set_env_var("LOGNAME", "odt-test");
+        let _path_guard = set_env_var("PATH", "/usr/bin:/bin");
+
+        let pid = service
+            .start_dev_server_script(
+                group_key.as_str(),
+                repo_path,
+                task_id,
+                worktree_path.as_str(),
+                script,
+            )
+            .expect("fake pnpm and node from augmented PATH should start");
+
+        assert!(
+            wait_for_path_exists(marker_path.as_path(), Duration::from_secs(5)),
+            "expected fake pnpm script to resolve node from augmented PATH"
+        );
+        stop_process_group(pid, DEV_SERVER_STOP_TIMEOUT).expect("stop dev server");
     }
 
     #[cfg(unix)]
