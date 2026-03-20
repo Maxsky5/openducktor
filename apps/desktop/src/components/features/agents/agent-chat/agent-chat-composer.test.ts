@@ -76,6 +76,22 @@ describe("AgentChatComposer", () => {
     expect(html).not.toContain("22.5%");
   });
 
+  test("stop button is enabled when session is working even if agentStudioReady is false", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          agentStudioReady: false,
+          canStopSession: true,
+          isSessionWorking: true,
+        },
+      }),
+    );
+
+    expect(html).toContain("Stop session");
+    expect(html).not.toContain('aria-label="Stop session" disabled');
+  });
+
   test("disables send when input is blank", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {

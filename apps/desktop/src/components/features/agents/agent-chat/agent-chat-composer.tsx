@@ -192,7 +192,6 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
                     type="button"
                     size="icon"
                     className="size-8 rounded-full border-0 bg-red-500 text-white shadow-sm hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700"
-                    disabled={!agentStudioReady}
                     aria-label="Stop session"
                     onClick={onStopSession}
                   >
