@@ -3,8 +3,8 @@ use std::env;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
-#[cfg(not(test))]
-use std::sync::OnceLock;
+#[cfg(all(unix, not(test)))]
+use std::sync::Mutex;
 
 #[cfg(windows)]
 const DEFAULT_WINDOWS_EXECUTABLE_EXTENSIONS: [&str; 4] = [".exe", ".cmd", ".bat", ".com"];
@@ -14,18 +14,35 @@ const LOGIN_SHELL_ENV_MARKER: &[u8] = b"__OPENDUCKTOR_ENV_START__\0";
 
 #[cfg(not(test))]
 #[cfg(unix)]
-static LOGIN_SHELL_PATH_CACHE: OnceLock<Option<OsString>> = OnceLock::new();
+static LOGIN_SHELL_PATH_CACHE: Mutex<Option<LoginShellPathCacheEntry>> = Mutex::new(None);
 
 #[cfg(not(test))]
-static PROCESS_PATH_CACHE: OnceLock<ProcessPathCache> = OnceLock::new();
+#[cfg(unix)]
+#[derive(Clone, Eq, PartialEq)]
+struct LoginShellPathCacheKey {
+    shell: Option<OsString>,
+    home: Option<OsString>,
+    user: Option<OsString>,
+    logname: Option<OsString>,
+}
 
-#[derive(Clone, Default)]
-struct ProcessPathCache {
-    explicit_override_directories: Vec<PathBuf>,
-    login_shell_entries: Vec<PathBuf>,
-    inherited_entries: Vec<PathBuf>,
-    standard_entries: Vec<PathBuf>,
-    bundled_dir: Option<PathBuf>,
+#[cfg(not(test))]
+#[cfg(unix)]
+#[derive(Clone)]
+struct LoginShellPathCacheEntry {
+    key: LoginShellPathCacheKey,
+    path: Option<OsString>,
+}
+
+#[cfg(not(test))]
+#[cfg(unix)]
+fn login_shell_path_cache_key() -> LoginShellPathCacheKey {
+    LoginShellPathCacheKey {
+        shell: env::var_os("SHELL"),
+        home: env::var_os("HOME"),
+        user: env::var_os("USER"),
+        logname: env::var_os("LOGNAME"),
+    }
 }
 
 fn command_env_override_name(program: &str) -> String {
@@ -163,16 +180,6 @@ fn unique_path_entries(entries: impl IntoIterator<Item = PathBuf>) -> Vec<PathBu
     deduped
 }
 
-fn build_process_path_cache() -> ProcessPathCache {
-    ProcessPathCache {
-        explicit_override_directories: explicit_command_override_directories(),
-        login_shell_entries: path_entries_from_value(login_shell_path()),
-        inherited_entries: path_entries_from_value(env::var_os("PATH")),
-        standard_entries: standard_search_directories(),
-        bundled_dir: current_executable_directory(),
-    }
-}
-
 #[cfg(unix)]
 fn standard_search_directories() -> Vec<PathBuf> {
     let mut directories = vec![
@@ -199,20 +206,6 @@ fn standard_search_directories() -> Vec<PathBuf> {
 #[cfg(not(unix))]
 fn standard_search_directories() -> Vec<PathBuf> {
     Vec::new()
-}
-
-fn process_path_cache() -> ProcessPathCache {
-    #[cfg(test)]
-    {
-        build_process_path_cache()
-    }
-
-    #[cfg(not(test))]
-    {
-        PROCESS_PATH_CACHE
-            .get_or_init(build_process_path_cache)
-            .clone()
-    }
 }
 
 fn command_path_from_directories(program: &str, directories: &[PathBuf]) -> Option<String> {
@@ -342,7 +335,32 @@ fn read_login_shell_path() -> Option<OsString> {
         command.env("LOGNAME", logname);
     }
 
-    let output = command.output().ok()?;
+    let mut child = command.spawn().ok()?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let output = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if !status.success() {
+                    return None;
+                }
+                break child.wait_with_output().ok()?;
+            }
+            Ok(None) => {
+                if std::time::Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return env::var_os("PATH");
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+        }
+    };
+
     if !output.status.success() {
         return None;
     }
@@ -363,9 +381,26 @@ fn login_shell_path() -> Option<OsString> {
 
     #[cfg(not(test))]
     {
-        LOGIN_SHELL_PATH_CACHE
-            .get_or_init(read_login_shell_path)
-            .clone()
+        let key = login_shell_path_cache_key();
+
+        if let Ok(cache) = LOGIN_SHELL_PATH_CACHE.lock() {
+            if let Some(entry) = cache.as_ref() {
+                if entry.key == key {
+                    return entry.path.clone();
+                }
+            }
+        }
+
+        let path = read_login_shell_path();
+
+        if let Ok(mut cache) = LOGIN_SHELL_PATH_CACHE.lock() {
+            *cache = Some(LoginShellPathCacheEntry {
+                key,
+                path: path.clone(),
+            });
+        }
+
+        path
     }
 }
 
@@ -378,9 +413,8 @@ fn process_path_with_order(
     path_override: Option<&str>,
     bundled_dir_first: bool,
 ) -> Option<OsString> {
-    let cache = process_path_cache();
-    let explicit_override_directories = cache.explicit_override_directories;
-    let bundled_dir = cache.bundled_dir;
+    let explicit_override_directories = explicit_command_override_directories();
+    let bundled_dir = current_executable_directory();
     let (login_shell_entries, inherited_entries, standard_entries) =
         if let Some(path_override) = path_override {
             (
@@ -390,9 +424,9 @@ fn process_path_with_order(
             )
         } else {
             (
-                cache.login_shell_entries,
-                cache.inherited_entries,
-                cache.standard_entries,
+                path_entries_from_value(login_shell_path()),
+                path_entries_from_value(env::var_os("PATH")),
+                standard_search_directories(),
             )
         };
 
@@ -816,6 +850,35 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn run_command_falls_back_to_inherited_path_when_login_shell_probe_times_out() {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("odt-login-shell-timeout");
+        let inherited_bin = root.join("inherited-bin");
+        fs::create_dir_all(&inherited_bin).expect("inherited path should exist");
+
+        let shell = root.join("slow-shell");
+        write_executable(&shell, "#!/bin/sh\nsleep 6\n");
+
+        let program = "odt-login-timeout-cli";
+        let script = inherited_bin.join(program);
+        write_executable(&script, "#!/bin/sh\nprintf 'timeout-fallback-ok'");
+
+        let _shell_guard = EnvVarGuard::set("SHELL", shell.to_string_lossy().as_ref());
+        let inherited_path = format!("{}:/usr/bin:/bin", inherited_bin.display());
+        let _path_guard = EnvVarGuard::set("PATH", inherited_path.as_str());
+        let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+        let _user_guard = EnvVarGuard::set("USER", "odt-test");
+        let _logname_guard = EnvVarGuard::set("LOGNAME", "odt-test");
+
+        let output = run_command(program, &[], None)
+            .expect("inherited PATH should be used when login shell probe times out");
+
+        assert_eq!(output, "timeout-fallback-ok");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn subprocess_path_env_combines_override_login_shell_inherited_and_bundled_dirs() {
         let _env_lock = lock_env();
         let root = unique_temp_path("odt-subprocess-path");
@@ -843,7 +906,8 @@ mod tests {
             override_file.to_string_lossy().as_ref(),
         );
         let _shell_guard = EnvVarGuard::set("SHELL", shell.to_string_lossy().as_ref());
-        let _path_guard = EnvVarGuard::set("PATH", inherited_dir.to_string_lossy().as_ref());
+        let inherited_path = format!("{}:/usr/bin:/bin", inherited_dir.display());
+        let _path_guard = EnvVarGuard::set("PATH", inherited_path.as_str());
         let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
         let _user_guard = EnvVarGuard::set("USER", "odt-test");
         let _logname_guard = EnvVarGuard::set("LOGNAME", "odt-test");
