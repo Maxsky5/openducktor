@@ -151,6 +151,8 @@ let latestHarnessValue: {
     mode: "direct_merge" | "pull_request";
     mergeMethod: "merge_commit" | "squash" | "rebase";
     pullRequestDraftMode: "manual" | "generate_ai";
+    pullRequestAvailable: boolean;
+    pullRequestUnavailableReason: string | null;
     squashCommitMessage: string;
     squashCommitMessageTouched: boolean;
     hasSuggestedSquashCommitMessage: boolean;
@@ -273,6 +275,158 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.squashCommitMessage).toBe("feat: builder change");
     expect(latestHarnessValue?.taskApprovalModal?.hasUncommittedChanges).toBe(true);
     expect(latestHarnessValue?.taskApprovalModal?.uncommittedFileCount).toBe(2);
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("defaults to pull_request mode when GitHub provider is available", async () => {
+    const pendingApprovalContext = createDeferred<TaskApprovalContext>();
+    taskApprovalContextGetMock.mockImplementationOnce(
+      (async () => pendingApprovalContext.promise) as unknown as never,
+    );
+
+    const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow({
+        activeRepo: "/repo",
+        tasks: [
+          createTaskCardFixture({
+            id: "TASK-1",
+            title: "Ship approval flow",
+            description: "Task description",
+          }),
+        ],
+        sessions: [],
+        loadAgentSessions: async () => {},
+        forkAgentSession: async () => "forked-session",
+        sendAgentMessage: async () => {},
+        refreshTasks: async () => {},
+      });
+      return null;
+    };
+
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(
+        <QueryProvider useIsolatedClient>
+          <Harness />
+        </QueryProvider>,
+      );
+    });
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+    });
+
+    expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
+    expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(true);
+
+    pendingApprovalContext.resolve({
+      taskId: "TASK-1",
+      taskStatus: "human_review",
+      workingDirectory: "/repo/.worktrees/task-1",
+      sourceBranch: "odt/TASK-1",
+      targetBranch: { remote: "origin", branch: "main" },
+      publishTarget: undefined,
+      defaultMergeMethod: "merge_commit",
+      hasUncommittedChanges: false,
+      uncommittedFileCount: 0,
+      pullRequest: undefined,
+      suggestedSquashCommitMessage: undefined,
+      providers: [
+        {
+          providerId: "github",
+          enabled: true,
+          available: true,
+          reason: undefined,
+        },
+      ],
+    });
+
+    await act(async () => {
+      await pendingApprovalContext.promise;
+      await Promise.resolve();
+    });
+
+    expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(false);
+    expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("pull_request");
+    expect(latestHarnessValue?.taskApprovalModal?.pullRequestAvailable).toBe(true);
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("defaults to direct_merge mode when no git provider is available", async () => {
+    const pendingApprovalContext = createDeferred<TaskApprovalContext>();
+    taskApprovalContextGetMock.mockImplementationOnce(
+      (async () => pendingApprovalContext.promise) as unknown as never,
+    );
+
+    const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow({
+        activeRepo: "/repo",
+        tasks: [
+          createTaskCardFixture({
+            id: "TASK-1",
+            title: "Ship approval flow",
+            description: "Task description",
+          }),
+        ],
+        sessions: [],
+        loadAgentSessions: async () => {},
+        forkAgentSession: async () => "forked-session",
+        sendAgentMessage: async () => {},
+        refreshTasks: async () => {},
+      });
+      return null;
+    };
+
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(
+        <QueryProvider useIsolatedClient>
+          <Harness />
+        </QueryProvider>,
+      );
+    });
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+    });
+
+    expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
+    expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(true);
+    expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("direct_merge");
+
+    pendingApprovalContext.resolve({
+      taskId: "TASK-1",
+      taskStatus: "human_review",
+      workingDirectory: "/repo/.worktrees/task-1",
+      sourceBranch: "odt/TASK-1",
+      targetBranch: { remote: "origin", branch: "main" },
+      publishTarget: undefined,
+      defaultMergeMethod: "merge_commit",
+      hasUncommittedChanges: false,
+      uncommittedFileCount: 0,
+      pullRequest: undefined,
+      suggestedSquashCommitMessage: undefined,
+      providers: [],
+    });
+
+    await act(async () => {
+      await pendingApprovalContext.promise;
+      await Promise.resolve();
+    });
+
+    expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(false);
+    expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("direct_merge");
+    expect(latestHarnessValue?.taskApprovalModal?.pullRequestAvailable).toBe(false);
 
     await act(async () => {
       renderer.unmount();
