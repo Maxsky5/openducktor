@@ -927,6 +927,9 @@ async fn dispatch_task_command(
         "task_pull_request_upsert" => Some(handle_task_pull_request_upsert(state, args)),
         "task_pull_request_unlink" => Some(handle_task_pull_request_unlink(state, args)),
         "task_pull_request_detect" => Some(handle_task_pull_request_detect(state, args)),
+        "task_pull_request_link_merged" => {
+            Some(handle_task_pull_request_link_merged(state, args).await)
+        }
         "repo_pull_request_sync" => Some(handle_repo_pull_request_sync(state, args)),
         "human_request_changes" => Some(handle_human_request_changes(state, args)),
         "human_approve" => Some(handle_human_approve(state, args)),
@@ -1956,6 +1959,35 @@ fn handle_task_pull_request_detect(state: &HeadlessState, args: Value) -> Comman
     handle_repo_task_operation(args, |repo_path, task_id| {
         state.service.task_pull_request_detect(&repo_path, &task_id)
     })
+}
+
+async fn handle_task_pull_request_link_merged(state: &HeadlessState, args: Value) -> CommandResult {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct TaskPullRequestLinkMergedArgs {
+        repo_path: String,
+        task_id: String,
+        pull_request: host_domain::PullRequestRecord,
+    }
+
+    let TaskPullRequestLinkMergedArgs {
+        repo_path,
+        task_id,
+        pull_request,
+    } = deserialize_args(args)?;
+    let service = state.service.clone();
+    let repo_path_for_worker = repo_path.clone();
+    let task_id_for_worker = task_id.clone();
+    let result = run_headless_blocking("task_pull_request_link_merged", move || {
+        service.task_pull_request_link_merged(
+            &repo_path_for_worker,
+            &task_id_for_worker,
+            pull_request,
+        )
+    })
+    .await?;
+    invalidate_repo_worktree_cache(&repo_path)?;
+    serialize_value(result)
 }
 
 fn handle_repo_pull_request_sync(state: &HeadlessState, args: Value) -> CommandResult {

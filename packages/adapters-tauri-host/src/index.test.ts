@@ -185,6 +185,7 @@ describe("TauriHostClient", () => {
       "taskPullRequestUpsert",
       "taskPullRequestUnlink",
       "taskPullRequestDetect",
+      "taskPullRequestLinkMerged",
       "repoPullRequestSync",
       "humanRequestChanges",
       "humanApprove",
@@ -1493,6 +1494,9 @@ describe("TauriHostClient", () => {
           },
         };
       }
+      if (command === "task_pull_request_link_merged") {
+        return makeTaskCardPayload();
+      }
       if (command === "repo_pull_request_sync") {
         return { ok: true };
       }
@@ -1515,8 +1519,21 @@ describe("TauriHostClient", () => {
     await client.taskPullRequestDetect("/repo", "task-1");
     expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V6");
 
-    await client.repoPullRequestSync("/repo");
+    await client.taskPullRequestLinkMerged("/repo", "task-1", {
+      providerId: "github",
+      number: 17,
+      url: "https://github.com/openai/openducktor/pull/17",
+      state: "merged",
+      createdAt: "2026-02-20T10:00:00Z",
+      updatedAt: "2026-02-20T10:00:00Z",
+      lastSyncedAt: "2026-02-20T10:00:00Z",
+      mergedAt: "2026-02-20T10:00:00Z",
+      closedAt: "2026-02-20T10:00:00Z",
+    });
     expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V7");
+
+    await client.repoPullRequestSync("/repo");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V8");
 
     expect(calls.map((entry) => entry.command)).toEqual([
       "task_metadata_get",
@@ -1529,6 +1546,8 @@ describe("TauriHostClient", () => {
       "task_pull_request_unlink",
       "task_metadata_get",
       "task_pull_request_detect",
+      "task_metadata_get",
+      "task_pull_request_link_merged",
       "task_metadata_get",
       "repo_pull_request_sync",
       "task_metadata_get",

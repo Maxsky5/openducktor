@@ -120,6 +120,12 @@ export type KanbanPageModels = {
   content: KanbanPageContentModel;
   taskComposer: KanbanPageTaskComposerModel;
   taskDetailsController: KanbanPageTaskDetailsControllerModel;
+  mergedPullRequestModal: {
+    pullRequest: NonNullable<TaskCard["pullRequest"]>;
+    isLinking: boolean;
+    onCancel: () => void;
+    onConfirm: () => void;
+  } | null;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   taskApprovalModal: TaskApprovalModalModel | null;
   resetImplementationModal: {

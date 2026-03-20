@@ -56,7 +56,23 @@ let latestKanbanColumnProps: Record<string, unknown> | null = null;
 let latestHumanReviewFeedbackModalModel: Record<string, unknown> | null = null;
 let latestSessionStartModalModel: Record<string, unknown> | null = null;
 let latestResetImplementationModalModel: Record<string, unknown> | null = null;
+let latestMergedPullRequestModalProps: Record<string, unknown> | null = null;
 let latestLocation = "/";
+let currentPendingMergedPullRequest: {
+  taskId: string;
+  pullRequest: {
+    providerId: string;
+    number: number;
+    url: string;
+    state: "merged";
+    createdAt: string;
+    updatedAt: string;
+    lastSyncedAt: string;
+    mergedAt: string;
+    closedAt: string;
+  };
+} | null = null;
+let currentLinkingMergedPullRequestTaskId: string | null = null;
 const RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR] as const;
 
 let currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
@@ -206,6 +222,13 @@ mock.module("./kanban-session-start-modal", () => ({
   },
 }));
 
+mock.module("@/components/features/pull-requests/merged-pull-request-confirm-dialog", () => ({
+  MergedPullRequestConfirmDialog: (props: Record<string, unknown>): ReactElement | null => {
+    latestMergedPullRequestModalProps = props;
+    return null;
+  },
+}));
+
 mock.module("./task-reset-implementation-modal", () => ({
   TaskResetImplementationModal: ({
     model,
@@ -252,9 +275,13 @@ mock.module("@/state", () => ({
     updateTask: async () => {},
     refreshTasks: async () => {},
     syncPullRequests: async () => {},
+    linkMergedPullRequest: async () => {},
+    cancelLinkMergedPullRequest: () => {},
     unlinkPullRequest: async () => {},
     detectingPullRequestTaskId: null,
+    linkingMergedPullRequestTaskId: currentLinkingMergedPullRequestTaskId,
     unlinkingPullRequestTaskId: null,
+    pendingMergedPullRequest: currentPendingMergedPullRequest,
     deleteTask: deleteTaskMock,
     resetTaskImplementation: resetTaskImplementationMock,
     transitionTask: async () => {},
@@ -363,7 +390,10 @@ describe("KanbanPage session start modal flow", () => {
     latestHumanReviewFeedbackModalModel = null;
     latestSessionStartModalModel = null;
     latestResetImplementationModalModel = null;
+    latestMergedPullRequestModalProps = null;
     latestLocation = "/";
+    currentPendingMergedPullRequest = null;
+    currentLinkingMergedPullRequestTaskId = null;
     startAgentSessionMock.mockClear();
     sendAgentMessageMock.mockClear();
     updateAgentSessionModelMock.mockClear();
@@ -1138,6 +1168,64 @@ describe("KanbanPage session start modal flow", () => {
     await act(async () => {
       renderer.unmount();
     });
+  });
+
+  test("shows the shared merged pull request dialog from task state", async () => {
+    currentPendingMergedPullRequest = {
+      taskId: "TASK-123",
+      pullRequest: {
+        providerId: "github",
+        number: 268,
+        url: "https://github.com/Maxsky5/openducktor/pull/268",
+        state: "merged",
+        createdAt: "2026-03-20T11:00:00Z",
+        updatedAt: "2026-03-20T11:21:32Z",
+        lastSyncedAt: "2026-03-20T11:21:32Z",
+        mergedAt: "2026-03-20T11:21:32Z",
+        closedAt: "2026-03-20T11:21:32Z",
+      },
+    };
+
+    const renderer = await renderPage();
+
+    try {
+      expect(latestMergedPullRequestModalProps?.pullRequest).toEqual(
+        currentPendingMergedPullRequest.pullRequest,
+      );
+      expect(latestMergedPullRequestModalProps?.isLinking).toBe(false);
+    } finally {
+      await act(async () => {
+        renderer.unmount();
+      });
+    }
+  });
+
+  test("marks the shared merged pull request dialog pending while linking", async () => {
+    currentPendingMergedPullRequest = {
+      taskId: "TASK-123",
+      pullRequest: {
+        providerId: "github",
+        number: 268,
+        url: "https://github.com/Maxsky5/openducktor/pull/268",
+        state: "merged",
+        createdAt: "2026-03-20T11:00:00Z",
+        updatedAt: "2026-03-20T11:21:32Z",
+        lastSyncedAt: "2026-03-20T11:21:32Z",
+        mergedAt: "2026-03-20T11:21:32Z",
+        closedAt: "2026-03-20T11:21:32Z",
+      },
+    };
+    currentLinkingMergedPullRequestTaskId = "TASK-123";
+
+    const renderer = await renderPage();
+
+    try {
+      expect(latestMergedPullRequestModalProps?.isLinking).toBe(true);
+    } finally {
+      await act(async () => {
+        renderer.unmount();
+      });
+    }
   });
 
   test("build action routes human review tasks into the human-changes builder scenario", async () => {

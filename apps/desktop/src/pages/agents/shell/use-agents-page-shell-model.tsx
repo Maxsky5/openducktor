@@ -1,5 +1,6 @@
 import { type ReactElement, startTransition, useCallback, useRef, useState } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
+import { MergedPullRequestConfirmDialog } from "@/components/features/pull-requests/merged-pull-request-confirm-dialog";
 import {
   TaskDetailsSheetController,
   type TaskDetailsSheetControllerHandle,
@@ -47,6 +48,7 @@ type AgentsPageShellModel = {
   isRightPanelVisible: boolean;
   rightPanelModel: ReturnType<typeof useAgentsPageRightPanelModel>["rightPanelModel"];
   gitConflictResolutionModal: ReactElement | null;
+  mergedPullRequestModal: ReactElement | null;
   humanReviewFeedbackModal: ReactElement;
   sessionStartModal: ReactElement | null;
   taskDetailsSheet: ReactElement;
@@ -62,9 +64,13 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     tasks,
     runs,
     syncPullRequests,
+    linkMergedPullRequest,
+    cancelLinkMergedPullRequest,
     unlinkPullRequest,
     humanRequestChangesTask,
     detectingPullRequestTaskId,
+    linkingMergedPullRequestTaskId,
+    pendingMergedPullRequest,
     unlinkingPullRequestTaskId,
   } = useTasksState();
   const {
@@ -154,6 +160,14 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     },
     [unlinkPullRequest],
   );
+
+  const handleLinkMergedPullRequest = useCallback((): Promise<void> => {
+    return linkMergedPullRequest();
+  }, [linkMergedPullRequest]);
+
+  const handleCancelLinkMergedPullRequest = useCallback((): void => {
+    cancelLinkMergedPullRequest();
+  }, [cancelLinkMergedPullRequest]);
 
   const runCompletionRecoverySignal = useRunCompletionRecoverySignal({
     activeSession: selection.viewActiveSession,
@@ -268,6 +282,15 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     <HumanReviewFeedbackModal model={orchestration.humanReviewFeedbackModal} />
   );
 
+  const mergedPullRequestModal = pendingMergedPullRequest ? (
+    <MergedPullRequestConfirmDialog
+      pullRequest={pendingMergedPullRequest.pullRequest}
+      isLinking={pendingMergedPullRequest.taskId === linkingMergedPullRequestTaskId}
+      onCancel={handleCancelLinkMergedPullRequest}
+      onConfirm={() => void handleLinkMergedPullRequest()}
+    />
+  ) : null;
+
   const taskDetailsSheet = (
     <TaskDetailsSheetController
       ref={taskDetailsSheetRef}
@@ -297,6 +320,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     isRightPanelVisible,
     rightPanelModel,
     gitConflictResolutionModal,
+    mergedPullRequestModal,
     humanReviewFeedbackModal,
     sessionStartModal,
     taskDetailsSheet,

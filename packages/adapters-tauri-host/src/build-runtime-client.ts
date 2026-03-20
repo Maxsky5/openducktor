@@ -5,6 +5,7 @@ import {
   buildContinuationTargetSchema,
   type DevServerGroupState,
   devServerGroupStateSchema,
+  type PullRequest,
   pullRequestSchema,
   type RunSummary,
   type RuntimeCheck,
@@ -276,6 +277,20 @@ const taskPullRequestDetect = async (invokeFn: InvokeFn, repoPath: string, taskI
   return taskPullRequestDetectResultSchema.parse(payload);
 };
 
+const taskPullRequestLinkMerged = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  taskId: string,
+  pullRequest: PullRequest,
+) => {
+  const payload = await invokeFn("task_pull_request_link_merged", {
+    repoPath,
+    taskId,
+    pullRequest,
+  });
+  return taskCardSchema.parse(payload);
+};
+
 const repoPullRequestSync = async (
   invokeFn: InvokeFn,
   repoPath: string,
@@ -437,6 +452,12 @@ export class TauriAgentClient {
 
   async taskPullRequestDetect(repoPath: string, taskId: string) {
     const result = await taskPullRequestDetect(this.invokeFn, repoPath, taskId);
+    this.metadataCache?.invalidate(repoPath, taskId);
+    return result;
+  }
+
+  async taskPullRequestLinkMerged(repoPath: string, taskId: string, pullRequest: PullRequest) {
+    const result = await taskPullRequestLinkMerged(this.invokeFn, repoPath, taskId, pullRequest);
     this.metadataCache?.invalidate(repoPath, taskId);
     return result;
   }

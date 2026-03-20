@@ -6,6 +6,7 @@ import type {
   GitProviderRepository,
   GitTargetBranch,
   GlobalGitConfig,
+  PullRequest,
   RepoDevServerScript,
   RunEvent,
   RunSummary,
@@ -83,11 +84,18 @@ export type ChecksStateContextValue = {
 export type TasksStateContextValue = {
   isLoadingTasks: boolean;
   detectingPullRequestTaskId: string | null;
+  linkingMergedPullRequestTaskId: string | null;
   unlinkingPullRequestTaskId: string | null;
+  pendingMergedPullRequest: {
+    taskId: string;
+    pullRequest: PullRequest;
+  } | null;
   tasks: TaskCard[];
   runs: RunSummary[];
   refreshTasks: () => Promise<void>;
   syncPullRequests: (taskId: string) => Promise<void>;
+  linkMergedPullRequest: () => Promise<void>;
+  cancelLinkMergedPullRequest: () => void;
   unlinkPullRequest: (taskId: string) => Promise<void>;
   createTask: (input: TaskCreateInput) => Promise<void>;
   updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;

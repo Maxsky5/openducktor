@@ -52,11 +52,16 @@ export const GitConfirmationDialog = memo(function GitConfirmationDialog({
 }: GitConfirmationDialogProps): ReactElement {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl overflow-hidden p-0" data-testid={contentTestId}>
-        <div className="space-y-6 px-6 py-6 sm:px-7 sm:py-7">
+      <DialogContent
+        className="max-w-2xl overflow-hidden border border-border bg-card p-0 shadow-2xl"
+        data-testid={contentTestId}
+      >
+        <div className="space-y-6 px-6 py-6 sm:px-8 sm:py-8">
           <DialogHeader className="space-y-3 pr-10">
-            <DialogTitle>{title}</DialogTitle>
-            <DialogDescription className="max-w-[38rem] text-[15px] leading-7">
+            <DialogTitle className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+              {title}
+            </DialogTitle>
+            <DialogDescription className="max-w-[42rem] text-sm leading-7 text-muted-foreground sm:text-[15px]">
               {description}
             </DialogDescription>
           </DialogHeader>
@@ -64,7 +69,7 @@ export const GitConfirmationDialog = memo(function GitConfirmationDialog({
           {children}
         </div>
 
-        <DialogFooter className="mt-0 flex flex-row items-center justify-between border-t border-border px-6 py-5 sm:px-7">
+        <DialogFooter className="mt-0 flex flex-col-reverse gap-3 border-t border-border bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-5">
           <Button
             type="button"
             variant="outline"
@@ -74,7 +79,7 @@ export const GitConfirmationDialog = memo(function GitConfirmationDialog({
           >
             {closeLabel}
           </Button>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
             <Button
               type="button"
               onClick={onConfirm}

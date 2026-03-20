@@ -584,6 +584,183 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("syncPullRequests stores merged pull requests for confirmation", async () => {
+    const taskPullRequestDetect = mock(async () => ({
+      outcome: "merged" as const,
+      pullRequest: {
+        providerId: "github",
+        number: 17,
+        url: "https://github.com/openai/openducktor/pull/17",
+        state: "merged" as const,
+        createdAt: "2026-02-20T10:00:00Z",
+        updatedAt: "2026-02-20T10:00:00Z",
+        lastSyncedAt: "2026-02-20T10:00:00Z",
+        mergedAt: "2026-02-20T10:00:00Z",
+        closedAt: "2026-02-20T10:00:00Z",
+      },
+    }));
+    const tasksList = mock(async () => [makeTask("A", "human_review")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskPullRequestDetect: host.taskPullRequestDetect,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.taskPullRequestDetect = taskPullRequestDetect;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.syncPullRequests("A");
+      });
+
+      expect(taskPullRequestDetect).toHaveBeenCalledWith("/repo", "A");
+      expect(tasksList).not.toHaveBeenCalled();
+      expect(runsList).not.toHaveBeenCalled();
+      expect(harness.getLatest().pendingMergedPullRequest).toEqual({
+        taskId: "A",
+        pullRequest: {
+          providerId: "github",
+          number: 17,
+          url: "https://github.com/openai/openducktor/pull/17",
+          state: "merged",
+          createdAt: "2026-02-20T10:00:00Z",
+          updatedAt: "2026-02-20T10:00:00Z",
+          lastSyncedAt: "2026-02-20T10:00:00Z",
+          mergedAt: "2026-02-20T10:00:00Z",
+          closedAt: "2026-02-20T10:00:00Z",
+        },
+      });
+    } finally {
+      await harness.unmount();
+      host.taskPullRequestDetect = original.taskPullRequestDetect;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
+  test("linkMergedPullRequest links the merged pull request and refreshes task data", async () => {
+    const taskPullRequestDetect = mock(async () => ({
+      outcome: "merged" as const,
+      pullRequest: {
+        providerId: "github",
+        number: 17,
+        url: "https://github.com/openai/openducktor/pull/17",
+        state: "merged" as const,
+        createdAt: "2026-02-20T10:00:00Z",
+        updatedAt: "2026-02-20T10:00:00Z",
+        lastSyncedAt: "2026-02-20T10:00:00Z",
+        mergedAt: "2026-02-20T10:00:00Z",
+        closedAt: "2026-02-20T10:00:00Z",
+      },
+    }));
+    const taskPullRequestLinkMerged = mock(async () => makeTask("A", "closed"));
+    const tasksList = mock(async () => [makeTask("A", "closed")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskPullRequestDetect: host.taskPullRequestDetect,
+      taskPullRequestLinkMerged: host.taskPullRequestLinkMerged,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.taskPullRequestDetect = taskPullRequestDetect;
+    host.taskPullRequestLinkMerged = taskPullRequestLinkMerged;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const originalToastSuccess = toast.success;
+    const toastSuccess = mock((_message: string, _options?: { description?: string }) => "");
+    (toast as { success: typeof toast.success }).success =
+      toastSuccess as unknown as typeof toast.success;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.syncPullRequests("A");
+      });
+      await harness.run(async (value) => {
+        await value.linkMergedPullRequest();
+      });
+
+      expect(taskPullRequestLinkMerged).toHaveBeenCalledWith("/repo", "A", {
+        providerId: "github",
+        number: 17,
+        url: "https://github.com/openai/openducktor/pull/17",
+        state: "merged",
+        createdAt: "2026-02-20T10:00:00Z",
+        updatedAt: "2026-02-20T10:00:00Z",
+        lastSyncedAt: "2026-02-20T10:00:00Z",
+        mergedAt: "2026-02-20T10:00:00Z",
+        closedAt: "2026-02-20T10:00:00Z",
+      });
+      expect(tasksList).toHaveBeenCalledWith("/repo");
+      expect(runsList).toHaveBeenCalledWith("/repo");
+      expect(harness.getLatest().pendingMergedPullRequest).toBeNull();
+      expect(harness.getLatest().linkingMergedPullRequestTaskId).toBeNull();
+      expect(toastSuccess).toHaveBeenCalledWith("Merged pull request linked", {
+        description: "PR #17; task moved to Done.",
+      });
+    } finally {
+      await harness.unmount();
+      host.taskPullRequestDetect = original.taskPullRequestDetect;
+      host.taskPullRequestLinkMerged = original.taskPullRequestLinkMerged;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+      toast.success = originalToastSuccess;
+    }
+  });
+
+  test("linkMergedPullRequest surfaces an actionable error when merged PR state is missing", async () => {
+    const originalToastError = toast.error;
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.linkMergedPullRequest();
+      });
+
+      expect(toastError).toHaveBeenCalledWith("Merged pull request state expired", {
+        description: "Re-run pull request detection and try again.",
+      });
+    } finally {
+      await harness.unmount();
+      toast.error = originalToastError;
+    }
+  });
+
   test("syncPullRequests warns when no pull request exists for the task branch", async () => {
     const taskPullRequestDetect = mock(async () => ({
       outcome: "not_found" as const,

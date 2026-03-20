@@ -254,6 +254,21 @@ pub async fn task_pull_request_detect(
 }
 
 #[tauri::command]
+pub async fn task_pull_request_link_merged(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+    pull_request: PullRequestRecord,
+) -> Result<TaskCard, String> {
+    let service = state.service.clone();
+    let result = run_service_blocking("task_pull_request_link_merged", move || {
+        service.task_pull_request_link_merged(&repo_path, &task_id, pull_request)
+    })
+    .await;
+    as_error(result)
+}
+
+#[tauri::command]
 pub async fn repo_pull_request_sync(
     state: State<'_, AppState>,
     repo_path: String,
