@@ -10,8 +10,8 @@ use host_domain::{
 };
 use host_infra_system::{
     command_exists, copy_configured_worktree_files, remove_worktree, repo_script_fingerprint,
-    resolve_central_beads_dir, run_command_allow_failure_with_env, version_command, ChatSettings,
-    GlobalGitConfig, HookSet, PromptOverrides, RepoConfig,
+    resolve_central_beads_dir, run_command, run_command_allow_failure_with_env, version_command,
+    ChatSettings, GlobalGitConfig, HookSet, PromptOverrides, RepoConfig,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -359,6 +359,7 @@ impl AppService {
         create_branch: bool,
     ) -> Result<GitWorktreeSummary> {
         let repo_path = self.resolve_authorized_repo_path(repo_path)?;
+        let repo_config = self.config_store.repo_config(repo_path.as_str())?;
         let worktree = worktree_path.trim();
         if worktree.is_empty() {
             return Err(anyhow!("worktree path cannot be empty"));
@@ -371,22 +372,20 @@ impl AppService {
             create_branch,
         )?;
 
-        let repo_config = self.config_store.repo_config(repo_path.as_str())?;
         if let Err(error) = copy_configured_worktree_files(
             Path::new(&repo_path),
             Path::new(worktree),
             repo_config.worktree_file_copies.as_slice(),
         ) {
-            let cleanup_error = remove_worktree(Path::new(&repo_path), Path::new(worktree))
-                .err()
-                .map(|cleanup_error| cleanup_error.to_string());
+            let cleanup_error = self.cleanup_failed_created_worktree(
+                Path::new(&repo_path),
+                Path::new(worktree),
+                branch,
+                create_branch,
+            );
             return Err(anyhow!(
                 "Configured worktree file copy failed: {error}{}",
                 cleanup_error
-                    .map(|cleanup_error| {
-                        format!("\nAlso failed to remove worktree: {cleanup_error}")
-                    })
-                    .unwrap_or_default()
             ));
         }
 
@@ -394,6 +393,40 @@ impl AppService {
             branch: branch.trim().to_string(),
             worktree_path: worktree.to_string(),
         })
+    }
+
+    fn cleanup_failed_created_worktree(
+        &self,
+        repo_path: &Path,
+        worktree_path: &Path,
+        branch: &str,
+        delete_branch: bool,
+    ) -> String {
+        let mut cleanup_errors = Vec::new();
+
+        if let Err(error) = remove_worktree(repo_path, worktree_path) {
+            cleanup_errors.push(format!("Also failed to remove worktree: {error}"));
+        }
+        if let Err(error) = run_command(
+            "git",
+            &["worktree", "prune", "--expire", "now"],
+            Some(repo_path),
+        ) {
+            cleanup_errors.push(format!("Also failed to prune worktree metadata: {error}"));
+        }
+        if delete_branch {
+            if let Err(error) = self.git_port.delete_local_branch(repo_path, branch, true) {
+                cleanup_errors.push(format!(
+                    "Also failed to delete created branch {branch}: {error}"
+                ));
+            }
+        }
+
+        if cleanup_errors.is_empty() {
+            String::new()
+        } else {
+            format!("\n{}", cleanup_errors.join("\n"))
+        }
     }
 
     pub fn git_remove_worktree(

@@ -66,6 +66,26 @@ fn run_command_in(current_dir: &Path, program: &str, args: &[&str]) -> Result<()
     ))
 }
 
+fn assert_branch_missing(repo_path: &Path, branch: &str) -> Result<()> {
+    let output = Command::new("git")
+        .current_dir(repo_path)
+        .args(["branch", "--list", branch])
+        .output()
+        .with_context(|| format!("failed listing branch {branch} in {}", repo_path.display()))?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "git branch --list failed for {branch} in {}",
+            repo_path.display()
+        ));
+    }
+
+    assert!(
+        String::from_utf8_lossy(&output.stdout).trim().is_empty(),
+        "branch {branch} should have been removed"
+    );
+    Ok(())
+}
+
 #[test]
 fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
     let _env_lock = lock_env();
@@ -431,11 +451,10 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
 
     let state = task_state.lock().expect("task lock poisoned");
     assert!(
-        state
-            .updated_patches
-            .iter()
-            .all(|(_, patch)| patch.status.is_none()),
-        "worktree copy failure should happen before task status changes"
+        state.updated_patches.iter().any(
+            |(task_id, patch)| task_id == "task-1" && patch.status == Some(TaskStatus::Blocked)
+        ),
+        "run failure should block the active task"
     );
     drop(state);
 
@@ -553,10 +572,25 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
         state
             .updated_patches
             .iter()
-            .all(|(_, patch)| patch.status.is_none()),
-        "worktree copy failure should happen before task status changes"
+            .all(|(task_id, _)| task_id != "task-1"),
+        "pre-start hook failure should not update task status before the build starts"
+    );
+    assert!(
+        state.updated_patches.iter().any(|(task_id, patch)| {
+            task_id == "task-2" && patch.status == Some(TaskStatus::InProgress)
+        }),
+        "successful build start should move task-2 into progress"
+    );
+    assert!(
+        state.updated_patches.iter().any(
+            |(task_id, patch)| task_id == "task-2" && patch.status == Some(TaskStatus::Blocked)
+        ),
+        "post-complete hook failure should block task-2"
     );
     drop(state);
+
+    let failed_branch = host_infra_system::build_branch_name("odt", "task-1", "Task task-1");
+    assert_branch_missing(repo.as_path(), failed_branch.as_str())?;
 
     let emitted = events.lock().expect("events lock poisoned");
     assert!(emitted
@@ -584,7 +618,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
 }
 
 #[test]
-fn build_start_blocks_and_cleans_up_when_configured_worktree_file_copy_fails() -> Result<()> {
+fn build_start_cleans_up_when_configured_worktree_file_copy_fails() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("build-copy-configured-files-failure");
     let repo = root.join("repo");
@@ -652,10 +686,13 @@ fn build_start_blocks_and_cleans_up_when_configured_worktree_file_copy_fails() -
         state
             .updated_patches
             .iter()
-            .all(|(_, patch)| patch.status.is_none()),
-        "worktree copy failure should happen before task status changes"
+            .all(|(task_id, _)| task_id != "task-1"),
+        "configured file copy failure should not change task status before build start"
     );
     drop(state);
+
+    let failed_branch = host_infra_system::build_branch_name("odt", "task-1", "Task task-1");
+    assert_branch_missing(repo.as_path(), failed_branch.as_str())?;
 
     let _ = fs::remove_dir_all(root);
     Ok(())

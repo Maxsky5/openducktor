@@ -39,6 +39,26 @@ use crate::app_service::{
     OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
 
+fn assert_branch_missing(repo_path: &Path, branch: &str) -> Result<()> {
+    let output = Command::new("git")
+        .current_dir(repo_path)
+        .args(["branch", "--list", branch])
+        .output()
+        .with_context(|| format!("failed listing branch {branch} in {}", repo_path.display()))?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "git branch --list failed for {branch} in {}",
+            repo_path.display()
+        ));
+    }
+
+    assert!(
+        String::from_utf8_lossy(&output.stdout).trim().is_empty(),
+        "branch {branch} should have been removed"
+    );
+    Ok(())
+}
+
 #[test]
 fn git_get_branches_returns_git_data_without_task_store_initialization() -> Result<()> {
     let repo_path = "/tmp/odt-repo";
@@ -303,6 +323,61 @@ fn git_create_worktree_copies_configured_files() -> Result<()> {
         worktree.to_string_lossy().as_ref(),
         true,
     )?;
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn git_create_worktree_cleans_up_when_configured_file_copy_fails() -> Result<()> {
+    let root = unique_temp_path("git-create-worktree-copy-failure");
+    let repo = root.join("repo");
+    let worktree = root.join("worktree");
+    init_git_repo(&repo)?;
+
+    let task_state = Arc::new(Mutex::new(TaskStoreState::default()));
+    let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore { state: task_state });
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let service = AppService::new(task_store, config_store);
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(root.join("worktrees").to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: vec![".env".to_string()],
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+
+    let error = service
+        .git_create_worktree(
+            repo_path.as_str(),
+            worktree.to_string_lossy().as_ref(),
+            "feature/manual-copy-failure",
+            true,
+        )
+        .expect_err("missing configured copy source should fail");
+    assert!(error
+        .to_string()
+        .contains("Configured worktree file copy failed"));
+    assert!(
+        !worktree.exists(),
+        "manual worktree creation should remove the failed worktree"
+    );
+    assert_branch_missing(repo.as_path(), "feature/manual-copy-failure")?;
+
     let _ = fs::remove_dir_all(root);
     Ok(())
 }

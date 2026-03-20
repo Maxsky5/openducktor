@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::DEFAULT_BRANCH_PREFIX;
 use std::fs;
+use std::io::ErrorKind;
 use std::net::TcpListener;
 use std::path::{Component, Path};
 use std::process::Command;
@@ -44,11 +45,29 @@ pub fn copy_configured_worktree_files(
     worktree_path: &Path,
     configured_files: &[String],
 ) -> Result<()> {
+    let repo_root = repo_path
+        .canonicalize()
+        .with_context(|| format!("Failed resolving repository path: {}", repo_path.display()))?;
+    let worktree_root = worktree_path.canonicalize().with_context(|| {
+        format!(
+            "Failed resolving worktree path before copying configured files: {}",
+            worktree_path.display()
+        )
+    })?;
+
     for configured_file in configured_files {
         let relative_path = Path::new(configured_file);
         validate_worktree_copy_path(relative_path, configured_file)?;
+        reject_symlinked_components(repo_path, relative_path, configured_file, "source")?;
 
         let source_path = repo_path.join(relative_path);
+        let canonical_source = source_path.canonicalize().with_context(|| {
+            format!(
+                "Configured worktree copy source is unavailable: {}",
+                source_path.display()
+            )
+        })?;
+        ensure_path_within_root(&repo_root, &canonical_source, configured_file, "source")?;
         let source_metadata = fs::metadata(&source_path).with_context(|| {
             format!(
                 "Configured worktree copy source is unavailable: {}",
@@ -64,12 +83,31 @@ pub fn copy_configured_worktree_files(
 
         let destination_path = worktree_path.join(relative_path);
         if let Some(parent) = destination_path.parent() {
+            let relative_parent = relative_path.parent().unwrap_or_else(|| Path::new(""));
+            reject_symlinked_components(
+                worktree_path,
+                relative_parent,
+                configured_file,
+                "destination",
+            )?;
             fs::create_dir_all(parent).with_context(|| {
                 format!(
                     "Failed creating configured worktree copy directory: {}",
                     parent.display()
                 )
             })?;
+            let canonical_parent = parent.canonicalize().with_context(|| {
+                format!(
+                    "Failed resolving configured worktree copy directory: {}",
+                    parent.display()
+                )
+            })?;
+            ensure_path_within_root(
+                &worktree_root,
+                &canonical_parent,
+                configured_file,
+                "destination",
+            )?;
         }
 
         fs::copy(&source_path, &destination_path).with_context(|| {
@@ -113,6 +151,56 @@ fn validate_worktree_copy_path(path: &Path, original: &str) -> Result<()> {
     Ok(())
 }
 
+fn reject_symlinked_components(
+    root_path: &Path,
+    relative_path: &Path,
+    original: &str,
+    path_role: &str,
+) -> Result<()> {
+    let mut current = root_path.to_path_buf();
+    for component in relative_path.components() {
+        let Component::Normal(segment) = component else {
+            continue;
+        };
+        current.push(segment);
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() {
+                    return Err(anyhow!(
+                        "Configured worktree copy {path_role} cannot use symlinked path components: {original}"
+                    ));
+                }
+            }
+            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(()),
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!(
+                        "Failed inspecting configured worktree copy {path_role} path: {}",
+                        current.display()
+                    )
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn ensure_path_within_root(
+    root_path: &Path,
+    candidate_path: &Path,
+    original: &str,
+    path_role: &str,
+) -> Result<()> {
+    if candidate_path.starts_with(root_path) {
+        return Ok(());
+    }
+
+    Err(anyhow!(
+        "Configured worktree copy {path_role} escapes its root via symlinked path components: {original}"
+    ))
+}
+
 pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
     let status = Command::new("git")
         .arg("worktree")
@@ -141,6 +229,8 @@ mod tests {
     use host_domain::DEFAULT_BRANCH_PREFIX;
     use std::fs;
     use std::net::TcpListener;
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
     use std::path::{Path, PathBuf};
     use std::process::{Command, Stdio};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -273,6 +363,58 @@ mod tests {
             error
                 .to_string()
                 .contains("cannot traverse outside the repository"),
+            "unexpected copy error: {error}"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_configured_worktree_files_rejects_symlinked_source_components() {
+        let root = unique_temp_path("copy-configured-source-symlink");
+        let repo = root.join("repo");
+        let worktree = root.join("worktree");
+        let outside = root.join("outside");
+        fs::create_dir_all(&repo).expect("repo directory should exist");
+        fs::create_dir_all(&worktree).expect("worktree directory should exist");
+        fs::create_dir_all(&outside).expect("outside directory should exist");
+        fs::write(outside.join("secret.env"), "TOKEN=secret\n").expect("outside file should write");
+        symlink(&outside, repo.join("config")).expect("repo config symlink should exist");
+
+        let error =
+            copy_configured_worktree_files(&repo, &worktree, &["config/secret.env".to_string()])
+                .expect_err("symlinked source component should be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("source cannot use symlinked path components"),
+            "unexpected copy error: {error}"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_configured_worktree_files_rejects_symlinked_destination_components() {
+        let root = unique_temp_path("copy-configured-destination-symlink");
+        let repo = root.join("repo");
+        let worktree = root.join("worktree");
+        let outside = root.join("outside");
+        fs::create_dir_all(repo.join("config")).expect("repo config directory should exist");
+        fs::create_dir_all(&worktree).expect("worktree directory should exist");
+        fs::create_dir_all(&outside).expect("outside directory should exist");
+        fs::write(repo.join("config").join("local.json"), "{}\n").expect("repo file should write");
+        symlink(&outside, worktree.join("config")).expect("worktree config symlink should exist");
+
+        let error =
+            copy_configured_worktree_files(&repo, &worktree, &["config/local.json".to_string()])
+                .expect_err("symlinked destination component should be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("destination cannot use symlinked path components"),
             "unexpected copy error: {error}"
         );
 
