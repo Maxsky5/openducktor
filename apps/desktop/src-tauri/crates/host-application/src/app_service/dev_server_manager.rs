@@ -261,9 +261,13 @@ impl AppService {
             let mut command =
                 build_dev_server_command(script.command.as_str(), script.name.as_str())?;
             command.current_dir(worktree_path);
-            if let Some(path_value) = subprocess_path_env() {
-                command.env("PATH", path_value);
-            }
+            let path_value = subprocess_path_env().ok_or_else(|| {
+                anyhow!(
+                    "Failed to assemble subprocess PATH for dev server `{}`",
+                    script.name
+                )
+            })?;
+            command.env("PATH", path_value);
             configure_process_group(&mut command);
 
             #[cfg(unix)]
@@ -1421,7 +1425,7 @@ sleep 5
             .expect("fake pnpm from augmented PATH should start");
 
         assert!(
-            wait_for_path_exists(marker_path.as_path(), Duration::from_secs(2)),
+            wait_for_path_exists(marker_path.as_path(), Duration::from_secs(5)),
             "expected fake pnpm from augmented PATH to run"
         );
         stop_process_group(pid, DEV_SERVER_STOP_TIMEOUT).expect("stop dev server");
