@@ -119,7 +119,7 @@ function FileDiffEntry({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-7 shrink-0"
+                className="size-6 shrink-0"
                 aria-label="Reset file"
                 title="Reset file"
                 data-testid="agent-studio-git-reset-file-button"
