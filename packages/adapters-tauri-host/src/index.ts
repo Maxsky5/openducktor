@@ -76,6 +76,7 @@ const AGENT_METHODS = [
   "taskPullRequestUpsert",
   "taskPullRequestUnlink",
   "taskPullRequestDetect",
+  "taskPullRequestLinkMerged",
   "repoPullRequestSync",
   "humanRequestChanges",
   "humanApprove",

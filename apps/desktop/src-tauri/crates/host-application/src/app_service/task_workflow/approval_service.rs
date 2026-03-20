@@ -454,6 +454,20 @@ impl AppService {
             source_branch.as_str(),
         )?;
 
+        if let Some(pull_request) = pull_request {
+            let record =
+                self.store_linked_pull_request_metadata(repo_path.as_str(), task_id, pull_request)?;
+            return Ok(TaskPullRequestDetectResult::Linked {
+                pull_request: record,
+            });
+        }
+
+        let pull_request = provider.find_pull_request_for_branch(
+            Path::new(&repo_path),
+            &repository,
+            source_branch.as_str(),
+        )?;
+
         let Some(pull_request) = pull_request else {
             return Ok(TaskPullRequestDetectResult::NotFound {
                 source_branch,
@@ -461,11 +475,76 @@ impl AppService {
             });
         };
 
-        let record =
-            self.store_linked_pull_request_metadata(repo_path.as_str(), task_id, pull_request)?;
-        Ok(TaskPullRequestDetectResult::Linked {
-            pull_request: record,
+        if pull_request.record.state == "merged" {
+            return Ok(TaskPullRequestDetectResult::Merged {
+                pull_request: pull_request.record,
+            });
+        }
+
+        Ok(TaskPullRequestDetectResult::NotFound {
+            source_branch,
+            target_branch,
         })
+    }
+
+    pub fn task_pull_request_link_merged(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+        pull_request: PullRequestRecord,
+    ) -> Result<TaskCard> {
+        let context = self.load_task_context(repo_path, task_id)?;
+        ensure_pull_request_management_status(&context.task.status)?;
+        if self
+            .task_metadata_get(context.repo.repo_path.as_str(), task_id)?
+            .pull_request
+            .is_some()
+        {
+            return Err(anyhow!("Task {task_id} already has a linked pull request."));
+        }
+        if pull_request.state != "merged" {
+            return Err(anyhow!(
+                "Task {task_id} can only link a merged pull request from detection results."
+            ));
+        }
+
+        let repo_path = self.resolve_task_repo_path(repo_path)?;
+        let working_directory = self
+            .build_continuation_target_get(context.repo.repo_path.as_str(), task_id)?
+            .working_directory;
+        let current_branch = self
+            .git_port
+            .get_current_branch(Path::new(&working_directory))?;
+        if current_branch.detached {
+            return Err(anyhow!(
+                "Pull request linking requires a builder branch, but the latest builder workspace is detached."
+            ));
+        }
+        let source_branch = current_branch
+            .name
+            .ok_or_else(|| anyhow!("Pull request linking requires a builder branch name."))?;
+
+        self.store_linked_pull_request_metadata(
+            repo_path.as_str(),
+            task_id,
+            ResolvedPullRequest {
+                record: pull_request,
+                source_branch: source_branch.clone(),
+            },
+        )?;
+        let task = self.task_transition(
+            repo_path.as_str(),
+            task_id,
+            TaskStatus::Closed,
+            Some("Linked pull request merged"),
+        )?;
+        self.finalize_direct_merge_cleanup(
+            repo_path.as_str(),
+            task_id,
+            source_branch.as_str(),
+            false,
+        )?;
+        Ok(task)
     }
 
     pub fn repo_pull_request_sync(&self, repo_path: &str) -> Result<bool> {

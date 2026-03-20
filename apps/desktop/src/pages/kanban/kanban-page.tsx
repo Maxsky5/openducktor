@@ -1,4 +1,5 @@
 import { type ReactElement, useCallback, useRef } from "react";
+import { MergedPullRequestConfirmDialog } from "@/components/features/pull-requests/merged-pull-request-confirm-dialog";
 import { TaskCreateModal } from "@/components/features/task-create/task-create-modal";
 import {
   TaskDetailsSheetController,
@@ -44,6 +45,14 @@ export function KanbanPage(): ReactElement {
       <KanbanPageHeader model={models.header} />
       <KanbanPageContent model={models.content} />
       <TaskCreateModal {...models.taskComposer} />
+      {models.mergedPullRequestModal ? (
+        <MergedPullRequestConfirmDialog
+          pullRequest={models.mergedPullRequestModal.pullRequest ?? null}
+          isLinking={models.mergedPullRequestModal.isSubmitting}
+          onCancel={models.mergedPullRequestModal.onCancel}
+          onConfirm={models.mergedPullRequestModal.onConfirm}
+        />
+      ) : null}
       <TaskDetailsSheetController ref={taskDetailsSheetRef} {...models.taskDetailsController} />
       <HumanReviewFeedbackModal model={models.humanReviewFeedbackModal} />
       <TaskApprovalModal model={models.taskApprovalModal} />

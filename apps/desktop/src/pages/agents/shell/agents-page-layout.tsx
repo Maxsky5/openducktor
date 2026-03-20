@@ -46,6 +46,7 @@ function AgentsPageWorkspace({
 
 type AgentsPageModalContentProps = {
   gitConflictResolutionModal: ReactNode;
+  mergedPullRequestModal: ReactNode;
   humanReviewFeedbackModal: ReactNode;
   sessionStartModal: ReactNode;
   taskDetailsSheet: ReactElement;
@@ -53,6 +54,7 @@ type AgentsPageModalContentProps = {
 
 function AgentsPageModalContent({
   gitConflictResolutionModal,
+  mergedPullRequestModal,
   humanReviewFeedbackModal,
   sessionStartModal,
   taskDetailsSheet,
@@ -60,6 +62,7 @@ function AgentsPageModalContent({
   return (
     <>
       {gitConflictResolutionModal}
+      {mergedPullRequestModal}
       {humanReviewFeedbackModal}
       {sessionStartModal}
       {taskDetailsSheet}
@@ -83,6 +86,7 @@ export type AgentsPageLayoutProps = {
   isRightPanelVisible: boolean;
   rightPanelModel: ComponentProps<typeof AgentStudioRightPanel>["model"] | null;
   gitConflictResolutionModal: ReactNode;
+  mergedPullRequestModal: ReactNode;
   humanReviewFeedbackModal: ReactNode;
   sessionStartModal: ReactNode;
   taskDetailsSheet: ReactElement;
@@ -104,6 +108,7 @@ export function AgentsPageLayout({
   isRightPanelVisible,
   rightPanelModel,
   gitConflictResolutionModal,
+  mergedPullRequestModal,
   humanReviewFeedbackModal,
   sessionStartModal,
   taskDetailsSheet,
@@ -138,6 +143,7 @@ export function AgentsPageLayout({
       modalContent={
         <AgentsPageModalContent
           gitConflictResolutionModal={gitConflictResolutionModal}
+          mergedPullRequestModal={mergedPullRequestModal}
           humanReviewFeedbackModal={humanReviewFeedbackModal}
           sessionStartModal={sessionStartModal}
           taskDetailsSheet={taskDetailsSheet}

@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createElement, type ReactElement } from "react";
+import type { TasksStateContextValue } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -103,15 +104,28 @@ let checksState = {
   isLoadingChecks: false,
   refreshChecks: async () => undefined,
 };
-let tasksState = {
+let tasksState: TasksStateContextValue = {
   isLoadingTasks: false,
   tasks: [task],
   runs: [],
+  refreshTasks: mock(async () => undefined),
   syncPullRequests: mock(async () => undefined),
+  linkMergedPullRequest: mock(async () => undefined),
+  cancelLinkMergedPullRequest: mock(() => undefined),
   unlinkPullRequest: mock(async () => undefined),
+  createTask: mock(async () => undefined),
+  updateTask: mock(async () => undefined),
+  deleteTask: mock(async () => undefined),
+  resetTaskImplementation: mock(async () => undefined),
+  transitionTask: mock(async () => undefined),
+  deferTask: mock(async () => undefined),
+  resumeDeferredTask: mock(async () => undefined),
+  humanApproveTask: mock(async () => undefined),
   humanRequestChangesTask: mock(async () => undefined),
   detectingPullRequestTaskId: null,
+  linkingMergedPullRequestTaskId: null,
   unlinkingPullRequestTaskId: null,
+  pendingMergedPullRequest: null,
 };
 let agentState = {
   sessions: [session],
@@ -162,6 +176,7 @@ let readinessState: ReadinessState = {
 };
 const rightPanelToggleModel = { label: "Toggle panel" };
 const rightPanelModel = { kind: "documents" };
+const latestMergedPullRequestModalProps: Record<string, unknown> | null = null;
 let orchestrationState: OrchestrationState = {
   repoSettings: null,
   chatSettingsLoadError: new Error("chat settings failed"),
@@ -275,6 +290,11 @@ mock.module("@/components/features/task-details/task-details-sheet-controller", 
     createElement("mock-task-details-sheet-controller", props),
 }));
 
+mock.module("@/components/features/pull-requests/merged-pull-request-confirm-dialog", () => ({
+  MergedPullRequestConfirmDialog: (props: Record<string, unknown>): ReactElement =>
+    createElement("mock-merged-pr-dialog", props),
+}));
+
 let useAgentsPageShellModel: typeof import("./use-agents-page-shell-model").useAgentsPageShellModel;
 
 beforeAll(async () => {
@@ -300,11 +320,24 @@ beforeEach(() => {
     isLoadingTasks: false,
     tasks: [task],
     runs: [],
+    refreshTasks: mock(async () => undefined),
     syncPullRequests: mock(async () => undefined),
+    linkMergedPullRequest: mock(async () => undefined),
+    cancelLinkMergedPullRequest: mock(() => undefined),
     unlinkPullRequest: mock(async () => undefined),
+    createTask: mock(async () => undefined),
+    updateTask: mock(async () => undefined),
+    deleteTask: mock(async () => undefined),
+    resetTaskImplementation: mock(async () => undefined),
+    transitionTask: mock(async () => undefined),
+    deferTask: mock(async () => undefined),
+    resumeDeferredTask: mock(async () => undefined),
+    humanApproveTask: mock(async () => undefined),
     humanRequestChangesTask: mock(async () => undefined),
     detectingPullRequestTaskId: null,
+    linkingMergedPullRequestTaskId: null,
     unlinkingPullRequestTaskId: null,
+    pendingMergedPullRequest: null,
   };
   agentState = {
     sessions: [session],
@@ -387,6 +420,23 @@ const createHookHarness = () => createSharedHookHarness(() => useAgentsPageShell
 
 describe("useAgentsPageShellModel", () => {
   test("surfaces hook state and wires modal/controller elements", async () => {
+    tasksState = {
+      ...tasksState,
+      pendingMergedPullRequest: {
+        taskId: "task-1",
+        pullRequest: {
+          providerId: "github",
+          number: 268,
+          url: "https://github.com/Maxsky5/openducktor/pull/268",
+          state: "merged",
+          createdAt: "2026-03-20T11:00:00Z",
+          updatedAt: "2026-03-20T11:21:32Z",
+          lastSyncedAt: "2026-03-20T11:21:32Z",
+          mergedAt: "2026-03-20T11:21:32Z",
+          closedAt: "2026-03-20T11:21:32Z",
+        },
+      },
+    };
     const harness = createHookHarness();
 
     try {
@@ -414,6 +464,10 @@ describe("useAgentsPageShellModel", () => {
       expect((state.humanReviewFeedbackModal as ReactElement<{ model: unknown }>).props.model).toBe(
         orchestrationState.humanReviewFeedbackModal,
       );
+      expect(
+        (state.mergedPullRequestModal as ReactElement<{ pullRequest: unknown }> | null)?.props
+          .pullRequest,
+      ).toEqual(tasksState.pendingMergedPullRequest?.pullRequest ?? null);
     } finally {
       await harness.unmount();
     }
@@ -437,6 +491,7 @@ describe("useAgentsPageShellModel", () => {
       expect(state.hasSelectedTask).toBe(false);
       expect(state.sessionStartModal).toBeNull();
       expect(state.gitConflictResolutionModal).toBeNull();
+      expect(state.mergedPullRequestModal).toBeNull();
     } finally {
       await harness.unmount();
     }

@@ -50,6 +50,12 @@ pub(super) trait GitHostingProvider: Send + Sync {
         repository: &GitProviderRepository,
         source_branch: &str,
     ) -> Result<Option<ResolvedPullRequest>>;
+    fn find_pull_request_for_branch(
+        &self,
+        repo_path: &Path,
+        repository: &GitProviderRepository,
+        source_branch: &str,
+    ) -> Result<Option<ResolvedPullRequest>>;
 }
 
 pub(super) struct GithubGhCliProvider;
@@ -80,6 +86,42 @@ pub(super) struct ResolvedPullRequest {
 }
 
 impl GithubGhCliProvider {
+    fn find_pull_request_list_entry_for_branch(
+        repo_path: &Path,
+        repository: &GitProviderRepository,
+        source_branch: &str,
+        state: Option<&str>,
+    ) -> Result<Option<ResolvedPullRequest>> {
+        let repo_slug = Self::repo_slug(repository);
+        let path = format!("repos/{repo_slug}/pulls");
+        let mut args = vec![
+            "api".to_string(),
+            "--method".to_string(),
+            "GET".to_string(),
+            path,
+        ];
+        if let Some(state) = state {
+            args.push("-f".to_string());
+            args.push(format!("state={state}"));
+        }
+        args.push("-f".to_string());
+        args.push(format!("head={}:{}", repository.owner, source_branch));
+        let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+        let payload = Self::run_gh(
+            repo_path,
+            Some(repository.host.as_str()),
+            arg_refs.as_slice(),
+        )?;
+        let mut pull_requests = Self::parse_pull_list_response(payload)?;
+        match pull_requests.len() {
+            0 => Ok(None),
+            1 => Ok(pull_requests.pop()),
+            _ => Err(anyhow!(
+                "Multiple pull requests were found for branch {source_branch}."
+            )),
+        }
+    }
+
     fn build_gh_args(host: Option<&str>, args: &[&str]) -> Vec<String> {
         let mut full_args = Vec::new();
         if let Some(host) = host.filter(|value| !value.trim().is_empty()) {
@@ -450,29 +492,26 @@ impl GitHostingProvider for GithubGhCliProvider {
         repository: &GitProviderRepository,
         source_branch: &str,
     ) -> Result<Option<ResolvedPullRequest>> {
-        let repo_slug = Self::repo_slug(repository);
-        let payload = Self::run_gh(
+        Self::find_pull_request_list_entry_for_branch(
             repo_path,
-            Some(repository.host.as_str()),
-            &[
-                "api",
-                "--method",
-                "GET",
-                &format!("repos/{repo_slug}/pulls"),
-                "-f",
-                "state=open",
-                "-f",
-                &format!("head={}:{}", repository.owner, source_branch),
-            ],
-        )?;
-        let mut pull_requests = Self::parse_pull_list_response(payload)?;
-        match pull_requests.len() {
-            0 => Ok(None),
-            1 => Ok(pull_requests.pop()),
-            _ => Err(anyhow!(
-                "Multiple open pull requests were found for branch {source_branch}."
-            )),
-        }
+            repository,
+            source_branch,
+            Some("open"),
+        )
+    }
+
+    fn find_pull_request_for_branch(
+        &self,
+        repo_path: &Path,
+        repository: &GitProviderRepository,
+        source_branch: &str,
+    ) -> Result<Option<ResolvedPullRequest>> {
+        Self::find_pull_request_list_entry_for_branch(
+            repo_path,
+            repository,
+            source_branch,
+            Some("all"),
+        )
     }
 }
 

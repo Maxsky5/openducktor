@@ -35,9 +35,13 @@ export function useKanbanPageModels({
     runs,
     refreshTasks,
     syncPullRequests,
+    linkMergedPullRequest,
+    cancelLinkMergedPullRequest,
     unlinkPullRequest,
     isLoadingTasks,
     detectingPullRequestTaskId,
+    linkingMergedPullRequestTaskId,
+    pendingMergedPullRequest,
     unlinkingPullRequestTaskId,
     deleteTask,
     resetTaskImplementation,
@@ -201,6 +205,16 @@ export function useKanbanPageModels({
       unlinkingPullRequestTaskId,
       onDelete: (taskId, options) => deleteTask(taskId, options.deleteSubtasks),
     },
+    mergedPullRequestModal: pendingMergedPullRequest
+      ? {
+          pullRequest: pendingMergedPullRequest.pullRequest,
+          isSubmitting: pendingMergedPullRequest.taskId === linkingMergedPullRequestTaskId,
+          onCancel: cancelLinkMergedPullRequest,
+          onConfirm: () => {
+            void linkMergedPullRequest();
+          },
+        }
+      : null,
     humanReviewFeedbackModal,
     taskApprovalModal,
     resetImplementationModal,

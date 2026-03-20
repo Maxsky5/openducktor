@@ -99,6 +99,10 @@ pub enum TaskPullRequestDetectResult {
         #[serde(rename = "pullRequest")]
         pull_request: PullRequestRecord,
     },
+    Merged {
+        #[serde(rename = "pullRequest")]
+        pull_request: PullRequestRecord,
+    },
     NotFound {
         #[serde(rename = "sourceBranch")]
         source_branch: String,

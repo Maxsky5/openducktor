@@ -115,6 +115,10 @@ export const taskPullRequestDetectResultSchema = z.discriminatedUnion("outcome",
     pullRequest: pullRequestSchema,
   }),
   z.object({
+    outcome: z.literal("merged"),
+    pullRequest: pullRequestSchema,
+  }),
+  z.object({
     outcome: z.literal("not_found"),
     sourceBranch: z.string().trim().min(1),
     targetBranch: z.string().trim().min(1),

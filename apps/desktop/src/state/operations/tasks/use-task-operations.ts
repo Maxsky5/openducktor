@@ -1,5 +1,6 @@
 import type {
   BeadsCheck,
+  PullRequest,
   RunSummary,
   TaskCard,
   TaskCreateInput,
@@ -32,12 +33,16 @@ type UseTaskOperationsResult = {
   runs: RunSummary[];
   isLoadingTasks: boolean;
   detectingPullRequestTaskId: string | null;
+  linkingMergedPullRequestTaskId: string | null;
   unlinkingPullRequestTaskId: string | null;
+  pendingMergedPullRequest: { taskId: string; pullRequest: PullRequest } | null;
   setIsLoadingTasks: (value: boolean) => void;
   clearTaskData: () => void;
   refreshTaskData: (repoPath: string) => Promise<void>;
   refreshTasks: () => Promise<void>;
   syncPullRequests: (taskId: string) => Promise<void>;
+  linkMergedPullRequest: () => Promise<void>;
+  cancelLinkMergedPullRequest: () => void;
   unlinkPullRequest: (taskId: string) => Promise<void>;
   createTask: (input: TaskCreateInput) => Promise<void>;
   updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
@@ -58,7 +63,14 @@ export function useTaskOperations({
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
   const [detectingPullRequestTaskId, setDetectingPullRequestTaskId] = useState<string | null>(null);
+  const [linkingMergedPullRequestTaskId, setLinkingMergedPullRequestTaskId] = useState<
+    string | null
+  >(null);
   const [unlinkingPullRequestTaskId, setUnlinkingPullRequestTaskId] = useState<string | null>(null);
+  const [pendingMergedPullRequest, setPendingMergedPullRequest] = useState<{
+    taskId: string;
+    pullRequest: PullRequest;
+  } | null>(null);
   const activeRepoRef = useRef(activeRepo);
 
   useEffect(() => {
@@ -66,7 +78,9 @@ export function useTaskOperations({
     activeRepoRef.current = activeRepo;
     if (previousActiveRepo !== activeRepo) {
       setDetectingPullRequestTaskId(null);
+      setLinkingMergedPullRequestTaskId(null);
       setUnlinkingPullRequestTaskId(null);
+      setPendingMergedPullRequest(null);
     }
   }, [activeRepo]);
 
@@ -151,6 +165,13 @@ export function useTaskOperations({
           });
           return;
         }
+        if (result.outcome === "merged") {
+          setPendingMergedPullRequest({
+            taskId,
+            pullRequest: result.pullRequest,
+          });
+          return;
+        }
         toast.warning("No pull request found", {
           description: `No open GitHub pull request found for ${result.sourceBranch}.`,
         });
@@ -166,6 +187,39 @@ export function useTaskOperations({
     },
     [activeRepo, refreshTaskData],
   );
+
+  const cancelLinkMergedPullRequest = useCallback((): void => {
+    if (linkingMergedPullRequestTaskId != null) {
+      return;
+    }
+    setPendingMergedPullRequest(null);
+  }, [linkingMergedPullRequestTaskId]);
+
+  const linkMergedPullRequest = useCallback(async (): Promise<void> => {
+    if (!pendingMergedPullRequest) {
+      return;
+    }
+
+    const { taskId, pullRequest } = pendingMergedPullRequest;
+    setLinkingMergedPullRequestTaskId(taskId);
+    try {
+      const repoPath = requireActiveRepo(activeRepo);
+      await host.taskPullRequestLinkMerged(repoPath, taskId, pullRequest);
+      setPendingMergedPullRequest((current) => (current?.taskId === taskId ? null : current));
+      await refreshTaskData(repoPath);
+      toast.success("Merged pull request linked", {
+        description: `PR #${pullRequest.number}; task moved to Done.`,
+      });
+    } catch (error) {
+      toast.error("Failed to link merged pull request", {
+        description: errorMessage(error),
+      });
+    } finally {
+      setLinkingMergedPullRequestTaskId((currentTaskId) =>
+        currentTaskId === taskId ? null : currentTaskId,
+      );
+    }
+  }, [activeRepo, pendingMergedPullRequest, refreshTaskData]);
 
   const unlinkPullRequest = useCallback(
     async (taskId: string): Promise<void> => {
@@ -357,7 +411,9 @@ export function useTaskOperations({
     setRuns([]);
     setIsLoadingTasks(false);
     setDetectingPullRequestTaskId(null);
+    setLinkingMergedPullRequestTaskId(null);
     setUnlinkingPullRequestTaskId(null);
+    setPendingMergedPullRequest(null);
   }, []);
 
   return {
@@ -365,12 +421,16 @@ export function useTaskOperations({
     runs,
     isLoadingTasks,
     detectingPullRequestTaskId,
+    linkingMergedPullRequestTaskId,
     unlinkingPullRequestTaskId,
+    pendingMergedPullRequest,
     setIsLoadingTasks,
     clearTaskData,
     refreshTaskData,
     refreshTasks,
     syncPullRequests,
+    linkMergedPullRequest,
+    cancelLinkMergedPullRequest,
     unlinkPullRequest,
     createTask,
     updateTask,
