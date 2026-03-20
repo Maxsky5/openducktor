@@ -323,6 +323,7 @@ describe("useTaskApprovalFlow", () => {
 
     expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
     expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(true);
+    expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("direct_merge");
 
     pendingApprovalContext.resolve({
       taskId: "TASK-1",

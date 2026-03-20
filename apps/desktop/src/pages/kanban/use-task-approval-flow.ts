@@ -167,14 +167,17 @@ export function useTaskApprovalFlow({
       const task = tasks.find((entry) => entry.id === taskId);
       const requestVersion = ++approvalRequestVersionRef.current;
 
+      const determineDefaultMode = (
+        context: TaskApprovalContext | undefined,
+      ): "direct_merge" | "pull_request" => {
+        const githubProvider = context?.providers?.find((entry) => entry.providerId === "github");
+        return githubProvider?.available ? "pull_request" : "direct_merge";
+      };
+
       const cachedContext = queryClient.getQueryData(
         taskApprovalQueryKeys.context(activeRepo, taskId),
       ) as TaskApprovalContext | undefined;
-      const githubProvider = cachedContext?.providers.find(
-        (entry) => entry.providerId === "github",
-      );
-      const effectiveMode =
-        options?.mode ?? (githubProvider?.available ? "pull_request" : "direct_merge");
+      const effectiveMode = options?.mode ?? determineDefaultMode(cachedContext);
 
       setState({
         open: true,
@@ -203,11 +206,7 @@ export function useTaskApprovalFlow({
           if (approvalRequestVersionRef.current !== requestVersion) {
             return;
           }
-          const updatedGithubProvider = approvalContext?.providers.find(
-            (entry) => entry.providerId === "github",
-          );
-          const updatedEffectiveMode =
-            options?.mode ?? (updatedGithubProvider?.available ? "pull_request" : "direct_merge");
+          const updatedEffectiveMode = options?.mode ?? determineDefaultMode(approvalContext);
           setState({
             open: true,
             stage: resolveApprovalStage(approvalContext),
