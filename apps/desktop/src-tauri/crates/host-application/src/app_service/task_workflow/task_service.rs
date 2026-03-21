@@ -1,4 +1,7 @@
-use crate::app_service::service_core::AppService;
+use crate::app_service::{
+    has_live_opencode_session_status, load_opencode_session_statuses, service_core::AppService,
+    OpencodeSessionStatusMap,
+};
 use crate::app_service::workflow_rules::{
     default_qa_required_for_issue_type, is_open_state, validate_parent_relationships_for_create,
     validate_parent_relationships_for_update, validate_transition,
@@ -8,7 +11,7 @@ use host_domain::{
     AgentSessionDocument, CreateTaskInput, QaWorkflowVerdict, RunState, RuntimeRole, TaskCard,
     TaskMetadata, TaskStatus, UpdateTaskPatch, DEFAULT_BRANCH_PREFIX,
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -317,17 +320,39 @@ impl AppService {
             .runs
             .lock()
             .map_err(|_| anyhow!("Run state lock poisoned"))?;
-        let has_active_run = runs.values().any(|run| {
-            normalize_path_for_comparison(run.repo_path.as_str()) == normalized_repo
-                && run.task_id == task_id
-                && matches!(
+        let mut runtime_statuses_by_directory = HashMap::<String, OpencodeSessionStatusMap>::new();
+        let mut runtime_routes_by_worktree = HashMap::new();
+        let mut has_active_run = false;
+        for run in runs.values() {
+            if normalize_path_for_comparison(run.repo_path.as_str()) != normalized_repo
+                || run.task_id != task_id
+                || !matches!(
                     run.summary.state,
                     RunState::Starting
                         | RunState::Running
                         | RunState::Blocked
                         | RunState::AwaitingDoneConfirmation
                 )
-        });
+            {
+                continue;
+            }
+
+            runtime_routes_by_worktree.insert(
+                normalize_path_key(run.worktree_path.as_str()),
+                run.summary.runtime_route.clone(),
+            );
+
+            if !is_live_build_run_for_task_reset(
+                run,
+                sessions,
+                &mut runtime_statuses_by_directory,
+            )? {
+                continue;
+            }
+
+            has_active_run = true;
+            break;
+        }
         drop(runs);
 
         if has_active_run {
@@ -347,17 +372,50 @@ impl AppService {
             ));
         }
 
-        let active_roles = sessions
+        let mut active_roles = HashSet::new();
+        for session in sessions
             .iter()
             .filter(|session| matches!(session.role.as_str(), "build" | "qa"))
-            .filter(|session| {
-                matches!(
-                    session.status.as_deref(),
-                    Some("starting") | Some("running")
-                )
-            })
-            .map(|session| session.role.as_str())
-            .collect::<HashSet<_>>();
+        {
+            if !matches!(session.status.as_deref(), Some("starting") | Some("running")) {
+                continue;
+            }
+
+            let external_session_id = session
+                .external_session_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty());
+            let Some(external_session_id) = external_session_id else {
+                active_roles.insert(session.role.as_str());
+                continue;
+            };
+
+            if session.role.as_str() != "build" {
+                active_roles.insert(session.role.as_str());
+                continue;
+            }
+
+            let worktree_key = normalize_path_key(session.working_directory.as_str());
+            let Some(runtime_route) = runtime_routes_by_worktree.get(worktree_key.as_str()) else {
+                active_roles.insert(session.role.as_str());
+                continue;
+            };
+            if !runtime_statuses_by_directory.contains_key(worktree_key.as_str()) {
+                let statuses = load_opencode_session_statuses(
+                    runtime_route,
+                    session.working_directory.as_str(),
+                )?;
+                runtime_statuses_by_directory.insert(worktree_key.clone(), statuses);
+            }
+
+            if runtime_statuses_by_directory
+                .get(worktree_key.as_str())
+                .is_some_and(|statuses| has_live_opencode_session_status(statuses, external_session_id))
+            {
+                active_roles.insert(session.role.as_str());
+            }
+        }
         if active_roles.is_empty() {
             return Ok(());
         }
@@ -582,7 +640,7 @@ fn derive_reset_implementation_status(task: &TaskCard) -> TaskStatus {
     TaskStatus::Open
 }
 
-fn normalize_path_for_comparison(path: &str) -> PathBuf {
+pub(crate) fn normalize_path_for_comparison(path: &str) -> PathBuf {
     let trimmed = path.trim();
     if trimmed.is_empty() {
         return PathBuf::new();
@@ -598,7 +656,7 @@ fn normalize_path_for_comparison(path: &str) -> PathBuf {
     })
 }
 
-fn normalize_path_key(path: &str) -> String {
+pub(crate) fn normalize_path_key(path: &str) -> String {
     normalize_path_for_comparison(path)
         .to_string_lossy()
         .to_string()
@@ -852,4 +910,50 @@ fn collect_active_runtime_roles_for_task(
     let mut roles = active_roles.into_iter().collect::<Vec<_>>();
     roles.sort_unstable();
     Ok(roles)
+}
+
+fn is_live_build_run_for_task_reset(
+    run: &crate::app_service::RunProcess,
+    sessions: &[AgentSessionDocument],
+    runtime_statuses_by_directory: &mut HashMap<String, OpencodeSessionStatusMap>,
+) -> Result<bool> {
+    let normalized_worktree = normalize_path_for_comparison(run.worktree_path.as_str());
+    let external_session_ids = sessions
+        .iter()
+        .filter(|session| session.role.trim() == "build")
+        .filter(|session| session.runtime_kind.trim() == run.summary.runtime_kind.as_str())
+        .filter(|session| {
+            normalize_path_for_comparison(session.working_directory.as_str()) == normalized_worktree
+        })
+        .filter_map(|session| {
+            session
+                .external_session_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        })
+        .collect::<Vec<_>>();
+
+    if external_session_ids.is_empty() {
+        return Ok(true);
+    }
+
+    let directory_key = normalize_path_key(run.worktree_path.as_str());
+    if !runtime_statuses_by_directory.contains_key(directory_key.as_str()) {
+        let statuses = match run.summary.runtime_kind {
+            host_domain::AgentRuntimeKind::Opencode => load_opencode_session_statuses(
+                &run.summary.runtime_route,
+                run.worktree_path.as_str(),
+            )?,
+        };
+        runtime_statuses_by_directory.insert(directory_key.clone(), statuses);
+    }
+
+    let statuses = runtime_statuses_by_directory
+        .get(directory_key.as_str())
+        .ok_or_else(|| anyhow!("Missing cached OpenCode session statuses for {}", run.worktree_path))?;
+    Ok(external_session_ids
+        .iter()
+        .any(|external_session_id| has_live_opencode_session_status(statuses, external_session_id)))
 }

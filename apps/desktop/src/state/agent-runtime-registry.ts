@@ -116,6 +116,12 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     ).listAvailableModels(input);
   }
 
+  listRuntimeSessions(input: Parameters<AgentEnginePort["listRuntimeSessions"]>[0]) {
+    return this.getAdapter(
+      this.requireInputRuntimeKind(input.runtimeKind, "runtime session discovery"),
+    ).listRuntimeSessions(input);
+  }
+
   hasSession(sessionId: string): boolean {
     return this.discoverSessionRuntimeKind(sessionId) !== null;
   }

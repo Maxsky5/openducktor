@@ -11,6 +11,7 @@ import {
   type EventUnsubscribe,
   type ForkAgentSessionInput,
   type ListAgentModelsInput,
+  type ListRuntimeSessionsInput,
   type LoadAgentFileStatusInput,
   type LoadAgentSessionDiffInput,
   type LoadAgentSessionHistoryInput,
@@ -18,6 +19,7 @@ import {
   type ReplyPermissionInput,
   type ReplyQuestionInput,
   type ResumeAgentSessionInput,
+  type RuntimeSessionSummary,
   type SendAgentUserMessageInput,
   type StartAgentSessionInput,
   toRuntimeClientInput,
@@ -66,6 +68,45 @@ import type {
 import { WORKFLOW_TOOL_CACHE_TTL_MS } from "./types";
 import { buildRoleScopedPermissionRules } from "./workflow-tool-permissions";
 import { resolveWorkflowToolSelection } from "./workflow-tool-selection";
+
+const toRuntimeSessionStatus = (status: unknown): RuntimeSessionSummary["status"] => {
+  if (typeof status !== "object" || status === null || !("type" in status)) {
+    return {
+      type: "idle",
+    };
+  }
+
+  const type = (status as { type?: unknown }).type;
+  if (type === "busy" || type === "idle") {
+    return {
+      type,
+    };
+  }
+
+  if (type === "retry") {
+    const retryStatus = status as {
+      attempt?: unknown;
+      message?: unknown;
+      next?: unknown;
+      nextEpochMs?: unknown;
+    };
+    return {
+      type: "retry",
+      attempt: typeof retryStatus.attempt === "number" ? retryStatus.attempt : 0,
+      message: typeof retryStatus.message === "string" ? retryStatus.message : "",
+      nextEpochMs:
+        typeof retryStatus.nextEpochMs === "number"
+          ? retryStatus.nextEpochMs
+          : typeof retryStatus.next === "number"
+            ? retryStatus.next
+            : 0,
+    };
+  }
+
+  return {
+    type: "idle",
+  };
+};
 
 export class OpencodeSdkAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
@@ -189,6 +230,40 @@ export class OpencodeSdkAdapter
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
     });
+  }
+
+  async listRuntimeSessions(input: ListRuntimeSessionsInput): Promise<RuntimeSessionSummary[]> {
+    const runtimeClientInput = toRuntimeClientInput(
+      input.runtimeConnection,
+      "list runtime sessions",
+    );
+    const unscopedClient = this.createClient({
+      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
+    });
+    const sessionsPayload = await unscopedClient.session.list();
+    const sessions = unwrapData(sessionsPayload, "list sessions");
+    const sessionDirectories = Array.from(
+      new Set(
+        sessions
+          .map((session) => session.directory?.trim())
+          .filter((directory): directory is string => Boolean(directory)),
+      ),
+    );
+    const statusEntries = await Promise.all(
+      sessionDirectories.map(async (directory) => {
+        const statusPayload = await unscopedClient.session.status({ directory });
+        return [directory, unwrapData(statusPayload, "get session status")] as const;
+      }),
+    );
+    const statusesByDirectory = new Map(statusEntries);
+
+    return sessions.map((session) => ({
+      externalSessionId: session.id,
+      title: session.title,
+      workingDirectory: session.directory,
+      startedAt: toIsoFromEpoch(session.time?.created, this.now),
+      status: toRuntimeSessionStatus(statusesByDirectory.get(session.directory)?.[session.id]),
+    }));
   }
 
   hasSession(sessionId: string): boolean {

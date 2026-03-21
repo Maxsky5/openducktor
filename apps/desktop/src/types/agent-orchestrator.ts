@@ -128,4 +128,5 @@ export type AgentSessionState = {
 
 export type AgentSessionLoadOptions = {
   hydrateHistoryForSessionId?: string | null;
+  reconcileLiveSessions?: boolean;
 };

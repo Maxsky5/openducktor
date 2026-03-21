@@ -1,12 +1,15 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
+import { appQueryClient } from "@/lib/query-client";
 import type {
   AgentChatMessage,
   AgentSessionLoadOptions,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
+import { loadAgentSessionListFromQuery } from "../../queries/agent-sessions";
+import { loadRuntimeListFromQuery } from "../../queries/runtime";
 import { host } from "../shared/host";
 import {
   attachAgentSessionListener,
@@ -24,6 +27,7 @@ import { createOrchestratorPublicOperations } from "./handlers/public-operations
 import type { StartAgentSessionInput } from "./handlers/start-session";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { createLoadSessionModelCatalog, createLoadSessionTodos } from "./lifecycle/session-loaders";
+import { resolveRuntimeRouteConnection } from "./runtime/runtime";
 
 type UseAgentOrchestratorOperationsArgs = {
   activeRepo: string | null;
@@ -54,6 +58,19 @@ type UseAgentOrchestratorOperationsResult = {
   answerAgentQuestion: (sessionId: string, requestId: string, answers: string[][]) => Promise<void>;
 };
 
+const getOrCreateRepoTaskSet = (
+  store: Record<string, Set<string>>,
+  repoPath: string,
+): Set<string> => {
+  const existing = store[repoPath];
+  if (existing) {
+    return existing;
+  }
+  const created = new Set<string>();
+  store[repoPath] = created;
+  return created;
+};
+
 export function useAgentOrchestratorOperations({
   activeRepo,
   tasks,
@@ -67,6 +84,8 @@ export function useAgentOrchestratorOperations({
     runs,
   });
   const { sessionsRef, turnStartedAtBySessionRef, unsubscribersRef } = refBridges;
+  const bootstrappedTasksByRepoRef = useRef<Record<string, Set<string>>>({});
+  const reconciledLiveSessionTasksByRepoRef = useRef<Record<string, Set<string>>>({});
   const runtimeDefinitions = useMemo(() => agentEngine.listRuntimeDefinitions(), [agentEngine]);
 
   const persistSessionSnapshot = useCallback(
@@ -186,32 +205,6 @@ export function useAgentOrchestratorOperations({
     [agentEngine, runtimeDefinitions, updateSession],
   );
 
-  const loadAgentSessions = useMemo(
-    () =>
-      createLoadAgentSessions({
-        activeRepo,
-        adapter: agentEngine,
-        repoEpochRef: refBridges.repoEpochRef,
-        previousRepoRef: refBridges.previousRepoRef,
-        sessionsRef: refBridges.sessionsRef,
-        setSessionsById: commitSessions,
-        taskRef: refBridges.taskRef,
-        updateSession,
-        loadSessionTodos,
-        loadSessionModelCatalog,
-        loadRepoPromptOverrides,
-      }),
-    [
-      activeRepo,
-      agentEngine,
-      commitSessions,
-      loadSessionModelCatalog,
-      loadSessionTodos,
-      refBridges,
-      updateSession,
-    ],
-  );
-
   const removeAgentSessions = useCallback(
     ({ taskId, roles }: { taskId: string; roles?: AgentSessionState["role"][] }): void => {
       const matchingRoles = roles ? new Set(roles) : null;
@@ -291,6 +284,223 @@ export function useAgentOrchestratorOperations({
       updateSession,
     ],
   );
+
+  const loadAgentSessions = useMemo(
+    () =>
+      createLoadAgentSessions({
+        activeRepo,
+        adapter: agentEngine,
+        repoEpochRef: refBridges.repoEpochRef,
+        previousRepoRef: refBridges.previousRepoRef,
+        sessionsRef: refBridges.sessionsRef,
+        setSessionsById: commitSessions,
+        taskRef: refBridges.taskRef,
+        updateSession,
+        attachSessionListener,
+        loadSessionTodos,
+        loadSessionModelCatalog,
+        loadRepoPromptOverrides,
+        loadTaskDocuments,
+      }),
+    [
+      activeRepo,
+      agentEngine,
+      attachSessionListener,
+      commitSessions,
+      loadSessionModelCatalog,
+      loadSessionTodos,
+      refBridges,
+      updateSession,
+    ],
+  );
+
+  useEffect(() => {
+    if (!activeRepo) {
+      return;
+    }
+    bootstrappedTasksByRepoRef.current[activeRepo] = new Set<string>();
+    reconciledLiveSessionTasksByRepoRef.current[activeRepo] = new Set<string>();
+  }, [activeRepo]);
+
+  useEffect(() => {
+    if (!activeRepo) {
+      return;
+    }
+
+    const bootstrappedTasks = getOrCreateRepoTaskSet(
+      bootstrappedTasksByRepoRef.current,
+      activeRepo,
+    );
+    const pendingTaskIds = tasks
+      .map((task) => task.id)
+      .filter((taskId) => !bootstrappedTasks.has(taskId));
+    if (pendingTaskIds.length === 0) {
+      return;
+    }
+
+    for (const taskId of pendingTaskIds) {
+      bootstrappedTasks.add(taskId);
+      void loadAgentSessions(taskId).catch(() => {
+        const currentSet = bootstrappedTasksByRepoRef.current[activeRepo];
+        currentSet?.delete(taskId);
+      });
+    }
+  }, [activeRepo, loadAgentSessions, tasks]);
+
+  useEffect(() => {
+    if (!activeRepo || tasks.length === 0) {
+      return;
+    }
+    const reconciledTaskIds = getOrCreateRepoTaskSet(
+      reconciledLiveSessionTasksByRepoRef.current,
+      activeRepo,
+    );
+    const pendingTaskIds = tasks
+      .map((task) => task.id)
+      .filter((taskId) => !reconciledTaskIds.has(taskId));
+    if (pendingTaskIds.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    const activeRunStates = new Set<RunSummary["state"]>([
+      "starting",
+      "running",
+      "blocked",
+      "awaiting_done_confirmation",
+    ]);
+
+    void (async () => {
+      try {
+        const persistedByTask = await Promise.all(
+          pendingTaskIds.map(
+            async (taskId) =>
+              [
+                taskId,
+                await loadAgentSessionListFromQuery(appQueryClient, activeRepo, taskId, {
+                  forceFresh: true,
+                }),
+              ] as const,
+          ),
+        );
+        if (cancelled) {
+          return;
+        }
+
+        const persistedTaskIdsByLiveSessionKey = new Map<string, Set<string>>();
+        const runtimeKinds = new Set<string>();
+        for (const [taskId, records] of persistedByTask) {
+          for (const record of records) {
+            const runtimeKind = record.runtimeKind ?? record.selectedModel?.runtimeKind;
+            const externalSessionId = record.externalSessionId ?? record.sessionId;
+            if (!runtimeKind || !externalSessionId) {
+              continue;
+            }
+            runtimeKinds.add(runtimeKind);
+            const key = `${runtimeKind}::${externalSessionId}`;
+            const taskIds = persistedTaskIdsByLiveSessionKey.get(key) ?? new Set<string>();
+            taskIds.add(taskId);
+            persistedTaskIdsByLiveSessionKey.set(key, taskIds);
+          }
+        }
+
+        if (persistedTaskIdsByLiveSessionKey.size === 0) {
+          const currentSet = getOrCreateRepoTaskSet(
+            reconciledLiveSessionTasksByRepoRef.current,
+            activeRepo,
+          );
+          for (const taskId of pendingTaskIds) {
+            currentSet.add(taskId);
+          }
+          return;
+        }
+
+        const runtimeConnections = new Map<
+          string,
+          Parameters<AgentEnginePort["listRuntimeSessions"]>[0]
+        >();
+        for (const runtimeKind of runtimeKinds) {
+          const runtimes = await loadRuntimeListFromQuery(appQueryClient, runtimeKind, activeRepo);
+          if (cancelled) {
+            return;
+          }
+          for (const runtime of runtimes) {
+            const { runtimeConnection } = resolveRuntimeRouteConnection(
+              runtime.runtimeRoute,
+              runtime.workingDirectory,
+            );
+            const key = `${runtimeKind}::${runtimeConnection.endpoint}::${runtimeConnection.workingDirectory}`;
+            runtimeConnections.set(key, {
+              runtimeKind,
+              runtimeConnection,
+            });
+          }
+        }
+
+        for (const run of runs) {
+          if (!activeRunStates.has(run.state)) {
+            continue;
+          }
+          const { runtimeConnection } = resolveRuntimeRouteConnection(
+            run.runtimeRoute,
+            run.worktreePath,
+          );
+          const key = `${run.runtimeKind}::${runtimeConnection.endpoint}::${runtimeConnection.workingDirectory}`;
+          runtimeConnections.set(key, {
+            runtimeKind: run.runtimeKind,
+            runtimeConnection,
+          });
+        }
+
+        const taskIdsToReconcile = new Set<string>();
+        for (const input of runtimeConnections.values()) {
+          const runtimeSessions = await agentEngine.listRuntimeSessions(input);
+          if (cancelled) {
+            return;
+          }
+          for (const runtimeSession of runtimeSessions) {
+            if (runtimeSession.status.type !== "busy" && runtimeSession.status.type !== "retry") {
+              continue;
+            }
+            const key = `${input.runtimeKind}::${runtimeSession.externalSessionId}`;
+            const taskIds = persistedTaskIdsByLiveSessionKey.get(key);
+            if (!taskIds) {
+              continue;
+            }
+            for (const taskId of taskIds) {
+              taskIdsToReconcile.add(taskId);
+            }
+          }
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        await Promise.all(
+          Array.from(taskIdsToReconcile).map((taskId) =>
+            loadAgentSessions(taskId, { reconcileLiveSessions: true }),
+          ),
+        );
+        if (cancelled) {
+          return;
+        }
+        const currentSet = getOrCreateRepoTaskSet(
+          reconciledLiveSessionTasksByRepoRef.current,
+          activeRepo,
+        );
+        for (const taskId of pendingTaskIds) {
+          currentSet.add(taskId);
+        }
+      } catch {
+        // Leave pending tasks unreconciled so a later render can retry.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRepo, agentEngine, loadAgentSessions, runs, tasks]);
 
   const ensureRuntime = useMemo(
     () =>

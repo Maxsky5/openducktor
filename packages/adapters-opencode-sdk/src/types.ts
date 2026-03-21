@@ -29,7 +29,7 @@ export type SessionRecord = {
 
 export type ClientFactory = (input: {
   runtimeEndpoint: string;
-  workingDirectory: string;
+  workingDirectory?: string;
 }) => OpencodeClient;
 
 export type OpencodeStreamEventLog = {
