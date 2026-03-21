@@ -6,6 +6,25 @@ use super::*;
 pub type RunEmitter = Arc<dyn Fn(RunEvent) + Send + Sync + 'static>;
 pub type DevServerEmitter = Arc<dyn Fn(DevServerEvent) + Send + Sync + 'static>;
 
+pub(super) struct RuntimeEnsureFlight {
+    pub(super) state: Mutex<RuntimeEnsureFlightState>,
+    pub(super) condvar: Condvar,
+}
+
+pub(super) enum RuntimeEnsureFlightState {
+    Starting,
+    Finished(Box<Result<RuntimeInstanceSummary, String>>),
+}
+
+impl RuntimeEnsureFlight {
+    pub(super) fn new() -> Self {
+        Self {
+            state: Mutex::new(RuntimeEnsureFlightState::Starting),
+            condvar: Condvar::new(),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct AppService {
     pub(super) task_store: Arc<dyn TaskStore>,
@@ -15,6 +34,7 @@ pub struct AppService {
     pub(super) runs: Arc<Mutex<HashMap<String, RunProcess>>>,
     pub(super) agent_runtimes: Arc<Mutex<HashMap<String, AgentRuntimeProcess>>>,
     pub(super) tracked_opencode_processes: Arc<Mutex<HashMap<u32, usize>>>,
+    pub(super) runtime_ensure_flights: Arc<Mutex<HashMap<String, Arc<RuntimeEnsureFlight>>>>,
     pub(super) opencode_process_registry_path: PathBuf,
     pub(super) instance_pid: u32,
     pub(super) initialized_repos: Arc<Mutex<HashSet<String>>>,
@@ -28,7 +48,7 @@ pub struct AppService {
 
 pub(crate) struct RunProcess {
     pub(super) summary: RunSummary,
-    pub(super) child: Child,
+    pub(super) child: Option<Child>,
     pub(super) _opencode_process_guard: Option<TrackedOpencodeProcessGuard>,
     pub(super) repo_path: String,
     pub(super) task_id: String,
@@ -98,6 +118,7 @@ impl AppService {
             runs: Arc::new(Mutex::new(HashMap::new())),
             agent_runtimes: Arc::new(Mutex::new(HashMap::new())),
             tracked_opencode_processes: Arc::new(Mutex::new(HashMap::new())),
+            runtime_ensure_flights: Arc::new(Mutex::new(HashMap::new())),
             opencode_process_registry_path,
             instance_pid,
             initialized_repos: Arc::new(Mutex::new(HashSet::new())),

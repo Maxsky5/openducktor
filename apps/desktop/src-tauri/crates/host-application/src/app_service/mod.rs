@@ -13,7 +13,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::Child;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Instant;
 
 pub mod build_orchestrator;
@@ -36,7 +36,7 @@ pub(crate) mod test_support;
 mod workflow_rules;
 mod workspace_policy;
 
-pub(crate) use events::{emit_event, spawn_output_forwarder};
+pub(crate) use events::emit_event;
 pub(crate) use hook_security::{run_parsed_hook_command_allow_failure, validate_hook_trust};
 pub(crate) use opencode_runtime::{
     opencode_server_parent_pid, process_exists, read_opencode_version,

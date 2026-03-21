@@ -1,6 +1,5 @@
 use super::super::{
-    emit_event, run_parsed_hook_command_allow_failure, terminate_child_process, AppService,
-    RunEmitter, RunProcess,
+    emit_event, run_parsed_hook_command_allow_failure, AppService, RunEmitter, RunProcess,
 };
 use super::CleanupMode;
 use anyhow::{anyhow, Result};
@@ -28,8 +27,6 @@ impl AppService {
         emitter: RunEmitter,
     ) -> Result<bool> {
         let mut run = self.take_run_for_cleanup(run_id)?;
-
-        terminate_child_process(&mut run.child);
 
         match mode {
             CleanupMode::Failure => self.cleanup_failed_run(run_id, &mut run, &emitter),

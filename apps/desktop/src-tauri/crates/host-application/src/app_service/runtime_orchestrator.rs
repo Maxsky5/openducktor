@@ -8,6 +8,7 @@ use host_domain::{
 };
 use std::collections::HashSet;
 use std::process::Child;
+use std::sync::Arc;
 
 #[derive(Clone, Copy)]
 pub(super) struct RuntimeExistingLookup<'a> {
@@ -44,6 +45,96 @@ pub(super) struct SpawnedRuntimeServer {
 }
 
 impl AppService {
+    fn runtime_ensure_flight_key(runtime_kind: AgentRuntimeKind, repo_key: &str) -> String {
+        format!("{}::{repo_key}", runtime_kind.as_str())
+    }
+
+    fn acquire_runtime_ensure_flight(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+    ) -> Result<(Arc<super::service_core::RuntimeEnsureFlight>, bool)> {
+        let key = Self::runtime_ensure_flight_key(runtime_kind, repo_key);
+        let mut flights = self
+            .runtime_ensure_flights
+            .lock()
+            .map_err(|_| anyhow!("Runtime ensure coordination state lock poisoned"))?;
+        if let Some(existing) = flights.get(key.as_str()) {
+            return Ok((existing.clone(), false));
+        }
+
+        let flight = Arc::new(super::service_core::RuntimeEnsureFlight::new());
+        flights.insert(key, flight.clone());
+        Ok((flight, true))
+    }
+
+    fn complete_runtime_ensure_flight(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+        flight: &Arc<super::service_core::RuntimeEnsureFlight>,
+        result: &Result<RuntimeInstanceSummary>,
+    ) {
+        let stored_result = match result {
+            Ok(summary) => Ok(summary.clone()),
+            Err(error) => Err(format!("{error:#}")),
+        };
+
+        if let Ok(mut state) = flight.state.lock() {
+            *state =
+                super::service_core::RuntimeEnsureFlightState::Finished(Box::new(stored_result));
+            flight.condvar.notify_all();
+        }
+
+        if let Ok(mut flights) = self.runtime_ensure_flights.lock() {
+            let key = Self::runtime_ensure_flight_key(runtime_kind, repo_key);
+            flights.remove(key.as_str());
+        }
+    }
+
+    fn wait_for_runtime_ensure_flight(
+        flight: &Arc<super::service_core::RuntimeEnsureFlight>,
+    ) -> Result<RuntimeInstanceSummary> {
+        let mut state = flight
+            .state
+            .lock()
+            .map_err(|_| anyhow!("Runtime ensure coordination state lock poisoned"))?;
+        loop {
+            match &*state {
+                super::service_core::RuntimeEnsureFlightState::Starting => {
+                    state = flight
+                        .condvar
+                        .wait(state)
+                        .map_err(|_| anyhow!("Runtime ensure coordination state lock poisoned"))?;
+                }
+                super::service_core::RuntimeEnsureFlightState::Finished(result) => {
+                    return result.as_ref().clone().map_err(|message| anyhow!(message));
+                }
+            }
+        }
+    }
+
+    fn find_existing_workspace_runtime(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+    ) -> Result<Option<RuntimeInstanceSummary>> {
+        let mut runtimes = self
+            .agent_runtimes
+            .lock()
+            .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
+        Self::prune_stale_runtimes(&mut runtimes)?;
+        Ok(Self::find_existing_runtime(
+            &runtimes,
+            RuntimeExistingLookup {
+                repo_key,
+                role: Self::WORKSPACE_RUNTIME_ROLE,
+                task_id: None,
+            },
+        )
+        .filter(|runtime| runtime.kind == runtime_kind))
+    }
+
     pub(super) fn ensure_runtime_supports_all_workflow_scopes(
         runtime_kind: AgentRuntimeKind,
     ) -> Result<()> {
@@ -150,60 +241,68 @@ impl AppService {
         let repo_key = self.resolve_authorized_repo_path(repo_path)?;
         let repo_path = repo_key.as_str();
 
+        if let Some(existing) =
+            self.find_existing_workspace_runtime(runtime_kind, repo_key.as_str())?
         {
-            let mut runtimes = self
-                .agent_runtimes
-                .lock()
-                .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-            Self::prune_stale_runtimes(&mut runtimes)?;
-
-            if let Some(existing) = Self::find_existing_runtime(
-                &runtimes,
-                RuntimeExistingLookup {
-                    repo_key: repo_key.as_str(),
-                    role: Self::WORKSPACE_RUNTIME_ROLE,
-                    task_id: None,
-                },
-            ) {
-                return Ok(existing);
-            }
+            return Ok(existing);
         }
 
-        let startup_error_context = format!(
-            "{} workspace runtime failed to start for {repo_path}",
-            runtime_kind.as_str()
-        );
-        let startup_policy = self.resolve_runtime_startup_policy(
-            "workspace_runtime",
-            repo_path,
-            Self::WORKSPACE_RUNTIME_TASK_ID,
-            Self::WORKSPACE_RUNTIME_ROLE,
-            startup_error_context.as_str(),
-        )?;
+        let (flight, is_leader) =
+            self.acquire_runtime_ensure_flight(runtime_kind, repo_key.as_str())?;
+        if !is_leader {
+            return Self::wait_for_runtime_ensure_flight(&flight);
+        }
 
-        self.spawn_and_register_runtime(RuntimeStartInput {
+        let startup_result = (|| -> Result<RuntimeInstanceSummary> {
+            if let Some(existing) =
+                self.find_existing_workspace_runtime(runtime_kind, repo_key.as_str())?
+            {
+                return Ok(existing);
+            }
+
+            let startup_error_context = format!(
+                "{} workspace runtime failed to start for {repo_path}",
+                runtime_kind.as_str()
+            );
+            let startup_policy = self.resolve_runtime_startup_policy(
+                "workspace_runtime",
+                repo_path,
+                Self::WORKSPACE_RUNTIME_TASK_ID,
+                Self::WORKSPACE_RUNTIME_ROLE,
+                startup_error_context.as_str(),
+            )?;
+
+            self.spawn_and_register_runtime(RuntimeStartInput {
+                runtime_kind,
+                startup_scope: "workspace_runtime",
+                repo_path,
+                repo_key: repo_key.clone(),
+                task_id: Self::WORKSPACE_RUNTIME_TASK_ID,
+                role: Self::WORKSPACE_RUNTIME_ROLE,
+                startup_policy,
+                working_directory: repo_key.clone(),
+                cleanup_target: None,
+                tracking_error_context: "Failed tracking spawned OpenCode workspace runtime",
+                startup_error_context,
+                post_start_policy: Some(RuntimePostStartPolicy {
+                    existing_lookup: RuntimeExistingLookup {
+                        repo_key: repo_key.as_str(),
+                        role: Self::WORKSPACE_RUNTIME_ROLE,
+                        task_id: None,
+                    },
+                    prune_error_context: format!(
+                        "Failed pruning stale runtimes while finalizing workspace runtime for {repo_path}"
+                    ),
+                }),
+            })
+        })();
+        self.complete_runtime_ensure_flight(
             runtime_kind,
-            startup_scope: "workspace_runtime",
-            repo_path,
-            repo_key: repo_key.clone(),
-            task_id: Self::WORKSPACE_RUNTIME_TASK_ID,
-            role: Self::WORKSPACE_RUNTIME_ROLE,
-            startup_policy,
-            working_directory: repo_key.clone(),
-            cleanup_target: None,
-            tracking_error_context: "Failed tracking spawned OpenCode workspace runtime",
-            startup_error_context,
-            post_start_policy: Some(RuntimePostStartPolicy {
-                existing_lookup: RuntimeExistingLookup {
-                    repo_key: repo_key.as_str(),
-                    role: Self::WORKSPACE_RUNTIME_ROLE,
-                    task_id: None,
-                },
-                prune_error_context: format!(
-                    "Failed pruning stale runtimes while finalizing workspace runtime for {repo_path}"
-                ),
-            }),
-        })
+            repo_key.as_str(),
+            &flight,
+            &startup_result,
+        );
+        startup_result
     }
 
     fn spawn_and_register_runtime(

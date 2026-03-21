@@ -205,6 +205,17 @@ pub enum RuntimeRoute {
     LocalHttp { endpoint: String },
 }
 
+impl RuntimeRoute {
+    pub fn port(&self) -> Option<u16> {
+        match self {
+            Self::LocalHttp { endpoint } => endpoint
+                .rsplit(':')
+                .next()
+                .and_then(|value| value.parse::<u16>().ok()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeRole {

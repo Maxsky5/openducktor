@@ -142,18 +142,6 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
     let worktree_path = PathBuf::from(run.worktree_path.clone());
     assert_eq!(service.runs_list(Some(repo_path.as_str()))?.len(), 1);
 
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while !events
-        .lock()
-        .expect("events lock poisoned")
-        .iter()
-        .any(|event| matches!(event, RunEvent::PermissionRequired { .. }))
-    {
-        if Instant::now() > deadline {
-            return Err(anyhow!("timed out waiting for permission-required event"));
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
     assert!(service.build_respond(
         run.run_id.as_str(),
         BuildResponseAction::Approve,
@@ -185,10 +173,7 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
         .any(|event| matches!(event, RunEvent::RunStarted { .. })));
     assert!(emitted
         .iter()
-        .any(|event| matches!(event, RunEvent::PermissionRequired { .. })));
-    assert!(emitted
-        .iter()
-        .any(|event| matches!(event, RunEvent::ToolExecution { .. })));
+        .any(|event| matches!(event, RunEvent::AgentThought { .. })));
     assert!(emitted
         .iter()
         .any(|event| matches!(event, RunEvent::RunFinished { success: true, .. })));
@@ -405,7 +390,7 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
                 last_message: None,
                 started_at: "2026-02-20T12:00:00Z".to_string(),
             },
-            child: spawn_sleep_process(20),
+            child: Some(spawn_sleep_process(20)),
             _opencode_process_guard: None,
             repo_path: repo_path.clone(),
             task_id: "task-1".to_string(),
@@ -1130,6 +1115,16 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
         },
     )?;
 
+    let shared_runtime = service.runtime_ensure("opencode", repo_path.as_str())?;
+    assert!(wait_for_path_exists(
+        pid_file.as_path(),
+        Duration::from_secs(2)
+    ));
+    let shared_pid = fs::read_to_string(pid_file.as_path())?
+        .trim()
+        .parse::<i32>()
+        .expect("shared runtime pid should parse as i32");
+
     let build_error = std::thread::scope(|scope| -> Result<anyhow::Error> {
         let build_handle = scope.spawn(|| {
             service.build_start(
@@ -1139,15 +1134,6 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
                 make_emitter(Arc::new(Mutex::new(Vec::new()))),
             )
         });
-
-        assert!(wait_for_path_exists(
-            pid_file.as_path(),
-            Duration::from_secs(2)
-        ));
-        let spawned_pid = fs::read_to_string(pid_file.as_path())?
-            .trim()
-            .parse::<i32>()
-            .expect("spawned build pid should parse as i32");
 
         let poison_handle = scope.spawn(|| {
             let _lock = service
@@ -1162,10 +1148,14 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
             .join()
             .expect("build thread should join")
             .expect_err("build_start should fail when run lock is poisoned");
-        assert!(wait_for_process_exit(spawned_pid, Duration::from_secs(2)));
         Ok(build_error)
     })?;
     assert!(build_error.to_string().contains("Run state lock poisoned"));
+    assert!(
+        !wait_for_process_exit(shared_pid, Duration::from_millis(250)),
+        "shared repo runtime should remain alive when build registration fails"
+    );
+    assert!(service.runtime_stop(shared_runtime.runtime_id.as_str())?);
 
     let _ = fs::remove_dir_all(root);
     Ok(())

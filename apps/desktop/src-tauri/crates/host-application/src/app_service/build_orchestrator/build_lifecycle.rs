@@ -1,14 +1,12 @@
 use super::super::{
-    emit_event, spawn_output_forwarder, terminate_child_process, AppService,
-    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, RunEmitter, RunProcess,
-    StartupEventContext, StartupEventCorrelation, StartupEventPayload,
-    STARTUP_CONFIG_INVALID_REASON,
+    emit_event, AppService, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, RunEmitter,
+    RunProcess, RuntimeInstanceSummary, StartupEventContext, StartupEventCorrelation,
+    StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
 };
-use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree, SpawnedBuildAgent};
+use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree};
 use super::BuildResponseAction;
 use anyhow::{anyhow, Context, Result};
 use host_domain::{now_rfc3339, AgentRuntimeKind, RunEvent, RunState, RunSummary, TaskStatus};
-use std::process::{ChildStderr, ChildStdout};
 use uuid::Uuid;
 
 struct BuildRunRegistration {
@@ -17,7 +15,6 @@ struct BuildRunRegistration {
     prerequisites: BuildPrerequisites,
     task_id: String,
     worktree_path: String,
-    spawned_agent: SpawnedBuildAgent,
     emitter: RunEmitter,
 }
 
@@ -25,7 +22,7 @@ struct BuildModeStartInput<'a> {
     runtime_kind: AgentRuntimeKind,
     prerequisites: BuildPrerequisites,
     prepared_worktree: PreparedBuildWorktree,
-    spawned_agent: SpawnedBuildAgent,
+    runtime_summary: RuntimeInstanceSummary,
     task_id: &'a str,
     run_id: &'a str,
     emitter: RunEmitter,
@@ -43,25 +40,23 @@ impl AppService {
         Self::ensure_runtime_supports_all_workflow_scopes(runtime_kind)?;
         let run_id = format!("run-{}", Uuid::new_v4().simple());
         let prerequisites = self.validate_build_prerequisites(repo_path, task_id)?;
-        let startup_policy = self.resolve_build_startup_policy(
+        let _startup_policy = self.resolve_build_startup_policy(
             prerequisites.repo_path.as_str(),
             task_id,
             run_id.as_str(),
         )?;
         let prepared_worktree = self.prepare_build_worktree(&prerequisites, task_id)?;
-        let spawned_agent = self.spawn_and_wait_for_agent(
-            &prerequisites,
-            &prepared_worktree,
-            task_id,
-            run_id.as_str(),
-            startup_policy,
-        )?;
+        let runtime_summary = self
+            .runtime_ensure(runtime_kind.as_str(), prerequisites.repo_path.as_str())
+            .with_context(|| {
+                format!("OpenCode build runtime failed to start for task {task_id}")
+            })?;
 
         self.initiate_build_mode(BuildModeStartInput {
             runtime_kind,
             prerequisites,
             prepared_worktree,
-            spawned_agent,
+            runtime_summary,
             task_id,
             run_id: run_id.as_str(),
             emitter,
@@ -136,7 +131,6 @@ impl AppService {
             .get_mut(run_id)
             .ok_or_else(|| anyhow!("Run not found: {run_id}"))?;
 
-        terminate_child_process(&mut run.child);
         run.summary.state = RunState::Stopped;
         run.summary.last_message = Some("Run stopped by user".to_string());
 
@@ -182,22 +176,7 @@ impl AppService {
             })
     }
 
-    fn abort_started_build<T>(
-        spawned_agent: &mut SpawnedBuildAgent,
-        error: anyhow::Error,
-    ) -> Result<T> {
-        terminate_child_process(&mut spawned_agent.child);
-        Err(error)
-    }
-
-    fn emit_build_started_and_forward_output(
-        run_id: &str,
-        task_id: &str,
-        branch: &str,
-        stdout: Option<ChildStdout>,
-        stderr: Option<ChildStderr>,
-        emitter: RunEmitter,
-    ) {
+    fn emit_build_started(run_id: &str, task_id: &str, branch: &str, emitter: RunEmitter) {
         emit_event(
             &emitter,
             RunEvent::RunStarted {
@@ -206,13 +185,6 @@ impl AppService {
                 timestamp: now_rfc3339(),
             },
         );
-
-        if let Some(stdout) = stdout {
-            spawn_output_forwarder(run_id.to_string(), "stdout", stdout, emitter.clone());
-        }
-        if let Some(stderr) = stderr {
-            spawn_output_forwarder(run_id.to_string(), "stderr", stderr, emitter.clone());
-        }
     }
 
     fn register_build_run(&self, registration: BuildRunRegistration) -> Result<RunSummary> {
@@ -222,30 +194,18 @@ impl AppService {
             prerequisites,
             task_id,
             worktree_path,
-            spawned_agent,
             emitter,
         } = registration;
-
-        let SpawnedBuildAgent {
-            mut child,
-            opencode_process_guard,
-            ..
-        } = spawned_agent;
         let mut runs = match self.runs.lock() {
             Ok(runs) => runs,
-            Err(_) => {
-                terminate_child_process(&mut child);
-                return Err(anyhow!("Run state lock poisoned"));
-            }
+            Err(_) => return Err(anyhow!("Run state lock poisoned")),
         };
 
-        let stdout = child.stdout.take();
-        let stderr = child.stderr.take();
         let task_id_for_event = task_id.clone();
         let process = RunProcess {
             summary: summary.clone(),
-            child,
-            _opencode_process_guard: Some(opencode_process_guard),
+            child: None,
+            _opencode_process_guard: None,
             repo_path: prerequisites.repo_path,
             task_id,
             worktree_path,
@@ -254,12 +214,10 @@ impl AppService {
 
         runs.insert(run_id.clone(), process);
         drop(runs);
-        Self::emit_build_started_and_forward_output(
+        Self::emit_build_started(
             run_id.as_str(),
             task_id_for_event.as_str(),
             summary.branch.as_str(),
-            stdout,
-            stderr,
             emitter,
         );
         Ok(summary)
@@ -270,7 +228,7 @@ impl AppService {
             runtime_kind,
             prerequisites,
             prepared_worktree,
-            mut spawned_agent,
+            runtime_summary,
             task_id,
             run_id,
             emitter,
@@ -280,27 +238,29 @@ impl AppService {
             task_id,
             TaskStatus::InProgress,
             Some("Builder delegated"),
-        )
-        .or_else(|error| Self::abort_started_build(&mut spawned_agent, error))?;
+        )?;
 
         let worktree_path = prepared_worktree
             .worktree_dir
             .to_str()
             .ok_or_else(|| anyhow!("Invalid worktree path"))
-            .map(|path| path.to_string())
-            .or_else(|error| Self::abort_started_build(&mut spawned_agent, error))?;
+            .map(|path| path.to_string())?;
         let run_id_string = run_id.to_string();
         let task_id_string = task_id.to_string();
+        let port = runtime_summary
+            .runtime_route
+            .port()
+            .ok_or_else(|| anyhow!("Build runtime route must expose a port"))?;
 
         let summary = RunSummary {
             run_id: run_id_string.clone(),
             runtime_kind,
-            runtime_route: runtime_kind.route_for_port(spawned_agent.port),
+            runtime_route: runtime_summary.runtime_route,
             repo_path: prerequisites.repo_path.clone(),
             task_id: task_id_string.clone(),
             branch: prerequisites.branch.clone(),
             worktree_path: worktree_path.clone(),
-            port: spawned_agent.port,
+            port,
             state: RunState::Running,
             last_message: Some(format!("{} runtime running", runtime_kind.as_str())),
             started_at: now_rfc3339(),
@@ -312,7 +272,6 @@ impl AppService {
             prerequisites,
             task_id: task_id_string,
             worktree_path,
-            spawned_agent,
             emitter,
         })
     }

@@ -1257,6 +1257,7 @@ fi
 if [ "$1" = "serve" ]; then
   HOST="127.0.0.1"
   PORT="0"
+  STARTS_FILE="${OPENDUCKTOR_TEST_STARTS_FILE:-}"
   while [ $# -gt 0 ]; do
     case "$1" in
       --hostname)
@@ -1272,6 +1273,9 @@ if [ "$1" = "serve" ]; then
         ;;
     esac
   done
+  if [ -n "$STARTS_FILE" ]; then
+    echo "$$" >> "$STARTS_FILE"
+  fi
   echo "permission requested: git push"
   echo "tool execution heartbeat" >&2
   exec python3 - "$HOST" "$PORT" <<'PY'

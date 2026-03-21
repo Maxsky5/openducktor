@@ -553,7 +553,7 @@ fn task_delete_rejects_active_builder_runs() {
                 last_message: None,
                 started_at: "2026-02-20T12:00:00Z".to_string(),
             },
-            child: spawn_sleep_process(20),
+            child: Some(spawn_sleep_process(20)),
             _opencode_process_guard: None,
             repo_path: repo_path.to_string(),
             task_id: "parent-1".to_string(),
@@ -594,7 +594,9 @@ fn task_delete_rejects_active_builder_runs() {
         .expect("run lock poisoned")
         .remove("run-1")
     {
-        terminate_child_process(&mut run.child);
+        if let Some(child) = run.child.as_mut() {
+            terminate_child_process(child);
+        }
     }
     let _ = fs::remove_dir_all(worktree_path);
     let _ = fs::remove_dir_all(repo_path);

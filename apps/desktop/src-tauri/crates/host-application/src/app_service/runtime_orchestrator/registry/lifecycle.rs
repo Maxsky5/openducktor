@@ -146,7 +146,9 @@ impl AppService {
         match self.runs.lock() {
             Ok(mut runs) => {
                 for (_, mut run) in runs.drain() {
-                    terminate_child_process(&mut run.child);
+                    if let Some(child) = run.child.as_mut() {
+                        terminate_child_process(child);
+                    }
                 }
             }
             Err(_) => cleanup_errors.push("Run state lock poisoned".to_string()),
