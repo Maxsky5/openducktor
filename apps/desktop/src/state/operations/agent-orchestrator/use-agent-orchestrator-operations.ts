@@ -73,6 +73,9 @@ const getOrCreateRepoTaskSet = (
 
 const nextSessionRetryDelayMs = (attempt: number): number => Math.min(5_000, 500 * 2 ** attempt);
 
+const getRuntimeSessionScanKey = (runtimeKind: string, endpoint: string): string =>
+  `${runtimeKind}::${endpoint}`;
+
 export function useAgentOrchestratorOperations({
   activeRepo,
   tasks,
@@ -500,15 +503,17 @@ export function useAgentOrchestratorOperations({
             return;
           }
           for (const runtime of runtimes) {
-            const { runtimeConnection } = resolveRuntimeRouteConnection(
+            const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
               runtime.runtimeRoute,
               runtime.workingDirectory,
             );
-            const key = `${runtimeKind}::${runtimeConnection.endpoint}::${runtimeConnection.workingDirectory}`;
-            runtimeConnections.set(key, {
-              runtimeKind,
-              runtimeConnection,
-            });
+            const key = getRuntimeSessionScanKey(runtimeKind, runtimeEndpoint);
+            if (!runtimeConnections.has(key)) {
+              runtimeConnections.set(key, {
+                runtimeKind,
+                runtimeConnection,
+              });
+            }
           }
         }
 
@@ -516,15 +521,17 @@ export function useAgentOrchestratorOperations({
           if (!activeRunStates.has(run.state)) {
             continue;
           }
-          const { runtimeConnection } = resolveRuntimeRouteConnection(
+          const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
             run.runtimeRoute,
             run.worktreePath,
           );
-          const key = `${run.runtimeKind}::${runtimeConnection.endpoint}::${runtimeConnection.workingDirectory}`;
-          runtimeConnections.set(key, {
-            runtimeKind: run.runtimeKind,
-            runtimeConnection,
-          });
+          const key = getRuntimeSessionScanKey(run.runtimeKind, runtimeEndpoint);
+          if (!runtimeConnections.has(key)) {
+            runtimeConnections.set(key, {
+              runtimeKind: run.runtimeKind,
+              runtimeConnection,
+            });
+          }
         }
 
         const taskIdsToReconcile = new Set<string>();

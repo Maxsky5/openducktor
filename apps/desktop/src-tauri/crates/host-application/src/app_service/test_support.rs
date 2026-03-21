@@ -1292,6 +1292,7 @@ pid_file = os.environ.get("OPENDUCKTOR_TEST_PID_FILE", "")
 termination_file = os.environ.get("OPENDUCKTOR_TEST_TERM_FILE", "")
 aborts_file = os.environ.get("OPENDUCKTOR_TEST_ABORTS_FILE", "")
 abort_status = int(os.environ.get("OPENDUCKTOR_TEST_ABORT_STATUS", "200") or "200")
+session_status_body = os.environ.get("OPENDUCKTOR_TEST_SESSION_STATUS_BODY", "{}")
 
 if pid_file:
     try:
@@ -1338,7 +1339,17 @@ while True:
 
         request_text = request.decode("utf-8", "ignore")
         request_line = request_text.splitlines()[0] if request_text else ""
-        if request_line.startswith("POST /session/") and "/abort" in request_line:
+        if request_line.startswith("GET /session/status"):
+            body = session_status_body.encode("utf-8")
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                f"Content-Length: {len(body)}\r\n"
+                "Content-Type: application/json\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+            ).encode("utf-8")
+            conn.sendall(response + body)
+        elif request_line.startswith("POST /session/") and "/abort" in request_line:
             if aborts_file:
                 try:
                     with open(aborts_file, "a", encoding="utf-8") as file:

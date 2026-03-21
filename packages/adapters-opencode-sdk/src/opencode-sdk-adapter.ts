@@ -117,6 +117,15 @@ const toRuntimeSessionStatus = (status: unknown): RuntimeSessionSummary["status"
   throw new Error(`Unsupported Opencode runtime session status type: ${String(type)}`);
 };
 
+const toRuntimeStatusMap = (payload: unknown, directory: string): Record<string, unknown> => {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    throw new Error(
+      `Malformed Opencode session status response for directory '${directory}': expected an object map.`,
+    );
+  }
+  return payload as Record<string, unknown>;
+};
+
 export class OpencodeSdkAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
 {
@@ -261,7 +270,10 @@ export class OpencodeSdkAdapter
     const statusEntries = await Promise.all(
       sessionDirectories.map(async (directory) => {
         const statusPayload = await unscopedClient.session.status({ directory });
-        return [directory, unwrapData(statusPayload, "get session status")] as const;
+        return [
+          directory,
+          toRuntimeStatusMap(unwrapData(statusPayload, "get session status"), directory),
+        ] as const;
       }),
     );
     const statusesByDirectory = new Map(statusEntries);
