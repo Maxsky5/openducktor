@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -208,10 +209,7 @@ pub enum RuntimeRoute {
 impl RuntimeRoute {
     pub fn port(&self) -> Option<u16> {
         match self {
-            Self::LocalHttp { endpoint } => endpoint
-                .rsplit(':')
-                .next()
-                .and_then(|value| value.parse::<u16>().ok()),
+            Self::LocalHttp { endpoint } => Url::parse(endpoint).ok()?.port(),
         }
     }
 }
@@ -420,7 +418,7 @@ mod tests {
     use super::{
         AgentRuntimeKind, DevServerEvent, DevServerGroupState, DevServerLogLine,
         DevServerLogStream, DevServerScriptState, DevServerScriptStatus, RuntimeCapabilities,
-        RuntimeDescriptor, RuntimeProvisioningMode, RuntimeSupportedScope,
+        RuntimeDescriptor, RuntimeProvisioningMode, RuntimeRoute, RuntimeSupportedScope,
         REQUIRED_RUNTIME_SUPPORTED_SCOPES,
     };
 
@@ -557,5 +555,23 @@ mod tests {
 
         let json = serde_json::to_value(state).expect("state should serialize");
         assert_eq!(json["scripts"][0]["bufferedLogLines"][0]["text"], "started");
+    }
+
+    #[test]
+    fn local_http_route_port_supports_paths() {
+        let route = RuntimeRoute::LocalHttp {
+            endpoint: "http://127.0.0.1:4321/api/runtime".to_string(),
+        };
+
+        assert_eq!(route.port(), Some(4321));
+    }
+
+    #[test]
+    fn local_http_route_port_rejects_invalid_endpoints() {
+        let route = RuntimeRoute::LocalHttp {
+            endpoint: "127.0.0.1:4321".to_string(),
+        };
+
+        assert_eq!(route.port(), None);
     }
 }

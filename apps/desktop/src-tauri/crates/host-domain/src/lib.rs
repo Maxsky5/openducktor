@@ -28,7 +28,8 @@ pub use runtime::{
     AgentRuntimeKind, BuildContinuationTarget, BuildContinuationTargetSource, DevServerEvent,
     DevServerGroupState, DevServerLogLine, DevServerLogStream, DevServerScriptState,
     DevServerScriptStatus, RunEvent, RunState, RunSummary, RuntimeCapabilities, RuntimeDescriptor,
-    RuntimeInstanceSummary, RuntimeProvisioningMode, RuntimeRole, RuntimeSupportedScope,
+    RuntimeInstanceSummary, RuntimeProvisioningMode, RuntimeRole, RuntimeRoute,
+    RuntimeSupportedScope,
 };
 pub use store::TaskStore;
 pub use system::{BeadsCheck, RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord};

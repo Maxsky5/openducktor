@@ -44,6 +44,61 @@ pub(super) struct SpawnedRuntimeServer {
     opencode_process_guard: super::TrackedOpencodeProcessGuard,
 }
 
+struct RuntimeEnsureFlightGuard<'a> {
+    service: &'a AppService,
+    runtime_kind: AgentRuntimeKind,
+    repo_key: String,
+    flight: Arc<super::service_core::RuntimeEnsureFlight>,
+    completed: bool,
+}
+
+impl<'a> RuntimeEnsureFlightGuard<'a> {
+    fn new(
+        service: &'a AppService,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+        flight: Arc<super::service_core::RuntimeEnsureFlight>,
+    ) -> Self {
+        Self {
+            service,
+            runtime_kind,
+            repo_key: repo_key.to_string(),
+            flight,
+            completed: false,
+        }
+    }
+
+    fn complete(&mut self, result: &Result<RuntimeInstanceSummary>) -> Result<()> {
+        self.completed = true;
+        self.service.complete_runtime_ensure_flight(
+            self.runtime_kind,
+            self.repo_key.as_str(),
+            &self.flight,
+            result,
+        )
+    }
+}
+
+impl Drop for RuntimeEnsureFlightGuard<'_> {
+    fn drop(&mut self) {
+        if self.completed {
+            return;
+        }
+
+        let aborted = Err(anyhow!("Runtime ensure aborted unexpectedly"));
+        if let Err(error) = self.service.complete_runtime_ensure_flight(
+            self.runtime_kind,
+            self.repo_key.as_str(),
+            &self.flight,
+            &aborted,
+        ) {
+            eprintln!(
+                "OpenDucktor warning: failed completing runtime ensure flight after abort: {error:#}"
+            );
+        }
+    }
+}
+
 impl AppService {
     fn runtime_ensure_flight_key(runtime_kind: AgentRuntimeKind, repo_key: &str) -> String {
         format!("{}::{repo_key}", runtime_kind.as_str())
@@ -74,22 +129,43 @@ impl AppService {
         repo_key: &str,
         flight: &Arc<super::service_core::RuntimeEnsureFlight>,
         result: &Result<RuntimeInstanceSummary>,
-    ) {
+    ) -> Result<()> {
         let stored_result = match result {
             Ok(summary) => Ok(summary.clone()),
             Err(error) => Err(format!("{error:#}")),
         };
+        let mut poisoned = false;
 
-        if let Ok(mut state) = flight.state.lock() {
+        {
+            let mut state = match flight.state.lock() {
+                Ok(state) => state,
+                Err(poisoned_state) => {
+                    poisoned = true;
+                    poisoned_state.into_inner()
+                }
+            };
             *state =
                 super::service_core::RuntimeEnsureFlightState::Finished(Box::new(stored_result));
             flight.condvar.notify_all();
         }
 
-        if let Ok(mut flights) = self.runtime_ensure_flights.lock() {
+        {
+            let mut flights = match self.runtime_ensure_flights.lock() {
+                Ok(flights) => flights,
+                Err(poisoned_flights) => {
+                    poisoned = true;
+                    poisoned_flights.into_inner()
+                }
+            };
             let key = Self::runtime_ensure_flight_key(runtime_kind, repo_key);
             flights.remove(key.as_str());
         }
+
+        if poisoned {
+            return Err(anyhow!("Runtime ensure coordination state lock poisoned"));
+        }
+
+        Ok(())
     }
 
     fn wait_for_runtime_ensure_flight(
@@ -252,6 +328,8 @@ impl AppService {
         if !is_leader {
             return Self::wait_for_runtime_ensure_flight(&flight);
         }
+        let mut flight_guard =
+            RuntimeEnsureFlightGuard::new(self, runtime_kind, repo_key.as_str(), flight);
 
         let startup_result = (|| -> Result<RuntimeInstanceSummary> {
             if let Some(existing) =
@@ -296,12 +374,7 @@ impl AppService {
                 }),
             })
         })();
-        self.complete_runtime_ensure_flight(
-            runtime_kind,
-            repo_key.as_str(),
-            &flight,
-            &startup_result,
-        );
+        flight_guard.complete(&startup_result)?;
         startup_result
     }
 
@@ -323,7 +396,78 @@ impl AppService {
 
 #[cfg(test)]
 mod tests {
+    use super::{AppService, RuntimeEnsureFlightGuard};
     use crate::app_service::test_support::build_service_with_state;
+    use anyhow::{anyhow, Result};
+    use host_domain::AgentRuntimeKind;
+    use std::thread;
+
+    #[test]
+    fn runtime_ensure_flight_guard_finishes_waiters_when_dropped_uncompleted() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let repo_key = "/tmp/runtime-flight-guard";
+        let (flight, is_leader) =
+            service.acquire_runtime_ensure_flight(AgentRuntimeKind::Opencode, repo_key)?;
+        assert!(is_leader);
+
+        {
+            let _guard = RuntimeEnsureFlightGuard::new(
+                &service,
+                AgentRuntimeKind::Opencode,
+                repo_key,
+                flight.clone(),
+            );
+        }
+
+        let error = AppService::wait_for_runtime_ensure_flight(&flight)
+            .expect_err("dropped leader should finish waiters with an error");
+        assert!(error
+            .to_string()
+            .contains("Runtime ensure aborted unexpectedly"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn complete_runtime_ensure_flight_recovers_poisoned_state_and_removes_entry() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let repo_key = "/tmp/runtime-flight-poison";
+        let (flight, is_leader) =
+            service.acquire_runtime_ensure_flight(AgentRuntimeKind::Opencode, repo_key)?;
+        assert!(is_leader);
+
+        let poison_handle = thread::spawn({
+            let flight = flight.clone();
+            move || {
+                let _lock = flight
+                    .state
+                    .lock()
+                    .expect("flight state should be available for poisoning");
+                panic!("poison runtime ensure flight state");
+            }
+        });
+        assert!(poison_handle.join().is_err());
+
+        let error = service
+            .complete_runtime_ensure_flight(
+                AgentRuntimeKind::Opencode,
+                repo_key,
+                &flight,
+                &Err(anyhow!("simulated startup failure")),
+            )
+            .expect_err("poisoned completion should surface an error");
+        assert!(error
+            .to_string()
+            .contains("Runtime ensure coordination state lock poisoned"));
+
+        let flights = service
+            .runtime_ensure_flights
+            .lock()
+            .expect("runtime ensure flights lock should remain available");
+        assert!(flights.is_empty());
+
+        Ok(())
+    }
 
     #[test]
     fn module_runs_list_is_empty_on_fresh_service() {
