@@ -1,4 +1,5 @@
 import type {
+  RunSummary,
   RuntimeDescriptor,
   RuntimeInstanceSummary,
   RuntimeKind,
@@ -31,6 +32,7 @@ type RuntimeCatalogDependencies = {
   getRuntimeDefinition: (runtimeKind: RuntimeKind) => RuntimeDescriptor;
   ensureRuntime: (runtimeKind: RuntimeKind, repoPath: string) => Promise<RuntimeInstanceSummary>;
   stopRuntime: (runtimeId: string) => Promise<{ ok: boolean }>;
+  listRuns: (repoPath: string) => Promise<RunSummary[]>;
   listAvailableModels: (input: ListCatalogInput) => Promise<AgentModelCatalog>;
   listAvailableToolIds: (input: ListCatalogInput) => Promise<string[]>;
   getMcpStatus: (input: ListCatalogInput) => Promise<Record<string, RuntimeMcpServerStatus>>;
@@ -67,6 +69,12 @@ type NormalizedMcpStatus = {
 };
 
 const ODT_MCP_SERVER_NAME = "openducktor";
+const ACTIVE_RUN_STATES = new Set<RunSummary["state"]>([
+  "starting",
+  "running",
+  "blocked",
+  "awaiting_done_confirmation",
+]);
 const toNowIso = (): string => new Date().toISOString();
 const toRuntimeInput = (
   runtime: RuntimeInstanceSummary,
@@ -187,6 +195,14 @@ const resolveMcpStatusError = (
   };
 };
 
+const hasActiveRunUsingRuntime = (runs: RunSummary[], runtimeEndpoint: string): boolean => {
+  return runs.some(
+    (run) =>
+      ACTIVE_RUN_STATES.has(run.state) &&
+      resolveRuntimeEndpoint(run.runtimeRoute) === runtimeEndpoint,
+  );
+};
+
 export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies) => {
   const probeRuntime = async (
     repoPath: string,
@@ -238,6 +254,17 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
 
       let restartedRuntime: RuntimeInstanceSummary | null = null;
       try {
+        const runs = await deps.listRuns(repoPath);
+        if (hasActiveRunUsingRuntime(runs, runtimeProbe.runtimeInput.runtimeEndpoint)) {
+          return {
+            ok: false,
+            result: toMcpStatusFailedHealthCheck(
+              runtimeProbe.runtime,
+              `Failed to query runtime MCP status: ${rawMessage}. Automatic runtime restart was skipped because an active run is using this runtime.`,
+              checkedAt,
+            ),
+          };
+        }
         await deps.stopRuntime(runtimeProbe.runtime.runtimeId);
         restartedRuntime = await deps.ensureRuntime(runtimeKind, repoPath);
         const restartedRuntimeInput = toRuntimeInput(restartedRuntime, runtimeKind);
@@ -367,6 +394,7 @@ export const createHostRuntimeCatalogOperations = (
     getRuntimeDefinition,
     ensureRuntime: (runtimeKind, repoPath) => host.runtimeEnsure(repoPath, runtimeKind),
     stopRuntime: (runtimeId) => host.runtimeStop(runtimeId),
+    listRuns: (repoPath) => host.runsList(repoPath),
     listAvailableModels: (input) =>
       getAdapter(input.runtimeKind).listAvailableModels({
         runtimeKind: input.runtimeKind,

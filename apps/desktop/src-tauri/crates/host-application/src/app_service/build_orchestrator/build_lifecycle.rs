@@ -1,14 +1,20 @@
 use super::super::{
-    emit_event, spawn_output_forwarder, terminate_child_process, AppService,
-    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, RunEmitter, RunProcess,
-    StartupEventContext, StartupEventCorrelation, StartupEventPayload,
-    STARTUP_CONFIG_INVALID_REASON,
+    emit_event, AppService, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, RunEmitter,
+    RunProcess, RuntimeInstanceSummary, StartupEventContext, StartupEventCorrelation,
+    StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
 };
-use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree, SpawnedBuildAgent};
+use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree};
 use super::BuildResponseAction;
 use anyhow::{anyhow, Context, Result};
-use host_domain::{now_rfc3339, AgentRuntimeKind, RunEvent, RunState, RunSummary, TaskStatus};
-use std::process::{ChildStderr, ChildStdout};
+use host_domain::{
+    now_rfc3339, AgentRuntimeKind, AgentSessionDocument, RunEvent, RunState, RunSummary,
+    RuntimeRoute, TaskStatus,
+};
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::TcpStream;
+use std::path::{Component, PathBuf};
+use std::time::Duration;
+use url::form_urlencoded;
 use uuid::Uuid;
 
 struct BuildRunRegistration {
@@ -17,7 +23,6 @@ struct BuildRunRegistration {
     prerequisites: BuildPrerequisites,
     task_id: String,
     worktree_path: String,
-    spawned_agent: SpawnedBuildAgent,
     emitter: RunEmitter,
 }
 
@@ -25,10 +30,18 @@ struct BuildModeStartInput<'a> {
     runtime_kind: AgentRuntimeKind,
     prerequisites: BuildPrerequisites,
     prepared_worktree: PreparedBuildWorktree,
-    spawned_agent: SpawnedBuildAgent,
+    runtime_summary: RuntimeInstanceSummary,
     task_id: &'a str,
     run_id: &'a str,
     emitter: RunEmitter,
+}
+
+struct BuildStopContext {
+    runtime_kind: AgentRuntimeKind,
+    runtime_route: RuntimeRoute,
+    repo_path: String,
+    task_id: String,
+    worktree_path: String,
 }
 
 impl AppService {
@@ -43,25 +56,23 @@ impl AppService {
         Self::ensure_runtime_supports_all_workflow_scopes(runtime_kind)?;
         let run_id = format!("run-{}", Uuid::new_v4().simple());
         let prerequisites = self.validate_build_prerequisites(repo_path, task_id)?;
-        let startup_policy = self.resolve_build_startup_policy(
+        self.resolve_build_startup_policy(
             prerequisites.repo_path.as_str(),
             task_id,
             run_id.as_str(),
         )?;
         let prepared_worktree = self.prepare_build_worktree(&prerequisites, task_id)?;
-        let spawned_agent = self.spawn_and_wait_for_agent(
-            &prerequisites,
-            &prepared_worktree,
-            task_id,
-            run_id.as_str(),
-            startup_policy,
-        )?;
+        let runtime_summary = self
+            .runtime_ensure(runtime_kind.as_str(), prerequisites.repo_path.as_str())
+            .with_context(|| {
+                format!("OpenCode build runtime failed to start for task {task_id}")
+            })?;
 
         self.initiate_build_mode(BuildModeStartInput {
             runtime_kind,
             prerequisites,
             prepared_worktree,
-            spawned_agent,
+            runtime_summary,
             task_id,
             run_id: run_id.as_str(),
             emitter,
@@ -128,6 +139,24 @@ impl AppService {
     }
 
     pub fn build_stop(&self, run_id: &str, emitter: RunEmitter) -> Result<bool> {
+        let stop_context = {
+            let runs = self
+                .runs
+                .lock()
+                .map_err(|_| anyhow!("Run state lock poisoned"))?;
+            let run = runs
+                .get(run_id)
+                .ok_or_else(|| anyhow!("Run not found: {run_id}"))?;
+            BuildStopContext {
+                runtime_kind: run.summary.runtime_kind,
+                runtime_route: run.summary.runtime_route.clone(),
+                repo_path: run.repo_path.clone(),
+                task_id: run.task_id.clone(),
+                worktree_path: run.worktree_path.clone(),
+            }
+        };
+        self.abort_build_session_for_stop(&stop_context)?;
+
         let mut runs = self
             .runs
             .lock()
@@ -136,7 +165,6 @@ impl AppService {
             .get_mut(run_id)
             .ok_or_else(|| anyhow!("Run not found: {run_id}"))?;
 
-        terminate_child_process(&mut run.child);
         run.summary.state = RunState::Stopped;
         run.summary.last_message = Some("Run stopped by user".to_string());
 
@@ -182,22 +210,7 @@ impl AppService {
             })
     }
 
-    fn abort_started_build<T>(
-        spawned_agent: &mut SpawnedBuildAgent,
-        error: anyhow::Error,
-    ) -> Result<T> {
-        terminate_child_process(&mut spawned_agent.child);
-        Err(error)
-    }
-
-    fn emit_build_started_and_forward_output(
-        run_id: &str,
-        task_id: &str,
-        branch: &str,
-        stdout: Option<ChildStdout>,
-        stderr: Option<ChildStderr>,
-        emitter: RunEmitter,
-    ) {
+    fn emit_build_started(run_id: &str, task_id: &str, branch: &str, emitter: RunEmitter) {
         emit_event(
             &emitter,
             RunEvent::RunStarted {
@@ -206,13 +219,119 @@ impl AppService {
                 timestamp: now_rfc3339(),
             },
         );
+    }
 
-        if let Some(stdout) = stdout {
-            spawn_output_forwarder(run_id.to_string(), "stdout", stdout, emitter.clone());
+    fn abort_build_session_for_stop(&self, context: &BuildStopContext) -> Result<()> {
+        let Some(session) = self.find_abortable_build_session_for_stop(context)? else {
+            return Ok(());
+        };
+        let external_session_id = session
+            .external_session_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| anyhow!("Build session is missing an external OpenCode session id"))?;
+
+        match context.runtime_kind {
+            AgentRuntimeKind::Opencode => Self::abort_opencode_session(
+                &context.runtime_route,
+                external_session_id,
+                session.working_directory.as_str(),
+            )?,
         }
-        if let Some(stderr) = stderr {
-            spawn_output_forwarder(run_id.to_string(), "stderr", stderr, emitter.clone());
+
+        Ok(())
+    }
+
+    fn find_abortable_build_session_for_stop(
+        &self,
+        context: &BuildStopContext,
+    ) -> Result<Option<AgentSessionDocument>> {
+        let normalized_worktree = normalize_path_for_comparison(context.worktree_path.as_str());
+        Ok(self
+            .agent_sessions_list(context.repo_path.as_str(), context.task_id.as_str())?
+            .into_iter()
+            .filter(|session| session.role.trim() == "build")
+            .filter(|session| session.runtime_kind.trim() == context.runtime_kind.as_str())
+            .filter(is_active_build_session)
+            .filter(|session| {
+                normalize_path_for_comparison(session.working_directory.as_str())
+                    == normalized_worktree
+            })
+            .filter(|session| {
+                session
+                    .external_session_id
+                    .as_deref()
+                    .is_some_and(|value| !value.trim().is_empty())
+            })
+            .max_by(|left, right| {
+                build_session_sort_key(left)
+                    .cmp(&build_session_sort_key(right))
+                    .then_with(|| left.session_id.cmp(&right.session_id))
+            }))
+    }
+
+    fn abort_opencode_session(
+        runtime_route: &RuntimeRoute,
+        external_session_id: &str,
+        working_directory: &str,
+    ) -> Result<()> {
+        let port = runtime_route
+            .port()
+            .ok_or_else(|| anyhow!("Build runtime route must expose a port"))?;
+        let request_path = format!(
+            "/session/{external_session_id}/abort?{}",
+            form_urlencoded::Serializer::new(String::new())
+                .append_pair("directory", working_directory)
+                .finish()
+        );
+
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).with_context(|| {
+            format!(
+                "Failed to connect to OpenCode runtime on port {port} to abort session {external_session_id}"
+            )
+        })?;
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .context("Failed configuring OpenCode abort read timeout")?;
+        stream
+            .set_write_timeout(Some(Duration::from_secs(2)))
+            .context("Failed configuring OpenCode abort write timeout")?;
+
+        let request = format!(
+            "POST {request_path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+        );
+        stream.write_all(request.as_bytes()).with_context(|| {
+            format!("Failed sending OpenCode abort request for session {external_session_id}")
+        })?;
+        stream.flush().with_context(|| {
+            format!("Failed flushing OpenCode abort request for session {external_session_id}")
+        })?;
+
+        let mut reader = BufReader::new(stream);
+        let mut status_line = String::new();
+        reader.read_line(&mut status_line).with_context(|| {
+            format!("Failed reading OpenCode abort response for session {external_session_id}")
+        })?;
+        let status_code = parse_http_status_code(status_line.as_str())?;
+
+        let mut response = String::new();
+        reader.read_to_string(&mut response).with_context(|| {
+            format!("Failed reading OpenCode abort response body for session {external_session_id}")
+        })?;
+        if (200..300).contains(&status_code) {
+            return Ok(());
         }
+
+        let response_body = extract_http_response_body(response.as_str());
+        let detail_suffix = if response_body.is_empty() {
+            String::new()
+        } else {
+            format!(": {response_body}")
+        };
+        Err(anyhow!(
+            "OpenCode runtime failed to abort session {external_session_id}: HTTP {status_code}{detail_suffix}"
+        ))
     }
 
     fn register_build_run(&self, registration: BuildRunRegistration) -> Result<RunSummary> {
@@ -222,30 +341,18 @@ impl AppService {
             prerequisites,
             task_id,
             worktree_path,
-            spawned_agent,
             emitter,
         } = registration;
-
-        let SpawnedBuildAgent {
-            mut child,
-            opencode_process_guard,
-            ..
-        } = spawned_agent;
         let mut runs = match self.runs.lock() {
             Ok(runs) => runs,
-            Err(_) => {
-                terminate_child_process(&mut child);
-                return Err(anyhow!("Run state lock poisoned"));
-            }
+            Err(_) => return Err(anyhow!("Run state lock poisoned")),
         };
 
-        let stdout = child.stdout.take();
-        let stderr = child.stderr.take();
         let task_id_for_event = task_id.clone();
         let process = RunProcess {
             summary: summary.clone(),
-            child,
-            _opencode_process_guard: Some(opencode_process_guard),
+            child: None,
+            _opencode_process_guard: None,
             repo_path: prerequisites.repo_path,
             task_id,
             worktree_path,
@@ -254,12 +361,10 @@ impl AppService {
 
         runs.insert(run_id.clone(), process);
         drop(runs);
-        Self::emit_build_started_and_forward_output(
+        Self::emit_build_started(
             run_id.as_str(),
             task_id_for_event.as_str(),
             summary.branch.as_str(),
-            stdout,
-            stderr,
             emitter,
         );
         Ok(summary)
@@ -270,7 +375,7 @@ impl AppService {
             runtime_kind,
             prerequisites,
             prepared_worktree,
-            mut spawned_agent,
+            runtime_summary,
             task_id,
             run_id,
             emitter,
@@ -280,27 +385,29 @@ impl AppService {
             task_id,
             TaskStatus::InProgress,
             Some("Builder delegated"),
-        )
-        .or_else(|error| Self::abort_started_build(&mut spawned_agent, error))?;
+        )?;
 
         let worktree_path = prepared_worktree
             .worktree_dir
             .to_str()
             .ok_or_else(|| anyhow!("Invalid worktree path"))
-            .map(|path| path.to_string())
-            .or_else(|error| Self::abort_started_build(&mut spawned_agent, error))?;
+            .map(|path| path.to_string())?;
         let run_id_string = run_id.to_string();
         let task_id_string = task_id.to_string();
+        let port = runtime_summary
+            .runtime_route
+            .port()
+            .ok_or_else(|| anyhow!("Build runtime route must expose a port"))?;
 
         let summary = RunSummary {
             run_id: run_id_string.clone(),
             runtime_kind,
-            runtime_route: runtime_kind.route_for_port(spawned_agent.port),
+            runtime_route: runtime_summary.runtime_route,
             repo_path: prerequisites.repo_path.clone(),
             task_id: task_id_string.clone(),
             branch: prerequisites.branch.clone(),
             worktree_path: worktree_path.clone(),
-            port: spawned_agent.port,
+            port,
             state: RunState::Running,
             last_message: Some(format!("{} runtime running", runtime_kind.as_str())),
             started_at: now_rfc3339(),
@@ -312,8 +419,71 @@ impl AppService {
             prerequisites,
             task_id: task_id_string,
             worktree_path,
-            spawned_agent,
             emitter,
         })
     }
+}
+
+fn build_session_sort_key(session: &AgentSessionDocument) -> (&str, &str) {
+    (
+        session
+            .updated_at
+            .as_deref()
+            .unwrap_or(session.started_at.as_str()),
+        session.started_at.as_str(),
+    )
+}
+
+fn is_active_build_session(session: &AgentSessionDocument) -> bool {
+    if session
+        .ended_at
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty())
+    {
+        return false;
+    }
+
+    !matches!(
+        session.status.as_deref().map(str::trim),
+        Some("stopped") | Some("error")
+    )
+}
+
+fn normalize_path_for_comparison(path: &str) -> PathBuf {
+    let path = path.trim();
+    let mut normalized = PathBuf::new();
+    for component in PathBuf::from(path).components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+
+    if normalized.as_os_str().is_empty() {
+        PathBuf::from(path)
+    } else {
+        normalized
+    }
+}
+
+fn parse_http_status_code(status_line: &str) -> Result<u16> {
+    let trimmed = status_line.trim();
+    let status_code = trimmed
+        .split_whitespace()
+        .nth(1)
+        .ok_or_else(|| anyhow!("OpenCode abort response missing HTTP status code"))?;
+    status_code
+        .parse::<u16>()
+        .with_context(|| format!("Invalid OpenCode abort HTTP status code: {status_code}"))
+}
+
+fn extract_http_response_body(response: &str) -> String {
+    response
+        .split_once("\r\n\r\n")
+        .or_else(|| response.split_once("\n\n"))
+        .map(|(_, body)| body.trim().to_string())
+        .unwrap_or_default()
 }

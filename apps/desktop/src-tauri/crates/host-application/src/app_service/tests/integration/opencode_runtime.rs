@@ -14,7 +14,10 @@ use crate::app_service::test_support::{
     make_task, set_env_var, spawn_sleep_process, unique_temp_path, wait_for_path_exists,
     wait_for_process_exit,
 };
-use crate::app_service::{AgentRuntimeProcess, RunProcess};
+use crate::app_service::{
+    read_opencode_process_registry, AgentRuntimeProcess, RunProcess,
+    OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+};
 
 fn runtime_summary_fixture(
     runtime_id: &str,
@@ -91,6 +94,74 @@ fn opencode_workspace_runtime_ensure_list_and_stop_flow() -> Result<()> {
     assert!(service
         .runtime_list("opencode", Some(repo_path.as_str()))?
         .is_empty());
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn opencode_workspace_runtime_ensure_deduplicates_parallel_startup() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("runtime-workspace-parallel-ensure");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let starts_file = root.join("started-pids.log");
+    let _opencode_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        fake_opencode.to_string_lossy().as_ref(),
+    );
+    let _delay_guard = set_env_var("OPENDUCKTOR_TEST_STARTUP_DELAY_MS", "400");
+    let _starts_guard = set_env_var(
+        "OPENDUCKTOR_TEST_STARTS_FILE",
+        starts_file.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+
+    let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+    let (first, second) = thread::scope(
+        |scope| -> Result<(RuntimeInstanceSummary, RuntimeInstanceSummary)> {
+            let first_handle =
+                scope.spawn(|| service.runtime_ensure("opencode", repo_path.as_str()));
+            let second_handle =
+                scope.spawn(|| service.runtime_ensure("opencode", repo_path.as_str()));
+
+            let first = first_handle
+                .join()
+                .expect("first ensure thread should join")?;
+            let second = second_handle
+                .join()
+                .expect("second ensure thread should join")?;
+            Ok((first, second))
+        },
+    )?;
+
+    assert_eq!(first.runtime_id, second.runtime_id);
+
+    let started_pids_file = fs::read_to_string(starts_file.as_path())?;
+    let started_pids = started_pids_file
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>();
+    assert_eq!(started_pids.len(), 1);
+
+    let registry =
+        read_opencode_process_registry(&root.join(OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH))?;
+    assert_eq!(registry.len(), 1);
+    assert_eq!(registry[0].child_pids.len(), 1);
+
+    assert!(service.runtime_stop(first.runtime_id.as_str())?);
     let _ = fs::remove_dir_all(root);
     Ok(())
 }
@@ -288,7 +359,7 @@ fn build_continuation_target_get_prefers_active_build_run() -> Result<()> {
                 "task-1",
                 worktree.to_string_lossy().as_ref(),
             ),
-            child: spawn_sleep_process(20),
+            child: Some(spawn_sleep_process(20)),
             _opencode_process_guard: None,
             repo_path: repo_path.clone(),
             task_id: "task-1".to_string(),

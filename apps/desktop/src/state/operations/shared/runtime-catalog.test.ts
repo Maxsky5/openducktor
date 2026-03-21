@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR, type RunSummary } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createRuntimeCatalogOperations } from "./runtime-catalog";
 
@@ -43,6 +43,7 @@ const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDepend
   getRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
   ensureRuntime: async () => runtimeFixture,
   stopRuntime: async () => ({ ok: true }),
+  listRuns: async () => [],
   listAvailableModels: async () => catalogFixture,
   listAvailableToolIds: async () => ["odt_read_task"],
   getMcpStatus: async () => ({
@@ -296,6 +297,51 @@ describe("opencode-catalog", () => {
     expect(result.mcpServerStatus).toBe("connected");
     expect(result.errors).toEqual([]);
     expect(result.availableToolIds).toEqual(["odt_read_task", "odt_set_plan"]);
+  });
+
+  test("skips automatic runtime restart when an active run is using the probed runtime", async () => {
+    const ensureRuntime = mock(async () => runtimeFixture);
+    const stopRuntime = mock(async () => ({ ok: true }));
+    const activeRuns: RunSummary[] = [
+      {
+        runId: "run-1",
+        runtimeKind: "opencode",
+        runtimeRoute: runtimeFixture.runtimeRoute,
+        repoPath: "/tmp/repo",
+        taskId: "task-1",
+        branch: "odt/task-1",
+        worktreePath: "/tmp/repo/worktree",
+        port: 4444,
+        state: "running",
+        lastMessage: null,
+        startedAt: "2026-02-22T08:00:00.000Z",
+      },
+    ];
+    const listRuns = mock(async () => activeRuns);
+    const getMcpStatus = mock(async () => {
+      throw new Error("ConfigInvalidError: invalid option loglevel");
+    });
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        ensureRuntime,
+        stopRuntime,
+        listRuns,
+        getMcpStatus,
+        shouldRestartRuntimeForMcpStatusError: () => true,
+      }),
+    );
+
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
+
+    expect(ensureRuntime).toHaveBeenCalledTimes(1);
+    expect(listRuns).toHaveBeenCalledWith("/tmp/repo");
+    expect(stopRuntime).not.toHaveBeenCalled();
+    expect(result.runtime).toEqual(runtimeFixture);
+    expect(result.mcpOk).toBe(false);
+    expect(result.mcpError).toContain("Automatic runtime restart was skipped");
+    expect(result.errors).toEqual([
+      "Failed to query runtime MCP status: ConfigInvalidError: invalid option loglevel. Automatic runtime restart was skipped because an active run is using this runtime.",
+    ]);
   });
 
   test("keeps restarted runtime details when config-invalid retry still fails", async () => {

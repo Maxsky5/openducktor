@@ -142,18 +142,6 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
     let worktree_path = PathBuf::from(run.worktree_path.clone());
     assert_eq!(service.runs_list(Some(repo_path.as_str()))?.len(), 1);
 
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while !events
-        .lock()
-        .expect("events lock poisoned")
-        .iter()
-        .any(|event| matches!(event, RunEvent::PermissionRequired { .. }))
-    {
-        if Instant::now() > deadline {
-            return Err(anyhow!("timed out waiting for permission-required event"));
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
     assert!(service.build_respond(
         run.run_id.as_str(),
         BuildResponseAction::Approve,
@@ -185,10 +173,7 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
         .any(|event| matches!(event, RunEvent::RunStarted { .. })));
     assert!(emitted
         .iter()
-        .any(|event| matches!(event, RunEvent::PermissionRequired { .. })));
-    assert!(emitted
-        .iter()
-        .any(|event| matches!(event, RunEvent::ToolExecution { .. })));
+        .any(|event| matches!(event, RunEvent::AgentThought { .. })));
     assert!(emitted
         .iter()
         .any(|event| matches!(event, RunEvent::RunFinished { success: true, .. })));
@@ -405,7 +390,7 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
                 last_message: None,
                 started_at: "2026-02-20T12:00:00Z".to_string(),
             },
-            child: spawn_sleep_process(20),
+            child: Some(spawn_sleep_process(20)),
             _opencode_process_guard: None,
             repo_path: repo_path.clone(),
             task_id: "task-1".to_string(),
@@ -457,6 +442,171 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
         "run failure should block the active task"
     );
     drop(state);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn build_stop_aborts_matching_builder_session_on_shared_runtime() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("build-stop-aborts-builder-session");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let aborts_file = root.join("aborts.log");
+    let _opencode_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        fake_opencode.to_string_lossy().as_ref(),
+    );
+    let _aborts_guard = set_env_var(
+        "OPENDUCKTOR_TEST_ABORTS_FILE",
+        aborts_file.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("builder-worktrees");
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+
+    let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
+    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
+    let mut session = make_session("task-1", "build-session");
+    session.role = "build".to_string();
+    session.status = Some("running".to_string());
+    session.working_directory = run.worktree_path.clone();
+    session.external_session_id = Some("external-build-session".to_string());
+    assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", session)?);
+
+    assert!(service.build_stop(run.run_id.as_str(), emitter.clone())?);
+    assert!(wait_for_path_exists(
+        aborts_file.as_path(),
+        Duration::from_secs(2)
+    ));
+    let abort_request = fs::read_to_string(aborts_file.as_path())?;
+    assert!(abort_request.contains("/session/external-build-session/abort?directory="));
+
+    assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
+    let runtime = service.runtime_list("opencode", Some(repo_path.as_str()))?;
+    assert_eq!(runtime.len(), 1);
+    assert!(service.runtime_stop(runtime[0].runtime_id.as_str())?);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn build_stop_propagates_abort_failures_without_marking_run_stopped() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("build-stop-abort-failure");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let aborts_file = root.join("aborts.log");
+    let _opencode_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        fake_opencode.to_string_lossy().as_ref(),
+    );
+    let _aborts_guard = set_env_var(
+        "OPENDUCKTOR_TEST_ABORTS_FILE",
+        aborts_file.to_string_lossy().as_ref(),
+    );
+    let _abort_status_guard = set_env_var("OPENDUCKTOR_TEST_ABORT_STATUS", "500");
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("builder-worktrees");
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+
+    let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
+    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
+    let mut session = make_session("task-1", "build-session");
+    session.role = "build".to_string();
+    session.status = Some("running".to_string());
+    session.working_directory = run.worktree_path.clone();
+    session.external_session_id = Some("external-build-session".to_string());
+    assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", session)?);
+
+    let error = service
+        .build_stop(run.run_id.as_str(), emitter.clone())
+        .expect_err("abort failures should surface to the caller");
+    assert!(error
+        .to_string()
+        .contains("OpenCode runtime failed to abort session external-build-session: HTTP 500"));
+    let listed_runs = service.runs_list(Some(repo_path.as_str()))?;
+    assert_eq!(listed_runs.len(), 1);
+    assert!(matches!(listed_runs[0].state, RunState::Running));
+    assert!(wait_for_path_exists(
+        aborts_file.as_path(),
+        Duration::from_secs(2)
+    ));
+
+    assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
+    let runtime = service.runtime_list("opencode", Some(repo_path.as_str()))?;
+    assert_eq!(runtime.len(), 1);
+    assert!(service.runtime_stop(runtime[0].runtime_id.as_str())?);
 
     let _ = fs::remove_dir_all(root);
     Ok(())
@@ -1130,6 +1280,16 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
         },
     )?;
 
+    let shared_runtime = service.runtime_ensure("opencode", repo_path.as_str())?;
+    assert!(wait_for_path_exists(
+        pid_file.as_path(),
+        Duration::from_secs(2)
+    ));
+    let shared_pid = fs::read_to_string(pid_file.as_path())?
+        .trim()
+        .parse::<i32>()
+        .expect("shared runtime pid should parse as i32");
+
     let build_error = std::thread::scope(|scope| -> Result<anyhow::Error> {
         let build_handle = scope.spawn(|| {
             service.build_start(
@@ -1139,15 +1299,6 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
                 make_emitter(Arc::new(Mutex::new(Vec::new()))),
             )
         });
-
-        assert!(wait_for_path_exists(
-            pid_file.as_path(),
-            Duration::from_secs(2)
-        ));
-        let spawned_pid = fs::read_to_string(pid_file.as_path())?
-            .trim()
-            .parse::<i32>()
-            .expect("spawned build pid should parse as i32");
 
         let poison_handle = scope.spawn(|| {
             let _lock = service
@@ -1162,10 +1313,14 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
             .join()
             .expect("build thread should join")
             .expect_err("build_start should fail when run lock is poisoned");
-        assert!(wait_for_process_exit(spawned_pid, Duration::from_secs(2)));
         Ok(build_error)
     })?;
     assert!(build_error.to_string().contains("Run state lock poisoned"));
+    assert!(
+        !wait_for_process_exit(shared_pid, Duration::from_millis(250)),
+        "shared repo runtime should remain alive when build registration fails"
+    );
+    assert!(service.runtime_stop(shared_runtime.runtime_id.as_str())?);
 
     let _ = fs::remove_dir_all(root);
     Ok(())

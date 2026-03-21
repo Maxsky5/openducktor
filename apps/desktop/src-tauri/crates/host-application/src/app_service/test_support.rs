@@ -1257,6 +1257,7 @@ fi
 if [ "$1" = "serve" ]; then
   HOST="127.0.0.1"
   PORT="0"
+  STARTS_FILE="${OPENDUCKTOR_TEST_STARTS_FILE:-}"
   while [ $# -gt 0 ]; do
     case "$1" in
       --hostname)
@@ -1272,6 +1273,9 @@ if [ "$1" = "serve" ]; then
         ;;
     esac
   done
+  if [ -n "$STARTS_FILE" ]; then
+    echo "$$" >> "$STARTS_FILE"
+  fi
   echo "permission requested: git push"
   echo "tool execution heartbeat" >&2
   exec python3 - "$HOST" "$PORT" <<'PY'
@@ -1286,6 +1290,8 @@ port = int(sys.argv[2])
 delay_ms = int(os.environ.get("OPENDUCKTOR_TEST_STARTUP_DELAY_MS", "0") or "0")
 pid_file = os.environ.get("OPENDUCKTOR_TEST_PID_FILE", "")
 termination_file = os.environ.get("OPENDUCKTOR_TEST_TERM_FILE", "")
+aborts_file = os.environ.get("OPENDUCKTOR_TEST_ABORTS_FILE", "")
+abort_status = int(os.environ.get("OPENDUCKTOR_TEST_ABORT_STATUS", "200") or "200")
 
 if pid_file:
     try:
@@ -1320,7 +1326,35 @@ signal.signal(signal.SIGINT, _stop)
 while True:
     conn, _ = server.accept()
     try:
-        conn.recv(1024)
+        request = b""
+        conn.settimeout(0.2)
+        while True:
+            chunk = conn.recv(4096)
+            if not chunk:
+                break
+            request += chunk
+            if b"\r\n\r\n" in request or len(request) >= 16384:
+                break
+
+        request_text = request.decode("utf-8", "ignore")
+        request_line = request_text.splitlines()[0] if request_text else ""
+        if request_line.startswith("POST /session/") and "/abort" in request_line:
+            if aborts_file:
+                try:
+                    with open(aborts_file, "a", encoding="utf-8") as file:
+                        file.write(request_line + "\n")
+                except Exception:
+                    pass
+            body = b'{"ok":true}'
+            status_text = "OK" if 200 <= abort_status < 300 else "Internal Server Error"
+            response = (
+                f"HTTP/1.1 {abort_status} {status_text}\r\n"
+                f"Content-Length: {len(body)}\r\n"
+                "Content-Type: application/json\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+            ).encode("utf-8")
+            conn.sendall(response + body)
     except Exception:
         pass
     finally:
