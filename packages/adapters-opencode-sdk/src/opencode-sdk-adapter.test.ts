@@ -290,4 +290,44 @@ describe("opencode-sdk-adapter", () => {
       },
     ]);
   });
+
+  test("listRuntimeSessions rejects sessions with invalid directories", async () => {
+    const mock = makeMockClient();
+    const malformedClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        list: async () => ({
+          data: [
+            {
+              id: "external-session-1",
+              projectID: "project-1",
+              directory: "   ",
+              title: "BUILD task-1",
+              time: {
+                created: Date.parse("2026-02-22T12:00:00.000Z"),
+              },
+            },
+          ],
+          error: undefined,
+        }),
+      },
+    } as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => malformedClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await expect(
+      adapter.listRuntimeSessions({
+        runtimeKind: "opencode",
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:12345",
+          workingDirectory: "/repo",
+        },
+      }),
+    ).rejects.toThrow(
+      "Malformed Opencode session payload for 'external-session-1': missing directory.",
+    );
+  });
 });

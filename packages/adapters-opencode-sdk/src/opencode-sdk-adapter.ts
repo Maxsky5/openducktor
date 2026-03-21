@@ -134,6 +134,14 @@ const normalizeSessionDirectory = (directory: unknown): string | undefined => {
   return normalized.length > 0 ? normalized : undefined;
 };
 
+const requireSessionDirectory = (directory: unknown, sessionId: string): string => {
+  const normalized = normalizeSessionDirectory(directory);
+  if (normalized !== undefined) {
+    return normalized;
+  }
+  throw new Error(`Malformed Opencode session payload for '${sessionId}': missing directory.`);
+};
+
 export class OpencodeSdkAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
 {
@@ -269,11 +277,7 @@ export class OpencodeSdkAdapter
     const sessionsPayload = await unscopedClient.session.list();
     const sessions = unwrapData(sessionsPayload, "list sessions");
     const sessionDirectories = Array.from(
-      new Set(
-        sessions
-          .map((session) => normalizeSessionDirectory(session.directory))
-          .filter((directory): directory is string => directory !== undefined),
-      ),
+      new Set(sessions.map((session) => requireSessionDirectory(session.directory, session.id))),
     );
     const statusEntries = await Promise.all(
       sessionDirectories.map(async (directory) => {
@@ -287,15 +291,12 @@ export class OpencodeSdkAdapter
     const statusesByDirectory = new Map(statusEntries);
 
     return sessions.map((session) => {
-      const normalizedDirectory = normalizeSessionDirectory(session.directory);
-      const directoryStatuses =
-        normalizedDirectory !== undefined
-          ? statusesByDirectory.get(normalizedDirectory)
-          : undefined;
+      const normalizedDirectory = requireSessionDirectory(session.directory, session.id);
+      const directoryStatuses = statusesByDirectory.get(normalizedDirectory);
       return {
         externalSessionId: session.id,
         title: session.title,
-        workingDirectory: normalizedDirectory ?? session.directory,
+        workingDirectory: normalizedDirectory,
         startedAt: toIsoFromEpoch(session.time?.created, this.now),
         status: toRuntimeSessionStatus(directoryStatuses?.[session.id]),
       };
