@@ -457,10 +457,18 @@ impl AppService {
         if !runtime_statuses_by_worktree.contains_key(worktree_key.as_str()) {
             let statuses = match run.summary.runtime_kind {
                 AgentRuntimeKind::Opencode => {
-                    super::load_opencode_session_statuses(
+                    match super::load_opencode_session_statuses(
                         &run.summary.runtime_route,
                         run.worktree_path.as_str(),
-                    )?
+                    ) {
+                        Ok(statuses) => statuses,
+                        Err(error)
+                            if super::is_unreachable_opencode_session_status_error(&error) =>
+                        {
+                            super::OpencodeSessionStatusMap::new()
+                        }
+                        Err(error) => return Err(error),
+                    }
                 }
             };
             runtime_statuses_by_worktree.insert(worktree_key.clone(), statuses);
@@ -641,6 +649,67 @@ mod tests {
 
         let runs = service.runs_list(Some("/tmp/repo"))?;
         server_handle.join().expect("status server thread should finish");
+
+        assert!(runs.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn module_runs_list_treats_unreachable_status_endpoint_as_stale_run() -> Result<()> {
+        let (service, task_state, _git_state) =
+            build_service_with_state(vec![make_task("task-1", "task", TaskStatus::InProgress)]);
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let port = listener.local_addr()?.port();
+        drop(listener);
+
+        task_state
+            .lock()
+            .expect("task store lock poisoned")
+            .agent_sessions = vec![AgentSessionDocument {
+            session_id: "build-session".to_string(),
+            external_session_id: Some("external-build-session".to_string()),
+            task_id: Some("task-1".to_string()),
+            role: "build".to_string(),
+            scenario: Some("build_implementation_start".to_string()),
+            status: Some("running".to_string()),
+            started_at: "2026-03-17T11:00:00Z".to_string(),
+            updated_at: None,
+            ended_at: None,
+            runtime_kind: "opencode".to_string(),
+            working_directory: "/tmp/repo/worktree".to_string(),
+            pending_permissions: Vec::new(),
+            pending_questions: Vec::new(),
+            selected_model: None,
+        }];
+
+        service.runs.lock().expect("run state lock poisoned").insert(
+            "run-1".to_string(),
+            RunProcess {
+                summary: RunSummary {
+                    run_id: "run-1".to_string(),
+                    runtime_kind: AgentRuntimeKind::Opencode,
+                    runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                        endpoint: format!("http://127.0.0.1:{port}"),
+                    },
+                    repo_path: "/tmp/repo".to_string(),
+                    task_id: "task-1".to_string(),
+                    branch: "odt/task-1".to_string(),
+                    worktree_path: "/tmp/repo/worktree".to_string(),
+                    port,
+                    state: host_domain::RunState::Running,
+                    last_message: None,
+                    started_at: "2026-03-17T11:00:00Z".to_string(),
+                },
+                child: None,
+                _opencode_process_guard: None,
+                repo_path: "/tmp/repo".to_string(),
+                task_id: "task-1".to_string(),
+                worktree_path: "/tmp/repo/worktree".to_string(),
+                repo_config: RepoConfig::default(),
+            },
+        );
+
+        let runs = service.runs_list(Some("/tmp/repo"))?;
 
         assert!(runs.is_empty());
         Ok(())

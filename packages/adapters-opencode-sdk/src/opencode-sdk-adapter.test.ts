@@ -178,4 +178,36 @@ describe("opencode-sdk-adapter", () => {
       },
     ]);
   });
+
+  test("listRuntimeSessions fails fast on malformed runtime statuses", async () => {
+    const mock = makeMockClient();
+    const malformedClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        status: async () => ({
+          data: {
+            "external-session-1": {
+              type: "unexpected",
+            },
+          },
+          error: undefined,
+        }),
+      },
+    } as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => malformedClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await expect(
+      adapter.listRuntimeSessions({
+        runtimeKind: "opencode",
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:12345",
+          workingDirectory: "/repo",
+        },
+      }),
+    ).rejects.toThrow("Unsupported Opencode runtime session status type");
+  });
 });

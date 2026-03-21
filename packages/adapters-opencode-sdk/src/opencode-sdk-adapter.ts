@@ -70,10 +70,13 @@ import { buildRoleScopedPermissionRules } from "./workflow-tool-permissions";
 import { resolveWorkflowToolSelection } from "./workflow-tool-selection";
 
 const toRuntimeSessionStatus = (status: unknown): RuntimeSessionSummary["status"] => {
-  if (typeof status !== "object" || status === null || !("type" in status)) {
+  if (status === undefined || status === null) {
     return {
       type: "idle",
     };
+  }
+  if (typeof status !== "object" || !("type" in status)) {
+    throw new Error("Malformed runtime session status payload from Opencode.");
   }
 
   const type = (status as { type?: unknown }).type;
@@ -90,22 +93,28 @@ const toRuntimeSessionStatus = (status: unknown): RuntimeSessionSummary["status"
       next?: unknown;
       nextEpochMs?: unknown;
     };
+    const attempt = retryStatus.attempt;
+    const message = retryStatus.message;
+    const nextEpochMs =
+      typeof retryStatus.nextEpochMs === "number" ? retryStatus.nextEpochMs : retryStatus.next;
+    if (typeof attempt !== "number") {
+      throw new Error("Malformed Opencode retry status: missing numeric attempt.");
+    }
+    if (typeof message !== "string") {
+      throw new Error("Malformed Opencode retry status: missing message.");
+    }
+    if (typeof nextEpochMs !== "number") {
+      throw new Error("Malformed Opencode retry status: missing next epoch.");
+    }
     return {
       type: "retry",
-      attempt: typeof retryStatus.attempt === "number" ? retryStatus.attempt : 0,
-      message: typeof retryStatus.message === "string" ? retryStatus.message : "",
-      nextEpochMs:
-        typeof retryStatus.nextEpochMs === "number"
-          ? retryStatus.nextEpochMs
-          : typeof retryStatus.next === "number"
-            ? retryStatus.next
-            : 0,
+      attempt,
+      message,
+      nextEpochMs,
     };
   }
 
-  return {
-    type: "idle",
-  };
+  throw new Error(`Unsupported Opencode runtime session status type: ${String(type)}`);
 };
 
 export class OpencodeSdkAdapter

@@ -1388,6 +1388,130 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4555");
   });
 
+  test("does not attach resumed sessions when the repo changes while resume is in flight", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    let state: Record<string, AgentSessionState> = {};
+    const repoEpochRef = { current: 2 };
+    const previousRepoRef = { current: "/tmp/repo" as string | null };
+    const resumeDeferred = createDeferred<void>();
+    let attachedListeners = 0;
+
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [sessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: createAdapter({
+        listRuntimeSessions: async () => [
+          {
+            externalSessionId: "external-1",
+            title: "PLANNER task-1",
+            workingDirectory: "/tmp/repo",
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: { type: "busy" },
+          },
+        ],
+        resumeSession: async (input) => {
+          await resumeDeferred.promise;
+          return {
+            sessionId: input.sessionId,
+            externalSessionId: input.externalSessionId,
+            role: input.role,
+            scenario: input.scenario,
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: "running",
+            runtimeKind: input.runtimeKind,
+          };
+        },
+      }),
+      repoEpochRef,
+      previousRepoRef,
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession,
+      attachSessionListener: () => {
+        attachedListeners += 1;
+      },
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadRepoPromptOverrides: async () => ({}),
+      loadTaskDocuments: async () => ({
+        specMarkdown: "",
+        planMarkdown: "",
+        qaMarkdown: "",
+      }),
+    });
+
+    const hostModule = await import("../../shared/host");
+    const originalList = hostModule.host.agentSessionsList;
+    const originalRuntimeList = hostModule.host.runtimeList;
+    hostModule.host.agentSessionsList = async () => [
+      {
+        runtimeKind: "opencode",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "planner",
+        scenario: "planner_initial",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+        workingDirectory: "/tmp/repo",
+      },
+    ];
+    hostModule.host.runtimeList = async () => [
+      {
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        repoPath: "/tmp/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/tmp/repo",
+        runtimeRoute: {
+          type: "local_http" as const,
+          endpoint: "http://127.0.0.1:4555",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      },
+    ];
+
+    try {
+      const loadPromise = loadAgentSessions("task-1", { reconcileLiveSessions: true });
+      repoEpochRef.current = 3;
+      previousRepoRef.current = "/tmp/other-repo";
+      resumeDeferred.resolve(undefined);
+      await loadPromise;
+    } finally {
+      hostModule.host.agentSessionsList = originalList;
+      hostModule.host.runtimeList = originalRuntimeList;
+    }
+
+    expect(attachedListeners).toBe(0);
+    expect(state["session-1"]).toBeUndefined();
+  });
+
   test("does not resume persisted sessions when the runtime does not report them live", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};

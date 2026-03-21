@@ -40,7 +40,8 @@ mod workspace_policy;
 pub(crate) use events::emit_event;
 pub(crate) use hook_security::{run_parsed_hook_command_allow_failure, validate_hook_trust};
 pub(crate) use opencode_session_status::{
-    has_live_opencode_session_status, load_opencode_session_statuses, OpencodeSessionStatusMap,
+    has_live_opencode_session_status, is_unreachable_opencode_session_status_error,
+    load_opencode_session_statuses, OpencodeSessionStatusMap,
 };
 pub(crate) use opencode_runtime::{
     opencode_server_parent_pid, process_exists, read_opencode_version,

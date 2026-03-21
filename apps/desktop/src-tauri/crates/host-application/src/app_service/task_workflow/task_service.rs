@@ -1,6 +1,6 @@
 use crate::app_service::{
-    has_live_opencode_session_status, load_opencode_session_statuses, service_core::AppService,
-    OpencodeSessionStatusMap,
+    has_live_opencode_session_status, is_unreachable_opencode_session_status_error,
+    load_opencode_session_statuses, service_core::AppService, OpencodeSessionStatusMap,
 };
 use crate::app_service::workflow_rules::{
     default_qa_required_for_issue_type, is_open_state, validate_parent_relationships_for_create,
@@ -405,7 +405,14 @@ impl AppService {
                 let statuses = load_opencode_session_statuses(
                     runtime_route,
                     session.working_directory.as_str(),
-                )?;
+                )
+                .or_else(|error| {
+                    if is_unreachable_opencode_session_status_error(&error) {
+                        Ok(OpencodeSessionStatusMap::new())
+                    } else {
+                        Err(error)
+                    }
+                })?;
                 runtime_statuses_by_directory.insert(worktree_key.clone(), statuses);
             }
 
@@ -945,7 +952,14 @@ fn is_live_build_run_for_task_reset(
             host_domain::AgentRuntimeKind::Opencode => load_opencode_session_statuses(
                 &run.summary.runtime_route,
                 run.worktree_path.as_str(),
-            )?,
+            )
+            .or_else(|error| {
+                if is_unreachable_opencode_session_status_error(&error) {
+                    Ok(OpencodeSessionStatusMap::new())
+                } else {
+                    Err(error)
+                }
+            })?,
         };
         runtime_statuses_by_directory.insert(directory_key.clone(), statuses);
     }

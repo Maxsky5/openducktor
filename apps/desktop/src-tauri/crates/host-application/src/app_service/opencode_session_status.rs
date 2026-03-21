@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::RuntimeRoute;
 use std::collections::HashMap;
+use std::io::ErrorKind;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
@@ -22,6 +23,24 @@ pub(crate) enum OpencodeSessionStatus {
 }
 
 pub(crate) type OpencodeSessionStatusMap = HashMap<String, OpencodeSessionStatus>;
+
+pub(crate) fn is_unreachable_opencode_session_status_error(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        cause
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|io_error| {
+                matches!(
+                    io_error.kind(),
+                    ErrorKind::ConnectionRefused
+                        | ErrorKind::ConnectionReset
+                        | ErrorKind::ConnectionAborted
+                        | ErrorKind::NotConnected
+                        | ErrorKind::TimedOut
+                        | ErrorKind::UnexpectedEof
+                )
+            })
+    })
+}
 
 pub(crate) fn has_live_opencode_session_status(
     statuses: &OpencodeSessionStatusMap,

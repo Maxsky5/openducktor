@@ -553,6 +553,9 @@ export const createLoadAgentSessions = ({
           systemPrompt: promptContext.systemPrompt,
           ...(selectedModel ? { model: selectedModel } : {}),
         });
+        if (isStaleRepoOperation()) {
+          return;
+        }
       }
 
       attachSessionListener(repoPath, record.sessionId);

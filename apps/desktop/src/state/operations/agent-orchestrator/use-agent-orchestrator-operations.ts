@@ -1,6 +1,6 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
 import type {
@@ -71,6 +71,8 @@ const getOrCreateRepoTaskSet = (
   return created;
 };
 
+const nextSessionRetryDelayMs = (attempt: number): number => Math.min(5_000, 500 * 2 ** attempt);
+
 export function useAgentOrchestratorOperations({
   activeRepo,
   tasks,
@@ -86,6 +88,9 @@ export function useAgentOrchestratorOperations({
   const { sessionsRef, turnStartedAtBySessionRef, unsubscribersRef } = refBridges;
   const bootstrappedTasksByRepoRef = useRef<Record<string, Set<string>>>({});
   const reconciledLiveSessionTasksByRepoRef = useRef<Record<string, Set<string>>>({});
+  const retryAttemptsByKeyRef = useRef<Record<string, number>>({});
+  const retryTimeoutsByKeyRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [sessionRetryTick, setSessionRetryTick] = useState(0);
   const runtimeDefinitions = useMemo(() => agentEngine.listRuntimeDefinitions(), [agentEngine]);
 
   const persistSessionSnapshot = useCallback(
@@ -314,6 +319,55 @@ export function useAgentOrchestratorOperations({
     ],
   );
 
+  const clearSessionRetry = useCallback(
+    (scope: "bootstrap" | "reconcile", repoPath: string, taskId: string) => {
+      const retryKey = `${scope}::${repoPath}::${taskId}`;
+      const timeout = retryTimeoutsByKeyRef.current[retryKey];
+      if (timeout !== undefined) {
+        clearTimeout(timeout);
+        delete retryTimeoutsByKeyRef.current[retryKey];
+      }
+      delete retryAttemptsByKeyRef.current[retryKey];
+    },
+    [],
+  );
+
+  const isCurrentActiveRepo = useCallback(
+    (repoPath: string): boolean => refBridges.previousRepoRef.current === repoPath,
+    [refBridges],
+  );
+
+  const scheduleSessionRetry = useCallback(
+    (scope: "bootstrap" | "reconcile", repoPath: string, taskId: string, error: unknown) => {
+      const retryKey = `${scope}::${repoPath}::${taskId}`;
+      if (retryTimeoutsByKeyRef.current[retryKey] !== undefined) {
+        return;
+      }
+      const attempt = retryAttemptsByKeyRef.current[retryKey] ?? 0;
+      retryAttemptsByKeyRef.current[retryKey] = attempt + 1;
+      const delayMs = nextSessionRetryDelayMs(attempt);
+      console.error(
+        `Failed to ${scope} agent sessions for task '${taskId}' in repo '${repoPath}'. Retrying in ${delayMs}ms.`,
+        error,
+      );
+      retryTimeoutsByKeyRef.current[retryKey] = setTimeout(() => {
+        delete retryTimeoutsByKeyRef.current[retryKey];
+        setSessionRetryTick((current) => current + 1);
+      }, delayMs);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    return () => {
+      for (const timeout of Object.values(retryTimeoutsByKeyRef.current)) {
+        clearTimeout(timeout);
+      }
+      retryTimeoutsByKeyRef.current = {};
+      retryAttemptsByKeyRef.current = {};
+    };
+  }, []);
+
   useEffect(() => {
     if (!activeRepo) {
       return;
@@ -326,6 +380,8 @@ export function useAgentOrchestratorOperations({
     if (!activeRepo) {
       return;
     }
+    // Explicitly reference the retry tick: this effect must rerun when a delayed retry fires.
+    void sessionRetryTick;
 
     const bootstrappedTasks = getOrCreateRepoTaskSet(
       bootstrappedTasksByRepoRef.current,
@@ -340,17 +396,35 @@ export function useAgentOrchestratorOperations({
 
     for (const taskId of pendingTaskIds) {
       bootstrappedTasks.add(taskId);
-      void loadAgentSessions(taskId).catch(() => {
-        const currentSet = bootstrappedTasksByRepoRef.current[activeRepo];
-        currentSet?.delete(taskId);
-      });
+      void loadAgentSessions(taskId)
+        .then(() => {
+          clearSessionRetry("bootstrap", activeRepo, taskId);
+        })
+        .catch((error) => {
+          if (!isCurrentActiveRepo(activeRepo)) {
+            return;
+          }
+          scheduleSessionRetry("bootstrap", activeRepo, taskId, error);
+          const currentSet = bootstrappedTasksByRepoRef.current[activeRepo];
+          currentSet?.delete(taskId);
+        });
     }
-  }, [activeRepo, loadAgentSessions, tasks]);
+  }, [
+    activeRepo,
+    clearSessionRetry,
+    isCurrentActiveRepo,
+    loadAgentSessions,
+    scheduleSessionRetry,
+    sessionRetryTick,
+    tasks,
+  ]);
 
   useEffect(() => {
     if (!activeRepo || tasks.length === 0) {
       return;
     }
+    // Explicitly reference the retry tick: this effect must rerun when a delayed retry fires.
+    void sessionRetryTick;
     const reconciledTaskIds = getOrCreateRepoTaskSet(
       reconciledLiveSessionTasksByRepoRef.current,
       activeRepo,
@@ -410,6 +484,7 @@ export function useAgentOrchestratorOperations({
             activeRepo,
           );
           for (const taskId of pendingTaskIds) {
+            clearSessionRetry("reconcile", activeRepo, taskId);
             currentSet.add(taskId);
           }
           return;
@@ -459,9 +534,6 @@ export function useAgentOrchestratorOperations({
             return;
           }
           for (const runtimeSession of runtimeSessions) {
-            if (runtimeSession.status.type !== "busy" && runtimeSession.status.type !== "retry") {
-              continue;
-            }
             const key = `${input.runtimeKind}::${runtimeSession.externalSessionId}`;
             const taskIds = persistedTaskIdsByLiveSessionKey.get(key);
             if (!taskIds) {
@@ -490,17 +562,33 @@ export function useAgentOrchestratorOperations({
           activeRepo,
         );
         for (const taskId of pendingTaskIds) {
+          clearSessionRetry("reconcile", activeRepo, taskId);
           currentSet.add(taskId);
         }
-      } catch {
-        // Leave pending tasks unreconciled so a later render can retry.
+      } catch (error) {
+        if (cancelled || !isCurrentActiveRepo(activeRepo)) {
+          return;
+        }
+        for (const taskId of pendingTaskIds) {
+          scheduleSessionRetry("reconcile", activeRepo, taskId, error);
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [activeRepo, agentEngine, loadAgentSessions, runs, tasks]);
+  }, [
+    activeRepo,
+    agentEngine,
+    clearSessionRetry,
+    isCurrentActiveRepo,
+    loadAgentSessions,
+    runs,
+    scheduleSessionRetry,
+    sessionRetryTick,
+    tasks,
+  ]);
 
   const ensureRuntime = useMemo(
     () =>
