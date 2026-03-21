@@ -126,6 +126,14 @@ const toRuntimeStatusMap = (payload: unknown, directory: string): Record<string,
   return payload as Record<string, unknown>;
 };
 
+const normalizeSessionDirectory = (directory: unknown): string | undefined => {
+  if (typeof directory !== "string") {
+    return undefined;
+  }
+  const normalized = directory.trim();
+  return normalized.length > 0 ? normalized : undefined;
+};
+
 export class OpencodeSdkAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
 {
@@ -263,8 +271,8 @@ export class OpencodeSdkAdapter
     const sessionDirectories = Array.from(
       new Set(
         sessions
-          .map((session) => session.directory?.trim())
-          .filter((directory): directory is string => Boolean(directory)),
+          .map((session) => normalizeSessionDirectory(session.directory))
+          .filter((directory): directory is string => directory !== undefined),
       ),
     );
     const statusEntries = await Promise.all(
@@ -278,13 +286,20 @@ export class OpencodeSdkAdapter
     );
     const statusesByDirectory = new Map(statusEntries);
 
-    return sessions.map((session) => ({
-      externalSessionId: session.id,
-      title: session.title,
-      workingDirectory: session.directory,
-      startedAt: toIsoFromEpoch(session.time?.created, this.now),
-      status: toRuntimeSessionStatus(statusesByDirectory.get(session.directory)?.[session.id]),
-    }));
+    return sessions.map((session) => {
+      const normalizedDirectory = normalizeSessionDirectory(session.directory);
+      const directoryStatuses =
+        normalizedDirectory !== undefined
+          ? statusesByDirectory.get(normalizedDirectory)
+          : undefined;
+      return {
+        externalSessionId: session.id,
+        title: session.title,
+        workingDirectory: normalizedDirectory ?? session.directory,
+        startedAt: toIsoFromEpoch(session.time?.created, this.now),
+        status: toRuntimeSessionStatus(directoryStatuses?.[session.id]),
+      };
+    });
   }
 
   hasSession(sessionId: string): boolean {

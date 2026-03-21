@@ -449,24 +449,38 @@ export function useAgentOrchestratorOperations({
 
     void (async () => {
       try {
-        const persistedByTask = await Promise.all(
-          pendingTaskIds.map(
-            async (taskId) =>
-              [
-                taskId,
-                await loadAgentSessionListFromQuery(appQueryClient, activeRepo, taskId, {
-                  forceFresh: true,
-                }),
-              ] as const,
-          ),
+        const persistedTaskResults = await Promise.allSettled(
+          pendingTaskIds.map(async (taskId) => ({
+            taskId,
+            records: await loadAgentSessionListFromQuery(appQueryClient, activeRepo, taskId, {
+              forceFresh: true,
+            }),
+          })),
         );
         if (cancelled) {
           return;
         }
 
+        const persistedByTask: Array<{
+          taskId: string;
+          records: Awaited<ReturnType<typeof loadAgentSessionListFromQuery>>;
+        }> = [];
+        const failedTaskErrors = new Map<string, unknown>();
+        for (const [index, result] of persistedTaskResults.entries()) {
+          const taskId = pendingTaskIds[index];
+          if (!taskId) {
+            continue;
+          }
+          if (result.status === "fulfilled") {
+            persistedByTask.push(result.value);
+            continue;
+          }
+          failedTaskErrors.set(taskId, result.reason);
+        }
+
         const persistedTaskIdsByLiveSessionKey = new Map<string, Set<string>>();
         const runtimeKinds = new Set<string>();
-        for (const [taskId, records] of persistedByTask) {
+        for (const { taskId, records } of persistedByTask) {
           for (const record of records) {
             const runtimeKind = record.runtimeKind ?? record.selectedModel?.runtimeKind;
             const externalSessionId = record.externalSessionId ?? record.sessionId;
@@ -486,9 +500,12 @@ export function useAgentOrchestratorOperations({
             reconciledLiveSessionTasksByRepoRef.current,
             activeRepo,
           );
-          for (const taskId of pendingTaskIds) {
+          for (const { taskId } of persistedByTask) {
             clearSessionRetry("reconcile", activeRepo, taskId);
             currentSet.add(taskId);
+          }
+          for (const [taskId, error] of failedTaskErrors) {
+            scheduleSessionRetry("reconcile", activeRepo, taskId, error);
           }
           return;
         }
@@ -556,21 +573,40 @@ export function useAgentOrchestratorOperations({
           return;
         }
 
-        await Promise.all(
-          Array.from(taskIdsToReconcile).map((taskId) =>
-            loadAgentSessions(taskId, { reconcileLiveSessions: true }),
-          ),
+        const reconcileResults = await Promise.allSettled(
+          Array.from(taskIdsToReconcile).map(async (taskId) => {
+            await loadAgentSessions(taskId, { reconcileLiveSessions: true });
+            return taskId;
+          }),
         );
         if (cancelled) {
           return;
         }
+
+        for (const [index, result] of reconcileResults.entries()) {
+          if (result.status === "fulfilled") {
+            continue;
+          }
+          const taskId = Array.from(taskIdsToReconcile)[index];
+          if (!taskId) {
+            continue;
+          }
+          failedTaskErrors.set(taskId, result.reason);
+        }
+
         const currentSet = getOrCreateRepoTaskSet(
           reconciledLiveSessionTasksByRepoRef.current,
           activeRepo,
         );
-        for (const taskId of pendingTaskIds) {
+        for (const { taskId } of persistedByTask) {
+          if (failedTaskErrors.has(taskId)) {
+            continue;
+          }
           clearSessionRetry("reconcile", activeRepo, taskId);
           currentSet.add(taskId);
+        }
+        for (const [taskId, error] of failedTaskErrors) {
+          scheduleSessionRetry("reconcile", activeRepo, taskId, error);
         }
       } catch (error) {
         if (cancelled || !isCurrentActiveRepo(activeRepo)) {

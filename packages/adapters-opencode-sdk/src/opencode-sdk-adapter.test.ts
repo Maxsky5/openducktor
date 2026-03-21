@@ -238,4 +238,56 @@ describe("opencode-sdk-adapter", () => {
       }),
     ).rejects.toThrow("Malformed Opencode session status response for directory '/repo'");
   });
+
+  test("listRuntimeSessions normalizes directory keys for status lookups", async () => {
+    const mock = makeMockClient();
+    const whitespaceClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        list: async () => ({
+          data: [
+            {
+              id: "external-session-1",
+              projectID: "project-1",
+              directory: "  /repo  ",
+              title: "BUILD task-1",
+              time: {
+                created: Date.parse("2026-02-22T12:00:00.000Z"),
+              },
+            },
+          ],
+          error: undefined,
+        }),
+      },
+    } as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => whitespaceClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    const sessions = await adapter.listRuntimeSessions({
+      runtimeKind: "opencode",
+      runtimeConnection: {
+        endpoint: "http://127.0.0.1:12345",
+        workingDirectory: "/repo",
+      },
+    });
+
+    expect(mock.statusCalls).toEqual([{ directory: "/repo" }]);
+    expect(sessions).toEqual([
+      {
+        externalSessionId: "external-session-1",
+        title: "BUILD task-1",
+        workingDirectory: "/repo",
+        startedAt: "2026-02-22T12:00:00.000Z",
+        status: {
+          type: "retry",
+          attempt: 2,
+          message: "retrying",
+          nextEpochMs: 1234,
+        },
+      },
+    ]);
+  });
 });
