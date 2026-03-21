@@ -48,6 +48,12 @@ const taskFixture: TaskCard = {
   createdAt: "2026-02-22T08:00:00.000Z",
 };
 
+const taskFixture2: TaskCard = {
+  ...taskFixture,
+  id: "task-2",
+  title: "Task 2",
+};
+
 beforeEach(async () => {
   await clearAppQueryClient();
 });
@@ -59,7 +65,6 @@ const persistedSessionFixture: AgentSessionRecord = {
   taskId: "task-1",
   role: "build",
   scenario: "build_implementation_start",
-  status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
   updatedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/tmp/repo",
@@ -216,6 +221,10 @@ const createHookHarness = (args: {
 describe("use-agent-orchestrator-operations", () => {
   const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
   const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+  const originalRuntimeList = host.runtimeList;
+  const originalRunsList = host.runsList;
+  const originalRuntimeEnsure = host.runtimeEnsure;
+  const originalListRuntimeSessions = OpencodeSdkAdapter.prototype.listRuntimeSessions;
 
   beforeEach(() => {
     host.workspaceGetRepoConfig = async () =>
@@ -233,11 +242,35 @@ describe("use-agent-orchestrator-operations", () => {
       repos: {},
       globalPromptOverrides: {},
     });
+    host.runtimeList = async () => [];
+    host.runsList = async () => [];
+    host.runtimeEnsure = async (repoPath, runtimeKind) => ({
+      kind: runtimeKind,
+      runtimeId: "runtime-1",
+      repoPath,
+      taskId: null,
+      role: "workspace",
+      workingDirectory: repoPath,
+      runtimeRoute: {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:4444",
+      },
+      startedAt: "2026-02-22T08:00:00.000Z",
+      descriptor: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        kind: runtimeKind,
+      },
+    });
+    OpencodeSdkAdapter.prototype.listRuntimeSessions = async () => [];
   });
 
   afterEach(() => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+    host.runtimeList = originalRuntimeList;
+    host.runsList = originalRunsList;
+    host.runtimeEnsure = originalRuntimeEnsure;
+    OpencodeSdkAdapter.prototype.listRuntimeSessions = originalListRuntimeSessions;
   });
 
   test("reattaches listener before send when adapter session exists", async () => {
@@ -511,7 +544,7 @@ describe("use-agent-orchestrator-operations", () => {
         expect(firstSessionId).toBe("session-in-memory");
         expect(secondSessionId).toBe("session-in-memory");
         expect(startCalls).toBe(1);
-        expect(persistedListCalls).toBe(1);
+        expect(persistedListCalls).toBe(2);
       } finally {
         await harness.unmount();
 
@@ -628,7 +661,7 @@ describe("use-agent-orchestrator-operations", () => {
         expect(firstSessionId).toBe("session-concurrent");
         expect(secondSessionId).toBe("session-concurrent");
         expect(startCalls).toBe(1);
-        expect(persistedListCalls).toBe(1);
+        expect(persistedListCalls).toBe(2);
       } finally {
         await harness.unmount();
 
@@ -1441,6 +1474,721 @@ describe("use-agent-orchestrator-operations", () => {
       } finally {
         host.agentSessionsList = originalAgentSessionsList;
         await harness.unmount();
+      }
+    });
+  });
+
+  test("revisit to the same repo bootstraps task sessions again", async () => {
+    await withSuppressedRendererWarning(async () => {
+      const originalAgentSessionsList = host.agentSessionsList;
+      host.agentSessionsList = async () => [persistedSessionFixture];
+
+      const harness = createHookHarness({
+        activeRepo: "/tmp/repo-a",
+        tasks: [taskFixture],
+        runs: [],
+        refreshTaskData: async () => {},
+      });
+
+      try {
+        await harness.mount();
+        await harness.updateArgs({
+          activeRepo: null,
+          tasks: [],
+          runs: [],
+        });
+        await harness.updateArgs({
+          activeRepo: "/tmp/repo-a",
+          tasks: [taskFixture],
+          runs: [],
+        });
+        const hydrated = await harness.waitFor((state) => state.sessions.length === 1);
+        expect(hydrated.sessions[0]?.sessionId).toBe("session-1");
+      } finally {
+        await harness.unmount();
+        host.agentSessionsList = originalAgentSessionsList;
+      }
+    });
+  });
+
+  test("reconciles live runtime sessions even when persisted records omit status", async () => {
+    await withSuppressedRendererWarning(async () => {
+      const originalAgentSessionsList = host.agentSessionsList;
+      const originalAgentSessionUpsert = host.agentSessionUpsert;
+      const originalSpecGet = host.specGet;
+      const originalPlanGet = host.planGet;
+      const originalQaGetReport = host.qaGetReport;
+      const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
+      const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+      const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
+      const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+
+      host.agentSessionsList = async () => [persistedSessionFixture];
+      host.agentSessionUpsert = async () => {};
+      host.specGet = async () => ({ markdown: "", updatedAt: null });
+      host.planGet = async () => ({ markdown: "", updatedAt: null });
+      host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+      host.runtimeList = async () => [
+        {
+          kind: "opencode",
+          runtimeId: "runtime-1",
+          repoPath: "/tmp/repo",
+          taskId: null,
+          role: "workspace",
+          workingDirectory: "/tmp/repo",
+          runtimeRoute: {
+            type: "local_http" as const,
+            endpoint: "http://127.0.0.1:4444",
+          },
+          startedAt: "2026-02-22T08:00:00.000Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        },
+      ];
+      OpencodeSdkAdapter.prototype.listRuntimeSessions = async () => [
+        {
+          externalSessionId: "external-1",
+          title: "BUILD task-1",
+          workingDirectory: "/tmp/repo",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: { type: "busy" },
+        },
+      ];
+      OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
+        runtimeKind: input.runtimeKind,
+        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: input.role,
+        scenario: input.scenario,
+        status: "running",
+      });
+      OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
+        models: [],
+        defaultModelsByProvider: {},
+        profiles: [],
+      });
+      OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
+      OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
+
+      const harness = createHookHarness({
+        activeRepo: "/tmp/repo",
+        tasks: [taskFixture],
+        runs: [],
+        refreshTaskData: async () => {},
+      });
+
+      try {
+        await harness.mount();
+        const resolved = await harness.waitFor((state) =>
+          state.sessions.some(
+            (session) => session.sessionId === "session-1" && session.status === "running",
+          ),
+        );
+        expect(resolved.sessions.find((session) => session.sessionId === "session-1")?.status).toBe(
+          "running",
+        );
+      } finally {
+        await harness.unmount();
+        host.agentSessionsList = originalAgentSessionsList;
+        host.agentSessionUpsert = originalAgentSessionUpsert;
+        host.specGet = originalSpecGet;
+        host.planGet = originalPlanGet;
+        host.qaGetReport = originalQaGetReport;
+        OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
+        OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+        OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+        OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      }
+    });
+  });
+
+  test("reconciles idle live runtime sessions on repo bootstrap", async () => {
+    await withSuppressedRendererWarning(async () => {
+      const originalAgentSessionsList = host.agentSessionsList;
+      const originalAgentSessionUpsert = host.agentSessionUpsert;
+      const originalSpecGet = host.specGet;
+      const originalPlanGet = host.planGet;
+      const originalQaGetReport = host.qaGetReport;
+      const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
+      const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+      const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
+      const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+
+      host.agentSessionsList = async () => [persistedSessionFixture];
+      host.agentSessionUpsert = async () => {};
+      host.specGet = async () => ({ markdown: "", updatedAt: null });
+      host.planGet = async () => ({ markdown: "", updatedAt: null });
+      host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+      host.runtimeList = async () => [
+        {
+          kind: "opencode",
+          runtimeId: "runtime-1",
+          repoPath: "/tmp/repo",
+          taskId: null,
+          role: "workspace",
+          workingDirectory: "/tmp/repo",
+          runtimeRoute: {
+            type: "local_http" as const,
+            endpoint: "http://127.0.0.1:4444",
+          },
+          startedAt: "2026-02-22T08:00:00.000Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        },
+      ];
+      OpencodeSdkAdapter.prototype.listRuntimeSessions = async () => [
+        {
+          externalSessionId: "external-1",
+          title: "BUILD task-1",
+          workingDirectory: "/tmp/repo",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: { type: "idle" },
+        },
+      ];
+      OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
+        runtimeKind: input.runtimeKind,
+        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: input.role,
+        scenario: input.scenario,
+        status: "idle",
+      });
+      OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
+        models: [],
+        defaultModelsByProvider: {},
+        profiles: [],
+      });
+      OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
+      OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
+
+      const harness = createHookHarness({
+        activeRepo: "/tmp/repo",
+        tasks: [taskFixture],
+        runs: [],
+        refreshTaskData: async () => {},
+      });
+
+      try {
+        await harness.mount();
+        const resolved = await harness.waitFor((state) =>
+          state.sessions.some(
+            (session) => session.sessionId === "session-1" && session.status === "idle",
+          ),
+        );
+        expect(resolved.sessions.find((session) => session.sessionId === "session-1")?.status).toBe(
+          "idle",
+        );
+      } finally {
+        await harness.unmount();
+        host.agentSessionsList = originalAgentSessionsList;
+        host.agentSessionUpsert = originalAgentSessionUpsert;
+        host.specGet = originalSpecGet;
+        host.planGet = originalPlanGet;
+        host.qaGetReport = originalQaGetReport;
+        OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
+        OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+        OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+        OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      }
+    });
+  });
+
+  test("scans each runtime endpoint only once during repo reconciliation", async () => {
+    await withSuppressedRendererWarning(async () => {
+      const originalAgentSessionsList = host.agentSessionsList;
+      const originalAgentSessionUpsert = host.agentSessionUpsert;
+      const originalSpecGet = host.specGet;
+      const originalPlanGet = host.planGet;
+      const originalQaGetReport = host.qaGetReport;
+      const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
+      const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+      const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
+      const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+
+      let listRuntimeSessionsCalls = 0;
+      const scannedEndpoints: string[] = [];
+
+      host.agentSessionsList = async () => [persistedSessionFixture];
+      host.agentSessionUpsert = async () => {};
+      host.specGet = async () => ({ markdown: "", updatedAt: null });
+      host.planGet = async () => ({ markdown: "", updatedAt: null });
+      host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+      host.runtimeList = async () =>
+        [
+          {
+            kind: "opencode",
+            runtimeId: "runtime-repo",
+            repoPath: "/tmp/repo",
+            taskId: null,
+            role: "workspace",
+            workingDirectory: "/tmp/repo",
+            runtimeRoute: {
+              type: "local_http" as const,
+              endpoint: "http://127.0.0.1:4444",
+            },
+            startedAt: "2026-02-22T08:00:00.000Z",
+            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+          },
+          {
+            kind: "opencode",
+            runtimeId: "runtime-build",
+            repoPath: "/tmp/repo",
+            taskId: "task-1",
+            role: "build",
+            workingDirectory: "/tmp/repo/worktree",
+            runtimeRoute: {
+              type: "local_http" as const,
+              endpoint: "http://127.0.0.1:4444",
+            },
+            startedAt: "2026-02-22T08:00:00.000Z",
+            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+          },
+        ] as Awaited<ReturnType<typeof host.runtimeList>>;
+      OpencodeSdkAdapter.prototype.listRuntimeSessions = async (input) => {
+        listRuntimeSessionsCalls += 1;
+        scannedEndpoints.push(input.runtimeConnection.endpoint ?? "");
+        return [
+          {
+            externalSessionId: "external-1",
+            title: "BUILD task-1",
+            workingDirectory: "/tmp/repo/worktree",
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: { type: "busy" },
+          },
+        ];
+      };
+      OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
+        runtimeKind: input.runtimeKind,
+        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: input.role,
+        scenario: input.scenario,
+        status: "running",
+      });
+      OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
+        models: [],
+        defaultModelsByProvider: {},
+        profiles: [],
+      });
+      OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
+      OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
+
+      const harness = createHookHarness({
+        activeRepo: "/tmp/repo",
+        tasks: [taskFixture],
+        runs: [runningRunFixture],
+        refreshTaskData: async () => {},
+      });
+
+      try {
+        await harness.mount();
+        await harness.waitFor((state) =>
+          state.sessions.some(
+            (session) => session.sessionId === "session-1" && session.status === "running",
+          ),
+        );
+        expect(new Set(scannedEndpoints)).toEqual(new Set(["http://127.0.0.1:4444"]));
+        expect(listRuntimeSessionsCalls).toBeLessThan(3);
+      } finally {
+        await harness.unmount();
+        host.agentSessionsList = originalAgentSessionsList;
+        host.agentSessionUpsert = originalAgentSessionUpsert;
+        host.specGet = originalSpecGet;
+        host.planGet = originalPlanGet;
+        host.qaGetReport = originalQaGetReport;
+        OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
+        OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+        OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+        OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      }
+    });
+  });
+
+  test("retries background session bootstrap after a transient persisted-session load failure", async () => {
+    await withSuppressedRendererWarning(async () => {
+      const originalAgentSessionsList = host.agentSessionsList;
+      const originalAgentSessionUpsert = host.agentSessionUpsert;
+      const originalSpecGet = host.specGet;
+      const originalPlanGet = host.planGet;
+      const originalQaGetReport = host.qaGetReport;
+
+      let listCalls = 0;
+      host.agentSessionsList = async () => {
+        listCalls += 1;
+        if (listCalls === 1) {
+          throw new Error("temporary session list failure");
+        }
+        return [persistedSessionFixture];
+      };
+      host.agentSessionUpsert = async () => {};
+      host.specGet = async () => ({ markdown: "", updatedAt: null });
+      host.planGet = async () => ({ markdown: "", updatedAt: null });
+      host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+
+      const harness = createHookHarness({
+        activeRepo: "/tmp/repo",
+        tasks: [taskFixture],
+        runs: [],
+        refreshTaskData: async () => {},
+      });
+
+      try {
+        await harness.mount();
+        const resolved = await harness.waitFor(
+          (state) => state.sessions.some((session) => session.sessionId === "session-1"),
+          2_000,
+        );
+        expect(listCalls).toBeGreaterThanOrEqual(2);
+        expect(
+          resolved.sessions.find((session) => session.sessionId === "session-1"),
+        ).toBeDefined();
+      } finally {
+        await harness.unmount();
+        host.agentSessionsList = originalAgentSessionsList;
+        host.agentSessionUpsert = originalAgentSessionUpsert;
+        host.specGet = originalSpecGet;
+        host.planGet = originalPlanGet;
+        host.qaGetReport = originalQaGetReport;
+      }
+    });
+  });
+
+  test("reconciles unaffected tasks when one persisted session list load fails", async () => {
+    await withSuppressedRendererWarning(async () => {
+      const originalAgentSessionsList = host.agentSessionsList;
+      const originalAgentSessionUpsert = host.agentSessionUpsert;
+      const originalSpecGet = host.specGet;
+      const originalPlanGet = host.planGet;
+      const originalQaGetReport = host.qaGetReport;
+      const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
+      const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+      const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
+      const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+
+      host.agentSessionsList = async (_repoPath, taskId) => {
+        if (taskId === "task-1") {
+          throw new Error("task-1 persisted sessions unavailable");
+        }
+        if (taskId === "task-2") {
+          return [
+            {
+              ...persistedSessionFixture,
+              sessionId: "session-2",
+              externalSessionId: "external-2",
+              taskId: "task-2",
+            },
+          ];
+        }
+        return [];
+      };
+      host.agentSessionUpsert = async () => {};
+      host.specGet = async () => ({ markdown: "", updatedAt: null });
+      host.planGet = async () => ({ markdown: "", updatedAt: null });
+      host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+      host.runtimeList = async () => [
+        {
+          kind: "opencode",
+          runtimeId: "runtime-1",
+          repoPath: "/tmp/repo",
+          taskId: null,
+          role: "workspace",
+          workingDirectory: "/tmp/repo",
+          runtimeRoute: {
+            type: "local_http" as const,
+            endpoint: "http://127.0.0.1:4444",
+          },
+          startedAt: "2026-02-22T08:00:00.000Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        },
+      ];
+      OpencodeSdkAdapter.prototype.listRuntimeSessions = async () => [
+        {
+          externalSessionId: "external-2",
+          title: "BUILD task-2",
+          workingDirectory: "/tmp/repo",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: { type: "busy" },
+        },
+      ];
+      OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
+        runtimeKind: input.runtimeKind,
+        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: input.role,
+        scenario: input.scenario,
+        status: "running",
+      });
+      OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
+        models: [],
+        defaultModelsByProvider: {},
+        profiles: [],
+      });
+      OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
+      OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
+
+      const harness = createHookHarness({
+        activeRepo: "/tmp/repo",
+        tasks: [taskFixture, taskFixture2],
+        runs: [],
+        refreshTaskData: async () => {},
+      });
+
+      try {
+        await harness.mount();
+        const resolved = await harness.waitFor((state) =>
+          state.sessions.some(
+            (session) => session.sessionId === "session-2" && session.status === "running",
+          ),
+        );
+        expect(
+          resolved.sessions.some(
+            (session) => session.sessionId === "session-1" && session.status === "running",
+          ),
+        ).toBe(false);
+      } finally {
+        await harness.unmount();
+        host.agentSessionsList = originalAgentSessionsList;
+        host.agentSessionUpsert = originalAgentSessionUpsert;
+        host.specGet = originalSpecGet;
+        host.planGet = originalPlanGet;
+        host.qaGetReport = originalQaGetReport;
+        OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
+        OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+        OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+        OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      }
+    });
+  });
+
+  test("reconciles unaffected tasks when one live-session resume fails", async () => {
+    await withSuppressedRendererWarning(async () => {
+      const originalAgentSessionsList = host.agentSessionsList;
+      const originalAgentSessionUpsert = host.agentSessionUpsert;
+      const originalSpecGet = host.specGet;
+      const originalPlanGet = host.planGet;
+      const originalQaGetReport = host.qaGetReport;
+      const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
+      const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+      const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
+      const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+
+      host.agentSessionsList = async (_repoPath, taskId) => {
+        if (taskId === "task-1") {
+          return [persistedSessionFixture];
+        }
+        if (taskId === "task-2") {
+          return [
+            {
+              ...persistedSessionFixture,
+              sessionId: "session-2",
+              externalSessionId: "external-2",
+              taskId: "task-2",
+            },
+          ];
+        }
+        return [];
+      };
+      host.agentSessionUpsert = async () => {};
+      host.specGet = async () => ({ markdown: "", updatedAt: null });
+      host.planGet = async () => ({ markdown: "", updatedAt: null });
+      host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+      host.runtimeList = async () => [
+        {
+          kind: "opencode",
+          runtimeId: "runtime-1",
+          repoPath: "/tmp/repo",
+          taskId: null,
+          role: "workspace",
+          workingDirectory: "/tmp/repo",
+          runtimeRoute: {
+            type: "local_http" as const,
+            endpoint: "http://127.0.0.1:4444",
+          },
+          startedAt: "2026-02-22T08:00:00.000Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        },
+      ];
+      OpencodeSdkAdapter.prototype.listRuntimeSessions = async () => [
+        {
+          externalSessionId: "external-1",
+          title: "BUILD task-1",
+          workingDirectory: "/tmp/repo",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: { type: "busy" },
+        },
+        {
+          externalSessionId: "external-2",
+          title: "BUILD task-2",
+          workingDirectory: "/tmp/repo",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: { type: "busy" },
+        },
+      ];
+      OpencodeSdkAdapter.prototype.resumeSession = async (input) => {
+        if (input.sessionId === "session-1") {
+          throw new Error("task-1 resume failed");
+        }
+        return {
+          runtimeKind: input.runtimeKind,
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          startedAt: "2026-02-22T08:00:00.000Z",
+          role: input.role,
+          scenario: input.scenario,
+          status: "running",
+        };
+      };
+      OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
+        models: [],
+        defaultModelsByProvider: {},
+        profiles: [],
+      });
+      OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
+      OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
+
+      const harness = createHookHarness({
+        activeRepo: "/tmp/repo",
+        tasks: [taskFixture, taskFixture2],
+        runs: [],
+        refreshTaskData: async () => {},
+      });
+
+      try {
+        await harness.mount();
+        const resolved = await harness.waitFor((state) =>
+          state.sessions.some(
+            (session) => session.sessionId === "session-2" && session.status === "running",
+          ),
+        );
+        expect(
+          resolved.sessions.some(
+            (session) => session.sessionId === "session-1" && session.status === "running",
+          ),
+        ).toBe(false);
+      } finally {
+        await harness.unmount();
+        host.agentSessionsList = originalAgentSessionsList;
+        host.agentSessionUpsert = originalAgentSessionUpsert;
+        host.specGet = originalSpecGet;
+        host.planGet = originalPlanGet;
+        host.qaGetReport = originalQaGetReport;
+        OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
+        OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+        OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+        OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      }
+    });
+  });
+
+  test("reconciles live runtime sessions for tasks added after the first repo bootstrap", async () => {
+    await withSuppressedRendererWarning(async () => {
+      const originalAgentSessionsList = host.agentSessionsList;
+      const originalAgentSessionUpsert = host.agentSessionUpsert;
+      const originalSpecGet = host.specGet;
+      const originalPlanGet = host.planGet;
+      const originalQaGetReport = host.qaGetReport;
+      const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
+      const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+      const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
+      const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+
+      host.agentSessionsList = async (_repoPath, taskId) => {
+        if (taskId === "task-1") {
+          return [persistedSessionFixture];
+        }
+        if (taskId === "task-2") {
+          return [
+            {
+              ...persistedSessionFixture,
+              sessionId: "session-2",
+              externalSessionId: "external-2",
+              taskId: "task-2",
+            },
+          ];
+        }
+        return [];
+      };
+      host.agentSessionUpsert = async () => {};
+      host.specGet = async () => ({ markdown: "", updatedAt: null });
+      host.planGet = async () => ({ markdown: "", updatedAt: null });
+      host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+      host.runtimeList = async () => [
+        {
+          kind: "opencode",
+          runtimeId: "runtime-1",
+          repoPath: "/tmp/repo",
+          taskId: null,
+          role: "workspace",
+          workingDirectory: "/tmp/repo",
+          runtimeRoute: {
+            type: "local_http" as const,
+            endpoint: "http://127.0.0.1:4444",
+          },
+          startedAt: "2026-02-22T08:00:00.000Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        },
+      ];
+      OpencodeSdkAdapter.prototype.listRuntimeSessions = async () => [
+        {
+          externalSessionId: "external-2",
+          title: "BUILD task-2",
+          workingDirectory: "/tmp/repo",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: { type: "busy" },
+        },
+      ];
+      OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
+        runtimeKind: input.runtimeKind,
+        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: input.role,
+        scenario: input.scenario,
+        status: "running",
+      });
+      OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
+        models: [],
+        defaultModelsByProvider: {},
+        profiles: [],
+      });
+      OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
+      OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
+
+      const harness = createHookHarness({
+        activeRepo: "/tmp/repo",
+        tasks: [taskFixture],
+        runs: [],
+        refreshTaskData: async () => {},
+      });
+
+      try {
+        await harness.mount();
+        await harness.updateArgs({
+          activeRepo: "/tmp/repo",
+          tasks: [taskFixture, taskFixture2],
+          runs: [],
+        });
+        const resolved = await harness.waitFor((state) =>
+          state.sessions.some(
+            (session) => session.sessionId === "session-2" && session.status === "running",
+          ),
+        );
+        expect(resolved.sessions.find((session) => session.sessionId === "session-2")?.status).toBe(
+          "running",
+        );
+      } finally {
+        await harness.unmount();
+        host.agentSessionsList = originalAgentSessionsList;
+        host.agentSessionUpsert = originalAgentSessionUpsert;
+        host.specGet = originalSpecGet;
+        host.planGet = originalPlanGet;
+        host.qaGetReport = originalQaGetReport;
+        OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
+        OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+        OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+        OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
       }
     });
   });

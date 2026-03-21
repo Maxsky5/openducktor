@@ -9,6 +9,7 @@ use host_infra_system::{
 };
 use serde_json::json;
 use std::fs;
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -44,6 +45,25 @@ fn init_git_repo(path: &std::path::Path) -> Result<()> {
         "failed to initialize git repo for test at {}",
         path.display()
     ))
+}
+
+fn spawn_opencode_session_status_server(response_body: &'static str) -> Result<(u16, std::thread::JoinHandle<()>)> {
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    let port = listener.local_addr()?.port();
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        response_body.len(),
+        response_body
+    );
+    let handle = std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut request_buffer = [0_u8; 4096];
+            let _ = stream.read(&mut request_buffer);
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.flush();
+        }
+    });
+    Ok((port, handle))
 }
 
 #[test]
@@ -805,6 +825,226 @@ fn task_reset_implementation_rejects_live_runtime_even_without_persisted_session
         .to_string()
         .contains("Stop the active session(s) first"));
     service.shutdown()?;
+    Ok(())
+}
+
+#[test]
+fn task_reset_implementation_ignores_stale_build_run_when_runtime_session_is_idle() -> Result<()> {
+    let repo_path = unique_temp_path("reset-implementation-stale-build-run-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+    let worktree_base = repo_path.join("worktrees");
+    let build_worktree = worktree_base.join("task-1");
+    fs::create_dir_all(&worktree_base)?;
+    fs::create_dir_all(&build_worktree)?;
+
+    let mut task = make_task("task-1", "task", TaskStatus::HumanReview);
+    task.document_summary.spec.has = true;
+    task.document_summary.plan.has = true;
+
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![task],
+        vec![GitBranch {
+            name: "odt/task-1".to_string(),
+            is_current: false,
+            is_remote: false,
+        }],
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        workspace.path.as_str(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            ..Default::default()
+        },
+    )?;
+    git_state
+        .lock()
+        .expect("git state lock poisoned")
+        .current_branches_by_path
+        .insert(
+            build_worktree.to_string_lossy().to_string(),
+            host_domain::GitCurrentBranch {
+                name: Some("odt/task-1".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "build-session".to_string(),
+        external_session_id: Some("external-build-session".to_string()),
+        task_id: Some("task-1".to_string()),
+        role: "build".to_string(),
+        scenario: Some("build_implementation_start".to_string()),
+        status: Some("running".to_string()),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        updated_at: None,
+        ended_at: None,
+        runtime_kind: "opencode".to_string(),
+        working_directory: build_worktree.to_string_lossy().to_string(),
+        pending_permissions: Vec::new(),
+        pending_questions: Vec::new(),
+        selected_model: None,
+    }];
+
+    let (port, server_handle) =
+        spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"idle"}}"#)?;
+    service.runs.lock().expect("run state lock poisoned").insert(
+        "run-1".to_string(),
+        crate::app_service::RunProcess {
+            summary: serde_json::from_value(json!({
+                "runId": "run-1",
+                "runtimeKind": "opencode",
+                "runtimeRoute": {
+                    "type": "local_http",
+                    "endpoint": format!("http://127.0.0.1:{port}"),
+                },
+                "repoPath": workspace.path.clone(),
+                "taskId": "task-1",
+                "branch": "odt/task-1",
+                "worktreePath": build_worktree.to_string_lossy().to_string(),
+                "port": port,
+                "state": "running",
+                "lastMessage": null,
+                "startedAt": "2026-03-17T11:00:00Z",
+            }))?,
+            child: None,
+            _opencode_process_guard: None,
+            repo_path: workspace.path.clone(),
+            task_id: "task-1".to_string(),
+            worktree_path: build_worktree.to_string_lossy().to_string(),
+            repo_config: host_infra_system::RepoConfig {
+                branch_prefix: "odt".to_string(),
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                ..Default::default()
+            },
+        },
+    );
+
+    let updated = service.task_reset_implementation(workspace.path.as_str(), "task-1")?;
+    server_handle.join().expect("status server thread should finish");
+
+    assert_eq!(updated.status, TaskStatus::ReadyForDev);
+    Ok(())
+}
+
+#[test]
+fn task_reset_implementation_ignores_stale_build_run_when_status_endpoint_is_unreachable(
+) -> Result<()> {
+    let repo_path = unique_temp_path("reset-implementation-stale-build-run-unreachable-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+    let worktree_base = repo_path.join("worktrees");
+    let build_worktree = worktree_base.join("task-1");
+    fs::create_dir_all(&worktree_base)?;
+    fs::create_dir_all(&build_worktree)?;
+
+    let mut task = make_task("task-1", "task", TaskStatus::HumanReview);
+    task.document_summary.spec.has = true;
+    task.document_summary.plan.has = true;
+
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![task],
+        vec![GitBranch {
+            name: "odt/task-1".to_string(),
+            is_current: false,
+            is_remote: false,
+        }],
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        workspace.path.as_str(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            ..Default::default()
+        },
+    )?;
+    git_state
+        .lock()
+        .expect("git state lock poisoned")
+        .current_branches_by_path
+        .insert(
+            build_worktree.to_string_lossy().to_string(),
+            host_domain::GitCurrentBranch {
+                name: Some("odt/task-1".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "build-session".to_string(),
+        external_session_id: Some("external-build-session".to_string()),
+        task_id: Some("task-1".to_string()),
+        role: "build".to_string(),
+        scenario: Some("build_implementation_start".to_string()),
+        status: Some("running".to_string()),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        updated_at: None,
+        ended_at: None,
+        runtime_kind: "opencode".to_string(),
+        working_directory: build_worktree.to_string_lossy().to_string(),
+        pending_permissions: Vec::new(),
+        pending_questions: Vec::new(),
+        selected_model: None,
+    }];
+
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    let port = listener.local_addr()?.port();
+    drop(listener);
+
+    service.runs.lock().expect("run state lock poisoned").insert(
+        "run-1".to_string(),
+        crate::app_service::RunProcess {
+            summary: serde_json::from_value(json!({
+                "runId": "run-1",
+                "runtimeKind": "opencode",
+                "runtimeRoute": {
+                    "type": "local_http",
+                    "endpoint": format!("http://127.0.0.1:{port}"),
+                },
+                "repoPath": workspace.path.clone(),
+                "taskId": "task-1",
+                "branch": "odt/task-1",
+                "worktreePath": build_worktree.to_string_lossy().to_string(),
+                "port": port,
+                "state": "running",
+                "lastMessage": null,
+                "startedAt": "2026-03-17T11:00:00Z",
+            }))?,
+            child: None,
+            _opencode_process_guard: None,
+            repo_path: workspace.path.clone(),
+            task_id: "task-1".to_string(),
+            worktree_path: build_worktree.to_string_lossy().to_string(),
+            repo_config: host_infra_system::RepoConfig {
+                branch_prefix: "odt".to_string(),
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                ..Default::default()
+            },
+        },
+    );
+
+    let updated = service.task_reset_implementation(workspace.path.as_str(), "task-1")?;
+
+    assert_eq!(updated.status, TaskStatus::ReadyForDev);
     Ok(())
 }
 

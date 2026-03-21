@@ -544,6 +544,10 @@ fn build_stop_propagates_abort_failures_without_marking_run_stopped() -> Result<
         aborts_file.to_string_lossy().as_ref(),
     );
     let _abort_status_guard = set_env_var("OPENDUCKTOR_TEST_ABORT_STATUS", "500");
+    let _session_status_guard = set_env_var(
+        "OPENDUCKTOR_TEST_SESSION_STATUS_BODY",
+        r#"{"external-build-session":{"type":"busy"}}"#,
+    );
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let repo_path = repo.to_string_lossy().to_string();

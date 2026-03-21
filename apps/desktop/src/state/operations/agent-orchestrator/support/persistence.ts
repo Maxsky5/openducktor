@@ -326,7 +326,6 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
   taskId: session.taskId,
   role: session.role,
   scenario: session.scenario,
-  status: session.status,
   startedAt: session.startedAt,
   runtimeKind: session.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
   workingDirectory: session.workingDirectory,
@@ -361,16 +360,15 @@ export const fromPersistedSessionRecord = (
   session: AgentSessionRecord,
   fallbackTaskId: string,
 ): AgentSessionState => {
-  const persistedStatus = session.status ?? "stopped";
-  const normalizedStatus =
-    persistedStatus === "starting" || persistedStatus === "running" ? "stopped" : persistedStatus;
   return {
     sessionId: session.sessionId,
     externalSessionId: session.externalSessionId ?? session.sessionId,
     taskId: session.taskId ?? fallbackTaskId,
     role: session.role,
     scenario: session.scenario ?? defaultScenarioForRole(session.role),
-    status: normalizedStatus,
+    // Persisted Beads records are durable session metadata only.
+    // Live state must always be derived from the runtime on hydration/reconciliation.
+    status: "stopped",
     startedAt: session.startedAt,
     runtimeKind: session.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
     runtimeId: null,

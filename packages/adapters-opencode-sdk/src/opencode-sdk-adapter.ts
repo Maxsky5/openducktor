@@ -11,6 +11,7 @@ import {
   type EventUnsubscribe,
   type ForkAgentSessionInput,
   type ListAgentModelsInput,
+  type ListRuntimeSessionsInput,
   type LoadAgentFileStatusInput,
   type LoadAgentSessionDiffInput,
   type LoadAgentSessionHistoryInput,
@@ -18,6 +19,7 @@ import {
   type ReplyPermissionInput,
   type ReplyQuestionInput,
   type ResumeAgentSessionInput,
+  type RuntimeSessionSummary,
   type SendAgentUserMessageInput,
   type StartAgentSessionInput,
   toRuntimeClientInput,
@@ -66,6 +68,79 @@ import type {
 import { WORKFLOW_TOOL_CACHE_TTL_MS } from "./types";
 import { buildRoleScopedPermissionRules } from "./workflow-tool-permissions";
 import { resolveWorkflowToolSelection } from "./workflow-tool-selection";
+
+const toRuntimeSessionStatus = (status: unknown): RuntimeSessionSummary["status"] => {
+  if (status === undefined || status === null) {
+    return {
+      type: "idle",
+    };
+  }
+  if (typeof status !== "object" || !("type" in status)) {
+    throw new Error("Malformed runtime session status payload from Opencode.");
+  }
+
+  const type = (status as { type?: unknown }).type;
+  if (type === "busy" || type === "idle") {
+    return {
+      type,
+    };
+  }
+
+  if (type === "retry") {
+    const retryStatus = status as {
+      attempt?: unknown;
+      message?: unknown;
+      next?: unknown;
+      nextEpochMs?: unknown;
+    };
+    const attempt = retryStatus.attempt;
+    const message = retryStatus.message;
+    const nextEpochMs =
+      typeof retryStatus.nextEpochMs === "number" ? retryStatus.nextEpochMs : retryStatus.next;
+    if (typeof attempt !== "number") {
+      throw new Error("Malformed Opencode retry status: missing numeric attempt.");
+    }
+    if (typeof message !== "string") {
+      throw new Error("Malformed Opencode retry status: missing message.");
+    }
+    if (typeof nextEpochMs !== "number") {
+      throw new Error("Malformed Opencode retry status: missing next epoch.");
+    }
+    return {
+      type: "retry",
+      attempt,
+      message,
+      nextEpochMs,
+    };
+  }
+
+  throw new Error(`Unsupported Opencode runtime session status type: ${String(type)}`);
+};
+
+const toRuntimeStatusMap = (payload: unknown, directory: string): Record<string, unknown> => {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    throw new Error(
+      `Malformed Opencode session status response for directory '${directory}': expected an object map.`,
+    );
+  }
+  return payload as Record<string, unknown>;
+};
+
+const normalizeSessionDirectory = (directory: unknown): string | undefined => {
+  if (typeof directory !== "string") {
+    return undefined;
+  }
+  const normalized = directory.trim();
+  return normalized.length > 0 ? normalized : undefined;
+};
+
+const requireSessionDirectory = (directory: unknown, sessionId: string): string => {
+  const normalized = normalizeSessionDirectory(directory);
+  if (normalized !== undefined) {
+    return normalized;
+  }
+  throw new Error(`Malformed Opencode session payload for '${sessionId}': missing directory.`);
+};
 
 export class OpencodeSdkAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
@@ -188,6 +263,43 @@ export class OpencodeSdkAdapter
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
+    });
+  }
+
+  async listRuntimeSessions(input: ListRuntimeSessionsInput): Promise<RuntimeSessionSummary[]> {
+    const runtimeClientInput = toRuntimeClientInput(
+      input.runtimeConnection,
+      "list runtime sessions",
+    );
+    const unscopedClient = this.createClient({
+      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
+    });
+    const sessionsPayload = await unscopedClient.session.list();
+    const sessions = unwrapData(sessionsPayload, "list sessions");
+    const sessionDirectories = Array.from(
+      new Set(sessions.map((session) => requireSessionDirectory(session.directory, session.id))),
+    );
+    const statusEntries = await Promise.all(
+      sessionDirectories.map(async (directory) => {
+        const statusPayload = await unscopedClient.session.status({ directory });
+        return [
+          directory,
+          toRuntimeStatusMap(unwrapData(statusPayload, "get session status"), directory),
+        ] as const;
+      }),
+    );
+    const statusesByDirectory = new Map(statusEntries);
+
+    return sessions.map((session) => {
+      const normalizedDirectory = requireSessionDirectory(session.directory, session.id);
+      const directoryStatuses = statusesByDirectory.get(normalizedDirectory);
+      return {
+        externalSessionId: session.id,
+        title: session.title,
+        workingDirectory: normalizedDirectory,
+        startedAt: toIsoFromEpoch(session.time?.created, this.now),
+        status: toRuntimeSessionStatus(directoryStatuses?.[session.id]),
+      };
     });
   }
 

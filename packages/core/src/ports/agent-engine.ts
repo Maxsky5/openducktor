@@ -56,6 +56,11 @@ export type ListAgentModelsInput = {
   runtimeConnection: AgentRuntimeConnection;
 };
 
+export type ListRuntimeSessionsInput = {
+  runtimeKind: RuntimeKind;
+  runtimeConnection: AgentRuntimeConnection;
+};
+
 export type LoadAgentSessionDiffInput = {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
@@ -76,6 +81,28 @@ export type AgentSessionHistoryMessage = {
   totalTokens?: number;
   model?: AgentModelSelection;
   parts: AgentStreamPart[];
+};
+
+export type RuntimeSessionStatus =
+  | {
+      type: "busy";
+    }
+  | {
+      type: "idle";
+    }
+  | {
+      type: "retry";
+      attempt: number;
+      message: string;
+      nextEpochMs: number;
+    };
+
+export type RuntimeSessionSummary = {
+  externalSessionId: string;
+  title: string;
+  workingDirectory: string;
+  startedAt: string;
+  status: RuntimeSessionStatus;
 };
 
 export type ReplyPermissionInput = {
@@ -115,6 +142,7 @@ export interface AgentSessionPort {
   startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary>;
   resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary>;
   forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary>;
+  listRuntimeSessions(input: ListRuntimeSessionsInput): Promise<RuntimeSessionSummary[]>;
   hasSession(sessionId: string): boolean;
   loadSessionHistory(input: LoadAgentSessionHistoryInput): Promise<AgentSessionHistoryMessage[]>;
   loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]>;

@@ -29,7 +29,7 @@ const recordFixture: AgentSessionRecord = {
 };
 
 describe("agent-orchestrator/support/persistence", () => {
-  test("normalizes persisted running status to stopped", () => {
+  test("hydrates persisted sessions as stopped until runtime reconciliation", () => {
     const hydrated = fromPersistedSessionRecord(recordFixture, "task-1");
     expect(hydrated.status).toBe("stopped");
     expect(hydrated.runtimeKind).toBe("opencode");
@@ -102,6 +102,7 @@ describe("agent-orchestrator/support/persistence", () => {
     const persisted = toPersistedSessionRecord(session);
     expect(persisted.scenario).toBe("build_implementation_start");
     expect(persisted.runtimeKind).toBe("opencode");
+    expect(persisted.status).toBeUndefined();
     expect(persisted.endedAt).toBeUndefined();
     expect(persisted.pendingPermissions).toEqual([]);
     expect(persisted.pendingQuestions).toEqual([]);

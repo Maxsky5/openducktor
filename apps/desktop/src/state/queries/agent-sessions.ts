@@ -21,5 +21,11 @@ export const loadAgentSessionListFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
+  options?: {
+    forceFresh?: boolean;
+  },
 ): Promise<AgentSessionRecord[]> =>
-  queryClient.fetchQuery(agentSessionListQueryOptions(repoPath, taskId));
+  queryClient.fetchQuery({
+    ...agentSessionListQueryOptions(repoPath, taskId),
+    ...(options?.forceFresh ? { staleTime: 0 } : {}),
+  });

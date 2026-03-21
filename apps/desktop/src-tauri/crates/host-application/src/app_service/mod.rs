@@ -22,6 +22,7 @@ mod dev_server_manager;
 mod events;
 mod git_provider;
 mod hook_security;
+mod opencode_session_status;
 mod opencode_runtime;
 mod process_registry;
 mod repo_init;
@@ -38,6 +39,10 @@ mod workspace_policy;
 
 pub(crate) use events::emit_event;
 pub(crate) use hook_security::{run_parsed_hook_command_allow_failure, validate_hook_trust};
+pub(crate) use opencode_session_status::{
+    has_live_opencode_session_status, is_unreachable_opencode_session_status_error,
+    load_opencode_session_statuses, OpencodeSessionStatusMap,
+};
 pub(crate) use opencode_runtime::{
     opencode_server_parent_pid, process_exists, read_opencode_version,
     resolve_opencode_binary_path, spawn_opencode_server, terminate_child_process,
