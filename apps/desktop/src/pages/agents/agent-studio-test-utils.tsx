@@ -2,7 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import { type ComponentProps, createElement, type ReactElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { QueryProvider } from "@/lib/query-provider";
-import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import {
   createAgentSessionFixture as createSharedAgentSessionFixture,
   createDeferred as createSharedDeferred,
@@ -45,6 +45,32 @@ const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
   },
 } satisfies ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
 
+const TEST_CHECKS_OPERATIONS_CONTEXT = {
+  refreshRuntimeCheck: async () => ({
+    gitOk: true,
+    gitVersion: null,
+    ghOk: true,
+    ghVersion: null,
+    ghAuthOk: true,
+    ghAuthLogin: null,
+    ghAuthError: null,
+    runtimes: [],
+    errors: [],
+  }),
+  refreshBeadsCheckForRepo: async () => ({
+    beadsOk: true,
+    beadsPath: "/repo/.beads",
+    beadsError: null,
+  }),
+  refreshRepoRuntimeHealthForRepo: async () => ({}),
+  clearActiveBeadsCheck: () => {},
+  clearActiveRepoRuntimeHealth: () => {},
+  setIsLoadingChecks: () => {},
+  hasRuntimeCheck: () => false,
+  hasCachedBeadsCheck: () => false,
+  hasCachedRepoRuntimeHealth: () => false,
+} satisfies ComponentProps<typeof ChecksOperationsContext.Provider>["value"];
+
 export const createDeferred = createSharedDeferred;
 
 export const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): TaskCard =>
@@ -74,12 +100,16 @@ export const createHookHarness = <Props, State>(
     await act(async () => {
       renderer = TestRenderer.create(
         createElement(
-          QueryProvider,
-          { useIsolatedClient: true },
+          ChecksOperationsContext.Provider,
+          { value: TEST_CHECKS_OPERATIONS_CONTEXT },
           createElement(
-            RuntimeDefinitionsContext.Provider,
-            { value: TEST_RUNTIME_DEFINITIONS_CONTEXT },
-            createElement(Harness, { hookProps: currentProps }),
+            QueryProvider,
+            { useIsolatedClient: true },
+            createElement(
+              RuntimeDefinitionsContext.Provider,
+              { value: TEST_RUNTIME_DEFINITIONS_CONTEXT },
+              createElement(Harness, { hookProps: currentProps }),
+            ),
           ),
         ),
       );
@@ -92,12 +122,16 @@ export const createHookHarness = <Props, State>(
     await act(async () => {
       renderer?.update(
         createElement(
-          QueryProvider,
-          { useIsolatedClient: true },
+          ChecksOperationsContext.Provider,
+          { value: TEST_CHECKS_OPERATIONS_CONTEXT },
           createElement(
-            RuntimeDefinitionsContext.Provider,
-            { value: TEST_RUNTIME_DEFINITIONS_CONTEXT },
-            createElement(Harness, { hookProps: currentProps }),
+            QueryProvider,
+            { useIsolatedClient: true },
+            createElement(
+              RuntimeDefinitionsContext.Provider,
+              { value: TEST_RUNTIME_DEFINITIONS_CONTEXT },
+              createElement(Harness, { hookProps: currentProps }),
+            ),
           ),
         ),
       );

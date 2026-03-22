@@ -1,264 +1,87 @@
-import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
-import { errorMessage } from "@/lib/errors";
-import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 
 type UseAgentStudioTaskHydrationParams = {
   activeRepo: string | null;
   activeTaskId: string;
   activeSessionId: string | null;
-  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
+  hydrateRequestedTaskSessionHistory: (input: {
+    taskId: string;
+    sessionId: string;
+  }) => Promise<void>;
 };
 
 type UseAgentStudioTaskHydrationResult = {
-  hydratedTasksByRepoAndTask: Record<string, boolean>;
+  isActiveTaskHydrated: boolean;
   isActiveTaskHydrationFailed: boolean;
   isActiveSessionHistoryHydrated: boolean;
   isActiveSessionHistoryHydrationFailed: boolean;
   isActiveSessionHistoryHydrating: boolean;
 };
 
-type HydrationStatus = "hydrating" | "hydrated" | "failed";
-
-const clearHydrationStatus = (
-  key: string,
-  setStatus: Dispatch<SetStateAction<Record<string, HydrationStatus>>>,
-): void => {
-  setStatus((current) => {
-    if (current[key] !== "hydrating") {
-      return current;
-    }
-    const { [key]: _removed, ...rest } = current;
-    return rest;
+const sessionHistoryHydrationQueryOptions = (
+  repoPath: string,
+  taskId: string,
+  sessionId: string,
+  hydrateRequestedTaskSessionHistory: (input: {
+    taskId: string;
+    sessionId: string;
+  }) => Promise<void>,
+) =>
+  queryOptions({
+    queryKey: ["agent-session-history-hydration", repoPath, taskId, sessionId] as const,
+    queryFn: (): Promise<null> =>
+      hydrateRequestedTaskSessionHistory({
+        taskId,
+        sessionId,
+      }).then(() => null),
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
+    retry: false,
   });
-};
 
 export function useAgentStudioTaskHydration({
   activeRepo,
   activeTaskId,
   activeSessionId,
-  loadAgentSessions,
+  hydrateRequestedTaskSessionHistory,
 }: UseAgentStudioTaskHydrationParams): UseAgentStudioTaskHydrationResult {
-  const hydratingTasksByRepoRef = useRef(new Set<string>());
-  const hydratingSessionHistoriesByRepoRef = useRef(new Set<string>());
-  const hydratedSessionHistoriesByRepoRef = useRef(new Set<string>());
-  const previousRepoRef = useRef<string | null>(activeRepo);
-  const [hydratedTasksByRepoAndTask, setHydratedTasksByRepoAndTask] = useState<
-    Record<string, boolean>
-  >({});
-  const [taskHydrationStatusByRepoKey, setTaskHydrationStatusByRepoKey] = useState<
-    Record<string, HydrationStatus>
-  >({});
-  const [sessionHistoryStatusByRepoKey, setSessionHistoryStatusByRepoKey] = useState<
-    Record<string, HydrationStatus>
-  >({});
-  const [hydrationRetryVersion, setHydrationRetryVersion] = useState(0);
-
-  useEffect(() => {
-    if (previousRepoRef.current === activeRepo) {
-      return;
-    }
-    previousRepoRef.current = activeRepo;
-    hydratingTasksByRepoRef.current.clear();
-    hydratingSessionHistoriesByRepoRef.current.clear();
-    hydratedSessionHistoriesByRepoRef.current.clear();
-    setHydratedTasksByRepoAndTask({});
-    setTaskHydrationStatusByRepoKey({});
-    setSessionHistoryStatusByRepoKey({});
-  }, [activeRepo]);
-
-  const activeTaskHydrationKey = activeRepo && activeTaskId ? `${activeRepo}:${activeTaskId}` : "";
-  const activeSessionHistoryKey =
-    activeRepo && activeTaskId && activeSessionId
-      ? `${activeRepo}:${activeTaskId}:${activeSessionId}`
-      : "";
-
-  useEffect(() => {
-    if (!activeRepo || !activeTaskId || activeSessionId) {
-      return;
-    }
-
-    const hydrationKey = activeTaskHydrationKey;
-    if (hydratedTasksByRepoAndTask[hydrationKey]) {
-      return;
-    }
-    if (hydratingTasksByRepoRef.current.has(hydrationKey)) {
-      return;
-    }
-
-    hydratingTasksByRepoRef.current.add(hydrationKey);
-    setTaskHydrationStatusByRepoKey((current) => ({
-      ...current,
-      [hydrationKey]: "hydrating",
-    }));
-    const currentHydrationRetryVersion = hydrationRetryVersion;
-    let cancelled = false;
-    void loadAgentSessions(activeTaskId)
-      .then(() => {
-        // Always update the hydration state, even if cancelled.
-        // This prevents the retry mechanism from re-triggering an infinite loop
-        // when loadAgentSessions completed successfully but the effect was cancelled
-        // by a React re-render before .then() ran.
-        setHydratedTasksByRepoAndTask((current) => {
-          if (current[hydrationKey] === true) {
-            return current;
-          }
-          return {
-            ...current,
-            [hydrationKey]: true,
-          };
-        });
-        if (cancelled) {
-          return;
-        }
-        setTaskHydrationStatusByRepoKey((current) => ({
-          ...current,
-          [hydrationKey]: "hydrated",
-        }));
-      })
-      .catch((error) => {
-        if (cancelled) {
-          return;
-        }
-        console.warn(
-          `Failed to hydrate task session context for ${activeTaskId}: ${errorMessage(error)}`,
-        );
-        setTaskHydrationStatusByRepoKey((current) => ({
-          ...current,
-          [hydrationKey]: "failed",
-        }));
-      })
-      .finally(() => {
-        hydratingTasksByRepoRef.current.delete(hydrationKey);
-        if (cancelled) {
-          clearHydrationStatus(hydrationKey, setTaskHydrationStatusByRepoKey);
-          setHydrationRetryVersion((current) =>
-            current === currentHydrationRetryVersion ? current + 1 : current,
-          );
-        }
+  const sessionHistoryHydrationQuery = useQuery({
+    queryKey:
+      activeRepo && activeTaskId && activeSessionId
+        ? sessionHistoryHydrationQueryOptions(
+            activeRepo,
+            activeTaskId,
+            activeSessionId,
+            hydrateRequestedTaskSessionHistory,
+          ).queryKey
+        : (["agent-session-history-hydration", "", "", ""] as const),
+    queryFn: async (): Promise<null> => {
+      if (!activeRepo || !activeTaskId || !activeSessionId) {
+        return null;
+      }
+      await hydrateRequestedTaskSessionHistory({
+        taskId: activeTaskId,
+        sessionId: activeSessionId,
       });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    activeRepo,
-    activeSessionId,
-    activeTaskHydrationKey,
-    activeTaskId,
-    hydrationRetryVersion,
-    hydratedTasksByRepoAndTask,
-    loadAgentSessions,
-  ]);
-
-  useEffect(() => {
-    if (!activeRepo || !activeTaskId || !activeSessionId) {
-      return;
-    }
-
-    const taskHydrationKey = activeTaskHydrationKey;
-    const sessionHydrationKey = activeSessionHistoryKey;
-    if (hydratedSessionHistoriesByRepoRef.current.has(sessionHydrationKey)) {
-      return;
-    }
-    if (hydratingSessionHistoriesByRepoRef.current.has(sessionHydrationKey)) {
-      return;
-    }
-
-    hydratingSessionHistoriesByRepoRef.current.add(sessionHydrationKey);
-    setSessionHistoryStatusByRepoKey((current) => ({
-      ...current,
-      [sessionHydrationKey]: "hydrating",
-    }));
-    const currentHydrationRetryVersion = hydrationRetryVersion;
-    let cancelled = false;
-    void loadAgentSessions(activeTaskId, {
-      hydrateHistoryForSessionId: activeSessionId,
-    })
-      .then(() => {
-        // Always mark hydration as complete in refs/state, even if cancelled.
-        // This prevents the retry mechanism from re-triggering an infinite loop
-        // when the promise resolved successfully but the effect was cancelled
-        // due to a React re-render (e.g., from state updates inside loadAgentSessions).
-        hydratedSessionHistoriesByRepoRef.current.add(sessionHydrationKey);
-        setHydratedTasksByRepoAndTask((current) => {
-          if (current[taskHydrationKey] === true) {
-            return current;
-          }
-          return {
-            ...current,
-            [taskHydrationKey]: true,
-          };
-        });
-        if (cancelled) {
-          return;
-        }
-        setTaskHydrationStatusByRepoKey((current) => ({
-          ...current,
-          [taskHydrationKey]: "hydrated",
-        }));
-        setSessionHistoryStatusByRepoKey((current) => ({
-          ...current,
-          [sessionHydrationKey]: "hydrated",
-        }));
-      })
-      .catch((error) => {
-        if (cancelled) {
-          return;
-        }
-        console.warn(
-          `Failed to hydrate session history for ${activeSessionId}: ${errorMessage(error)}`,
-        );
-        setTaskHydrationStatusByRepoKey((current) => {
-          if (current[taskHydrationKey] === "hydrated") {
-            return current;
-          }
-          return {
-            ...current,
-            [taskHydrationKey]: "failed",
-          };
-        });
-        setSessionHistoryStatusByRepoKey((current) => {
-          return {
-            ...current,
-            [sessionHydrationKey]: "failed",
-          };
-        });
-      })
-      .finally(() => {
-        hydratingSessionHistoriesByRepoRef.current.delete(sessionHydrationKey);
-        if (cancelled) {
-          clearHydrationStatus(sessionHydrationKey, setSessionHistoryStatusByRepoKey);
-          setHydrationRetryVersion((current) =>
-            current === currentHydrationRetryVersion ? current + 1 : current,
-          );
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    activeRepo,
-    activeSessionHistoryKey,
-    activeSessionId,
-    activeTaskHydrationKey,
-    activeTaskId,
-    hydrationRetryVersion,
-    loadAgentSessions,
-  ]);
-
-  const activeTaskHydrationStatus = activeTaskHydrationKey
-    ? taskHydrationStatusByRepoKey[activeTaskHydrationKey]
-    : undefined;
-  const activeSessionHistoryStatus = activeSessionHistoryKey
-    ? sessionHistoryStatusByRepoKey[activeSessionHistoryKey]
-    : undefined;
+      return null;
+    },
+    enabled: Boolean(activeRepo && activeTaskId && activeSessionId),
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
 
   return {
-    hydratedTasksByRepoAndTask,
-    isActiveTaskHydrationFailed: activeTaskHydrationStatus === "failed",
-    isActiveSessionHistoryHydrated: activeSessionHistoryStatus === "hydrated",
-    isActiveSessionHistoryHydrationFailed: activeSessionHistoryStatus === "failed",
-    isActiveSessionHistoryHydrating: activeSessionHistoryStatus === "hydrating",
+    isActiveTaskHydrated: Boolean(activeRepo && activeTaskId),
+    isActiveTaskHydrationFailed: false,
+    isActiveSessionHistoryHydrated: activeSessionId
+      ? sessionHistoryHydrationQuery.isSuccess
+      : false,
+    isActiveSessionHistoryHydrationFailed: activeSessionId
+      ? sessionHistoryHydrationQuery.isError
+      : false,
+    isActiveSessionHistoryHydrating: activeSessionId
+      ? sessionHistoryHydrationQuery.isPending
+      : false,
   };
 }

@@ -18,9 +18,16 @@ const createRequest = (requestId: string) => ({
   taskId: "task-1",
   role: "build" as const,
   scenario: "build_implementation_start" as const,
-  startMode: "fresh" as const,
   reason: "scenario_kickoff" as const,
   selectedModel: null,
+  reusableSessionOptions: [
+    {
+      value: "session-build-1",
+      label: "Builder session",
+      description: "Existing builder session",
+    },
+  ],
+  initialReusableSessionId: "session-build-1",
 });
 
 describe("useSessionStartModalRequestActivation", () => {
@@ -47,6 +54,14 @@ describe("useSessionStartModalRequestActivation", () => {
           taskId: "task-1",
           role: "build",
           scenario: "build_implementation_start",
+          reusableSessionOptions: [
+            {
+              value: "session-build-1",
+              label: "Builder session",
+              description: "Existing builder session",
+            },
+          ],
+          initialReusableSessionId: "session-build-1",
         }),
       );
     } finally {

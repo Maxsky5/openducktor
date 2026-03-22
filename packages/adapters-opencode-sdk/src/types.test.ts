@@ -35,13 +35,15 @@ describe("types", () => {
       },
       input: sessionInput,
       client: createClient({
-        baseUrl: "http://127.0.0.1:12345",
+        runtimeEndpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       }),
       externalSessionId: "external-session-1",
-      streamAbortController: new AbortController(),
-      streamDone: Promise.resolve(),
+      eventTransportKey: "http://127.0.0.1:12345",
       emittedAssistantMessageIds: new Set<string>(),
+      partsById: new Map(),
+      messageRoleById: new Map(),
+      pendingDeltasByPartId: new Map(),
     };
     const status: McpServerStatus = { status: "connected" };
     const options: OpencodeSdkAdapterOptions = {

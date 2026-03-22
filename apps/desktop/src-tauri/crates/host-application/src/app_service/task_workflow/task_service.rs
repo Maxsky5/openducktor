@@ -8,8 +8,8 @@ use crate::app_service::workflow_rules::{
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentSessionDocument, CreateTaskInput, QaWorkflowVerdict, RunState, RuntimeRole, TaskCard,
-    TaskMetadata, TaskStatus, UpdateTaskPatch, DEFAULT_BRANCH_PREFIX,
+    AgentSessionDocument, CreateTaskInput, GitWorktreeSummary, QaWorkflowVerdict, RunState,
+    RuntimeRole, TaskCard, TaskMetadata, TaskStatus, UpdateTaskPatch, DEFAULT_BRANCH_PREFIX,
 };
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -133,6 +133,12 @@ impl AppService {
                 .with_context(|| format!("Failed to remove task worktree {worktree_path}"))?;
         }
 
+        ensure_related_branches_are_unused_by_worktrees(
+            self,
+            context.repo_dir(),
+            &related_local_branches,
+        )?;
+
         for branch_name in related_local_branches {
             self.git_delete_local_branch(
                 context.repo.repo_path.as_str(),
@@ -166,11 +172,6 @@ impl AppService {
             branch_prefix.as_str(),
             task_id,
         )?;
-        ensure_related_reset_branches_are_deletable(
-            self,
-            context.repo_dir(),
-            &related_local_branches,
-        )?;
         let removable_worktrees = collect_managed_task_worktree_paths(
             self,
             context.repo.repo_path.as_str(),
@@ -197,6 +198,16 @@ impl AppService {
                 ));
             }
             removed_worktrees.push(worktree_path.clone());
+        }
+
+        if let Err(error) =
+            ensure_related_branches_are_unused_by_worktrees(self, context.repo_dir(), &related_local_branches)
+        {
+            return Err(with_reset_cleanup_progress(
+                error,
+                &removed_worktrees,
+                &deleted_branches,
+            ));
         }
 
         for branch_name in &related_local_branches {
@@ -274,7 +285,22 @@ impl AppService {
             context.repo.tasks[index] = updated.clone();
         }
 
+        self.clear_task_runs(context.repo.repo_path.as_str(), task_id)?;
+
         Ok(self.enrich_task(updated, &context.repo.tasks))
+    }
+
+    fn clear_task_runs(&self, repo_path: &str, task_id: &str) -> Result<()> {
+        let normalized_repo = normalize_path_for_comparison(repo_path);
+        let mut runs = self
+            .runs
+            .lock()
+            .map_err(|_| anyhow!("Run state lock poisoned"))?;
+        runs.retain(|_, run| {
+            normalize_path_for_comparison(run.repo_path.as_str()) != normalized_repo
+                || run.task_id != task_id
+        });
+        Ok(())
     }
 
     fn ensure_no_active_task_delete_runs(&self, repo_path: &str, task_ids: &[&str]) -> Result<()> {
@@ -826,28 +852,43 @@ fn resolve_effective_worktree_base_path(
         .and_then(|workspace| workspace.effective_worktree_base_path))
 }
 
-fn ensure_related_reset_branches_are_deletable(
+fn ensure_related_branches_are_unused_by_worktrees(
     service: &AppService,
     repo_path: &Path,
     related_local_branches: &HashSet<String>,
 ) -> Result<()> {
-    let current_branch = service.git_port.get_current_branch(repo_path)?;
-    let Some(current_branch_name) = current_branch
-        .name
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
-        return Ok(());
-    };
+    let active_related_worktrees = service
+        .git_port
+        .list_worktrees(repo_path)?
+        .into_iter()
+        .filter_map(|worktree| to_active_related_worktree(related_local_branches, worktree))
+        .collect::<Vec<_>>();
 
-    if related_local_branches.contains(current_branch_name) {
-        return Err(anyhow!(
-            "Cannot reset implementation while branch {current_branch_name} is checked out. Switch branches first."
-        ));
+    if active_related_worktrees.is_empty() {
+        return Ok(());
     }
 
-    Ok(())
+    let joined = active_related_worktrees.join(", ");
+    Err(anyhow!(
+        "Cannot delete implementation branch while it is still checked out in worktree(s): {joined}. Switch those worktrees to another branch first."
+    ))
+}
+
+fn to_active_related_worktree(
+    related_local_branches: &HashSet<String>,
+    worktree: GitWorktreeSummary,
+) -> Option<String> {
+    let branch_name = worktree.branch.trim();
+    if branch_name.is_empty() || !related_local_branches.contains(branch_name) {
+        return None;
+    }
+
+    let worktree_path = worktree.worktree_path.trim();
+    if worktree_path.is_empty() {
+        return Some(branch_name.to_string());
+    }
+
+    Some(format!("{branch_name} ({worktree_path})"))
 }
 
 fn with_reset_cleanup_progress(

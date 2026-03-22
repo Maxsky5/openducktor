@@ -7,10 +7,10 @@ import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 type ConfirmHumanReviewFeedbackFlowInput = {
   state: HumanReviewFeedbackState;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
-  loadAgentSessions: (
-    taskId: string,
-    options?: { hydrateHistoryForSessionId?: string },
-  ) => Promise<void>;
+  hydrateRequestedTaskSessionHistory: (input: {
+    taskId: string;
+    sessionId: string;
+  }) => Promise<void>;
   openSessionStartModal: (intent: KanbanSessionStartIntent) => void;
   openAgentStudioSession: (taskId: string, session: AgentSessionState) => void;
   sendAgentMessage: (sessionId: string, message: string) => Promise<void>;
@@ -20,7 +20,7 @@ type ConfirmHumanReviewFeedbackFlowInput = {
 export const confirmHumanReviewFeedbackFlow = async ({
   state,
   humanRequestChangesTask,
-  loadAgentSessions,
+  hydrateRequestedTaskSessionHistory,
   openSessionStartModal,
   openAgentStudioSession,
   sendAgentMessage,
@@ -38,7 +38,7 @@ export const confirmHumanReviewFeedbackFlow = async ({
       taskId: state.taskId,
       role: "build",
       scenario: state.scenario,
-      startMode: "fresh",
+      reusableSessionOptions: [],
       postStartAction: "send_message",
       message: trimmedMessage,
       beforeStartAction: {
@@ -62,8 +62,9 @@ export const confirmHumanReviewFeedbackFlow = async ({
   openAgentStudioSession(state.taskId, existingBuilderSession);
 
   try {
-    await loadAgentSessions(state.taskId, {
-      hydrateHistoryForSessionId: existingBuilderSession.sessionId,
+    await hydrateRequestedTaskSessionHistory({
+      taskId: state.taskId,
+      sessionId: existingBuilderSession.sessionId,
     });
   } catch {
     toast.error("Changes requested, but refreshing Builder sessions failed.");

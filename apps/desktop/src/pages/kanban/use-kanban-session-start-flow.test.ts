@@ -1,81 +1,30 @@
 import { describe, expect, test } from "bun:test";
-import {
-  createAgentSessionFixture,
-  createTaskCardFixture,
-} from "../agents/agent-studio-test-utils";
-import {
-  findLatestSessionByRoleForTask,
-  findSessionsByRoleForTask,
-  resolveKanbanPlanningStartPreference,
-} from "./use-kanban-session-start-flow";
+import { createTaskCardFixture } from "../agents/agent-studio-test-utils";
+import { resolveKanbanBuildStartScenario } from "./use-kanban-session-start-flow";
 
-describe("use-kanban-session-start-flow helpers", () => {
-  test("findSessionsByRoleForTask returns all matching sessions newest first", () => {
-    const sessions = [
-      createAgentSessionFixture({
-        runtimeKind: "opencode",
-        sessionId: "build-older",
-        taskId: "TASK-1",
-        role: "build",
-        startedAt: "2026-02-10T10:00:00.000Z",
-      }),
-      createAgentSessionFixture({
-        runtimeKind: "opencode",
-        sessionId: "build-latest",
-        taskId: "TASK-1",
-        role: "build",
-        startedAt: "2026-02-12T10:00:00.000Z",
-      }),
-      createAgentSessionFixture({
-        runtimeKind: "opencode",
-        sessionId: "qa-latest",
-        taskId: "TASK-1",
-        role: "qa",
-        startedAt: "2026-02-11T10:00:00.000Z",
-      }),
-    ];
+describe("resolveKanbanBuildStartScenario", () => {
+  test("uses implementation start for regular build starts", () => {
+    const task = createTaskCardFixture({ id: "TASK-1", status: "ready_for_dev" });
 
-    expect(
-      findSessionsByRoleForTask(sessions, "TASK-1", "build").map((session) => session.sessionId),
-    ).toEqual(["build-latest", "build-older"]);
+    expect(resolveKanbanBuildStartScenario([task], "TASK-1")).toBe("build_implementation_start");
   });
 
-  test("findLatestSessionByRoleForTask returns the most recent matching session", () => {
-    const sessions = [
-      createAgentSessionFixture({
-        runtimeKind: "opencode",
-        sessionId: "spec-older",
-        taskId: "TASK-1",
-        role: "spec",
-        startedAt: "2026-02-10T10:00:00.000Z",
-      }),
-      createAgentSessionFixture({
-        runtimeKind: "opencode",
-        sessionId: "build-latest",
-        taskId: "TASK-1",
-        role: "build",
-        startedAt: "2026-02-12T10:00:00.000Z",
-      }),
-      createAgentSessionFixture({
-        runtimeKind: "opencode",
-        sessionId: "spec-latest",
-        taskId: "TASK-1",
-        role: "spec",
-        startedAt: "2026-02-11T10:00:00.000Z",
-      }),
-    ];
+  test("uses QA rejection follow-up for QA-rejected tasks", () => {
+    const task = createTaskCardFixture({ id: "TASK-1", status: "in_progress" });
+    task.documentSummary.qaReport = {
+      has: true,
+      updatedAt: "2026-03-09T10:00:00.000Z",
+      verdict: "rejected",
+    };
 
-    expect(findLatestSessionByRoleForTask(sessions, "TASK-1", "spec")?.sessionId).toBe(
-      "spec-latest",
+    expect(resolveKanbanBuildStartScenario([task], "TASK-1")).toBe("build_after_qa_rejected");
+  });
+
+  test("uses human-feedback follow-up for human-review tasks", () => {
+    const task = createTaskCardFixture({ id: "TASK-1", status: "human_review" });
+
+    expect(resolveKanbanBuildStartScenario([task], "TASK-1")).toBe(
+      "build_after_human_request_changes",
     );
-    expect(findLatestSessionByRoleForTask(sessions, "TASK-1", "qa")).toBeNull();
-  });
-
-  test("resolveKanbanPlanningStartPreference matches task workflow rules", () => {
-    const tasks = [createTaskCardFixture({ id: "TASK-1", status: "spec_ready" })];
-
-    expect(resolveKanbanPlanningStartPreference(tasks, "TASK-1", "set_plan")).toBe("fresh");
-    expect(resolveKanbanPlanningStartPreference(tasks, "TASK-1", "set_spec")).toBe("continue");
-    expect(resolveKanbanPlanningStartPreference(tasks, "TASK-404", "set_spec")).toBe("fresh");
   });
 });

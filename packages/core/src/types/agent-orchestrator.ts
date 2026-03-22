@@ -2,6 +2,7 @@ import type {
   AgentKickoffScenario as ContractsAgentKickoffScenario,
   AgentRole as ContractsAgentRole,
   AgentScenario as ContractsAgentScenario,
+  AgentSessionStartMode as ContractsAgentSessionStartMode,
   AgentToolName as ContractsAgentToolName,
   RuntimeCapabilities,
   RuntimeDescriptor,
@@ -9,15 +10,28 @@ import type {
   RuntimeTransport,
   TaskPriority,
 } from "@openducktor/contracts";
-import { isAgentKickoffScenario as isContractsAgentKickoffScenario } from "@openducktor/contracts";
+import {
+  defaultAgentScenarioForRole as defaultContractsAgentScenarioForRole,
+  defaultStartModeForScenario as defaultContractsStartModeForScenario,
+  getAgentScenarioDefinition as getContractsAgentScenarioDefinition,
+  getAgentScenariosForRole as getContractsAgentScenariosForRole,
+  isAgentKickoffScenario as isContractsAgentKickoffScenario,
+  isScenarioStartModeAllowed as isContractsScenarioStartModeAllowed,
+} from "@openducktor/contracts";
 
 export type { RuntimeKind } from "@openducktor/contracts";
 
 export type AgentRole = ContractsAgentRole;
 export type AgentScenario = ContractsAgentScenario;
 export type AgentKickoffScenario = ContractsAgentKickoffScenario;
+export type AgentSessionStartMode = ContractsAgentSessionStartMode;
 export type AgentToolName = ContractsAgentToolName;
 export const isAgentKickoffScenario = isContractsAgentKickoffScenario;
+export const getAgentScenarioDefinition = getContractsAgentScenarioDefinition;
+export const getAgentScenariosForRole = getContractsAgentScenariosForRole;
+export const defaultAgentScenarioForRole = defaultContractsAgentScenarioForRole;
+export const isScenarioStartModeAllowed = isContractsScenarioStartModeAllowed;
+export const defaultStartModeForScenario = defaultContractsStartModeForScenario;
 
 export const assertAgentKickoffScenario = (scenario: AgentScenario): AgentKickoffScenario => {
   if (!isContractsAgentKickoffScenario(scenario)) {
@@ -77,6 +91,29 @@ export type AgentSessionTodoItem = {
   content: string;
   status: AgentSessionTodoStatus;
   priority: AgentSessionTodoPriority;
+};
+
+export type AgentPendingPermissionRequest = {
+  requestId: string;
+  permission: string;
+  patterns: string[];
+  metadata?: Record<string, unknown>;
+};
+
+export type AgentPendingQuestionRequest = {
+  requestId: string;
+  questions: Array<{
+    header: string;
+    question: string;
+    options: Array<{ label: string; description: string }>;
+    multiple?: boolean;
+    custom?: boolean;
+  }>;
+};
+
+export type AgentRuntimePendingInput = {
+  permissions: AgentPendingPermissionRequest[];
+  questions: AgentPendingQuestionRequest[];
 };
 
 export type AgentToolCall =

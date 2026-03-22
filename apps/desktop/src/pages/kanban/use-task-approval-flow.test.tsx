@@ -224,7 +224,7 @@ describe("useTaskApprovalFlow", () => {
           }),
         ],
         sessions: [],
-        loadAgentSessions: async () => {},
+        hydrateRequestedTaskSessionHistory: async () => {},
         forkAgentSession: async () => "forked-session",
         sendAgentMessage: async () => {},
         refreshTasks: async () => {},
@@ -300,7 +300,7 @@ describe("useTaskApprovalFlow", () => {
           }),
         ],
         sessions: [],
-        loadAgentSessions: async () => {},
+        hydrateRequestedTaskSessionHistory: async () => {},
         forkAgentSession: async () => "forked-session",
         sendAgentMessage: async () => {},
         refreshTasks: async () => {},
@@ -380,7 +380,7 @@ describe("useTaskApprovalFlow", () => {
           }),
         ],
         sessions: [],
-        loadAgentSessions: async () => {},
+        hydrateRequestedTaskSessionHistory: async () => {},
         forkAgentSession: async () => "forked-session",
         sendAgentMessage: async () => {},
         refreshTasks: async () => {},
@@ -462,7 +462,7 @@ describe("useTaskApprovalFlow", () => {
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
         sessions: [],
-        loadAgentSessions: async () => {},
+        hydrateRequestedTaskSessionHistory: async () => {},
         forkAgentSession: async () => "forked-session",
         sendAgentMessage: async () => {},
         refreshTasks: async () => {},
@@ -528,7 +528,7 @@ describe("useTaskApprovalFlow", () => {
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
         sessions: [],
-        loadAgentSessions: async () => {},
+        hydrateRequestedTaskSessionHistory: async () => {},
         forkAgentSession: async () => "forked-session",
         sendAgentMessage: async () => {},
         refreshTasks: async () => {},
@@ -617,7 +617,7 @@ describe("useTaskApprovalFlow", () => {
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
         sessions: [],
-        loadAgentSessions: async () => {},
+        hydrateRequestedTaskSessionHistory: async () => {},
         forkAgentSession: async () => "forked-session",
         sendAgentMessage: async () => {},
         refreshTasks: async () => {},
@@ -694,7 +694,7 @@ describe("useTaskApprovalFlow", () => {
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
         sessions: [],
-        loadAgentSessions: async () => {},
+        hydrateRequestedTaskSessionHistory: async () => {},
         forkAgentSession: async () => "forked-session",
         sendAgentMessage: async () => {},
         refreshTasks: refreshTasksMock,
@@ -797,7 +797,7 @@ describe("useTaskApprovalFlow", () => {
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
         sessions: [builderSession, forkedSession],
-        loadAgentSessions: loadAgentSessionsMock,
+        hydrateRequestedTaskSessionHistory: loadAgentSessionsMock,
         forkAgentSession: async () => "forked-session",
         sendAgentMessage: async () => {
           forkedSession.messages.push({
@@ -838,8 +838,9 @@ describe("useTaskApprovalFlow", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
-    expect(loadAgentSessionsMock).toHaveBeenCalledWith("TASK-1", {
-      hydrateHistoryForSessionId: "builder-session",
+    expect(loadAgentSessionsMock).toHaveBeenCalledWith({
+      taskId: "TASK-1",
+      sessionId: "builder-session",
     });
     expect(taskPullRequestUpsertMock).toHaveBeenCalledWith("/repo", "TASK-1", "PR", "Body");
     expect(refreshTasksMock).toHaveBeenCalledTimes(1);
@@ -911,7 +912,7 @@ describe("useTaskApprovalFlow", () => {
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
         sessions: [builderSession, forkedSession],
-        loadAgentSessions: async () => {},
+        hydrateRequestedTaskSessionHistory: async () => {},
         forkAgentSession: async () => "forked-session",
         sendAgentMessage: async () => {
           setTimeout(() => {

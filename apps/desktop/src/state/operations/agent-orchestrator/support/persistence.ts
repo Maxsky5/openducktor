@@ -1,9 +1,10 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type {
-  AgentModelSelection,
-  AgentRole,
-  AgentScenario,
-  AgentSessionHistoryMessage,
+import {
+  type AgentModelSelection,
+  type AgentRole,
+  type AgentScenario,
+  type AgentSessionHistoryMessage,
+  defaultAgentScenarioForRole,
 } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { isQuestionToolName } from "@/lib/question-tools";
@@ -13,6 +14,7 @@ import { mergeModelSelection, normalizePersistedSelection } from "./models";
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
+type RecoveredPendingPermissionRequest = AgentSessionState["pendingPermissions"][number];
 type RecoveredPendingQuestionRequest = AgentSessionState["pendingQuestions"][number] & {
   answered: boolean;
 };
@@ -133,6 +135,14 @@ const normalizeRecoveredQuestions = (
       },
     ];
   });
+};
+
+const normalizeRecoveredPatterns = (rawPatterns: unknown): string[] => {
+  if (!Array.isArray(rawPatterns)) {
+    return [];
+  }
+
+  return rawPatterns.filter((entry): entry is string => typeof entry === "string");
 };
 
 const normalizeAnswerValues = (value: unknown): string[] => {
@@ -264,6 +274,45 @@ const readPendingQuestionRequest = (
   };
 };
 
+const readPendingPermissionRequest = (
+  part: Extract<HistoryPart, { kind: "tool" }>,
+): RecoveredPendingPermissionRequest | null => {
+  const metadata = asRecord(part.metadata);
+  const input = asRecord(part.input);
+  const output = parseJsonRecord(part.output);
+  const requestId =
+    readString(metadata, ["requestId", "requestID", "permissionRequestId", "id"]) ??
+    readString(input, ["requestId", "requestID", "permissionRequestId", "id"]) ??
+    readString(output, ["requestId", "requestID", "permissionRequestId", "id"]) ??
+    part.callId ??
+    part.partId;
+  const permission =
+    readString(metadata, ["permission"]) ??
+    readString(input, ["permission"]) ??
+    readString(output, ["permission"]);
+  if (!requestId || !permission) {
+    return null;
+  }
+
+  const metadataPatterns = normalizeRecoveredPatterns(metadata?.patterns);
+  const inputPatterns = normalizeRecoveredPatterns(input?.patterns);
+  const outputPatterns = normalizeRecoveredPatterns(output?.patterns);
+  const patterns =
+    metadataPatterns.length > 0
+      ? metadataPatterns
+      : inputPatterns.length > 0
+        ? inputPatterns
+        : outputPatterns;
+
+  const resolvedMetadata = metadata ?? input ?? output ?? undefined;
+  return {
+    requestId,
+    permission,
+    patterns,
+    ...(resolvedMetadata ? { metadata: resolvedMetadata } : {}),
+  };
+};
+
 export const recoverPendingQuestionsFromHistory = (
   history: AgentSessionHistoryMessage[],
 ): AgentSessionState["pendingQuestions"] => {
@@ -320,6 +369,39 @@ export const recoverPendingQuestionsFromHistory = (
   return pendingQueue;
 };
 
+export const recoverPendingPermissionsFromHistory = (
+  history: AgentSessionHistoryMessage[],
+): AgentSessionState["pendingPermissions"] => {
+  const pendingPermissions: AgentSessionState["pendingPermissions"] = [];
+
+  for (const message of history) {
+    for (const part of message.parts) {
+      if (part.kind !== "tool") {
+        continue;
+      }
+      const permission = readPendingPermissionRequest(part);
+      if (!permission) {
+        continue;
+      }
+
+      const existingIndex = pendingPermissions.findIndex(
+        (entry) => entry.requestId === permission.requestId,
+      );
+      if (existingIndex >= 0) {
+        pendingPermissions.splice(existingIndex, 1);
+      }
+
+      if (part.status === "completed" || part.status === "error") {
+        continue;
+      }
+
+      pendingPermissions.push(permission);
+    }
+  }
+
+  return pendingPermissions;
+};
+
 export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => ({
   sessionId: session.sessionId,
   externalSessionId: session.externalSessionId,
@@ -344,16 +426,7 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
 });
 
 export const defaultScenarioForRole = (role: AgentRole): AgentScenario => {
-  if (role === "spec") {
-    return "spec_initial";
-  }
-  if (role === "planner") {
-    return "planner_initial";
-  }
-  if (role === "qa") {
-    return "qa_review";
-  }
-  return "build_implementation_start";
+  return defaultAgentScenarioForRole(role);
 };
 
 export const fromPersistedSessionRecord = (

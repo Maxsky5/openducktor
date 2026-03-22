@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 
 let browserAppMode = false;
 let tauriRuntime = false;
@@ -7,14 +7,9 @@ mock.module("@openducktor/adapters-tauri-host", () => ({
   createTauriHostClient: () => ({}) as object,
 }));
 
-mock.module("@/lib/browser-live-client", () => ({
-  createBrowserLiveHostClient: () => ({}) as object,
-  subscribeBrowserLiveDevServerEvents: async () => () => {},
-  subscribeBrowserLiveRunEvents: async () => () => {},
-}));
-
 mock.module("@/lib/browser-mode", () => ({
   isBrowserAppMode: () => browserAppMode,
+  getBrowserBackendUrl: () => "http://127.0.0.1:14327",
 }));
 
 mock.module("@/lib/runtime", () => ({
@@ -25,6 +20,10 @@ describe("host-client", () => {
   beforeEach(() => {
     browserAppMode = false;
     tauriRuntime = false;
+  });
+
+  afterAll(() => {
+    mock.restore();
   });
 
   test("fails fast when run-event subscriptions are unavailable in the current runtime", async () => {

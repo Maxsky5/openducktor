@@ -1,12 +1,15 @@
 import type {
   AgentSessionRecord,
   RepoPromptOverrides,
-  RunSummary,
   RuntimeInstanceSummary,
   RuntimeKind,
   TaskCard,
 } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
+import type {
+  AgentEnginePort,
+  AgentRuntimeConnection,
+  LiveAgentSessionSnapshot,
+} from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { appQueryClient } from "@/lib/query-client";
 import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
@@ -14,25 +17,24 @@ import { loadRuntimeListFromQuery, runtimeQueryKeys } from "@/state/queries/runt
 import { loadRepoRunsFromQuery } from "@/state/queries/tasks";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
-import {
-  resolveRuntimeRouteConnection,
-  type TaskDocuments,
-  toRuntimeConnection,
-} from "../runtime/runtime";
-import { createRepoStaleGuard, normalizeWorkingDirectory } from "../support/core";
+import type { TaskDocuments } from "../runtime/runtime";
+import { createRepoStaleGuard } from "../support/core";
 import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
 import {
   defaultScenarioForRole,
   fromPersistedSessionRecord,
   historyToChatMessages,
+  recoverPendingPermissionsFromHistory,
   recoverPendingQuestionsFromHistory,
 } from "../support/persistence";
+import { buildSessionPreludeMessages, buildSessionSystemPrompt } from "../support/session-prompt";
 import {
-  buildSessionPreludeMessages,
-  buildSessionSystemPrompt,
-  loadSessionPromptContext,
-} from "../support/session-prompt";
-import { warmSessionData } from "../support/session-warmup";
+  createHydrationRuntimeResolver,
+  readPersistedRuntimeKind,
+} from "./hydration-runtime-resolution";
+import { LiveAgentSessionCache, liveAgentSessionLookupKey } from "./live-agent-session-cache";
+import type { LiveAgentSessionStore } from "./live-agent-session-store";
+import { createReattachLiveSession } from "./reattach-live-session";
 
 type UpdateSession = (
   sessionId: string,
@@ -42,11 +44,29 @@ type UpdateSession = (
 
 type SessionLifecycleAdapter = Pick<
   AgentEnginePort,
-  "hasSession" | "listRuntimeSessions" | "loadSessionHistory" | "resumeSession"
->;
+  "hasSession" | "loadSessionHistory" | "resumeSession" | "listLiveAgentSessionSnapshots"
+> & {
+  listLiveAgentSessionSnapshots?: AgentEnginePort["listLiveAgentSessionSnapshots"];
+};
 
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 const SESSION_HISTORY_HYDRATION_CONCURRENCY = 3;
+const EMPTY_PROMPT_OVERRIDES: RepoPromptOverrides = {};
+
+type HydrationRuntimeResolution =
+  | {
+      ok: true;
+      runtimeKind: RuntimeKind;
+      runtimeId: string | null;
+      runId: string | null;
+      runtimeEndpoint: string;
+      runtimeConnection: AgentRuntimeConnection;
+    }
+  | {
+      ok: false;
+      runtimeKind: RuntimeKind;
+      reason: string;
+    };
 
 const mergePersistedSessionRecord = (
   current: AgentSessionState,
@@ -71,20 +91,56 @@ const mergePersistedSessionRecord = (
   };
 };
 
-const readPersistedRuntimeKind = ({
-  sessionId,
-  runtimeKind,
-  selectedModel,
-}: Pick<AgentSessionRecord, "sessionId" | "runtimeKind" | "selectedModel">): RuntimeKind => {
-  const resolvedRuntimeKind = runtimeKind ?? selectedModel?.runtimeKind;
-  if (!resolvedRuntimeKind) {
-    throw new Error(`Persisted session '${sessionId}' is missing runtime kind metadata.`);
+const shouldPreferLivePendingInput = <T>(value: T[] | null): value is T[] => {
+  return (value?.length ?? 0) > 0;
+};
+
+const shouldKeepPersistedPendingInput = <T>(value: T[] | undefined): boolean => {
+  return (value?.length ?? 0) > 0;
+};
+
+const resolvePendingPermissionsForHydration = ({
+  livePendingPermissions,
+  persistedPendingPermissions,
+  currentPendingPermissions,
+  history,
+}: {
+  livePendingPermissions: AgentSessionState["pendingPermissions"] | null;
+  persistedPendingPermissions: AgentSessionRecord["pendingPermissions"];
+  currentPendingPermissions: AgentSessionState["pendingPermissions"];
+  history: Parameters<typeof recoverPendingPermissionsFromHistory>[0];
+}): AgentSessionState["pendingPermissions"] => {
+  if (shouldPreferLivePendingInput(livePendingPermissions)) {
+    return livePendingPermissions;
   }
-  return resolvedRuntimeKind;
+  if (shouldKeepPersistedPendingInput(persistedPendingPermissions)) {
+    return currentPendingPermissions;
+  }
+  return recoverPendingPermissionsFromHistory(history);
+};
+
+const resolvePendingQuestionsForHydration = ({
+  livePendingQuestions,
+  persistedPendingQuestions,
+  currentPendingQuestions,
+  history,
+}: {
+  livePendingQuestions: AgentSessionState["pendingQuestions"] | null;
+  persistedPendingQuestions: AgentSessionRecord["pendingQuestions"];
+  currentPendingQuestions: AgentSessionState["pendingQuestions"];
+  history: Parameters<typeof recoverPendingQuestionsFromHistory>[0];
+}): AgentSessionState["pendingQuestions"] => {
+  if (shouldPreferLivePendingInput(livePendingQuestions)) {
+    return livePendingQuestions;
+  }
+  if (shouldKeepPersistedPendingInput(persistedPendingQuestions)) {
+    return currentPendingQuestions;
+  }
+  return recoverPendingQuestionsFromHistory(history);
 };
 
 const toLiveSessionState = (
-  status: Awaited<ReturnType<SessionLifecycleAdapter["listRuntimeSessions"]>>[number]["status"],
+  status: LiveAgentSessionSnapshot["status"],
 ): AgentSessionState["status"] => {
   if (status.type === "busy" || status.type === "retry") {
     return "running";
@@ -92,60 +148,36 @@ const toLiveSessionState = (
   return "idle";
 };
 
-type ResolvedRuntime =
-  | {
-      ok: true;
-      runtimeKind: RuntimeKind;
-      runtimeId: string | null;
-      runId: string | null;
-      runtimeEndpoint: string;
-      runtimeConnection: AgentRuntimeConnection;
-    }
-  | {
-      ok: false;
-      runtimeKind: RuntimeKind;
-      reason: string;
-    };
-
 type CreateLoadAgentSessionsArgs = {
   activeRepo: string | null;
   adapter: SessionLifecycleAdapter;
   repoEpochRef: MutableRefObject<number>;
+  activeRepoRef?: MutableRefObject<string | null>;
   previousRepoRef: MutableRefObject<string | null>;
   sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
   setSessionsById: Dispatch<SetStateAction<Record<string, AgentSessionState>>>;
   taskRef: MutableRefObject<TaskCard[]>;
   updateSession: UpdateSession;
   attachSessionListener?: (repoPath: string, sessionId: string) => void;
-  loadSessionTodos: (
-    sessionId: string,
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-    externalSessionId: string,
-  ) => Promise<void>;
-  loadSessionModelCatalog: (
-    sessionId: string,
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-  ) => Promise<void>;
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
   loadTaskDocuments?: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
+  liveAgentSessionStore?: LiveAgentSessionStore;
 };
 
 export const createLoadAgentSessions = ({
   activeRepo,
   adapter,
   repoEpochRef,
+  activeRepoRef,
   previousRepoRef,
   sessionsRef,
   setSessionsById,
   taskRef,
   updateSession,
   attachSessionListener,
-  loadSessionTodos,
-  loadSessionModelCatalog,
   loadRepoPromptOverrides,
-  loadTaskDocuments,
+  loadTaskDocuments: _loadTaskDocuments,
+  liveAgentSessionStore,
 }: CreateLoadAgentSessionsArgs): ((
   taskId: string,
   options?: AgentSessionLoadOptions,
@@ -159,52 +191,39 @@ export const createLoadAgentSessions = ({
     const isStaleRepoOperation = createRepoStaleGuard({
       repoPath,
       repoEpochRef,
+      activeRepoRef,
       previousRepoRef,
     });
     if (isStaleRepoOperation()) {
       return;
     }
 
-    const warmPersistedSession = (
-      targetSessionId: string,
-      runtimeKind: RuntimeKind,
-      runtimeConnection: AgentRuntimeConnection,
-      externalSessionId: string,
-      role: AgentSessionState["role"],
-      shouldLoadModelCatalog = true,
-    ): void => {
-      warmSessionData(
-        {
-          repoPath,
-          sessionId: targetSessionId,
-          taskId,
-          role,
-          runtimeKind,
-          runtimeConnection,
-          externalSessionId,
-        },
-        {
-          loadSessionTodos,
-          loadSessionModelCatalog,
-        },
-        {
-          operationPrefix: "load-sessions-warm-session",
-          shouldLoadModelCatalog,
-        },
-      );
-    };
-
-    const [persisted, repoPromptOverrides] = await Promise.all([
-      loadAgentSessionListFromQuery(appQueryClient, repoPath, taskId, { forceFresh: true }),
-      loadRepoPromptOverrides(repoPath),
-    ]);
+    const persisted = await (options?.persistedRecords
+      ? Promise.resolve(options.persistedRecords)
+      : loadAgentSessionListFromQuery(appQueryClient, repoPath, taskId));
     if (isStaleRepoOperation()) {
       return;
     }
+    let repoPromptOverridesPromise: Promise<RepoPromptOverrides> | null = null;
+    const getRepoPromptOverrides = (): Promise<RepoPromptOverrides> => {
+      if (repoPromptOverridesPromise === null) {
+        repoPromptOverridesPromise = loadRepoPromptOverrides(repoPath);
+      }
+      return repoPromptOverridesPromise;
+    };
 
-    const requestedSessionId = options?.hydrateHistoryForSessionId?.trim() || null;
-    const shouldHydrateRequestedSession = requestedSessionId !== null;
-    const shouldReconcileLiveSessions = options?.reconcileLiveSessions === true;
+    const mode = options?.mode ?? "bootstrap";
+    const requestedSessionId = options?.targetSessionId?.trim() || null;
+    const shouldHydrateRequestedSession =
+      mode === "requested_history" && requestedSessionId !== null;
+    const shouldReconcileLiveSessions = mode === "reconcile_live";
+    const historyPolicy =
+      options?.historyPolicy ??
+      (shouldHydrateRequestedSession
+        ? "requested_only"
+        : shouldReconcileLiveSessions
+          ? "live_if_empty"
+          : "none");
 
     setSessionsById((current) => {
       if (isStaleRepoOperation()) {
@@ -218,13 +237,13 @@ export const createLoadAgentSessions = ({
             existingSession,
             record,
             taskId,
-            repoPromptOverrides,
+            existingSession.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
           );
           continue;
         }
         next[record.sessionId] = {
           ...fromPersistedSessionRecord(record, taskId),
-          promptOverrides: repoPromptOverrides,
+          promptOverrides: EMPTY_PROMPT_OVERRIDES,
         };
       }
       return next;
@@ -245,74 +264,118 @@ export const createLoadAgentSessions = ({
     const historyHydrationSessionIds = new Set(
       recordsToHydrate
         .filter((record) => {
-          if (!shouldHydrateRequestedSession) {
+          if (historyPolicy !== "requested_only") {
             return false;
           }
-          const existingSession = sessionsRef.current[record.sessionId];
-          return !existingSession || existingSession.messages.length === 0;
+          return requestedSessionId === null || record.sessionId === requestedSessionId;
         })
         .map((record) => record.sessionId),
     );
 
     if (recordsToHydrate.length === 0) {
-      const requestedSession = requestedSessionId
-        ? sessionsRef.current[requestedSessionId]
-        : undefined;
-      if (
-        requestedSession &&
-        requestedSession.taskId === taskId &&
-        requestedSession.runtimeEndpoint &&
-        requestedSession.workingDirectory
-      ) {
-        const requestedRecord = requestedSessionId
-          ? persisted.find((record) => record.sessionId === requestedSessionId)
-          : undefined;
-        const runtimeConnection = toRuntimeConnection(
-          requestedSession.runtimeEndpoint,
-          requestedSession.workingDirectory,
-        );
-        const requestedRuntimeKind =
-          requestedRecord?.runtimeKind ??
-          requestedRecord?.selectedModel?.runtimeKind ??
-          requestedSession.runtimeKind ??
-          requestedSession.selectedModel?.runtimeKind;
-        if (!requestedRuntimeKind) {
-          throw new Error(`Session '${requestedSession.sessionId}' is missing runtime kind.`);
-        }
-        warmPersistedSession(
-          requestedSession.sessionId,
-          requestedRuntimeKind,
-          runtimeConnection,
-          requestedSession.externalSessionId,
-          requestedSession.role,
-          !requestedSession.modelCatalog && !requestedSession.isLoadingModelCatalog,
-        );
-      }
       return;
     }
 
-    const runtimeKindsToInspect = Array.from(
-      new Set(recordsToHydrate.map((record) => readPersistedRuntimeKind(record))),
-    );
-    const runtimeLists = await Promise.all(
-      runtimeKindsToInspect.map(async (runtimeKind) => {
-        const runtimes = await loadRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath);
-        return [runtimeKind, runtimes] as const;
-      }),
-    );
-    const runtimesByKind = new Map(runtimeLists);
+    const readCurrentHydratedRuntimeResolution = (
+      record: AgentSessionRecord,
+    ): Extract<HydrationRuntimeResolution, { ok: true }> | null => {
+      const currentSession = sessionsRef.current[record.sessionId];
+      const runtimeKind = currentSession?.runtimeKind ?? null;
+      const runtimeEndpoint = currentSession?.runtimeEndpoint.trim() ?? "";
+      const workingDirectory =
+        currentSession?.workingDirectory.trim() || record.workingDirectory.trim();
+      if (!runtimeKind || runtimeEndpoint.length === 0 || workingDirectory.length === 0) {
+        return null;
+      }
 
-    const requiresRunInspection = recordsToHydrate.some(
+      return {
+        ok: true,
+        runtimeKind,
+        runtimeId: currentSession?.runtimeId ?? null,
+        runId: currentSession?.runId ?? null,
+        runtimeEndpoint,
+        runtimeConnection: {
+          endpoint: runtimeEndpoint,
+          workingDirectory,
+        },
+      };
+    };
+
+    const loadLiveLiveAgentSessionSnapshot = async (
+      record: AgentSessionRecord,
+      runtimeResolution: Extract<HydrationRuntimeResolution, { ok: true }>,
+    ): Promise<LiveAgentSessionSnapshot | null> => {
+      const externalSessionId = record.externalSessionId ?? record.sessionId;
+      const storedSnapshot = liveAgentSessionStore?.readSnapshot({
+        repoPath,
+        runtimeKind: runtimeResolution.runtimeKind,
+        runtimeEndpoint: runtimeResolution.runtimeEndpoint,
+        workingDirectory: record.workingDirectory,
+        externalSessionId,
+      });
+      if (storedSnapshot) {
+        return storedSnapshot;
+      }
+
+      const preloadedSnapshots = options?.preloadedLiveAgentSessionsByKey?.get(
+        liveAgentSessionLookupKey(
+          runtimeResolution.runtimeKind,
+          runtimeResolution.runtimeEndpoint,
+          record.workingDirectory,
+        ),
+      );
+      if (preloadedSnapshots) {
+        return (
+          preloadedSnapshots.find((snapshot) => snapshot.externalSessionId === externalSessionId) ??
+          null
+        );
+      }
+      if (!adapter.listLiveAgentSessionSnapshots) {
+        throw new Error("Live agent session snapshots are unavailable for session hydration.");
+      }
+      const snapshots = await adapter.listLiveAgentSessionSnapshots({
+        runtimeKind: runtimeResolution.runtimeKind,
+        runtimeConnection: runtimeResolution.runtimeConnection,
+        directories: [record.workingDirectory],
+      });
+      return snapshots.find((snapshot) => snapshot.externalSessionId === externalSessionId) ?? null;
+    };
+
+    const recordsNeedingRuntimeResolution = recordsToHydrate.filter((record) => {
+      if (!historyHydrationSessionIds.has(record.sessionId)) {
+        return true;
+      }
+      return readCurrentHydratedRuntimeResolution(record) === null;
+    });
+
+    const runtimeKindsToInspect = Array.from(
+      new Set(recordsNeedingRuntimeResolution.map((record) => readPersistedRuntimeKind(record))),
+    );
+    const runtimesByKind =
+      options?.preloadedRuntimeLists ??
+      new Map(
+        await Promise.all(
+          runtimeKindsToInspect.map(async (runtimeKind) => {
+            const runtimes = await loadRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath);
+            return [runtimeKind, runtimes] as const;
+          }),
+        ),
+      );
+
+    const requiresRunInspection = recordsNeedingRuntimeResolution.some(
       (record) => record.role === "build" || record.role === "qa",
     );
     const liveRuns = requiresRunInspection
-      ? await loadRepoRunsFromQuery(appQueryClient, repoPath)
+      ? (options?.preloadedRuns ?? (await loadRepoRunsFromQuery(appQueryClient, repoPath)))
       : [];
     const ensuredWorkspaceRuntimes = new Map<RuntimeKind, RuntimeInstanceSummary | null>();
 
     const ensureWorkspaceRuntime = async (
       runtimeKind: RuntimeKind,
     ): Promise<RuntimeInstanceSummary | null> => {
+      if (options?.allowRuntimeEnsure === false) {
+        return null;
+      }
       if (ensuredWorkspaceRuntimes.has(runtimeKind)) {
         return ensuredWorkspaceRuntimes.get(runtimeKind) ?? null;
       }
@@ -326,118 +389,25 @@ export const createLoadAgentSessions = ({
       return runtime;
     };
 
-    const findRuntimeByWorkingDirectory = (
-      runtimeKind: RuntimeKind,
-      workingDirectory: string,
-    ): RuntimeInstanceSummary | null => {
-      const runtimes = runtimesByKind.get(runtimeKind) ?? [];
-      const normalizedDirectory = normalizeWorkingDirectory(workingDirectory);
-      return (
-        runtimes.find(
-          (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === normalizedDirectory,
-        ) ?? null
-      );
-    };
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath,
+      liveRuns,
+      runtimesByKind,
+      ...(options?.preloadedRuntimeConnectionsByKey
+        ? { preloadedRuntimeConnectionsByKey: options.preloadedRuntimeConnectionsByKey }
+        : {}),
+      ensureWorkspaceRuntime,
+    });
 
-    const findRunByWorkingDirectory = (
-      runtimeKind: RuntimeKind,
-      workingDirectory: string,
-    ): RunSummary | null => {
-      const normalizedDirectory = normalizeWorkingDirectory(workingDirectory);
-      return (
-        liveRuns.find(
-          (run) =>
-            run.runtimeKind === runtimeKind &&
-            normalizeWorkingDirectory(run.worktreePath) === normalizedDirectory,
-        ) ?? null
-      );
-    };
-
-    const resolveHydrationRuntime = async (
-      record: AgentSessionRecord,
-    ): Promise<ResolvedRuntime> => {
-      const runtimeKind = readPersistedRuntimeKind(record);
-      const workingDirectory = record.workingDirectory;
-
-      if (record.role === "build" || record.role === "qa") {
-        const run = findRunByWorkingDirectory(runtimeKind, workingDirectory);
-        if (run) {
-          const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
-            run.runtimeRoute,
-            workingDirectory,
-          );
-          return {
-            ok: true,
-            runtimeKind,
-            runtimeId: null,
-            runId: run.runId,
-            runtimeEndpoint,
-            runtimeConnection,
-          };
-        }
-      }
-
-      const runtime = findRuntimeByWorkingDirectory(runtimeKind, workingDirectory);
-      if (runtime) {
-        const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
-          runtime.runtimeRoute,
-          workingDirectory,
-        );
-        return {
-          ok: true,
-          runtimeKind,
-          runtimeId: runtime.runtimeId,
-          runId: null,
-          runtimeEndpoint,
-          runtimeConnection,
-        };
-      }
-
-      const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
-      const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
-      const shouldEnsureWorkspaceRuntime =
-        record.role === "build" ||
-        (record.role === "qa" && normalizedWorkingDirectory !== normalizedRepoPath) ||
-        ((record.role === "spec" || record.role === "planner") &&
-          normalizedWorkingDirectory === normalizedRepoPath);
-
-      if (!shouldEnsureWorkspaceRuntime) {
-        return {
-          ok: false,
-          runtimeKind,
-          reason: `No live runtime found for working directory ${workingDirectory}.`,
-        };
-      }
-
-      const workspaceRuntime = await ensureWorkspaceRuntime(runtimeKind);
-      if (!workspaceRuntime) {
-        return {
-          ok: false,
-          runtimeKind,
-          reason: `Runtime ${runtimeKind} is unavailable for session hydration.`,
-        };
-      }
-      const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
-        workspaceRuntime.runtimeRoute,
-        workingDirectory,
-      );
-      return {
-        ok: true,
-        runtimeKind,
-        runtimeId: workspaceRuntime.runtimeId,
-        runId: null,
-        runtimeEndpoint,
-        runtimeConnection,
-      };
-    };
-
-    const buildHydrationPreludeMessages = ({
+    const buildHydrationPreludeMessages = async ({
       record,
       resolvedScenario,
+      promptOverrides,
     }: {
       record: AgentSessionRecord;
       resolvedScenario: AgentSessionState["scenario"];
-    }): AgentSessionState["messages"] => {
+      promptOverrides: RepoPromptOverrides;
+    }): Promise<AgentSessionState["messages"]> => {
       const task = taskRef.current.find((entry) => entry.id === taskId);
       if (!task) {
         return buildSessionPreludeMessages({
@@ -454,7 +424,7 @@ export const createLoadAgentSessions = ({
         role: record.role,
         scenario: resolvedScenario,
         task,
-        promptOverrides: repoPromptOverrides,
+        promptOverrides,
         documents: {
           specMarkdown: "",
           planMarkdown: "",
@@ -471,118 +441,93 @@ export const createLoadAgentSessions = ({
       });
     };
 
-    const runtimeSessionsByKey = new Map<
-      string,
-      Awaited<ReturnType<SessionLifecycleAdapter["listRuntimeSessions"]>>
-    >();
-    const listLiveRuntimeSessions = async (
-      runtimeKind: RuntimeKind,
-      runtimeConnection: AgentRuntimeConnection,
-    ) => {
-      const key = `${runtimeKind}::${runtimeConnection.endpoint}::${runtimeConnection.workingDirectory}`;
-      if (runtimeSessionsByKey.has(key)) {
-        return runtimeSessionsByKey.get(key) ?? [];
+    const buildHydrationSystemPrompt = async ({
+      record,
+      resolvedScenario,
+      promptOverrides,
+    }: {
+      record: AgentSessionRecord;
+      resolvedScenario: AgentSessionState["scenario"];
+      promptOverrides: RepoPromptOverrides;
+    }): Promise<string> => {
+      const task = taskRef.current.find((entry) => entry.id === taskId);
+      if (!task) {
+        return "";
       }
-      const sessions = await adapter.listRuntimeSessions({
-        runtimeKind,
-        runtimeConnection,
+
+      return buildSessionSystemPrompt({
+        role: record.role,
+        scenario: resolvedScenario,
+        task,
+        promptOverrides,
+        documents: {
+          specMarkdown: "",
+          planMarkdown: "",
+          qaMarkdown: "",
+        },
       });
-      runtimeSessionsByKey.set(key, sessions);
-      return sessions;
     };
 
-    const maybeResumeLiveRecord = async (record: AgentSessionRecord): Promise<void> => {
-      if (typeof adapter.hasSession !== "function" || !attachSessionListener) {
-        return;
-      }
-
-      const runtimeResolution = await resolveHydrationRuntime(record);
-      if (!runtimeResolution.ok) {
-        return;
-      }
-
-      const externalSessionId = record.externalSessionId ?? record.sessionId;
-      const attachedExistingSession = adapter.hasSession(record.sessionId);
-      const runtimeSessions = await listLiveRuntimeSessions(
-        runtimeResolution.runtimeKind,
-        runtimeResolution.runtimeConnection,
+    if (shouldReconcileLiveSessions && !adapter.listLiveAgentSessionSnapshots) {
+      throw new Error(
+        "Live agent session snapshots are unavailable for live session reconciliation.",
       );
-      const liveSession = runtimeSessions.find(
-        (session) => session.externalSessionId === externalSessionId,
-      );
-      if (!liveSession) {
-        return;
-      }
-      const nextStatus = toLiveSessionState(liveSession.status);
+    }
 
-      const selectedModel = normalizePersistedSelection(record.selectedModel);
-      if (!attachedExistingSession) {
-        if (typeof adapter.resumeSession !== "function" || !loadTaskDocuments) {
-          return;
-        }
-
-        const task = taskRef.current.find((entry) => entry.id === taskId);
-        if (!task) {
-          throw new Error(`Task not found: ${taskId}`);
-        }
-
+    const runtimeSessionScanCache = new LiveAgentSessionCache(
+      {
+        listLiveAgentSessionSnapshots: async (input) => {
+          if (!adapter.listLiveAgentSessionSnapshots) {
+            throw new Error("Live agent session snapshots are unavailable for session scanning.");
+          }
+          return adapter.listLiveAgentSessionSnapshots(input);
+        },
+      },
+      options?.preloadedLiveAgentSessionsByKey,
+    );
+    const maybeResumeLiveRecord = createReattachLiveSession({
+      adapter,
+      repoPath,
+      taskId,
+      taskRef,
+      sessionsRef,
+      updateSession,
+      ...(attachSessionListener ? { attachSessionListener } : {}),
+      promptOverrides: EMPTY_PROMPT_OVERRIDES,
+      resolveHydrationRuntime,
+      listLiveAgentSessions: (runtimeKind, runtimeConnection, directories) =>
+        runtimeSessionScanCache.load({
+          runtimeKind,
+          runtimeConnection,
+          directories,
+        }),
+      resumeMissingLiveSession: async ({ record, runtimeKind, runtimeConnection }) => {
+        const promptOverrides = await getRepoPromptOverrides();
         const resolvedScenario = record.scenario ?? defaultScenarioForRole(record.role);
-        const promptContext = await loadSessionPromptContext({
-          repoPath,
-          taskId,
-          role: record.role,
-          scenario: resolvedScenario,
-          task,
-          loadTaskDocuments,
-          loadRepoPromptOverrides,
+        const selectedModel = normalizePersistedSelection(record.selectedModel);
+        const systemPrompt = await buildHydrationSystemPrompt({
+          record,
+          resolvedScenario,
+          promptOverrides,
         });
-        if (isStaleRepoOperation()) {
-          return;
-        }
 
         await adapter.resumeSession({
           sessionId: record.sessionId,
-          externalSessionId,
+          externalSessionId: record.externalSessionId ?? record.sessionId,
           repoPath,
-          runtimeKind: runtimeResolution.runtimeKind,
-          runtimeConnection: runtimeResolution.runtimeConnection,
-          workingDirectory: runtimeResolution.runtimeConnection.workingDirectory,
+          runtimeKind,
+          runtimeConnection,
+          workingDirectory: runtimeConnection.workingDirectory,
           taskId,
           role: record.role,
           scenario: resolvedScenario,
-          systemPrompt: promptContext.systemPrompt,
+          systemPrompt,
           ...(selectedModel ? { model: selectedModel } : {}),
         });
-        if (isStaleRepoOperation()) {
-          return;
-        }
-      }
-
-      attachSessionListener(repoPath, record.sessionId);
-      updateSession(
-        record.sessionId,
-        (current) => ({
-          ...current,
-          runtimeKind: runtimeResolution.runtimeKind,
-          runtimeId: runtimeResolution.runtimeId,
-          runId: runtimeResolution.runId,
-          runtimeEndpoint: runtimeResolution.runtimeEndpoint,
-          workingDirectory: runtimeResolution.runtimeConnection.workingDirectory,
-          status: nextStatus,
-          promptOverrides: repoPromptOverrides,
-          selectedModel: mergeModelSelection(current.selectedModel, selectedModel ?? undefined),
-        }),
-        { persist: false },
-      );
-      warmPersistedSession(
-        record.sessionId,
-        runtimeResolution.runtimeKind,
-        runtimeResolution.runtimeConnection,
-        externalSessionId,
-        record.role,
-        true,
-      );
-    };
+      },
+      isStaleRepoOperation,
+      toLiveSessionState,
+    });
 
     if (shouldReconcileLiveSessions) {
       for (
@@ -608,7 +553,9 @@ export const createLoadAgentSessions = ({
 
       const shouldHydrateHistory = historyHydrationSessionIds.has(record.sessionId);
       const workingDirectory = record.workingDirectory;
-      const runtimeResolution = await resolveHydrationRuntime(record);
+      const runtimeResolution =
+        (shouldHydrateHistory ? readCurrentHydratedRuntimeResolution(record) : null) ??
+        (await resolveHydrationRuntime(record));
       if (!runtimeResolution.ok) {
         if (shouldHydrateHistory) {
           throw new Error(runtimeResolution.reason);
@@ -622,7 +569,7 @@ export const createLoadAgentSessions = ({
             runId: null,
             runtimeEndpoint: "",
             workingDirectory,
-            promptOverrides: repoPromptOverrides,
+            promptOverrides: current.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
           }),
           { persist: false },
         );
@@ -630,7 +577,6 @@ export const createLoadAgentSessions = ({
       }
 
       const externalSessionId = record.externalSessionId ?? record.sessionId;
-      const resolvedScenario = record.scenario ?? defaultScenarioForRole(record.role);
       if (!shouldHydrateHistory) {
         updateSession(
           record.sessionId,
@@ -641,28 +587,18 @@ export const createLoadAgentSessions = ({
             runId: runtimeResolution.runId,
             runtimeEndpoint: runtimeResolution.runtimeEndpoint,
             workingDirectory,
-            promptOverrides: repoPromptOverrides,
+            promptOverrides: current.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
           }),
           { persist: false },
         );
-
-        if (requestedSessionId && record.sessionId === requestedSessionId) {
-          const requestedSession = sessionsRef.current[record.sessionId];
-          warmPersistedSession(
-            record.sessionId,
-            runtimeResolution.runtimeKind,
-            runtimeResolution.runtimeConnection,
-            externalSessionId,
-            record.role,
-            !requestedSession?.modelCatalog && !requestedSession?.isLoadingModelCatalog,
-          );
-        }
         return;
       }
 
-      const preludeMessages = buildHydrationPreludeMessages({
+      const promptOverrides = await getRepoPromptOverrides();
+      const preludeMessages = await buildHydrationPreludeMessages({
         record,
-        resolvedScenario,
+        resolvedScenario: record.scenario ?? defaultScenarioForRole(record.role),
+        promptOverrides,
       });
       const history = await adapter.loadSessionHistory({
         runtimeKind: runtimeResolution.runtimeKind,
@@ -670,42 +606,53 @@ export const createLoadAgentSessions = ({
         externalSessionId,
         limit: INITIAL_SESSION_HISTORY_LIMIT,
       });
-      const recoveredPendingQuestions =
-        (record.pendingQuestions?.length ?? 0) > 0 ? record.pendingQuestions : undefined;
+      const liveRuntimeSnapshot = await loadLiveLiveAgentSessionSnapshot(record, runtimeResolution);
+      const liveSessionStatus = liveRuntimeSnapshot
+        ? toLiveSessionState(liveRuntimeSnapshot.status)
+        : null;
+      const livePendingPermissions = liveRuntimeSnapshot?.pendingPermissions ?? null;
+      const livePendingQuestions = liveRuntimeSnapshot?.pendingQuestions ?? null;
       if (isStaleRepoOperation()) {
         return;
       }
 
       updateSession(
         record.sessionId,
-        (current) => ({
-          ...current,
-          runtimeKind: runtimeResolution.runtimeKind,
-          runtimeId: runtimeResolution.runtimeId,
-          runId: runtimeResolution.runId,
-          runtimeEndpoint: runtimeResolution.runtimeEndpoint,
-          workingDirectory,
-          promptOverrides: repoPromptOverrides,
-          pendingQuestions:
-            recoveredPendingQuestions && recoveredPendingQuestions.length > 0
-              ? current.pendingQuestions
-              : recoverPendingQuestionsFromHistory(history),
-          messages: [
-            ...preludeMessages,
-            ...historyToChatMessages(history, {
-              role: record.role,
-              selectedModel: normalizePersistedSelection(record.selectedModel),
-            }),
-          ],
-        }),
+        (current) => {
+          const resolvedPendingPermissions = resolvePendingPermissionsForHydration({
+            livePendingPermissions,
+            persistedPendingPermissions: record.pendingPermissions,
+            currentPendingPermissions: current.pendingPermissions,
+            history,
+          });
+          const resolvedPendingQuestions = resolvePendingQuestionsForHydration({
+            livePendingQuestions,
+            persistedPendingQuestions: record.pendingQuestions,
+            currentPendingQuestions: current.pendingQuestions,
+            history,
+          });
+
+          return {
+            ...current,
+            runtimeKind: runtimeResolution.runtimeKind,
+            runtimeId: runtimeResolution.runtimeId,
+            runId: runtimeResolution.runId,
+            runtimeEndpoint: runtimeResolution.runtimeEndpoint,
+            status: liveSessionStatus ?? current.status,
+            workingDirectory,
+            promptOverrides,
+            pendingPermissions: resolvedPendingPermissions,
+            pendingQuestions: resolvedPendingQuestions,
+            messages: [
+              ...preludeMessages,
+              ...historyToChatMessages(history, {
+                role: record.role,
+                selectedModel: normalizePersistedSelection(record.selectedModel),
+              }),
+            ],
+          };
+        },
         { persist: false },
-      );
-      warmPersistedSession(
-        record.sessionId,
-        runtimeResolution.runtimeKind,
-        runtimeResolution.runtimeConnection,
-        externalSessionId,
-        record.role,
       );
     };
 

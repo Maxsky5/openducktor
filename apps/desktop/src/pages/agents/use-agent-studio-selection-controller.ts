@@ -1,10 +1,17 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentRole,
+  AgentRuntimeConnection,
+  AgentScenario,
+  AgentSessionTodoItem,
+} from "@openducktor/core";
 import { useMemo, useRef } from "react";
-import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import { firstScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
 import { resolveAgentStudioActiveSession, resolveAgentStudioTaskId } from "./agents-page-selection";
+import { useAgentStudioActiveSessionRuntimeData } from "./use-agent-studio-active-session-runtime-data";
 import { useAgentStudioTaskHydration } from "./use-agent-studio-task-hydration";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
@@ -17,8 +24,21 @@ type UseAgentStudioSelectionControllerArgs = {
   sessionParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
+  scenarioFromQuery: AgentScenario | null;
   updateQuery: (updates: QueryUpdate) => void;
-  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
+  hydrateRequestedTaskSessionHistory: (input: {
+    taskId: string;
+    sessionId: string;
+  }) => Promise<void>;
+  readSessionModelCatalog: (
+    runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
+    runtimeConnection: AgentRuntimeConnection,
+  ) => Promise<AgentModelCatalog>;
+  readSessionTodos: (
+    runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
+    runtimeConnection: AgentRuntimeConnection,
+    externalSessionId: string,
+  ) => Promise<AgentSessionTodoItem[]>;
   clearComposerInput: () => void;
   onContextSwitchIntent?: () => void;
 };
@@ -129,8 +149,11 @@ export function useAgentStudioSelectionController({
   sessionParam,
   hasExplicitRoleParam,
   roleFromQuery,
+  scenarioFromQuery,
   updateQuery,
-  loadAgentSessions,
+  hydrateRequestedTaskSessionHistory,
+  readSessionModelCatalog,
+  readSessionTodos,
   clearComposerInput,
   onContextSwitchIntent,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
@@ -183,6 +206,11 @@ export function useAgentStudioSelectionController({
       roleFromQuery,
     });
   }, [hasExplicitRoleParam, roleFromQuery, sessionParam, sessionsForTask]);
+  const hydratedActiveSession = useAgentStudioActiveSessionRuntimeData({
+    session: activeSession,
+    readSessionModelCatalog,
+    readSessionTodos,
+  });
 
   const latestSessionByTaskId = useMemo(() => {
     const latestByTask = new Map<string, AgentSessionState>();
@@ -264,6 +292,11 @@ export function useAgentStudioSelectionController({
       roleFromQuery,
     });
   }, [hasViewRoleSelection, roleFromQuery, viewSessionParam, viewSessionsForTask]);
+  const hydratedViewActiveSession = useAgentStudioActiveSessionRuntimeData({
+    session: viewActiveSession,
+    readSessionModelCatalog,
+    readSessionTodos,
+  });
 
   const viewRole: AgentRole = hasViewRoleSelection
     ? roleFromQuery
@@ -272,14 +305,18 @@ export function useAgentStudioSelectionController({
       (isViewTaskDetachedFromQuery ? "spec" : roleFromQuery));
 
   const viewScenarios = SCENARIOS_BY_ROLE[viewRole];
+  const explicitViewScenario =
+    hasViewRoleSelection && scenarioFromQuery && viewScenarios.includes(scenarioFromQuery)
+      ? scenarioFromQuery
+      : null;
 
   const viewScenario: AgentScenario =
     viewActiveSession?.scenario && viewScenarios.includes(viewActiveSession.scenario)
       ? viewActiveSession.scenario
-      : firstScenario(viewRole);
+      : (explicitViewScenario ?? firstScenario(viewRole));
 
   const {
-    hydratedTasksByRepoAndTask,
+    isActiveTaskHydrated,
     isActiveTaskHydrationFailed,
     isActiveSessionHistoryHydrated,
     isActiveSessionHistoryHydrationFailed,
@@ -287,21 +324,16 @@ export function useAgentStudioSelectionController({
   } = useAgentStudioTaskHydration({
     activeRepo,
     activeTaskId: viewTaskId,
-    activeSessionId: viewActiveSession?.sessionId ?? null,
-    loadAgentSessions,
+    activeSessionId: hydratedViewActiveSession?.sessionId ?? null,
+    hydrateRequestedTaskSessionHistory,
   });
-
-  const taskHydrationKey = activeRepo && viewTaskId ? `${activeRepo}:${viewTaskId}` : "";
-  const isActiveTaskHydrated = taskHydrationKey
-    ? (hydratedTasksByRepoAndTask[taskHydrationKey] ?? false)
-    : false;
 
   return {
     selectedSessionById,
     taskId,
     selectedTask,
     sessionsForTask,
-    activeSession,
+    activeSession: hydratedActiveSession,
     isLoadingTasks,
     activeTaskTabId,
     availableTabTasks,
@@ -312,7 +344,7 @@ export function useAgentStudioSelectionController({
     viewTaskId,
     viewSelectedTask,
     viewSessionsForTask,
-    viewActiveSession,
+    viewActiveSession: hydratedViewActiveSession,
     viewRole,
     viewScenario,
     isActiveTaskHydrated,

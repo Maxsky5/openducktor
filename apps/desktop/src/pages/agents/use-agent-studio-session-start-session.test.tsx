@@ -41,7 +41,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     current: new Map<string, Promise<string | undefined>>(),
   } satisfies MutableRefObject<Map<string, Promise<string | undefined>>>,
   updateQuery: () => {},
-  resolveRequestedSelection: async () => null,
+  resolveRequestedDecision: async () => null,
   ...overrides,
 });
 
@@ -51,9 +51,17 @@ describe("useAgentStudioSessionStartSession", () => {
   });
 
   test("scopes in-flight starts by task, role, and scenario", async () => {
-    const specSelection = createDeferred<null>();
-    const plannerSelection = createDeferred<null>();
-    const resolveRequestedSelection = mock(async (request: { role: string }) =>
+    const specSelection = createDeferred<{
+      selectedModel: null;
+      startMode: "fresh";
+      reuseSessionId: null;
+    } | null>();
+    const plannerSelection = createDeferred<{
+      selectedModel: null;
+      startMode: "fresh";
+      reuseSessionId: null;
+    } | null>();
+    const resolveRequestedDecision = mock(async (request: { role: string }) =>
       request.role === "spec" ? specSelection.promise : plannerSelection.promise,
     );
     const startAgentSession = mock(async (request: { role: string }) => `${request.role}-session`);
@@ -64,7 +72,7 @@ describe("useAgentStudioSessionStartSession", () => {
     const harness = createHookHarness(
       createBaseArgs({
         startAgentSession,
-        resolveRequestedSelection,
+        resolveRequestedDecision,
         startingSessionByTaskRef,
       }),
     );
@@ -81,7 +89,7 @@ describe("useAgentStudioSessionStartSession", () => {
         role: "planner",
         scenario: "planner_initial",
         startAgentSession,
-        resolveRequestedSelection,
+        resolveRequestedDecision,
         startingSessionByTaskRef,
       }),
     );
@@ -91,12 +99,20 @@ describe("useAgentStudioSessionStartSession", () => {
       plannerStartPromise = state.startSession("composer_send");
     });
 
-    expect(resolveRequestedSelection).toHaveBeenCalledTimes(2);
+    expect(resolveRequestedDecision).toHaveBeenCalledTimes(2);
     expect(startingSessionByTaskRef.current.size).toBe(2);
     expect(specStartPromise).not.toBe(plannerStartPromise);
 
-    specSelection.resolve(null);
-    plannerSelection.resolve(null);
+    specSelection.resolve({
+      selectedModel: null,
+      startMode: "fresh",
+      reuseSessionId: null,
+    });
+    plannerSelection.resolve({
+      selectedModel: null,
+      startMode: "fresh",
+      reuseSessionId: null,
+    });
 
     await expect(specStartPromise).resolves.toBe("spec-session");
     await expect(plannerStartPromise).resolves.toBe("planner-session");

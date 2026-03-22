@@ -2,6 +2,7 @@ import { memo, type ReactElement, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -62,27 +63,29 @@ export const GitConflictDialog = memo(function GitConflictDialog({
           <DialogDescription>{conflict ? toConflictDescription(conflict) : null}</DialogDescription>
         </DialogHeader>
 
-        {conflict ? (
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm font-medium text-foreground">Conflicted files</p>
-              <ul className="mt-2 max-h-40 list-disc space-y-1 overflow-auto pl-5 text-sm text-muted-foreground">
-                {conflict.conflictedFiles.map((file) => (
-                  <li key={file}>{file}</li>
-                ))}
-              </ul>
-            </div>
+        <DialogBody className="pt-4">
+          {conflict ? (
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-medium text-foreground">Conflicted files</p>
+                <ul className="mt-2 max-h-40 list-disc space-y-1 overflow-auto pl-5 text-sm text-muted-foreground">
+                  {conflict.conflictedFiles.map((file) => (
+                    <li key={file}>{file}</li>
+                  ))}
+                </ul>
+              </div>
 
-            <div>
-              <p className="text-sm font-medium text-foreground">Git output</p>
-              <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap text-foreground">
-                {conflict.output}
-              </pre>
+              <div>
+                <p className="text-sm font-medium text-foreground">Git output</p>
+                <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap text-foreground">
+                  {conflict.output}
+                </pre>
+              </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+        </DialogBody>
 
-        <DialogFooter className="mt-6 flex flex-row items-center justify-between gap-2">
+        <DialogFooter className="mt-0 flex flex-row items-center justify-between gap-2 border-t border-border pt-5">
           <Button
             type="button"
             variant="outline"

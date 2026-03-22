@@ -1,7 +1,14 @@
-import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
-import type { NewSessionStartRequest, SessionStartRequestReason } from "@/features/session-start";
-import { resolveBuildWorkingDirectoryOverride } from "@/lib/build-worktree-overrides";
+import type {
+  NewSessionStartDecision,
+  NewSessionStartRequest,
+  SessionStartRequestReason,
+} from "@/features/session-start";
+import {
+  resolveBuildWorkingDirectoryOverride,
+  resolveQaBuilderSessionContext,
+} from "@/lib/build-worktree-overrides";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import {
@@ -12,7 +19,6 @@ import {
   decrementActivityCountRecord,
   incrementActivityCountRecord,
   type QueryUpdate,
-  resolveReusableSessionForStart,
 } from "../use-agent-studio-session-action-helpers";
 
 type UseAgentStudioSessionStartSessionArgs = {
@@ -30,9 +36,9 @@ type UseAgentStudioSessionStartSessionArgs = {
   setStartingActivityCountByContext: Dispatch<SetStateAction<Record<string, number>>>;
   startingSessionByTaskRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
   updateQuery: (updates: QueryUpdate) => void;
-  resolveRequestedSelection: (
+  resolveRequestedDecision: (
     request: Omit<NewSessionStartRequest, "selectedModel">,
-  ) => Promise<AgentModelSelection | null | undefined>;
+  ) => Promise<NewSessionStartDecision | undefined>;
 };
 
 export function useAgentStudioSessionStartSession({
@@ -40,7 +46,6 @@ export function useAgentStudioSessionStartSession({
   taskId,
   role,
   scenario,
-  activeSession,
   sessionsForTask,
   selectedTask,
   agentStudioReady,
@@ -50,15 +55,12 @@ export function useAgentStudioSessionStartSession({
   setStartingActivityCountByContext,
   startingSessionByTaskRef,
   updateQuery,
-  resolveRequestedSelection,
+  resolveRequestedDecision,
 }: UseAgentStudioSessionStartSessionArgs): {
   startSession: (reason: SessionStartRequestReason) => Promise<string | undefined>;
 } {
   const startRequestedSession = useCallback(
-    async (params: {
-      reason: SessionStartRequestReason;
-      startMode: "fresh" | "reuse_latest";
-    }): Promise<string | undefined> => {
+    async (params: { reason: SessionStartRequestReason }): Promise<string | undefined> => {
       const startContextKey = buildAgentStudioAsyncActivityContextKey({
         activeRepo,
         taskId,
@@ -69,15 +71,26 @@ export function useAgentStudioSessionStartSession({
         incrementActivityCountRecord(current, startContextKey),
       );
       try {
-        const selectedModel = await resolveRequestedSelection({
+        const decision = await resolveRequestedDecision({
           taskId,
           role,
           scenario,
-          startMode: params.startMode,
           reason: params.reason,
         });
-        if (selectedModel === undefined) {
+        if (decision == null) {
           return undefined;
+        }
+        const selectedModel = decision.selectedModel;
+        if (decision.reuseSessionId) {
+          if (selectedModel) {
+            updateAgentSessionModel(decision.reuseSessionId, selectedModel);
+          }
+          applyAgentStudioSelectionQuery(updateQuery, {
+            taskId,
+            sessionId: decision.reuseSessionId,
+            role,
+          });
+          return decision.reuseSessionId;
         }
 
         let workingDirectoryOverride: string | null = null;
@@ -94,15 +107,25 @@ export function useAgentStudioSessionStartSession({
             `Failed to resolve working directory override for ${role} ${scenario} on ${taskId}: ${description}`,
           );
         }
+        const builderContext =
+          role === "qa"
+            ? await resolveQaBuilderSessionContext({
+                activeRepo,
+                taskId,
+                sessions: sessionsForTask,
+              })
+            : null;
         const sessionId = await startAgentSession({
           taskId,
           role,
           scenario,
           selectedModel,
           sendKickoff: false,
-          startMode: params.startMode,
+          startMode: decision.startMode,
+          ...(decision.reuseSessionId ? { reuseSessionId: decision.reuseSessionId } : {}),
           requireModelReady: true,
           ...(workingDirectoryOverride ? { workingDirectoryOverride } : {}),
+          ...(builderContext ? { builderContext } : {}),
         });
 
         if (selectedModel) {
@@ -123,7 +146,7 @@ export function useAgentStudioSessionStartSession({
     },
     [
       activeRepo,
-      resolveRequestedSelection,
+      resolveRequestedDecision,
       role,
       scenario,
       setStartingActivityCountByContext,
@@ -131,6 +154,7 @@ export function useAgentStudioSessionStartSession({
       updateQuery,
       taskId,
       updateAgentSessionModel,
+      sessionsForTask,
     ],
   );
 
@@ -143,20 +167,6 @@ export function useAgentStudioSessionStartSession({
         return undefined;
       }
 
-      const reusableSession = resolveReusableSessionForStart({
-        activeSession,
-        sessionsForTask,
-        role,
-      });
-      if (reusableSession) {
-        applyAgentStudioSelectionQuery(updateQuery, {
-          taskId: reusableSession.session.taskId,
-          sessionId: reusableSession.session.sessionId,
-          role: reusableSession.session.role,
-        });
-        return reusableSession.session.sessionId;
-      }
-
       const startKey = buildCreateSessionStartKey({
         taskId,
         role,
@@ -167,10 +177,7 @@ export function useAgentStudioSessionStartSession({
         return inFlightSessionStart;
       }
 
-      const startPromise = startRequestedSession({
-        reason,
-        startMode: "reuse_latest",
-      });
+      const startPromise = startRequestedSession({ reason });
 
       startingSessionByTaskRef.current.set(startKey, startPromise);
       void startPromise.finally(() => {
@@ -182,17 +189,14 @@ export function useAgentStudioSessionStartSession({
       return startPromise;
     },
     [
-      activeSession,
       agentStudioReady,
       isActiveTaskHydrated,
       role,
       selectedTask,
-      sessionsForTask,
       scenario,
       startRequestedSession,
       startingSessionByTaskRef,
       taskId,
-      updateQuery,
     ],
   );
 

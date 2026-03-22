@@ -1,5 +1,7 @@
 import type {
   AgentEvent,
+  AgentPendingPermissionRequest,
+  AgentPendingQuestionRequest,
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
   AgentStreamPart,
@@ -21,6 +23,126 @@ import { toIsoFromEpoch } from "./session-runtime-utils";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 import { normalizeTodoList } from "./todo-normalizers";
 import type { ClientFactory, SessionRecord } from "./types";
+
+const asRecord = (value: unknown): Record<string, unknown> | null => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+};
+
+const readString = (record: Record<string, unknown>, keys: string[]): string | undefined => {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return undefined;
+};
+
+const readStringArray = (record: Record<string, unknown>, key: string): string[] => {
+  const value = record[key];
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((entry): entry is string => typeof entry === "string");
+};
+
+const normalizeQuestionOptions = (
+  value: unknown,
+): AgentPendingQuestionRequest["questions"][number]["options"] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    const record = asRecord(entry);
+    if (!record) {
+      return [];
+    }
+    const label = readString(record, ["label"]);
+    if (!label) {
+      return [];
+    }
+    const description = readString(record, ["description"]) ?? label;
+    return [{ label, description }];
+  });
+};
+
+const normalizePendingQuestion = (value: unknown): AgentPendingQuestionRequest | null => {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+  const requestId = readString(record, ["id", "requestID", "requestId"]);
+  const sessionId = readString(record, ["sessionID", "sessionId", "session_id"]);
+  const rawQuestions = record.questions;
+  if (!requestId || !sessionId || !Array.isArray(rawQuestions)) {
+    return null;
+  }
+
+  const questions = rawQuestions.flatMap((entry) => {
+    const question = asRecord(entry);
+    if (!question) {
+      return [];
+    }
+    const header = readString(question, ["header", "title", "label"]);
+    const prompt = readString(question, ["question", "title", "header"]);
+    if (!header || !prompt) {
+      return [];
+    }
+    const options = normalizeQuestionOptions(question.options);
+    return [
+      {
+        header,
+        question: prompt,
+        options,
+        ...(typeof question.multiple === "boolean" ? { multiple: question.multiple } : {}),
+        ...(typeof question.custom === "boolean" ? { custom: question.custom } : {}),
+      },
+    ];
+  });
+
+  if (questions.length === 0) {
+    return null;
+  }
+
+  return {
+    requestId,
+    questions,
+  };
+};
+
+const normalizePendingPermission = (value: unknown): AgentPendingPermissionRequest | null => {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const requestId = readString(record, ["id", "requestID", "requestId"]);
+  const permission = readString(record, ["permission"]);
+  const patterns = readStringArray(record, "patterns");
+  if (!requestId || !permission) {
+    return null;
+  }
+
+  const metadata = asRecord(record.metadata);
+  return {
+    requestId,
+    permission,
+    patterns,
+    ...(metadata ? { metadata } : {}),
+  };
+};
+
+const readPendingSessionId = (value: unknown): string | undefined => {
+  const record = asRecord(value);
+  if (!record) {
+    return undefined;
+  }
+  return readString(record, ["sessionID", "sessionId", "session_id"]);
+};
 
 export const loadSessionHistory = async (
   createClient: ClientFactory,
@@ -108,6 +230,67 @@ export const loadSessionTodos = async (
   } catch (error) {
     throw toOpenCodeRequestError("load session todos", error);
   }
+};
+
+export const listLiveAgentSessionPendingInput = async (
+  createClient: ClientFactory,
+  input: {
+    runtimeEndpoint: string;
+    workingDirectory: string;
+  },
+): Promise<
+  Record<
+    string,
+    {
+      permissions: AgentPendingPermissionRequest[];
+      questions: AgentPendingQuestionRequest[];
+    }
+  >
+> => {
+  const client = createClient({
+    runtimeEndpoint: input.runtimeEndpoint,
+    workingDirectory: input.workingDirectory,
+  });
+  const [permissionResponse, questionResponse] = await Promise.all([
+    client.permission.list({
+      directory: input.workingDirectory,
+    }),
+    client.question.list({
+      directory: input.workingDirectory,
+    }),
+  ]);
+  const permissions = unwrapData(permissionResponse, "list pending permissions");
+  const questions = unwrapData(questionResponse, "list pending questions");
+
+  const bySession: Record<
+    string,
+    {
+      permissions: AgentPendingPermissionRequest[];
+      questions: AgentPendingQuestionRequest[];
+    }
+  > = {};
+
+  for (const entry of permissions) {
+    const sessionId = readPendingSessionId(entry);
+    const normalized = normalizePendingPermission(entry);
+    if (!sessionId || !normalized) {
+      continue;
+    }
+    bySession[sessionId] ??= { permissions: [], questions: [] };
+    bySession[sessionId].permissions.push(normalized);
+  }
+
+  for (const entry of questions) {
+    const sessionId = readPendingSessionId(entry);
+    const normalized = normalizePendingQuestion(entry);
+    if (!sessionId || !normalized) {
+      continue;
+    }
+    bySession[sessionId] ??= { permissions: [], questions: [] };
+    bySession[sessionId].questions.push(normalized);
+  }
+
+  return bySession;
 };
 
 export const sendUserMessage = async (input: {

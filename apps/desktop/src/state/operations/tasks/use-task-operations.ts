@@ -7,14 +7,18 @@ import type {
   TaskStatus,
   TaskUpdatePatch,
 } from "@openducktor/contracts";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import { appQueryClient } from "@/lib/query-client";
 import { documentQueryKeys } from "@/state/queries/documents";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import { agentSessionQueryKeys } from "../../queries/agent-sessions";
-import { invalidateRepoTaskQueries, loadRepoTaskDataFromQuery } from "../../queries/tasks";
+import {
+  invalidateRepoTaskQueries,
+  loadRepoTaskDataFromQuery,
+  repoTaskDataQueryOptions,
+} from "../../queries/tasks";
 import { host } from "../shared/host";
 import {
   DEFERRED_BY_USER_REASON,
@@ -59,9 +63,8 @@ export function useTaskOperations({
   activeRepo,
   refreshBeadsCheckForRepo,
 }: UseTaskOperationsArgs): UseTaskOperationsResult {
-  const [tasks, setTasks] = useState<TaskCard[]>([]);
-  const [runs, setRuns] = useState<RunSummary[]>([]);
-  const [isLoadingTasks, setIsLoadingTasks] = useState(false);
+  const queryClient = useQueryClient();
+  const [isManualLoadingTasks, setIsManualLoadingTasks] = useState(false);
   const [detectingPullRequestTaskId, setDetectingPullRequestTaskId] = useState<string | null>(null);
   const [linkingMergedPullRequestTaskId, setLinkingMergedPullRequestTaskId] = useState<
     string | null
@@ -72,11 +75,16 @@ export function useTaskOperations({
     pullRequest: PullRequest;
   } | null>(null);
   const activeRepoRef = useRef(activeRepo);
+  const repoTaskDataQuery = useQuery({
+    ...repoTaskDataQueryOptions(activeRepo ?? "__disabled__"),
+    enabled: activeRepo !== null,
+  });
 
   useEffect(() => {
     const previousActiveRepo = activeRepoRef.current;
     activeRepoRef.current = activeRepo;
     if (previousActiveRepo !== activeRepo) {
+      setIsManualLoadingTasks(false);
       setDetectingPullRequestTaskId(null);
       setLinkingMergedPullRequestTaskId(null);
       setUnlinkingPullRequestTaskId(null);
@@ -84,18 +92,13 @@ export function useTaskOperations({
     }
   }, [activeRepo]);
 
-  const refreshTaskData = useCallback(async (repoPath: string): Promise<void> => {
-    await invalidateRepoTaskQueries(appQueryClient, repoPath);
-    const { tasks: taskList, runs: runList } = await loadRepoTaskDataFromQuery(
-      appQueryClient,
-      repoPath,
-    );
-    if (activeRepoRef.current !== repoPath) {
-      return;
-    }
-    setTasks(taskList);
-    setRuns(runList);
-  }, []);
+  const refreshTaskData = useCallback(
+    async (repoPath: string): Promise<void> => {
+      await invalidateRepoTaskQueries(queryClient, repoPath);
+      await loadRepoTaskDataFromQuery(queryClient, repoPath);
+    },
+    [queryClient],
+  );
 
   const runTaskMutation = useCallback(
     async (options: {
@@ -128,7 +131,7 @@ export function useTaskOperations({
       return;
     }
 
-    setIsLoadingTasks(true);
+    setIsManualLoadingTasks(true);
     try {
       const beads = await refreshBeadsCheckForRepo(activeRepo, false);
       if (!beads.beadsOk) {
@@ -148,7 +151,7 @@ export function useTaskOperations({
         description: summarizeTaskLoadError(error),
       });
     } finally {
-      setIsLoadingTasks(false);
+      setIsManualLoadingTasks(false);
     }
   }, [activeRepo, refreshBeadsCheckForRepo, refreshTaskData]);
 
@@ -305,22 +308,22 @@ export function useTaskOperations({
       try {
         await host.taskResetImplementation(repoPath, taskId);
         await Promise.all([
-          appQueryClient.invalidateQueries({
+          queryClient.invalidateQueries({
             queryKey: agentSessionQueryKeys.list(repoPath, taskId),
             exact: true,
             refetchType: "none",
           }),
-          appQueryClient.invalidateQueries({
+          queryClient.invalidateQueries({
             queryKey: documentQueryKeys.qaReport(repoPath, taskId),
             exact: true,
             refetchType: "none",
           }),
-          appQueryClient.invalidateQueries({
+          queryClient.invalidateQueries({
             queryKey: documentQueryKeys.spec(repoPath, taskId),
             exact: true,
             refetchType: "none",
           }),
-          appQueryClient.invalidateQueries({
+          queryClient.invalidateQueries({
             queryKey: documentQueryKeys.plan(repoPath, taskId),
             exact: true,
             refetchType: "none",
@@ -337,7 +340,7 @@ export function useTaskOperations({
         throw error;
       }
     },
-    [activeRepo, refreshTaskData],
+    [activeRepo, queryClient, refreshTaskData],
   );
 
   const transitionTask = useCallback(
@@ -410,14 +413,18 @@ export function useTaskOperations({
   );
 
   const clearTaskData = useCallback(() => {
-    setTasks([]);
-    setRuns([]);
-    setIsLoadingTasks(false);
+    setIsManualLoadingTasks(false);
     setDetectingPullRequestTaskId(null);
     setLinkingMergedPullRequestTaskId(null);
     setUnlinkingPullRequestTaskId(null);
     setPendingMergedPullRequest(null);
   }, []);
+
+  const tasks = activeRepo ? (repoTaskDataQuery.data?.tasks ?? []) : [];
+  const runs = activeRepo ? (repoTaskDataQuery.data?.runs ?? []) : [];
+  const isLoadingTasks =
+    isManualLoadingTasks ||
+    (activeRepo !== null && (repoTaskDataQuery.isPending || repoTaskDataQuery.isFetching));
 
   return {
     tasks,
@@ -427,7 +434,7 @@ export function useTaskOperations({
     linkingMergedPullRequestTaskId,
     unlinkingPullRequestTaskId,
     pendingMergedPullRequest,
-    setIsLoadingTasks,
+    setIsLoadingTasks: setIsManualLoadingTasks,
     clearTaskData,
     refreshTaskData,
     refreshTasks,

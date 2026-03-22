@@ -934,6 +934,13 @@ fn task_reset_implementation_ignores_stale_build_run_when_runtime_session_is_idl
     server_handle.join().expect("status server thread should finish");
 
     assert_eq!(updated.status, TaskStatus::ReadyForDev);
+    assert!(
+        service
+            .runs
+            .lock()
+            .expect("run state lock poisoned")
+            .is_empty()
+    );
     Ok(())
 }
 
@@ -1045,6 +1052,13 @@ fn task_reset_implementation_ignores_stale_build_run_when_status_endpoint_is_unr
     let updated = service.task_reset_implementation(workspace.path.as_str(), "task-1")?;
 
     assert_eq!(updated.status, TaskStatus::ReadyForDev);
+    assert!(
+        service
+            .runs
+            .lock()
+            .expect("run state lock poisoned")
+            .is_empty()
+    );
     Ok(())
 }
 
@@ -1396,6 +1410,101 @@ fn task_reset_implementation_reports_partial_cleanup_progress_when_store_cleanup
     assert!(error_text.contains(build_worktree.to_string_lossy().as_ref()));
     assert!(error_text.contains("odt/task-1"));
     assert!(error_text.contains("Retry reset to finish cleanup safely."));
+
+    Ok(())
+}
+
+#[test]
+fn task_reset_implementation_rejects_branch_still_checked_out_in_remaining_worktree() -> Result<()>
+{
+    let repo_path = unique_temp_path("reset-implementation-checked-out-branch-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+    let worktree_base = repo_path.join("worktrees");
+    let build_worktree = worktree_base.join("task-1");
+    fs::create_dir_all(&build_worktree)?;
+
+    let task = make_task("task-1", "task", TaskStatus::AiReview);
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![task],
+        vec![GitBranch {
+            name: "odt/task-1".to_string(),
+            is_current: false,
+            is_remote: false,
+        }],
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            ..Default::default()
+        },
+    )?;
+    {
+        let mut state = git_state.lock().expect("git state lock poisoned");
+        state.current_branches_by_path.insert(
+            build_worktree.to_string_lossy().to_string(),
+            host_domain::GitCurrentBranch {
+                name: Some("odt/task-1".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
+        state.worktrees = vec![host_domain::GitWorktreeSummary {
+            branch: "odt/task-1".to_string(),
+            worktree_path: repo_path.to_string_lossy().to_string(),
+        }];
+    }
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "build-session".to_string(),
+        external_session_id: None,
+        task_id: Some("task-1".to_string()),
+        role: "build".to_string(),
+        scenario: Some("build_implementation_start".to_string()),
+        status: Some("stopped".to_string()),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        updated_at: None,
+        ended_at: None,
+        runtime_kind: "opencode".to_string(),
+        working_directory: build_worktree.to_string_lossy().to_string(),
+        pending_permissions: Vec::new(),
+        pending_questions: Vec::new(),
+        selected_model: None,
+    }];
+
+    let error = service
+        .task_reset_implementation(&repo_path.to_string_lossy(), "task-1")
+        .expect_err("reset should fail when branch stays checked out in another worktree");
+    let error_text = format!("{error:#}");
+    assert!(error_text.contains("Cannot delete implementation branch while it is still checked out"));
+    assert!(error_text.contains(repo_path.to_string_lossy().as_ref()));
+    assert!(error_text.contains("odt/task-1"));
+
+    let state = task_state.lock().expect("task store lock poisoned");
+    assert!(state.cleared_session_roles.is_empty());
+    drop(state);
+
+    let git_calls = &git_state.lock().expect("git state lock poisoned").calls;
+    assert!(git_calls.iter().any(|call| matches!(
+        call,
+        crate::app_service::test_support::GitCall::RemoveWorktree { worktree_path, force, .. }
+            if worktree_path == &build_worktree.to_string_lossy() && *force
+    )));
+    assert!(!git_calls.iter().any(|call| matches!(
+        call,
+        crate::app_service::test_support::GitCall::DeleteLocalBranch { branch, .. }
+            if branch == "odt/task-1"
+    )));
 
     Ok(())
 }

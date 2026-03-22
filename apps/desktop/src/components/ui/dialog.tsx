@@ -56,7 +56,7 @@ function DialogContent({
         <DialogPrimitive.Content
           data-slot="dialog-content"
           className={cn(
-            "pointer-events-auto relative z-[70] my-8 w-full min-h-0 max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto rounded-xl border border-border bg-popover p-6 shadow-xl",
+            "pointer-events-auto relative z-[70] my-8 flex w-full min-h-0 max-h-[calc(100dvh-2rem)] max-w-2xl flex-col overflow-hidden rounded-xl border border-border bg-popover p-6 shadow-xl",
             className,
           )}
           {...props}
@@ -69,12 +69,16 @@ function DialogContent({
   );
 }
 
+function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
+  return <div className={cn("min-h-0 flex-1 overflow-y-auto", className)} {...props} />;
+}
+
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("flex flex-col gap-1.5", className)} {...props} />;
+  return <div className={cn("shrink-0 flex flex-col gap-1.5", className)} {...props} />;
 }
 
 function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("mt-6 flex justify-end gap-2", className)} {...props} />;
+  return <div className={cn("shrink-0 mt-6 flex justify-end gap-2", className)} {...props} />;
 }
 
 function DialogTitle(props: React.ComponentProps<typeof DialogPrimitive.Title>) {
@@ -87,6 +91,7 @@ function DialogDescription(props: React.ComponentProps<typeof DialogPrimitive.De
 
 export {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,

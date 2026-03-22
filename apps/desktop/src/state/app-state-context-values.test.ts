@@ -129,7 +129,18 @@ describe("app-state-context-values", () => {
     };
     const agentValue: AgentStateContextValue = {
       sessions: [],
+      bootstrapTaskSessions: async () => {},
+      hydrateRequestedTaskSessionHistory: async () => {},
+      reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
+      readSessionModelCatalog: async () => ({
+        providers: [],
+        models: [],
+        variants: [],
+        profiles: [],
+        defaultModelsByProvider: {},
+      }),
+      readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       startAgentSession: async () => "session",
       forkAgentSession: async () => "session-forked",

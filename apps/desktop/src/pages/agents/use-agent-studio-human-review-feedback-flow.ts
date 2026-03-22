@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -12,7 +12,11 @@ import type {
   HumanReviewFeedbackState,
   PendingHumanReviewHydration,
 } from "@/features/human-review-feedback/human-review-feedback-types";
-import type { NewSessionStartRequest } from "@/features/session-start";
+import {
+  buildReusableSessionOptions,
+  type NewSessionStartDecision,
+  type NewSessionStartRequest,
+} from "@/features/session-start";
 import { resolveBuildWorkingDirectoryOverride } from "@/lib/build-worktree-overrides";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
@@ -47,13 +51,14 @@ type UseAgentStudioHumanReviewFeedbackFlowArgs = {
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
-  loadAgentSessions: AgentStateContextValue["loadAgentSessions"];
+  bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
+  hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent?: () => void;
-  resolveRequestedSelection: (
+  resolveRequestedDecision: (
     request: Omit<NewSessionStartRequest, "selectedModel">,
-  ) => Promise<AgentModelSelection | null | undefined>;
+  ) => Promise<NewSessionStartDecision | undefined>;
 };
 
 type UseAgentStudioHumanReviewFeedbackFlowResult = {
@@ -72,11 +77,12 @@ export function useAgentStudioHumanReviewFeedbackFlow({
   startAgentSession,
   sendAgentMessage,
   updateAgentSessionModel,
-  loadAgentSessions,
+  bootstrapTaskSessions,
+  hydrateRequestedTaskSessionHistory,
   humanRequestChangesTask,
   updateQuery,
   onContextSwitchIntent,
-  resolveRequestedSelection,
+  resolveRequestedDecision,
 }: UseAgentStudioHumanReviewFeedbackFlowArgs): UseAgentStudioHumanReviewFeedbackFlowResult {
   const sessionsForTaskRef = useRef(sessionsForTask);
   const selectedTaskRef = useRef(selectedTask);
@@ -151,7 +157,7 @@ export function useAgentStudioHumanReviewFeedbackFlow({
     void (async () => {
       try {
         const baselineSessions = sessionsForTaskRef.current;
-        await loadAgentSessions(taskId);
+        await bootstrapTaskSessions(taskId);
 
         const currentBuilderSessions = findBuilderSessions(sessionsForTaskRef.current);
         if (currentBuilderSessions.length > 0) {
@@ -171,7 +177,7 @@ export function useAgentStudioHumanReviewFeedbackFlow({
         toast.error("Failed to load Builder sessions for this task.");
       }
     })();
-  }, [loadAgentSessions, taskId]);
+  }, [bootstrapTaskSessions, taskId]);
 
   const confirmHumanReviewFeedback = useCallback((): void => {
     if (!humanReviewFeedbackState) {
@@ -189,16 +195,29 @@ export function useAgentStudioHumanReviewFeedbackFlow({
 
         if (humanReviewFeedbackState.selectedTarget === NEW_BUILDER_SESSION_TARGET) {
           setHumanReviewFeedbackState(null);
-          const selectedModel = await resolveRequestedSelection({
+          const decision = await resolveRequestedDecision({
             taskId: humanReviewFeedbackState.taskId,
             role: "build",
             scenario: humanReviewFeedbackState.scenario,
-            startMode: "fresh",
             reason: "create_session",
+            reusableSessionOptions: buildReusableSessionOptions({
+              sessions: humanReviewFeedbackState.builderSessions,
+              role: "build",
+            }),
+            initialReusableSessionId:
+              humanReviewFeedbackState.builderSessions[0]?.sessionId ?? null,
           });
-          if (selectedModel === undefined) {
+          if (decision == null) {
             return;
           }
+          const reuseSessionId = decision.reuseSessionId;
+          if (reuseSessionId) {
+            setHumanReviewFeedbackState((current) =>
+              current ? { ...current, selectedTarget: reuseSessionId } : current,
+            );
+            return;
+          }
+          const selectedModel = decision.selectedModel;
 
           const workingDirectoryOverride = await resolveBuildWorkingDirectoryOverride({
             activeRepo,
@@ -256,8 +275,9 @@ export function useAgentStudioHumanReviewFeedbackFlow({
         selectSessionInAgentStudio(existingBuilderSession.sessionId, "build");
 
         try {
-          await loadAgentSessions(humanReviewFeedbackState.taskId, {
-            hydrateHistoryForSessionId: existingBuilderSession.sessionId,
+          await hydrateRequestedTaskSessionHistory({
+            taskId: humanReviewFeedbackState.taskId,
+            sessionId: existingBuilderSession.sessionId,
           });
         } catch {
           toast.error("Changes requested, but refreshing Builder sessions failed.");
@@ -280,8 +300,8 @@ export function useAgentStudioHumanReviewFeedbackFlow({
     humanReviewFeedbackState,
     humanRequestChangesTask,
     activeRepo,
-    loadAgentSessions,
-    resolveRequestedSelection,
+    hydrateRequestedTaskSessionHistory,
+    resolveRequestedDecision,
     selectSessionInAgentStudio,
     sendAgentMessage,
     startAgentSession,

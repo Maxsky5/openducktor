@@ -77,7 +77,6 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      loadSessionTodos: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -174,21 +173,18 @@ describe("agent-orchestrator-session-events", () => {
         tool: "odt_set_plan",
         output: "ok",
         expectedRefreshTaskDataCalls: 1,
-        expectedLoadSessionTodosCalls: 0,
       },
       {
         name: "todo tool refresh",
         tool: "todowrite",
         output: '{"todos":[]}',
         expectedRefreshTaskDataCalls: 0,
-        expectedLoadSessionTodosCalls: 1,
       },
     ] as const;
 
     for (const scenario of scenarios) {
       const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
       let refreshTaskDataCalls = 0;
-      let loadSessionTodosCalls = 0;
 
       const adapter: SessionEventAdapter = {
         subscribeEvents: (_sessionId, handler) => {
@@ -236,9 +232,6 @@ describe("agent-orchestrator-session-events", () => {
         refreshTaskData: async () => {
           refreshTaskDataCalls += 1;
         },
-        loadSessionTodos: async () => {
-          loadSessionTodosCalls += 1;
-        },
       });
 
       const handleEvent = handlers[0];
@@ -281,7 +274,6 @@ describe("agent-orchestrator-session-events", () => {
       await Promise.resolve();
 
       expect(refreshTaskDataCalls).toBe(scenario.expectedRefreshTaskDataCalls);
-      expect(loadSessionTodosCalls).toBe(scenario.expectedLoadSessionTodosCalls);
     }
   });
 
@@ -332,7 +324,6 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      loadSessionTodos: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -409,7 +400,6 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      loadSessionTodos: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -495,7 +485,6 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      loadSessionTodos: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -594,7 +583,6 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      loadSessionTodos: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -663,7 +651,6 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      loadSessionTodos: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -750,7 +737,6 @@ describe("agent-orchestrator-session-events", () => {
         turnStartedAtBySessionRef.current["session-1"] = 0;
       },
       refreshTaskData: async () => {},
-      loadSessionTodos: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -850,7 +836,6 @@ describe("agent-orchestrator-session-events", () => {
       refreshTaskData: async () => {
         refreshCalls += 1;
       },
-      loadSessionTodos: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -1095,7 +1080,6 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      loadSessionTodos: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -1199,7 +1183,6 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      loadSessionTodos: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -1301,7 +1284,6 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      loadSessionTodos: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -1421,7 +1403,6 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      loadSessionTodos: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -1494,7 +1475,6 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      loadSessionTodos: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -1574,7 +1554,6 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => 120,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      loadSessionTodos: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -1668,7 +1647,6 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => 120,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      loadSessionTodos: async () => {},
     });
 
     const handleEvent = handlers[0];

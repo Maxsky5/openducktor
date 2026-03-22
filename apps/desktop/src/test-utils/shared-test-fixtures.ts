@@ -14,6 +14,7 @@ const BASE_TASK_CARD_FIXTURE: TaskCard = {
   labels: [],
   parentId: undefined,
   subtaskIds: [],
+  agentSessions: [],
   assignee: undefined,
   pullRequest: undefined,
   documentSummary: {

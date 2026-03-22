@@ -5,6 +5,7 @@ import { TaskSelector } from "@/components/features/tasks";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -199,35 +200,37 @@ export function AgentStudioTaskTabs({
             </DialogDescription>
           </DialogHeader>
 
-          {!isCreateDialogReady || isLoadingAvailableTabTasks ? (
-            <div className="relative">
+          <DialogBody className="pt-4">
+            {!isCreateDialogReady || isLoadingAvailableTabTasks ? (
+              <div className="relative">
+                <TaskSelector
+                  tasks={[]}
+                  value=""
+                  includeEmptyOption
+                  emptyLabel="Loading tasks..."
+                  searchPlaceholder="Loading tasks..."
+                  disabled
+                  onValueChange={() => undefined}
+                />
+                <LoaderCircle className="pointer-events-none absolute right-9 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+              </div>
+            ) : hasCreatableTasks ? (
               <TaskSelector
-                tasks={[]}
-                value=""
-                includeEmptyOption
-                emptyLabel="Loading tasks..."
-                searchPlaceholder="Loading tasks..."
-                disabled
-                onValueChange={() => undefined}
+                tasks={availableTabTasks}
+                value={pendingTaskId}
+                includeEmptyOption={false}
+                emptyLabel="Select task"
+                disabled={!agentStudioReady}
+                onValueChange={setPendingTaskId}
               />
-              <LoaderCircle className="pointer-events-none absolute right-9 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-            </div>
-          ) : hasCreatableTasks ? (
-            <TaskSelector
-              tasks={availableTabTasks}
-              value={pendingTaskId}
-              includeEmptyOption={false}
-              emptyLabel="Select task"
-              disabled={!agentStudioReady}
-              onValueChange={setPendingTaskId}
-            />
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              All available tasks already have an open tab.
-            </p>
-          )}
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                All available tasks already have an open tab.
+              </p>
+            )}
+          </DialogBody>
 
-          <DialogFooter>
+          <DialogFooter className="mt-0 border-t border-border pt-5">
             <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
               Cancel
             </Button>

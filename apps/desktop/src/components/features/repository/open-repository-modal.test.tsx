@@ -36,6 +36,8 @@ mock.module("@/components/ui/button", () => ({
 mock.module("@/components/ui/dialog", () => ({
   Dialog: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
     createElement("div", props, children),
+  DialogBody: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+    createElement("div", props, children),
   DialogContent: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
     createElement("div", props, children),
   DialogDescription: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>

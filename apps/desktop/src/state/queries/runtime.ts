@@ -48,3 +48,10 @@ export const loadRuntimeListFromQuery = (
   repoPath: string,
 ): Promise<RuntimeInstanceSummary[]> =>
   queryClient.fetchQuery(runtimeListQueryOptions(runtimeKind, repoPath));
+
+export const ensureRuntimeListFromQuery = (
+  queryClient: QueryClient,
+  runtimeKind: RuntimeKind,
+  repoPath: string,
+): Promise<RuntimeInstanceSummary[]> =>
+  queryClient.ensureQueryData(runtimeListQueryOptions(runtimeKind, repoPath));

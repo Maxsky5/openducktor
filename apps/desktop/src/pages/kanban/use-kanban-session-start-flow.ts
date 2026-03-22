@@ -1,5 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import {
+  type AgentModelSelection,
+  type AgentRole,
+  type AgentScenario,
+  defaultStartModeForScenario,
+} from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
@@ -14,14 +19,21 @@ import type {
   HumanReviewFeedbackState,
   PendingHumanReviewHydration,
 } from "@/features/human-review-feedback/human-review-feedback-types";
-import { firstScenario, useSessionStartModalCoordinator } from "@/features/session-start";
+import {
+  buildReusableSessionOptions,
+  firstScenario,
+  useSessionStartModalCoordinator,
+} from "@/features/session-start";
 import { roleDefaultSelectionFor } from "@/features/session-start/session-start-selection";
 import { resolveBuildContinuationScenario } from "@/lib/build-scenarios";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import { confirmHumanReviewFeedbackFlow } from "./kanban-human-review-feedback";
-import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
+import type {
+  KanbanResolvedSessionStartIntent,
+  KanbanSessionStartIntent,
+} from "./kanban-page-model-types";
 import { startKanbanSessionFlow } from "./kanban-session-start-actions";
 
 type UseKanbanSessionStartFlowArgs = {
@@ -31,6 +43,8 @@ type UseKanbanSessionStartFlowArgs = {
   sessions: AgentSessionState[];
   navigate: NavigateFunction;
   loadRepoSettings: () => Promise<RepoSettingsInput>;
+  bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
+  hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
   loadAgentSessions: AgentStateContextValue["loadAgentSessions"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   startAgentSession: AgentStateContextValue["startAgentSession"];
@@ -79,6 +93,14 @@ export const resolveKanbanPlanningStartPreference = (
   return task?.status === "spec_ready" ? "continue" : "fresh";
 };
 
+export const resolveKanbanBuildStartScenario = (
+  tasks: TaskCard[],
+  taskId: string,
+): AgentScenario => {
+  const task = tasks.find((entry) => entry.id === taskId);
+  return resolveBuildContinuationScenario(task);
+};
+
 export function useKanbanSessionStartFlow({
   activeRepo,
   repoSettings,
@@ -86,7 +108,9 @@ export function useKanbanSessionStartFlow({
   sessions,
   navigate,
   loadRepoSettings,
-  loadAgentSessions,
+  bootstrapTaskSessions,
+  hydrateRequestedTaskSessionHistory,
+  loadAgentSessions: _loadAgentSessions,
   humanRequestChangesTask,
   startAgentSession,
   sendAgentMessage,
@@ -123,8 +147,14 @@ export function useKanbanSessionStartFlow({
     modelOptions,
     modelGroups,
     variantOptions,
+    availableStartModes,
+    selectedStartMode,
+    reusableSessionOptions,
+    selectedReusableSessionId,
     openStartModal,
     closeStartModal,
+    handleSelectStartMode,
+    handleSelectReusableSession,
     handleSelectRuntime,
     handleSelectAgent,
     handleSelectModel,
@@ -141,7 +171,6 @@ export function useKanbanSessionStartFlow({
         taskId: sessionStartIntent.taskId,
         role: sessionStartIntent.role,
         scenario: sessionStartIntent.scenario,
-        startMode: sessionStartIntent.startMode,
         postStartAction: sessionStartIntent.postStartAction,
         ...(sessionStartIntent.message ? { message: sessionStartIntent.message } : {}),
       }
@@ -198,7 +227,12 @@ export function useKanbanSessionStartFlow({
         taskId: intent.taskId,
         role: intent.role,
         scenario: intent.scenario,
-        startMode: intent.startMode,
+        reusableSessionOptions:
+          intent.reusableSessionOptions ??
+          buildReusableSessionOptions({
+            sessions: sessionsRef.current.filter((session) => session.taskId === intent.taskId),
+            role: intent.role,
+          }),
         postStartAction: intent.postStartAction,
         ...(intent.message ? { message: intent.message } : {}),
       });
@@ -237,18 +271,34 @@ export function useKanbanSessionStartFlow({
   }, [closeStartModal, isStartingSession]);
 
   const confirmSessionStart = useCallback(
-    (startInBackground = false): void => {
+    (
+      input?:
+        | boolean
+        | {
+            runInBackground?: boolean;
+            startMode?: "fresh" | "reuse";
+            reuseSessionId?: string | null;
+          },
+    ): void => {
       const latestIntent = sessionStartIntentRef.current;
       if (!latestIntent) {
         return;
       }
+      const runInBackground =
+        typeof input === "boolean" ? input : (input?.runInBackground ?? false);
+      const startMode =
+        typeof input === "boolean"
+          ? defaultStartModeForScenario(latestIntent.scenario)
+          : (input?.startMode ?? defaultStartModeForScenario(latestIntent.scenario));
+      const reuseSessionId = typeof input === "boolean" ? null : (input?.reuseSessionId ?? null);
 
-      const intent: KanbanSessionStartIntent = {
+      const intent: KanbanResolvedSessionStartIntent = {
         taskId: latestIntent.taskId,
         role: latestIntent.role,
         scenario: latestIntent.scenario,
-        startMode: latestIntent.startMode,
+        startMode,
         postStartAction: latestIntent.postStartAction,
+        ...(reuseSessionId ? { reuseSessionId } : {}),
         ...(latestIntent.message ? { message: latestIntent.message } : {}),
         ...(sessionStartBeforeActionRef.current
           ? { beforeStartAction: sessionStartBeforeActionRef.current }
@@ -269,8 +319,9 @@ export function useKanbanSessionStartFlow({
             activeRepo,
             intent,
             selection,
-            startInBackground,
+            startInBackground: runInBackground,
             tasks,
+            sessions,
             roleLabels,
             queryClient,
             startAgentSession,
@@ -294,6 +345,7 @@ export function useKanbanSessionStartFlow({
       sendAgentMessage,
       startAgentSession,
       tasks,
+      sessions,
       humanRequestChangesTask,
       updateAgentSessionModel,
       repoSettings,
@@ -307,8 +359,7 @@ export function useKanbanSessionStartFlow({
       openSessionStartModal({
         taskId,
         role: "build",
-        scenario: "build_implementation_start",
-        startMode: "reuse_latest",
+        scenario: resolveKanbanBuildStartScenario(tasksRef.current, taskId),
         postStartAction: "kickoff",
       });
     },
@@ -331,7 +382,6 @@ export function useKanbanSessionStartFlow({
               taskId,
               role: "spec",
               scenario: firstScenario("spec"),
-              startMode: "reuse_latest",
               postStartAction: "none",
             },
             latestSpecSession.sessionId,
@@ -346,7 +396,6 @@ export function useKanbanSessionStartFlow({
         taskId,
         role,
         scenario: firstScenario(role),
-        startMode: startPreference === "fresh" ? "fresh" : "reuse_latest",
         postStartAction: startPreference === "fresh" ? "kickoff" : "none",
       });
     },
@@ -367,7 +416,6 @@ export function useKanbanSessionStartFlow({
         taskId,
         role: "qa",
         scenario: "qa_review",
-        startMode: "reuse_latest",
         postStartAction: "kickoff",
       });
     },
@@ -384,7 +432,6 @@ export function useKanbanSessionStartFlow({
             taskId,
             role: "qa",
             scenario: "qa_review",
-            startMode: "reuse_latest",
             postStartAction: "none",
           },
           latestQaSession.sessionId,
@@ -402,7 +449,7 @@ export function useKanbanSessionStartFlow({
       void (async () => {
         try {
           const baselineSessions = sessionsRef.current;
-          await loadAgentSessions(taskId);
+          await bootstrapTaskSessions(taskId);
 
           const currentTasks = tasksRef.current;
           const currentBuilderSessions = findSessionsByRoleForTask(
@@ -424,7 +471,7 @@ export function useKanbanSessionStartFlow({
         }
       })();
     },
-    [loadAgentSessions],
+    [bootstrapTaskSessions],
   );
 
   const confirmHumanReviewFeedback = useCallback((): void => {
@@ -438,7 +485,7 @@ export function useKanbanSessionStartFlow({
         await confirmHumanReviewFeedbackFlow({
           state: humanReviewFeedbackState,
           humanRequestChangesTask,
-          loadAgentSessions,
+          hydrateRequestedTaskSessionHistory,
           openSessionStartModal,
           openAgentStudioSession,
           sendAgentMessage,
@@ -457,7 +504,7 @@ export function useKanbanSessionStartFlow({
   }, [
     humanRequestChangesTask,
     humanReviewFeedbackState,
-    loadAgentSessions,
+    hydrateRequestedTaskSessionHistory,
     openAgentStudioSession,
     openSessionStartModal,
     sendAgentMessage,
@@ -501,7 +548,7 @@ export function useKanbanSessionStartFlow({
       title: sessionStartIntent.title,
       description:
         sessionStartIntent.description ??
-        "Choose agent, model, and variant before starting this session.",
+        "Choose how to start the session, then pick the agent, model, and variant.",
       confirmLabel: "Start session",
       selectedModelSelection: sessionStartSelection,
       selectedRuntimeKind,
@@ -513,6 +560,12 @@ export function useKanbanSessionStartFlow({
       modelOptions,
       modelGroups,
       variantOptions,
+      availableStartModes,
+      selectedStartMode,
+      reusableSessionOptions,
+      selectedReusableSessionId,
+      onSelectStartMode: handleSelectStartMode,
+      onSelectReusableSession: handleSelectReusableSession,
       onSelectRuntime: handleSelectRuntime,
       onSelectAgent: handleSelectAgent,
       onSelectModel: handleSelectModel,
@@ -535,12 +588,18 @@ export function useKanbanSessionStartFlow({
     handleSelectAgent,
     handleSelectModel,
     handleSelectVariant,
+    handleSelectStartMode,
+    handleSelectReusableSession,
     isCatalogLoading,
     isSessionStartModalOpen,
     isStartingSession,
     modelGroups,
     modelOptions,
     runtimeOptions,
+    availableStartModes,
+    reusableSessionOptions,
+    selectedReusableSessionId,
+    selectedStartMode,
     selectedRuntimeKind,
     sessionStartIntent,
     sessionStartSelection,

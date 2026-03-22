@@ -26,6 +26,11 @@ impl BeadsTaskStore {
             .unwrap_or_else(|| default_ai_review_enabled(&issue_type));
         let document_summary = metadata_document_summary(namespace);
         let pull_request = parse_pull_request_metadata(namespace);
+        let mut agent_sessions = namespace
+            .and_then(|ns| ns.get("agentSessions"))
+            .and_then(crate::metadata::parse_agent_sessions)
+            .unwrap_or_default();
+        agent_sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
 
         let parent_id = issue.parent.or_else(|| {
             issue.dependencies.iter().find_map(|dependency| {
@@ -53,6 +58,7 @@ impl BeadsTaskStore {
             assignee: issue.owner,
             parent_id,
             subtask_ids: Vec::new(),
+            agent_sessions,
             pull_request,
             document_summary,
             agent_workflows: AgentWorkflows::default(),

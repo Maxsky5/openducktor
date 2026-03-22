@@ -354,11 +354,17 @@ const makeMockClient = ({
         };
       },
     },
-    event: {
-      subscribe: async () => {
-        async function* iterator(): AsyncGenerator<Event> {
+    global: {
+      event: async (options?: { signal?: AbortSignal }) => {
+        async function* iterator(): AsyncGenerator<{ directory: string; payload: Event }> {
           for (const event of stream.events) {
-            yield event;
+            if (options?.signal?.aborted) {
+              return;
+            }
+            const directory =
+              (event as Event & { properties?: { directory?: string } }).properties?.directory ??
+              defaultRuntimeConnection.workingDirectory;
+            yield { directory, payload: event };
           }
         }
         return { stream: iterator() };
@@ -429,6 +435,93 @@ const createLoadSessionTodosHarness = (
 };
 
 describe("OpencodeSdkAdapter", () => {
+  test("shares one global event stream across sessions on the same endpoint", async () => {
+    const mock = makeMockClient({});
+    let listCalls = 0;
+    const abortSignals: AbortSignal[] = [];
+    (
+      mock.client.global as unknown as {
+        event: (options?: {
+          signal?: AbortSignal;
+        }) => Promise<{ stream: AsyncIterable<{ directory: string; payload: Event }> }>;
+      }
+    ).event = async (options?: { signal?: AbortSignal }) => {
+      listCalls += 1;
+      abortSignals.push(options?.signal ?? AbortSignal.abort());
+
+      async function* iterator(): AsyncGenerator<{ directory: string; payload: Event }> {
+        if (options?.signal?.aborted) {
+          return;
+        }
+        await new Promise<void>((resolve) => {
+          options?.signal?.addEventListener("abort", () => resolve(), { once: true });
+        });
+      }
+
+      return { stream: iterator() };
+    };
+
+    const createClientCalls: unknown[] = [];
+    const adapter = new OpencodeSdkAdapter({
+      createClient: (input) => {
+        createClientCalls.push(input);
+        return mock.client;
+      },
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await adapter.startSession({
+      sessionId: "session-1",
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      role: "build",
+      scenario: "build_implementation_start",
+      systemPrompt: "system",
+      runtimeConnection: {
+        endpoint: "http://127.0.0.1:12000",
+        workingDirectory: "/repo",
+      },
+    });
+    await adapter.startSession({
+      sessionId: "session-2",
+      repoPath: "/repo",
+      workingDirectory: "/other",
+      taskId: "task-2",
+      runtimeKind: "opencode",
+      role: "qa",
+      scenario: "qa_review",
+      systemPrompt: "system",
+      runtimeConnection: {
+        endpoint: "http://127.0.0.1:12000",
+        workingDirectory: "/other",
+      },
+    });
+
+    expect(listCalls).toBe(1);
+    expect(abortSignals).toHaveLength(1);
+    expect(createClientCalls).toEqual([
+      {
+        runtimeEndpoint: "http://127.0.0.1:12000",
+        workingDirectory: "/repo",
+      },
+      {
+        runtimeEndpoint: "http://127.0.0.1:12000",
+      },
+      {
+        runtimeEndpoint: "http://127.0.0.1:12000",
+        workingDirectory: "/other",
+      },
+    ]);
+
+    await adapter.stopSession("session-1");
+    expect(abortSignals[0]?.aborted).toBe(false);
+
+    await adapter.stopSession("session-2");
+    expect(abortSignals[0]?.aborted).toBe(true);
+  });
+
   test("startSession emits session_started and returns summary", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({

@@ -22,8 +22,11 @@ export function useAgentStudioDocuments({
   planDoc: ReturnType<typeof useTaskDocuments>["planDoc"];
   qaDoc: ReturnType<typeof useTaskDocuments>["qaDoc"];
 } {
-  const { specDoc, planDoc, qaDoc, ensureDocumentLoaded, reloadDocument, applyDocumentUpdate } =
-    useTaskDocuments(taskId || null, true, activeRepo ?? "");
+  const { specDoc, planDoc, qaDoc, reloadDocument, applyDocumentUpdate } = useTaskDocuments(
+    taskId || null,
+    true,
+    activeRepo ?? "",
+  );
 
   const documentContextKey = `${taskId}:${activeSession?.sessionId ?? ""}`;
   const processedDocumentToolEventsRef = useRef(new Set<string>());
@@ -51,15 +54,6 @@ export function useAgentStudioDocuments({
     documentReloadAttemptsRef.current.clear();
     refreshedTaskVersionsRef.current.clear();
   }, [documentContextKey]);
-
-  useEffect(() => {
-    if (!taskId) {
-      return;
-    }
-    ensureDocumentLoaded("spec");
-    ensureDocumentLoaded("plan");
-    ensureDocumentLoaded("qa");
-  }, [ensureDocumentLoaded, taskId]);
 
   useEffect(() => {
     if (!taskId || taskDocumentVersionKey === null) {

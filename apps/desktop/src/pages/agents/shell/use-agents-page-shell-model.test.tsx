@@ -23,7 +23,10 @@ const retryNavigationPersistence = mock(() => {});
 const updateQuery = mock((_updates?: unknown) => {});
 const handleSelectTab = mock((_value: string) => {});
 const retryChatSettingsLoad = mock(() => {});
-const requestNewSessionStart = mock(async () => ({ selectedModel: null }));
+const requestNewSessionStart = mock(async () => ({
+  selectedModel: null,
+  reuseSessionId: null,
+}));
 const resolvePendingSessionStart = mock((_requestId: string, _decision: unknown) => {});
 const resolvePendingRebaseConflictResolution = mock((_requestId: string, _decision: unknown) => {});
 const handleResolveRebaseConflict = mock(async () => {});

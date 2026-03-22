@@ -1,0 +1,121 @@
+import type {
+  AgentModelCatalog,
+  AgentRuntimeConnection,
+  AgentSessionTodoItem,
+} from "@openducktor/core";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import {
+  SESSION_MODEL_CATALOG_STALE_TIME_MS,
+  SESSION_TODOS_STALE_TIME_MS,
+  sessionModelCatalogQueryOptions,
+  sessionTodosQueryOptions,
+} from "@/state/queries/agent-session-runtime";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+
+type UseAgentStudioActiveSessionRuntimeDataArgs = {
+  session: AgentSessionState | null;
+  readSessionModelCatalog: (
+    runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
+    runtimeConnection: AgentRuntimeConnection,
+  ) => Promise<AgentModelCatalog>;
+  readSessionTodos: (
+    runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
+    runtimeConnection: AgentRuntimeConnection,
+    externalSessionId: string,
+  ) => Promise<AgentSessionTodoItem[]>;
+};
+
+const toRuntimeQueryInput = (session: AgentSessionState | null) => {
+  const runtimeKind = session?.runtimeKind ?? session?.selectedModel?.runtimeKind;
+  const runtimeEndpoint = session?.runtimeEndpoint.trim() ?? "";
+  const workingDirectory = session?.workingDirectory.trim() ?? "";
+  if (!session || !runtimeKind || runtimeEndpoint.length === 0 || workingDirectory.length === 0) {
+    return null;
+  }
+  return {
+    runtimeKind,
+    runtimeConnection: {
+      endpoint: runtimeEndpoint,
+      workingDirectory,
+    },
+  };
+};
+
+export const useAgentStudioActiveSessionRuntimeData = ({
+  session,
+  readSessionModelCatalog,
+  readSessionTodos,
+}: UseAgentStudioActiveSessionRuntimeDataArgs): AgentSessionState | null => {
+  const runtimeQueryInput = toRuntimeQueryInput(session);
+  const catalogQuery = useQuery({
+    queryKey: runtimeQueryInput
+      ? sessionModelCatalogQueryOptions(
+          runtimeQueryInput.runtimeKind,
+          runtimeQueryInput.runtimeConnection,
+          readSessionModelCatalog,
+        ).queryKey
+      : (["agent-session-runtime", "model-catalog", "", "", ""] as const),
+    queryFn: async (): Promise<AgentModelCatalog> => {
+      if (!runtimeQueryInput) {
+        throw new Error("Session runtime catalog query is disabled.");
+      }
+      return readSessionModelCatalog(
+        runtimeQueryInput.runtimeKind,
+        runtimeQueryInput.runtimeConnection,
+      );
+    },
+    enabled: runtimeQueryInput !== null,
+    staleTime: SESSION_MODEL_CATALOG_STALE_TIME_MS,
+  });
+  const todosQuery = useQuery({
+    queryKey:
+      runtimeQueryInput && session
+        ? sessionTodosQueryOptions(
+            runtimeQueryInput.runtimeKind,
+            runtimeQueryInput.runtimeConnection,
+            session.externalSessionId,
+            readSessionTodos,
+          ).queryKey
+        : (["agent-session-runtime", "todos", "", "", "", ""] as const),
+    queryFn: async (): Promise<AgentSessionTodoItem[]> => {
+      if (!runtimeQueryInput || !session) {
+        throw new Error("Session todos query is disabled.");
+      }
+      return readSessionTodos(
+        runtimeQueryInput.runtimeKind,
+        runtimeQueryInput.runtimeConnection,
+        session.externalSessionId,
+      );
+    },
+    enabled: runtimeQueryInput !== null && session !== null,
+    staleTime: SESSION_TODOS_STALE_TIME_MS,
+  });
+
+  return useMemo(() => {
+    if (!session) {
+      return null;
+    }
+
+    const resolvedCatalog = session.modelCatalog ?? catalogQuery.data ?? null;
+    const resolvedTodos = session.todos.length > 0 ? session.todos : (todosQuery.data ?? []);
+    const isLoadingModelCatalog =
+      session.isLoadingModelCatalog ||
+      (runtimeQueryInput !== null && resolvedCatalog === null && catalogQuery.isPending);
+
+    if (
+      resolvedCatalog === session.modelCatalog &&
+      resolvedTodos === session.todos &&
+      isLoadingModelCatalog === session.isLoadingModelCatalog
+    ) {
+      return session;
+    }
+
+    return {
+      ...session,
+      modelCatalog: resolvedCatalog,
+      todos: resolvedTodos,
+      isLoadingModelCatalog,
+    };
+  }, [catalogQuery.data, catalogQuery.isPending, runtimeQueryInput, session, todosQuery.data]);
+};

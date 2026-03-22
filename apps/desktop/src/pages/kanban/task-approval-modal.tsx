@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -270,255 +271,256 @@ export function TaskApprovalModal({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        {model.stage === "approval" ? (
-          <div className="space-y-6 px-6 py-6 sm:px-8">
-            {model.isLoading ? (
-              <div className="flex min-h-56 items-center justify-center rounded-2xl border border-border bg-muted/30 px-6">
-                <div className="flex flex-col items-center gap-3 text-center">
-                  <LoaderCircle className="size-6 animate-spin text-primary" />
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-foreground">
-                      Preparing approval options
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      OpenDucktor is loading the builder branch and provider readiness.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <>
-                {model.hasUncommittedChanges ? (
-                  <div className="grid gap-1 rounded-2xl border border-warning-border bg-warning-surface p-4 text-warning-surface-foreground">
-                    <p className="text-sm font-semibold">Uncommitted changes detected</p>
-                    <p className="text-sm">{dirtyWorktreeMessage}</p>
-                  </div>
-                ) : null}
-
-                {model.errorMessage ? (
-                  <div className="grid gap-1 rounded-2xl border border-destructive-border bg-destructive-surface p-4 text-destructive-surface-foreground">
-                    <p className="text-sm font-semibold">Approval failed</p>
-                    <p className="text-sm text-destructive-muted">{model.errorMessage}</p>
-                  </div>
-                ) : null}
-
-                <div className="space-y-3">
-                  <Label className={sectionLabelClass}>Approval Action</Label>
-                  <SegmentedTabs
-                    ariaLabel="Approval action"
-                    value={model.mode}
-                    options={actionOptions}
-                    disabled={model.isSubmitting}
-                    onChange={model.onModeChange}
-                  />
-                  {!model.pullRequestAvailable && model.pullRequestUnavailableReason ? (
-                    <p className="text-sm text-muted-foreground">
-                      Pull request unavailable: {model.pullRequestUnavailableReason}
-                    </p>
-                  ) : null}
-                </div>
-
-                {model.mode === "direct_merge" ? (
-                  <div className="space-y-3">
-                    <Label className={sectionLabelClass}>Merge Method</Label>
-                    <div className="grid gap-3 md:grid-cols-3">
-                      {MERGE_METHOD_OPTIONS.map((option) => (
-                        <OptionCard
-                          key={option.value}
-                          value={option.value}
-                          selectedValue={model.mergeMethod}
-                          label={option.label}
-                          description={option.description}
-                          disabled={model.isSubmitting}
-                          onSelect={model.onMergeMethodChange}
-                        />
-                      ))}
+        <DialogBody>
+          {model.stage === "approval" ? (
+            <div className="space-y-6 px-6 py-6 sm:px-8">
+              {model.isLoading ? (
+                <div className="flex min-h-56 items-center justify-center rounded-2xl border border-border bg-muted/30 px-6">
+                  <div className="flex flex-col items-center gap-3 text-center">
+                    <LoaderCircle className="size-6 animate-spin text-primary" />
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-foreground">
+                        Preparing approval options
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        OpenDucktor is loading the builder branch and provider readiness.
+                      </p>
                     </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {model.hasUncommittedChanges ? (
+                    <div className="grid gap-1 rounded-2xl border border-warning-border bg-warning-surface p-4 text-warning-surface-foreground">
+                      <p className="text-sm font-semibold">Uncommitted changes detected</p>
+                      <p className="text-sm">{dirtyWorktreeMessage}</p>
+                    </div>
+                  ) : null}
 
-                    {model.mergeMethod === "squash" ? (
-                      <div className="grid gap-2 rounded-2xl border border-border bg-card p-5">
-                        <Label htmlFor="task-approval-squash-commit-message">
-                          Squash Commit Message
-                        </Label>
-                        <Textarea
-                          id="task-approval-squash-commit-message"
-                          className="min-h-28"
-                          placeholder="e.g. feat: add Microsoft login"
-                          value={model.squashCommitMessage}
-                          disabled={model.isSubmitting}
-                          onChange={(event) =>
-                            model.onSquashCommitMessageChange(event.currentTarget.value)
-                          }
-                        />
-                        <p className="text-sm text-muted-foreground">
-                          OpenDucktor prefills this from the oldest commit unique to the builder
-                          branch. Edit it before creating the single squash commit on{" "}
-                          <span className="font-mono text-[13px] text-foreground">
-                            {model.targetBranch?.branch ?? "the target branch"}
-                          </span>
-                          .
-                        </p>
-                        {showSquashCommitMessageValidationError ? (
-                          <p className="text-sm text-destructive">
-                            Enter the squash commit message before merging locally.
-                          </p>
-                        ) : null}
-                      </div>
+                  {model.errorMessage ? (
+                    <div className="grid gap-1 rounded-2xl border border-destructive-border bg-destructive-surface p-4 text-destructive-surface-foreground">
+                      <p className="text-sm font-semibold">Approval failed</p>
+                      <p className="text-sm text-destructive-muted">{model.errorMessage}</p>
+                    </div>
+                  ) : null}
+
+                  <div className="space-y-3">
+                    <Label className={sectionLabelClass}>Approval Action</Label>
+                    <SegmentedTabs
+                      ariaLabel="Approval action"
+                      value={model.mode}
+                      options={actionOptions}
+                      disabled={model.isSubmitting}
+                      onChange={model.onModeChange}
+                    />
+                    {!model.pullRequestAvailable && model.pullRequestUnavailableReason ? (
+                      <p className="text-sm text-muted-foreground">
+                        Pull request unavailable: {model.pullRequestUnavailableReason}
+                      </p>
                     ) : null}
                   </div>
-                ) : (
-                  <div className="space-y-5">
+
+                  {model.mode === "direct_merge" ? (
                     <div className="space-y-3">
-                      <Label className={sectionLabelClass}>Pull Request Draft</Label>
-                      <div className="grid gap-3 md:grid-cols-2">
-                        {PULL_REQUEST_DRAFT_OPTIONS.map((option) => (
+                      <Label className={sectionLabelClass}>Merge Method</Label>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        {MERGE_METHOD_OPTIONS.map((option) => (
                           <OptionCard
                             key={option.value}
                             value={option.value}
-                            selectedValue={model.pullRequestDraftMode}
+                            selectedValue={model.mergeMethod}
                             label={option.label}
                             description={option.description}
                             disabled={model.isSubmitting}
-                            onSelect={model.onPullRequestDraftModeChange}
+                            onSelect={model.onMergeMethodChange}
                           />
                         ))}
                       </div>
-                    </div>
 
-                    {model.pullRequestDraftMode === "manual" ? (
-                      <div className="grid gap-4 rounded-2xl border border-border bg-card p-5">
-                        <div className="grid gap-2">
-                          <Label htmlFor="task-approval-pr-title">Pull Request Title</Label>
-                          <Input
-                            id="task-approval-pr-title"
-                            value={model.title}
-                            disabled={model.isSubmitting}
-                            onChange={(event) => model.onTitleChange(event.currentTarget.value)}
-                          />
-                        </div>
-
-                        <div className="grid gap-2">
-                          <Label htmlFor="task-approval-pr-body">Pull Request Description</Label>
+                      {model.mergeMethod === "squash" ? (
+                        <div className="grid gap-2 rounded-2xl border border-border bg-card p-5">
+                          <Label htmlFor="task-approval-squash-commit-message">
+                            Squash Commit Message
+                          </Label>
                           <Textarea
-                            id="task-approval-pr-body"
-                            className="min-h-56"
-                            value={model.body}
+                            id="task-approval-squash-commit-message"
+                            className="min-h-28"
+                            placeholder="e.g. feat: add Microsoft login"
+                            value={model.squashCommitMessage}
                             disabled={model.isSubmitting}
-                            onChange={(event) => model.onBodyChange(event.currentTarget.value)}
+                            onChange={(event) =>
+                              model.onSquashCommitMessageChange(event.currentTarget.value)
+                            }
                           />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="rounded-2xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
-                        OpenDucktor will fork the latest Builder session, generate the pull request
-                        title and description in the background, then create or update the pull
-                        request.
-                      </div>
-                    )}
-
-                    {model.pullRequestUrl ? (
-                      <a
-                        href={model.pullRequestUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-sm text-primary underline underline-offset-4"
-                      >
-                        Open existing pull request
-                      </a>
-                    ) : null}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        ) : null}
-
-        {isCompletionStage ? (
-          <div className="grid gap-4 px-6 py-6 sm:px-8">
-            {completionErrorMessage ? (
-              <div className="grid gap-1 rounded-2xl border border-destructive-border bg-destructive-surface p-4 text-destructive-surface-foreground">
-                <p className="text-sm font-semibold">Direct merge completion failed</p>
-                <p className="text-sm text-destructive-muted">{completionErrorMessage}</p>
-              </div>
-            ) : null}
-
-            {completionContextError ? null : (
-              <>
-                <div className="rounded-2xl border border-info-border bg-info-surface p-5">
-                  <div className="flex items-start gap-4">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-info-border/60 bg-card/70 text-info-muted">
-                      <Check className="size-5" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <p className="text-sm font-semibold text-info-surface-foreground">
-                        Local merge ready
-                      </p>
-                      <p className="text-sm leading-6 text-info-surface-foreground">
-                        The direct merge is already applied on this machine for{" "}
-                        <span className="font-mono text-[13px]">{localBranchName}</span> on this
-                        task.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-border bg-card p-5">
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-foreground">Next step</p>
-                    {hasPublishTarget ? (
-                      <p className="text-sm leading-6 text-muted-foreground">
-                        Push{" "}
-                        <span className="font-mono text-[13px] text-foreground">
-                          {publishTargetLabel}
-                        </span>{" "}
-                        to publish the merged target branch, then move the task to Done and clean up
-                        the builder workspace.
-                      </p>
-                    ) : (
-                      <p className="text-sm leading-6 text-muted-foreground">
-                        Move the task to Done and clean up the builder workspace. The merge is
-                        already applied locally on{" "}
-                        <span className="font-mono text-[13px] text-foreground">
-                          {localBranchName}
-                        </span>
-                        .
-                      </p>
-                    )}
-                  </div>
-
-                  <div
-                    className={cn(
-                      "mt-4 grid gap-3",
-                      hasPublishTarget &&
-                        "md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center",
-                    )}
-                  >
-                    <div className="rounded-xl border border-border bg-muted/40 p-4">
-                      <p className={sectionLabelClass}>Local Branch</p>
-                      <p className="mt-2 font-mono text-sm text-foreground">{localBranchName}</p>
-                    </div>
-
-                    {hasPublishTarget ? (
-                      <>
-                        <div className="hidden justify-center md:flex">
-                          <ArrowRight className="size-4 text-muted-foreground" />
-                        </div>
-
-                        <div className="rounded-xl border border-border bg-muted/40 p-4">
-                          <p className={sectionLabelClass}>Remote To Update</p>
-                          <p className="mt-2 font-mono text-sm text-foreground">
-                            {publishTargetLabel}
+                          <p className="text-sm text-muted-foreground">
+                            OpenDucktor prefills this from the oldest commit unique to the builder
+                            branch. Edit it before creating the single squash commit on{" "}
+                            <span className="font-mono text-[13px] text-foreground">
+                              {model.targetBranch?.branch ?? "the target branch"}
+                            </span>
+                            .
                           </p>
+                          {showSquashCommitMessageValidationError ? (
+                            <p className="text-sm text-destructive">
+                              Enter the squash commit message before merging locally.
+                            </p>
+                          ) : null}
                         </div>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        ) : null}
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      <div className="space-y-3">
+                        <Label className={sectionLabelClass}>Pull Request Draft</Label>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {PULL_REQUEST_DRAFT_OPTIONS.map((option) => (
+                            <OptionCard
+                              key={option.value}
+                              value={option.value}
+                              selectedValue={model.pullRequestDraftMode}
+                              label={option.label}
+                              description={option.description}
+                              disabled={model.isSubmitting}
+                              onSelect={model.onPullRequestDraftModeChange}
+                            />
+                          ))}
+                        </div>
+                      </div>
 
+                      {model.pullRequestDraftMode === "manual" ? (
+                        <div className="grid gap-4 rounded-2xl border border-border bg-card p-5">
+                          <div className="grid gap-2">
+                            <Label htmlFor="task-approval-pr-title">Pull Request Title</Label>
+                            <Input
+                              id="task-approval-pr-title"
+                              value={model.title}
+                              disabled={model.isSubmitting}
+                              onChange={(event) => model.onTitleChange(event.currentTarget.value)}
+                            />
+                          </div>
+
+                          <div className="grid gap-2">
+                            <Label htmlFor="task-approval-pr-body">Pull Request Description</Label>
+                            <Textarea
+                              id="task-approval-pr-body"
+                              className="min-h-56"
+                              value={model.body}
+                              disabled={model.isSubmitting}
+                              onChange={(event) => model.onBodyChange(event.currentTarget.value)}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
+                          OpenDucktor will fork the latest Builder session, generate the pull
+                          request title and description in the background, then create or update the
+                          pull request.
+                        </div>
+                      )}
+
+                      {model.pullRequestUrl ? (
+                        <a
+                          href={model.pullRequestUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm text-primary underline underline-offset-4"
+                        >
+                          Open existing pull request
+                        </a>
+                      ) : null}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ) : null}
+
+          {isCompletionStage ? (
+            <div className="grid gap-4 px-6 py-6 sm:px-8">
+              {completionErrorMessage ? (
+                <div className="grid gap-1 rounded-2xl border border-destructive-border bg-destructive-surface p-4 text-destructive-surface-foreground">
+                  <p className="text-sm font-semibold">Direct merge completion failed</p>
+                  <p className="text-sm text-destructive-muted">{completionErrorMessage}</p>
+                </div>
+              ) : null}
+
+              {completionContextError ? null : (
+                <>
+                  <div className="rounded-2xl border border-info-border bg-info-surface p-5">
+                    <div className="flex items-start gap-4">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-info-border/60 bg-card/70 text-info-muted">
+                        <Check className="size-5" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <p className="text-sm font-semibold text-info-surface-foreground">
+                          Local merge ready
+                        </p>
+                        <p className="text-sm leading-6 text-info-surface-foreground">
+                          The direct merge is already applied on this machine for{" "}
+                          <span className="font-mono text-[13px]">{localBranchName}</span> on this
+                          task.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-border bg-card p-5">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-foreground">Next step</p>
+                      {hasPublishTarget ? (
+                        <p className="text-sm leading-6 text-muted-foreground">
+                          Push{" "}
+                          <span className="font-mono text-[13px] text-foreground">
+                            {publishTargetLabel}
+                          </span>{" "}
+                          to publish the merged target branch, then move the task to Done and clean
+                          up the builder workspace.
+                        </p>
+                      ) : (
+                        <p className="text-sm leading-6 text-muted-foreground">
+                          Move the task to Done and clean up the builder workspace. The merge is
+                          already applied locally on{" "}
+                          <span className="font-mono text-[13px] text-foreground">
+                            {localBranchName}
+                          </span>
+                          .
+                        </p>
+                      )}
+                    </div>
+
+                    <div
+                      className={cn(
+                        "mt-4 grid gap-3",
+                        hasPublishTarget &&
+                          "md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center",
+                      )}
+                    >
+                      <div className="rounded-xl border border-border bg-muted/40 p-4">
+                        <p className={sectionLabelClass}>Local Branch</p>
+                        <p className="mt-2 font-mono text-sm text-foreground">{localBranchName}</p>
+                      </div>
+
+                      {hasPublishTarget ? (
+                        <>
+                          <div className="hidden justify-center md:flex">
+                            <ArrowRight className="size-4 text-muted-foreground" />
+                          </div>
+
+                          <div className="rounded-xl border border-border bg-muted/40 p-4">
+                            <p className={sectionLabelClass}>Remote To Update</p>
+                            <p className="mt-2 font-mono text-sm text-foreground">
+                              {publishTargetLabel}
+                            </p>
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : null}
+        </DialogBody>
         <DialogFooter
           className={cn(
             "mt-0 border-t border-border/80 bg-muted/20 px-6 py-4 sm:px-8",

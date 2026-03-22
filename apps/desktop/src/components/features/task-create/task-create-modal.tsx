@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -101,83 +102,85 @@ export function TaskCreateModal({
             disabled={controller.isBusy}
             className="flex min-h-0 flex-1 flex-col border-0 p-0"
           >
-            <div
-              className={cn(
-                "min-h-0 flex-1 overflow-y-auto space-y-4 px-5 py-4 transition-opacity",
-                controller.isBusy ? "cursor-wait opacity-55" : "opacity-100",
-              )}
-            >
-              {controller.mode === "create" ? (
-                <TaskComposerStepper
-                  step={controller.step}
-                  onStepChange={(nextStep) => {
-                    if (nextStep === "details" && controller.step !== "details") {
-                      return;
-                    }
-                    controller.setStep(nextStep);
-                  }}
-                />
-              ) : (
-                <TaskEditSectionSwitcher
-                  section={controller.editSection}
-                  hasUnsavedSpec={controller.isSpecDirty}
-                  hasUnsavedPlan={controller.isPlanDirty}
-                  disabled={controller.isBusy}
-                  onSectionChange={controller.requestSectionChange}
-                />
-              )}
-
-              {controller.isTypeStepVisible ? (
-                <IssueTypeGrid
-                  selectedIssueType={controller.selectedCreateIssueType}
-                  onSelectIssueType={controller.selectCreateIssueType}
-                />
-              ) : controller.mode === "edit" && activeDocumentSection ? (
-                <Suspense fallback={<TaskDocumentEditorFallback />}>
-                  <TaskDocumentEditor
-                    key={activeDocumentSection}
-                    title={
-                      activeDocumentSection === "spec" ? "Specification" : "Implementation Plan"
-                    }
-                    subtitle={
-                      activeDocumentSection === "spec"
-                        ? "Edit the canonical specification markdown for this task."
-                        : "Edit the implementation plan markdown for this task."
-                    }
-                    placeholder={
-                      activeDocumentSection === "spec"
-                        ? "# Purpose\n\nDescribe expected outcome..."
-                        : "## Milestones\n\n- ..."
-                    }
-                    markdown={controller.activeDraft}
-                    view={controller.views[activeDocumentSection]}
-                    onViewChange={(nextView) =>
-                      controller.setDocumentView(activeDocumentSection, nextView)
-                    }
-                    updatedAt={controller.activeDocument?.updatedAt ?? null}
-                    isLoading={controller.activeDocument?.isLoading ?? false}
-                    isSaving={controller.isSavingDocument === activeDocumentSection}
-                    error={controller.activeDocument?.error ?? null}
-                    hasUnsavedChanges={controller.isActiveDocumentDirty}
-                    onMarkdownChange={(value) =>
-                      controller.updateDocumentDraft(activeDocumentSection, value)
-                    }
-                    onRetryLoad={() => {
-                      void controller.loadDocumentSection(activeDocumentSection, true);
+            <DialogBody>
+              <div
+                className={cn(
+                  "min-h-0 flex-1 overflow-y-auto space-y-4 px-5 py-4 transition-opacity",
+                  controller.isBusy ? "cursor-wait opacity-55" : "opacity-100",
+                )}
+              >
+                {controller.mode === "create" ? (
+                  <TaskComposerStepper
+                    step={controller.step}
+                    onStepChange={(nextStep) => {
+                      if (nextStep === "details" && controller.step !== "details") {
+                        return;
+                      }
+                      controller.setStep(nextStep);
                     }}
                   />
-                </Suspense>
-              ) : (
-                <TaskDetailsForm
-                  mode={controller.mode}
-                  state={controller.state}
-                  priorityOptions={controller.priorityComboboxOptions}
-                  knownLabels={controller.knownLabels}
-                  onStateChange={controller.updateState}
-                  onRequestTypeChange={() => controller.setStep("type")}
-                />
-              )}
-            </div>
+                ) : (
+                  <TaskEditSectionSwitcher
+                    section={controller.editSection}
+                    hasUnsavedSpec={controller.isSpecDirty}
+                    hasUnsavedPlan={controller.isPlanDirty}
+                    disabled={controller.isBusy}
+                    onSectionChange={controller.requestSectionChange}
+                  />
+                )}
+
+                {controller.isTypeStepVisible ? (
+                  <IssueTypeGrid
+                    selectedIssueType={controller.selectedCreateIssueType}
+                    onSelectIssueType={controller.selectCreateIssueType}
+                  />
+                ) : controller.mode === "edit" && activeDocumentSection ? (
+                  <Suspense fallback={<TaskDocumentEditorFallback />}>
+                    <TaskDocumentEditor
+                      key={activeDocumentSection}
+                      title={
+                        activeDocumentSection === "spec" ? "Specification" : "Implementation Plan"
+                      }
+                      subtitle={
+                        activeDocumentSection === "spec"
+                          ? "Edit the canonical specification markdown for this task."
+                          : "Edit the implementation plan markdown for this task."
+                      }
+                      placeholder={
+                        activeDocumentSection === "spec"
+                          ? "# Purpose\n\nDescribe expected outcome..."
+                          : "## Milestones\n\n- ..."
+                      }
+                      markdown={controller.activeDraft}
+                      view={controller.views[activeDocumentSection]}
+                      onViewChange={(nextView) =>
+                        controller.setDocumentView(activeDocumentSection, nextView)
+                      }
+                      updatedAt={controller.activeDocument?.updatedAt ?? null}
+                      isLoading={controller.activeDocument?.isLoading ?? false}
+                      isSaving={controller.isSavingDocument === activeDocumentSection}
+                      error={controller.activeDocument?.error ?? null}
+                      hasUnsavedChanges={controller.isActiveDocumentDirty}
+                      onMarkdownChange={(value) =>
+                        controller.updateDocumentDraft(activeDocumentSection, value)
+                      }
+                      onRetryLoad={() => {
+                        void controller.loadDocumentSection(activeDocumentSection, true);
+                      }}
+                    />
+                  </Suspense>
+                ) : (
+                  <TaskDetailsForm
+                    mode={controller.mode}
+                    state={controller.state}
+                    priorityOptions={controller.priorityComboboxOptions}
+                    knownLabels={controller.knownLabels}
+                    onStateChange={controller.updateState}
+                    onRequestTypeChange={() => controller.setStep("type")}
+                  />
+                )}
+              </div>
+            </DialogBody>
 
             <DialogFooter className="mt-0 justify-between border-t border-border px-5 py-4">
               <Button

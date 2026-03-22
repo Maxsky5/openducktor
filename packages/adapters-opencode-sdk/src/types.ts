@@ -1,5 +1,6 @@
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentSessionSummary, StartAgentSessionInput } from "@openducktor/core";
+import type { PendingPartDelta } from "./event-stream/shared";
 
 /**
  * Cache TTL for workflow tool selection (5 minutes).
@@ -16,15 +17,31 @@ export type SessionRecord = {
   input: SessionInput;
   client: OpencodeClient;
   externalSessionId: string;
-  streamAbortController: AbortController;
-  streamDone: Promise<void>;
+  eventTransportKey: string;
   emittedAssistantMessageIds: Set<string>;
+  partsById: Map<string, import("@opencode-ai/sdk/v2/client").Part>;
+  messageRoleById: Map<string, string>;
+  pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
   /** Cached workflow tool selection (toolId -> enabled). */
   workflowToolSelectionCache?: Record<string, boolean>;
   /** Timestamp when cache was last populated. */
   workflowToolSelectionCachedAt?: number;
   /** Model key used to compute the cached workflow tool selection. */
   workflowToolSelectionCacheModelKey?: string;
+};
+
+export type EventStreamSubscriber = {
+  sessionId: string;
+  externalSessionId: string;
+  input: SessionInput;
+};
+
+export type RuntimeEventTransportRecord = {
+  key: string;
+  runtimeEndpoint: string;
+  controller: AbortController;
+  streamDone: Promise<void>;
+  subscribers: Map<string, EventStreamSubscriber>;
 };
 
 export type ClientFactory = (input: {

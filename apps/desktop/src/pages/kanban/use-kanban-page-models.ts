@@ -21,8 +21,11 @@ export function useKanbanPageModels({
   onCloseDetails,
 }: UseKanbanPageModelsArgs): KanbanPageModels {
   const { activeRepo, isSwitchingWorkspace, loadRepoSettings } = useWorkspaceState();
+  const { repoSettings } = useAgentStudioRepoSettings({ activeRepo });
   const {
     sessions,
+    bootstrapTaskSessions,
+    hydrateRequestedTaskSessionHistory,
     loadAgentSessions,
     removeAgentSessions,
     startAgentSession,
@@ -51,8 +54,6 @@ export function useKanbanPageModels({
   } = useTasksState();
   const navigate = useNavigate();
 
-  const { repoSettings } = useAgentStudioRepoSettings({ activeRepo });
-
   const sessionStartFlow = useKanbanSessionStartFlow({
     activeRepo,
     repoSettings,
@@ -60,6 +61,8 @@ export function useKanbanPageModels({
     sessions,
     navigate,
     loadRepoSettings,
+    bootstrapTaskSessions,
+    hydrateRequestedTaskSessionHistory,
     loadAgentSessions,
     humanRequestChangesTask,
     startAgentSession,
@@ -128,7 +131,7 @@ export function useKanbanPageModels({
     activeRepo,
     tasks,
     sessions,
-    loadAgentSessions,
+    hydrateRequestedTaskSessionHistory,
     forkAgentSession,
     sendAgentMessage,
     refreshTasks,

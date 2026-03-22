@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -42,7 +43,7 @@ export function HumanReviewFeedbackModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5 pt-2">
+        <DialogBody className="space-y-5 pt-2">
           <div className="space-y-2">
             <Label htmlFor="human-review-feedback-target">Builder Session</Label>
             <Combobox
@@ -66,9 +67,9 @@ export function HumanReviewFeedbackModal({
               onChange={(event) => model.onMessageChange(event.target.value)}
             />
           </div>
-        </div>
+        </DialogBody>
 
-        <DialogFooter className="justify-between">
+        <DialogFooter className="mt-0 justify-between border-t border-border pt-5">
           <Button
             type="button"
             variant="outline"

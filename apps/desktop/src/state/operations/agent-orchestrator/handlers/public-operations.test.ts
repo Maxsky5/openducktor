@@ -54,7 +54,18 @@ describe("agent-orchestrator-public-operations", () => {
         older: createSessionState("older", "2026-03-01T10:00:00.000Z"),
         newer: createSessionState("newer", "2026-03-01T11:00:00.000Z"),
       },
+      bootstrapTaskSessions: async () => {},
+      hydrateRequestedTaskSessionHistory: async () => {},
+      reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
+      readSessionModelCatalog: async () => ({
+        providers: [],
+        models: [],
+        variants: [],
+        profiles: [],
+        defaultModelsByProvider: {},
+      }),
+      readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       sessionActions: createSessionActions(),
     });
@@ -69,9 +80,20 @@ describe("agent-orchestrator-public-operations", () => {
 
     const operations = createOrchestratorPublicOperations({
       sessionsById: {},
+      bootstrapTaskSessions: async () => {},
+      hydrateRequestedTaskSessionHistory: async () => {},
+      reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {
         throw new Error("load failed");
       },
+      readSessionModelCatalog: async () => ({
+        providers: [],
+        models: [],
+        variants: [],
+        profiles: [],
+        defaultModelsByProvider: {},
+      }),
+      readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       sessionActions: createSessionActions(),
     });
@@ -93,7 +115,18 @@ describe("agent-orchestrator-public-operations", () => {
 
     const operations = createOrchestratorPublicOperations({
       sessionsById: {},
+      bootstrapTaskSessions: async () => {},
+      hydrateRequestedTaskSessionHistory: async () => {},
+      reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
+      readSessionModelCatalog: async () => ({
+        providers: [],
+        models: [],
+        variants: [],
+        profiles: [],
+        defaultModelsByProvider: {},
+      }),
+      readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       sessionActions: createSessionActions({
         startAgentSession: async () => {
@@ -124,7 +157,18 @@ describe("agent-orchestrator-public-operations", () => {
 
     const operations = createOrchestratorPublicOperations({
       sessionsById: {},
+      bootstrapTaskSessions: async () => {},
+      hydrateRequestedTaskSessionHistory: async () => {},
+      reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
+      readSessionModelCatalog: async () => ({
+        providers: [],
+        models: [],
+        variants: [],
+        profiles: [],
+        defaultModelsByProvider: {},
+      }),
+      readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       sessionActions: createSessionActions({
         forkAgentSession: async () => {
@@ -154,7 +198,18 @@ describe("agent-orchestrator-public-operations", () => {
 
     const operations = createOrchestratorPublicOperations({
       sessionsById: {},
+      bootstrapTaskSessions: async () => {},
+      hydrateRequestedTaskSessionHistory: async () => {},
+      reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
+      readSessionModelCatalog: async () => ({
+        providers: [],
+        models: [],
+        variants: [],
+        profiles: [],
+        defaultModelsByProvider: {},
+      }),
+      readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       sessionActions: createSessionActions({
         sendAgentMessage: async () => {
@@ -179,7 +234,18 @@ describe("agent-orchestrator-public-operations", () => {
     const removeAgentSessions = mock(() => {});
     const operations = createOrchestratorPublicOperations({
       sessionsById: {},
+      bootstrapTaskSessions: async () => {},
+      hydrateRequestedTaskSessionHistory: async () => {},
+      reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
+      readSessionModelCatalog: async () => ({
+        providers: [],
+        models: [],
+        variants: [],
+        profiles: [],
+        defaultModelsByProvider: {},
+      }),
+      readSessionTodos: async () => [],
       removeAgentSessions,
       sessionActions: createSessionActions(),
     });

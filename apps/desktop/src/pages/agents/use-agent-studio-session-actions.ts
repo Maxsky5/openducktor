@@ -38,6 +38,8 @@ type UseAgentStudioSessionActionsArgs = {
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
+  bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
+  hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
   loadAgentSessions: AgentStateContextValue["loadAgentSessions"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
@@ -62,6 +64,8 @@ export function useAgentStudioSessionActions({
   startAgentSession,
   sendAgentMessage,
   updateAgentSessionModel,
+  bootstrapTaskSessions,
+  hydrateRequestedTaskSessionHistory,
   loadAgentSessions,
   humanRequestChangesTask,
   answerAgentQuestion,
@@ -129,6 +133,8 @@ export function useAgentStudioSessionActions({
     startAgentSession,
     sendAgentMessage,
     updateAgentSessionModel,
+    bootstrapTaskSessions,
+    hydrateRequestedTaskSessionHistory,
     loadAgentSessions,
     humanRequestChangesTask,
     updateQuery,
@@ -304,6 +310,7 @@ export function useAgentStudioSessionActions({
           taskId,
           sessionId: undefined,
           role: nextRole,
+          scenario,
         });
         return;
       }
@@ -328,9 +335,10 @@ export function useAgentStudioSessionActions({
         taskId: session.taskId,
         sessionId: session.sessionId,
         role: session.role,
+        scenario: session.scenario,
       });
     },
-    [activeSession, onContextSwitchIntent, role, sessionsForTask, taskId, updateQuery],
+    [activeSession, onContextSwitchIntent, role, scenario, sessionsForTask, taskId, updateQuery],
   );
 
   const handleSessionSelectionChange = useCallback(
@@ -359,6 +367,7 @@ export function useAgentStudioSessionActions({
         taskId: selectedSession.taskId,
         sessionId: selectedSession.sessionId,
         role: selectedSession.role,
+        scenario: selectedSession.scenario,
       });
     },
     [activeSession, onContextSwitchIntent, role, sessionsForTask, taskId, updateQuery],

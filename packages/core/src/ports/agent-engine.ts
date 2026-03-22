@@ -3,6 +3,8 @@ import type {
   AgentEvent,
   AgentModelCatalog,
   AgentModelSelection,
+  AgentPendingPermissionRequest,
+  AgentPendingQuestionRequest,
   AgentRole,
   AgentRuntimeConnection,
   AgentScenario,
@@ -51,14 +53,28 @@ export type LoadAgentSessionTodosInput = {
   externalSessionId: string;
 };
 
+export type ListLiveAgentSessionPendingInput = {
+  runtimeKind: RuntimeKind;
+  runtimeConnection: AgentRuntimeConnection;
+};
+
+export type LiveAgentSessionPendingInputBySession = Record<
+  string,
+  {
+    permissions: AgentPendingPermissionRequest[];
+    questions: AgentPendingQuestionRequest[];
+  }
+>;
+
 export type ListAgentModelsInput = {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
 };
 
-export type ListRuntimeSessionsInput = {
+export type ListLiveAgentSessionsInput = {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
+  directories?: string[];
 };
 
 export type LoadAgentSessionDiffInput = {
@@ -83,7 +99,7 @@ export type AgentSessionHistoryMessage = {
   parts: AgentStreamPart[];
 };
 
-export type RuntimeSessionStatus =
+export type LiveAgentSessionStatus =
   | {
       type: "busy";
     }
@@ -97,12 +113,17 @@ export type RuntimeSessionStatus =
       nextEpochMs: number;
     };
 
-export type RuntimeSessionSummary = {
+export type LiveAgentSessionSummary = {
   externalSessionId: string;
   title: string;
   workingDirectory: string;
   startedAt: string;
-  status: RuntimeSessionStatus;
+  status: LiveAgentSessionStatus;
+};
+
+export type LiveAgentSessionSnapshot = LiveAgentSessionSummary & {
+  pendingPermissions: AgentPendingPermissionRequest[];
+  pendingQuestions: AgentPendingQuestionRequest[];
 };
 
 export type ReplyPermissionInput = {
@@ -142,10 +163,16 @@ export interface AgentSessionPort {
   startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary>;
   resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary>;
   forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary>;
-  listRuntimeSessions(input: ListRuntimeSessionsInput): Promise<RuntimeSessionSummary[]>;
+  listLiveAgentSessions(input: ListLiveAgentSessionsInput): Promise<LiveAgentSessionSummary[]>;
+  listLiveAgentSessionSnapshots(
+    input: ListLiveAgentSessionsInput,
+  ): Promise<LiveAgentSessionSnapshot[]>;
   hasSession(sessionId: string): boolean;
   loadSessionHistory(input: LoadAgentSessionHistoryInput): Promise<AgentSessionHistoryMessage[]>;
   loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]>;
+  listLiveAgentSessionPendingInput(
+    input: ListLiveAgentSessionPendingInput,
+  ): Promise<LiveAgentSessionPendingInputBySession>;
   updateSessionModel(input: UpdateAgentSessionModelInput): void;
   sendUserMessage(input: SendAgentUserMessageInput): Promise<void>;
   replyPermission(input: ReplyPermissionInput): Promise<void>;

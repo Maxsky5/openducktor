@@ -1,5 +1,6 @@
 use crate::{as_error, AppState};
 use host_domain::AgentSessionDocument;
+use std::collections::HashMap;
 use tauri::State;
 
 #[tauri::command]
@@ -24,4 +25,13 @@ pub async fn agent_session_upsert(
             .agent_session_upsert(&repo_path, &task_id, session)
             .map(|ok| serde_json::json!({ "ok": ok })),
     )
+}
+
+#[tauri::command]
+pub async fn agent_sessions_list_bulk(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_ids: Vec<String>,
+) -> Result<HashMap<String, Vec<AgentSessionDocument>>, String> {
+    as_error(state.service.agent_sessions_list_bulk(&repo_path, &task_ids))
 }

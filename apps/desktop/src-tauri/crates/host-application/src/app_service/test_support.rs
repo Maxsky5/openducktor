@@ -24,10 +24,11 @@ use host_domain::{
     GitMergeMethod, GitPort, GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest,
     GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult, GitResetSnapshot,
     GitResetWorktreeSelection, GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
-    GitUpstreamAheadBehind, GitWorktreeStatusData, GitWorktreeStatusSummaryData, IssueType,
-    PlanSubtaskInput, PullRequestRecord, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent,
-    RunState, RunSummary, RuntimeInstanceSummary, SpecDocument, TaskAction, TaskCard,
-    TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    GitUpstreamAheadBehind, GitWorktreeStatusData, GitWorktreeStatusSummaryData,
+    GitWorktreeSummary, IssueType, PlanSubtaskInput, PullRequestRecord, QaReportDocument,
+    QaVerdict, QaWorkflowVerdict, RunEvent, RunState, RunSummary, RuntimeInstanceSummary,
+    SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore,
+    UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -64,6 +65,7 @@ pub(crate) fn make_task(id: &str, issue_type: &str, status: TaskStatus) -> TaskC
         assignee: None,
         parent_id: None,
         subtask_ids: Vec::new(),
+        agent_sessions: Vec::new(),
         pull_request: None,
         document_summary: TaskDocumentSummary::default(),
         agent_workflows: AgentWorkflows::default(),
@@ -147,6 +149,7 @@ impl TaskStore for FakeTaskStore {
             assignee: None,
             parent_id: input.parent_id,
             subtask_ids: Vec::new(),
+            agent_sessions: Vec::new(),
             pull_request: None,
             document_summary: TaskDocumentSummary::default(),
             agent_workflows: AgentWorkflows::default(),
@@ -457,6 +460,9 @@ pub(crate) enum GitCall {
     GetCurrentBranch {
         repo_path: String,
     },
+    ListWorktrees {
+        repo_path: String,
+    },
     SwitchBranch {
         repo_path: String,
         branch: String,
@@ -554,6 +560,7 @@ pub(crate) struct GitState {
     pub(crate) branches: Vec<GitBranch>,
     pub(crate) current_branch: GitCurrentBranch,
     pub(crate) current_branches_by_path: HashMap<String, GitCurrentBranch>,
+    pub(crate) worktrees: Vec<GitWorktreeSummary>,
     pub(crate) remove_worktree_error: Option<String>,
     pub(crate) delete_local_branch_error: Option<String>,
     pub(crate) worktree_status_data: Option<GitWorktreeStatusData>,
@@ -596,6 +603,14 @@ impl GitPort for FakeGitPort {
             .get(repo_path.as_str())
             .cloned()
             .unwrap_or_else(|| state.current_branch.clone()))
+    }
+
+    fn list_worktrees(&self, repo_path: &Path) -> Result<Vec<GitWorktreeSummary>> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::ListWorktrees {
+            repo_path: repo_path.to_string_lossy().to_string(),
+        });
+        Ok(state.worktrees.clone())
     }
 
     fn switch_branch(
@@ -1001,6 +1016,7 @@ pub(crate) fn build_service_with_git_state_enforced(
         branches,
         current_branch,
         current_branches_by_path: HashMap::new(),
+        worktrees: Vec::new(),
         remove_worktree_error: None,
         delete_local_branch_error: None,
         worktree_status_data: None,
@@ -1084,6 +1100,7 @@ pub(crate) fn build_service_with_git_state(
         branches,
         current_branch,
         current_branches_by_path: HashMap::new(),
+        worktrees: Vec::new(),
         remove_worktree_error: None,
         delete_local_branch_error: None,
         worktree_status_data: None,
@@ -1525,6 +1542,7 @@ pub(crate) fn build_service_with_store(
         branches,
         current_branch,
         current_branches_by_path: HashMap::new(),
+        worktrees: Vec::new(),
         remove_worktree_error: None,
         delete_local_branch_error: None,
         worktree_status_data: None,

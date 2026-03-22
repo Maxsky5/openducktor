@@ -1,6 +1,17 @@
 import { createTauriHostClient, type TauriHostClient } from "@openducktor/adapters-tauri-host";
 import { getBrowserBackendUrl } from "@/lib/browser-mode";
 
+type BrowserSseListener = (payload: unknown) => void;
+
+type BrowserSseChannel = {
+  eventSource: EventSource;
+  listeners: Map<number, BrowserSseListener>;
+  handleMessage: (event: MessageEvent<string>) => void;
+};
+
+const sseChannels = new Map<string, BrowserSseChannel>();
+let nextSseListenerId = 0;
+
 export const readBrowserLiveErrorMessage = async (response: Response): Promise<string> => {
   const text = await response.text().catch(() => "");
   const trimmedText = text.trim();
@@ -43,23 +54,57 @@ export const createBrowserLiveHostClient = (): TauriHostClient => {
   return createTauriHostClient(createHttpInvoke());
 };
 
-const subscribeSseChannel = (path: string, listener: (payload: unknown) => void): (() => void) => {
+const parseSsePayload = (raw: string): unknown => {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+};
+
+const closeSseChannelIfUnused = (path: string, channel: BrowserSseChannel): void => {
+  if (channel.listeners.size > 0) {
+    return;
+  }
+  channel.eventSource.removeEventListener("message", channel.handleMessage as EventListener);
+  channel.eventSource.close();
+  sseChannels.delete(path);
+};
+
+const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() => void) => {
   const baseUrl = getBrowserBackendUrl().replace(/\/$/, "");
-  const eventSource = new EventSource(`${baseUrl}/${path}`);
+  let channel = sseChannels.get(path);
 
-  const handleMessage = (event: MessageEvent<string>): void => {
-    try {
-      listener(JSON.parse(event.data));
-    } catch {
-      listener(event.data);
-    }
-  };
+  if (!channel) {
+    const eventSource = new EventSource(`${baseUrl}/${path}`);
+    const listeners = new Map<number, BrowserSseListener>();
+    const handleMessage = (event: MessageEvent<string>): void => {
+      const payload = parseSsePayload(event.data);
+      for (const currentListener of listeners.values()) {
+        currentListener(payload);
+      }
+    };
 
-  eventSource.addEventListener("message", handleMessage as EventListener);
+    eventSource.addEventListener("message", handleMessage as EventListener);
+    channel = {
+      eventSource,
+      listeners,
+      handleMessage,
+    };
+    sseChannels.set(path, channel);
+  }
+
+  const listenerId = nextSseListenerId;
+  nextSseListenerId += 1;
+  channel.listeners.set(listenerId, listener);
 
   return () => {
-    eventSource.removeEventListener("message", handleMessage as EventListener);
-    eventSource.close();
+    const currentChannel = sseChannels.get(path);
+    if (!currentChannel) {
+      return;
+    }
+    currentChannel.listeners.delete(listenerId);
+    closeSseChannelIfUnused(path, currentChannel);
   };
 };
 

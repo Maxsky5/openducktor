@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
 import { clearAppQueryClient } from "@/lib/query-client";
 import {
@@ -7,6 +8,9 @@ import {
 } from "@/pages/agents/agent-studio-test-utils";
 
 enableReactActEnvironment();
+if (typeof document === "undefined") {
+  GlobalRegistrator.register();
+}
 
 const runsListMock = mock(async (): Promise<Array<{ runId: string; worktreePath: string }>> => []);
 const gitGetWorktreeStatusMock = mock(
@@ -175,6 +179,10 @@ const createBaseArgs = (): HookArgs => ({
   branchIdentityKey: null,
   enablePolling: false,
 });
+
+const dispatchDiffRefresh = (): void => {
+  document.dispatchEvent(new Event("visibilitychange"));
+};
 
 beforeAll(async () => {
   ({ useAgentStudioDiffData } = await import("./use-agent-studio-diff-data"));
@@ -753,36 +761,11 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
-  test("polling invalidates the inactive scope so switching scopes triggers a fresh full reload", async () => {
-    const originalSetInterval = globalThis.setInterval;
-    const originalClearInterval = globalThis.clearInterval;
-    let intervalCallback: (() => void) | null = null;
-
-    const setIntervalMock = mock((callback: TimerHandler, _delay?: number) => {
-      if (typeof callback !== "function") {
-        throw new Error("Expected polling callback function");
-      }
-      intervalCallback = () => {
-        callback();
-      };
-      return 1;
-    });
-    const clearIntervalMock = mock((_intervalId: number) => {});
-
-    globalThis.setInterval = setIntervalMock as unknown as typeof globalThis.setInterval;
-    globalThis.clearInterval = clearIntervalMock as unknown as typeof globalThis.clearInterval;
-
+  test("visibility refresh invalidates the inactive scope so switching scopes triggers a fresh full reload", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       enablePolling: true,
     });
-
-    const runTick = (): void => {
-      if (intervalCallback == null) {
-        throw new Error("Polling callback was not registered");
-      }
-      intervalCallback();
-    };
 
     try {
       await harness.mount();
@@ -878,7 +861,7 @@ describe("useAgentStudioDiffData", () => {
       );
 
       await harness.run(() => {
-        runTick();
+        dispatchDiffRefresh();
       });
       await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 1);
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
@@ -901,30 +884,10 @@ describe("useAgentStudioDiffData", () => {
       ]);
     } finally {
       await harness.unmount();
-      globalThis.setInterval = originalSetInterval;
-      globalThis.clearInterval = originalClearInterval;
     }
   });
 
-  test("polling schedules one periodic request for the active scope", async () => {
-    const originalSetInterval = globalThis.setInterval;
-    const originalClearInterval = globalThis.clearInterval;
-    let intervalCallback: (() => void) | null = null;
-
-    const setIntervalMock = mock((callback: TimerHandler, _delay?: number) => {
-      if (typeof callback !== "function") {
-        throw new Error("Expected polling callback function");
-      }
-      intervalCallback = () => {
-        callback();
-      };
-      return 1;
-    });
-    const clearIntervalMock = mock((_intervalId: number) => {});
-
-    globalThis.setInterval = setIntervalMock as unknown as typeof globalThis.setInterval;
-    globalThis.clearInterval = clearIntervalMock as unknown as typeof globalThis.clearInterval;
-
+  test("visibility refresh requests a summary for the active scope", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       enablePolling: true,
@@ -934,17 +897,8 @@ describe("useAgentStudioDiffData", () => {
       await harness.mount();
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
 
-      expect(setIntervalMock).toHaveBeenCalledTimes(1);
-      expect(setIntervalMock.mock.calls[0]?.[1]).toBe(30_000);
-      const runTick = (): void => {
-        if (intervalCallback == null) {
-          throw new Error("Polling callback was not registered");
-        }
-        intervalCallback();
-      };
-
       await harness.run(() => {
-        runTick();
+        dispatchDiffRefresh();
       });
       await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 1);
       expect(gitGetWorktreeStatusSummaryMock).toHaveBeenNthCalledWith(
@@ -969,7 +923,7 @@ describe("useAgentStudioDiffData", () => {
       );
 
       await harness.run(() => {
-        runTick();
+        dispatchDiffRefresh();
       });
       await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 2);
       expect(gitGetWorktreeStatusSummaryMock).toHaveBeenNthCalledWith(
@@ -982,30 +936,10 @@ describe("useAgentStudioDiffData", () => {
       expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
     } finally {
       await harness.unmount();
-      expect(clearIntervalMock).toHaveBeenCalledTimes(1);
-      globalThis.setInterval = originalSetInterval;
-      globalThis.clearInterval = originalClearInterval;
     }
   });
 
-  test("polling summary requests do not invalidate an in-flight full reload", async () => {
-    const originalSetInterval = globalThis.setInterval;
-    const originalClearInterval = globalThis.clearInterval;
-    let intervalCallback: (() => void) | null = null;
-
-    const setIntervalMock = mock((callback: TimerHandler, _delay?: number) => {
-      if (typeof callback !== "function") {
-        throw new Error("Expected polling callback function");
-      }
-      intervalCallback = () => {
-        callback();
-      };
-      return 1;
-    });
-    const clearIntervalMock = mock((_intervalId: number) => {});
-    globalThis.setInterval = setIntervalMock as unknown as typeof globalThis.setInterval;
-    globalThis.clearInterval = clearIntervalMock as unknown as typeof globalThis.clearInterval;
-
+  test("visibility refresh summary requests do not invalidate an in-flight full reload", async () => {
     const pendingFullReload = createDeferred<GitWorktreeStatus>();
     let fullRequestCount = 0;
     gitGetWorktreeStatusMock.mockImplementation(
@@ -1081,13 +1015,6 @@ describe("useAgentStudioDiffData", () => {
       enablePolling: true,
     });
 
-    const runTick = (): void => {
-      if (intervalCallback == null) {
-        throw new Error("Polling callback was not registered");
-      }
-      intervalCallback();
-    };
-
     try {
       await harness.mount();
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
@@ -1098,7 +1025,7 @@ describe("useAgentStudioDiffData", () => {
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
 
       await harness.run(() => {
-        runTick();
+        dispatchDiffRefresh();
       });
       await harness.run(async () => {
         await Promise.resolve();
@@ -1134,35 +1061,19 @@ describe("useAgentStudioDiffData", () => {
       expect(harness.getLatest().fileDiffs[0]?.file).toBe("src/full.ts");
 
       await harness.run(() => {
-        runTick();
+        dispatchDiffRefresh();
       });
       await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 1);
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
       expect(harness.getLatest().branch).toBe("feature/base");
     } finally {
       await harness.unmount();
-      globalThis.setInterval = originalSetInterval;
-      globalThis.clearInterval = originalClearInterval;
     }
   });
 
-  test("polling persists hash metadata changes even when derived shared fields stay equal", async () => {
-    const originalSetInterval = globalThis.setInterval;
-    const originalClearInterval = globalThis.clearInterval;
+  test("visibility refresh persists hash metadata changes even when derived shared fields stay equal", async () => {
     const originalDateNow = Date.now;
-    let intervalCallback: (() => void) | null = null;
     let nowMs = 1_731_000_000_000;
-
-    const setIntervalMock = mock((callback: TimerHandler, _delay?: number) => {
-      if (typeof callback !== "function") {
-        throw new Error("Expected polling callback function");
-      }
-      intervalCallback = () => {
-        callback();
-      };
-      return 1;
-    });
-    const clearIntervalMock = mock((_intervalId: number) => {});
 
     let fullRequestCount = 0;
     gitGetWorktreeStatusMock.mockImplementation(
@@ -1269,21 +1180,12 @@ describe("useAgentStudioDiffData", () => {
       },
     );
 
-    globalThis.setInterval = setIntervalMock as unknown as typeof globalThis.setInterval;
-    globalThis.clearInterval = clearIntervalMock as unknown as typeof globalThis.clearInterval;
     Date.now = () => nowMs;
 
     const harness = createHookHarness({
       ...createBaseArgs(),
       enablePolling: true,
     });
-
-    const runTick = (): void => {
-      if (intervalCallback == null) {
-        throw new Error("Polling callback was not registered");
-      }
-      intervalCallback();
-    };
 
     try {
       await harness.mount();
@@ -1292,7 +1194,7 @@ describe("useAgentStudioDiffData", () => {
       expect(firstState.upstreamAheadBehind).toEqual({ ahead: 1, behind: 0 });
 
       await harness.run(() => {
-        runTick();
+        dispatchDiffRefresh();
       });
       await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 1);
       const secondState = harness.getLatest();
@@ -1301,35 +1203,18 @@ describe("useAgentStudioDiffData", () => {
 
       nowMs += 6_000;
       await harness.run(() => {
-        runTick();
+        dispatchDiffRefresh();
       });
       await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 2);
       const thirdState = harness.getLatest();
       expect(thirdState).toEqual(secondState);
     } finally {
       await harness.unmount();
-      globalThis.setInterval = originalSetInterval;
-      globalThis.clearInterval = originalClearInterval;
       Date.now = originalDateNow;
     }
   });
 
-  test("polling updates uncommitted file count from summary payloads", async () => {
-    const originalSetInterval = globalThis.setInterval;
-    const originalClearInterval = globalThis.clearInterval;
-    let intervalCallback: (() => void) | null = null;
-
-    const setIntervalMock = mock((callback: TimerHandler, _delay?: number) => {
-      if (typeof callback !== "function") {
-        throw new Error("Expected polling callback function");
-      }
-      intervalCallback = () => {
-        callback();
-      };
-      return 1;
-    });
-    const clearIntervalMock = mock((_intervalId: number) => {});
-
+  test("visibility refresh updates uncommitted file count from summary payloads", async () => {
     let fullRequestCount = 0;
     gitGetWorktreeStatusMock.mockImplementation(
       async (
@@ -1440,20 +1325,10 @@ describe("useAgentStudioDiffData", () => {
       },
     );
 
-    globalThis.setInterval = setIntervalMock as unknown as typeof globalThis.setInterval;
-    globalThis.clearInterval = clearIntervalMock as unknown as typeof globalThis.clearInterval;
-
     const harness = createHookHarness({
       ...createBaseArgs(),
       enablePolling: true,
     });
-
-    const runTick = (): void => {
-      if (intervalCallback == null) {
-        throw new Error("Polling callback was not registered");
-      }
-      intervalCallback();
-    };
 
     try {
       await harness.mount();
@@ -1461,34 +1336,17 @@ describe("useAgentStudioDiffData", () => {
       expect(harness.getLatest().uncommittedFileCount).toBe(1);
 
       await harness.run(() => {
-        runTick();
+        dispatchDiffRefresh();
       });
       await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 1);
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
       await harness.waitFor((state) => state.uncommittedFileCount === 4);
     } finally {
       await harness.unmount();
-      globalThis.setInterval = originalSetInterval;
-      globalThis.clearInterval = originalClearInterval;
     }
   });
 
-  test("polling triggers a full reload when summary hashes show file status changes", async () => {
-    const originalSetInterval = globalThis.setInterval;
-    const originalClearInterval = globalThis.clearInterval;
-    let intervalCallback: (() => void) | null = null;
-
-    const setIntervalMock = mock((callback: TimerHandler, _delay?: number) => {
-      if (typeof callback !== "function") {
-        throw new Error("Expected polling callback function");
-      }
-      intervalCallback = () => {
-        callback();
-      };
-      return 1;
-    });
-    const clearIntervalMock = mock((_intervalId: number) => {});
-
+  test("visibility refresh triggers a full reload when summary hashes show file status changes", async () => {
     let fullRequestCount = 0;
     gitGetWorktreeStatusMock.mockImplementation(
       async (
@@ -1587,20 +1445,10 @@ describe("useAgentStudioDiffData", () => {
         ),
     );
 
-    globalThis.setInterval = setIntervalMock as unknown as typeof globalThis.setInterval;
-    globalThis.clearInterval = clearIntervalMock as unknown as typeof globalThis.clearInterval;
-
     const harness = createHookHarness({
       ...createBaseArgs(),
       enablePolling: true,
     });
-
-    const runTick = (): void => {
-      if (intervalCallback == null) {
-        throw new Error("Polling callback was not registered");
-      }
-      intervalCallback();
-    };
 
     try {
       await harness.mount();
@@ -1610,7 +1458,7 @@ describe("useAgentStudioDiffData", () => {
       ]);
 
       await harness.run(() => {
-        runTick();
+        dispatchDiffRefresh();
       });
       await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 1);
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
@@ -1621,27 +1469,10 @@ describe("useAgentStudioDiffData", () => {
       expect(harness.getLatest().branch).toBe("feature/resolved");
     } finally {
       await harness.unmount();
-      globalThis.setInterval = originalSetInterval;
-      globalThis.clearInterval = originalClearInterval;
     }
   });
 
-  test("polling triggers a full reload when non-conflict summary hashes change", async () => {
-    const originalSetInterval = globalThis.setInterval;
-    const originalClearInterval = globalThis.clearInterval;
-    let intervalCallback: (() => void) | null = null;
-
-    const setIntervalMock = mock((callback: TimerHandler, _delay?: number) => {
-      if (typeof callback !== "function") {
-        throw new Error("Expected polling callback function");
-      }
-      intervalCallback = () => {
-        callback();
-      };
-      return 1;
-    });
-    const clearIntervalMock = mock((_intervalId: number) => {});
-
+  test("visibility refresh triggers a full reload when non-conflict summary hashes change", async () => {
     let targetFullRequestCount = 0;
     gitGetWorktreeStatusMock.mockImplementation(
       async (
@@ -1750,20 +1581,10 @@ describe("useAgentStudioDiffData", () => {
         ),
     );
 
-    globalThis.setInterval = setIntervalMock as unknown as typeof globalThis.setInterval;
-    globalThis.clearInterval = clearIntervalMock as unknown as typeof globalThis.clearInterval;
-
     const harness = createHookHarness({
       ...createBaseArgs(),
       enablePolling: true,
     });
-
-    const runTick = (): void => {
-      if (intervalCallback == null) {
-        throw new Error("Polling callback was not registered");
-      }
-      intervalCallback();
-    };
 
     try {
       await harness.mount();
@@ -1775,7 +1596,7 @@ describe("useAgentStudioDiffData", () => {
       expect(harness.getLatest().fileDiffs[0]?.additions).toBe(1);
 
       await harness.run(() => {
-        runTick();
+        dispatchDiffRefresh();
       });
       await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 1);
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
@@ -1786,8 +1607,6 @@ describe("useAgentStudioDiffData", () => {
       });
     } finally {
       await harness.unmount();
-      globalThis.setInterval = originalSetInterval;
-      globalThis.clearInterval = originalClearInterval;
     }
   });
 
@@ -2783,14 +2602,6 @@ describe("useAgentStudioDiffData", () => {
     const pendingRunsList = createDeferred<Array<{ runId: string; worktreePath: string }>>();
     runsListMock.mockImplementation(async () => pendingRunsList.promise);
 
-    const originalSetInterval = globalThis.setInterval;
-    const originalClearInterval = globalThis.clearInterval;
-    const setIntervalMock = mock((_callback: TimerHandler, _delay?: number) => 1);
-    const clearIntervalMock = mock((_intervalId: number) => {});
-
-    globalThis.setInterval = setIntervalMock as unknown as typeof globalThis.setInterval;
-    globalThis.clearInterval = clearIntervalMock as unknown as typeof globalThis.clearInterval;
-
     const harness = createHookHarness({
       ...createBaseArgs(),
       sessionRunId: "run-1",
@@ -2803,13 +2614,10 @@ describe("useAgentStudioDiffData", () => {
         await Promise.resolve();
       });
 
-      expect(setIntervalMock).not.toHaveBeenCalled();
       expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
       expect(gitGetWorktreeStatusSummaryMock).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
-      globalThis.setInterval = originalSetInterval;
-      globalThis.clearInterval = originalClearInterval;
       pendingRunsList.reject(new Error("cleanup"));
     }
   });

@@ -49,6 +49,8 @@ const createBaseArgs = (): HookArgs => {
     startAgentSession: async () => "session-new",
     sendAgentMessage: async () => {},
     updateAgentSessionModel: () => {},
+    bootstrapTaskSessions: async () => {},
+    hydrateRequestedTaskSessionHistory: async () => {},
     loadAgentSessions: async () => {},
     humanRequestChangesTask: async () => {},
     answerAgentQuestion: async () => {},
@@ -118,7 +120,7 @@ describe("useAgentStudioSessionActions", () => {
         profileId: "spec",
       },
       sendKickoff: false,
-      startMode: "reuse_latest",
+      startMode: "fresh" as const,
       requireModelReady: true,
     });
     expect(updateAgentSessionModel).toHaveBeenCalledWith("session-new", {
@@ -414,7 +416,11 @@ describe("useAgentStudioSessionActions", () => {
       variant: "thinking",
       profileId: "spec",
     } as const;
-    const requestNewSessionStart = mock(async () => ({ selectedModel: requestedSelection }));
+    const requestNewSessionStart = mock(async () => ({
+      startMode: "fresh" as const,
+      reuseSessionId: null,
+      selectedModel: requestedSelection,
+    }));
     const startAgentSession = mock(async () => "session-new");
     const sendAgentMessage = mock(async () => {});
 
@@ -434,7 +440,6 @@ describe("useAgentStudioSessionActions", () => {
       taskId: "task-1",
       role: "spec",
       scenario: "spec_initial",
-      startMode: "reuse_latest",
       reason: "composer_send",
       selectedModel: {
         runtimeKind: "opencode",
@@ -444,13 +449,17 @@ describe("useAgentStudioSessionActions", () => {
         profileId: "spec",
       },
     });
+    const requestArg = (
+      requestNewSessionStart.mock.calls as unknown as Array<[Record<string, unknown>]>
+    ).at(0)?.[0];
+    expect(requestArg).not.toHaveProperty("startMode");
     expect(startAgentSession).toHaveBeenCalledWith({
       taskId: "task-1",
       role: "spec",
       scenario: "spec_initial",
       selectedModel: requestedSelection,
       sendKickoff: false,
-      startMode: "reuse_latest",
+      startMode: "fresh" as const,
       requireModelReady: true,
     });
     expect(sendAgentMessage).toHaveBeenCalledWith("session-new", "hello world");
@@ -535,7 +544,9 @@ describe("useAgentStudioSessionActions", () => {
       task: "task-2",
       session: "session-2",
       agent: "spec",
+      scenario: "spec_initial",
       autostart: undefined,
+      start: undefined,
     });
 
     await harness.unmount();
@@ -563,7 +574,9 @@ describe("useAgentStudioSessionActions", () => {
       task: "task-1",
       session: undefined,
       agent: "planner",
+      scenario: "spec_initial",
       autostart: undefined,
+      start: undefined,
     });
 
     await harness.unmount();
@@ -638,15 +651,9 @@ describe("useAgentStudioSessionActions", () => {
         taskId: "task-1",
         role: "planner",
         scenario: "planner_initial",
-        selectedModel: {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5",
-          variant: "default",
-          profileId: "spec",
-        },
+        selectedModel: null,
         sendKickoff: false,
-        startMode: "fresh",
+        startMode: "fresh" as const,
         requireModelReady: true,
       });
 
@@ -719,6 +726,8 @@ describe("useAgentStudioSessionActions", () => {
 
   test("handleCreateSession requests model selection with create_session reason", async () => {
     const requestNewSessionStart = mock(async () => ({
+      startMode: "fresh" as const,
+      reuseSessionId: null,
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "anthropic",
@@ -766,16 +775,13 @@ describe("useAgentStudioSessionActions", () => {
       taskId: "task-1",
       role: "planner",
       scenario: "planner_initial",
-      startMode: "fresh",
       reason: "create_session",
-      selectedModel: {
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-        profileId: "spec",
-      },
+      selectedModel: null,
     });
+    const requestArg = (
+      requestNewSessionStart.mock.calls as unknown as Array<[Record<string, unknown>]>
+    ).at(0)?.[0];
+    expect(requestArg).not.toHaveProperty("startMode");
     expect(startAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({
         role: "planner",
@@ -885,6 +891,7 @@ describe("useAgentStudioSessionActions", () => {
         task: "task-1",
         session: undefined,
         agent: "planner",
+        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -892,6 +899,7 @@ describe("useAgentStudioSessionActions", () => {
         task: "task-1",
         session: "session-spec",
         agent: "spec",
+        scenario: "spec_initial",
         autostart: undefined,
         start: undefined,
       });
@@ -984,6 +992,8 @@ describe("useAgentStudioSessionActions", () => {
 
   test("startScenarioKickoff requests session selection with kickoff reason", async () => {
     const requestNewSessionStart = mock(async () => ({
+      startMode: "fresh" as const,
+      reuseSessionId: null,
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "openai",
@@ -1012,7 +1022,6 @@ describe("useAgentStudioSessionActions", () => {
       taskId: "task-1",
       role: "spec",
       scenario: "spec_initial",
-      startMode: "reuse_latest",
       reason: "scenario_kickoff",
       selectedModel: {
         runtimeKind: "opencode",
@@ -1022,6 +1031,10 @@ describe("useAgentStudioSessionActions", () => {
         profileId: "spec",
       },
     });
+    const requestArg = (
+      requestNewSessionStart.mock.calls as unknown as Array<[Record<string, unknown>]>
+    ).at(0)?.[0];
+    expect(requestArg).not.toHaveProperty("startMode");
     expect(sendAgentMessage).toHaveBeenCalledWith(
       "session-spec",
       kickoffPromptForScenario("spec", "spec_initial", "task-1"),

@@ -1,3 +1,4 @@
+export { resolveScenarioStartMode } from "./session-start-mode";
 export {
   buildGitConflictResolutionPrompt,
   firstScenario,
@@ -6,6 +7,7 @@ export {
   SCENARIO_LABELS,
   SCENARIOS_BY_ROLE,
 } from "./session-start-prompts";
+export { buildReusableSessionOptions } from "./session-start-reuse-options";
 export {
   isSameSelection,
   normalizeSelectionForCatalog,
@@ -16,6 +18,7 @@ export type {
   NewSessionStartRequest,
   RequestNewSessionStart,
   SessionStartRequestReason,
+  SessionStartReusableSessionOption,
 } from "./session-start-types";
 export type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 export {

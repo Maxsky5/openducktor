@@ -1,14 +1,12 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { isTodoToolName, settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { finalizeDraftAssistantMessage } from "../support/assistant-meta";
-import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { sanitizeStreamingText } from "../support/core";
 import type {
   DraftChannel,
   DraftChannelValueMap,
   SessionLifecycleEventContext,
   SessionPart,
-  SessionPartEventContext,
 } from "./session-event-types";
 
 const DRAFT_FLUSH_DELAY_MS = 32;
@@ -171,40 +169,4 @@ export const createPrePartTodoSettlement = (
       messages: settledMessages,
     };
   };
-};
-
-export const refreshTodosFromSessionRef = (
-  context: Pick<SessionPartEventContext, "store" | "refresh">,
-): void => {
-  const session = context.store.sessionsRef.current[context.store.sessionId];
-  if (!session) {
-    return;
-  }
-  const runtimeKind = session.runtimeKind ?? session.selectedModel?.runtimeKind;
-  if (!runtimeKind) {
-    throw new Error(
-      `Runtime kind is required to refresh todos for session '${context.store.sessionId}'.`,
-    );
-  }
-  runOrchestratorSideEffect(
-    "session-events-refresh-todos",
-    context.refresh.loadSessionTodos(
-      context.store.sessionId,
-      runtimeKind,
-      {
-        endpoint: session.runtimeEndpoint,
-        workingDirectory: session.workingDirectory,
-      },
-      session.externalSessionId,
-    ),
-    {
-      tags: {
-        repoPath: context.refresh.repoPath,
-        sessionId: context.store.sessionId,
-        taskId: session.taskId,
-        role: session.role,
-        externalSessionId: session.externalSessionId,
-      },
-    },
-  );
 };

@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import type { GitCurrentBranch } from "@openducktor/contracts";
 import {
   BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
-  BRANCH_SYNC_INTERVAL_MS,
   branchProbeErrorSignature,
   classifyBranchProbeError,
   hasBranchIdentityChanged,
@@ -73,10 +72,6 @@ describe("workspace-operations-model", () => {
   test("skips no-op branch switch when already attached", () => {
     expect(shouldSkipBranchSwitch(branch("main", false), "main")).toBe(true);
     expect(shouldSkipBranchSwitch(branch("main", true), "main")).toBe(false);
-  });
-
-  test("keeps polling interval contract", () => {
-    expect(BRANCH_SYNC_INTERVAL_MS).toBe(30000);
   });
 
   test("classifies branch probe errors with typed code and stage", () => {

@@ -66,6 +66,10 @@ export function useAgentStudioReadiness({
   isLoadingChecks,
   refreshChecks,
 }: UseAgentStudioReadinessArgs): AgentStudioOrchestrationReadinessContext {
+  const isRuntimeHealthPending =
+    activeRepo !== null &&
+    runtimeDefinitions.length > 0 &&
+    runtimeDefinitions.some((definition) => runtimeHealthByRuntime[definition.kind] === undefined);
   const healthyRuntimeDefinition = useMemo(
     () =>
       runtimeDefinitions.find((definition) => {
@@ -108,6 +112,9 @@ export function useAgentStudioReadiness({
       return "Loading runtime definitions...";
     }
     if (isLoadingChecks) {
+      return "Checking runtime and OpenDucktor MCP health...";
+    }
+    if (isRuntimeHealthPending) {
       return "Checking runtime and OpenDucktor MCP health...";
     }
 

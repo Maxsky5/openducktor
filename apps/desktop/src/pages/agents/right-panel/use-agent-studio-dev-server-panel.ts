@@ -14,7 +14,6 @@ import type {
 import { errorMessage } from "@/lib/errors";
 import { hostClient, subscribeDevServerEvents } from "@/lib/host-client";
 import { devServerGroupStateQueryOptions, devServerQueryKeys } from "@/state/queries/dev-servers";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
 const MAX_BUFFERED_LOG_LINES = 2_000;
@@ -23,7 +22,6 @@ type UseAgentStudioDevServerPanelArgs = {
   repoPath: string | null;
   taskId: string | null;
   repoSettings: RepoSettingsInput | null;
-  activeSession: AgentSessionState | null;
   enabled: boolean;
 };
 
@@ -143,7 +141,6 @@ export function useAgentStudioDevServerPanel({
   repoPath,
   taskId,
   repoSettings,
-  activeSession,
   enabled,
 }: UseAgentStudioDevServerPanelArgs): AgentStudioDevServerPanelModel {
   const queryClient = useQueryClient();
@@ -156,7 +153,7 @@ export function useAgentStudioDevServerPanel({
 
   const configuredScripts = repoSettings?.devServers ?? [];
   const hasConfiguredScripts = configuredScripts.length > 0;
-  const queryEnabled = enabled && repoPath !== null && taskId !== null;
+  const queryEnabled = enabled && hasConfiguredScripts && repoPath !== null && taskId !== null;
   const [queryActivationState, setQueryActivationState] = useState<{
     enabled: boolean;
     since: number;
@@ -165,7 +162,6 @@ export function useAgentStudioDevServerPanel({
     since: queryEnabled ? Date.now() : 0,
   }));
   const taskMemoryKey = repoPath && taskId ? buildTaskMemoryKey(repoPath, taskId) : null;
-  const activeSessionRefreshKey = `${activeSession?.sessionId ?? ""}:${activeSession?.status ?? ""}:${activeSession?.workingDirectory ?? ""}`;
   const queryOptions =
     repoPath && taskId
       ? devServerGroupStateQueryOptions(repoPath, taskId)
@@ -188,6 +184,26 @@ export function useAgentStudioDevServerPanel({
       };
     });
   }, [queryEnabled]);
+
+  useEffect(() => {
+    if (!queryEnabled || repoPath === null || taskId === null) {
+      return;
+    }
+
+    if (stateQuery.isFetching || stateQuery.dataUpdatedAt >= queryActivationState.since) {
+      return;
+    }
+
+    void stateQuery.refetch();
+  }, [
+    queryActivationState.since,
+    queryEnabled,
+    repoPath,
+    stateQuery,
+    stateQuery.dataUpdatedAt,
+    stateQuery.isFetching,
+    taskId,
+  ]);
 
   const syncStateFromEvent = useCallback(
     (event: DevServerEvent): void => {
@@ -245,8 +261,128 @@ export function useAgentStudioDevServerPanel({
     taskMemoryKey,
   ]);
 
+  const syncQueryState = useCallback(
+    (nextState: DevServerGroupState): void => {
+      if (!repoPath || !taskId) {
+        return;
+      }
+
+      queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), nextState);
+      setLiveState(nextState);
+    },
+    [queryClient, repoPath, taskId],
+  );
+
+  const invalidateState = useCallback((): void => {
+    if (!repoPath || !taskId) {
+      return;
+    }
+
+    void queryClient.invalidateQueries({
+      queryKey: devServerQueryKeys.state(repoPath, taskId),
+      exact: true,
+      refetchType: "active",
+    });
+  }, [queryClient, repoPath, taskId]);
+
+  const startMutation = useMutation({
+    mutationFn: async (): Promise<DevServerGroupState> => {
+      if (!repoPath || !taskId) {
+        throw new Error("Builder dev servers require an active repository and task.");
+      }
+
+      return hostClient.devServerStart(repoPath, taskId);
+    },
+    onMutate: () => {
+      setActionError(null);
+    },
+    onSuccess: syncQueryState,
+    onError: (error: unknown) => {
+      setActionError(errorMessage(error));
+    },
+    onSettled: (_data, error) => {
+      if (error) {
+        invalidateState();
+      }
+    },
+  });
+
+  const stopMutation = useMutation({
+    mutationFn: async (): Promise<DevServerGroupState> => {
+      if (!repoPath || !taskId) {
+        throw new Error("Builder dev servers require an active repository and task.");
+      }
+
+      return hostClient.devServerStop(repoPath, taskId);
+    },
+    onMutate: () => {
+      setActionError(null);
+    },
+    onSuccess: syncQueryState,
+    onError: (error: unknown) => {
+      setActionError(errorMessage(error));
+    },
+    onSettled: (_data, error) => {
+      if (error) {
+        invalidateState();
+      }
+    },
+  });
+
+  const restartMutation = useMutation({
+    mutationFn: async (): Promise<DevServerGroupState> => {
+      if (!repoPath || !taskId) {
+        throw new Error("Builder dev servers require an active repository and task.");
+      }
+
+      return hostClient.devServerRestart(repoPath, taskId);
+    },
+    onMutate: () => {
+      setActionError(null);
+    },
+    onSuccess: syncQueryState,
+    onError: (error: unknown) => {
+      setActionError(errorMessage(error));
+    },
+    onSettled: (_data, error) => {
+      if (error) {
+        invalidateState();
+      }
+    },
+  });
+
+  const hasFreshQueryData =
+    stateQuery.data !== undefined && stateQuery.dataUpdatedAt >= queryActivationState.since;
+  const shouldUseQueryData =
+    queryEnabled && hasFreshQueryData && queryActivationState.enabled === queryEnabled;
+  const currentLiveState = queryEnabled ? liveState : null;
+  const effectiveState =
+    currentLiveState ?? (shouldUseQueryData ? (stateQuery.data ?? null) : null);
+  const shouldSubscribeToEvents =
+    queryEnabled &&
+    (startMutation.isPending ||
+      stopMutation.isPending ||
+      restartMutation.isPending ||
+      (effectiveState?.scripts.some((script) => script.status !== "stopped") ?? false));
+  const isAwaitingFreshState =
+    queryEnabled &&
+    effectiveState == null &&
+    !stateQuery.error &&
+    (stateQuery.isPending || stateQuery.isFetching || stateQuery.data !== undefined);
+  const rememberedScriptId = taskMemoryKey
+    ? (selectionMemoryRef.current.get(taskMemoryKey) ?? null)
+    : null;
+  const effectiveSelectedScriptId = useMemo(
+    () =>
+      selectDefaultDevServerTab(
+        effectiveState?.scripts ?? [],
+        selectedScriptId ?? rememberedScriptId,
+      ),
+    [effectiveState?.scripts, rememberedScriptId, selectedScriptId],
+  );
+
   useEffect(() => {
-    if (!queryEnabled || repoPath === null || taskId === null) {
+    if (!shouldSubscribeToEvents || repoPath === null || taskId === null) {
       return;
     }
 
@@ -303,126 +439,7 @@ export function useAgentStudioDevServerPanel({
       cancelled = true;
       unsubscribe?.();
     };
-  }, [queryEnabled, repoPath, syncStateFromEvent, taskId]);
-
-  useEffect(() => {
-    if (!queryEnabled || repoPath === null || taskId === null) {
-      return;
-    }
-
-    if (activeSessionRefreshKey) {
-      // Include activeSessionRefreshKey in the dependency list so session refreshes
-      // trigger a dev-server state refresh for the active task.
-    }
-
-    void queryClient.invalidateQueries({
-      queryKey: devServerQueryKeys.state(repoPath, taskId),
-      exact: true,
-      refetchType: "active",
-    });
-  }, [activeSessionRefreshKey, queryClient, queryEnabled, repoPath, taskId]);
-
-  const syncQueryState = useCallback(
-    (nextState: DevServerGroupState): void => {
-      if (!repoPath || !taskId) {
-        return;
-      }
-
-      queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), nextState);
-      setLiveState(nextState);
-    },
-    [queryClient, repoPath, taskId],
-  );
-
-  const invalidateState = useCallback((): void => {
-    if (!repoPath || !taskId) {
-      return;
-    }
-
-    void queryClient.invalidateQueries({
-      queryKey: devServerQueryKeys.state(repoPath, taskId),
-      exact: true,
-      refetchType: "active",
-    });
-  }, [queryClient, repoPath, taskId]);
-
-  const startMutation = useMutation({
-    mutationFn: async (): Promise<DevServerGroupState> => {
-      if (!repoPath || !taskId) {
-        throw new Error("Builder dev servers require an active repository and task.");
-      }
-
-      return hostClient.devServerStart(repoPath, taskId);
-    },
-    onMutate: () => {
-      setActionError(null);
-    },
-    onSuccess: syncQueryState,
-    onError: (error: unknown) => {
-      setActionError(errorMessage(error));
-    },
-    onSettled: invalidateState,
-  });
-
-  const stopMutation = useMutation({
-    mutationFn: async (): Promise<DevServerGroupState> => {
-      if (!repoPath || !taskId) {
-        throw new Error("Builder dev servers require an active repository and task.");
-      }
-
-      return hostClient.devServerStop(repoPath, taskId);
-    },
-    onMutate: () => {
-      setActionError(null);
-    },
-    onSuccess: syncQueryState,
-    onError: (error: unknown) => {
-      setActionError(errorMessage(error));
-    },
-    onSettled: invalidateState,
-  });
-
-  const restartMutation = useMutation({
-    mutationFn: async (): Promise<DevServerGroupState> => {
-      if (!repoPath || !taskId) {
-        throw new Error("Builder dev servers require an active repository and task.");
-      }
-
-      return hostClient.devServerRestart(repoPath, taskId);
-    },
-    onMutate: () => {
-      setActionError(null);
-    },
-    onSuccess: syncQueryState,
-    onError: (error: unknown) => {
-      setActionError(errorMessage(error));
-    },
-    onSettled: invalidateState,
-  });
-
-  const hasFreshQueryData =
-    stateQuery.data !== undefined && stateQuery.dataUpdatedAt >= queryActivationState.since;
-  const shouldUseQueryData =
-    queryEnabled && hasFreshQueryData && queryActivationState.enabled === queryEnabled;
-  const currentLiveState = queryEnabled ? liveState : null;
-  const effectiveState =
-    currentLiveState ?? (shouldUseQueryData ? (stateQuery.data ?? null) : null);
-  const isAwaitingFreshState =
-    queryEnabled &&
-    effectiveState == null &&
-    !stateQuery.error &&
-    (stateQuery.isPending || stateQuery.isFetching || stateQuery.data !== undefined);
-  const rememberedScriptId = taskMemoryKey
-    ? (selectionMemoryRef.current.get(taskMemoryKey) ?? null)
-    : null;
-  const effectiveSelectedScriptId = useMemo(
-    () =>
-      selectDefaultDevServerTab(
-        effectiveState?.scripts ?? [],
-        selectedScriptId ?? rememberedScriptId,
-      ),
-    [effectiveState?.scripts, rememberedScriptId, selectedScriptId],
-  );
+  }, [repoPath, shouldSubscribeToEvents, syncStateFromEvent, taskId]);
 
   useEffect(() => {
     if (!taskMemoryKey) {

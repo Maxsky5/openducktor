@@ -17,7 +17,7 @@ use host_domain::{
     GitMergeBranchRequest, GitMergeBranchResult, GitPort, GitPullRequest, GitPullResult,
     GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest,
     GitRebaseBranchResult, GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
-    GitWorktreeStatusData, GitWorktreeStatusSummaryData,
+    GitWorktreeStatusData, GitWorktreeStatusSummaryData, GitWorktreeSummary,
 };
 use std::path::Path;
 
@@ -70,6 +70,10 @@ impl GitPort for GitCliPort {
 
     fn get_current_branch(&self, repo_path: &Path) -> Result<GitCurrentBranch> {
         self.get_current_branch_impl(repo_path)
+    }
+
+    fn list_worktrees(&self, repo_path: &Path) -> Result<Vec<GitWorktreeSummary>> {
+        self.list_worktrees_impl(repo_path)
     }
 
     fn switch_branch(

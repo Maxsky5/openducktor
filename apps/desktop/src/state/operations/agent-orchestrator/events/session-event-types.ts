@@ -1,5 +1,4 @@
-import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
+import type { AgentEnginePort } from "@openducktor/core";
 import type { MutableRefObject } from "react";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 
@@ -42,12 +41,6 @@ export type AttachAgentSessionListenerParams = {
   resolveTurnDurationMs: ResolveTurnDuration;
   clearTurnDuration: (sessionId: string) => void;
   refreshTaskData: (repoPath: string) => Promise<void>;
-  loadSessionTodos: (
-    sessionId: string,
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-    externalSessionId: string,
-  ) => Promise<void>;
 };
 
 export type SessionStoreContext = Pick<
@@ -77,7 +70,7 @@ export type SessionPermissionContext = Pick<AttachAgentSessionListenerParams, "a
 
 export type SessionRefreshContext = Pick<
   AttachAgentSessionListenerParams,
-  "repoPath" | "refreshTaskData" | "loadSessionTodos"
+  "repoPath" | "refreshTaskData"
 >;
 
 export type SessionLifecycleEventContext = {
@@ -163,7 +156,6 @@ export const createSessionEventHandlerContext = (
     refresh: {
       repoPath: context.repoPath,
       refreshTaskData: context.refreshTaskData,
-      loadSessionTodos: context.loadSessionTodos,
     },
   },
 });

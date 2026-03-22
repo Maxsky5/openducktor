@@ -109,7 +109,15 @@ export type SettingsModalController = {
   submit: () => Promise<boolean>;
 };
 
-export const useSettingsModalController = (open: boolean): SettingsModalController => {
+type UseSettingsModalControllerArgs = {
+  open: boolean;
+  shouldLoadCatalog: boolean;
+};
+
+export const useSettingsModalController = ({
+  open,
+  shouldLoadCatalog,
+}: UseSettingsModalControllerArgs): SettingsModalController => {
   const {
     activeRepo,
     workspaces,
@@ -161,7 +169,7 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     isCatalogLoadingForRuntime,
     isLoadingCatalog,
   } = useSettingsModalCatalogState({
-    open,
+    enabled: shouldLoadCatalog,
     selectedRepoPath,
     runtimeDefinitions,
   });

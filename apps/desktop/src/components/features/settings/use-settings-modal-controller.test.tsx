@@ -40,6 +40,12 @@ const loadSettingsSnapshot = mock(async (): Promise<SettingsSnapshot> => createS
 let refreshChecks = mock(async () => {});
 let saveGlobalGitConfig = mock(async () => {});
 let saveSettingsSnapshot = mock(async () => {});
+const useSettingsModalCatalogStateMock = mock(() => ({
+  getCatalogForRuntime: () => null,
+  getCatalogErrorForRuntime: () => null,
+  isCatalogLoadingForRuntime: () => false,
+  isLoadingCatalog: false,
+}));
 
 mock.module("@/state", () => ({
   useWorkspaceState: () => ({
@@ -83,20 +89,23 @@ mock.module("./use-settings-modal-branches-state", () => ({
 }));
 
 mock.module("./use-settings-modal-catalog-state", () => ({
-  useSettingsModalCatalogState: () => ({
-    getCatalogForRuntime: () => null,
-    getCatalogErrorForRuntime: () => null,
-    isCatalogLoadingForRuntime: () => false,
-    isLoadingCatalog: false,
-  }),
+  useSettingsModalCatalogState: useSettingsModalCatalogStateMock,
 }));
 
 const { useSettingsModalController } = await import("./use-settings-modal-controller");
 
-const createHookHarness = (open: boolean) =>
-  createSharedHookHarness(({ isOpen }: { isOpen: boolean }) => useSettingsModalController(isOpen), {
-    isOpen: open,
-  });
+const createHookHarness = (open: boolean, shouldLoadCatalog = false) =>
+  createSharedHookHarness(
+    ({ isOpen, shouldLoad }: { isOpen: boolean; shouldLoad: boolean }) =>
+      useSettingsModalController({
+        open: isOpen,
+        shouldLoadCatalog: shouldLoad,
+      }),
+    {
+      isOpen: open,
+      shouldLoad: shouldLoadCatalog,
+    },
+  );
 
 describe("useSettingsModalController", () => {
   afterAll(() => {
@@ -117,15 +126,42 @@ describe("useSettingsModalController", () => {
 
     const nextRefreshChecks = mock(async () => {});
     refreshChecks = nextRefreshChecks;
-    await harness.update({ isOpen: true });
+    await harness.update({ isOpen: true, shouldLoad: false });
 
     expect(nextRefreshChecks).toHaveBeenCalledTimes(0);
 
-    await harness.update({ isOpen: false });
-    await harness.update({ isOpen: true });
+    await harness.update({ isOpen: false, shouldLoad: false });
+    await harness.update({ isOpen: true, shouldLoad: false });
     await harness.waitFor((state) => state.snapshotDraft !== null);
 
     expect(nextRefreshChecks).toHaveBeenCalledTimes(0);
+
+    await harness.unmount();
+  });
+
+  test("does not enable catalog loading unless the agents section requests it", async () => {
+    useSettingsModalCatalogStateMock.mockClear();
+
+    const harness = createHookHarness(true, false);
+    await harness.mount();
+    await harness.waitFor((state) => state.snapshotDraft !== null);
+
+    expect(useSettingsModalCatalogStateMock).toHaveBeenCalled();
+    const catalogCalls = useSettingsModalCatalogStateMock.mock.calls as unknown as Array<
+      [{ enabled: boolean; selectedRepoPath: string | null }]
+    >;
+    const disabledCall = catalogCalls.find((call) => call[0].enabled === false);
+    expect(disabledCall?.[0]).toMatchObject({
+      enabled: false,
+    });
+
+    await harness.update({ isOpen: true, shouldLoad: true });
+
+    const enabledCall = [...catalogCalls].reverse().find((call) => call[0].enabled === true);
+    expect(enabledCall?.[0]).toMatchObject({
+      enabled: true,
+      selectedRepoPath: "/repo",
+    });
 
     await harness.unmount();
   });

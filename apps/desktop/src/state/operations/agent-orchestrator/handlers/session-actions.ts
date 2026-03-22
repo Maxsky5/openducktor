@@ -1,10 +1,5 @@
-import type { RepoPromptOverrides, RuntimeKind, TaskCard } from "@openducktor/contracts";
-import type {
-  AgentEnginePort,
-  AgentModelSelection,
-  AgentRole,
-  AgentRuntimeConnection,
-} from "@openducktor/core";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { AgentEnginePort, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
@@ -14,7 +9,6 @@ import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import { createRepoStaleGuard, now, throwIfRepoStale } from "../support/core";
 import { annotateQuestionToolMessage } from "../support/question-messages";
 import { buildSessionPreludeMessages, loadSessionPromptContext } from "../support/session-prompt";
-import { warmSessionData } from "../support/session-warmup";
 import { createStartAgentSession } from "./start-session";
 
 type SessionActionsDependencies = {
@@ -28,6 +22,7 @@ type SessionActionsDependencies = {
   sessionsRef: { current: Record<string, AgentSessionState> };
   taskRef: { current: TaskCard[] };
   repoEpochRef: { current: number };
+  activeRepoRef?: { current: string | null };
   previousRepoRef: { current: string | null };
   inFlightStartsByRepoTaskRef: { current: Map<string, Promise<string>> };
   unsubscribersRef: { current: Map<string, () => void> };
@@ -44,17 +39,6 @@ type SessionActionsDependencies = {
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoDefaultModel: (repoPath: string, role: AgentRole) => Promise<AgentModelSelection | null>;
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
-  loadSessionTodos: (
-    sessionId: string,
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-    externalSessionId: string,
-  ) => Promise<void>;
-  loadSessionModelCatalog: (
-    sessionId: string,
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-  ) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   clearTurnDuration: (sessionId: string) => void;
   refreshTaskData: (repoPath: string) => Promise<void>;
@@ -123,6 +107,7 @@ export const createAgentSessionActions = ({
   sessionsRef,
   taskRef,
   repoEpochRef,
+  activeRepoRef,
   previousRepoRef,
   inFlightStartsByRepoTaskRef,
   unsubscribersRef,
@@ -135,8 +120,6 @@ export const createAgentSessionActions = ({
   loadTaskDocuments,
   loadRepoDefaultModel,
   loadRepoPromptOverrides,
-  loadSessionTodos,
-  loadSessionModelCatalog,
   loadAgentSessions,
   clearTurnDuration,
   refreshTaskData,
@@ -155,8 +138,6 @@ export const createAgentSessionActions = ({
     ensureRuntime,
     loadTaskDocuments,
     loadRepoPromptOverrides,
-    loadSessionTodos,
-    loadSessionModelCatalog,
   });
 
   const sendAgentMessage = async (sessionId: string, content: string): Promise<void> => {
@@ -193,24 +174,28 @@ export const createAgentSessionActions = ({
       turnModelBySessionRef.current[sessionId] = selectedModel ?? null;
     }
 
-    updateSession(sessionId, (current) => ({
-      ...current,
-      status: "running",
-      draftAssistantText: "",
-      draftAssistantMessageId: null,
-      draftReasoningText: "",
-      draftReasoningMessageId: null,
-      messages: [
-        ...current.messages,
-        {
-          id: crypto.randomUUID(),
-          role: "user",
-          content: trimmed,
-          timestamp: now(),
-          ...(userMessageMeta ? { meta: userMessageMeta } : {}),
-        },
-      ],
-    }));
+    updateSession(
+      sessionId,
+      (current) => ({
+        ...current,
+        status: "running",
+        draftAssistantText: "",
+        draftAssistantMessageId: null,
+        draftReasoningText: "",
+        draftReasoningMessageId: null,
+        messages: [
+          ...current.messages,
+          {
+            id: crypto.randomUUID(),
+            role: "user",
+            content: trimmed,
+            timestamp: now(),
+            ...(userMessageMeta ? { meta: userMessageMeta } : {}),
+          },
+        ],
+      }),
+      { persist: false },
+    );
 
     try {
       await adapter.sendUserMessage({
@@ -252,6 +237,7 @@ export const createAgentSessionActions = ({
       activeRepo,
       repoEpochRef,
       previousRepoRef,
+      ...(activeRepoRef ? { activeRepoRef } : {}),
     },
     session: {
       setSessionsById,
@@ -279,8 +265,6 @@ export const createAgentSessionActions = ({
     model: {
       loadRepoDefaultModel,
       loadRepoPromptOverrides,
-      loadSessionTodos,
-      loadSessionModelCatalog,
     },
   });
 
@@ -295,6 +279,7 @@ export const createAgentSessionActions = ({
     const isStaleRepoOperation = createRepoStaleGuard({
       repoPath,
       repoEpochRef,
+      activeRepoRef,
       previousRepoRef,
     });
     throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
@@ -391,27 +376,6 @@ export const createAgentSessionActions = ({
     }));
     attachSessionListener(repoPath, summary.sessionId);
     void persistSessionSnapshot(nextSession);
-    warmSessionData(
-      {
-        repoPath,
-        sessionId: summary.sessionId,
-        taskId: nextSession.taskId,
-        role: nextSession.role,
-        runtimeKind,
-        runtimeConnection: {
-          endpoint: nextSession.runtimeEndpoint,
-          workingDirectory: nextSession.workingDirectory,
-        },
-        externalSessionId: summary.externalSessionId,
-      },
-      {
-        loadSessionTodos,
-        loadSessionModelCatalog,
-      },
-      {
-        operationPrefix: "fork-session-warm-session",
-      },
-    );
     return summary.sessionId;
   };
 
@@ -436,16 +400,20 @@ export const createAgentSessionActions = ({
         delete turnModelBySessionRef.current[sessionId];
       }
 
-      updateSession(sessionId, (current) => ({
-        ...current,
-        status: "stopped",
-        draftAssistantText: "",
-        draftAssistantMessageId: null,
-        draftReasoningText: "",
-        draftReasoningMessageId: null,
-        pendingPermissions: [],
-        pendingQuestions: [],
-      }));
+      updateSession(
+        sessionId,
+        (current) => ({
+          ...current,
+          status: "stopped",
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          pendingPermissions: [],
+          pendingQuestions: [],
+        }),
+        { persist: true },
+      );
     }
   };
 
@@ -459,10 +427,14 @@ export const createAgentSessionActions = ({
         model: selection,
       });
     }
-    updateSession(sessionId, (current) => ({
-      ...current,
-      selectedModel: selection,
-    }));
+    updateSession(
+      sessionId,
+      (current) => ({
+        ...current,
+        selectedModel: selection,
+      }),
+      { persist: true },
+    );
   };
 
   const replyAgentPermission = async (
@@ -487,12 +459,16 @@ export const createAgentSessionActions = ({
       ...(message ? { message } : {}),
     });
 
-    updateSession(sessionId, (current) => ({
-      ...current,
-      pendingPermissions: current.pendingPermissions.filter(
-        (entry) => entry.requestId !== requestId,
-      ),
-    }));
+    updateSession(
+      sessionId,
+      (current) => ({
+        ...current,
+        pendingPermissions: current.pendingPermissions.filter(
+          (entry) => entry.requestId !== requestId,
+        ),
+      }),
+      { persist: true },
+    );
   };
 
   const answerAgentQuestion = async (
@@ -510,19 +486,23 @@ export const createAgentSessionActions = ({
       sessionId,
     );
     await adapter.replyQuestion({ sessionId, requestId, answers });
-    updateSession(sessionId, (current) => {
-      const { pendingQuestions, messages } = applyQuestionAnswerToSession(
-        current,
-        requestId,
-        answers,
-      );
+    updateSession(
+      sessionId,
+      (current) => {
+        const { pendingQuestions, messages } = applyQuestionAnswerToSession(
+          current,
+          requestId,
+          answers,
+        );
 
-      return {
-        ...current,
-        pendingQuestions,
-        messages,
-      };
-    });
+        return {
+          ...current,
+          pendingQuestions,
+          messages,
+        };
+      },
+      { persist: true },
+    );
   };
 
   return {

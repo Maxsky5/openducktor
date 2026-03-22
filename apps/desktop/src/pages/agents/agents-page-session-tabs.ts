@@ -1,5 +1,10 @@
 import type { AgentWorkflowState, TaskCard } from "@openducktor/contracts";
-import { type AgentRole, type AgentScenario, isRecord } from "@openducktor/core";
+import {
+  type AgentRole,
+  type AgentScenario,
+  isRecord,
+  isScenarioStartModeAllowed,
+} from "@openducktor/core";
 import type { AgentStudioTaskTab } from "@/components/features/agents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { buildRoleWorkflowMapForTask as resolveRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
@@ -434,62 +439,74 @@ export const buildSessionCreateOptions = (params: {
   };
 
   if (params.roleEnabledByTask.spec) {
-    addFreshOption(
-      "spec",
-      "spec_initial",
-      `${params.roleLabelByRole.spec} · Start Spec`,
-      "Create a new spec session from scratch",
-      params.createSessionDisabled,
-    );
+    if (isScenarioStartModeAllowed("spec_initial", "fresh")) {
+      addFreshOption(
+        "spec",
+        "spec_initial",
+        `${params.roleLabelByRole.spec} · Start Spec`,
+        "Create a new spec session from scratch",
+        params.createSessionDisabled,
+      );
+    }
   }
 
   const canStartPlannerFresh = params.roleEnabledByTask.planner;
   if (canStartPlannerFresh) {
-    addFreshOption(
-      "planner",
-      "planner_initial",
-      `${params.roleLabelByRole.planner} · Start Planner`,
-      "Create a new planner session from scratch",
-      params.createSessionDisabled,
-    );
-  }
-
-  if (params.roleEnabledByTask.build) {
-    addFreshOption(
-      "build",
-      "build_implementation_start",
-      `${params.roleLabelByRole.build} · ${params.scenarioLabels.build_implementation_start}`,
-      `Create ${params.roleLabelByRole.build.toLowerCase()} session with ${params.scenarioLabels.build_implementation_start.toLowerCase()}`,
-      params.createSessionDisabled,
-    );
-    if (params.hasQaRejection) {
+    if (isScenarioStartModeAllowed("planner_initial", "fresh")) {
       addFreshOption(
-        "build",
-        "build_after_qa_rejected",
-        `${params.roleLabelByRole.build} · ${params.scenarioLabels.build_after_qa_rejected}`,
-        `Create ${params.roleLabelByRole.build.toLowerCase()} session with ${params.scenarioLabels.build_after_qa_rejected.toLowerCase()}`,
+        "planner",
+        "planner_initial",
+        `${params.roleLabelByRole.planner} · Start Planner`,
+        "Create a new planner session from scratch",
         params.createSessionDisabled,
       );
     }
-    if (params.hasHumanFeedback) {
+  }
+
+  if (params.roleEnabledByTask.build) {
+    if (isScenarioStartModeAllowed("build_implementation_start", "fresh")) {
       addFreshOption(
         "build",
-        "build_after_human_request_changes",
-        `${params.roleLabelByRole.build} · ${params.scenarioLabels.build_after_human_request_changes}`,
-        `Create ${params.roleLabelByRole.build.toLowerCase()} session with ${params.scenarioLabels.build_after_human_request_changes.toLowerCase()}`,
+        "build_implementation_start",
+        `${params.roleLabelByRole.build} · ${params.scenarioLabels.build_implementation_start}`,
+        `Create ${params.roleLabelByRole.build.toLowerCase()} session with ${params.scenarioLabels.build_implementation_start.toLowerCase()}`,
         params.createSessionDisabled,
       );
+    }
+    if (params.hasQaRejection) {
+      if (isScenarioStartModeAllowed("build_after_qa_rejected", "fresh")) {
+        addFreshOption(
+          "build",
+          "build_after_qa_rejected",
+          `${params.roleLabelByRole.build} · ${params.scenarioLabels.build_after_qa_rejected}`,
+          `Create ${params.roleLabelByRole.build.toLowerCase()} session with ${params.scenarioLabels.build_after_qa_rejected.toLowerCase()}`,
+          params.createSessionDisabled,
+        );
+      }
+    }
+    if (params.hasHumanFeedback) {
+      if (isScenarioStartModeAllowed("build_after_human_request_changes", "fresh")) {
+        addFreshOption(
+          "build",
+          "build_after_human_request_changes",
+          `${params.roleLabelByRole.build} · ${params.scenarioLabels.build_after_human_request_changes}`,
+          `Create ${params.roleLabelByRole.build.toLowerCase()} session with ${params.scenarioLabels.build_after_human_request_changes.toLowerCase()}`,
+          params.createSessionDisabled,
+        );
+      }
     }
   }
 
   if (params.roleEnabledByTask.qa) {
-    addFreshOption(
-      "qa",
-      "qa_review",
-      `${params.roleLabelByRole.qa} · ${params.scenarioLabels.qa_review}`,
-      `Create ${params.roleLabelByRole.qa.toLowerCase()} session with ${params.scenarioLabels.qa_review.toLowerCase()}`,
-      params.createSessionDisabled,
-    );
+    if (isScenarioStartModeAllowed("qa_review", "fresh")) {
+      addFreshOption(
+        "qa",
+        "qa_review",
+        `${params.roleLabelByRole.qa} · ${params.scenarioLabels.qa_review}`,
+        `Create ${params.roleLabelByRole.qa.toLowerCase()} session with ${params.scenarioLabels.qa_review.toLowerCase()}`,
+        params.createSessionDisabled,
+      );
+    }
   }
 
   return options;

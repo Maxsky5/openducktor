@@ -10,7 +10,10 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useChecksState, useWorkspaceState } from "@/state";
-import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import {
+  useChecksOperationsContext,
+  useRuntimeDefinitionsContext,
+} from "@/state/app-state-contexts";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
 
@@ -18,6 +21,8 @@ export function DiagnosticsPanel(): ReactElement {
   const { activeRepo, activeWorkspace, isSwitchingWorkspace } = useWorkspaceState();
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
+  const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
+    useChecksOperationsContext();
   const { runtimeCheck, beadsCheck, runtimeHealthByRuntime, refreshChecks, isLoadingChecks } =
     useChecksState();
   const [isOpen, setOpen] = useState(false);
@@ -62,6 +67,24 @@ export function DiagnosticsPanel(): ReactElement {
     autoOpenedByRepoRef.current.add(activeRepo);
     setOpen(true);
   }, [activeRepo, model.criticalReasons.length]);
+
+  useEffect(() => {
+    if (!isOpen || !activeRepo || runtimeDefinitions.length === 0 || isLoadingChecks) {
+      return;
+    }
+    const runtimeKinds = runtimeDefinitions.map((definition) => definition.kind);
+    if (hasCachedRepoRuntimeHealth(activeRepo, runtimeKinds)) {
+      return;
+    }
+    void refreshRepoRuntimeHealthForRepo(activeRepo, false);
+  }, [
+    activeRepo,
+    hasCachedRepoRuntimeHealth,
+    isLoadingChecks,
+    isOpen,
+    refreshRepoRuntimeHealthForRepo,
+    runtimeDefinitions,
+  ]);
 
   return (
     <>

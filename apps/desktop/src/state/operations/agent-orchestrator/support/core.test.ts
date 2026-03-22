@@ -43,15 +43,33 @@ describe("agent-orchestrator/support/core", () => {
 
   test("creates a stale-repo guard bound to initial repo epoch", () => {
     const repoEpochRef = { current: 3 };
+    const activeRepoRef = { current: "/repo/a" as string | null };
     const previousRepoRef = { current: "/repo/a" as string | null };
     const isStale = createRepoStaleGuard({
       repoPath: "/repo/a",
       repoEpochRef,
+      activeRepoRef,
       previousRepoRef,
     });
 
     expect(isStale()).toBe(false);
     repoEpochRef.current = 4;
+    expect(isStale()).toBe(true);
+  });
+
+  test("prefers the active repo ref over the previous repo marker", () => {
+    const repoEpochRef = { current: 1 };
+    const activeRepoRef = { current: "/repo/a" as string | null };
+    const previousRepoRef = { current: null as string | null };
+    const isStale = createRepoStaleGuard({
+      repoPath: "/repo/a",
+      repoEpochRef,
+      activeRepoRef,
+      previousRepoRef,
+    });
+
+    expect(isStale()).toBe(false);
+    activeRepoRef.current = "/repo/b";
     expect(isStale()).toBe(true);
   });
 

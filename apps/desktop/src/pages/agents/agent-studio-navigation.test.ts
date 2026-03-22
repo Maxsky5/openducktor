@@ -9,6 +9,7 @@ describe("agent-studio-navigation", () => {
           taskId: "task-current",
           sessionId: null,
           role: null,
+          scenario: null,
         },
         {
           taskId: "task-persisted",
@@ -20,6 +21,7 @@ describe("agent-studio-navigation", () => {
       taskId: "task-current",
       sessionId: null,
       role: "planner",
+      scenario: null,
     });
   });
 
@@ -30,6 +32,7 @@ describe("agent-studio-navigation", () => {
           taskId: "task-current",
           sessionId: null,
           role: null,
+          scenario: null,
         },
         {
           taskId: "task-current",
@@ -41,6 +44,7 @@ describe("agent-studio-navigation", () => {
       taskId: "task-current",
       sessionId: "session-persisted",
       role: "planner",
+      scenario: null,
     });
   });
 });

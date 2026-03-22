@@ -1,0 +1,543 @@
+import type {
+  AgentSessionRecord,
+  RunSummary,
+  RuntimeInstanceSummary,
+  RuntimeKind,
+  TaskCard,
+} from "@openducktor/contracts";
+import type {
+  AgentEnginePort,
+  AgentRuntimeConnection,
+  LiveAgentSessionSnapshot,
+} from "@openducktor/core";
+import { appQueryClient } from "@/lib/query-client";
+import { loadRuntimeListFromQuery, runtimeQueryKeys } from "@/state/queries/runtime";
+import { host } from "../../shared/host";
+import { resolveRuntimeRouteConnection } from "../runtime/runtime";
+import { normalizeWorkingDirectory } from "../support/core";
+import {
+  getLiveAgentSessionCacheKey,
+  LiveAgentSessionCache,
+  liveAgentSessionLookupKey,
+  runtimeWorkingDirectoryKey,
+} from "./live-agent-session-cache";
+import type { LiveAgentSessionStore } from "./live-agent-session-store";
+import type { SessionHydrationOperations } from "./session-hydration-operations";
+
+type HydrationScope = "bootstrap" | "reconcile";
+
+type RuntimeConnectionScan = {
+  runtimeKind: RuntimeKind;
+  runtimeConnection: AgentRuntimeConnection;
+  runtimeEndpoint: string;
+  directories: Set<string>;
+};
+
+type ReconcilePreloadPlan = {
+  persistedByTask: Array<{ taskId: string; records: AgentSessionRecord[] }>;
+  taskIdsToReconcile: Set<string>;
+  preloadedRuntimeLists: Map<RuntimeKind, RuntimeInstanceSummary[]>;
+  preloadedRuntimeConnectionsByKey: Map<string, AgentRuntimeConnection>;
+  preloadedLiveAgentSessionsByKey: Map<string, LiveAgentSessionSnapshot[]>;
+};
+
+const nextSessionRetryDelayMs = (attempt: number): number => Math.min(5_000, 500 * 2 ** attempt);
+
+const invalidateRuntimeList = async (runtimeKind: RuntimeKind, repoPath: string): Promise<void> => {
+  await appQueryClient.invalidateQueries({
+    queryKey: runtimeQueryKeys.list(runtimeKind, repoPath),
+    exact: true,
+    refetchType: "none",
+  });
+};
+
+const getOrCreateRepoTaskSet = (
+  store: Record<string, Set<string>>,
+  repoPath: string,
+): Set<string> => {
+  const existing = store[repoPath];
+  if (existing) {
+    return existing;
+  }
+  const created = new Set<string>();
+  store[repoPath] = created;
+  return created;
+};
+
+export const createRepoSessionHydrationService = ({
+  agentEngine,
+  sessionHydration,
+  liveAgentSessionStore,
+  onRetryRequested,
+}: {
+  agentEngine: Pick<AgentEnginePort, "listLiveAgentSessionSnapshots">;
+  sessionHydration: Pick<
+    SessionHydrationOperations,
+    "bootstrapTaskSessions" | "reconcileLiveTaskSessions"
+  >;
+  liveAgentSessionStore: LiveAgentSessionStore;
+  onRetryRequested: () => void;
+}) => {
+  const bootstrappedTasksByRepo: Record<string, Set<string>> = {};
+  const reconciledTasksByRepo: Record<string, Set<string>> = {};
+  const retryAttemptsByKey: Record<string, number> = {};
+  const retryTimeoutsByKey: Record<string, ReturnType<typeof setTimeout>> = {};
+
+  const clearRetry = (scope: HydrationScope, repoPath: string, taskId: string): void => {
+    const retryKey = `${scope}::${repoPath}::${taskId}`;
+    const timeout = retryTimeoutsByKey[retryKey];
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+      delete retryTimeoutsByKey[retryKey];
+    }
+    delete retryAttemptsByKey[retryKey];
+  };
+
+  const scheduleRetry = (
+    scope: HydrationScope,
+    repoPath: string,
+    taskId: string,
+    error: unknown,
+  ): void => {
+    const retryKey = `${scope}::${repoPath}::${taskId}`;
+    if (retryTimeoutsByKey[retryKey] !== undefined) {
+      return;
+    }
+    const attempt = retryAttemptsByKey[retryKey] ?? 0;
+    retryAttemptsByKey[retryKey] = attempt + 1;
+    const delayMs = nextSessionRetryDelayMs(attempt);
+    console.error(
+      `Failed to ${scope} agent sessions for task '${taskId}' in repo '${repoPath}'. Retrying in ${delayMs}ms.`,
+      error,
+    );
+    retryTimeoutsByKey[retryKey] = setTimeout(() => {
+      delete retryTimeoutsByKey[retryKey];
+      onRetryRequested();
+    }, delayMs);
+  };
+
+  const buildReconcilePreloadPlan = async ({
+    repoPath,
+    tasks,
+    runs,
+    isCancelled,
+  }: {
+    repoPath: string;
+    tasks: TaskCard[];
+    runs: RunSummary[];
+    isCancelled: () => boolean;
+  }): Promise<ReconcilePreloadPlan> => {
+    const persistedByTask = tasks.map((task) => ({
+      taskId: task.id,
+      records: task.agentSessions ?? [],
+    }));
+
+    const persistedTaskIdsByLiveSessionKey = new Map<string, Set<string>>();
+    const runtimeKinds = new Set<RuntimeKind>();
+    const desiredDirectoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
+
+    for (const { taskId, records } of persistedByTask) {
+      for (const record of records) {
+        const runtimeKind = record.runtimeKind ?? record.selectedModel?.runtimeKind;
+        const externalSessionId = record.externalSessionId ?? record.sessionId;
+        if (!runtimeKind || !externalSessionId) {
+          continue;
+        }
+        runtimeKinds.add(runtimeKind);
+        const liveSessionKey = `${runtimeKind}::${externalSessionId}`;
+        const taskIds = persistedTaskIdsByLiveSessionKey.get(liveSessionKey) ?? new Set<string>();
+        taskIds.add(taskId);
+        persistedTaskIdsByLiveSessionKey.set(liveSessionKey, taskIds);
+
+        const desiredDirectories =
+          desiredDirectoriesByRuntimeKind.get(runtimeKind) ?? new Set<string>();
+        desiredDirectories.add(record.workingDirectory);
+        desiredDirectoriesByRuntimeKind.set(runtimeKind, desiredDirectories);
+      }
+    }
+
+    const runtimeConnections = new Map<string, RuntimeConnectionScan>();
+    const preloadedRuntimeLists = new Map<RuntimeKind, RuntimeInstanceSummary[]>();
+    const preloadedRuntimeConnectionsByKey = new Map<string, AgentRuntimeConnection>();
+    const activeRunStates = new Set<RunSummary["state"]>([
+      "starting",
+      "running",
+      "blocked",
+      "awaiting_done_confirmation",
+    ]);
+
+    for (const runtimeKind of runtimeKinds) {
+      const runtimes = await loadRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath);
+      if (isCancelled()) {
+        return {
+          persistedByTask,
+          taskIdsToReconcile: new Set<string>(),
+          preloadedRuntimeLists,
+          preloadedRuntimeConnectionsByKey,
+          preloadedLiveAgentSessionsByKey: new Map<string, LiveAgentSessionSnapshot[]>(),
+        };
+      }
+
+      const runtimeEntries = [...runtimes];
+      let ensuredRuntimeForKind: RuntimeInstanceSummary | null = null;
+      const desiredDirectories = desiredDirectoriesByRuntimeKind.get(runtimeKind) ?? new Set();
+      const repoPathKey = normalizeWorkingDirectory(repoPath);
+      const needsRepoRootRuntime =
+        desiredDirectories.has(repoPath) &&
+        !runtimeEntries.some(
+          (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === repoPathKey,
+        );
+      if (needsRepoRootRuntime) {
+        const ensuredRuntime = await host.runtimeEnsure(repoPath, runtimeKind);
+        await invalidateRuntimeList(runtimeKind, repoPath);
+        if (isCancelled()) {
+          return {
+            persistedByTask,
+            taskIdsToReconcile: new Set<string>(),
+            preloadedRuntimeLists,
+            preloadedRuntimeConnectionsByKey,
+            preloadedLiveAgentSessionsByKey: new Map<string, LiveAgentSessionSnapshot[]>(),
+          };
+        }
+        ensuredRuntimeForKind = ensuredRuntime;
+        runtimeEntries.push(ensuredRuntime);
+      }
+
+      preloadedRuntimeLists.set(runtimeKind, runtimeEntries);
+      const coveredDirectories = new Set(
+        runtimeEntries.map((runtime) => normalizeWorkingDirectory(runtime.workingDirectory)),
+      );
+
+      for (const runtime of runtimeEntries) {
+        const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
+          runtime.runtimeRoute,
+          runtime.workingDirectory,
+        );
+        preloadedRuntimeConnectionsByKey.set(
+          runtimeWorkingDirectoryKey(runtimeKind, runtime.workingDirectory),
+          { ...runtimeConnection, endpoint: runtimeEndpoint },
+        );
+        if (!desiredDirectories.has(runtime.workingDirectory)) {
+          continue;
+        }
+
+        const scanKey = getLiveAgentSessionCacheKey(runtimeKind, runtimeEndpoint);
+        if (!runtimeConnections.has(scanKey)) {
+          runtimeConnections.set(scanKey, {
+            runtimeKind,
+            runtimeConnection,
+            runtimeEndpoint,
+            directories: new Set<string>(),
+          });
+        }
+        runtimeConnections.get(scanKey)?.directories.add(runtime.workingDirectory);
+      }
+
+      const missingDesiredDirectories = Array.from(desiredDirectories).filter(
+        (workingDirectory) => !coveredDirectories.has(normalizeWorkingDirectory(workingDirectory)),
+      );
+      if (missingDesiredDirectories.length === 0) {
+        continue;
+      }
+
+      const routeSourceRuntime =
+        ensuredRuntimeForKind ??
+        runtimeEntries.find(
+          (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === repoPathKey,
+        ) ??
+        runtimeEntries[0] ??
+        (await host.runtimeEnsure(repoPath, runtimeKind));
+      if (!ensuredRuntimeForKind && !runtimeEntries.includes(routeSourceRuntime)) {
+        await invalidateRuntimeList(runtimeKind, repoPath);
+      }
+      if (!ensuredRuntimeForKind && !runtimeEntries.includes(routeSourceRuntime)) {
+        if (isCancelled()) {
+          return {
+            persistedByTask,
+            taskIdsToReconcile: new Set<string>(),
+            preloadedRuntimeLists,
+            preloadedRuntimeConnectionsByKey,
+            preloadedLiveAgentSessionsByKey: new Map<string, LiveAgentSessionSnapshot[]>(),
+          };
+        }
+        ensuredRuntimeForKind = routeSourceRuntime;
+        runtimeEntries.push(routeSourceRuntime);
+      }
+      const repoRuntime = resolveRuntimeRouteConnection(routeSourceRuntime.runtimeRoute, repoPath);
+      const scanKey = getLiveAgentSessionCacheKey(runtimeKind, repoRuntime.runtimeEndpoint);
+      if (!runtimeConnections.has(scanKey)) {
+        runtimeConnections.set(scanKey, {
+          runtimeKind,
+          runtimeConnection: repoRuntime.runtimeConnection,
+          runtimeEndpoint: repoRuntime.runtimeEndpoint,
+          directories: new Set<string>(),
+        });
+      }
+      for (const workingDirectory of missingDesiredDirectories) {
+        const { runtimeConnection } = resolveRuntimeRouteConnection(
+          routeSourceRuntime.runtimeRoute,
+          workingDirectory,
+        );
+        preloadedRuntimeConnectionsByKey.set(
+          runtimeWorkingDirectoryKey(runtimeKind, workingDirectory),
+          runtimeConnection,
+        );
+        runtimeConnections.get(scanKey)?.directories.add(workingDirectory);
+      }
+    }
+
+    for (const run of runs) {
+      if (!activeRunStates.has(run.state)) {
+        continue;
+      }
+      const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
+        run.runtimeRoute,
+        run.worktreePath,
+      );
+      preloadedRuntimeConnectionsByKey.set(
+        runtimeWorkingDirectoryKey(run.runtimeKind, run.worktreePath),
+        { ...runtimeConnection, endpoint: runtimeEndpoint },
+      );
+      const scanKey = getLiveAgentSessionCacheKey(run.runtimeKind, runtimeEndpoint);
+      if (!runtimeConnections.has(scanKey)) {
+        runtimeConnections.set(scanKey, {
+          runtimeKind: run.runtimeKind,
+          runtimeConnection,
+          runtimeEndpoint,
+          directories: new Set<string>(),
+        });
+      }
+      runtimeConnections.get(scanKey)?.directories.add(run.worktreePath);
+    }
+
+    const taskIdsToReconcile = new Set<string>();
+    const preloadedLiveAgentSessionsByKey = new Map<string, LiveAgentSessionSnapshot[]>();
+    const runtimeSessionScanCache = new LiveAgentSessionCache(agentEngine);
+
+    for (const input of runtimeConnections.values()) {
+      const runtimeSessions = await runtimeSessionScanCache.load({
+        runtimeKind: input.runtimeKind,
+        runtimeConnection: input.runtimeConnection,
+        directories: Array.from(input.directories),
+      });
+      if (isCancelled()) {
+        return {
+          persistedByTask,
+          taskIdsToReconcile: new Set<string>(),
+          preloadedRuntimeLists,
+          preloadedRuntimeConnectionsByKey,
+          preloadedLiveAgentSessionsByKey,
+        };
+      }
+
+      const sessionsByWorkingDirectory = new Map<string, LiveAgentSessionSnapshot[]>();
+      for (const runtimeSession of runtimeSessions) {
+        const workingDirectoryKey = normalizeWorkingDirectory(runtimeSession.workingDirectory);
+        const sessionsForDirectory = sessionsByWorkingDirectory.get(workingDirectoryKey) ?? [];
+        sessionsForDirectory.push(runtimeSession);
+        sessionsByWorkingDirectory.set(workingDirectoryKey, sessionsForDirectory);
+      }
+
+      for (const [workingDirectory, sessionsForDirectory] of sessionsByWorkingDirectory) {
+        preloadedLiveAgentSessionsByKey.set(
+          liveAgentSessionLookupKey(input.runtimeKind, input.runtimeEndpoint, workingDirectory),
+          sessionsForDirectory,
+        );
+      }
+
+      for (const runtimeSession of runtimeSessions) {
+        const liveSessionKey = `${input.runtimeKind}::${runtimeSession.externalSessionId}`;
+        const taskIds = persistedTaskIdsByLiveSessionKey.get(liveSessionKey);
+        if (!taskIds) {
+          continue;
+        }
+        for (const taskId of taskIds) {
+          taskIdsToReconcile.add(taskId);
+        }
+      }
+    }
+
+    return {
+      persistedByTask,
+      taskIdsToReconcile,
+      preloadedRuntimeLists,
+      preloadedRuntimeConnectionsByKey,
+      preloadedLiveAgentSessionsByKey,
+    };
+  };
+
+  return {
+    resetRepo(repoPath: string): void {
+      liveAgentSessionStore.clearRepo(repoPath);
+      getOrCreateRepoTaskSet(bootstrappedTasksByRepo, repoPath);
+      getOrCreateRepoTaskSet(reconciledTasksByRepo, repoPath);
+    },
+
+    dispose(): void {
+      for (const timeout of Object.values(retryTimeoutsByKey)) {
+        clearTimeout(timeout);
+      }
+      for (const key of Object.keys(retryTimeoutsByKey)) {
+        delete retryTimeoutsByKey[key];
+      }
+      for (const key of Object.keys(retryAttemptsByKey)) {
+        delete retryAttemptsByKey[key];
+      }
+    },
+
+    async bootstrapPendingTasks({
+      repoPath,
+      tasks,
+      isCancelled,
+      isCurrentRepo,
+    }: {
+      repoPath: string;
+      tasks: TaskCard[];
+      isCancelled: () => boolean;
+      isCurrentRepo: (repoPath: string) => boolean;
+    }): Promise<void> {
+      const bootstrappedTasks = getOrCreateRepoTaskSet(bootstrappedTasksByRepo, repoPath);
+      const pendingTasks = tasks.filter((task) => !bootstrappedTasks.has(task.id));
+      if (pendingTasks.length === 0) {
+        return;
+      }
+
+      for (const task of pendingTasks) {
+        bootstrappedTasks.add(task.id);
+      }
+
+      try {
+        const results = await Promise.allSettled(
+          pendingTasks.map(async (task) => {
+            await sessionHydration.bootstrapTaskSessions(task.id, task.agentSessions ?? []);
+            return task.id;
+          }),
+        );
+        if (isCancelled()) {
+          return;
+        }
+
+        for (const [index, result] of results.entries()) {
+          const taskId = pendingTasks[index]?.id;
+          if (!taskId) {
+            continue;
+          }
+          if (result.status === "fulfilled") {
+            clearRetry("bootstrap", repoPath, taskId);
+            continue;
+          }
+          if (!isCurrentRepo(repoPath)) {
+            return;
+          }
+          scheduleRetry("bootstrap", repoPath, taskId, result.reason);
+          bootstrappedTasksByRepo[repoPath]?.delete(taskId);
+        }
+      } catch (error) {
+        if (isCancelled() || !isCurrentRepo(repoPath)) {
+          return;
+        }
+        for (const task of pendingTasks) {
+          scheduleRetry("bootstrap", repoPath, task.id, error);
+          bootstrappedTasksByRepo[repoPath]?.delete(task.id);
+        }
+      }
+    },
+
+    async reconcilePendingTasks({
+      repoPath,
+      tasks,
+      runs,
+      isCancelled,
+      isCurrentRepo,
+    }: {
+      repoPath: string;
+      tasks: TaskCard[];
+      runs: RunSummary[];
+      isCancelled: () => boolean;
+      isCurrentRepo: (repoPath: string) => boolean;
+    }): Promise<void> {
+      const reconciledTaskIds = getOrCreateRepoTaskSet(reconciledTasksByRepo, repoPath);
+      const pendingTasks = tasks.filter((task) => !reconciledTaskIds.has(task.id));
+      if (pendingTasks.length === 0) {
+        return;
+      }
+
+      for (const task of pendingTasks) {
+        reconciledTaskIds.add(task.id);
+      }
+
+      try {
+        const plan = await buildReconcilePreloadPlan({
+          repoPath,
+          tasks: pendingTasks,
+          runs,
+          isCancelled,
+        });
+        if (isCancelled() || !isCurrentRepo(repoPath)) {
+          return;
+        }
+
+        liveAgentSessionStore.replaceRepoSnapshots(repoPath, plan.preloadedLiveAgentSessionsByKey);
+
+        if (plan.taskIdsToReconcile.size === 0) {
+          for (const { taskId } of plan.persistedByTask) {
+            clearRetry("reconcile", repoPath, taskId);
+          }
+          return;
+        }
+
+        const reconcileTaskIds = Array.from(plan.taskIdsToReconcile);
+        const results = await Promise.allSettled(
+          reconcileTaskIds.map(async (taskId) => {
+            const records =
+              plan.persistedByTask.find((entry) => entry.taskId === taskId)?.records ?? [];
+            await sessionHydration.reconcileLiveTaskSessions({
+              taskId,
+              persistedRecords: records,
+              preloadedRuns: runs,
+              preloadedRuntimeLists: plan.preloadedRuntimeLists,
+              preloadedRuntimeConnectionsByKey: plan.preloadedRuntimeConnectionsByKey,
+              preloadedLiveAgentSessionsByKey: plan.preloadedLiveAgentSessionsByKey,
+              allowRuntimeEnsure: false,
+            });
+            return taskId;
+          }),
+        );
+        if (isCancelled()) {
+          return;
+        }
+
+        const failedTaskErrors = new Map<string, unknown>();
+        for (const [index, result] of results.entries()) {
+          if (result.status === "fulfilled") {
+            continue;
+          }
+          const taskId = reconcileTaskIds[index];
+          if (taskId) {
+            failedTaskErrors.set(taskId, result.reason);
+          }
+        }
+
+        for (const { taskId } of plan.persistedByTask) {
+          if (failedTaskErrors.has(taskId)) {
+            continue;
+          }
+          clearRetry("reconcile", repoPath, taskId);
+        }
+
+        for (const [taskId, error] of failedTaskErrors) {
+          reconciledTasksByRepo[repoPath]?.delete(taskId);
+          scheduleRetry("reconcile", repoPath, taskId, error);
+        }
+      } catch (error) {
+        if (isCancelled() || !isCurrentRepo(repoPath)) {
+          return;
+        }
+        for (const task of pendingTasks) {
+          reconciledTasksByRepo[repoPath]?.delete(task.id);
+          scheduleRetry("reconcile", repoPath, task.id, error);
+        }
+      }
+    },
+  };
+};

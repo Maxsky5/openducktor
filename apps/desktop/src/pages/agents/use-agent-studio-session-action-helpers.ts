@@ -17,6 +17,7 @@ type AgentStudioSessionSelectionQueryParams = {
   taskId: string;
   sessionId: string | undefined;
   role: AgentRole;
+  scenario?: AgentScenario;
 };
 
 type AgentStudioAsyncActivityContextKeyParams = {
@@ -48,11 +49,13 @@ const buildSessionSelectionQueryUpdate = (params: {
   taskId: string;
   sessionId: string | undefined;
   role: AgentRole;
+  scenario?: AgentScenario;
 }): QueryUpdate => {
   return {
     [AGENT_STUDIO_QUERY_KEYS.task]: params.taskId,
     [AGENT_STUDIO_QUERY_KEYS.session]: params.sessionId,
     [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
+    [AGENT_STUDIO_QUERY_KEYS.scenario]: params.scenario,
     [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
     [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
   };
@@ -65,6 +68,7 @@ export const buildAgentStudioSelectionQueryUpdate = (
     taskId: params.taskId,
     sessionId: params.sessionId,
     role: params.role,
+    ...(params.scenario ? { scenario: params.scenario } : {}),
   });
 };
 
@@ -84,6 +88,7 @@ export const buildPreviousSelectionQueryUpdate = (params: {
     [AGENT_STUDIO_QUERY_KEYS.task]: params.activeSession?.taskId ?? params.taskId,
     [AGENT_STUDIO_QUERY_KEYS.session]: params.activeSession?.sessionId,
     [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
+    [AGENT_STUDIO_QUERY_KEYS.scenario]: params.activeSession?.scenario,
     [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
     [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
   };

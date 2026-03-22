@@ -441,6 +441,7 @@ pub enum GitMergeBranchResult {
 pub trait GitPort: Send + Sync {
     fn get_branches(&self, repo_path: &Path) -> Result<Vec<GitBranch>>;
     fn get_current_branch(&self, repo_path: &Path) -> Result<GitCurrentBranch>;
+    fn list_worktrees(&self, repo_path: &Path) -> Result<Vec<GitWorktreeSummary>>;
     fn switch_branch(
         &self,
         repo_path: &Path,

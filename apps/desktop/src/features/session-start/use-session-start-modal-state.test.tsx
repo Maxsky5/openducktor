@@ -124,7 +124,6 @@ describe("useSessionStartModalState", () => {
         taskId: "TASK-1",
         role: "build",
         scenario: "build_implementation_start",
-        startMode: "fresh",
         postStartAction: "kickoff",
         title: "Start Builder Session",
       });
@@ -164,7 +163,6 @@ describe("useSessionStartModalState", () => {
         taskId: "TASK-2",
         role: "spec",
         scenario: "spec_initial",
-        startMode: "fresh",
         postStartAction: "kickoff",
         title: "Start Spec Session",
       });
@@ -192,7 +190,6 @@ describe("useSessionStartModalState", () => {
         taskId: "TASK-3",
         role: "spec",
         scenario: "spec_initial",
-        startMode: "fresh",
         postStartAction: "kickoff",
         title: "Start Spec Session",
       });
@@ -216,7 +213,6 @@ describe("useSessionStartModalState", () => {
         taskId: "TASK-3",
         role: "spec",
         scenario: "spec_initial",
-        startMode: "fresh",
         postStartAction: "kickoff",
         title: "Start Spec Session",
       });
@@ -244,7 +240,6 @@ describe("useSessionStartModalState", () => {
         taskId: "TASK-4",
         role: "spec",
         scenario: "spec_initial",
-        startMode: "reuse_latest",
         postStartAction: "none",
         title: "Start Spec Session",
       });
@@ -284,7 +279,6 @@ describe("useSessionStartModalState", () => {
         taskId: "TASK-5",
         role: "spec",
         scenario: "spec_initial",
-        startMode: "fresh",
         postStartAction: "none",
         title: "Start Spec Session",
       });
@@ -306,7 +300,6 @@ describe("useSessionStartModalState", () => {
         taskId: "TASK-5",
         role: "spec",
         scenario: "spec_initial",
-        startMode: "fresh",
         postStartAction: "none",
         selectedModel: {
           runtimeKind: "opencode",
@@ -326,6 +319,88 @@ describe("useSessionStartModalState", () => {
       variant: "default",
       profileId: "build-agent",
     });
+
+    await harness.unmount();
+  });
+
+  test("forces fresh mode for fresh-only scenarios even when reuse is requested", async () => {
+    const harness = createHookHarness(createBaseProps());
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "agent_studio",
+        taskId: "TASK-6",
+        role: "spec",
+        scenario: "spec_initial",
+        postStartAction: "none",
+        title: "Start Spec Session",
+      });
+    });
+
+    expect(harness.getLatest().availableStartModes).toEqual(["fresh"]);
+    expect(harness.getLatest().selectedStartMode).toBe("fresh");
+
+    await harness.unmount();
+  });
+
+  test("initializes reusable session selection for reuse-capable scenarios", async () => {
+    const harness = createHookHarness(createBaseProps());
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-7",
+        role: "qa",
+        scenario: "qa_review",
+        reusableSessionOptions: [
+          {
+            value: "session-2",
+            label: "QA session 2",
+            description: "Second session",
+          },
+          {
+            value: "session-1",
+            label: "QA session 1",
+            description: "First session",
+          },
+        ],
+        initialReusableSessionId: "session-1",
+        postStartAction: "kickoff",
+        title: "Start QA Session",
+      });
+    });
+
+    expect(harness.getLatest().availableStartModes).toEqual(["fresh", "reuse"]);
+    expect(harness.getLatest().selectedStartMode).toBe("reuse");
+    expect(harness.getLatest().selectedReusableSessionId).toBe("session-1");
+
+    await harness.unmount();
+  });
+
+  test("defaults to fresh when reuse is requested but no reusable sessions exist", async () => {
+    const harness = createHookHarness(createBaseProps());
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-8",
+        role: "qa",
+        scenario: "qa_review",
+        reusableSessionOptions: [],
+        postStartAction: "kickoff",
+        title: "Start QA Session",
+      });
+    });
+
+    expect(harness.getLatest().availableStartModes).toEqual(["fresh", "reuse"]);
+    expect(harness.getLatest().selectedStartMode).toBe("fresh");
+    expect(harness.getLatest().selectedReusableSessionId).toBe("");
 
     await harness.unmount();
   });

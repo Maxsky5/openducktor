@@ -1,17 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
 import { useSpecState } from "@/state";
 import type { TaskDocumentPayload } from "@/types/task-documents";
-import {
-  createTaskDocumentLoadController,
-  requestTaskDocumentLoad,
-  resetTaskDocumentLoadController,
-  settleTaskDocumentLoad,
-  supersedeTaskDocumentLoad,
-  type TaskDocumentSectionKey,
-} from "./task-document-load-controller";
-import { resolveLoadedDocumentState } from "./task-document-state";
 
-export type DocumentSectionKey = TaskDocumentSectionKey;
+export type DocumentSectionKey = "spec" | "plan" | "qa";
 
 export type TaskDocumentState = {
   markdown: string;
@@ -21,36 +13,64 @@ export type TaskDocumentState = {
   loaded: boolean;
 };
 
-type TaskDocumentsState = Record<DocumentSectionKey, TaskDocumentState>;
-
 type TaskDocumentLoaders = {
   loadSpecDocument: (taskId: string) => Promise<TaskDocumentPayload>;
   loadPlanDocument: (taskId: string) => Promise<TaskDocumentPayload>;
   loadQaReportDocument: (taskId: string) => Promise<TaskDocumentPayload>;
 };
 
-const createInitialTaskDocumentState = (): TaskDocumentState => ({
-  markdown: "",
-  updatedAt: null,
-  isLoading: false,
-  error: null,
-  loaded: false,
-});
+const TASK_DOCUMENT_STALE_TIME_MS = 60_000;
 
-const createInitialDocumentsState = (): TaskDocumentsState => ({
-  spec: createInitialTaskDocumentState(),
-  plan: createInitialTaskDocumentState(),
-  qa: createInitialTaskDocumentState(),
-});
-
-const cloneDocumentsState = (documents: TaskDocumentsState): TaskDocumentsState => ({
-  spec: { ...documents.spec },
-  plan: { ...documents.plan },
-  qa: { ...documents.qa },
+const createTaskDocumentState = (input?: {
+  markdown?: string;
+  updatedAt?: string | null;
+  isLoading?: boolean;
+  error?: string | null;
+  loaded?: boolean;
+}): TaskDocumentState => ({
+  markdown: input?.markdown ?? "",
+  updatedAt: input?.updatedAt ?? null,
+  isLoading: input?.isLoading ?? false,
+  error: input?.error ?? null,
+  loaded: input?.loaded ?? false,
 });
 
 const toErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : "Unable to load document.";
+
+const createDocumentQueryKey = (cacheScope: string, taskId: string, section: DocumentSectionKey) =>
+  ["task-documents", section, cacheScope, taskId] as const;
+
+const createDocumentQueryOptions = ({
+  cacheScope,
+  taskId,
+  section,
+  loader,
+}: {
+  cacheScope: string;
+  taskId: string;
+  section: DocumentSectionKey;
+  loader: (taskId: string) => Promise<TaskDocumentPayload>;
+}) =>
+  queryOptions({
+    queryKey: createDocumentQueryKey(cacheScope, taskId, section),
+    queryFn: (): Promise<TaskDocumentPayload> => loader(taskId),
+    staleTime: TASK_DOCUMENT_STALE_TIME_MS,
+  });
+
+const toTaskDocumentState = (
+  query: ReturnType<typeof useQuery<TaskDocumentPayload>>,
+  enabled: boolean,
+): TaskDocumentState => {
+  const hasResolved = query.data !== undefined || query.isSuccess || query.isError;
+  return createTaskDocumentState({
+    markdown: query.data?.markdown ?? "",
+    updatedAt: query.data?.updatedAt ?? null,
+    isLoading: enabled && query.isFetching && query.data === undefined,
+    error: query.error ? toErrorMessage(query.error) : null,
+    loaded: hasResolved,
+  });
+};
 
 export function useTaskDocuments(
   taskId: string | null,
@@ -67,185 +87,133 @@ export function useTaskDocuments(
 } {
   const specState = useSpecState();
   const { loadSpecDocument, loadPlanDocument, loadQaReportDocument } = loadersOverride ?? specState;
-  const [documents, setDocuments] = useState<TaskDocumentsState>(createInitialDocumentsState);
-  const previousContext = useRef<{ taskCacheKey: string | null; open: boolean } | null>(null);
-  const documentsRef = useRef<TaskDocumentsState>(documents);
-  const cachedDocumentsByTaskCacheKey = useRef<Record<string, TaskDocumentsState>>({});
-  const taskCacheKey = taskId ? `${cacheScope}::${taskId}` : null;
-  const loadController = useRef(createTaskDocumentLoadController());
+  const queryClient = useQueryClient();
 
-  const updateDocumentsSnapshot = useCallback(
-    (snapshot: TaskDocumentsState): void => {
-      documentsRef.current = snapshot;
-      setDocuments(snapshot);
-      if (!taskCacheKey) {
-        return;
-      }
-      cachedDocumentsByTaskCacheKey.current[taskCacheKey] = cloneDocumentsState(snapshot);
-    },
-    [taskCacheKey],
-  );
-
-  documentsRef.current = documents;
-
-  useEffect(() => {
-    const contextDidChange =
-      previousContext.current?.taskCacheKey !== taskCacheKey ||
-      previousContext.current?.open !== open;
-    if (!contextDidChange) {
-      return;
-    }
-
-    previousContext.current = { taskCacheKey, open };
-    resetTaskDocumentLoadController(loadController.current);
-    const initialDocuments =
-      taskCacheKey && cachedDocumentsByTaskCacheKey.current[taskCacheKey]
-        ? cloneDocumentsState(cachedDocumentsByTaskCacheKey.current[taskCacheKey])
-        : createInitialDocumentsState();
-    documentsRef.current = initialDocuments;
-    setDocuments(initialDocuments);
-  }, [open, taskCacheKey]);
-
-  const loadDocument = useCallback(
-    function loadDocument(section: DocumentSectionKey, force: boolean): boolean {
-      if (!taskId || !open) {
-        return false;
-      }
-
-      const current = documentsRef.current[section];
-      const loadRequest = requestTaskDocumentLoad(
-        loadController.current,
-        section,
-        force,
-        current.loaded,
-      );
-      if (!loadRequest.accepted) {
-        return false;
-      }
-      if (loadRequest.contextVersion === null || loadRequest.requestVersion === null) {
-        return true;
-      }
-
-      const loadingSnapshot: TaskDocumentsState = {
-        ...documentsRef.current,
-        [section]: {
-          ...current,
-          isLoading: true,
-          error: null,
-        },
-      };
-      updateDocumentsSnapshot(loadingSnapshot);
-
-      const { contextVersion, requestVersion } = loadRequest;
-      const loader: (id: string) => Promise<TaskDocumentPayload> =
-        section === "spec"
-          ? loadSpecDocument
-          : section === "plan"
-            ? loadPlanDocument
-            : loadQaReportDocument;
-
-      const replayPendingForcedReload = (shouldReplay: boolean): void => {
-        if (!shouldReplay) {
-          return;
-        }
-
-        globalThis.queueMicrotask(() => {
-          loadDocument(section, true);
-        });
-      };
-
-      void loader(taskId)
-        .then((result) => {
-          const settlement = settleTaskDocumentLoad(
-            loadController.current,
-            section,
-            contextVersion,
-            requestVersion,
-          );
-          if (!settlement.shouldApply) {
-            replayPendingForcedReload(settlement.shouldReplay);
-            return;
-          }
-
-          const successSnapshot: TaskDocumentsState = {
-            ...documentsRef.current,
-            [section]: resolveLoadedDocumentState(documentsRef.current[section], result),
-          };
-          updateDocumentsSnapshot(successSnapshot);
-          replayPendingForcedReload(settlement.shouldReplay);
+  const enabled = open && taskId !== null;
+  const specQuery = useQuery({
+    ...(taskId
+      ? createDocumentQueryOptions({
+          cacheScope,
+          taskId,
+          section: "spec",
+          loader: loadSpecDocument,
         })
-        .catch((error: unknown) => {
-          const settlement = settleTaskDocumentLoad(
-            loadController.current,
-            section,
-            contextVersion,
-            requestVersion,
-          );
-          if (!settlement.shouldApply) {
-            replayPendingForcedReload(settlement.shouldReplay);
-            return;
-          }
+      : createDocumentQueryOptions({
+          cacheScope,
+          taskId: "__disabled__",
+          section: "spec",
+          loader: loadSpecDocument,
+        })),
+    enabled,
+  });
+  const planQuery = useQuery({
+    ...(taskId
+      ? createDocumentQueryOptions({
+          cacheScope,
+          taskId,
+          section: "plan",
+          loader: loadPlanDocument,
+        })
+      : createDocumentQueryOptions({
+          cacheScope,
+          taskId: "__disabled__",
+          section: "plan",
+          loader: loadPlanDocument,
+        })),
+    enabled,
+  });
+  const qaQuery = useQuery({
+    ...(taskId
+      ? createDocumentQueryOptions({
+          cacheScope,
+          taskId,
+          section: "qa",
+          loader: loadQaReportDocument,
+        })
+      : createDocumentQueryOptions({
+          cacheScope,
+          taskId: "__disabled__",
+          section: "qa",
+          loader: loadQaReportDocument,
+        })),
+    enabled,
+  });
 
-          const errorSnapshot: TaskDocumentsState = {
-            ...documentsRef.current,
-            [section]: {
-              ...documentsRef.current[section],
-              isLoading: false,
-              error: toErrorMessage(error),
-              loaded: true,
-            },
-          };
-          updateDocumentsSnapshot(errorSnapshot);
-          replayPendingForcedReload(settlement.shouldReplay);
-        });
-      return true;
-    },
-    [
-      loadPlanDocument,
-      loadQaReportDocument,
-      loadSpecDocument,
-      open,
-      taskId,
-      updateDocumentsSnapshot,
-    ],
+  const queryOptionsBySection = useMemo(
+    () =>
+      taskId
+        ? {
+            spec: createDocumentQueryOptions({
+              cacheScope,
+              taskId,
+              section: "spec",
+              loader: loadSpecDocument,
+            }),
+            plan: createDocumentQueryOptions({
+              cacheScope,
+              taskId,
+              section: "plan",
+              loader: loadPlanDocument,
+            }),
+            qa: createDocumentQueryOptions({
+              cacheScope,
+              taskId,
+              section: "qa",
+              loader: loadQaReportDocument,
+            }),
+          }
+        : null,
+    [cacheScope, loadPlanDocument, loadQaReportDocument, loadSpecDocument, taskId],
   );
 
   const ensureDocumentLoaded = useCallback(
     (section: DocumentSectionKey): boolean => {
-      return loadDocument(section, false);
+      if (!open || !queryOptionsBySection) {
+        return false;
+      }
+
+      void queryClient.ensureQueryData(queryOptionsBySection[section]).catch(() => undefined);
+      return true;
     },
-    [loadDocument],
+    [open, queryClient, queryOptionsBySection],
   );
 
   const reloadDocument = useCallback(
     (section: DocumentSectionKey): boolean => {
-      return loadDocument(section, true);
+      if (!open || !queryOptionsBySection) {
+        return false;
+      }
+
+      const options = queryOptionsBySection[section];
+      void queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
+      void queryClient
+        .fetchQuery({
+          ...options,
+          staleTime: 0,
+        })
+        .catch(() => undefined);
+      return true;
     },
-    [loadDocument],
+    [open, queryClient, queryOptionsBySection],
   );
 
   const applyDocumentUpdate = useCallback(
     (section: DocumentSectionKey, payload: TaskDocumentPayload): void => {
-      supersedeTaskDocumentLoad(loadController.current, section);
-      const snapshot: TaskDocumentsState = {
-        ...documentsRef.current,
-        [section]: {
-          markdown: payload.markdown,
-          updatedAt: payload.updatedAt,
-          isLoading: false,
-          error: null,
-          loaded: true,
-        },
-      };
-      updateDocumentsSnapshot(snapshot);
+      if (!queryOptionsBySection) {
+        return;
+      }
+
+      const queryKey = queryOptionsBySection[section].queryKey;
+      void queryClient.cancelQueries({ queryKey, exact: true });
+      queryClient.setQueryData<TaskDocumentPayload>(queryKey, payload);
     },
-    [updateDocumentsSnapshot],
+    [queryClient, queryOptionsBySection],
   );
 
   return {
-    specDoc: documents.spec,
-    planDoc: documents.plan,
-    qaDoc: documents.qa,
+    specDoc: toTaskDocumentState(specQuery, enabled),
+    planDoc: toTaskDocumentState(planQuery, enabled),
+    qaDoc: toTaskDocumentState(qaQuery, enabled),
     ensureDocumentLoaded,
     reloadDocument,
     applyDocumentUpdate,

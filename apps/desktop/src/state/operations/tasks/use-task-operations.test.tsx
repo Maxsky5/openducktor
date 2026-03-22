@@ -4,6 +4,7 @@ import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
+import { QueryProvider } from "@/lib/query-provider";
 import { host } from "../shared/host";
 import { useTaskOperations } from "./use-task-operations";
 
@@ -75,14 +76,26 @@ const createHookHarness = (initialArgs: HookArgs) => {
   return {
     mount: async () => {
       await act(async () => {
-        renderer = TestRenderer.create(createElement(Harness, { args: currentArgs }));
+        renderer = TestRenderer.create(
+          createElement(
+            QueryProvider,
+            { useIsolatedClient: true },
+            createElement(Harness, { args: currentArgs }),
+          ),
+        );
       });
       await flush();
     },
     updateArgs: async (nextArgs: HookArgs) => {
       currentArgs = nextArgs;
       await act(async () => {
-        renderer?.update(createElement(Harness, { args: currentArgs }));
+        renderer?.update(
+          createElement(
+            QueryProvider,
+            { useIsolatedClient: true },
+            createElement(Harness, { args: currentArgs }),
+          ),
+        );
       });
       await flush();
     },
@@ -172,9 +185,11 @@ describe("use-task-operations", () => {
   });
 
   test("refreshTaskData bypasses stale cached task data on repeated explicit refreshes", async () => {
-    const tasksList = mock(async () => [makeTask("A", "open")]);
-    tasksList.mockImplementationOnce(async () => [makeTask("A", "open")]);
-    tasksList.mockImplementationOnce(async () => [makeTask("A", "ready_for_dev")]);
+    let taskLoadCount = 0;
+    const tasksList = mock(async () => {
+      taskLoadCount += 1;
+      return [makeTask("A", taskLoadCount >= 3 ? "ready_for_dev" : "open")];
+    });
     const runsList = mock(async (): Promise<RunSummary[]> => []);
 
     const original = {
@@ -203,9 +218,10 @@ describe("use-task-operations", () => {
       await harness.run(async (value) => {
         await value.refreshTaskData("/repo");
       });
+      await flush();
 
-      expect(tasksList).toHaveBeenCalledTimes(2);
-      expect(runsList).toHaveBeenCalledTimes(2);
+      expect(tasksList).toHaveBeenCalledTimes(3);
+      expect(runsList).toHaveBeenCalledTimes(3);
       expect(harness.getLatest().tasks[0]?.status).toBe("ready_for_dev");
     } finally {
       await harness.unmount();
@@ -215,10 +231,12 @@ describe("use-task-operations", () => {
   });
 
   test("resetTaskImplementation refreshes task data after host reset completes", async () => {
-    const taskResetImplementation = mock(async () => makeTask("A", "ready_for_dev"));
-    const tasksList = mock(async () => [makeTask("A", "in_progress")]);
-    tasksList.mockImplementationOnce(async () => [makeTask("A", "in_progress")]);
-    tasksList.mockImplementationOnce(async () => [makeTask("A", "ready_for_dev")]);
+    let currentStatus: TaskCard["status"] = "in_progress";
+    const taskResetImplementation = mock(async () => {
+      currentStatus = "ready_for_dev";
+      return makeTask("A", "ready_for_dev");
+    });
+    const tasksList = mock(async () => [makeTask("A", currentStatus)]);
     const runsList = mock(async (): Promise<RunSummary[]> => []);
 
     const original = {
@@ -241,14 +259,13 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
-      await harness.run(async (value) => {
-        await value.refreshTaskData("/repo");
-      });
+      await flush();
       expect(harness.getLatest().tasks[0]?.status).toBe("in_progress");
 
       await harness.run(async (value) => {
         await value.resetTaskImplementation("A");
       });
+      await flush();
 
       expect(taskResetImplementation).toHaveBeenCalledWith("/repo", "A");
       expect(harness.getLatest().tasks[0]?.status).toBe("ready_for_dev");
@@ -473,6 +490,8 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      tasksList.mockClear();
+      runsList.mockClear();
       await harness.run(async (value) => {
         await value.syncPullRequests("A");
       });
@@ -622,6 +641,8 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      tasksList.mockClear();
+      runsList.mockClear();
       await harness.run(async (value) => {
         await value.syncPullRequests("A");
       });
@@ -697,6 +718,8 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      tasksList.mockClear();
+      runsList.mockClear();
       await harness.run(async (value) => {
         await value.syncPullRequests("A");
       });
@@ -795,6 +818,8 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      tasksList.mockClear();
+      runsList.mockClear();
       await harness.run(async (value) => {
         await value.syncPullRequests("A");
       });
@@ -844,6 +869,8 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      tasksList.mockClear();
+      runsList.mockClear();
       await harness.run(async (value) => {
         await value.syncPullRequests("A");
       });
@@ -928,6 +955,8 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      tasksList.mockClear();
+      runsList.mockClear();
       await harness.run(async (value) => {
         await value.unlinkPullRequest("A");
       });
@@ -1172,6 +1201,8 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      tasksList.mockClear();
+      runsList.mockClear();
       await harness.run(async (value) => {
         await value.refreshTasks();
       });

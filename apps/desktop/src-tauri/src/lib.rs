@@ -353,6 +353,7 @@ fn startup_phase_command_registration(
         runtime_stop,
         runtime_ensure,
         agent_sessions_list,
+        agent_sessions_list_bulk,
         agent_session_upsert,
         set_theme
     ])

@@ -22,7 +22,7 @@ import {
   loadTaskApprovalContextFromQuery,
   taskApprovalQueryKeys,
 } from "@/state/queries/task-approval";
-import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { TaskApprovalModalModel } from "./kanban-page-model-types";
 
 type ApprovalState = {
@@ -46,7 +46,10 @@ type UseTaskApprovalFlowArgs = {
   activeRepo: string | null;
   tasks: TaskCard[];
   sessions: AgentSessionState[];
-  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
+  hydrateRequestedTaskSessionHistory: (input: {
+    taskId: string;
+    sessionId: string;
+  }) => Promise<void>;
   forkAgentSession: (input: { parentSessionId: string }) => Promise<string>;
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
   refreshTasks: () => Promise<void>;
@@ -105,7 +108,7 @@ export function useTaskApprovalFlow({
   activeRepo,
   tasks,
   sessions,
-  loadAgentSessions,
+  hydrateRequestedTaskSessionHistory,
   forkAgentSession,
   sendAgentMessage,
   refreshTasks,
@@ -239,8 +242,9 @@ export function useTaskApprovalFlow({
 
   const waitForLoadedParentSession = useCallback(
     async (taskId: string, sessionId: string): Promise<AgentSessionState> => {
-      await loadAgentSessions(taskId, {
-        hydrateHistoryForSessionId: sessionId,
+      await hydrateRequestedTaskSessionHistory({
+        taskId,
+        sessionId,
       });
       for (let attempt = 0; attempt < 20; attempt += 1) {
         const parentSession = sessionsRef.current.find((entry) => entry.sessionId === sessionId);
@@ -255,7 +259,7 @@ export function useTaskApprovalFlow({
       }
       throw new Error("Failed to reconnect the parent Builder session for pull request drafting.");
     },
-    [loadAgentSessions],
+    [hydrateRequestedTaskSessionHistory],
   );
 
   const waitForForkedAssistantReply = useCallback(

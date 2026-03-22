@@ -3,6 +3,7 @@ use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentSessionDocument, BuildContinuationTarget, BuildContinuationTargetSource, RunState,
 };
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -30,6 +31,33 @@ impl AppService {
             .upsert_agent_session(Path::new(&repo_path), task_id, session)
             .with_context(|| format!("Failed to persist agent session for {task_id}"))?;
         Ok(true)
+    }
+
+    pub fn agent_sessions_list_bulk(
+        &self,
+        repo_path: &str,
+        task_ids: &[String],
+    ) -> Result<HashMap<String, Vec<AgentSessionDocument>>> {
+        if task_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let repo_path = self.resolve_task_repo_path(repo_path)?;
+        let repo_dir = Path::new(&repo_path);
+        let tasks = self.task_store.list_tasks(repo_dir)?;
+        let available_task_ids = tasks.into_iter().map(|task| task.id).collect::<HashSet<_>>();
+
+        let mut sessions_by_task = HashMap::new();
+        for task_id in task_ids {
+            if !available_task_ids.contains(task_id) {
+                return Err(anyhow!("Task not found: {task_id}"));
+            }
+
+            let metadata = self.task_store.get_task_metadata(repo_dir, task_id)?;
+            sessions_by_task.insert(task_id.clone(), metadata.agent_sessions);
+        }
+
+        Ok(sessions_by_task)
     }
 
     pub fn build_continuation_target_get(

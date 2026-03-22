@@ -1,5 +1,6 @@
 import {
   type AgentSessionRecord,
+  agentSessionRecordSchema,
   type PlanSubtaskInput,
   type TaskCard,
   type TaskCreateInput,
@@ -250,6 +251,30 @@ export class TauriTaskClient {
   async agentSessionsList(repoPath: string, taskId: string): Promise<AgentSessionRecord[]> {
     const payload = await this.readTaskMetadata(repoPath, taskId);
     return payload.agentSessions;
+  }
+
+  async agentSessionsListBulk(
+    repoPath: string,
+    taskIds: string[],
+  ): Promise<Record<string, AgentSessionRecord[]>> {
+    const payload = await this.invokeFn("agent_sessions_list_bulk", {
+      repoPath,
+      taskIds,
+    });
+    if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+      throw new Error("agent_sessions_list_bulk returned a malformed payload.");
+    }
+
+    const sessionsByTaskId: Record<string, AgentSessionRecord[]> = {};
+    for (const [taskId, records] of Object.entries(payload)) {
+      sessionsByTaskId[taskId] = parseArray(
+        agentSessionRecordSchema,
+        records,
+        `agent_sessions_list_bulk:${taskId}`,
+      );
+    }
+
+    return sessionsByTaskId;
   }
 
   async agentSessionUpsert(

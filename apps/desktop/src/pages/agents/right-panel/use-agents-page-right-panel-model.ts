@@ -1,19 +1,12 @@
 import { useMemo } from "react";
-import { useAgentStudioDiffData } from "@/features/agent-studio-git";
-import { normalizeTargetBranch, UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
+import { useAgentStudioBuildToolsReadModel } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-read-model";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState, useWorkspaceState } from "@/state";
-import { useAgentStudioBuildWorktreeRefresh } from "../use-agent-studio-build-worktree-refresh";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
 import type {
   AgentStudioOrchestrationSelectionContext,
   useAgentStudioOrchestrationController,
 } from "../use-agent-studio-orchestration-controller";
-import {
-  buildAgentStudioGitPanelBranchIdentityKey,
-  resolveAgentStudioGitPanelBranch,
-} from "./agents-page-git-panel";
-import { useAgentStudioDevServerPanel } from "./use-agent-studio-dev-server-panel";
 import { buildAgentStudioRightPanelModel } from "./use-agent-studio-right-panel";
 
 type UseAgentsPageRightPanelModelArgs = {
@@ -24,6 +17,7 @@ type UseAgentsPageRightPanelModelArgs = {
   viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
   panelKind: Parameters<typeof buildAgentStudioRightPanelModel>[0]["panelKind"];
   isPanelOpen: boolean;
+  isViewSessionHistoryHydrating: boolean;
   documentsModel: Parameters<typeof buildAgentStudioRightPanelModel>[0]["documentsModel"];
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
   runCompletionRecoverySignal: number;
@@ -41,6 +35,7 @@ export function useAgentsPageRightPanelModel({
   viewSelectedTask,
   panelKind,
   isPanelOpen,
+  isViewSessionHistoryHydrating,
   documentsModel,
   repoSettings,
   runCompletionRecoverySignal,
@@ -49,48 +44,19 @@ export function useAgentsPageRightPanelModel({
   onDetectPullRequest,
   onResolveGitConflict,
 }: UseAgentsPageRightPanelModelArgs) {
-  const gitPanelContextMode: "repository" | "worktree" =
-    viewActiveSession?.role === "build" ? "worktree" : "repository";
-  const repositoryBranchIdentityKey =
-    gitPanelContextMode === "repository"
-      ? buildAgentStudioGitPanelBranchIdentityKey(activeBranch)
-      : null;
-  const diffComparisonTarget =
-    gitPanelContextMode === "repository"
-      ? { branch: UPSTREAM_TARGET_BRANCH }
-      : (repoSettings?.defaultTargetBranch ?? normalizeTargetBranch(null));
-  const shouldLoadVisibleBuildToolsPanel =
-    viewRole === "build" && panelKind === "build_tools" && isPanelOpen;
-  const diffData = useAgentStudioDiffData({
-    repoPath: shouldLoadVisibleBuildToolsPanel ? activeRepo : null,
-    sessionWorkingDirectory: shouldLoadVisibleBuildToolsPanel
-      ? (viewActiveSession?.workingDirectory ?? null)
-      : null,
-    sessionRunId: shouldLoadVisibleBuildToolsPanel ? (viewActiveSession?.runId ?? null) : null,
-    runCompletionRecoverySignal,
-    defaultTargetBranch: diffComparisonTarget,
-    branchIdentityKey: repositoryBranchIdentityKey,
-    enablePolling: shouldLoadVisibleBuildToolsPanel && Boolean(viewActiveSession),
-  });
-  const resolvedGitPanelBranch = resolveAgentStudioGitPanelBranch({
-    contextMode: gitPanelContextMode,
-    workspaceActiveBranch: activeBranch,
-    diffBranch: diffData.branch,
-  });
-
-  useAgentStudioBuildWorktreeRefresh({
-    viewRole,
-    activeSession: viewActiveSession,
-    refreshWorktree: diffData.refresh,
-  });
-
-  const devServerModel = useAgentStudioDevServerPanel({
-    repoPath: shouldLoadVisibleBuildToolsPanel ? activeRepo : null,
-    taskId: shouldLoadVisibleBuildToolsPanel ? (viewSelectedTask?.id ?? null) : null,
-    repoSettings,
-    activeSession: viewActiveSession,
-    enabled: shouldLoadVisibleBuildToolsPanel,
-  });
+  const { diffData, devServerModel, gitPanelContextMode, resolvedGitPanelBranch } =
+    useAgentStudioBuildToolsReadModel({
+      activeRepo,
+      activeBranch,
+      viewRole,
+      viewActiveSession,
+      viewSelectedTask,
+      panelKind,
+      isPanelOpen,
+      isViewSessionHistoryHydrating,
+      repoSettings,
+      runCompletionRecoverySignal,
+    });
 
   const isActiveBuilderWorking =
     viewActiveSession?.role === "build" &&

@@ -17,7 +17,6 @@ import {
 import { host } from "../shared/host";
 import {
   BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
-  BRANCH_SYNC_INTERVAL_MS,
   type BranchProbeError,
   type BranchProbeOutcome,
   branchProbeErrorSignature,
@@ -418,16 +417,9 @@ export function useWorkspaceOperations({
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        void syncExternalBranchChange();
-      }
-    }, BRANCH_SYNC_INTERVAL_MS);
-
     return () => {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.clearInterval(intervalId);
     };
   }, [activeRepo, syncExternalBranchChange]);
 

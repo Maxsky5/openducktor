@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionRecord, RuntimeInstanceSummary } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createDeferred, createTaskCardFixture } from "../test-utils";
+import { LiveAgentSessionStore } from "./live-agent-session-store";
 import { createLoadAgentSessions } from "./load-sessions";
 
 const taskFixture = createTaskCardFixture({ title: "Task" });
@@ -13,7 +14,7 @@ const createAdapter = (
   overrides: Partial<Parameters<typeof createLoadAgentSessions>[0]["adapter"]> = {},
 ): Parameters<typeof createLoadAgentSessions>[0]["adapter"] => ({
   hasSession: () => false,
-  listRuntimeSessions: async () => [],
+  listLiveAgentSessionSnapshots: async () => [],
   loadSessionHistory: async () => [],
   resumeSession: async (input) => ({
     sessionId: input.sessionId,
@@ -55,6 +56,7 @@ describe("agent-orchestrator-load-sessions", () => {
       activeRepo: null,
       adapter: createAdapter(),
       repoEpochRef: { current: 0 },
+      activeRepoRef: { current: null },
       previousRepoRef: { current: null },
       sessionsRef: { current: {} },
       setSessionsById: () => {
@@ -62,8 +64,6 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       taskRef: { current: [taskFixture] },
       updateSession: () => {},
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -78,6 +78,7 @@ describe("agent-orchestrator-load-sessions", () => {
       activeRepo: "/tmp/repo",
       adapter: createAdapter(),
       repoEpochRef: { current: 0 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef: { current: {} },
       setSessionsById: () => {
@@ -85,8 +86,6 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       taskRef: { current: [taskFixture] },
       updateSession: () => {},
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -111,13 +110,12 @@ describe("agent-orchestrator-load-sessions", () => {
       activeRepo: "/tmp/repo",
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
       updateSession: () => {},
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -231,13 +229,12 @@ describe("agent-orchestrator-load-sessions", () => {
       activeRepo: "/tmp/repo",
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
       updateSession: () => {},
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -297,6 +294,513 @@ describe("agent-orchestrator-load-sessions", () => {
     ]);
   });
 
+  test("keeps persisted pending permissions when the live snapshot reports no pending input", async () => {
+    const existingSession: AgentSessionState = {
+      sessionId: "session-1",
+      externalSessionId: "external-1",
+      taskId: "task-1",
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "idle",
+      startedAt: "2026-02-22T08:00:00.000Z",
+      runtimeKind: "opencode",
+      runtimeId: null,
+      runId: null,
+      runtimeEndpoint: "http://127.0.0.1:4444",
+      workingDirectory: "/tmp/repo/worktree",
+      messages: [],
+      draftAssistantText: "",
+      draftAssistantMessageId: null,
+      draftReasoningText: "",
+      draftReasoningMessageId: null,
+      contextUsage: null,
+      pendingPermissions: [{ requestId: "permission-1", permission: "read", patterns: [".env"] }],
+      pendingQuestions: [],
+      todos: [],
+      modelCatalog: null,
+      selectedModel: null,
+      isLoadingModelCatalog: false,
+      promptOverrides: {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: { "session-1": existingSession },
+    };
+    let state: Record<string, AgentSessionState> = sessionsRef.current;
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const hostModule = await import("../../shared/host");
+    const originalList = hostModule.host.agentSessionsList;
+    hostModule.host.agentSessionsList = async () => [
+      {
+        runtimeKind: "opencode",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:01.000Z",
+        workingDirectory: "/tmp/repo/worktree",
+        pendingPermissions: [{ requestId: "permission-1", permission: "read", patterns: [".env"] }],
+      },
+    ];
+
+    appQueryClient.setQueryData(runtimeQueryKeys.list("opencode", "/tmp/repo"), [
+      {
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        repoPath: "/tmp/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/tmp/repo",
+        runtimeRoute: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4444",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      } satisfies RuntimeInstanceSummary,
+    ]);
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: createAdapter({
+        loadSessionHistory: async () => [],
+        listLiveAgentSessionSnapshots: async () => [
+          {
+            externalSessionId: "external-1",
+            title: "Session",
+            role: "build",
+            scenario: "build_implementation_start",
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: { type: "idle" },
+            pendingPermissions: [],
+            pendingQuestions: [],
+            workingDirectory: "/tmp/repo/worktree",
+          },
+        ],
+      }),
+      repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession: (sessionId, updater) => {
+        const current = state[sessionId];
+        if (!current) {
+          return;
+        }
+        const next = updater(current);
+        state = {
+          ...state,
+          [sessionId]: next,
+        };
+        sessionsRef.current = state;
+      },
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await loadAgentSessions("task-1", {
+        mode: "requested_history",
+        targetSessionId: "session-1",
+        historyPolicy: "requested_only",
+      });
+    } finally {
+      hostModule.host.agentSessionsList = originalList;
+    }
+
+    expect(state["session-1"]?.pendingPermissions).toEqual([
+      { requestId: "permission-1", permission: "read", patterns: [".env"] },
+    ]);
+  });
+
+  test("hydrates requested session history from the current live runtime without re-resolving runtimes", async () => {
+    const runtimeListCalls: string[] = [];
+    const runsListCalls: string[] = [];
+    const runtimeEnsureCalls: string[] = [];
+    const hostModule = await import("../../shared/host");
+    hostModule.host.runtimeList = async (_runtimeKind, repoPath) => {
+      runtimeListCalls.push(repoPath);
+      return [];
+    };
+    hostModule.host.runsList = async (repoPath) => {
+      runsListCalls.push(repoPath ?? "");
+      return [];
+    };
+    hostModule.host.runtimeEnsure = async (repoPath) => {
+      runtimeEnsureCalls.push(repoPath);
+      return {
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        repoPath,
+        taskId: null,
+        role: "workspace",
+        workingDirectory: repoPath,
+        runtimeRoute: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:9999",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      };
+    };
+
+    const existingSession: AgentSessionState = {
+      sessionId: "session-live",
+      externalSessionId: "external-live",
+      taskId: "task-1",
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "running",
+      startedAt: "2026-02-22T08:00:00.000Z",
+      runtimeKind: "opencode",
+      runtimeId: "runtime-live",
+      runId: "run-live",
+      runtimeEndpoint: "http://127.0.0.1:4444",
+      workingDirectory: "/tmp/repo/worktree",
+      messages: [],
+      draftAssistantText: "",
+      draftAssistantMessageId: null,
+      draftReasoningText: "",
+      draftReasoningMessageId: null,
+      contextUsage: null,
+      pendingPermissions: [],
+      pendingQuestions: [],
+      todos: [],
+      modelCatalog: null,
+      selectedModel: null,
+      isLoadingModelCatalog: false,
+      promptOverrides: {},
+    };
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: { "session-live": existingSession },
+    };
+    let state = sessionsRef.current;
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    let historyLoadInput: {
+      runtimeKind: string;
+      endpoint: string;
+      workingDirectory: string;
+      externalSessionId: string;
+    } | null = null;
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: createAdapter({
+        loadSessionHistory: async (input) => {
+          historyLoadInput = {
+            runtimeKind: input.runtimeKind,
+            endpoint: input.runtimeConnection.endpoint ?? "",
+            workingDirectory: input.runtimeConnection.workingDirectory,
+            externalSessionId: input.externalSessionId,
+          };
+          return [];
+        },
+      }),
+      repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        const nextSession = updater(current);
+        sessionsRef.current = {
+          ...sessionsRef.current,
+          [sessionId]: nextSession,
+        };
+        state = sessionsRef.current;
+      },
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    await loadAgentSessions("task-1", {
+      mode: "requested_history",
+      targetSessionId: "session-live",
+      historyPolicy: "requested_only",
+      persistedRecords: [
+        {
+          runtimeKind: "opencode",
+          sessionId: "session-live",
+          externalSessionId: "external-live",
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_implementation_start",
+          status: "running",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          updatedAt: "2026-02-22T08:00:00.000Z",
+          workingDirectory: "/tmp/repo/worktree",
+          pendingPermissions: [],
+          pendingQuestions: [],
+        },
+      ],
+      preloadedLiveAgentSessionsByKey: new Map([
+        [
+          "opencode::http://127.0.0.1:4444::/tmp/repo/worktree",
+          [
+            {
+              externalSessionId: "external-live",
+              title: "BUILD task-1",
+              workingDirectory: "/tmp/repo/worktree",
+              startedAt: "2026-02-22T08:00:00.000Z",
+              status: { type: "busy" },
+              pendingPermissions: [],
+              pendingQuestions: [],
+            },
+          ],
+        ],
+      ]),
+    });
+
+    expect(historyLoadInput).not.toBeNull();
+    expect(historyLoadInput).toMatchObject({
+      runtimeKind: "opencode",
+      endpoint: "http://127.0.0.1:4444",
+      workingDirectory: "/tmp/repo/worktree",
+      externalSessionId: "external-live",
+    });
+    expect(runtimeListCalls).toEqual([]);
+    expect(runsListCalls).toEqual([]);
+    expect(runtimeEnsureCalls).toEqual([]);
+  });
+
+  test("reuses the trusted live agent session store for requested session hydration", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": {
+          sessionId: "session-1",
+          externalSessionId: "external-1",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+          role: "build",
+          scenario: "build_implementation_start",
+          status: "idle",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          runtimeId: "runtime-1",
+          runId: "run-1",
+          runtimeEndpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          pendingPermissions: [],
+          pendingQuestions: [],
+          todos: [],
+          modelCatalog: null,
+          selectedModel: null,
+          isLoadingModelCatalog: false,
+        },
+      },
+    };
+    let state = sessionsRef.current;
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+    liveAgentSessionStore.replaceRepoSnapshots(
+      "/tmp/repo",
+      new Map([
+        [
+          "opencode::http://127.0.0.1:4444::/tmp/repo/worktree",
+          [
+            {
+              externalSessionId: "external-1",
+              title: "BUILD task-1",
+              workingDirectory: "/tmp/repo/worktree",
+              startedAt: "2026-02-22T08:00:00.000Z",
+              status: { type: "busy" },
+              pendingPermissions: [],
+              pendingQuestions: [],
+            },
+          ],
+        ],
+      ]),
+    );
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: createAdapter({
+        listLiveAgentSessionSnapshots: async () => {
+          throw new Error("should not reload live snapshots");
+        },
+      }),
+      repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession: (sessionId, updater) => {
+        const currentSession = state[sessionId];
+        if (!currentSession) {
+          throw new Error(`Missing session '${sessionId}' in test state.`);
+        }
+        setSessionsById((current) => ({
+          ...current,
+          [sessionId]: updater(currentSession),
+        }));
+      },
+      loadRepoPromptOverrides: async () => ({}),
+      liveAgentSessionStore,
+    });
+
+    await loadAgentSessions("task-1", {
+      mode: "requested_history",
+      targetSessionId: "session-1",
+      persistedRecords: [
+        {
+          runtimeKind: "opencode",
+          sessionId: "session-1",
+          externalSessionId: "external-1",
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_implementation_start",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          updatedAt: "2026-02-22T08:00:00.000Z",
+          workingDirectory: "/tmp/repo/worktree",
+        },
+      ],
+    });
+
+    expect(state["session-1"]?.status).toBe("running");
+  });
+
+  test("refreshes requested session history even when in-memory messages already exist", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-live": {
+          sessionId: "session-live",
+          externalSessionId: "external-live",
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_implementation_start",
+          status: "running",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          runtimeKind: "opencode",
+          runtimeId: "runtime-live",
+          runId: null,
+          runtimeEndpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+          messages: [
+            {
+              id: "stale-message",
+              role: "assistant",
+              content: "stale",
+              timestamp: "2026-02-22T08:00:00.000Z",
+              meta: { kind: "assistant", agentRole: "build", isFinal: true },
+            },
+          ],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          contextUsage: null,
+          pendingPermissions: [],
+          pendingQuestions: [],
+          todos: [],
+          modelCatalog: null,
+          selectedModel: null,
+          isLoadingModelCatalog: false,
+          promptOverrides: {},
+        },
+      },
+    };
+    let historyLoads = 0;
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: createAdapter({
+        loadSessionHistory: async () => {
+          historyLoads += 1;
+          return [];
+        },
+        listLiveAgentSessionSnapshots: async () => [
+          {
+            externalSessionId: "external-live",
+            title: "BUILD task-1",
+            workingDirectory: "/tmp/repo/worktree",
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: { type: "busy" },
+            pendingPermissions: [],
+            pendingQuestions: [],
+          },
+        ],
+      }),
+      repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById: (updater) => {
+        sessionsRef.current =
+          typeof updater === "function" ? updater(sessionsRef.current) : updater;
+      },
+      taskRef: { current: [taskFixture] },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current = {
+          ...sessionsRef.current,
+          [sessionId]: updater(current),
+        };
+      },
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    await loadAgentSessions("task-1", {
+      mode: "requested_history",
+      targetSessionId: "session-live",
+      historyPolicy: "requested_only",
+      persistedRecords: [
+        {
+          runtimeKind: "opencode",
+          sessionId: "session-live",
+          externalSessionId: "external-live",
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_implementation_start",
+          status: "running",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          updatedAt: "2026-02-22T08:00:00.000Z",
+          workingDirectory: "/tmp/repo/worktree",
+          pendingPermissions: [],
+          pendingQuestions: [],
+        },
+      ],
+    });
+
+    expect(historyLoads).toBe(1);
+  });
+
   test("does not eagerly hydrate session history or runtime connections without an explicit target session", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
@@ -334,13 +838,12 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
       updateSession,
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -402,13 +905,12 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
       updateSession: () => {},
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -481,7 +983,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     try {
-      await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" });
+      await loadAgentSessions("task-1", {
+        mode: "requested_history",
+        targetSessionId: "session-1",
+        historyPolicy: "requested_only",
+      });
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
@@ -497,7 +1003,6 @@ describe("agent-orchestrator-load-sessions", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": {
-          runtimeKind: "opencode",
           sessionId: "session-1",
           externalSessionId: "external-1",
           taskId: "task-1",
@@ -505,9 +1010,9 @@ describe("agent-orchestrator-load-sessions", () => {
           scenario: "planner_initial",
           status: "idle",
           startedAt: "2026-02-22T08:00:00.000Z",
-          runtimeId: "runtime-1",
+          runtimeId: null,
           runId: null,
-          runtimeEndpoint: "http://127.0.0.1:4555",
+          runtimeEndpoint: "",
           workingDirectory: "/tmp/repo",
           messages: [
             {
@@ -535,13 +1040,12 @@ describe("agent-orchestrator-load-sessions", () => {
       activeRepo: "/tmp/repo",
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById: () => {},
       taskRef: { current: [taskFixture] },
       updateSession: () => {},
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -563,7 +1067,11 @@ describe("agent-orchestrator-load-sessions", () => {
 
     try {
       await expect(
-        loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" }),
+        loadAgentSessions("task-1", {
+          mode: "requested_history",
+          targetSessionId: "session-1",
+          historyPolicy: "requested_only",
+        }),
       ).rejects.toThrow("Persisted session 'session-1' is missing runtime kind metadata.");
     } finally {
       hostModule.host.agentSessionsList = originalList;
@@ -610,24 +1118,16 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       },
     };
-    let todoLoads = 0;
-    let modelCatalogLoads = 0;
-
     const loadAgentSessions = createLoadAgentSessions({
       activeRepo: "/tmp/repo",
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById: () => {},
       taskRef: { current: [taskFixture] },
       updateSession: () => {},
-      loadSessionTodos: async () => {
-        todoLoads += 1;
-      },
-      loadSessionModelCatalog: async () => {
-        modelCatalogLoads += 1;
-      },
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -666,14 +1166,16 @@ describe("agent-orchestrator-load-sessions", () => {
     ];
 
     try {
-      await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" });
+      await loadAgentSessions("task-1", {
+        mode: "requested_history",
+        targetSessionId: "session-1",
+        historyPolicy: "requested_only",
+      });
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
     }
-
-    expect(todoLoads).toBe(1);
-    expect(modelCatalogLoads).toBe(0);
+    expect(sessionsRef.current["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4555");
   });
 
   test("rehydrates persisted sessions that exist in memory with empty message history", async () => {
@@ -742,13 +1244,12 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
       updateSession,
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -791,7 +1292,11 @@ describe("agent-orchestrator-load-sessions", () => {
     ];
 
     try {
-      await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" });
+      await loadAgentSessions("task-1", {
+        mode: "requested_history",
+        targetSessionId: "session-1",
+        historyPolicy: "requested_only",
+      });
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
@@ -801,6 +1306,163 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(historyLoads).toBe(1);
     expect(state["session-1"]?.messages.length).toBeGreaterThan(0);
     expect(state["session-1"]?.messages[0]?.id).toBe("history:session-start:session-1");
+  });
+
+  test("hydrates runtime pending permissions and questions for a requested live session", async () => {
+    const setSessionsByIdCalls: Array<Record<string, AgentSessionState>> = [];
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": {
+          sessionId: "session-1",
+          externalSessionId: "external-session-1",
+          taskId: "task-1",
+          role: "build" as const,
+          scenario: "build_implementation_start" as const,
+          status: "running" as const,
+          startedAt: "2026-02-22T08:00:00.000Z",
+          runtimeId: null,
+          runId: null,
+          runtimeEndpoint: "",
+          runtimeKind: "opencode" as const,
+          workingDirectory: "/tmp/repo/worktree",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          pendingPermissions: [],
+          pendingQuestions: [],
+          todos: [],
+          modelCatalog: null,
+          selectedModel: null,
+          isLoadingModelCatalog: false,
+        },
+      },
+    };
+
+    const adapter = createAdapter({
+      loadSessionHistory: async () => [
+        {
+          messageId: "m-1",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:00.000Z",
+          text: "Waiting",
+          parts: [],
+        },
+      ],
+      listLiveAgentSessionSnapshots: async () => [
+        {
+          externalSessionId: "external-session-1",
+          title: "BUILD task-1",
+          workingDirectory: "/tmp/repo/worktree",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: { type: "busy" },
+          pendingPermissions: [
+            {
+              requestId: "perm-1",
+              permission: "read",
+              patterns: ["**/.env"],
+            },
+          ],
+          pendingQuestions: [
+            {
+              requestId: "question-1",
+              questions: [
+                {
+                  header: "Confirm",
+                  question: "Ship it?",
+                  options: [{ label: "Yes", description: "Approve" }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      repoEpochRef: { current: 0 },
+      activeRepoRef: { current: "/tmp/repo" },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById: (updater) => {
+        if (typeof updater === "function") {
+          sessionsRef.current = updater(sessionsRef.current);
+        } else {
+          sessionsRef.current = updater;
+        }
+        setSessionsByIdCalls.push(sessionsRef.current);
+      },
+      taskRef: { current: [taskFixture] },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current = {
+          ...sessionsRef.current,
+          [sessionId]: updater(current),
+        };
+      },
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const record: AgentSessionRecord = {
+      runtimeKind: "opencode",
+      sessionId: "session-1",
+      externalSessionId: "external-session-1",
+      taskId: "task-1",
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "running",
+      startedAt: "2026-02-22T08:00:00.000Z",
+      updatedAt: "2026-02-22T08:00:00.000Z",
+      workingDirectory: "/tmp/repo/worktree",
+      pendingPermissions: [],
+      pendingQuestions: [],
+    };
+    const hostRuntimeList: RuntimeInstanceSummary[] = [
+      {
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        repoPath: "/tmp/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/tmp/repo/worktree",
+        runtimeRoute: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4444",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      },
+    ];
+
+    await loadAgentSessions("task-1", {
+      mode: "requested_history",
+      targetSessionId: "session-1",
+      persistedRecords: [record],
+      preloadedRuntimeLists: new Map([["opencode", hostRuntimeList]]),
+    });
+
+    expect(setSessionsByIdCalls.length).toBeGreaterThan(0);
+    expect(sessionsRef.current["session-1"]?.pendingPermissions).toEqual([
+      { requestId: "perm-1", permission: "read", patterns: ["**/.env"] },
+    ]);
+    expect(sessionsRef.current["session-1"]?.pendingQuestions).toEqual([
+      {
+        requestId: "question-1",
+        questions: [
+          {
+            header: "Confirm",
+            question: "Ship it?",
+            options: [{ label: "Yes", description: "Approve" }],
+          },
+        ],
+      },
+    ]);
   });
 
   test("rejects hydration when a persisted session record is missing runtime metadata", async () => {
@@ -819,13 +1481,12 @@ describe("agent-orchestrator-load-sessions", () => {
       activeRepo: "/tmp/repo",
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
       updateSession: () => {},
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -847,7 +1508,11 @@ describe("agent-orchestrator-load-sessions", () => {
 
     try {
       await expect(
-        loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" }),
+        loadAgentSessions("task-1", {
+          mode: "requested_history",
+          targetSessionId: "session-1",
+          historyPolicy: "requested_only",
+        }),
       ).rejects.toThrow("Persisted session 'session-1' is missing runtime kind metadata.");
       expect(state["session-1"]?.messages ?? []).toEqual([]);
     } finally {
@@ -890,13 +1555,12 @@ describe("agent-orchestrator-load-sessions", () => {
       activeRepo: "/tmp/repo",
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
       updateSession,
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -939,7 +1603,11 @@ describe("agent-orchestrator-load-sessions", () => {
     ];
 
     try {
-      await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-qa-1" });
+      await loadAgentSessions("task-1", {
+        mode: "requested_history",
+        targetSessionId: "session-qa-1",
+        historyPolicy: "requested_only",
+      });
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
@@ -986,13 +1654,12 @@ describe("agent-orchestrator-load-sessions", () => {
       activeRepo: "/tmp/repo",
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
       updateSession,
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -1042,7 +1709,11 @@ describe("agent-orchestrator-load-sessions", () => {
 
     try {
       await expect(
-        loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-qa-root" }),
+        loadAgentSessions("task-1", {
+          mode: "requested_history",
+          targetSessionId: "session-qa-root",
+          historyPolicy: "requested_only",
+        }),
       ).rejects.toThrow("No live runtime found for working directory /tmp/repo/.");
     } finally {
       hostModule.host.agentSessionsList = originalList;
@@ -1087,13 +1758,12 @@ describe("agent-orchestrator-load-sessions", () => {
       activeRepo: "/tmp/repo",
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
       updateSession,
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -1136,7 +1806,11 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     try {
-      await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" });
+      await loadAgentSessions("task-1", {
+        mode: "requested_history",
+        targetSessionId: "session-1",
+        historyPolicy: "requested_only",
+      });
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
@@ -1183,13 +1857,12 @@ describe("agent-orchestrator-load-sessions", () => {
       activeRepo: "/tmp/repo",
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
       updateSession,
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -1248,7 +1921,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     try {
-      await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" });
+      await loadAgentSessions("task-1", {
+        mode: "requested_history",
+        targetSessionId: "session-1",
+        historyPolicy: "requested_only",
+      });
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
@@ -1267,11 +1944,12 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(state["session-1"]?.messages[0]?.id).toBe("history:session-start:session-1");
   });
 
-  test("resumes live persisted sessions when runtime discovery finds them active", async () => {
+  test("resumes live persisted sessions without eagerly hydrating transcript history", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
     let resumeCalls = 0;
     let attachedListeners = 0;
+    let historyLoads = 0;
 
     const setSessionsById = (
       updater:
@@ -1300,15 +1978,37 @@ describe("agent-orchestrator-load-sessions", () => {
     const loadAgentSessions = createLoadAgentSessions({
       activeRepo: "/tmp/repo",
       adapter: createAdapter({
-        listRuntimeSessions: async () => [
+        listLiveAgentSessionSnapshots: async () => [
           {
             externalSessionId: "external-1",
             title: "PLANNER task-1",
             workingDirectory: "/tmp/repo",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
+            pendingPermissions: [],
+            pendingQuestions: [],
           },
         ],
+        loadSessionHistory: async () => {
+          historyLoads += 1;
+          return [
+            {
+              messageId: "history:session-start:session-1",
+              parts: [
+                {
+                  kind: "text",
+                  messageId: "history:session-start:session-1",
+                  partId: "part-1",
+                  text: "Resumed history",
+                  completed: true,
+                },
+              ],
+              role: "assistant",
+              timestamp: "2026-02-22T08:00:01.000Z",
+              text: "Resumed history",
+            },
+          ];
+        },
         resumeSession: async (input) => {
           resumeCalls += 1;
           return {
@@ -1323,6 +2023,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
@@ -1331,8 +2032,6 @@ describe("agent-orchestrator-load-sessions", () => {
       attachSessionListener: () => {
         attachedListeners += 1;
       },
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
       loadTaskDocuments: async () => ({
         specMarkdown: "",
@@ -1376,19 +2075,21 @@ describe("agent-orchestrator-load-sessions", () => {
     ];
 
     try {
-      await loadAgentSessions("task-1", { reconcileLiveSessions: true });
+      await loadAgentSessions("task-1", { mode: "reconcile_live", historyPolicy: "none" });
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
     }
 
     expect(resumeCalls).toBe(1);
+    expect(historyLoads).toBe(0);
     expect(attachedListeners).toBe(1);
     expect(state["session-1"]?.status).toBe("running");
     expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4555");
+    expect(state["session-1"]?.messages).toEqual([]);
   });
 
-  test("does not attach resumed sessions when the repo changes while resume is in flight", async () => {
+  test("does not attach projected live sessions when the repo changes while reconcile is in flight", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
     const repoEpochRef = { current: 2 };
@@ -1423,13 +2124,15 @@ describe("agent-orchestrator-load-sessions", () => {
     const loadAgentSessions = createLoadAgentSessions({
       activeRepo: "/tmp/repo",
       adapter: createAdapter({
-        listRuntimeSessions: async () => [
+        listLiveAgentSessionSnapshots: async () => [
           {
             externalSessionId: "external-1",
             title: "PLANNER task-1",
             workingDirectory: "/tmp/repo",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
+            pendingPermissions: [],
+            pendingQuestions: [],
           },
         ],
         resumeSession: async (input) => {
@@ -1454,8 +2157,6 @@ describe("agent-orchestrator-load-sessions", () => {
       attachSessionListener: () => {
         attachedListeners += 1;
       },
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
       loadTaskDocuments: async () => ({
         specMarkdown: "",
@@ -1498,7 +2199,10 @@ describe("agent-orchestrator-load-sessions", () => {
     ];
 
     try {
-      const loadPromise = loadAgentSessions("task-1", { reconcileLiveSessions: true });
+      const loadPromise = loadAgentSessions("task-1", {
+        mode: "reconcile_live",
+        historyPolicy: "live_if_empty",
+      });
       repoEpochRef.current = 3;
       previousRepoRef.current = "/tmp/other-repo";
       resumeDeferred.resolve(undefined);
@@ -1529,7 +2233,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const loadAgentSessions = createLoadAgentSessions({
       activeRepo: "/tmp/repo",
       adapter: createAdapter({
-        listRuntimeSessions: async () => [],
+        listLiveAgentSessionSnapshots: async () => [],
         resumeSession: async (input) => {
           resumeCalls += 1;
           return {
@@ -1544,14 +2248,13 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
       updateSession: () => {},
       attachSessionListener: () => {},
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
       loadTaskDocuments: async () => ({
         specMarkdown: "",
@@ -1594,7 +2297,7 @@ describe("agent-orchestrator-load-sessions", () => {
     ];
 
     try {
-      await loadAgentSessions("task-1", { reconcileLiveSessions: true });
+      await loadAgentSessions("task-1", { mode: "reconcile_live", historyPolicy: "live_if_empty" });
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
@@ -1637,17 +2340,20 @@ describe("agent-orchestrator-load-sessions", () => {
       activeRepo: "/tmp/repo",
       adapter: createAdapter({
         hasSession: () => true,
-        listRuntimeSessions: async () => [
+        listLiveAgentSessionSnapshots: async () => [
           {
             externalSessionId: "external-1",
             title: "PLANNER task-1",
             workingDirectory: "/tmp/repo",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
+            pendingPermissions: [],
+            pendingQuestions: [],
           },
         ],
       }),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
@@ -1656,8 +2362,6 @@ describe("agent-orchestrator-load-sessions", () => {
       attachSessionListener: () => {
         attachedListeners += 1;
       },
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
       loadTaskDocuments: async () => ({
         specMarkdown: "",
@@ -1700,7 +2404,7 @@ describe("agent-orchestrator-load-sessions", () => {
     ];
 
     try {
-      await loadAgentSessions("task-1", { reconcileLiveSessions: true });
+      await loadAgentSessions("task-1", { mode: "reconcile_live", historyPolicy: "live_if_empty" });
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
@@ -1709,6 +2413,137 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(attachedListeners).toBe(1);
     expect(state["session-1"]?.status).toBe("running");
     expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4555");
+  });
+
+  test("resumes and reattaches missing adapter sessions when reconciling after a repo switch", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    let state: Record<string, AgentSessionState> = {};
+    let attachedListeners = 0;
+    const resumeCalls: Array<{ sessionId: string; workingDirectory: string }> = [];
+
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [sessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: createAdapter({
+        hasSession: () => false,
+        resumeSession: async (input) => {
+          resumeCalls.push({
+            sessionId: input.sessionId,
+            workingDirectory: input.workingDirectory,
+          });
+          return {
+            sessionId: input.sessionId,
+            externalSessionId: input.externalSessionId,
+            role: input.role,
+            scenario: input.scenario,
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: "running",
+            runtimeKind: input.runtimeKind,
+          };
+        },
+        listLiveAgentSessionSnapshots: async () => [
+          {
+            externalSessionId: "external-1",
+            title: "BUILDER task-1",
+            workingDirectory: "/tmp/repo/worktree",
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: { type: "busy" },
+            pendingPermissions: [],
+            pendingQuestions: [],
+          },
+        ],
+      }),
+      repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession,
+      attachSessionListener: () => {
+        attachedListeners += 1;
+      },
+      loadRepoPromptOverrides: async () => ({}),
+      loadTaskDocuments: async () => ({
+        specMarkdown: "",
+        planMarkdown: "",
+        qaMarkdown: "",
+      }),
+      liveAgentSessionStore: new LiveAgentSessionStore(),
+    });
+
+    const hostModule = await import("../../shared/host");
+    const originalList = hostModule.host.agentSessionsList;
+    const originalRuntimeList = hostModule.host.runtimeList;
+    hostModule.host.agentSessionsList = async () => [
+      {
+        runtimeKind: "opencode",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+        workingDirectory: "/tmp/repo/worktree",
+      },
+    ];
+    hostModule.host.runtimeList = async () => [
+      {
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        repoPath: "/tmp/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/tmp/repo",
+        runtimeRoute: {
+          type: "local_http" as const,
+          endpoint: "http://127.0.0.1:4555",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      },
+    ];
+
+    try {
+      await loadAgentSessions("task-1", { mode: "reconcile_live", historyPolicy: "live_if_empty" });
+    } finally {
+      hostModule.host.agentSessionsList = originalList;
+      hostModule.host.runtimeList = originalRuntimeList;
+    }
+
+    expect(resumeCalls).toEqual([
+      {
+        sessionId: "session-1",
+        workingDirectory: "/tmp/repo/worktree",
+      },
+    ]);
+    expect(attachedListeners).toBe(1);
+    expect(state["session-1"]?.status).toBe("running");
+    expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4444");
   });
 
   test("does not reattach adapter-held sessions when the runtime no longer reports them live", async () => {
@@ -1744,9 +2579,10 @@ describe("agent-orchestrator-load-sessions", () => {
       activeRepo: "/tmp/repo",
       adapter: createAdapter({
         hasSession: () => true,
-        listRuntimeSessions: async () => [],
+        listLiveAgentSessionSnapshots: async () => [],
       }),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
@@ -1755,8 +2591,6 @@ describe("agent-orchestrator-load-sessions", () => {
       attachSessionListener: () => {
         attachedListeners += 1;
       },
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
       loadTaskDocuments: async () => ({
         specMarkdown: "",
@@ -1799,7 +2633,7 @@ describe("agent-orchestrator-load-sessions", () => {
     ];
 
     try {
-      await loadAgentSessions("task-1", { reconcileLiveSessions: true });
+      await loadAgentSessions("task-1", { mode: "reconcile_live", historyPolicy: "live_if_empty" });
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
@@ -1818,8 +2652,6 @@ describe("agent-orchestrator-load-sessions", () => {
     let setCalls = 0;
     let state: Record<string, AgentSessionState> = {};
     let updateCalls = 0;
-    let todosLoads = 0;
-    let modelCatalogLoads = 0;
     let historyLoads = 0;
 
     const setSessionsById = (
@@ -1847,12 +2679,6 @@ describe("agent-orchestrator-load-sessions", () => {
       taskRef: { current: [taskFixture] },
       updateSession: () => {
         updateCalls += 1;
-      },
-      loadSessionTodos: async () => {
-        todosLoads += 1;
-      },
-      loadSessionModelCatalog: async () => {
-        modelCatalogLoads += 1;
       },
       loadRepoPromptOverrides: async () => ({}),
     });
@@ -1888,8 +2714,6 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(Object.keys(state)).toHaveLength(0);
     expect(updateCalls).toBe(0);
     expect(historyLoads).toBe(0);
-    expect(todosLoads).toBe(0);
-    expect(modelCatalogLoads).toBe(0);
   });
 
   test("rehydrates system prompt without eager document host calls", async () => {
@@ -1928,13 +2752,12 @@ describe("agent-orchestrator-load-sessions", () => {
       activeRepo: "/tmp/repo",
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
       previousRepoRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
       updateSession,
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -1981,7 +2804,11 @@ describe("agent-orchestrator-load-sessions", () => {
 
     try {
       await expect(
-        loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" }),
+        loadAgentSessions("task-1", {
+          mode: "requested_history",
+          targetSessionId: "session-1",
+          historyPolicy: "requested_only",
+        }),
       ).rejects.toThrow("runtime unavailable");
     } finally {
       hostModule.host.agentSessionsList = originalList;

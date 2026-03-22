@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -67,23 +68,27 @@ export function TaskDeleteConfirmDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="mt-4 space-y-2 rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground">
-          <p className="font-medium">This action permanently removes the task from Beads.</p>
-          {hasSubtasks ? (
-            <p>Direct subtasks will also be deleted to avoid orphaned children in the workflow.</p>
-          ) : null}
-          {isLoadingImpact ? (
-            <p>{formatManagedSessionCleanupLoadingMessage()}</p>
-          ) : impactError ? (
-            <p>{formatUnknownManagedSessionCleanupMessage()}</p>
-          ) : hasManagedSessionCleanup ? (
-            <p>{formatManagedSessionCleanupMessage(managedWorktreeCount)}</p>
-          ) : null}
-          {impactError ? <p className="text-destructive-muted">{impactError}</p> : null}
-          {deleteError ? <p className="text-destructive-muted">{deleteError}</p> : null}
-        </div>
+        <DialogBody className="pt-4">
+          <div className="space-y-2 rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground">
+            <p className="font-medium">This action permanently removes the task from Beads.</p>
+            {hasSubtasks ? (
+              <p>
+                Direct subtasks will also be deleted to avoid orphaned children in the workflow.
+              </p>
+            ) : null}
+            {isLoadingImpact ? (
+              <p>{formatManagedSessionCleanupLoadingMessage()}</p>
+            ) : impactError ? (
+              <p>{formatUnknownManagedSessionCleanupMessage()}</p>
+            ) : hasManagedSessionCleanup ? (
+              <p>{formatManagedSessionCleanupMessage(managedWorktreeCount)}</p>
+            ) : null}
+            {impactError ? <p className="text-destructive-muted">{impactError}</p> : null}
+            {deleteError ? <p className="text-destructive-muted">{deleteError}</p> : null}
+          </div>
+        </DialogBody>
 
-        <DialogFooter className="mt-6 flex flex-row justify-end gap-2">
+        <DialogFooter className="mt-0 flex flex-row justify-end gap-2 border-t border-border pt-5">
           <Button
             type="button"
             variant="outline"

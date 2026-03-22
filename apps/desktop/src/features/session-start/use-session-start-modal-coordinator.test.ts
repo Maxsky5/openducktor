@@ -17,16 +17,14 @@ describe("use-session-start-modal-coordinator", () => {
     expect(
       buildSessionStartModalDescription({
         scenario: "spec_initial",
-        startMode: "fresh",
       }),
     ).toBe("Start a fresh session for Spec.");
 
     expect(
       buildSessionStartModalDescription({
         scenario: "build_after_human_request_changes",
-        startMode: "reuse_latest",
       }),
-    ).toBe("Continue latest or start a new session for Apply Human Changes.");
+    ).toBe("Choose whether to start fresh or reuse an existing session for Apply Human Changes.");
   });
 
   test("maps session-start reasons to post actions", () => {

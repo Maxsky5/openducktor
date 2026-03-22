@@ -129,7 +129,7 @@ export function useAgentStudioModelSelection({
 
   const composerCatalogQuery = useQuery({
     ...repoRuntimeCatalogQueryOptions(activeRepo ?? "", composerRuntimeKind, loadCatalogForRepo),
-    enabled: activeRepo !== null && (activeSession == null || activeSession.modelCatalog == null),
+    enabled: activeRepo !== null && activeSession == null,
     queryFn: async (): Promise<AgentModelCatalog> => {
       if (!activeRepo) {
         throw new Error("No repository selected.");

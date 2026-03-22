@@ -9,7 +9,6 @@ type ProbeBranchChangeParams = {
   isSyncInFlight: boolean;
 };
 
-export const BRANCH_SYNC_INTERVAL_MS = 30000;
 export const BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS = 120000;
 
 export type BranchProbeStage = "current_branch_probe" | "branch_refresh";

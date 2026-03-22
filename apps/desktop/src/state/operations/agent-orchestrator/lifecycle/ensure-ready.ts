@@ -1,5 +1,5 @@
-import type { RepoPromptOverrides, RuntimeKind, TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { AgentEnginePort } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -12,12 +12,12 @@ import {
   throwIfRepoStale,
 } from "../support/core";
 import { loadSessionPromptContext } from "../support/session-prompt";
-import { warmSessionData } from "../support/session-warmup";
 
 type EnsureSessionReadyDependencies = {
   activeRepo: string | null;
   adapter: AgentEnginePort;
   repoEpochRef: { current: number };
+  activeRepoRef?: { current: string | null };
   previousRepoRef: { current: string | null };
   sessionsRef: { current: Record<string, AgentSessionState> };
   taskRef: { current: TaskCard[] };
@@ -43,17 +43,6 @@ type EnsureSessionReadyDependencies = {
   ) => Promise<RuntimeInfo>;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
-  loadSessionTodos: (
-    sessionId: string,
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-    externalSessionId: string,
-  ) => Promise<void>;
-  loadSessionModelCatalog: (
-    sessionId: string,
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-  ) => Promise<void>;
 };
 
 const STALE_PREPARE_ERROR = "Workspace changed while preparing session.";
@@ -62,6 +51,7 @@ export const createEnsureSessionReady = ({
   activeRepo,
   adapter,
   repoEpochRef,
+  activeRepoRef,
   previousRepoRef,
   sessionsRef,
   taskRef,
@@ -71,14 +61,13 @@ export const createEnsureSessionReady = ({
   ensureRuntime,
   loadTaskDocuments,
   loadRepoPromptOverrides,
-  loadSessionTodos,
-  loadSessionModelCatalog,
 }: EnsureSessionReadyDependencies) => {
   return async (sessionId: string): Promise<void> => {
     const repoPath = requireActiveRepo(activeRepo);
     const isStaleRepoOperation = createRepoStaleGuard({
       repoPath,
       repoEpochRef,
+      activeRepoRef,
       previousRepoRef,
     });
     const assertNotStale = (): void => {
@@ -210,35 +199,6 @@ export const createEnsureSessionReady = ({
 
     if (isStaleRepoOperation()) {
       return;
-    }
-
-    const activeSession = sessionsRef.current[sessionId];
-    const runtimeConnection = resolveRuntimeConnection(runtime);
-    if (activeSession) {
-      const runtimeKind = activeSession.runtimeKind ?? activeSession.selectedModel?.runtimeKind;
-      if (!runtimeKind) {
-        throw new Error(`Runtime kind is required to warm session '${sessionId}'.`);
-      }
-      warmSessionData(
-        {
-          repoPath,
-          sessionId,
-          taskId: activeSession.taskId,
-          role: activeSession.role,
-          runtimeKind,
-          runtimeConnection,
-          externalSessionId: activeSession.externalSessionId,
-        },
-        {
-          loadSessionTodos,
-          loadSessionModelCatalog,
-        },
-        {
-          operationPrefix: "ensure-ready-warm-session",
-          shouldLoadModelCatalog:
-            !activeSession.modelCatalog && !activeSession.isLoadingModelCatalog,
-        },
-      );
     }
   };
 };

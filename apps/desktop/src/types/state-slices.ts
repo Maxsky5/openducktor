@@ -19,7 +19,15 @@ import type {
   TaskUpdatePatch,
   WorkspaceRecord,
 } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentModelSelection,
+  AgentRole,
+  AgentRuntimeConnection,
+  AgentScenario,
+  AgentSessionStartMode,
+  AgentSessionTodoItem,
+} from "@openducktor/core";
 import type { AgentSessionLoadOptions, AgentSessionState } from "./agent-orchestrator";
 import type { RepoRuntimeHealthMap } from "./diagnostics";
 
@@ -128,7 +136,43 @@ export type SpecStateContextValue = {
 
 export type AgentStateContextValue = {
   sessions: AgentSessionState[];
+  bootstrapTaskSessions: (
+    taskId: string,
+    persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[],
+  ) => Promise<void>;
+  hydrateRequestedTaskSessionHistory: (input: {
+    taskId: string;
+    sessionId: string;
+    persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
+  }) => Promise<void>;
+  reconcileLiveTaskSessions: (input: {
+    taskId: string;
+    persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
+    preloadedRuns?: import("@openducktor/contracts").RunSummary[];
+    preloadedRuntimeLists?: Map<
+      import("@openducktor/contracts").RuntimeKind,
+      import("@openducktor/contracts").RuntimeInstanceSummary[]
+    >;
+    preloadedRuntimeConnectionsByKey?: Map<
+      string,
+      import("@openducktor/core").AgentRuntimeConnection
+    >;
+    preloadedLiveAgentSessionsByKey?: Map<
+      string,
+      import("@openducktor/core").LiveAgentSessionSnapshot[]
+    >;
+    allowRuntimeEnsure?: boolean;
+  }) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
+  readSessionModelCatalog: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+  ) => Promise<AgentModelCatalog>;
+  readSessionTodos: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+    externalSessionId: string,
+  ) => Promise<AgentSessionTodoItem[]>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => void;
   startAgentSession: (input: {
     taskId: string;
@@ -137,9 +181,14 @@ export type AgentStateContextValue = {
     scenario?: AgentScenario;
     selectedModel?: AgentModelSelection | null;
     sendKickoff?: boolean;
-    startMode?: "reuse_latest" | "fresh";
+    startMode?: AgentSessionStartMode;
+    reuseSessionId?: string | null;
     requireModelReady?: boolean;
     workingDirectoryOverride?: string | null;
+    builderContext?: {
+      sessionId?: string | null;
+      workingDirectory: string;
+    } | null;
   }) => Promise<string>;
   forkAgentSession: (input: {
     parentSessionId: string;

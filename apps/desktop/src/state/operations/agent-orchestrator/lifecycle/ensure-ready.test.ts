@@ -88,8 +88,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         qaMarkdown: "",
       }),
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
     });
 
     try {
@@ -162,8 +160,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         qaMarkdown: "",
       }),
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
     });
 
     try {
@@ -183,8 +179,6 @@ describe("agent-orchestrator-ensure-ready", () => {
     let unsubscribeCalls = 0;
     let stopCalls = 0;
     let resumeCalls = 0;
-    let todosCalls = 0;
-    let catalogCalls = 0;
 
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
@@ -272,12 +266,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         qaMarkdown: "",
       }),
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {
-        todosCalls += 1;
-      },
-      loadSessionModelCatalog: async () => {
-        catalogCalls += 1;
-      },
     });
 
     try {
@@ -287,8 +275,6 @@ describe("agent-orchestrator-ensure-ready", () => {
       expect(stopCalls).toBe(1);
       expect(resumeCalls).toBe(1);
       expect(attachCalls).toBe(1);
-      expect(todosCalls).toBe(1);
-      expect(catalogCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.status).toBe("idle");
       expect(sessionsRef.current["session-1"]?.pendingPermissions).toEqual([
         { requestId: "perm-1", permission: "read", patterns: ["*"] },
@@ -384,8 +370,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         qaMarkdown: "",
       }),
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
     });
 
     try {
@@ -462,8 +446,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         qaMarkdown: "",
       }),
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
     });
 
     try {
@@ -537,8 +519,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         qaMarkdown: "",
       }),
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
     });
 
     try {
@@ -618,8 +598,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         qaMarkdown: "",
       }),
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
     });
 
     try {
@@ -675,8 +653,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         throw new Error("prompt load failed");
       },
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
     });
 
     try {
@@ -723,8 +699,6 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoPromptOverrides: async () => promptOverridesDeferred.promise,
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
     });
 
     try {

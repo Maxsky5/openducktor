@@ -70,6 +70,9 @@ export const buildDiagnosticsPanelModel = (
   const repoName = activeRepo?.split("/").filter(Boolean).at(-1) ?? "No repository";
   const effectiveWorktreeBasePath = activeWorkspace?.effectiveWorktreeBasePath ?? null;
   const worktreeAvailable = Boolean(effectiveWorktreeBasePath);
+  const hasRuntimeHealthData = runtimeDefinitions.some(
+    (definition) => runtimeHealthByRuntime[definition.kind] !== undefined,
+  );
   const runtimeEntries = runtimeDefinitions.map((definition) => ({
     definition,
     cliHealth: runtimeCheck?.runtimes.find((entry) => entry.kind === definition.kind) ?? null,
@@ -84,12 +87,14 @@ export const buildDiagnosticsPanelModel = (
     if (runtimeCheck && (!runtimeCheck.gitOk || runtimeCheck.runtimes.some((entry) => !entry.ok))) {
       criticalReasons.push("Runtime CLI checks failing");
     }
-    for (const { definition, runtimeHealth } of runtimeEntries) {
-      if (runtimeHealth?.runtimeOk === false) {
-        criticalReasons.push(`${definition.label} runtime unavailable`);
-      }
-      if (definition.capabilities.supportsMcpStatus && runtimeHealth?.mcpOk === false) {
-        criticalReasons.push(`${definition.label} OpenDucktor MCP unavailable`);
+    if (hasRuntimeHealthData) {
+      for (const { definition, runtimeHealth } of runtimeEntries) {
+        if (runtimeHealth?.runtimeOk === false) {
+          criticalReasons.push(`${definition.label} runtime unavailable`);
+        }
+        if (definition.capabilities.supportsMcpStatus && runtimeHealth?.mcpOk === false) {
+          criticalReasons.push(`${definition.label} OpenDucktor MCP unavailable`);
+        }
       }
     }
     if (beadsCheck?.beadsOk === false) {
@@ -107,8 +112,7 @@ export const buildDiagnosticsPanelModel = (
     (isLoadingRuntimeDefinitions ||
       isLoadingChecks ||
       runtimeCheck === null ||
-      beadsCheck === null ||
-      runtimeDefinitions.some((definition) => !(definition.kind in runtimeHealthByRuntime)));
+      beadsCheck === null);
 
   const repositorySection: DiagnosticsSectionModel = {
     key: "repository",

@@ -1,4 +1,10 @@
-import type { AgentModelCatalog, AgentRole, AgentScenario } from "@openducktor/core";
+import {
+  type AgentModelCatalog,
+  type AgentRole,
+  type AgentScenario,
+  defaultStartModeForScenario,
+  getAgentScenarioDefinition,
+} from "@openducktor/core";
 import { useCallback } from "react";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { AGENT_ROLE_LABELS } from "@/types";
@@ -11,8 +17,8 @@ import {
   useSessionStartModalState,
 } from "./use-session-start-modal-state";
 
-const startModeLabelFor = (startMode: SessionStartModalIntent["startMode"]): string =>
-  startMode === "fresh" ? "Start a fresh session" : "Continue latest or start a new session";
+const startModeLabelFor = (startMode: "fresh" | "reuse"): string =>
+  startMode === "fresh" ? "Start a fresh session" : "Reuse an existing session";
 
 export const buildSessionStartModalTitle = (role: AgentRole): string => {
   const roleLabel = AGENT_ROLE_LABELS[role] ?? role.toUpperCase();
@@ -21,13 +27,15 @@ export const buildSessionStartModalTitle = (role: AgentRole): string => {
 
 export const buildSessionStartModalDescription = ({
   scenario,
-  startMode,
 }: {
   scenario: AgentScenario;
-  startMode: SessionStartModalIntent["startMode"];
 }): string => {
   const scenarioLabel = SCENARIO_LABELS[scenario] ?? scenario;
-  return `${startModeLabelFor(startMode)} for ${scenarioLabel}.`;
+  const allowedStartModes = getAgentScenarioDefinition(scenario).allowedStartModes;
+  if (allowedStartModes.length > 1) {
+    return `Choose whether to start fresh or reuse an existing session for ${scenarioLabel}.`;
+  }
+  return `${startModeLabelFor(defaultStartModeForScenario(scenario))} for ${scenarioLabel}.`;
 };
 
 export const toSessionStartPostAction = (
@@ -85,7 +93,6 @@ export function useSessionStartModalCoordinator({
           request.description ??
           buildSessionStartModalDescription({
             scenario: request.scenario,
-            startMode: request.startMode,
           }),
       });
     },

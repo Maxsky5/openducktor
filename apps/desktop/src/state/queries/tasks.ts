@@ -1,4 +1,4 @@
-import type { RunSummary, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, RunSummary, TaskCard } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
 import { toVisibleTasks } from "../read-models/task-read-model";
@@ -17,7 +17,7 @@ export const taskQueryKeys = {
   runs: (repoPath: string) => [...taskQueryKeys.all, "runs", repoPath] as const,
 };
 
-const repoTaskDataQueryOptions = (repoPath: string) =>
+export const repoTaskDataQueryOptions = (repoPath: string) =>
   queryOptions({
     queryKey: taskQueryKeys.repoData(repoPath),
     queryFn: async (): Promise<RepoTaskData> => {
@@ -34,7 +34,7 @@ const repoTaskDataQueryOptions = (repoPath: string) =>
     staleTime: TASK_DATA_STALE_TIME_MS,
   });
 
-const repoRunsQueryOptions = (repoPath: string) =>
+export const repoRunsQueryOptions = (repoPath: string) =>
   queryOptions({
     queryKey: taskQueryKeys.runs(repoPath),
     queryFn: (): Promise<RunSummary[]> => host.runsList(repoPath),
@@ -82,4 +82,52 @@ export const invalidateRepoTaskQueries = (
       refetchType: "none",
     }),
   ]);
+};
+
+export const upsertAgentSessionInRepoTaskData = (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+  session: AgentSessionRecord,
+): void => {
+  queryClient.setQueryData<RepoTaskData | undefined>(
+    taskQueryKeys.repoData(repoPath),
+    (current): RepoTaskData | undefined => {
+      if (!current) {
+        return current;
+      }
+
+      let didChange = false;
+      const nextTasks = current.tasks.map((task) => {
+        if (task.id !== taskId) {
+          return task;
+        }
+
+        const currentAgentSessions = task.agentSessions ?? [];
+        const existingIndex = currentAgentSessions.findIndex(
+          (entry) => entry.sessionId === session.sessionId,
+        );
+        const existingSession =
+          existingIndex === -1 ? null : (currentAgentSessions[existingIndex] ?? null);
+        if (existingSession === session) {
+          return task;
+        }
+
+        const nextAgentSessions =
+          existingIndex === -1
+            ? [...currentAgentSessions, session]
+            : currentAgentSessions.map((entry, index) =>
+                index === existingIndex ? session : entry,
+              );
+
+        didChange = true;
+        return {
+          ...task,
+          agentSessions: nextAgentSessions,
+        };
+      });
+
+      return didChange ? { ...current, tasks: nextTasks } : current;
+    },
+  );
 };

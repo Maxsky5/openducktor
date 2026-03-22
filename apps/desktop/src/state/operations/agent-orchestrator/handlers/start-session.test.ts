@@ -48,8 +48,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -62,13 +60,14 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("reuses an existing in-flight start promise", async () => {
     const inFlight = Promise.resolve("session-in-flight");
     const inFlightMap = new Map<string, Promise<string>>([
-      ["/tmp/repo::task-1::build::reuse_latest::", inFlight],
+      ["/tmp/repo::task-1::build::reuse::::::", inFlight],
     ]);
+    const sessionsRef = { current: {} };
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
       setSessionsById: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
       previousRepoRef: { current: "/tmp/repo" },
@@ -84,15 +83,20 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
       sendAgentMessage: async () => {},
     });
 
-    await expect(start({ taskId: "task-1", role: "build" })).resolves.toBe("session-in-flight");
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        startMode: "reuse",
+      }),
+    ).resolves.toBe("session-in-flight");
   });
 
   test("does not dedupe in-flight starts across different roles", async () => {
@@ -145,8 +149,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -193,7 +195,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
             externalSessionId: "external-newer",
             taskId: "task-1",
             role: "build",
-            scenario: "build_implementation_start",
+            scenario: "build_after_human_request_changes",
             status: "idle",
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
@@ -219,6 +221,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
+      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
@@ -229,8 +232,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -238,9 +239,209 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      await expect(start({ taskId: "task-1", role: "build" })).resolves.toBe("newer");
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_after_human_request_changes",
+          startMode: "reuse",
+        }),
+      ).resolves.toBe("newer");
       expect(persistedListCalls).toBe(0);
     } finally {
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
+  test("reuses the explicitly selected in-memory session instead of the latest one", async () => {
+    let persistedListCalls = 0;
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => {
+      persistedListCalls += 1;
+      return [];
+    };
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter: new OpencodeSdkAdapter(),
+      setSessionsById: () => {},
+      sessionsRef: {
+        current: {
+          latest: {
+            runtimeKind: "opencode",
+            sessionId: "latest",
+            externalSessionId: "external-latest",
+            taskId: "task-1",
+            role: "build",
+            scenario: "build_after_human_request_changes",
+            status: "idle",
+            startedAt: "2026-02-22T08:10:00.000Z",
+            runtimeId: null,
+            runId: "run-2",
+            runtimeEndpoint: "http://127.0.0.1:4444",
+            workingDirectory: "/tmp/repo/worktree",
+            messages: [],
+            draftAssistantText: "",
+            draftAssistantMessageId: null,
+            draftReasoningText: "",
+            draftReasoningMessageId: null,
+            pendingPermissions: [],
+            pendingQuestions: [],
+            todos: [],
+            modelCatalog: null,
+            selectedModel: null,
+            isLoadingModelCatalog: false,
+          },
+          chosen: {
+            runtimeKind: "opencode",
+            sessionId: "chosen",
+            externalSessionId: "external-chosen",
+            taskId: "task-1",
+            role: "build",
+            scenario: "build_after_human_request_changes",
+            status: "idle",
+            startedAt: "2026-02-22T08:00:00.000Z",
+            runtimeId: null,
+            runId: "run-1",
+            runtimeEndpoint: "http://127.0.0.1:4444",
+            workingDirectory: "/tmp/repo/worktree",
+            messages: [],
+            draftAssistantText: "",
+            draftAssistantMessageId: null,
+            draftReasoningText: "",
+            draftReasoningMessageId: null,
+            pendingPermissions: [],
+            pendingQuestions: [],
+            todos: [],
+            modelCatalog: null,
+            selectedModel: null,
+            isLoadingModelCatalog: false,
+          },
+        },
+      },
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: "runtime-2",
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_after_human_request_changes",
+          startMode: "reuse",
+          reuseSessionId: "chosen",
+        }),
+      ).resolves.toBe("chosen");
+      expect(persistedListCalls).toBe(0);
+    } finally {
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
+  test("starts a fresh build session instead of reusing an in-memory session when the continuation target changed", async () => {
+    let persistedListCalls = 0;
+    let startCalls = 0;
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => {
+      persistedListCalls += 1;
+      return [];
+    };
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async (input) => {
+      startCalls += 1;
+      return {
+        runtimeKind: "opencode",
+        sessionId: "fresh-build-session",
+        externalSessionId: "external-fresh-build-session",
+        startedAt: "2026-02-22T08:20:00.000Z",
+        role: input.role,
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef: {
+        current: {
+          stale: {
+            runtimeKind: "opencode",
+            sessionId: "stale",
+            externalSessionId: "external-stale",
+            taskId: "task-1",
+            role: "build",
+            scenario: "build_implementation_start",
+            status: "idle",
+            startedAt: "2026-02-22T08:10:00.000Z",
+            runtimeId: null,
+            runId: "run-old",
+            runtimeEndpoint: "http://127.0.0.1:4444",
+            workingDirectory: "/tmp/repo/old-worktree",
+            messages: [],
+            draftAssistantText: "",
+            draftAssistantMessageId: null,
+            draftReasoningText: "",
+            draftReasoningMessageId: null,
+            pendingPermissions: [],
+            pendingQuestions: [],
+            todos: [],
+            modelCatalog: null,
+            selectedModel: null,
+            isLoadingModelCatalog: false,
+          },
+        },
+      },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      resolveBuildContinuationTarget: async () => "/tmp/repo/new-worktree",
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: "runtime-2",
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:5555",
+        workingDirectory: "/tmp/repo/new-worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(start({ taskId: "task-1", role: "build" })).resolves.toBe("fresh-build-session");
+      expect(startCalls).toBe(1);
+      expect(persistedListCalls).toBe(0);
+    } finally {
+      adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
     }
   });
@@ -262,7 +463,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           externalSessionId: "external-reused",
           taskId: "task-1",
           role: "build",
-          scenario: "build_implementation_start",
+          scenario: "build_after_human_request_changes",
           status: "idle",
           startedAt: "2026-02-22T08:10:00.000Z",
           runtimeId: null,
@@ -304,6 +505,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
+      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
@@ -314,8 +516,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {
@@ -329,6 +529,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
         start({
           taskId: "task-1",
           role: "build",
+          scenario: "build_after_human_request_changes",
+          startMode: "reuse",
           selectedModel,
         }),
       ).resolves.toBe("reused");
@@ -420,8 +622,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -522,8 +722,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -630,8 +828,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -721,8 +917,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -739,7 +933,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("returns latest persisted session for same role and hydrates when missing from memory", async () => {
+  test("returns the requested persisted session for the same role and hydrates when missing from memory", async () => {
     let loadAgentSessionsCalls = 0;
 
     const originalAgentSessionsList = host.agentSessionsList;
@@ -750,7 +944,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "external-2",
         taskId: "task-1",
         role: "build",
-        scenario: "build_implementation_start",
+        scenario: "build_after_human_request_changes",
         status: "idle",
         startedAt: "2026-02-22T08:20:00.000Z",
         updatedAt: "2026-02-22T08:20:00.000Z",
@@ -765,7 +959,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
-        scenario: "build_implementation_start",
+        scenario: "build_after_human_request_changes",
         status: "idle",
         startedAt: "2026-02-22T08:10:00.000Z",
         updatedAt: "2026-02-22T08:10:00.000Z",
@@ -776,11 +970,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
       {
         runtimeKind: "opencode",
-        sessionId: "persisted-spec-newer",
-        externalSessionId: "external-spec-newer",
+        sessionId: "persisted-build-newer",
+        externalSessionId: "external-build-newer",
         taskId: "task-1",
-        role: "spec",
-        scenario: "spec_initial",
+        role: "build",
+        scenario: "build_implementation_start",
         status: "idle",
         startedAt: "2026-02-22T08:30:00.000Z",
         updatedAt: "2026-02-22T08:30:00.000Z",
@@ -791,16 +985,18 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
     ];
 
+    const sessionsRef = { current: {} };
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
       setSessionsById: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
+      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
@@ -811,10 +1007,35 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {
         loadAgentSessionsCalls += 1;
+        sessionsRef.current = {
+          "persisted-build-newer": {
+            runtimeKind: "opencode",
+            sessionId: "persisted-build-newer",
+            externalSessionId: "external-build-newer",
+            taskId: "task-1",
+            role: "build",
+            scenario: "build_implementation_start",
+            status: "idle",
+            startedAt: "2026-02-22T08:30:00.000Z",
+            runtimeId: "runtime-1",
+            runId: "run-3",
+            runtimeEndpoint: "http://127.0.0.1:4444",
+            workingDirectory: "/tmp/repo/worktree",
+            messages: [],
+            draftAssistantText: "",
+            draftAssistantMessageId: null,
+            draftReasoningText: "",
+            draftReasoningMessageId: null,
+            pendingPermissions: [],
+            pendingQuestions: [],
+            todos: [],
+            modelCatalog: null,
+            selectedModel: null,
+            isLoadingModelCatalog: false,
+          },
+        };
       },
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -822,7 +1043,14 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      await expect(start({ taskId: "task-1", role: "build" })).resolves.toBe("persisted-2");
+      const sessionId = await start({
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        startMode: "reuse",
+        reuseSessionId: "persisted-build-newer",
+      });
+      expect(sessionId).toBe("persisted-build-newer");
       expect(loadAgentSessionsCalls).toBe(1);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
@@ -880,11 +1108,12 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
     ];
 
+    const sessionsRef = { current: {} };
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
       setSessionsById: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef,
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       previousRepoRef: { current: "/tmp/repo" },
@@ -900,10 +1129,40 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {
         loadAgentSessionsCalls += 1;
+        sessionsRef.current = {
+          "persisted-claude": {
+            runtimeKind: "claude-code",
+            sessionId: "persisted-claude",
+            externalSessionId: "external-claude",
+            taskId: "task-1",
+            role: "build",
+            scenario: "build_after_human_request_changes",
+            status: "idle",
+            startedAt: "2026-02-22T08:20:00.000Z",
+            runtimeId: "runtime-1",
+            runId: "run-2",
+            runtimeEndpoint: "http://127.0.0.1:4444",
+            workingDirectory: "/tmp/repo/worktree",
+            messages: [],
+            draftAssistantText: "",
+            draftAssistantMessageId: null,
+            draftReasoningText: "",
+            draftReasoningMessageId: null,
+            pendingPermissions: [],
+            pendingQuestions: [],
+            todos: [],
+            modelCatalog: null,
+            selectedModel: {
+              runtimeKind: "claude-code",
+              providerId: "anthropic",
+              modelId: "claude-3-7-sonnet",
+              profileId: "Hephaestus",
+            },
+            isLoadingModelCatalog: false,
+          },
+        };
       },
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -922,7 +1181,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("reuses persisted session when runtime kind is only present on selected model", async () => {
+  test("reuses the requested persisted session when runtime kind is only present on selected model", async () => {
     let loadAgentSessionsCalls = 0;
     let startCalls = 0;
 
@@ -949,7 +1208,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           externalSessionId: "external-claude",
           taskId: "task-1",
           role: "build",
-          scenario: "build_implementation_start",
+          scenario: "build_after_human_request_changes",
           status: "idle",
           startedAt: "2026-02-22T08:20:00.000Z",
           updatedAt: "2026-02-22T08:20:00.000Z",
@@ -966,16 +1225,18 @@ describe("agent-orchestrator/handlers/start-session", () => {
         },
       ] as unknown as Awaited<ReturnType<typeof host.agentSessionsList>>;
 
+    const sessionsRef = { current: {} };
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
       setSessionsById: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
+      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
       ensureRuntime: async () => ({
         kind: "claude-code",
         runtimeId: "runtime-claude",
@@ -986,10 +1247,40 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {
         loadAgentSessionsCalls += 1;
+        sessionsRef.current = {
+          "persisted-claude": {
+            runtimeKind: "claude-code",
+            sessionId: "persisted-claude",
+            externalSessionId: "external-claude",
+            taskId: "task-1",
+            role: "build",
+            scenario: "build_after_human_request_changes",
+            status: "idle",
+            startedAt: "2026-02-22T08:20:00.000Z",
+            runtimeId: "runtime-1",
+            runId: "run-2",
+            runtimeEndpoint: "http://127.0.0.1:4444",
+            workingDirectory: "/tmp/repo/worktree",
+            messages: [],
+            draftAssistantText: "",
+            draftAssistantMessageId: null,
+            draftReasoningText: "",
+            draftReasoningMessageId: null,
+            pendingPermissions: [],
+            pendingQuestions: [],
+            todos: [],
+            modelCatalog: null,
+            selectedModel: {
+              runtimeKind: "claude-code",
+              providerId: "anthropic",
+              modelId: "claude-3-7-sonnet",
+              profileId: "Hephaestus",
+            },
+            isLoadingModelCatalog: false,
+          },
+        };
       },
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -997,17 +1288,19 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          selectedModel: {
-            runtimeKind: "claude-code",
-            providerId: "anthropic",
-            modelId: "claude-3-7-sonnet",
-          },
-        }),
-      ).resolves.toBe("persisted-claude");
+      const sessionId = await start({
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        startMode: "reuse",
+        reuseSessionId: "persisted-claude",
+        selectedModel: {
+          runtimeKind: "claude-code",
+          providerId: "anthropic",
+          modelId: "claude-3-7-sonnet",
+        },
+      });
+      expect(sessionId).toBe("persisted-claude");
       expect(loadAgentSessionsCalls).toBe(1);
       expect(startCalls).toBe(0);
     } finally {
@@ -1048,8 +1341,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -1109,8 +1400,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -1170,8 +1459,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -1185,6 +1472,86 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(qaTargetCalls).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
+  test("uses explicit builder context for qa start without resolving a continuation target", async () => {
+    let qaTargetCalls = 0;
+    const ensuredWorkingDirectories: Array<string | null | undefined> = [];
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async (input) => ({
+      sessionId: "session-qa",
+      externalSessionId: "external-qa",
+      role: input.role,
+      scenario: input.scenario,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      status: "idle",
+      runtimeKind: input.runtimeKind,
+    });
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef: { current: {} },
+      taskRef: {
+        current: [
+          createTaskCardFixture({
+            id: "task-1",
+            status: "human_review",
+            agentWorkflows: {
+              spec: { required: false, canSkip: true, available: true, completed: true },
+              planner: { required: false, canSkip: true, available: true, completed: true },
+              builder: { required: true, canSkip: false, available: true, completed: true },
+              qa: { required: true, canSkip: false, available: true, completed: false },
+            },
+          }),
+        ],
+      },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      resolveBuildContinuationTarget: async () => {
+        qaTargetCalls += 1;
+        return "/tmp/repo/unexpected";
+      },
+      ensureRuntime: async (_repoPath, _taskId, _role, options) => {
+        ensuredWorkingDirectories.push(options?.workingDirectoryOverride);
+        return {
+          kind: "opencode",
+          runtimeId: null,
+          runId: null,
+          runtimeEndpoint: "http://127.0.0.1:4444",
+          workingDirectory: options?.workingDirectoryOverride ?? "/tmp/repo",
+        };
+      },
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "qa",
+          startMode: "fresh",
+          builderContext: {
+            sessionId: "builder-1",
+            workingDirectory: "/tmp/repo/worktree",
+          },
+        }),
+      ).resolves.toBe("session-qa");
+      expect(qaTargetCalls).toBe(0);
+      expect(ensuredWorkingDirectories).toEqual(["/tmp/repo/worktree"]);
+    } finally {
+      adapter.startSession = originalStartSession;
     }
   });
 
@@ -1217,8 +1584,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -1283,8 +1648,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -1349,8 +1712,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -1416,8 +1777,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -1481,8 +1840,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -1503,8 +1860,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("creates a fresh session and triggers kickoff flow", async () => {
     let attachCalls = 0;
     let persistCalls = 0;
-    let todosCalls = 0;
-    let modelCatalogCalls = 0;
     let kickoffCalls = 0;
     let refreshCalls = 0;
     let startCalls = 0;
@@ -1559,12 +1914,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {
-        todosCalls += 1;
-      },
-      loadSessionModelCatalog: async () => {
-        modelCatalogCalls += 1;
-      },
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {
         refreshCalls += 1;
@@ -1583,8 +1932,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(startCalls).toBe(1);
       expect(attachCalls).toBe(1);
       expect(persistCalls).toBe(1);
-      expect(todosCalls).toBe(1);
-      expect(modelCatalogCalls).toBe(1);
       expect(kickoffCalls).toBe(1);
       expect(refreshCalls).toBe(1);
       expect(Object.keys(sessionsState)).toContain("session-created");
@@ -1648,8 +1995,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         return null;
       },
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -1712,8 +2057,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -1770,8 +2113,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {
         refreshCalls += 1;
@@ -1847,8 +2188,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => defaultModelDeferred.promise,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -1918,8 +2257,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
@@ -1996,8 +2333,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => defaultModelDeferred.promise,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {

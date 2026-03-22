@@ -4,18 +4,26 @@ import { assertAgentKickoffScenario } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { kickoffPromptForScenario } from "@/features/session-start";
-import { resolveBuildWorkingDirectoryOverride } from "@/lib/build-worktree-overrides";
+import {
+  resolveBuildWorkingDirectoryOverride,
+  resolveQaBuilderSessionContext,
+} from "@/lib/build-worktree-overrides";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { loadEffectivePromptOverrides } from "../../state/operations/shared/prompt-overrides";
-import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
+import type {
+  KanbanResolvedSessionStartIntent,
+  KanbanSessionStartIntent,
+} from "./kanban-page-model-types";
 import { renderSessionStartedToastAction } from "./session-started-toast-action";
 
 type StartKanbanSessionFlowInput = {
   activeRepo: string | null;
-  intent: KanbanSessionStartIntent;
+  intent: KanbanResolvedSessionStartIntent;
   selection: AgentModelSelection | null;
   startInBackground: boolean;
   tasks: TaskCard[];
+  sessions: AgentSessionState[];
   roleLabels: Record<AgentRole, string>;
   queryClient: QueryClient;
   startAgentSession: AgentStateContextValue["startAgentSession"];
@@ -32,6 +40,7 @@ export const startKanbanSessionFlow = async ({
   selection,
   startInBackground,
   tasks,
+  sessions,
   roleLabels,
   queryClient,
   startAgentSession,
@@ -47,6 +56,14 @@ export const startKanbanSessionFlow = async ({
     role: intent.role,
     scenario: intent.scenario,
   });
+  const builderContext =
+    intent.role === "qa"
+      ? await resolveQaBuilderSessionContext({
+          activeRepo,
+          taskId: intent.taskId,
+          sessions,
+        })
+      : null;
   const sessionId = await startAgentSession({
     taskId: intent.taskId,
     role: intent.role,
@@ -54,8 +71,10 @@ export const startKanbanSessionFlow = async ({
     selectedModel: selection,
     sendKickoff: false,
     startMode: intent.startMode,
+    ...(intent.reuseSessionId ? { reuseSessionId: intent.reuseSessionId } : {}),
     requireModelReady: true,
     ...(workingDirectoryOverride ? { workingDirectoryOverride } : {}),
+    ...(builderContext ? { builderContext } : {}),
   });
 
   if (selection) {

@@ -1,15 +1,26 @@
-import type { RunSummary, TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { findRuntimeDefinition } from "@/lib/agent-runtime";
+import type {
+  AgentSessionRecord,
+  RunSummary,
+  RuntimeInstanceSummary,
+  RuntimeKind,
+  TaskCard,
+} from "@openducktor/contracts";
+import type {
+  AgentEnginePort,
+  AgentModelCatalog,
+  AgentModelSelection,
+  AgentRuntimeConnection,
+  AgentSessionTodoItem,
+} from "@openducktor/core";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { appQueryClient } from "@/lib/query-client";
 import type {
   AgentChatMessage,
   AgentSessionLoadOptions,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
-import { loadAgentSessionListFromQuery } from "../../queries/agent-sessions";
-import { loadRuntimeListFromQuery } from "../../queries/runtime";
+import { upsertAgentSessionRecordInQuery } from "../../queries/agent-sessions";
+import { upsertAgentSessionInRepoTaskData } from "../../queries/tasks";
 import { host } from "../shared/host";
 import {
   attachAgentSessionListener,
@@ -26,8 +37,9 @@ import {
 import { createOrchestratorPublicOperations } from "./handlers/public-operations";
 import type { StartAgentSessionInput } from "./handlers/start-session";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
-import { createLoadSessionModelCatalog, createLoadSessionTodos } from "./lifecycle/session-loaders";
-import { resolveRuntimeRouteConnection } from "./runtime/runtime";
+import { LiveAgentSessionStore } from "./lifecycle/live-agent-session-store";
+import { createRepoSessionHydrationService } from "./lifecycle/repo-session-hydration-service";
+import { createSessionHydrationOperations } from "./lifecycle/session-hydration-operations";
 
 type UseAgentOrchestratorOperationsArgs = {
   activeRepo: string | null;
@@ -39,7 +51,37 @@ type UseAgentOrchestratorOperationsArgs = {
 
 type UseAgentOrchestratorOperationsResult = {
   sessions: AgentSessionState[];
+  bootstrapTaskSessions: (taskId: string, persistedRecords?: AgentSessionRecord[]) => Promise<void>;
+  hydrateRequestedTaskSessionHistory: (input: {
+    taskId: string;
+    sessionId: string;
+    persistedRecords?: AgentSessionRecord[];
+  }) => Promise<void>;
+  reconcileLiveTaskSessions: (input: {
+    taskId: string;
+    persistedRecords?: AgentSessionRecord[];
+    preloadedRuns?: RunSummary[];
+    preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
+    preloadedRuntimeConnectionsByKey?: Map<
+      string,
+      import("@openducktor/core").AgentRuntimeConnection
+    >;
+    preloadedLiveAgentSessionsByKey?: Map<
+      string,
+      import("@openducktor/core").LiveAgentSessionSnapshot[]
+    >;
+    allowRuntimeEnsure?: boolean;
+  }) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
+  readSessionModelCatalog: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+  ) => Promise<AgentModelCatalog>;
+  readSessionTodos: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+    externalSessionId: string,
+  ) => Promise<AgentSessionTodoItem[]>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
   startAgentSession: (input: StartAgentSessionInput) => Promise<string>;
   forkAgentSession: (input: {
@@ -58,24 +100,6 @@ type UseAgentOrchestratorOperationsResult = {
   answerAgentQuestion: (sessionId: string, requestId: string, answers: string[][]) => Promise<void>;
 };
 
-const getOrCreateRepoTaskSet = (
-  store: Record<string, Set<string>>,
-  repoPath: string,
-): Set<string> => {
-  const existing = store[repoPath];
-  if (existing) {
-    return existing;
-  }
-  const created = new Set<string>();
-  store[repoPath] = created;
-  return created;
-};
-
-const nextSessionRetryDelayMs = (attempt: number): number => Math.min(5_000, 500 * 2 ** attempt);
-
-const getRuntimeSessionScanKey = (runtimeKind: string, endpoint: string): string =>
-  `${runtimeKind}::${endpoint}`;
-
 export function useAgentOrchestratorOperations({
   activeRepo,
   tasks,
@@ -89,19 +113,17 @@ export function useAgentOrchestratorOperations({
     runs,
   });
   const { sessionsRef, turnStartedAtBySessionRef, unsubscribersRef } = refBridges;
-  const bootstrappedTasksByRepoRef = useRef<Record<string, Set<string>>>({});
-  const reconciledLiveSessionTasksByRepoRef = useRef<Record<string, Set<string>>>({});
-  const retryAttemptsByKeyRef = useRef<Record<string, number>>({});
-  const retryTimeoutsByKeyRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [sessionRetryTick, setSessionRetryTick] = useState(0);
-  const runtimeDefinitions = useMemo(() => agentEngine.listRuntimeDefinitions(), [agentEngine]);
 
   const persistSessionSnapshot = useCallback(
     async (session: AgentSessionState): Promise<void> => {
       if (!activeRepo) {
         return;
       }
-      await host.agentSessionUpsert(activeRepo, session.taskId, toPersistedSessionRecord(session));
+      const persistedRecord = toPersistedSessionRecord(session);
+      await host.agentSessionUpsert(activeRepo, session.taskId, persistedRecord);
+      upsertAgentSessionRecordInQuery(appQueryClient, activeRepo, session.taskId, persistedRecord);
+      upsertAgentSessionInRepoTaskData(appQueryClient, activeRepo, session.taskId, persistedRecord);
     },
     [activeRepo],
   );
@@ -140,7 +162,7 @@ export function useAgentOrchestratorOperations({
       };
       commitSessions(nextSessions);
 
-      if (options?.persist !== false) {
+      if (options?.persist === true) {
         runOrchestratorSideEffect(
           "operations-persist-session-snapshot",
           persistSessionSnapshot(nextSession),
@@ -192,25 +214,27 @@ export function useAgentOrchestratorOperations({
     [turnStartedAtBySessionRef],
   );
 
-  const loadSessionModelCatalog = useMemo(
-    () =>
-      createLoadSessionModelCatalog({
-        adapter: agentEngine,
-        updateSession,
+  const readSessionModelCatalog = useCallback(
+    (runtimeKind: RuntimeKind, runtimeConnection: AgentRuntimeConnection) =>
+      agentEngine.listAvailableModels({
+        runtimeKind,
+        runtimeConnection,
       }),
-    [agentEngine, updateSession],
+    [agentEngine],
   );
 
-  const loadSessionTodos = useMemo(
-    () =>
-      createLoadSessionTodos({
-        adapter: agentEngine,
-        supportsSessionTodos: (runtimeKind) =>
-          findRuntimeDefinition(runtimeDefinitions, runtimeKind)?.capabilities.supportsTodos ??
-          false,
-        updateSession,
+  const readSessionTodos = useCallback(
+    (
+      runtimeKind: RuntimeKind,
+      runtimeConnection: AgentRuntimeConnection,
+      externalSessionId: string,
+    ) =>
+      agentEngine.loadSessionTodos({
+        runtimeKind,
+        runtimeConnection,
+        externalSessionId,
       }),
-    [agentEngine, runtimeDefinitions, updateSession],
+    [agentEngine],
   );
 
   const removeAgentSessions = useCallback(
@@ -259,8 +283,13 @@ export function useAgentOrchestratorOperations({
     [commitSessions, refBridges, sessionsRef, unsubscribersRef],
   );
 
+  const liveAgentSessionStore = useMemo(() => new LiveAgentSessionStore(), []);
+
   const attachSessionListener = useCallback(
     (repoPath: string, sessionId: string): void => {
+      if (unsubscribersRef.current.has(sessionId)) {
+        return;
+      }
       const unsubscribe = attachAgentSessionListener({
         adapter: agentEngine,
         repoPath,
@@ -276,7 +305,6 @@ export function useAgentOrchestratorOperations({
         resolveTurnDurationMs,
         clearTurnDuration,
         refreshTaskData,
-        loadSessionTodos,
       });
 
       unsubscribersRef.current.set(sessionId, unsubscribe);
@@ -284,7 +312,6 @@ export function useAgentOrchestratorOperations({
     [
       agentEngine,
       clearTurnDuration,
-      loadSessionTodos,
       refBridges,
       refreshTaskData,
       resolveTurnDurationMs,
@@ -299,85 +326,64 @@ export function useAgentOrchestratorOperations({
         activeRepo,
         adapter: agentEngine,
         repoEpochRef: refBridges.repoEpochRef,
+        activeRepoRef: refBridges.activeRepoRef,
         previousRepoRef: refBridges.previousRepoRef,
         sessionsRef: refBridges.sessionsRef,
         setSessionsById: commitSessions,
         taskRef: refBridges.taskRef,
         updateSession,
         attachSessionListener,
-        loadSessionTodos,
-        loadSessionModelCatalog,
         loadRepoPromptOverrides,
         loadTaskDocuments,
+        liveAgentSessionStore,
       }),
     [
       activeRepo,
       agentEngine,
       attachSessionListener,
       commitSessions,
-      loadSessionModelCatalog,
-      loadSessionTodos,
+      liveAgentSessionStore,
       refBridges,
       updateSession,
     ],
   );
 
-  const clearSessionRetry = useCallback(
-    (scope: "bootstrap" | "reconcile", repoPath: string, taskId: string) => {
-      const retryKey = `${scope}::${repoPath}::${taskId}`;
-      const timeout = retryTimeoutsByKeyRef.current[retryKey];
-      if (timeout !== undefined) {
-        clearTimeout(timeout);
-        delete retryTimeoutsByKeyRef.current[retryKey];
-      }
-      delete retryAttemptsByKeyRef.current[retryKey];
-    },
-    [],
+  const sessionHydration = useMemo(
+    () =>
+      createSessionHydrationOperations({
+        loadAgentSessions,
+      }),
+    [loadAgentSessions],
+  );
+
+  const repoSessionHydrationService = useMemo(
+    () =>
+      createRepoSessionHydrationService({
+        agentEngine,
+        sessionHydration,
+        liveAgentSessionStore,
+        onRetryRequested: () => {
+          setSessionRetryTick((current) => current + 1);
+        },
+      }),
+    [agentEngine, liveAgentSessionStore, sessionHydration],
   );
 
   const isCurrentActiveRepo = useCallback(
-    (repoPath: string): boolean => refBridges.previousRepoRef.current === repoPath,
+    (repoPath: string): boolean => refBridges.activeRepoRef.current === repoPath,
     [refBridges],
   );
 
-  const scheduleSessionRetry = useCallback(
-    (scope: "bootstrap" | "reconcile", repoPath: string, taskId: string, error: unknown) => {
-      const retryKey = `${scope}::${repoPath}::${taskId}`;
-      if (retryTimeoutsByKeyRef.current[retryKey] !== undefined) {
-        return;
-      }
-      const attempt = retryAttemptsByKeyRef.current[retryKey] ?? 0;
-      retryAttemptsByKeyRef.current[retryKey] = attempt + 1;
-      const delayMs = nextSessionRetryDelayMs(attempt);
-      console.error(
-        `Failed to ${scope} agent sessions for task '${taskId}' in repo '${repoPath}'. Retrying in ${delayMs}ms.`,
-        error,
-      );
-      retryTimeoutsByKeyRef.current[retryKey] = setTimeout(() => {
-        delete retryTimeoutsByKeyRef.current[retryKey];
-        setSessionRetryTick((current) => current + 1);
-      }, delayMs);
-    },
-    [],
-  );
-
   useEffect(() => {
-    return () => {
-      for (const timeout of Object.values(retryTimeoutsByKeyRef.current)) {
-        clearTimeout(timeout);
-      }
-      retryTimeoutsByKeyRef.current = {};
-      retryAttemptsByKeyRef.current = {};
-    };
-  }, []);
+    return () => repoSessionHydrationService.dispose();
+  }, [repoSessionHydrationService]);
 
   useEffect(() => {
     if (!activeRepo) {
       return;
     }
-    bootstrappedTasksByRepoRef.current[activeRepo] = new Set<string>();
-    reconciledLiveSessionTasksByRepoRef.current[activeRepo] = new Set<string>();
-  }, [activeRepo]);
+    repoSessionHydrationService.resetRepo(activeRepo);
+  }, [activeRepo, repoSessionHydrationService]);
 
   useEffect(() => {
     if (!activeRepo) {
@@ -386,41 +392,21 @@ export function useAgentOrchestratorOperations({
     // Explicitly reference the retry tick: this effect must rerun when a delayed retry fires.
     void sessionRetryTick;
 
-    const bootstrappedTasks = getOrCreateRepoTaskSet(
-      bootstrappedTasksByRepoRef.current,
-      activeRepo,
-    );
-    const pendingTaskIds = tasks
-      .map((task) => task.id)
-      .filter((taskId) => !bootstrappedTasks.has(taskId));
-    if (pendingTaskIds.length === 0) {
-      return;
-    }
+    let cancelled = false;
 
-    for (const taskId of pendingTaskIds) {
-      bootstrappedTasks.add(taskId);
-      void loadAgentSessions(taskId)
-        .then(() => {
-          clearSessionRetry("bootstrap", activeRepo, taskId);
-        })
-        .catch((error) => {
-          if (!isCurrentActiveRepo(activeRepo)) {
-            return;
-          }
-          scheduleSessionRetry("bootstrap", activeRepo, taskId, error);
-          const currentSet = bootstrappedTasksByRepoRef.current[activeRepo];
-          currentSet?.delete(taskId);
-        });
-    }
-  }, [
-    activeRepo,
-    clearSessionRetry,
-    isCurrentActiveRepo,
-    loadAgentSessions,
-    scheduleSessionRetry,
-    sessionRetryTick,
-    tasks,
-  ]);
+    void (async () => {
+      await repoSessionHydrationService.bootstrapPendingTasks({
+        repoPath: activeRepo,
+        tasks,
+        isCancelled: () => cancelled,
+        isCurrentRepo: isCurrentActiveRepo,
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRepo, isCurrentActiveRepo, repoSessionHydrationService, sessionRetryTick, tasks]);
 
   useEffect(() => {
     if (!activeRepo || tasks.length === 0) {
@@ -428,210 +414,22 @@ export function useAgentOrchestratorOperations({
     }
     // Explicitly reference the retry tick: this effect must rerun when a delayed retry fires.
     void sessionRetryTick;
-    const reconciledTaskIds = getOrCreateRepoTaskSet(
-      reconciledLiveSessionTasksByRepoRef.current,
-      activeRepo,
-    );
-    const pendingTaskIds = tasks
-      .map((task) => task.id)
-      .filter((taskId) => !reconciledTaskIds.has(taskId));
-    if (pendingTaskIds.length === 0) {
-      return;
-    }
-
     let cancelled = false;
-    const activeRunStates = new Set<RunSummary["state"]>([
-      "starting",
-      "running",
-      "blocked",
-      "awaiting_done_confirmation",
-    ]);
 
     void (async () => {
-      try {
-        const persistedTaskResults = await Promise.allSettled(
-          pendingTaskIds.map(async (taskId) => ({
-            taskId,
-            records: await loadAgentSessionListFromQuery(appQueryClient, activeRepo, taskId, {
-              forceFresh: true,
-            }),
-          })),
-        );
-        if (cancelled) {
-          return;
-        }
-
-        const persistedByTask: Array<{
-          taskId: string;
-          records: Awaited<ReturnType<typeof loadAgentSessionListFromQuery>>;
-        }> = [];
-        const failedTaskErrors = new Map<string, unknown>();
-        for (const [index, result] of persistedTaskResults.entries()) {
-          const taskId = pendingTaskIds[index];
-          if (!taskId) {
-            continue;
-          }
-          if (result.status === "fulfilled") {
-            persistedByTask.push(result.value);
-            continue;
-          }
-          failedTaskErrors.set(taskId, result.reason);
-        }
-
-        const persistedTaskIdsByLiveSessionKey = new Map<string, Set<string>>();
-        const runtimeKinds = new Set<string>();
-        for (const { taskId, records } of persistedByTask) {
-          for (const record of records) {
-            const runtimeKind = record.runtimeKind ?? record.selectedModel?.runtimeKind;
-            const externalSessionId = record.externalSessionId ?? record.sessionId;
-            if (!runtimeKind || !externalSessionId) {
-              continue;
-            }
-            runtimeKinds.add(runtimeKind);
-            const key = `${runtimeKind}::${externalSessionId}`;
-            const taskIds = persistedTaskIdsByLiveSessionKey.get(key) ?? new Set<string>();
-            taskIds.add(taskId);
-            persistedTaskIdsByLiveSessionKey.set(key, taskIds);
-          }
-        }
-
-        if (persistedTaskIdsByLiveSessionKey.size === 0) {
-          const currentSet = getOrCreateRepoTaskSet(
-            reconciledLiveSessionTasksByRepoRef.current,
-            activeRepo,
-          );
-          for (const { taskId } of persistedByTask) {
-            clearSessionRetry("reconcile", activeRepo, taskId);
-            currentSet.add(taskId);
-          }
-          for (const [taskId, error] of failedTaskErrors) {
-            scheduleSessionRetry("reconcile", activeRepo, taskId, error);
-          }
-          return;
-        }
-
-        const runtimeConnections = new Map<
-          string,
-          Parameters<AgentEnginePort["listRuntimeSessions"]>[0]
-        >();
-        for (const runtimeKind of runtimeKinds) {
-          const runtimes = await loadRuntimeListFromQuery(appQueryClient, runtimeKind, activeRepo);
-          if (cancelled) {
-            return;
-          }
-          for (const runtime of runtimes) {
-            const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
-              runtime.runtimeRoute,
-              runtime.workingDirectory,
-            );
-            const key = getRuntimeSessionScanKey(runtimeKind, runtimeEndpoint);
-            if (!runtimeConnections.has(key)) {
-              runtimeConnections.set(key, {
-                runtimeKind,
-                runtimeConnection,
-              });
-            }
-          }
-        }
-
-        for (const run of runs) {
-          if (!activeRunStates.has(run.state)) {
-            continue;
-          }
-          const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
-            run.runtimeRoute,
-            run.worktreePath,
-          );
-          const key = getRuntimeSessionScanKey(run.runtimeKind, runtimeEndpoint);
-          if (!runtimeConnections.has(key)) {
-            runtimeConnections.set(key, {
-              runtimeKind: run.runtimeKind,
-              runtimeConnection,
-            });
-          }
-        }
-
-        const taskIdsToReconcile = new Set<string>();
-        for (const input of runtimeConnections.values()) {
-          const runtimeSessions = await agentEngine.listRuntimeSessions(input);
-          if (cancelled) {
-            return;
-          }
-          for (const runtimeSession of runtimeSessions) {
-            const key = `${input.runtimeKind}::${runtimeSession.externalSessionId}`;
-            const taskIds = persistedTaskIdsByLiveSessionKey.get(key);
-            if (!taskIds) {
-              continue;
-            }
-            for (const taskId of taskIds) {
-              taskIdsToReconcile.add(taskId);
-            }
-          }
-        }
-
-        if (cancelled) {
-          return;
-        }
-
-        const reconcileResults = await Promise.allSettled(
-          Array.from(taskIdsToReconcile).map(async (taskId) => {
-            await loadAgentSessions(taskId, { reconcileLiveSessions: true });
-            return taskId;
-          }),
-        );
-        if (cancelled) {
-          return;
-        }
-
-        for (const [index, result] of reconcileResults.entries()) {
-          if (result.status === "fulfilled") {
-            continue;
-          }
-          const taskId = Array.from(taskIdsToReconcile)[index];
-          if (!taskId) {
-            continue;
-          }
-          failedTaskErrors.set(taskId, result.reason);
-        }
-
-        const currentSet = getOrCreateRepoTaskSet(
-          reconciledLiveSessionTasksByRepoRef.current,
-          activeRepo,
-        );
-        for (const { taskId } of persistedByTask) {
-          if (failedTaskErrors.has(taskId)) {
-            continue;
-          }
-          clearSessionRetry("reconcile", activeRepo, taskId);
-          currentSet.add(taskId);
-        }
-        for (const [taskId, error] of failedTaskErrors) {
-          scheduleSessionRetry("reconcile", activeRepo, taskId, error);
-        }
-      } catch (error) {
-        if (cancelled || !isCurrentActiveRepo(activeRepo)) {
-          return;
-        }
-        for (const taskId of pendingTaskIds) {
-          scheduleSessionRetry("reconcile", activeRepo, taskId, error);
-        }
-      }
+      await repoSessionHydrationService.reconcilePendingTasks({
+        repoPath: activeRepo,
+        tasks,
+        runs,
+        isCancelled: () => cancelled,
+        isCurrentRepo: isCurrentActiveRepo,
+      });
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [
-    activeRepo,
-    agentEngine,
-    clearSessionRetry,
-    isCurrentActiveRepo,
-    loadAgentSessions,
-    runs,
-    scheduleSessionRetry,
-    sessionRetryTick,
-    tasks,
-  ]);
+  }, [activeRepo, isCurrentActiveRepo, runs, repoSessionHydrationService, sessionRetryTick, tasks]);
 
   const ensureRuntime = useMemo(
     () =>
@@ -651,6 +449,7 @@ export function useAgentOrchestratorOperations({
         sessionsRef: refBridges.sessionsRef,
         taskRef: refBridges.taskRef,
         repoEpochRef: refBridges.repoEpochRef,
+        activeRepoRef: refBridges.activeRepoRef,
         previousRepoRef: refBridges.previousRepoRef,
         inFlightStartsByRepoTaskRef: refBridges.inFlightStartsByRepoTaskRef,
         unsubscribersRef: refBridges.unsubscribersRef,
@@ -663,8 +462,6 @@ export function useAgentOrchestratorOperations({
         ensureRuntime,
         loadTaskDocuments,
         loadRepoDefaultModel,
-        loadSessionTodos,
-        loadSessionModelCatalog,
         loadRepoPromptOverrides,
         loadAgentSessions,
         clearTurnDuration,
@@ -679,8 +476,6 @@ export function useAgentOrchestratorOperations({
       commitSessions,
       ensureRuntime,
       loadAgentSessions,
-      loadSessionModelCatalog,
-      loadSessionTodos,
       persistSessionSnapshot,
       refBridges,
       refreshTaskData,
@@ -692,10 +487,23 @@ export function useAgentOrchestratorOperations({
     () =>
       createOrchestratorPublicOperations({
         sessionsById,
+        bootstrapTaskSessions: sessionHydration.bootstrapTaskSessions,
+        hydrateRequestedTaskSessionHistory: sessionHydration.hydrateRequestedTaskSession,
+        reconcileLiveTaskSessions: sessionHydration.reconcileLiveTaskSessions,
         loadAgentSessions,
+        readSessionModelCatalog,
+        readSessionTodos,
         removeAgentSessions,
         sessionActions,
       }),
-    [sessionsById, loadAgentSessions, removeAgentSessions, sessionActions],
+    [
+      sessionsById,
+      sessionHydration,
+      loadAgentSessions,
+      readSessionModelCatalog,
+      readSessionTodos,
+      removeAgentSessions,
+      sessionActions,
+    ],
   );
 }

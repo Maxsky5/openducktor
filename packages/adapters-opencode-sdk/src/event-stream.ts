@@ -1,9 +1,32 @@
-import type { OpencodeClient, Part } from "@opencode-ai/sdk/v2/client";
+import type { Event, GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { handleMessageEvent } from "./event-stream/message-events";
 import { handleSessionEvent } from "./event-stream/session-events";
-import { isRelevantEvent } from "./event-stream/shared";
-import type { OpencodeEventLogger, SessionInput, SessionRecord } from "./types";
+import { isRelevantEvent, readEventDirectory, readEventSessionId } from "./event-stream/shared";
+import type {
+  EventStreamSubscriber,
+  OpencodeEventLogger,
+  SessionInput,
+  SessionRecord,
+} from "./types";
+
+type ProcessOpencodeEventInput = {
+  context: {
+    sessionId: string;
+    externalSessionId: string;
+    input: SessionInput;
+  };
+  event: Event;
+  now: () => string;
+  emit: (sessionId: string, event: AgentEvent) => void;
+  getSession: (sessionId: string) => SessionRecord | undefined;
+};
+
+type SubscribeGlobalEventsInput = {
+  client: OpencodeClient;
+  controller: AbortController;
+  onEvent: (event: Event) => void;
+};
 
 type SubscribeOpencodeEventsInput = {
   context: {
@@ -19,16 +42,66 @@ type SubscribeOpencodeEventsInput = {
   logEvent?: OpencodeEventLogger;
 };
 
-export const subscribeOpencodeEvents = async (
-  input: SubscribeOpencodeEventsInput,
-): Promise<void> => {
-  const sse = await input.client.event.subscribe(
-    { directory: input.context.input.workingDirectory },
-    { signal: input.controller.signal },
-  );
-  const partsById = new Map<string, Part>();
-  const messageRoleById = new Map<string, string>();
-  const pendingDeltasByPartId = new Map<string, Array<{ field: string; delta: string }>>();
+type LogEventInput = {
+  subscriber: EventStreamSubscriber;
+  event: Event;
+  relevant: boolean;
+  logEvent?: OpencodeEventLogger;
+};
+
+type GlobalEventStream = {
+  stream: AsyncIterable<GlobalEvent>;
+};
+
+type GlobalEventApi = {
+  event: (options?: { signal?: AbortSignal }) => Promise<GlobalEventStream> | GlobalEventStream;
+};
+
+const getGlobalEventApi = (client: OpencodeClient): GlobalEventApi => {
+  const globalApi = (client as OpencodeClient & { global?: { event?: unknown } }).global;
+  if (!globalApi || typeof globalApi.event !== "function") {
+    throw new Error(
+      "OpenCode SDK does not expose global event streaming via client.global.event(). Update @opencode-ai/sdk before using the adapter.",
+    );
+  }
+  return globalApi as GlobalEventApi;
+};
+
+const resolveGlobalEventStream = async (
+  client: OpencodeClient,
+  signal: AbortSignal,
+): Promise<AsyncIterable<GlobalEvent>> => {
+  const stream = await getGlobalEventApi(client).event({ signal });
+  if (
+    typeof stream === "object" &&
+    stream !== null &&
+    "stream" in stream &&
+    stream.stream &&
+    typeof stream.stream[Symbol.asyncIterator] === "function"
+  ) {
+    return stream.stream;
+  }
+  throw new Error("OpenCode SDK global event stream must expose a stream async iterator.");
+};
+
+const toDirectoryScopedEvent = (event: GlobalEvent): Event => {
+  const payload = event.payload as Event & { properties?: Record<string, unknown> };
+  return {
+    ...payload,
+    properties: {
+      ...(payload.properties ?? {}),
+      directory: event.directory,
+    },
+  } as Event;
+};
+
+const normalizeDirectory = (directory: string): string => directory.trim();
+
+export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => {
+  const session = input.getSession(input.context.sessionId);
+  if (!session) {
+    return;
+  }
   const runtime = {
     sessionId: input.context.sessionId,
     externalSessionId: input.context.externalSessionId,
@@ -36,29 +109,100 @@ export const subscribeOpencodeEvents = async (
     now: input.now,
     emit: input.emit,
     getSession: input.getSession,
-    partsById,
-    messageRoleById,
-    pendingDeltasByPartId,
+    partsById: session.partsById,
+    messageRoleById: session.messageRoleById,
+    pendingDeltasByPartId: session.pendingDeltasByPartId,
   };
 
-  for await (const event of sse.stream) {
-    const relevant = isRelevantEvent(input.context.externalSessionId, event);
-    if (input.logEvent) {
-      input.logEvent({
-        sessionId: input.context.sessionId,
-        externalSessionId: input.context.externalSessionId,
-        relevant,
-        event,
-      });
-    }
-
-    if (!relevant) {
-      continue;
-    }
-
-    if (handleMessageEvent(event, runtime)) {
-      continue;
-    }
-    handleSessionEvent(event, runtime);
+  if (handleMessageEvent(input.event, runtime)) {
+    return;
   }
+  handleSessionEvent(input.event, runtime);
+};
+
+export const logStreamEvent = ({ subscriber, event, relevant, logEvent }: LogEventInput): void => {
+  if (!logEvent) {
+    return;
+  }
+  logEvent({
+    sessionId: subscriber.sessionId,
+    externalSessionId: subscriber.externalSessionId,
+    relevant,
+    event,
+  });
+};
+
+export const assertGlobalEventSupport = (client: OpencodeClient): void => {
+  void getGlobalEventApi(client);
+};
+
+export const subscribeGlobalEvents = async (input: SubscribeGlobalEventsInput): Promise<void> => {
+  const stream = await resolveGlobalEventStream(input.client, input.controller.signal);
+  for await (const event of stream) {
+    if (input.controller.signal.aborted) {
+      break;
+    }
+    input.onEvent(toDirectoryScopedEvent(event));
+  }
+};
+
+export const isRelevantSubscriberEvent = (
+  subscriber: EventStreamSubscriber,
+  event: Event,
+): boolean => {
+  if (isRelevantEvent(subscriber.externalSessionId, event)) {
+    return true;
+  }
+
+  if (readEventSessionId(event)) {
+    return false;
+  }
+
+  const eventDirectory = readEventDirectory(event);
+  if (!eventDirectory) {
+    return false;
+  }
+
+  return (
+    normalizeDirectory(eventDirectory) === normalizeDirectory(subscriber.input.workingDirectory)
+  );
+};
+
+export const subscribeOpencodeEvents = async (
+  input: SubscribeOpencodeEventsInput,
+): Promise<void> => {
+  return subscribeGlobalEvents({
+    client: input.client,
+    controller: input.controller,
+    onEvent: (event) => {
+      const relevant = isRelevantSubscriberEvent(
+        {
+          sessionId: input.context.sessionId,
+          externalSessionId: input.context.externalSessionId,
+          input: input.context.input,
+        },
+        event,
+      );
+      logStreamEvent({
+        subscriber: {
+          sessionId: input.context.sessionId,
+          externalSessionId: input.context.externalSessionId,
+          input: input.context.input,
+        },
+        event,
+        relevant,
+        ...(input.logEvent ? { logEvent: input.logEvent } : {}),
+      });
+      if (!relevant) {
+        return;
+      }
+      processOpencodeEvent({
+        context: input.context,
+        event,
+        now: input.now,
+        emit: input.emit,
+        getSession: input.getSession,
+      });
+    },
+  });
 };
