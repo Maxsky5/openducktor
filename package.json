@@ -32,7 +32,7 @@
     "rollup": "^4.59.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.7",
+    "@biomejs/biome": "^2.4.8",
     "@types/node": "^25.5.0",
     "knip": "^5.87.0",
     "typescript": "^5.7.3"
