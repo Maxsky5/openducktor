@@ -197,8 +197,8 @@ export function useAgentChatScrollController({
 
     const distanceFromBottom =
       container.scrollHeight - container.scrollTop - container.clientHeight;
-    const isNearBottom = distanceFromBottom <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
-    if (!isPinnedToBottomRef.current && !isNearBottom) {
+    const isWithinBottomThreshold = distanceFromBottom <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
+    if (!isPinnedToBottomRef.current && !isWithinBottomThreshold) {
       return;
     }
 
