@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { createElement } from "react";
-import { act, create } from "react-test-renderer";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { useAgentStudioDiffRequestController } from "./use-agent-studio-diff-request-controller";
 
 type HookResult = ReturnType<typeof useAgentStudioDiffRequestController>;
@@ -8,15 +7,10 @@ type HookResult = ReturnType<typeof useAgentStudioDiffRequestController>;
 const createHarness = () => {
   const latestResultRef: { current: HookResult | null } = { current: null };
 
-  function Harness(): null {
+  const harness = createSharedHookHarness(() => {
     latestResultRef.current = useAgentStudioDiffRequestController();
     return null;
-  }
-
-  let renderer = null as ReturnType<typeof create> | null;
-  act(() => {
-    renderer = create(createElement(Harness));
-  });
+  }, undefined);
 
   const getResult = (): HookResult => {
     if (!latestResultRef.current) {
@@ -26,24 +20,26 @@ const createHarness = () => {
   };
 
   return {
+    mount: () => harness.mount(),
     getResult,
-    unmount: () => renderer?.unmount(),
+    unmount: () => harness.unmount(),
   };
 };
 
 describe("useAgentStudioDiffRequestController", () => {
   const mountedHarnesses = new Set<ReturnType<typeof createHarness>>();
 
-  afterEach(() => {
+  afterEach(async () => {
     for (const harness of mountedHarnesses) {
-      harness.unmount();
+      await harness.unmount();
     }
     mountedHarnesses.clear();
   });
 
-  test("invalidates prior request versions when request tracking resets", () => {
+  test("invalidates prior request versions when request tracking resets", async () => {
     const harness = createHarness();
     mountedHarnesses.add(harness);
+    await harness.mount();
 
     const controller = harness.getResult();
     const initialRequest = controller.beginRequest({
@@ -59,9 +55,7 @@ describe("useAgentStudioDiffRequestController", () => {
       throw new Error("Expected initial full load to begin");
     }
 
-    act(() => {
-      controller.resetRequestTracking();
-    });
+    controller.resetRequestTracking();
 
     expect(controller.shouldApplyResult("target", "full", initialRequest.version)).toBe(false);
 

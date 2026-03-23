@@ -14,7 +14,7 @@
     "test:rust": "cd apps/desktop/src-tauri && cargo test",
     "build": "bun run --workspaces build",
     "typecheck": "bun run --workspaces typecheck",
-    "test": "bun run --workspaces test",
+    "test": "bun run --workspaces test --timeout 500",
     "lint": "bun run tauri:commands:panic-guard && bun run --workspaces lint",
     "tauri:commands:panic-guard": "bun run scripts/tauri-command-panic-guard.ts",
     "deps:unused:deps": "bunx knip --workspace='@openducktor/*' --include dependencies",

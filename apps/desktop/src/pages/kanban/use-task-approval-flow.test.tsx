@@ -2,9 +2,10 @@ import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createTauriHostClient } from "@openducktor/adapters-tauri-host";
 import type { TaskApprovalContext } from "@openducktor/contracts";
 import type { ReactElement } from "react";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { act } from "react";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture,
   createTaskCardFixture,
@@ -185,6 +186,14 @@ function createDeferred<TValue>() {
   };
 }
 
+const mountApprovalHarness = async (Harness: () => ReactElement | null) => {
+  const harness = createSharedHookHarness(Harness, undefined, {
+    wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+  });
+  await harness.mount();
+  return harness;
+};
+
 describe("useTaskApprovalFlow", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
@@ -229,14 +238,7 @@ describe("useTaskApprovalFlow", () => {
       return null;
     };
 
-    let renderer!: ReactTestRenderer;
-    await act(async () => {
-      renderer = create(
-        <QueryProvider useIsolatedClient>
-          <Harness />
-        </QueryProvider>,
-      );
-    });
+    const harness = await mountApprovalHarness(Harness);
 
     await act(async () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
@@ -274,7 +276,7 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.uncommittedFileCount).toBe(2);
 
     await act(async () => {
-      renderer.unmount();
+      await harness.unmount();
     });
   });
 
@@ -302,14 +304,7 @@ describe("useTaskApprovalFlow", () => {
       return null;
     };
 
-    let renderer!: ReactTestRenderer;
-    await act(async () => {
-      renderer = create(
-        <QueryProvider useIsolatedClient>
-          <Harness />
-        </QueryProvider>,
-      );
-    });
+    const harness = await mountApprovalHarness(Harness);
 
     await act(async () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
@@ -351,7 +346,7 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.pullRequestAvailable).toBe(true);
 
     await act(async () => {
-      renderer.unmount();
+      await harness.unmount();
     });
   });
 
@@ -379,14 +374,7 @@ describe("useTaskApprovalFlow", () => {
       return null;
     };
 
-    let renderer!: ReactTestRenderer;
-    await act(async () => {
-      renderer = create(
-        <QueryProvider useIsolatedClient>
-          <Harness />
-        </QueryProvider>,
-      );
-    });
+    const harness = await mountApprovalHarness(Harness);
 
     await act(async () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
@@ -421,7 +409,7 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.pullRequestAvailable).toBe(false);
 
     await act(async () => {
-      renderer.unmount();
+      await harness.unmount();
     });
   });
 
@@ -458,14 +446,7 @@ describe("useTaskApprovalFlow", () => {
       return null;
     };
 
-    let renderer!: ReactTestRenderer;
-    await act(async () => {
-      renderer = create(
-        <QueryProvider useIsolatedClient>
-          <Harness />
-        </QueryProvider>,
-      );
-    });
+    const harness = await mountApprovalHarness(Harness);
 
     await act(async () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
@@ -475,7 +456,7 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("complete_direct_merge");
 
     await act(async () => {
-      renderer.unmount();
+      await harness.unmount();
     });
   });
 
@@ -521,14 +502,7 @@ describe("useTaskApprovalFlow", () => {
       return null;
     };
 
-    let renderer!: ReactTestRenderer;
-    await act(async () => {
-      renderer = create(
-        <QueryProvider useIsolatedClient>
-          <Harness />
-        </QueryProvider>,
-      );
-    });
+    const harness = await mountApprovalHarness(Harness);
 
     await act(async () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
@@ -552,7 +526,7 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.uncommittedFileCount).toBe(0);
 
     await act(async () => {
-      renderer.unmount();
+      await harness.unmount();
     });
   });
 
@@ -607,14 +581,7 @@ describe("useTaskApprovalFlow", () => {
       return null;
     };
 
-    let renderer!: ReactTestRenderer;
-    await act(async () => {
-      renderer = create(
-        <QueryProvider useIsolatedClient>
-          <Harness />
-        </QueryProvider>,
-      );
-    });
+    const harness = await mountApprovalHarness(Harness);
 
     await act(async () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
@@ -649,7 +616,7 @@ describe("useTaskApprovalFlow", () => {
     expect(taskDirectMergeCompleteMock).toHaveBeenCalledWith("/repo", "TASK-1");
 
     await act(async () => {
-      renderer.unmount();
+      await harness.unmount();
     });
   });
 
@@ -681,14 +648,7 @@ describe("useTaskApprovalFlow", () => {
       return null;
     };
 
-    let renderer!: ReactTestRenderer;
-    await act(async () => {
-      renderer = create(
-        <QueryProvider useIsolatedClient>
-          <Harness />
-        </QueryProvider>,
-      );
-    });
+    const harness = await mountApprovalHarness(Harness);
 
     await act(async () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
@@ -709,7 +669,7 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal).toBeNull();
 
     await act(async () => {
-      renderer.unmount();
+      await harness.unmount();
     });
   });
 
@@ -749,14 +709,7 @@ describe("useTaskApprovalFlow", () => {
       return null;
     };
 
-    let renderer!: ReactTestRenderer;
-    await act(async () => {
-      renderer = create(
-        <QueryProvider useIsolatedClient>
-          <Harness />
-        </QueryProvider>,
-      );
-    });
+    const harness = await mountApprovalHarness(Harness);
 
     await act(async () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
@@ -781,7 +734,7 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal).toBeNull();
 
     await act(async () => {
-      renderer.unmount();
+      await harness.unmount();
     });
   });
 
@@ -822,14 +775,7 @@ describe("useTaskApprovalFlow", () => {
       return null;
     };
 
-    let renderer!: ReactTestRenderer;
-    await act(async () => {
-      renderer = create(
-        <QueryProvider useIsolatedClient>
-          <Harness />
-        </QueryProvider>,
-      );
-    });
+    const harness = await mountApprovalHarness(Harness);
 
     await act(async () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
@@ -859,7 +805,7 @@ describe("useTaskApprovalFlow", () => {
     expect(taskPullRequestUpsertMock).not.toHaveBeenCalled();
 
     await act(async () => {
-      renderer.unmount();
+      await harness.unmount();
     });
   });
 });

@@ -15,6 +15,21 @@ const createStartAgentSessionWithFlatDeps = (deps: FlatStartSessionDependencies)
   return createStartAgentSession(toStartSessionDependencies(deps));
 };
 
+const withCapturedConsoleError = async (
+  run: (calls: unknown[][]) => Promise<void>,
+): Promise<void> => {
+  const originalError = console.error;
+  const calls: unknown[][] = [];
+  console.error = (...args: unknown[]) => {
+    calls.push(args);
+  };
+  try {
+    await run(calls);
+  } finally {
+    console.error = originalError;
+  }
+};
+
 const taskFixture = createTaskCardFixture({
   title: "Implement feature",
   description: "desc",
@@ -1953,9 +1968,13 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      await expect(start({ taskId: "task-1", role: "build" })).rejects.toThrow(
-        "Workspace changed while starting session. Failed to stop stale started session 'session-created': stop boom",
-      );
+      await withCapturedConsoleError(async (calls) => {
+        await expect(start({ taskId: "task-1", role: "build" })).rejects.toThrow(
+          "Workspace changed while starting session. Failed to stop stale started session 'session-created': stop boom",
+        );
+        expect(calls).toHaveLength(1);
+        expect(String(calls[0]?.[1] ?? "")).toBe("start-session-stop-on-stale-after-start");
+      });
     } finally {
       adapter.startSession = originalStartSession;
       adapter.stopSession = originalStopSession;

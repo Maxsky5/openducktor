@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import {
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -29,40 +29,32 @@ describe("TaskDetailsSheetFooter", () => {
   test("omits workflow action placeholder when no workflow actions are available", async () => {
     const { TaskDetailsSheetFooter } = await import("./task-details-sheet-footer");
 
-    let renderer!: ReactTestRenderer;
-    await act(async () => {
-      renderer = create(
-        <TaskDetailsSheetFooter
-          task={createTaskCardFixture({ status: "closed", availableActions: [] })}
-          onOpenChange={() => {}}
-          includeActions={["human_approve", "human_request_changes", "open_builder", "build_start"]}
-          onWorkflowAction={() => {}}
-        />,
-      );
-    });
+    const { unmount } = render(
+      <TaskDetailsSheetFooter
+        task={createTaskCardFixture({ status: "closed", availableActions: [] })}
+        onOpenChange={() => {}}
+        includeActions={["human_approve", "human_request_changes", "open_builder", "build_start"]}
+        onWorkflowAction={() => {}}
+      />,
+    );
 
     expect(workflowActionGroupRenderMock).not.toHaveBeenCalled();
 
-    await act(async () => {
-      renderer.unmount();
-    });
+    unmount();
   });
 
   test("keeps footer action menu when delete is available without workflow actions", async () => {
     const { TaskDetailsSheetFooter } = await import("./task-details-sheet-footer");
 
-    let renderer!: ReactTestRenderer;
-    await act(async () => {
-      renderer = create(
-        <TaskDetailsSheetFooter
-          task={createTaskCardFixture({ status: "closed", availableActions: [] })}
-          onOpenChange={() => {}}
-          includeActions={["human_approve", "human_request_changes", "open_builder", "build_start"]}
-          onWorkflowAction={() => {}}
-          onDeleteSelect={() => {}}
-        />,
-      );
-    });
+    const { unmount } = render(
+      <TaskDetailsSheetFooter
+        task={createTaskCardFixture({ status: "closed", availableActions: [] })}
+        onOpenChange={() => {}}
+        includeActions={["human_approve", "human_request_changes", "open_builder", "build_start"]}
+        onWorkflowAction={() => {}}
+        onDeleteSelect={() => {}}
+      />,
+    );
 
     expect(workflowActionGroupRenderMock).toHaveBeenCalledTimes(1);
     expect(workflowActionGroupRenderMock).toHaveBeenCalledWith(
@@ -71,8 +63,6 @@ describe("TaskDetailsSheetFooter", () => {
       }),
     );
 
-    await act(async () => {
-      renderer.unmount();
-    });
+    unmount();
   });
 });

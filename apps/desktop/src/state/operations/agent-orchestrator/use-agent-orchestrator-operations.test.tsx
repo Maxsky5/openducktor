@@ -6,20 +6,50 @@ import {
   type RunSummary,
   type TaskCard,
 } from "@openducktor/contracts";
-import TestRenderer, { act } from "react-test-renderer";
+import { act } from "react";
 import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { host } from "../shared/host";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const withSuppressedRendererWarning = async (run: () => Promise<void>) => {
+  await run();
 };
 
-const TEST_RENDERER_DEPRECATION_WARNING = "react-test-renderer is deprecated";
+const withSuppressedReattachWarning = async (run: () => Promise<void>) => {
+  const originalWarn = console.warn;
+  const originalError = console.error;
+  console.warn = (...args: Parameters<typeof console.warn>): void => {
+    const [firstArg] = args;
+    if (
+      typeof firstArg === "string" &&
+      firstArg.startsWith("Failed to reconcile agent sessions for task")
+    ) {
+      return;
+    }
+    originalWarn(...args);
+  };
+  console.error = (...args: Parameters<typeof console.error>): void => {
+    const [firstArg] = args;
+    if (
+      typeof firstArg === "string" &&
+      firstArg.startsWith("Failed to reconcile agent sessions for task")
+    ) {
+      return;
+    }
+    originalError(...args);
+  };
 
-(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  try {
+    await run();
+  } finally {
+    console.warn = originalWarn;
+    console.error = originalError;
+  }
+};
 
 const taskFixture: TaskCard = {
   id: "task-1",
@@ -127,23 +157,6 @@ const createDeferred = <T,>() => {
   };
 };
 
-const withSuppressedRendererWarning = async (run: () => Promise<void>) => {
-  const originalConsoleError = console.error;
-  console.error = (...args: Parameters<typeof console.error>) => {
-    const [firstArg] = args;
-    if (typeof firstArg === "string" && firstArg.includes(TEST_RENDERER_DEPRECATION_WARNING)) {
-      return;
-    }
-    originalConsoleError(...args);
-  };
-
-  try {
-    await run();
-  } finally {
-    console.error = originalConsoleError;
-  }
-};
-
 const createHookHarness = (args: {
   activeRepo: string | null;
   tasks: TaskCard[];
@@ -152,7 +165,6 @@ const createHookHarness = (args: {
   agentEngine?: OpencodeSdkAdapter;
 }) => {
   let latest: ReturnType<typeof useAgentOrchestratorOperations> | null = null;
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
   let currentArgs = {
     ...args,
     agentEngine: args.agentEngine ?? new OpencodeSdkAdapter(),
@@ -163,21 +175,14 @@ const createHookHarness = (args: {
     return null;
   };
 
+  const sharedHarness = createSharedHookHarness(Harness, undefined);
+
   const mount = async () => {
-    await act(async () => {
-      renderer = TestRenderer.create(<Harness />);
-      await flush();
-    });
+    await sharedHarness.mount();
   };
 
   const unmount = async () => {
-    if (!renderer) {
-      return;
-    }
-    await act(async () => {
-      renderer?.unmount();
-      await flush();
-    });
+    await sharedHarness.unmount();
   };
 
   const updateArgs = async (
@@ -193,16 +198,12 @@ const createHookHarness = (args: {
       ...currentArgs,
       ...nextArgs,
     };
-    await act(async () => {
-      renderer?.update(<Harness />);
-      await flush();
-    });
+    await sharedHarness.update(undefined);
   };
 
   const run = async (callback: () => Promise<void> | void) => {
-    await act(async () => {
+    await sharedHarness.run(async () => {
       await callback();
-      await flush();
     });
   };
 
@@ -2263,7 +2264,7 @@ describe("use-agent-orchestrator-operations", () => {
   });
 
   test("reconciles unaffected tasks without forcing background resume for every live session", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await withSuppressedReattachWarning(async () => {
       const originalAgentSessionsList = host.agentSessionsList;
       const originalAgentSessionUpsert = host.agentSessionUpsert;
       const originalSpecGet = host.specGet;

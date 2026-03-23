@@ -1,7 +1,8 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
+import { act } from "react";
 import { MemoryRouter } from "react-router-dom";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import {
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -20,8 +21,14 @@ mock.module("@/components/features/kanban/task-workflow-action-group", () => ({
 }));
 
 describe("KanbanTaskCard memoization", () => {
+  let KanbanTaskCard: typeof import("./kanban-task-card").KanbanTaskCard;
+
   beforeEach(() => {
     workflowActionGroupRenderMock.mockClear();
+  });
+
+  beforeAll(async () => {
+    ({ KanbanTaskCard } = await import("./kanban-task-card"));
   });
 
   afterAll(() => {
@@ -29,8 +36,6 @@ describe("KanbanTaskCard memoization", () => {
   });
 
   test("skips rerender when task reference changes but compared fields are equivalent", async () => {
-    const { KanbanTaskCard } = await import("./kanban-task-card");
-
     const task = createTaskCardFixture({
       id: "TASK-1",
       title: "Memoized card",
@@ -53,9 +58,9 @@ describe("KanbanTaskCard memoization", () => {
       } as const,
     ];
 
-    let renderer!: ReactTestRenderer;
+    let rendered!: ReturnType<typeof render>;
     await act(async () => {
-      renderer = create(
+      rendered = render(
         <MemoryRouter initialEntries={["/kanban"]}>
           <KanbanTaskCard
             task={task}
@@ -74,7 +79,7 @@ describe("KanbanTaskCard memoization", () => {
     expect(workflowActionGroupRenderMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      renderer.update(
+      rendered.rerender(
         <MemoryRouter initialEntries={["/kanban"]}>
           <KanbanTaskCard
             task={{ ...task }}
@@ -93,13 +98,11 @@ describe("KanbanTaskCard memoization", () => {
     expect(workflowActionGroupRenderMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      renderer.unmount();
+      rendered.unmount();
     });
   });
 
   test("rerenders when task workflow data changes", async () => {
-    const { KanbanTaskCard } = await import("./kanban-task-card");
-
     const task = createTaskCardFixture({
       id: "TASK-2",
       status: "in_progress",
@@ -107,9 +110,9 @@ describe("KanbanTaskCard memoization", () => {
       updatedAt: "2026-01-01T00:00:00.000Z",
     });
 
-    let renderer!: ReactTestRenderer;
+    let rendered!: ReturnType<typeof render>;
     await act(async () => {
-      renderer = create(
+      rendered = render(
         <MemoryRouter initialEntries={["/kanban"]}>
           <KanbanTaskCard
             task={task}
@@ -128,7 +131,7 @@ describe("KanbanTaskCard memoization", () => {
     expect(workflowActionGroupRenderMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      renderer.update(
+      rendered.rerender(
         <MemoryRouter initialEntries={["/kanban"]}>
           <KanbanTaskCard
             task={{
@@ -151,13 +154,11 @@ describe("KanbanTaskCard memoization", () => {
     expect(workflowActionGroupRenderMock).toHaveBeenCalledTimes(2);
 
     await act(async () => {
-      renderer.unmount();
+      rendered.unmount();
     });
   });
 
   test("rerenders when waiting-input state changes without a session status change", async () => {
-    const { KanbanTaskCard } = await import("./kanban-task-card");
-
     const task = createTaskCardFixture({
       id: "TASK-3",
       status: "in_progress",
@@ -165,9 +166,9 @@ describe("KanbanTaskCard memoization", () => {
       updatedAt: "2026-01-01T00:00:00.000Z",
     });
 
-    let renderer!: ReactTestRenderer;
+    let rendered!: ReturnType<typeof render>;
     await act(async () => {
-      renderer = create(
+      rendered = render(
         <MemoryRouter initialEntries={["/kanban"]}>
           <KanbanTaskCard
             task={task}
@@ -195,7 +196,7 @@ describe("KanbanTaskCard memoization", () => {
     expect(workflowActionGroupRenderMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      renderer.update(
+      rendered.rerender(
         <MemoryRouter initialEntries={["/kanban"]}>
           <KanbanTaskCard
             task={task}
@@ -223,7 +224,7 @@ describe("KanbanTaskCard memoization", () => {
     expect(workflowActionGroupRenderMock).toHaveBeenCalledTimes(2);
 
     await act(async () => {
-      renderer.unmount();
+      rendered.unmount();
     });
   });
 });

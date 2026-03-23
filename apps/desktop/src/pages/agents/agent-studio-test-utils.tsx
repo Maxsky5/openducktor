@@ -1,8 +1,13 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { type ComponentProps, createElement, type ReactElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import {
+  type ComponentProps,
+  createElement,
+  type PropsWithChildren,
+  type ReactElement,
+} from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture as createSharedAgentSessionFixture,
   createDeferred as createSharedDeferred,
@@ -16,11 +21,6 @@ type ReactActEnvironment = typeof globalThis & {
 
 export const enableReactActEnvironment = (): void => {
   (globalThis as ReactActEnvironment).IS_REACT_ACT_ENVIRONMENT = true;
-};
-
-const flushMicrotasks = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
 };
 
 const PAGE_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
@@ -80,108 +80,23 @@ export const createAgentSessionFixture = (
   overrides: Partial<AgentSessionState> = {},
 ): AgentSessionState => createSharedAgentSessionFixture(PAGE_SESSION_DEFAULTS, overrides);
 
-type HookRunner<State> = (state: State) => void | Promise<void>;
-
 export const createHookHarness = <Props, State>(
   useHook: (props: Props) => State,
   initialProps: Props,
 ) => {
-  let latest: State | null = null;
-  let currentProps = initialProps;
+  const wrapper = ({ children }: PropsWithChildren): ReactElement =>
+    createElement(
+      ChecksOperationsContext.Provider,
+      { value: TEST_CHECKS_OPERATIONS_CONTEXT },
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(RuntimeDefinitionsContext.Provider, {
+          value: TEST_RUNTIME_DEFINITIONS_CONTEXT,
+          children,
+        }),
+      ),
+    );
 
-  const Harness = ({ hookProps }: { hookProps: Props }): ReactElement | null => {
-    latest = useHook(hookProps);
-    return null;
-  };
-
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
-
-  const mount = async (): Promise<void> => {
-    await act(async () => {
-      renderer = TestRenderer.create(
-        createElement(
-          ChecksOperationsContext.Provider,
-          { value: TEST_CHECKS_OPERATIONS_CONTEXT },
-          createElement(
-            QueryProvider,
-            { useIsolatedClient: true },
-            createElement(
-              RuntimeDefinitionsContext.Provider,
-              { value: TEST_RUNTIME_DEFINITIONS_CONTEXT },
-              createElement(Harness, { hookProps: currentProps }),
-            ),
-          ),
-        ),
-      );
-      await flushMicrotasks();
-    });
-  };
-
-  const update = async (nextProps: Props): Promise<void> => {
-    currentProps = nextProps;
-    await act(async () => {
-      renderer?.update(
-        createElement(
-          ChecksOperationsContext.Provider,
-          { value: TEST_CHECKS_OPERATIONS_CONTEXT },
-          createElement(
-            QueryProvider,
-            { useIsolatedClient: true },
-            createElement(
-              RuntimeDefinitionsContext.Provider,
-              { value: TEST_RUNTIME_DEFINITIONS_CONTEXT },
-              createElement(Harness, { hookProps: currentProps }),
-            ),
-          ),
-        ),
-      );
-      await flushMicrotasks();
-    });
-  };
-
-  const run = async (fn: HookRunner<State>): Promise<void> => {
-    await act(async () => {
-      if (!latest) {
-        throw new Error("Hook state unavailable");
-      }
-      await fn(latest);
-      await flushMicrotasks();
-    });
-  };
-
-  const getLatest = (): State => {
-    if (!latest) {
-      throw new Error("Hook state unavailable");
-    }
-    return latest;
-  };
-
-  const waitFor = async (
-    predicate: (state: State) => boolean,
-    timeoutMs = 500,
-    intervalMs = 5,
-  ): Promise<void> => {
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < timeoutMs) {
-      if (latest && predicate(latest)) {
-        return;
-      }
-
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, intervalMs));
-        await flushMicrotasks();
-      });
-    }
-
-    throw new Error("Timed out waiting for hook state");
-  };
-
-  const unmount = async (): Promise<void> => {
-    await act(async () => {
-      renderer?.unmount();
-      await flushMicrotasks();
-    });
-  };
-
-  return { mount, update, run, getLatest, waitFor, unmount };
+  return createSharedHookHarness(useHook, initialProps, { wrapper });
 };

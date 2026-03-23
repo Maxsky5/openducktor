@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { render, waitFor } from "@testing-library/react";
 import { createElement, type ReactElement } from "react";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
 const reactActEnvironment = globalThis as {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -75,8 +75,8 @@ const flushMicrotasks = async (): Promise<void> => {
   await Promise.resolve();
 };
 
-const findSyntaxNodes = (renderer: ReactTestRenderer) =>
-  renderer.root.findAll((node) => (node.type as unknown) === "mock-syntax-highlighter");
+const findSyntaxNodes = (container: HTMLElement): HTMLElement[] =>
+  Array.from(container.querySelectorAll("mock-syntax-highlighter"));
 
 beforeAll(async () => {
   ({ default: MarkdownSyntaxBlock } = await import("./markdown-syntax-block"));
@@ -97,113 +97,112 @@ describe("MarkdownSyntaxBlock", () => {
   test("renders plain code first in dark theme, then upgrades to dark syntax theme", async () => {
     currentTheme = "dark";
 
-    let renderer!: ReactTestRenderer;
-    act(() => {
-      renderer = create(
-        <MarkdownSyntaxBlock language="javascript" code={"const x = 1;\nconsole.log(x);"} />,
-      );
-    });
+    const rendered = render(
+      <MarkdownSyntaxBlock language="javascript" code={"const x = 1;\nconsole.log(x);"} />,
+    );
 
-    expect(renderer.root.findAllByType("pre")).toHaveLength(1);
-    expect(findSyntaxNodes(renderer)).toHaveLength(0);
+    expect(rendered.container.querySelectorAll("pre")).toHaveLength(1);
+    expect(findSyntaxNodes(rendered.container)).toHaveLength(0);
 
-    await act(flushMicrotasks);
+    await flushMicrotasks();
+    await waitFor(() => expect(findSyntaxNodes(rendered.container)).toHaveLength(1));
 
-    const nodes = findSyntaxNodes(renderer);
+    const nodes = findSyntaxNodes(rendered.container);
     expect(nodes).toHaveLength(1);
-    expect(nodes[0]?.props.style).toBe(DARK_THEME);
+    expect(syntaxHighlighterRenderMock.mock.calls.at(-1)?.[0]?.style).toBe(DARK_THEME);
     expect(darkThemeModuleLoadMock).toHaveBeenCalledTimes(1);
 
-    act(() => {
-      renderer.unmount();
-    });
+    rendered.unmount();
   });
 
   test("renders light syntax theme immediately when theme is light", async () => {
-    let renderer!: ReactTestRenderer;
-    act(() => {
-      renderer = create(<MarkdownSyntaxBlock language="javascript" code="const answer = 42;" />);
-    });
+    const rendered = render(
+      <MarkdownSyntaxBlock language="javascript" code="const answer = 42;" />,
+    );
 
-    const nodes = findSyntaxNodes(renderer);
+    const nodes = findSyntaxNodes(rendered.container);
     expect(nodes).toHaveLength(1);
-    expect(nodes[0]?.props.style).toBe(LIGHT_THEME);
-    expect(renderer.root.findAllByType("pre")).toHaveLength(0);
+    expect(syntaxHighlighterRenderMock.mock.calls.at(-1)?.[0]?.style).toBe(LIGHT_THEME);
+    expect(rendered.container.querySelectorAll("pre")).toHaveLength(0);
     expect(darkThemeModuleLoadMock).not.toHaveBeenCalled();
 
-    act(() => {
-      renderer.unmount();
-    });
+    rendered.unmount();
   });
 
   test("keeps plain code fallback for unsupported languages", async () => {
-    let renderer!: ReactTestRenderer;
-    act(() => {
-      renderer = create(<MarkdownSyntaxBlock language="elixir" code="IO.puts(:hello)" />);
-    });
+    const rendered = render(<MarkdownSyntaxBlock language="elixir" code="IO.puts(:hello)" />);
 
-    expect(renderer.root.findAllByType("pre")).toHaveLength(1);
-    expect(findSyntaxNodes(renderer)).toHaveLength(0);
+    expect(rendered.container.querySelectorAll("pre")).toHaveLength(1);
+    expect(findSyntaxNodes(rendered.container)).toHaveLength(0);
 
-    act(() => {
-      renderer.unmount();
-    });
+    rendered.unmount();
   });
 
   test("upgrades multiple dark blocks from plain code to dark syntax highlighting", async () => {
     currentTheme = "dark";
 
-    let renderer!: ReactTestRenderer;
-    act(() => {
-      renderer = create(
-        <div>
-          <MarkdownSyntaxBlock language="javascript" code="const a = 1;" />
-          <MarkdownSyntaxBlock language="json" code='{"a":1}' />
-        </div>,
-      );
-    });
+    const rendered = render(
+      <div>
+        <MarkdownSyntaxBlock language="javascript" code="const a = 1;" />
+        <MarkdownSyntaxBlock language="json" code='{"a":1}' />
+      </div>,
+    );
 
-    await act(flushMicrotasks);
+    await flushMicrotasks();
+    await waitFor(() => expect(findSyntaxNodes(rendered.container)).toHaveLength(2));
 
-    const nodes = findSyntaxNodes(renderer);
+    const nodes = findSyntaxNodes(rendered.container);
     expect(nodes).toHaveLength(2);
-    expect(nodes[0]?.props.style).toBe(DARK_THEME);
-    expect(nodes[1]?.props.style).toBe(DARK_THEME);
+    const renderCalls = syntaxHighlighterRenderMock.mock.calls.map((call) => call[0]);
+    expect(renderCalls.at(-2)?.style).toBe(DARK_THEME);
+    expect(renderCalls.at(-1)?.style).toBe(DARK_THEME);
 
-    act(() => {
-      renderer.unmount();
-    });
+    rendered.unmount();
   });
 
   test("surfaces a fallback notice for grammar load failures and clears it after switching away", async () => {
     yamlLanguageShouldFail = true;
+    const originalConsoleError = console.error;
+    console.error = (...args: unknown[]): void => {
+      const [firstArg] = args;
+      if (
+        typeof firstArg === "string" &&
+        firstArg.startsWith("Failed to lazy-load language grammar for 'yaml':")
+      ) {
+        return;
+      }
+      originalConsoleError(...args);
+    };
 
-    let renderer!: ReactTestRenderer;
-    act(() => {
-      renderer = create(<MarkdownSyntaxBlock language="yaml" code={"name: OpenDucktor\n"} />);
-    });
+    const rendered = render(<MarkdownSyntaxBlock language="yaml" code={"name: OpenDucktor\n"} />);
 
-    await act(flushMicrotasks);
+    try {
+      await flushMicrotasks();
+      await waitFor(() =>
+        expect(
+          rendered.container.querySelector('[data-syntax-load-failure="language"]'),
+        ).not.toBeNull(),
+      );
 
-    const fallback = renderer.root.findByProps({ "data-syntax-load-failure": "language" });
-    expect(fallback.findByType("p").children.join("")).toContain(
-      "Syntax highlighting unavailable: failed to load the yaml grammar (missing yaml grammar)",
-    );
-    expect(findSyntaxNodes(renderer)).toHaveLength(0);
+      const fallback = rendered.container.querySelector('[data-syntax-load-failure="language"]');
+      expect(fallback?.textContent).toContain(
+        "Syntax highlighting unavailable: failed to load the yaml grammar (missing yaml grammar)",
+      );
+      expect(findSyntaxNodes(rendered.container)).toHaveLength(0);
 
-    act(() => {
-      renderer.update(<MarkdownSyntaxBlock language="elixir" code="IO.puts(:hello)" />);
-    });
+      rendered.rerender(<MarkdownSyntaxBlock language="elixir" code="IO.puts(:hello)" />);
 
-    await act(flushMicrotasks);
+      await flushMicrotasks();
+      await waitFor(() =>
+        expect(rendered.container.querySelectorAll("[data-syntax-load-failure]")).toHaveLength(0),
+      );
 
-    expect(
-      renderer.root.findAll((node) => node.props["data-syntax-load-failure"] !== undefined),
-    ).toHaveLength(0);
-    expect(renderer.root.findAllByType("p")).toHaveLength(0);
+      expect(rendered.container.querySelectorAll("[data-syntax-load-failure]")).toHaveLength(0);
+      expect(rendered.container.querySelectorAll("p")).toHaveLength(0);
 
-    act(() => {
-      renderer.unmount();
-    });
+      rendered.unmount();
+    } finally {
+      console.error = originalConsoleError;
+    }
   });
 });

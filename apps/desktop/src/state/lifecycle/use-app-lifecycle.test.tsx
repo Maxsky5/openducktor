@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { createTauriHostClient } from "@openducktor/adapters-tauri-host";
-import type { ReactElement } from "react";
-import { createElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import { act } from "react";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 
 let subscribedRunListener: ((payload: unknown) => void) | null = null;
 const toastError = mock((_message: string, _options?: { description?: string }) => "");
@@ -62,11 +61,6 @@ const reactActEnvironment = globalThis as typeof globalThis & {
 };
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-};
-
 const createDeferred = <T,>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
   let reject: ((reason?: unknown) => void) | null = null;
@@ -98,41 +92,35 @@ describe("useAppLifecycle", () => {
     const refreshTaskData = mock(async (_repoPath: string) => {});
     const setRunCompletionSignal = mock((_runId: string, _eventType) => {});
 
-    const Harness = ({ args }: { args: HookArgs }): ReactElement | null => {
+    const Harness = ({ args }: { args: HookArgs }) => {
       useAppLifecycle(args);
       return null;
     };
-
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
-    await act(async () => {
-      renderer = TestRenderer.create(
-        createElement(Harness, {
-          args: {
-            activeRepo: "/repo",
-            setEvents: mock((_updater) => {}),
-            setRunCompletionSignal,
-            refreshWorkspaces: mock(async () => {}),
-            refreshBranches: mock(async () => {}),
-            refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-            refreshBeadsCheckForRepo: mock(async () => ({
-              beadsOk: true,
-              beadsPath: "/repo/.beads",
-              beadsError: null,
-            })),
-            refreshTaskData,
-            clearBranchData: mock(() => {}),
-          } satisfies HookArgs,
-        }),
-      );
+    const harness = createSharedHookHarness(Harness, {
+      args: {
+        activeRepo: "/repo",
+        setEvents: mock((_updater) => {}),
+        setRunCompletionSignal,
+        refreshWorkspaces: mock(async () => {}),
+        refreshBranches: mock(async () => {}),
+        refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+        refreshBeadsCheckForRepo: mock(async () => ({
+          beadsOk: true,
+          beadsPath: "/repo/.beads",
+          beadsError: null,
+        })),
+        refreshTaskData,
+        clearBranchData: mock(() => {}),
+      } satisfies HookArgs,
     });
-    await flush();
+    await harness.mount();
 
     refreshTaskData.mockClear();
     if (!subscribedRunListener) {
       throw new Error("Expected run event listener to be registered");
     }
 
-    await act(async () => {
+    await harness.run(() => {
       subscribedRunListener?.({
         type: "run_finished",
         runId: "run-1",
@@ -140,15 +128,12 @@ describe("useAppLifecycle", () => {
         timestamp: "2026-03-15T10:00:00.000Z",
         success: true,
       });
-      await flush();
     });
 
     expect(setRunCompletionSignal).toHaveBeenCalledWith("run-1", "run_finished");
     expect(refreshTaskData).toHaveBeenCalledWith("/repo");
 
-    await act(async () => {
-      renderer?.unmount();
-    });
+    await harness.unmount();
   });
 
   test("loads repo task and diagnostics checks when the active repo changes", async () => {
@@ -157,25 +142,41 @@ describe("useAppLifecycle", () => {
 
     let currentArgs!: HookArgs;
 
-    const Harness = ({ args }: { args: HookArgs }): ReactElement | null => {
+    const Harness = ({ args }: { args: HookArgs }) => {
       useAppLifecycle(args);
       return null;
     };
 
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    type LifecycleHarness = {
+      mount: () => Promise<void>;
+      update: (nextProps: { args: HookArgs }) => Promise<void>;
+      run: (fn: (state: null) => void | Promise<void>) => Promise<void>;
+      unmount: () => Promise<void>;
+    };
+
+    let mountedHarness: LifecycleHarness | null = null;
     const mount = async (args: HookArgs): Promise<void> => {
       currentArgs = args;
-      await act(async () => {
-        renderer = TestRenderer.create(createElement(Harness, { args }));
-      });
-      await flush();
+      mountedHarness = createSharedHookHarness(Harness, { args });
+      await mountedHarness.mount();
     };
     const update = async (args: HookArgs): Promise<void> => {
       currentArgs = args;
-      await act(async () => {
-        renderer?.update(createElement(Harness, { args }));
-      });
-      await flush();
+      if (!mountedHarness) {
+        throw new Error("Expected lifecycle harness to be mounted");
+      }
+      await mountedHarness.update({ args });
+    };
+    const requireHarness = (): LifecycleHarness => {
+      if (!mountedHarness) {
+        throw new Error("Expected lifecycle harness to be mounted");
+      }
+      return mountedHarness;
+    };
+    const disposeHarness = async (): Promise<void> => {
+      if (mountedHarness) {
+        await mountedHarness.unmount();
+      }
     };
 
     const taskLoadDeferred = createDeferred<void>();
@@ -217,17 +218,17 @@ describe("useAppLifecycle", () => {
       expect(baseArgs.refreshTaskData).toHaveBeenCalledWith("/repo");
       expect(baseArgs.refreshBranches).toHaveBeenCalledWith(false);
 
-      await act(async () => {
+      const activeHarness = requireHarness();
+
+      await activeHarness.run(async () => {
         taskLoadDeferred.resolve();
-        await flush();
       });
 
       expect(baseArgs.refreshTaskData).toHaveBeenCalledTimes(1);
 
-      await act(async () => {
+      await activeHarness.run(async () => {
         runtimeRepoCheckDeferred.resolve({ runtimeOk: true });
         branchesDeferred.resolve();
-        await flush();
       });
 
       expect(refreshRuntimeCheck).toHaveBeenCalledTimes(2);
@@ -235,9 +236,7 @@ describe("useAppLifecycle", () => {
       taskLoadDeferred.resolve();
       runtimeRepoCheckDeferred.resolve({ runtimeOk: true });
       branchesDeferred.resolve();
-      await act(async () => {
-        renderer?.unmount();
-      });
+      await disposeHarness();
     }
   });
 
@@ -249,12 +248,6 @@ describe("useAppLifecycle", () => {
     const taskDeferred = createDeferred<void>();
     const branchesDeferred = createDeferred<void>();
 
-    const Harness = ({ args }: { args: HookArgs }): ReactElement | null => {
-      useAppLifecycle(args);
-      return null;
-    };
-
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
     const baseArgs: HookArgs = {
       activeRepo: null,
       setEvents: mock((_updater) => {}),
@@ -268,21 +261,21 @@ describe("useAppLifecycle", () => {
       beadsPreparationToastDelayMs: 5,
     };
 
-    try {
-      await act(async () => {
-        renderer = TestRenderer.create(createElement(Harness, { args: baseArgs }));
-      });
-      await flush();
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
 
-      await act(async () => {
-        renderer?.update(
-          createElement(Harness, {
-            args: {
-              ...baseArgs,
-              activeRepo: "/repo",
-            },
-          }),
-        );
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    try {
+      await harness.mount();
+
+      await harness.update({
+        args: {
+          ...baseArgs,
+          activeRepo: "/repo",
+        },
       });
 
       await act(async () => {
@@ -293,11 +286,10 @@ describe("useAppLifecycle", () => {
         description: "OpenDucktor is initializing the Beads task store for this repository.",
       });
 
-      await act(async () => {
+      await harness.run(async () => {
         beadsDeferred.resolve({ beadsOk: true, beadsError: null });
         taskDeferred.resolve();
         branchesDeferred.resolve();
-        await flush();
       });
 
       expect(toastDismiss).toHaveBeenCalledWith("toast-id");
@@ -308,9 +300,7 @@ describe("useAppLifecycle", () => {
       beadsDeferred.resolve({ beadsOk: true, beadsError: null });
       taskDeferred.resolve();
       branchesDeferred.resolve();
-      await act(async () => {
-        renderer?.unmount();
-      });
+      await harness.unmount();
     }
   });
 
@@ -321,12 +311,6 @@ describe("useAppLifecycle", () => {
     const taskDeferred = createDeferred<void>();
     const branchesDeferred = createDeferred<void>();
 
-    const Harness = ({ args }: { args: HookArgs }): ReactElement | null => {
-      useAppLifecycle(args);
-      return null;
-    };
-
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
     const baseArgs: HookArgs = {
       activeRepo: null,
       setEvents: mock((_updater) => {}),
@@ -343,21 +327,21 @@ describe("useAppLifecycle", () => {
       beadsPreparationToastDelayMs: 5,
     };
 
-    try {
-      await act(async () => {
-        renderer = TestRenderer.create(createElement(Harness, { args: baseArgs }));
-      });
-      await flush();
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
 
-      await act(async () => {
-        renderer?.update(
-          createElement(Harness, {
-            args: {
-              ...baseArgs,
-              activeRepo: "/repo",
-            },
-          }),
-        );
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    try {
+      await harness.mount();
+
+      await harness.update({
+        args: {
+          ...baseArgs,
+          activeRepo: "/repo",
+        },
       });
 
       await act(async () => {
@@ -367,17 +351,14 @@ describe("useAppLifecycle", () => {
       expect(toastLoading).not.toHaveBeenCalled();
       expect(toastSuccess).not.toHaveBeenCalled();
 
-      await act(async () => {
+      await harness.run(async () => {
         taskDeferred.resolve();
         branchesDeferred.resolve();
-        await flush();
       });
     } finally {
       taskDeferred.resolve();
       branchesDeferred.resolve();
-      await act(async () => {
-        renderer?.unmount();
-      });
+      await harness.unmount();
     }
   });
 
@@ -388,12 +369,6 @@ describe("useAppLifecycle", () => {
     const beadsDeferred = createDeferred<{ beadsOk: boolean; beadsError?: string | null }>();
     const branchesDeferred = createDeferred<void>();
 
-    const Harness = ({ args }: { args: HookArgs }): ReactElement | null => {
-      useAppLifecycle(args);
-      return null;
-    };
-
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
     const baseArgs: HookArgs = {
       activeRepo: null,
       setEvents: mock((_updater) => {}),
@@ -407,27 +382,26 @@ describe("useAppLifecycle", () => {
       beadsPreparationToastDelayMs: 15,
     };
 
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
+
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
     try {
-      await act(async () => {
-        renderer = TestRenderer.create(createElement(Harness, { args: baseArgs }));
-      });
-      await flush();
+      await harness.mount();
 
-      await act(async () => {
-        renderer?.update(
-          createElement(Harness, {
-            args: {
-              ...baseArgs,
-              activeRepo: "/repo",
-            },
-          }),
-        );
+      await harness.update({
+        args: {
+          ...baseArgs,
+          activeRepo: "/repo",
+        },
       });
 
-      await act(async () => {
+      await harness.run(async () => {
         beadsDeferred.resolve({ beadsOk: false, beadsError: "init failed" });
         branchesDeferred.resolve();
-        await flush();
       });
 
       await act(async () => {
@@ -442,9 +416,7 @@ describe("useAppLifecycle", () => {
     } finally {
       beadsDeferred.resolve({ beadsOk: true, beadsError: null });
       branchesDeferred.resolve();
-      await act(async () => {
-        renderer?.unmount();
-      });
+      await harness.unmount();
     }
   });
 
@@ -455,12 +427,6 @@ describe("useAppLifecycle", () => {
     const beadsDeferred = createDeferred<{ beadsOk: boolean; beadsError?: string | null }>();
     const branchesDeferred = createDeferred<void>();
 
-    const Harness = ({ args }: { args: HookArgs }): ReactElement | null => {
-      useAppLifecycle(args);
-      return null;
-    };
-
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
     const baseArgs: HookArgs = {
       activeRepo: null,
       setEvents: mock((_updater) => {}),
@@ -474,21 +440,21 @@ describe("useAppLifecycle", () => {
       beadsPreparationToastDelayMs: 5,
     };
 
-    try {
-      await act(async () => {
-        renderer = TestRenderer.create(createElement(Harness, { args: baseArgs }));
-      });
-      await flush();
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
 
-      await act(async () => {
-        renderer?.update(
-          createElement(Harness, {
-            args: {
-              ...baseArgs,
-              activeRepo: "/repo",
-            },
-          }),
-        );
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    try {
+      await harness.mount();
+
+      await harness.update({
+        args: {
+          ...baseArgs,
+          activeRepo: "/repo",
+        },
       });
 
       await act(async () => {
@@ -499,10 +465,9 @@ describe("useAppLifecycle", () => {
         description: "OpenDucktor is initializing the Beads task store for this repository.",
       });
 
-      await act(async () => {
+      await harness.run(async () => {
         beadsDeferred.resolve({ beadsOk: false, beadsError: "store failed" });
         branchesDeferred.resolve();
-        await flush();
       });
 
       expect(toastDismiss).toHaveBeenCalledWith("toast-id");
@@ -513,9 +478,7 @@ describe("useAppLifecycle", () => {
     } finally {
       beadsDeferred.resolve({ beadsOk: true, beadsError: null });
       branchesDeferred.resolve();
-      await act(async () => {
-        renderer?.unmount();
-      });
+      await harness.unmount();
     }
   });
 });

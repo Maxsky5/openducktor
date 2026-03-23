@@ -5,6 +5,21 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createDeferred } from "../test-utils";
 import { createEnsureSessionReady } from "./ensure-ready";
 
+const withCapturedConsoleError = async (
+  run: (calls: unknown[][]) => Promise<void>,
+): Promise<void> => {
+  const originalError = console.error;
+  const calls: unknown[][] = [];
+  console.error = (...args: unknown[]) => {
+    calls.push(args);
+  };
+  try {
+    await run(calls);
+  } finally {
+    console.error = originalError;
+  }
+};
+
 const taskFixture: TaskCard = {
   id: "task-1",
   title: "Implement feature",
@@ -373,9 +388,13 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await expect(ensureReady("session-1")).rejects.toThrow(
-        "Failed to stop attached error session 'session-1' before preparing it: stop boom",
-      );
+      await withCapturedConsoleError(async (calls) => {
+        await expect(ensureReady("session-1")).rejects.toThrow(
+          "Failed to stop attached error session 'session-1' before preparing it: stop boom",
+        );
+        expect(calls).toHaveLength(1);
+        expect(String(calls[0]?.[1] ?? "")).toBe("ensure-ready-stop-attached-error-session");
+      });
       expect(resumeCalls).toBe(0);
       expect(unsubscribeCalls).toBe(0);
       expect(unsubscribersRef.current.has("session-1")).toBe(true);
@@ -522,9 +541,13 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await expect(ensureReady("session-1")).rejects.toThrow(
-        "Workspace changed while preparing session. Failed to stop stale resumed session 'session-1': stop boom",
-      );
+      await withCapturedConsoleError(async (calls) => {
+        await expect(ensureReady("session-1")).rejects.toThrow(
+          "Workspace changed while preparing session. Failed to stop stale resumed session 'session-1': stop boom",
+        );
+        expect(calls).toHaveLength(1);
+        expect(String(calls[0]?.[1] ?? "")).toBe("ensure-ready-stop-session-after-stale-resume");
+      });
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;

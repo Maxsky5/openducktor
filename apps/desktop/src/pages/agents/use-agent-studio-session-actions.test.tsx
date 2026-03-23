@@ -218,8 +218,10 @@ describe("useAgentStudioSessionActions", () => {
       expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", "hello world");
     });
 
-    sendDeferred.resolve();
-    await sendPromise;
+    await harness.run(async () => {
+      sendDeferred.resolve();
+      await sendPromise;
+    });
     await harness.unmount();
   });
 
@@ -242,8 +244,10 @@ describe("useAgentStudioSessionActions", () => {
       expect(setInput).toHaveBeenCalledWith("");
     });
 
-    sendDeferred.reject(new Error("send failed"));
-    await sendPromise;
+    await harness.run(async () => {
+      sendDeferred.reject(new Error("send failed"));
+      await sendPromise;
+    });
 
     expect(setInput).toHaveBeenLastCalledWith("hello world");
     await harness.unmount();
@@ -293,19 +297,16 @@ describe("useAgentStudioSessionActions", () => {
     expect(nextState.isSending).toBe(false);
     expect(nextState.isSessionWorking).toBe(false);
 
-    sendDeferred.resolve();
-    await sendPromise;
+    await harness.run(async () => {
+      sendDeferred.resolve();
+      await sendPromise;
+    });
     await harness.unmount();
   });
 
-  test("keeps the latest send active after switching away and back", async () => {
+  test("restores the in-flight send state after switching away and back", async () => {
     const firstSendDeferred = createDeferred<void>();
-    const secondSendDeferred = createDeferred<void>();
-    const sendPromises = [firstSendDeferred.promise, secondSendDeferred.promise];
-    const sendAgentMessage = mock(() => {
-      const nextPromise = sendPromises.shift();
-      return nextPromise ?? Promise.resolve();
-    });
+    const sendAgentMessage = mock(() => firstSendDeferred.promise);
     const taskOneSession = createSession({
       taskId: "task-1",
       sessionId: "session-task-1",
@@ -350,18 +351,75 @@ describe("useAgentStudioSessionActions", () => {
       input: "second send",
     });
 
-    let secondSendPromise: Promise<void> | undefined;
+    await harness.waitFor((state) => state.isSending);
+    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+
+    await harness.run(() => {
+      firstSendDeferred.resolve();
+    });
+    await firstSendPromise;
+    await harness.waitFor((state) => !state.isSending);
+    await harness.unmount();
+  });
+
+  test("blocks overlapping sends after returning to an in-flight session", async () => {
+    const firstSendDeferred = createDeferred<void>();
+    const sendAgentMessage = mock(() => firstSendDeferred.promise);
+    const taskOneSession = createSession({
+      taskId: "task-1",
+      sessionId: "session-task-1",
+      status: "stopped",
+    });
+    const taskTwoSession = createSession({
+      taskId: "task-2",
+      sessionId: "session-task-2",
+      status: "stopped",
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: taskOneSession,
+      sessionsForTask: [taskOneSession],
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+
+    let firstSendPromise: Promise<void> | undefined;
     await harness.run((state) => {
-      secondSendPromise = state.onSend();
+      firstSendPromise = state.onSend();
     });
     await harness.waitFor((state) => state.isSending);
 
-    firstSendDeferred.resolve();
-    await firstSendPromise;
+    await harness.update({
+      ...createBaseArgs(),
+      taskId: "task-2",
+      activeSession: taskTwoSession,
+      sessionsForTask: [taskTwoSession],
+      sendAgentMessage,
+      input: "other task",
+    });
+    expect(harness.getLatest().isSending).toBe(false);
+
+    await harness.update({
+      ...createBaseArgs(),
+      activeSession: taskOneSession,
+      sessionsForTask: [taskOneSession],
+      sendAgentMessage,
+      input: "second send",
+    });
+    await harness.waitFor((state) => state.isSending);
+
+    await harness.run(async (state) => {
+      await state.onSend();
+    });
+    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
     expect(harness.getLatest().isSending).toBe(true);
 
-    secondSendDeferred.resolve();
-    await secondSendPromise;
+    await harness.run(async () => {
+      firstSendDeferred.resolve();
+      await firstSendPromise;
+    });
     await harness.waitFor((state) => !state.isSending);
     await harness.unmount();
   });
@@ -402,8 +460,10 @@ describe("useAgentStudioSessionActions", () => {
 
     expect(harness.getLatest().isSending).toBe(true);
 
-    sendDeferred.resolve();
-    await sendPromise;
+    await harness.run(async () => {
+      sendDeferred.resolve();
+      await sendPromise;
+    });
     await harness.waitFor((state) => !state.isSending);
     await harness.unmount();
   });

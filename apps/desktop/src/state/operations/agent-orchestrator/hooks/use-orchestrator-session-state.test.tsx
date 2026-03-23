@@ -1,13 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
-import TestRenderer, { act } from "react-test-renderer";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { useOrchestratorSessionState } from "./use-orchestrator-session-state";
-
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-};
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -85,7 +80,6 @@ type HookArgs = Parameters<typeof useOrchestratorSessionState>[0];
 
 const createHookHarness = (initialArgs: HookArgs) => {
   let latest: ReturnType<typeof useOrchestratorSessionState> | null = null;
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
   let currentArgs = initialArgs;
 
   const Harness = () => {
@@ -93,38 +87,27 @@ const createHookHarness = (initialArgs: HookArgs) => {
     return null;
   };
 
+  const sharedHarness = createSharedHookHarness(Harness, undefined);
+
   const mount = async () => {
-    await act(async () => {
-      renderer = TestRenderer.create(<Harness />);
-      await flush();
-    });
+    await sharedHarness.mount();
   };
 
   const unmount = async () => {
-    if (!renderer) {
-      return;
-    }
-    await act(async () => {
-      renderer?.unmount();
-      await flush();
-    });
+    await sharedHarness.unmount();
   };
 
   const update = async (nextArgs: HookArgs) => {
     currentArgs = nextArgs;
-    await act(async () => {
-      renderer?.update(<Harness />);
-      await flush();
-    });
+    await sharedHarness.update(undefined);
   };
 
   const run = async (callback: (hook: ReturnType<typeof useOrchestratorSessionState>) => void) => {
-    await act(async () => {
-      if (!latest) {
-        throw new Error("Hook state unavailable");
-      }
-      callback(latest);
-      await flush();
+    if (!latest) {
+      throw new Error("Hook state unavailable");
+    }
+    await sharedHarness.run(() => {
+      callback(latest as ReturnType<typeof useOrchestratorSessionState>);
     });
   };
 

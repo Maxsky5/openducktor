@@ -1,11 +1,7 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { createElement } from "react";
-import TestRenderer, {
-  act,
-  type ReactTestInstance,
-  type ReactTestRenderer,
-} from "react-test-renderer";
 import type { GitConflict } from "@/features/agent-studio-git";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { PendingGitConflictResolutionRequest } from "./use-git-conflict-resolution";
@@ -19,43 +15,26 @@ mock.module("@/components/ui/dialog", () => ({
   Dialog: ({
     children,
     open,
-    ...props
   }: {
     children?: ReactNode;
     open?: boolean;
     [key: string]: unknown;
-  }): ReactElement | null => (open === false ? null : createElement("div", props, children)),
-  DialogBody: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
-  DialogContent: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
-  DialogDescription: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) =>
-    createElement("p", props, children),
-  DialogFooter: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
-  DialogHeader: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
-  DialogTitle: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) =>
-    createElement("h2", props, children),
+  }): ReactElement | null => (open === false ? null : createElement("div", null, children)),
+  DialogBody: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
+    createElement("div", null, children),
+  DialogContent: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
+    createElement("div", null, children),
+  DialogDescription: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
+    createElement("p", null, children),
+  DialogFooter: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
+    createElement("div", null, children),
+  DialogHeader: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
+    createElement("div", null, children),
+  DialogTitle: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
+    createElement("h2", null, children),
 }));
 
 let GitConflictResolutionModal: typeof import("./git-conflict-resolution-modal").GitConflictResolutionModal;
-
-const flattenChildrenText = (value: unknown): string => {
-  if (typeof value === "string") {
-    return value;
-  }
-  if (typeof value === "number") {
-    return String(value);
-  }
-  if (Array.isArray(value)) {
-    return value.map(flattenChildrenText).join(" ");
-  }
-  if (value && typeof value === "object" && "props" in value) {
-    return flattenChildrenText((value as { props?: { children?: unknown } }).props?.children);
-  }
-  return "";
-};
 
 const builderSession = (sessionId: string): AgentSessionState => ({
   sessionId,
@@ -109,86 +88,60 @@ beforeAll(async () => {
   ({ GitConflictResolutionModal } = await import("./git-conflict-resolution-modal"));
 });
 
-const renderModal = async (
-  request: PendingGitConflictResolutionRequest,
-  onResolve: () => void,
-): Promise<ReactTestRenderer> => {
-  let renderer!: ReactTestRenderer;
-  await act(async () => {
-    renderer = TestRenderer.create(
-      createElement(GitConflictResolutionModal, {
-        request,
-        onResolve,
-      }),
-    );
-  });
-  return renderer;
-};
+const renderModal = (request: PendingGitConflictResolutionRequest, onResolve: () => void) =>
+  render(
+    createElement(GitConflictResolutionModal, {
+      request,
+      onResolve,
+    }),
+  );
 
 describe("GitConflictResolutionModal render behavior", () => {
   test("submits the selected existing session", async () => {
     const onResolve = mock(() => {});
-    const mountedRenderer = await renderModal(createRequest(), onResolve);
+    const rendered = renderModal(createRequest(), onResolve);
 
-    const existingSessionButtons = mountedRenderer.root.findAll(
-      (node: ReactTestInstance) =>
-        node.type === "button" &&
-        flattenChildrenText(node.props.children).includes("idle") &&
-        !flattenChildrenText(node.props.children).includes("paused worktree"),
-    );
+    const existingSessionButtons = screen
+      .getAllByRole("button")
+      .filter(
+        (button) =>
+          button.textContent?.includes("idle") && !button.textContent?.includes("paused worktree"),
+      );
 
     const sessionButton = existingSessionButtons[1];
     if (!sessionButton) {
       throw new Error("Expected a second existing-session button");
     }
 
-    await act(async () => {
-      sessionButton.props.onClick();
-    });
+    fireEvent.click(sessionButton);
 
-    const confirmButton = mountedRenderer.root.find(
-      (node: ReactTestInstance) =>
-        node.type === "button" &&
-        flattenChildrenText(node.props.children).includes("Use selected session"),
-    );
+    const confirmButton = screen.getByRole("button", { name: /use selected session/i });
 
-    expect(confirmButton.props.disabled).toBe(false);
+    expect(confirmButton.hasAttribute("disabled")).toBe(false);
 
-    await act(async () => {
-      confirmButton.props.onClick();
-    });
+    fireEvent.click(confirmButton);
 
     expect(onResolve).toHaveBeenCalledWith({ mode: "existing", sessionId: "session-2" });
+    rendered.unmount();
   });
 
   test("submits a new session decision", async () => {
     const onResolve = mock(() => {});
-    const mountedRenderer = await renderModal(createRequest(), onResolve);
+    const rendered = renderModal(createRequest(), onResolve);
 
-    const newSessionButton = mountedRenderer.root.find(
-      (node: ReactTestInstance) =>
-        node.type === "button" &&
-        flattenChildrenText(node.props.children).includes(
-          "Start a new Builder session in the paused worktree",
-        ),
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /start a new builder session in the paused worktree/i,
+      }),
     );
 
-    await act(async () => {
-      newSessionButton.props.onClick();
-    });
+    const confirmButton = screen.getByRole("button", { name: /start new session/i });
 
-    const confirmButton = mountedRenderer.root.find(
-      (node: ReactTestInstance) =>
-        node.type === "button" &&
-        flattenChildrenText(node.props.children).includes("Start new session"),
-    );
+    expect(confirmButton.hasAttribute("disabled")).toBe(false);
 
-    expect(confirmButton.props.disabled).toBe(false);
-
-    await act(async () => {
-      confirmButton.props.onClick();
-    });
+    fireEvent.click(confirmButton);
 
     expect(onResolve).toHaveBeenCalledWith({ mode: "new" });
+    rendered.unmount();
   });
 });

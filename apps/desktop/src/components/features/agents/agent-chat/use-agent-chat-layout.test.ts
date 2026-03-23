@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { createElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   COMPOSER_TEXTAREA_MAX_HEIGHT_PX,
   COMPOSER_TEXTAREA_MIN_HEIGHT_PX,
@@ -85,31 +84,16 @@ describe("use-agent-chat-layout helpers", () => {
   });
 
   test("returns stable refs and offset state for the layout hook", async () => {
-    const latestRef: { current: LayoutHookState | null } = { current: null };
+    const harness = createSharedHookHarness(
+      ({ activeSessionId, input }: { activeSessionId: string | null; input: string }) => {
+        return useAgentChatLayout({ activeSessionId, input });
+      },
+      { activeSessionId: "session-1", input: "" },
+    );
 
-    const Harness = ({
-      activeSessionId,
-      input,
-    }: {
-      activeSessionId: string | null;
-      input: string;
-    }) => {
-      latestRef.current = useAgentChatLayout({ activeSessionId, input });
-      return null;
-    };
+    await harness.mount();
 
-    let renderer!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      renderer = TestRenderer.create(
-        createElement(Harness, { activeSessionId: "session-1", input: "" }),
-      );
-      await Promise.resolve();
-    });
-
-    const initialState = latestRef.current;
-    if (!initialState) {
-      throw new Error("Hook state unavailable");
-    }
+    const initialState = harness.getLatest() as LayoutHookState;
 
     expect(initialState.todoPanelBottomOffset).toBe(12);
     expect(initialState.messagesContainerRef.current).toBeNull();
@@ -117,21 +101,12 @@ describe("use-agent-chat-layout helpers", () => {
     expect(initialState.composerTextareaRef.current).toBeNull();
     expect(typeof initialState.resizeComposerTextarea).toBe("function");
 
-    await act(async () => {
-      renderer.update(createElement(Harness, { activeSessionId: "session-2", input: "draft" }));
-      await Promise.resolve();
-    });
+    await harness.update({ activeSessionId: "session-2", input: "draft" });
 
-    const updatedState = latestRef.current;
-    if (!updatedState) {
-      throw new Error("Hook state unavailable");
-    }
+    const updatedState = harness.getLatest() as LayoutHookState;
 
     expect(updatedState.todoPanelBottomOffset).toBe(12);
 
-    await act(async () => {
-      renderer.unmount();
-      await Promise.resolve();
-    });
+    await harness.unmount();
   });
 });

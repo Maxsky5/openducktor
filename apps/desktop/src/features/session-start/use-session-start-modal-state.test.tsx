@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -9,9 +9,6 @@ import {
 import { useSessionStartModalState } from "./use-session-start-modal-state";
 
 enableReactActEnvironment();
-
-const TEST_RENDERER_DEPRECATION_WARNING = "react-test-renderer is deprecated";
-const originalConsoleError = console.error;
 
 type HookArgs = Parameters<typeof useSessionStartModalState>[0];
 
@@ -100,19 +97,6 @@ const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 describe("useSessionStartModalState", () => {
-  beforeEach(() => {
-    console.error = (...args: unknown[]): void => {
-      if (typeof args[0] === "string" && args[0].includes(TEST_RENDERER_DEPRECATION_WARNING)) {
-        return;
-      }
-      originalConsoleError(...args);
-    };
-  });
-
-  afterEach(() => {
-    console.error = originalConsoleError;
-  });
-
   test("initializes selection from repo role defaults", async () => {
     const harness = createHookHarness(createBaseProps());
 

@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { createElement, useEffect, useRef, useState } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import type { RenderResult } from "@testing-library/react";
+import { render, waitFor } from "@testing-library/react";
+import { act, createElement, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { host } from "../shared/host";
 import { useWorkspaceOperations } from "./use-workspace-operations";
 
@@ -16,47 +18,6 @@ reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 const flush = async (): Promise<void> => {
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
-};
-
-const setGlobalProperty = (key: "window" | "document", value: unknown): void => {
-  const descriptor = Object.getOwnPropertyDescriptor(globalThis, key);
-  if (!descriptor || descriptor.configurable) {
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      writable: true,
-      value,
-    });
-    return;
-  }
-
-  if ("writable" in descriptor && descriptor.writable) {
-    (globalThis as Record<string, unknown>)[key] = value;
-    return;
-  }
-
-  throw new Error(`Cannot override global ${key}`);
-};
-
-const mockBrowserGlobals = (windowValue: Window, documentValue: Document): (() => void) => {
-  const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
-  const documentDescriptor = Object.getOwnPropertyDescriptor(globalThis, "document");
-
-  setGlobalProperty("window", windowValue);
-  setGlobalProperty("document", documentValue);
-
-  return () => {
-    if (windowDescriptor) {
-      Object.defineProperty(globalThis, "window", windowDescriptor);
-    } else {
-      Reflect.deleteProperty(globalThis, "window");
-    }
-
-    if (documentDescriptor) {
-      Object.defineProperty(globalThis, "document", documentDescriptor);
-    } else {
-      Reflect.deleteProperty(globalThis, "document");
-    }
-  };
 };
 
 const createBrowserListenerHarness = (
@@ -73,6 +34,11 @@ const createBrowserListenerHarness = (
   let focusHandler: (() => void) | null = null;
   let visibilityChangeHandler: (() => void) | null = null;
   let currentVisibilityState = visibilityState;
+  const originalWindowAddEventListener = window.addEventListener.bind(window);
+  const originalWindowRemoveEventListener = window.removeEventListener.bind(window);
+  const originalDocumentAddEventListener = document.addEventListener.bind(document);
+  const originalDocumentRemoveEventListener = document.removeEventListener.bind(document);
+  const originalVisibilityState = Object.getOwnPropertyDescriptor(document, "visibilityState");
 
   const addWindowEventListener = mock(
     (event: string, handler: EventListenerOrEventListenerObject) => {
@@ -90,18 +56,30 @@ const createBrowserListenerHarness = (
     },
   );
   const removeDocumentEventListener = mock(() => {});
-  const fakeWindow = {
-    addEventListener: addWindowEventListener,
-    removeEventListener: removeWindowEventListener,
-  } as unknown as Window;
-  const fakeDocument = {
-    addEventListener: addDocumentEventListener,
-    removeEventListener: removeDocumentEventListener,
-    get visibilityState() {
+
+  window.addEventListener = addWindowEventListener as typeof window.addEventListener;
+  window.removeEventListener = removeWindowEventListener as typeof window.removeEventListener;
+  document.addEventListener = addDocumentEventListener as typeof document.addEventListener;
+  document.removeEventListener = removeDocumentEventListener as typeof document.removeEventListener;
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get() {
       return currentVisibilityState;
     },
-  } as unknown as Document;
-  const restoreBrowserGlobals = mockBrowserGlobals(fakeWindow, fakeDocument);
+  });
+
+  const restoreBrowserGlobals = () => {
+    window.addEventListener = originalWindowAddEventListener;
+    window.removeEventListener = originalWindowRemoveEventListener;
+    document.addEventListener = originalDocumentAddEventListener;
+    document.removeEventListener = originalDocumentRemoveEventListener;
+
+    if (originalVisibilityState) {
+      Object.defineProperty(document, "visibilityState", originalVisibilityState);
+    } else {
+      Reflect.deleteProperty(document, "visibilityState");
+    }
+  };
 
   return {
     addWindowEventListener,
@@ -170,30 +148,23 @@ const createHookHarness = (initialArgs: HookArgs) => {
     return null;
   };
 
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
+  const sharedHarness = createSharedHookHarness(Harness, { args: currentArgs });
 
   return {
     mount: async () => {
-      await act(async () => {
-        renderer = TestRenderer.create(createElement(Harness, { args: currentArgs }));
-      });
-      await flush();
+      await sharedHarness.mount();
     },
     updateArgs: async (nextArgs: HookArgs) => {
       currentArgs = nextArgs;
-      await act(async () => {
-        renderer?.update(createElement(Harness, { args: currentArgs }));
-      });
-      await flush();
+      await sharedHarness.update({ args: currentArgs });
     },
     run: async (fn: (value: ReturnType<typeof useWorkspaceOperations>) => Promise<void> | void) => {
       if (!latest) {
         throw new Error("Hook not mounted");
       }
-      await act(async () => {
+      await sharedHarness.run(async () => {
         await fn(latest as ReturnType<typeof useWorkspaceOperations>);
       });
-      await flush();
     },
     getLatest: () => {
       if (!latest) {
@@ -202,10 +173,7 @@ const createHookHarness = (initialArgs: HookArgs) => {
       return latest;
     },
     unmount: async () => {
-      await act(async () => {
-        renderer?.unmount();
-      });
-      renderer = null;
+      await sharedHarness.unmount();
     },
   };
 };
@@ -279,11 +247,11 @@ describe("use-workspace-operations", () => {
       });
     };
 
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let rendered: RenderResult | null = null;
 
     try {
       await act(async () => {
-        renderer = TestRenderer.create(createElement(Harness, { args: currentArgs }));
+        rendered = render(createElement(Harness, { args: currentArgs }));
       });
       await flush();
 
@@ -293,9 +261,15 @@ describe("use-workspace-operations", () => {
       };
 
       await act(async () => {
-        renderer?.update(createElement(Harness, { args: currentArgs }));
+        rendered?.rerender(createElement(Harness, { args: currentArgs }));
       });
       await flush();
+      await waitFor(() => {
+        expect(latest?.activeBranch).toEqual({
+          name: "main",
+          detached: false,
+        });
+      });
 
       if (!latest) {
         throw new Error("Hook not mounted");
@@ -321,9 +295,7 @@ describe("use-workspace-operations", () => {
       ]);
       expect(latestValue.isLoadingBranches).toBe(false);
     } finally {
-      await act(async () => {
-        renderer?.unmount();
-      });
+      (rendered as RenderResult | null)?.unmount();
       host.gitGetCurrentBranch = originalGitGetCurrentBranch;
       host.gitGetBranches = originalGitGetBranches;
     }
@@ -603,11 +575,11 @@ describe("use-workspace-operations", () => {
       return null;
     };
 
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let rendered: RenderResult | null = null;
 
     try {
       await act(async () => {
-        renderer = TestRenderer.create(createElement(Harness));
+        rendered = render(createElement(Harness));
       });
       await flush();
 
@@ -668,9 +640,7 @@ describe("use-workspace-operations", () => {
       ]);
     } finally {
       workspaceSelectDeferred.resolve(workspace("/repo-a", true));
-      await act(async () => {
-        renderer?.unmount();
-      });
+      (rendered as RenderResult | null)?.unmount();
       host.workspaceSelect = originalWorkspaceSelect;
       host.workspaceList = originalWorkspaceList;
       host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
@@ -889,11 +859,11 @@ describe("use-workspace-operations", () => {
       return null;
     };
 
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let rendered: RenderResult | null = null;
 
     try {
       await act(async () => {
-        renderer = TestRenderer.create(createElement(Harness));
+        rendered = render(createElement(Harness));
       });
       await flush();
 
@@ -940,9 +910,7 @@ describe("use-workspace-operations", () => {
         workspace("/repo-a", true),
       ]);
     } finally {
-      await act(async () => {
-        renderer?.unmount();
-      });
+      (rendered as RenderResult | null)?.unmount();
       host.workspaceSelect = originalWorkspaceSelect;
       host.workspaceList = originalWorkspaceList;
       host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;

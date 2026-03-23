@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { host } from "@/state/operations/host";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -71,8 +72,31 @@ afterAll(() => {
   mock.restore();
 });
 
+const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+
 beforeEach(() => {
   toastErrorMock.mockClear();
+  host.workspaceGetRepoConfig = async () =>
+    ({
+      promptOverrides: {},
+    }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
+  host.workspaceGetSettingsSnapshot = async () => ({
+    theme: "light" as const,
+    git: {
+      defaultMergeMethod: "merge_commit",
+    },
+    chat: {
+      showThinkingMessages: false,
+    },
+    repos: {},
+    globalPromptOverrides: {},
+  });
+});
+
+afterEach(() => {
+  host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+  host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
 });
 
 describe("useAgentStudioFreshSessionCreation", () => {

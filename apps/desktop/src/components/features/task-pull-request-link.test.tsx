@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
-import { act, create } from "react-test-renderer";
 
 (
   globalThis as typeof globalThis & {
@@ -29,62 +29,58 @@ describe("TaskPullRequestLink", () => {
 
   test("opens the pull request URL when clicked", async () => {
     const { TaskPullRequestLink } = await import("./task-pull-request-link");
-    let renderer!: ReturnType<typeof create>;
-    await act(async () => {
-      renderer = create(
-        createElement(TaskPullRequestLink, {
-          pullRequest: {
-            providerId: "github",
-            number: 110,
-            url: "https://github.com/openai/openducktor/pull/110",
-            state: "open",
-            createdAt: "2026-03-12T12:24:09Z",
-            updatedAt: "2026-03-12T12:24:09Z",
-            lastSyncedAt: undefined,
-            mergedAt: undefined,
-            closedAt: undefined,
-          },
-        }),
-      );
-    });
+    const rendered = render(
+      createElement(TaskPullRequestLink, {
+        pullRequest: {
+          providerId: "github",
+          number: 110,
+          url: "https://github.com/openai/openducktor/pull/110",
+          state: "open",
+          createdAt: "2026-03-12T12:24:09Z",
+          updatedAt: "2026-03-12T12:24:09Z",
+          lastSyncedAt: undefined,
+          mergedAt: undefined,
+          closedAt: undefined,
+        },
+      }),
+    );
 
-    const button = renderer.root.findByType("button");
-    await act(async () => {
-      button.props.onClick();
-    });
+    fireEvent.click(rendered.getByRole("button"));
 
     expect(openExternalUrlMock).toHaveBeenCalledWith(
       "https://github.com/openai/openducktor/pull/110",
     );
+    rendered.unmount();
   });
 
   test("uses merged styling for merged pull requests", async () => {
     const { TaskPullRequestLink } = await import("./task-pull-request-link");
-    let renderer!: ReturnType<typeof create>;
-    await act(async () => {
-      renderer = create(
-        createElement(TaskPullRequestLink, {
-          pullRequest: {
-            providerId: "github",
-            number: 110,
-            url: "https://github.com/openai/openducktor/pull/110",
-            state: "merged",
-            createdAt: "2026-03-12T12:24:09Z",
-            updatedAt: "2026-03-12T12:24:09Z",
-            lastSyncedAt: undefined,
-            mergedAt: "2026-03-12T12:30:00Z",
-            closedAt: undefined,
-          },
-        }),
-      );
-    });
+    const rendered = render(
+      createElement(TaskPullRequestLink, {
+        pullRequest: {
+          providerId: "github",
+          number: 110,
+          url: "https://github.com/openai/openducktor/pull/110",
+          state: "merged",
+          createdAt: "2026-03-12T12:24:09Z",
+          updatedAt: "2026-03-12T12:24:09Z",
+          lastSyncedAt: undefined,
+          mergedAt: "2026-03-12T12:30:00Z",
+          closedAt: undefined,
+        },
+      }),
+    );
 
-    const button = renderer.root.findByType("button");
-    expect(button.props.className).toContain("border-border");
-    expect(button.props.className).toContain("bg-card");
-    const styledChildren = renderer.root.findAll(
-      (node) => typeof node.props.className === "string" && node.props.className.includes("violet"),
+    const button = rendered.getByRole("button");
+    if (!button) {
+      throw new Error("Expected pull request button");
+    }
+    expect(button.className).toContain("border-border");
+    expect(button.className).toContain("bg-card");
+    const styledChildren = Array.from(rendered.container.querySelectorAll("*")).filter((node) =>
+      node.className.includes("violet"),
     );
     expect(styledChildren.length).toBeGreaterThan(0);
+    rendered.unmount();
   });
 });

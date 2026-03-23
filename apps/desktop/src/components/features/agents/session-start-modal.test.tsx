@@ -1,7 +1,17 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import type { SessionStartModalModel } from "./session-start-modal";
+
+const omitDialogDomProps = ({
+  onOpenChange: _onOpenChange,
+  open: _open,
+  ...props
+}: {
+  onOpenChange?: unknown;
+  open?: unknown;
+  [key: string]: unknown;
+}) => props;
 
 const reactActEnvironment = globalThis as {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -19,19 +29,19 @@ mock.module("@/components/ui/combobox", () => ({
 
 mock.module("@/components/ui/dialog", () => ({
   Dialog: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("mock-dialog", props, children),
+    createElement("mock-dialog", omitDialogDomProps(props), children),
   DialogBody: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
+    createElement("div", omitDialogDomProps(props), children),
   DialogContent: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
+    createElement("div", omitDialogDomProps(props), children),
   DialogDescription: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("p", props, children),
+    createElement("p", omitDialogDomProps(props), children),
   DialogFooter: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
+    createElement("div", omitDialogDomProps(props), children),
   DialogHeader: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
+    createElement("div", omitDialogDomProps(props), children),
   DialogTitle: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("h2", props, children),
+    createElement("h2", omitDialogDomProps(props), children),
 }));
 
 const noop = () => {};
@@ -85,25 +95,27 @@ describe("SessionStartModal", () => {
     mock.restore();
   });
 
-  test("uses a form action instead of an onSubmit preventDefault handler", () => {
-    let renderer!: ReactTestRenderer;
+  test("submits through the form action", () => {
+    const onConfirm = mock(() => {});
+    const { container, unmount } = render(
+      createElement(SessionStartModal, { model: createModel({ onConfirm }) }),
+    );
 
-    act(() => {
-      renderer = create(createElement(SessionStartModal, { model: createModel() }));
+    const form = container.querySelector("form");
+    if (!form) {
+      throw new Error("Expected form element");
+    }
+
+    fireEvent.submit(form);
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      runInBackground: false,
+      startMode: "fresh",
+      sourceSessionId: null,
     });
 
-    const form = renderer.root.findByType("form");
-    expect(typeof form.props.action).toBe("function");
-    expect(form.props.onSubmit).toBeUndefined();
+    expect(screen.getByRole("button", { name: /start session/i })).toBeTruthy();
 
-    const submitButton = renderer.root.findAllByType("button").find((button) => {
-      return button.props.type === "submit";
-    });
-
-    expect(submitButton?.children.join("")).toContain("Start session");
-
-    act(() => {
-      renderer.unmount();
-    });
+    unmount();
   });
 });

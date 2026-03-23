@@ -4,9 +4,9 @@ import {
   type RepoConfig,
   type RepoPromptOverrides,
 } from "@openducktor/contracts";
-import { isValidElement, type ReactElement } from "react";
+import { type RenderResult, render } from "@testing-library/react";
+import { act, isValidElement, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
@@ -17,6 +17,8 @@ import {
 } from "../agents/agent-studio-test-utils";
 
 enableReactActEnvironment();
+
+const originalConsoleError = console.error;
 
 const startAgentSessionMock = mock(async () => "session-1");
 const sendAgentMessageMock = mock(async () => {});
@@ -186,7 +188,7 @@ const createRepoConfigFixture = (promptOverrides: RepoPromptOverrides = {}): Rep
   },
 });
 
-const renderPage = async (): Promise<ReactTestRenderer> => {
+const renderPage = async (): Promise<RenderResult> => {
   const { KanbanPage } = await import("./kanban-page");
   const LocationProbe = (): ReactElement | null => {
     const location = useLocation();
@@ -194,18 +196,14 @@ const renderPage = async (): Promise<ReactTestRenderer> => {
     return null;
   };
 
-  let renderer!: ReactTestRenderer;
-  await act(async () => {
-    renderer = create(
-      <QueryProvider useIsolatedClient>
-        <MemoryRouter initialEntries={["/"]}>
-          <LocationProbe />
-          <KanbanPage />
-        </MemoryRouter>
-      </QueryProvider>,
-    );
-  });
-  return renderer;
+  return render(
+    <QueryProvider useIsolatedClient>
+      <MemoryRouter initialEntries={["/"]}>
+        <LocationProbe />
+        <KanbanPage />
+      </MemoryRouter>
+    </QueryProvider>,
+  );
 };
 
 // Double Promise.resolve() intentionally flushes React's queued microtasks and batched updates.
@@ -273,6 +271,10 @@ describe("KanbanPage session start modal flow", () => {
         latestSessionStartModalModel = model;
         return null;
       },
+    }));
+
+    mock.module("./task-approval-modal", () => ({
+      TaskApprovalModal: (): ReactElement | null => null,
     }));
 
     mock.module("@/components/features/pull-requests/merged-pull-request-confirm-dialog", () => ({
@@ -440,6 +442,7 @@ describe("KanbanPage session start modal flow", () => {
   });
 
   afterAll(() => {
+    console.error = originalConsoleError;
     mock.restore();
   });
 
@@ -513,15 +516,13 @@ describe("KanbanPage session start modal flow", () => {
     if (!isValidElement(toastDescription)) {
       throw new Error("Expected background toast description to render an action element.");
     }
-    let toastDescriptionRenderer!: ReactTestRenderer;
+    const toastDescriptionRender = render(toastDescription);
+    const actionButton = toastDescriptionRender.container.querySelector("button");
+    if (!actionButton) {
+      throw new Error("Expected background toast action button.");
+    }
     await act(async () => {
-      toastDescriptionRenderer = create(toastDescription);
-    });
-
-    const actionButton = toastDescriptionRenderer.root.findByType("button");
-    expect(typeof actionButton.props.onClick).toBe("function");
-    await act(async () => {
-      actionButton.props.onClick();
+      actionButton.click();
       await Promise.resolve();
     });
     expect(latestLocation).toContain("/agents?task=TASK-123");
@@ -529,9 +530,7 @@ describe("KanbanPage session start modal flow", () => {
     expect(latestLocation).toContain("agent=build");
     expect(latestLocation).toContain("scenario=build_implementation_start");
 
-    await act(async () => {
-      toastDescriptionRenderer.unmount();
-    });
+    toastDescriptionRender.unmount();
 
     await act(async () => {
       renderer.unmount();

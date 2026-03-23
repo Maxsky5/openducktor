@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { createElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, createElement } from "react";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 
@@ -10,7 +10,6 @@ import { AgentSessionQuestionCard } from "./agent-session-question-card";
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const TEST_RENDERER_DEPRECATION_WARNING = "react-test-renderer is deprecated";
 const originalConsoleError = console.error;
 
 type CardProps = React.ComponentProps<typeof AgentSessionQuestionCard>;
@@ -31,76 +30,37 @@ const buildRequest = (overrides: Partial<AgentQuestionRequest> = {}): AgentQuest
   ...overrides,
 });
 
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-};
-
-const nodeText = (node: TestRenderer.ReactTestInstance): string => {
-  return node.children
-    .map((child) => {
-      if (typeof child === "string") {
-        return child;
-      }
-      return nodeText(child);
-    })
-    .join("");
-};
-
 const createCardHarness = (props: CardProps) => {
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
+  let rendered: ReturnType<typeof render> | null = null;
 
   const mount = async (): Promise<void> => {
-    await act(async () => {
-      renderer = TestRenderer.create(createElement(AgentSessionQuestionCard, props));
-      await flush();
-    });
+    rendered = render(createElement(AgentSessionQuestionCard, props));
   };
 
   const unmount = async (): Promise<void> => {
-    await act(async () => {
-      renderer?.unmount();
-      await flush();
-    });
+    rendered?.unmount();
   };
 
   const clickButtonByText = async (label: string, index = 0): Promise<void> => {
-    if (!renderer) {
-      throw new Error("Renderer not mounted");
-    }
-    const button = renderer.root.findAll(
-      (node) =>
-        node.type === "button" &&
-        typeof node.props.onClick === "function" &&
-        nodeText(node).includes(label),
-    )[index];
+    const button = screen.getAllByRole("button", { name: new RegExp(label, "i") })[index];
     if (!button) {
       throw new Error(`No button found for label '${label}' at index ${index}`);
     }
     await act(async () => {
-      button.props.onClick();
-      await flush();
+      fireEvent.click(button);
     });
   };
 
   const getButtonDisabled = (label: string): boolean => {
-    if (!renderer) {
-      throw new Error("Renderer not mounted");
-    }
-    const button = renderer.root.find(
-      (node) =>
-        node.type === "button" &&
-        typeof node.props.onClick === "function" &&
-        nodeText(node).includes(label),
-    );
-    return Boolean(button.props.disabled);
+    const button = screen.getByRole("button", { name: new RegExp(label, "i") });
+    return button.hasAttribute("disabled");
   };
 
   const asText = (): string => {
-    if (!renderer) {
+    if (!rendered) {
       throw new Error("Renderer not mounted");
     }
-    return JSON.stringify(renderer.toJSON());
+    return rendered.container.textContent ?? "";
   };
 
   return { mount, unmount, clickButtonByText, getButtonDisabled, asText };
@@ -109,9 +69,6 @@ const createCardHarness = (props: CardProps) => {
 describe("AgentSessionQuestionCard", () => {
   beforeEach(() => {
     console.error = (...args: unknown[]): void => {
-      if (typeof args[0] === "string" && args[0].includes(TEST_RENDERER_DEPRECATION_WARNING)) {
-        return;
-      }
       originalConsoleError(...args);
     };
   });
@@ -201,7 +158,9 @@ describe("AgentSessionQuestionCard", () => {
 
     await harness.clickButtonByText("Frontend");
     await harness.clickButtonByText("Confirm Answers");
-    expect(harness.asText()).toContain("Submission exploded");
+    await waitFor(() => {
+      expect(harness.asText()).toContain("Submission exploded");
+    });
 
     await harness.clickButtonByText("Frontend");
     expect(harness.asText()).not.toContain("Submission exploded");

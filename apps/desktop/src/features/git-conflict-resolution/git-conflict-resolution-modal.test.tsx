@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { ReactElement } from "react";
-import { createElement } from "react";
-import TestRenderer, { act, type ReactTestRenderer } from "react-test-renderer";
 import type { GitConflict } from "@/features/agent-studio-git";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { useGitConflictResolutionModalState } from "./git-conflict-resolution-modal";
 import type { PendingGitConflictResolutionRequest } from "./use-git-conflict-resolution";
@@ -62,14 +60,11 @@ const createRequest = (
 
 let latestState: ReturnType<typeof useGitConflictResolutionModalState> | undefined;
 
-const HookHarness = ({
-  request,
-}: {
-  request: PendingGitConflictResolutionRequest;
-}): ReactElement => {
-  latestState = useGitConflictResolutionModalState(request);
-  return createElement("div");
-};
+const createHarness = (request: PendingGitConflictResolutionRequest) =>
+  createSharedHookHarness((currentRequest: PendingGitConflictResolutionRequest) => {
+    latestState = useGitConflictResolutionModalState(currentRequest);
+    return null;
+  }, request);
 
 describe("git-conflict-resolution-modal", () => {
   beforeEach(() => {
@@ -81,20 +76,18 @@ describe("git-conflict-resolution-modal", () => {
       defaultSessionId: " missing-session ",
     });
 
-    let renderer: ReactTestRenderer | null = null;
-    await act(async () => {
-      renderer = TestRenderer.create(createElement(HookHarness, { request }));
-    });
+    const harness = createHarness(request);
+    await harness.mount();
 
-    if (!renderer || !latestState) {
-      throw new Error("Expected conflict-resolution modal harness to mount");
+    try {
+      if (!latestState) {
+        throw new Error("Expected conflict-resolution modal harness to mount");
+      }
+
+      expect(latestState.confirmDisabled).toBe(true);
+    } finally {
+      await harness.unmount();
     }
-
-    expect(latestState.confirmDisabled).toBe(true);
-
-    await act(async () => {
-      renderer?.unmount();
-    });
   });
 
   test("reconciles state against the latest request before applying updates", async () => {
@@ -106,34 +99,29 @@ describe("git-conflict-resolution-modal", () => {
       builderSessions: [builderSession("session-3")],
     });
 
-    let renderer: ReactTestRenderer | null = null;
-    await act(async () => {
-      renderer = TestRenderer.create(createElement(HookHarness, { request: firstRequest }));
-    });
+    const harness = createHarness(firstRequest);
+    await harness.mount();
 
-    if (!renderer || !latestState) {
-      throw new Error("Expected conflict-resolution modal harness to mount");
+    try {
+      if (!latestState) {
+        throw new Error("Expected conflict-resolution modal harness to mount");
+      }
+
+      await harness.update(secondRequest);
+      await harness.run(() => {
+        latestState?.setSelectedSessionId("session-3");
+      });
+      await harness.update(secondRequest);
+
+      if (!latestState) {
+        throw new Error("Expected latest conflict-resolution modal state");
+      }
+
+      expect(latestState.mode).toBe("new");
+      expect(latestState.selectedSessionId).toBe("session-3");
+      expect(latestState.confirmDisabled).toBe(false);
+    } finally {
+      await harness.unmount();
     }
-
-    await act(async () => {
-      renderer?.update(createElement(HookHarness, { request: secondRequest }));
-    });
-
-    await act(async () => {
-      latestState?.setSelectedSessionId("session-3");
-      renderer?.update(createElement(HookHarness, { request: secondRequest }));
-    });
-
-    if (!latestState) {
-      throw new Error("Expected latest conflict-resolution modal state");
-    }
-
-    expect(latestState.mode).toBe("new");
-    expect(latestState.selectedSessionId).toBe("session-3");
-    expect(latestState.confirmDisabled).toBe(false);
-
-    await act(async () => {
-      renderer?.unmount();
-    });
   });
 });

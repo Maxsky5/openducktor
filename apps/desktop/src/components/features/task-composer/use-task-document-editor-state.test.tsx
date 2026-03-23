@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createElement, type ReactElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   type TaskDocumentSection,
   useTaskDocumentEditorState,
@@ -11,11 +10,9 @@ const reactActEnvironment = globalThis as typeof globalThis & {
 };
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
-const TEST_RENDERER_DEPRECATION_WARNING = "react-test-renderer is deprecated";
 const originalConsoleError = console.error;
 
 type HookArgs = Parameters<typeof useTaskDocumentEditorState>[0];
-type HookState = ReturnType<typeof useTaskDocumentEditorState>;
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -33,83 +30,8 @@ const createDeferred = <T,>(): Deferred<T> => {
   return { promise, resolve, reject };
 };
 
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-};
-
 const createHookHarness = (initialProps: HookArgs) => {
-  let latest: HookState | null = null;
-
-  const Harness = (props: HookArgs): ReactElement | null => {
-    latest = useTaskDocumentEditorState(props);
-    return null;
-  };
-
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
-
-  const mount = async (): Promise<void> => {
-    await act(async () => {
-      renderer = TestRenderer.create(createElement(Harness, initialProps));
-      await flush();
-    });
-  };
-
-  const update = async (nextProps: HookArgs): Promise<void> => {
-    if (!renderer) {
-      throw new Error("Renderer not mounted");
-    }
-    await act(async () => {
-      renderer?.update(createElement(Harness, nextProps));
-      await flush();
-    });
-  };
-
-  const run = async (fn: () => Promise<void> | void): Promise<void> => {
-    await act(async () => {
-      await fn();
-      await flush();
-    });
-  };
-
-  const getLatest = (): HookState => {
-    if (!latest) {
-      throw new Error("Hook state not available");
-    }
-    return latest;
-  };
-
-  const waitFor = async (
-    predicate: (state: HookState) => boolean,
-    timeoutMs = 500,
-  ): Promise<void> => {
-    const startTime = Date.now();
-    while (Date.now() - startTime < timeoutMs) {
-      const state = latest;
-      if (state && predicate(state)) {
-        return;
-      }
-
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 5));
-        await flush();
-      });
-    }
-
-    throw new Error("Timed out waiting for hook state");
-  };
-
-  const unmount = async (): Promise<void> => {
-    if (!renderer) {
-      return;
-    }
-    await act(async () => {
-      renderer?.unmount();
-      await flush();
-    });
-  };
-
-  return { mount, update, run, getLatest, waitFor, unmount };
+  return createSharedHookHarness(useTaskDocumentEditorState, initialProps);
 };
 
 const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
@@ -124,10 +46,6 @@ const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 describe("useTaskDocumentEditorState", () => {
   beforeEach(() => {
     console.error = (...args: unknown[]): void => {
-      if (typeof args[0] === "string" && args[0].includes(TEST_RENDERER_DEPRECATION_WARNING)) {
-        return;
-      }
-
       originalConsoleError(...args);
     };
   });
@@ -229,7 +147,6 @@ describe("useTaskDocumentEditorState", () => {
 
     await harness.run(async () => {
       second.resolve({ markdown: "# Task 2", updatedAt: "2026-02-20T11:00:00Z" });
-      await flush();
     });
     await harness.waitFor((state) => state.documents.spec.serverMarkdown === "# Task 2");
 
@@ -237,7 +154,6 @@ describe("useTaskDocumentEditorState", () => {
 
     await harness.run(async () => {
       first.resolve({ markdown: "# Task 1", updatedAt: "2026-02-20T10:00:00Z" });
-      await flush();
     });
 
     expect(harness.getLatest().documents.spec.serverMarkdown).toBe("# Task 2");

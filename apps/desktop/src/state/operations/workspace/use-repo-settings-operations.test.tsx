@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { agentPromptTemplateIdValues } from "@openducktor/contracts";
-import { createElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import type { PropsWithChildren, ReactElement } from "react";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { host } from "../shared/host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
@@ -13,41 +13,35 @@ const reactActEnvironment = globalThis as typeof globalThis & {
 };
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-};
-
 type HookArgs = Parameters<typeof useRepoSettingsOperations>[0];
 type HookResult = ReturnType<typeof useRepoSettingsOperations>;
 
 const createHookHarness = (initialArgs: HookArgs) => {
   let latest: HookResult | null = null;
+  const currentArgs = initialArgs;
 
   const Harness = ({ args }: { args: HookArgs }) => {
     latest = useRepoSettingsOperations(args);
     return null;
   };
 
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
+  const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+    <QueryProvider>{children}</QueryProvider>
+  );
+
+  const sharedHarness = createSharedHookHarness(Harness, { args: currentArgs }, { wrapper });
 
   return {
     mount: async () => {
-      await act(async () => {
-        renderer = TestRenderer.create(
-          createElement(QueryProvider, undefined, createElement(Harness, { args: initialArgs })),
-        );
-      });
-      await flush();
+      await sharedHarness.mount();
     },
     run: async (fn: (value: HookResult) => Promise<void> | void) => {
       if (!latest) {
         throw new Error("Hook not mounted");
       }
-      await act(async () => {
+      await sharedHarness.run(async () => {
         await fn(latest as HookResult);
       });
-      await flush();
     },
     getLatest: () => {
       if (!latest) {
@@ -56,10 +50,7 @@ const createHookHarness = (initialArgs: HookArgs) => {
       return latest;
     },
     unmount: async () => {
-      await act(async () => {
-        renderer?.unmount();
-      });
-      renderer = null;
+      await sharedHarness.unmount();
     },
   };
 };

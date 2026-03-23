@@ -1,13 +1,20 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 
 enableReactActEnvironment();
 
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
+const omitDialogDomProps = (props: Record<string, unknown>): Record<string, unknown> => {
+  const {
+    closeButton: _closeButton,
+    onEscapeKeyDown: _onEscapeKeyDown,
+    onPointerDownOutside: _onPointerDownOutside,
+    onOpenChange: _onOpenChange,
+    ...domProps
+  } = props;
+
+  return domProps;
 };
 
 const pickRepositoryDirectoryMock = mock(async (): Promise<string | null> => "/repo");
@@ -56,24 +63,24 @@ describe("OpenRepositoryModal", () => {
 
     mock.module("@/components/ui/dialog", () => ({
       Dialog: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", props, children),
+        createElement("div", omitDialogDomProps(props), children),
       DialogBody: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", props, children),
+        createElement("div", omitDialogDomProps(props), children),
       DialogContent: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", props, children),
+        createElement("div", omitDialogDomProps(props), children),
       DialogDescription: ({
         children,
         ...props
       }: {
         children: ReactNode;
         [key: string]: unknown;
-      }) => createElement("p", props, children),
+      }) => createElement("p", omitDialogDomProps(props), children),
       DialogFooter: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", props, children),
+        createElement("div", omitDialogDomProps(props), children),
       DialogHeader: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", props, children),
+        createElement("div", omitDialogDomProps(props), children),
       DialogTitle: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("h2", props, children),
+        createElement("h2", omitDialogDomProps(props), children),
     }));
 
     ({ OpenRepositoryModal } = await import("./open-repository-modal"));
@@ -89,30 +96,25 @@ describe("OpenRepositoryModal", () => {
       throw "bd not found in PATH";
     });
 
-    let renderer!: ReactTestRenderer;
+    const { container, unmount } = render(
+      createElement(OpenRepositoryModal, {
+        open: true,
+        canClose: false,
+        onOpenChange: () => {},
+      }),
+    );
 
-    await act(async () => {
-      renderer = create(
-        createElement(OpenRepositoryModal, {
-          open: true,
-          canClose: false,
-          onOpenChange: () => {},
-        }),
-      );
-      await flush();
-    });
-
-    const primaryButton = renderer.root.findAllByType("button")[0];
+    const primaryButton = container.querySelector("button");
     if (!primaryButton) {
       throw new Error("Primary button not found");
     }
 
-    await act(async () => {
-      primaryButton.props.onClick();
-      await flush();
+    fireEvent.click(primaryButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/bd not found in path/i)).toBeTruthy();
     });
 
-    const tree = JSON.stringify(renderer.toJSON());
-    expect(tree).toContain("bd not found in PATH");
+    unmount();
   });
 });
