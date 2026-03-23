@@ -991,6 +991,62 @@ fn list_tasks_filters_events_and_populates_subtask_ids() -> Result<()> {
 }
 
 #[test]
+fn list_tasks_marks_qa_report_present_when_latest_markdown_is_empty() -> Result<()> {
+    let repo = RepoFixture::new("list-qa-empty-markdown");
+    let payload = json!([issue_value(
+        "task-qa-empty",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "qaRequired": true,
+                "documents": {
+                    "qaReports": [
+                        {
+                            "markdown": "previous qa",
+                            "verdict": "approved",
+                            "updatedAt": "2026-02-20T09:00:00Z",
+                            "updatedBy": "qa-agent",
+                            "sourceTool": "qa_approved",
+                            "revision": 1
+                        },
+                        {
+                            "markdown": "   ",
+                            "verdict": "rejected",
+                            "updatedAt": "2026-02-20T10:00:00Z",
+                            "updatedBy": "qa-agent",
+                            "sourceTool": "qa_rejected",
+                            "revision": 2
+                        }
+                    ]
+                }
+            }
+        })),
+    )]);
+
+    let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(payload.to_string()))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let tasks = store.list_tasks(repo.path())?;
+    assert_eq!(tasks.len(), 1);
+
+    let task = &tasks[0];
+    assert!(task.document_summary.qa_report.has);
+    assert_eq!(
+        task.document_summary.qa_report.updated_at.as_deref(),
+        Some("2026-02-20T10:00:00Z")
+    );
+    assert_eq!(
+        task.document_summary.qa_report.verdict,
+        host_domain::QaWorkflowVerdict::Rejected
+    );
+
+    Ok(())
+}
+
+#[test]
 fn list_tasks_uses_short_lived_repo_cache() -> Result<()> {
     let repo = RepoFixture::new("list-cache-hit");
     let payload = json!([issue_value("task-1", "open", "task", None, json!([]), None)]);
