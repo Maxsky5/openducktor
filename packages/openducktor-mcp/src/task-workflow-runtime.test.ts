@@ -26,6 +26,11 @@ const createTaskCard = (input: TaskCardFixtureInput) => ({
   status: input.status,
   issueType: input.issueType,
   aiReviewEnabled: input.aiReviewEnabled,
+  documentSummary: {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" as const },
+  },
 });
 
 const makeIssue = (input: { id?: string; status?: string; metadata?: unknown }) => ({

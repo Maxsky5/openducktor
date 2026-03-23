@@ -10,7 +10,7 @@ export type { IssueType, PlanSubtaskInput, QaReportVerdict, TaskStatus };
 
 export type TaskCard = Pick<
   CanonicalTaskCard,
-  "id" | "title" | "status" | "issueType" | "aiReviewEnabled"
+  "id" | "title" | "status" | "issueType" | "aiReviewEnabled" | "documentSummary"
 > & {
   description?: CanonicalTaskCard["description"];
   parentId?: string;

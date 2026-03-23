@@ -53,6 +53,215 @@ describe("task mapping entry parsers", () => {
     });
   });
 
+  test("issueToTaskCard maps document summary with latest QA rejected verdict", () => {
+    const issue: RawIssue = {
+      id: "task-qa-rejected",
+      title: "Carry QA summary",
+      status: "ai_review",
+      issue_type: "task",
+      metadata: {
+        openducktor: {
+          documents: {
+            spec: [
+              {
+                markdown: "# Spec",
+                updatedAt: "2026-02-28T00:00:00Z",
+                updatedBy: "planner",
+                sourceTool: "odt_set_spec",
+                revision: 1,
+              },
+            ],
+            implementationPlan: [
+              {
+                markdown: "# Plan",
+                updatedAt: "2026-02-28T01:00:00Z",
+                updatedBy: "planner",
+                sourceTool: "odt_set_plan",
+                revision: 1,
+              },
+            ],
+            qaReports: [
+              {
+                markdown: "",
+                verdict: "approved",
+                updatedAt: "2026-02-28T02:00:00Z",
+                updatedBy: "qa",
+                sourceTool: "odt_qa_approved",
+                revision: 1,
+              },
+              {
+                markdown: "Needs changes",
+                verdict: "rejected",
+                updatedAt: "2026-02-28T03:00:00Z",
+                updatedBy: "qa",
+                sourceTool: "odt_qa_rejected",
+                revision: 2,
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    expect(issueToTaskCard(issue, "openducktor")).toMatchObject({
+      id: "task-qa-rejected",
+      documentSummary: {
+        spec: {
+          has: true,
+          updatedAt: "2026-02-28T00:00:00Z",
+        },
+        plan: {
+          has: true,
+          updatedAt: "2026-02-28T01:00:00Z",
+        },
+        qaReport: {
+          has: true,
+          updatedAt: "2026-02-28T03:00:00Z",
+          verdict: "rejected",
+        },
+      },
+    });
+  });
+
+  test("issueToTaskCard maps document summary with latest QA approved verdict", () => {
+    const issue: RawIssue = {
+      id: "task-qa-approved",
+      title: "Carry QA approved summary",
+      status: "ai_review",
+      issue_type: "task",
+      metadata: {
+        openducktor: {
+          documents: {
+            qaReports: [
+              {
+                markdown: "Needs fixes first",
+                verdict: "rejected",
+                updatedAt: "2026-02-28T04:00:00Z",
+                updatedBy: "qa",
+                sourceTool: "odt_qa_rejected",
+                revision: 1,
+              },
+              {
+                markdown: "Looks good now",
+                verdict: "approved",
+                updatedAt: "2026-02-28T05:00:00Z",
+                updatedBy: "qa",
+                sourceTool: "odt_qa_approved",
+                revision: 2,
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    expect(issueToTaskCard(issue, "openducktor")).toMatchObject({
+      id: "task-qa-approved",
+      documentSummary: {
+        spec: {
+          has: false,
+        },
+        plan: {
+          has: false,
+        },
+        qaReport: {
+          has: true,
+          updatedAt: "2026-02-28T05:00:00Z",
+          verdict: "approved",
+        },
+      },
+    });
+  });
+
+  test("issueToTaskCard keeps latest QA verdict when latest QA markdown is empty", () => {
+    const issue: RawIssue = {
+      id: "task-qa-empty-latest",
+      title: "Carry QA verdict without content",
+      status: "ai_review",
+      issue_type: "task",
+      metadata: {
+        openducktor: {
+          documents: {
+            qaReports: [
+              {
+                markdown: "Has content",
+                verdict: "approved",
+                updatedAt: "2026-02-28T06:00:00Z",
+                updatedBy: "qa",
+                sourceTool: "odt_qa_approved",
+                revision: 1,
+              },
+              {
+                markdown: "   ",
+                verdict: "rejected",
+                updatedAt: "2026-02-28T07:00:00Z",
+                updatedBy: "qa",
+                sourceTool: "odt_qa_rejected",
+                revision: 2,
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    expect(issueToTaskCard(issue, "openducktor")).toMatchObject({
+      id: "task-qa-empty-latest",
+      documentSummary: {
+        spec: {
+          has: false,
+        },
+        plan: {
+          has: false,
+        },
+        qaReport: {
+          has: false,
+          verdict: "rejected",
+        },
+      },
+    });
+  });
+
+  test("issueToTaskCard defaults QA summary to not_reviewed when no QA metadata exists", () => {
+    const issue: RawIssue = {
+      id: "task-qa-missing",
+      title: "No QA yet",
+      status: "ready_for_dev",
+      issue_type: "task",
+      metadata: {
+        openducktor: {
+          documents: {
+            spec: [
+              {
+                markdown: "",
+                updatedAt: "2026-02-28T00:00:00Z",
+                updatedBy: "planner",
+                sourceTool: "odt_set_spec",
+                revision: 1,
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    expect(issueToTaskCard(issue, "openducktor")).toMatchObject({
+      id: "task-qa-missing",
+      documentSummary: {
+        spec: {
+          has: false,
+        },
+        plan: {
+          has: false,
+        },
+        qaReport: {
+          has: false,
+          verdict: "not_reviewed",
+        },
+      },
+    });
+  });
+
   test("issueToPublicTask rejects invalid Beads created_at timestamps", () => {
     const issue: RawIssue = {
       id: "task-11",

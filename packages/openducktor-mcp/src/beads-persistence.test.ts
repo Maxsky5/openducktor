@@ -153,6 +153,11 @@ describe("BeadsPersistence", () => {
         status: "in_progress",
         issueType: "feature",
         aiReviewEnabled: false,
+        documentSummary: {
+          spec: { has: false },
+          plan: { has: false },
+          qaReport: { has: false, verdict: "not_reviewed" },
+        },
       },
     ]);
     expect(state.calls).toEqual([["list", "--all", "--limit", "0"]]);
@@ -271,6 +276,11 @@ describe("BeadsPersistence", () => {
         status: "open",
         issueType: "task",
         aiReviewEnabled: true,
+        documentSummary: {
+          spec: { has: false },
+          plan: { has: false },
+          qaReport: { has: false, verdict: "not_reviewed" },
+        },
       },
     ]);
   });

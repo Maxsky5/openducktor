@@ -149,6 +149,34 @@ export const issueToTaskCard = (issue: RawIssue, metadataNamespace: string): Tas
   const issueType = parseBeadsIssueType(issue.id, issue.issue_type);
   const root = parseMetadataRoot(issue.metadata);
   const namespace = ensureObject(root[metadataNamespace]);
+  const documents = ensureObject(namespace.documents);
+  const specEntries = parseMarkdownEntries(documents.spec);
+  const planEntries = parseMarkdownEntries(documents.implementationPlan);
+  const qaEntries = parseQaEntries(documents.qaReports);
+
+  const latestSpec = specEntries.length > 0 ? specEntries[specEntries.length - 1] : undefined;
+  const latestPlan = planEntries.length > 0 ? planEntries[planEntries.length - 1] : undefined;
+  const latestQa = qaEntries.length > 0 ? qaEntries[qaEntries.length - 1] : undefined;
+  const specHasContent = typeof latestSpec === "object" && latestSpec.markdown.trim().length > 0;
+  const planHasContent = typeof latestPlan === "object" && latestPlan.markdown.trim().length > 0;
+  const qaHasContent = typeof latestQa === "object" && latestQa.markdown.trim().length > 0;
+
+  const documentSummary: TaskCard["documentSummary"] = {
+    spec: {
+      has: specHasContent,
+      ...(specHasContent ? { updatedAt: latestSpec.updatedAt } : {}),
+    },
+    plan: {
+      has: planHasContent,
+      ...(planHasContent ? { updatedAt: latestPlan.updatedAt } : {}),
+    },
+    qaReport: {
+      has: qaHasContent,
+      ...(qaHasContent ? { updatedAt: latestQa.updatedAt } : {}),
+      verdict: latestQa?.verdict ?? "not_reviewed",
+    },
+  };
+
   const qaRequired =
     typeof namespace.qaRequired === "boolean"
       ? namespace.qaRequired
@@ -163,6 +191,7 @@ export const issueToTaskCard = (issue: RawIssue, metadataNamespace: string): Tas
     status: parseBeadsTaskStatus(issue.id, issue.status),
     issueType,
     aiReviewEnabled: qaRequired,
+    documentSummary,
     ...(parentId ? { parentId } : {}),
   };
 };
