@@ -37,6 +37,7 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(hydrated.runtimeId).toBeNull();
     expect(hydrated.runId).toBeNull();
     expect(hydrated.selectedModel?.modelId).toBe("gpt-5");
+    expect(hydrated.isLoadingModelCatalog).toBe(false);
   });
 
   test("preserves pending input requests across persistence hydration", () => {

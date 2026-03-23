@@ -459,7 +459,7 @@ export const fromPersistedSessionRecord = (
     todos: [],
     modelCatalog: null,
     selectedModel: normalizePersistedSelection(session.selectedModel),
-    isLoadingModelCatalog: true,
+    isLoadingModelCatalog: false,
   };
 };
 
