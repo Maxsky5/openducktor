@@ -410,11 +410,17 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }
   });
 
-  test("stops runtime-backed qa sessions via runtime stop", async () => {
+  test("does not stop shared runtime when build/qa session lacks runId", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
-    adapter.hasSession = () => false;
-    let runtimeStopCalls = 0;
+    const originalStopSession = adapter.stopSession;
+    adapter.hasSession = () => true;
+    let buildStopCalls = 0;
+    let localStopCalls = 0;
+
+    adapter.stopSession = async () => {
+      localStopCalls += 1;
+    };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
@@ -459,16 +465,119 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
-      stopRuntime: async (runtimeId) => {
-        runtimeStopCalls += 1;
-        expect(runtimeId).toBe("runtime-1");
+      stopBuildRun: async () => {
+        buildStopCalls += 1;
       },
     });
 
     try {
       await actions.stopAgentSession("session-1");
-      expect(runtimeStopCalls).toBe(1);
+      expect(buildStopCalls).toBe(0);
+      expect(localStopCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.stopSession = originalStopSession;
+    }
+  });
+
+  test("persists stopped snapshot before reloading host sessions", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    adapter.hasSession = () => false;
+
+    const persistDeferred = createDeferred<void>();
+    const callOrder: string[] = [];
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          runId: "run-1",
+          pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: ["*"] }],
+          pendingQuestions: [
+            {
+              requestId: "question-1",
+              questions: [
+                {
+                  header: "Proceed",
+                  question: "Proceed?",
+                  options: [],
+                  multiple: false,
+                  custom: false,
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    };
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map() },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[sessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {
+        callOrder.push("load-agent-sessions");
+      },
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {
+        callOrder.push("refresh-task-data");
+      },
+      persistSessionSnapshot: async () => {
+        callOrder.push("persist-start");
+        await persistDeferred.promise;
+        callOrder.push("persist-end");
+      },
+      stopBuildRun: async () => {
+        callOrder.push("stop-build-run");
+      },
+      invalidateSessionStopQueries: async () => {
+        callOrder.push("invalidate-stop-queries");
+      },
+    });
+
+    try {
+      const stopPromise = actions.stopAgentSession("session-1");
+      await Promise.resolve();
+
+      expect(callOrder).toEqual(["stop-build-run", "persist-start"]);
+
+      persistDeferred.resolve();
+      await stopPromise;
+
+      const persistEndIndex = callOrder.indexOf("persist-end");
+      expect(persistEndIndex).toBeGreaterThan(-1);
+      expect(callOrder.indexOf("invalidate-stop-queries")).toBeGreaterThan(persistEndIndex);
+      expect(callOrder.indexOf("refresh-task-data")).toBeGreaterThan(persistEndIndex);
+      expect(callOrder.indexOf("load-agent-sessions")).toBeGreaterThan(persistEndIndex);
+      expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+      expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
+      expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
     } finally {
       adapter.hasSession = originalHasSession;
     }

@@ -504,9 +504,6 @@ export function useAgentOrchestratorOperations({
         stopBuildRun: async (runId) => {
           await host.buildStop(runId);
         },
-        stopRuntime: async (runtimeId) => {
-          await host.runtimeStop(runtimeId);
-        },
         invalidateSessionStopQueries,
       }),
     [

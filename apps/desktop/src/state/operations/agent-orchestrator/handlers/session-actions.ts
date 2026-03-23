@@ -44,7 +44,6 @@ type SessionActionsDependencies = {
   refreshTaskData: (repoPath: string) => Promise<void>;
   persistSessionSnapshot: (session: AgentSessionState) => Promise<void>;
   stopBuildRun?: (runId: string) => Promise<void>;
-  stopRuntime?: (runtimeId: string) => Promise<void>;
   invalidateSessionStopQueries?: (input: {
     repoPath: string;
     taskId: string;
@@ -133,9 +132,6 @@ export const createAgentSessionActions = ({
   persistSessionSnapshot,
   stopBuildRun = async () => {
     throw new Error("Build stop operation is unavailable.");
-  },
-  stopRuntime = async () => {
-    throw new Error("Runtime stop operation is unavailable.");
   },
   invalidateSessionStopQueries,
 }: SessionActionsDependencies) => {
@@ -404,8 +400,6 @@ export const createAgentSessionActions = ({
     try {
       if (roleRequiresHostStop && session.runId) {
         await stopBuildRun(session.runId);
-      } else if (roleRequiresHostStop && session.runtimeId) {
-        await stopRuntime(session.runtimeId);
       }
 
       if (hasLocalRuntimeSession) {
@@ -425,9 +419,9 @@ export const createAgentSessionActions = ({
       delete turnModelBySessionRef.current[sessionId];
     }
 
-    updateSession(
-      sessionId,
-      (current) => ({
+    let stoppedSessionSnapshot: AgentSessionState | null = null;
+    updateSession(sessionId, (current) => {
+      const nextSession: AgentSessionState = {
         ...current,
         status: "stopped",
         draftAssistantText: "",
@@ -436,9 +430,14 @@ export const createAgentSessionActions = ({
         draftReasoningMessageId: null,
         pendingPermissions: [],
         pendingQuestions: [],
-      }),
-      { persist: true },
-    );
+      };
+      stoppedSessionSnapshot = nextSession;
+      return nextSession;
+    });
+
+    if (stoppedSessionSnapshot) {
+      await persistSessionSnapshot(stoppedSessionSnapshot);
+    }
 
     if (activeRepo) {
       await Promise.all([
