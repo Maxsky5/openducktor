@@ -74,6 +74,7 @@ afterAll(() => {
 
 const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
 const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
 
 beforeEach(() => {
   toastErrorMock.mockClear();
@@ -92,11 +93,16 @@ beforeEach(() => {
     repos: {},
     globalPromptOverrides: {},
   });
+  host.buildContinuationTargetGet = async () => ({
+    workingDirectory: "/repo/worktrees/task-1",
+    source: "builder_session",
+  });
 });
 
 afterEach(() => {
   host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
   host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+  host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
 });
 
 describe("useAgentStudioFreshSessionCreation", () => {
@@ -130,7 +136,7 @@ describe("useAgentStudioFreshSessionCreation", () => {
     await harness.unmount();
   });
 
-  test("passes builder context when creating a fresh qa session", async () => {
+  test("uses host continuation target for fresh QA builder context", async () => {
     const startAgentSession = mock(async () => "session-qa");
     const harness = createHookHarness(
       createBaseArgs({
@@ -148,7 +154,7 @@ describe("useAgentStudioFreshSessionCreation", () => {
             sessionId: "builder-1",
             role: "build",
             scenario: "build_implementation_start",
-            workingDirectory: "/repo/worktrees/task-1",
+            workingDirectory: "/repo/worktrees/stale-task",
             startedAt: "2026-02-22T09:00:00.000Z",
           }),
         ],
@@ -174,7 +180,6 @@ describe("useAgentStudioFreshSessionCreation", () => {
         role: "qa",
         scenario: "qa_review",
         builderContext: {
-          sessionId: "builder-1",
           workingDirectory: "/repo/worktrees/task-1",
         },
       }),
