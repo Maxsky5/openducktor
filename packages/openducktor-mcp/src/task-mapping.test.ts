@@ -123,6 +123,56 @@ describe("task mapping entry parsers", () => {
     });
   });
 
+  test("issueToTaskCard maps document summary with latest QA approved verdict", () => {
+    const issue: RawIssue = {
+      id: "task-qa-approved",
+      title: "Carry QA approved summary",
+      status: "ai_review",
+      issue_type: "task",
+      metadata: {
+        openducktor: {
+          documents: {
+            qaReports: [
+              {
+                markdown: "Needs fixes first",
+                verdict: "rejected",
+                updatedAt: "2026-02-28T04:00:00Z",
+                updatedBy: "qa",
+                sourceTool: "odt_qa_rejected",
+                revision: 1,
+              },
+              {
+                markdown: "Looks good now",
+                verdict: "approved",
+                updatedAt: "2026-02-28T05:00:00Z",
+                updatedBy: "qa",
+                sourceTool: "odt_qa_approved",
+                revision: 2,
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    expect(issueToTaskCard(issue, "openducktor")).toMatchObject({
+      id: "task-qa-approved",
+      documentSummary: {
+        spec: {
+          has: false,
+        },
+        plan: {
+          has: false,
+        },
+        qaReport: {
+          has: true,
+          updatedAt: "2026-02-28T05:00:00Z",
+          verdict: "approved",
+        },
+      },
+    });
+  });
+
   test("issueToTaskCard defaults QA summary to not_reviewed when no QA metadata exists", () => {
     const issue: RawIssue = {
       id: "task-qa-missing",
