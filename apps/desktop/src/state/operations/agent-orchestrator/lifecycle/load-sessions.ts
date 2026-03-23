@@ -500,6 +500,9 @@ export const createLoadAgentSessions = ({
             reattached: await maybeResumeLiveRecord(record),
           })),
         );
+        if (isStaleRepoOperation()) {
+          return;
+        }
         for (const { record, reattached } of reattachResults) {
           if (reattached) {
             continue;

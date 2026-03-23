@@ -105,11 +105,7 @@ impl AppService {
         let latest_builder_session = sessions
             .into_iter()
             .filter(|session| TaskAgentRole::parse(session.role.trim()) == Some(TaskAgentRole::Build))
-            .max_by(|left, right| {
-                session_sort_key(left)
-                    .cmp(&session_sort_key(right))
-                    .then_with(|| left.session_id.cmp(&right.session_id))
-            })
+            .max_by(|left, right| session_sort_key(left).cmp(&session_sort_key(right)))
             .ok_or_else(|| {
                 anyhow!(
                     "Builder continuation cannot start until a builder worktree exists for task {task_id}. Start Builder first."
