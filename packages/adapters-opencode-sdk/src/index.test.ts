@@ -43,7 +43,7 @@ type MockSession = {
   getCalls: unknown[];
   messagesCalls: unknown[];
   todoCalls: unknown[];
-  promptQueue: Array<{ info: { id: string; [key: string]: unknown }; parts: Part[] }>;
+  promptQueue: Array<{ info: { id?: string; [key: string]: unknown }; parts: Part[] }>;
   messagesResponse: Array<{
     info: {
       id: string;
@@ -111,7 +111,7 @@ type AgentsMockResult =
 type MakeMockClientInput = {
   sessionId?: string;
   streamEvents?: Event[];
-  promptQueue?: Array<{ info: { id: string; [key: string]: unknown }; parts: Part[] }>;
+  promptQueue?: Array<{ info: { id?: string; [key: string]: unknown }; parts: Part[] }>;
   messagesResponse?: Array<{
     info: {
       id: string;
@@ -915,6 +915,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const history = await adapter.loadSessionHistory({
+      runtimeKind: "opencode",
       runtimeConnection: defaultRuntimeConnection,
       externalSessionId: "session-opencode-1",
       limit: 100,
@@ -1009,6 +1010,11 @@ describe("OpencodeSdkAdapter", () => {
 
     expect(partEvents.length).toBeGreaterThanOrEqual(2);
     expect(messageEvents).toHaveLength(1);
+    expect(events).toContainEqual({
+      type: "session_idle",
+      sessionId: "session-1",
+      timestamp: "2026-02-17T12:00:00Z",
+    });
     expect(messageEvents[0]).toMatchObject({
       type: "assistant_message",
       messageId: "assistant-1",
