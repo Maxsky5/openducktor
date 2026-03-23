@@ -92,12 +92,11 @@ const persistedSessionFixture: AgentSessionRecord = {
   runtimeKind: "opencode",
   sessionId: "session-1",
   externalSessionId: "external-1",
-  taskId: "task-1",
   role: "build",
   scenario: "build_implementation_start",
   startedAt: "2026-02-22T08:00:00.000Z",
-  updatedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/tmp/repo",
+  selectedModel: null,
 };
 
 const persistedBuildSessionFixture: AgentSessionRecord = {
@@ -117,7 +116,6 @@ const taskFixture2WithPersistedBuildSession: TaskCard = {
       ...persistedBuildSessionFixture,
       sessionId: "session-2",
       externalSessionId: "external-2",
-      taskId: "task-2",
     },
   ],
 };

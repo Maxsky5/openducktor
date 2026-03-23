@@ -642,13 +642,15 @@ describe("runtime schemas", () => {
     const parsed = agentSessionRecordSchema.parse({
       sessionId: "obp-session-2",
       role: "planner",
+      scenario: "planner_initial",
       startedAt: "2026-02-18T17:11:00.000Z",
       workingDirectory: "/repo",
     });
 
     expect(parsed.role).toBe("planner");
-    expect(parsed.scenario).toBeUndefined();
+    expect(parsed.scenario).toBe("planner_initial");
     expect(parsed.externalSessionId).toBeUndefined();
-    expect(parsed.status).toBeUndefined();
+    expect(parsed.runtimeKind).toBe("opencode");
+    expect(parsed.selectedModel).toBeNull();
   });
 });

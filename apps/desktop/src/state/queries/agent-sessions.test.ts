@@ -6,13 +6,12 @@ import { agentSessionQueryKeys, upsertAgentSessionRecordInQuery } from "./agent-
 const sessionFixture: AgentSessionRecord = {
   sessionId: "session-1",
   externalSessionId: "external-1",
-  taskId: "task-1",
   role: "build",
   scenario: "build_implementation_start",
   runtimeKind: "opencode",
   workingDirectory: "/tmp/repo/worktree",
   startedAt: "2026-03-22T12:00:00.000Z",
-  updatedAt: "2026-03-22T12:00:00.000Z",
+  selectedModel: null,
 };
 
 describe("agent session query cache helpers", () => {
@@ -35,18 +34,7 @@ describe("agent session query cache helpers", () => {
 
     const updatedSession: AgentSessionRecord = {
       ...sessionFixture,
-      pendingQuestions: [
-        {
-          requestId: "question-1",
-          questions: [
-            {
-              header: "Confirm",
-              question: "Proceed?",
-              options: [{ label: "Yes", description: "Continue" }],
-            },
-          ],
-        },
-      ],
+      workingDirectory: "/tmp/repo/updated-worktree",
     };
 
     upsertAgentSessionRecordInQuery(queryClient, "/repo", "task-1", updatedSession);

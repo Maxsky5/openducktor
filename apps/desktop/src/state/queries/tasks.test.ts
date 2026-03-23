@@ -33,13 +33,12 @@ const taskFixture: TaskCard = {
 const sessionFixture: AgentSessionRecord = {
   sessionId: "session-1",
   externalSessionId: "external-1",
-  taskId: "task-1",
   role: "build",
   scenario: "build_implementation_start",
   runtimeKind: "opencode",
   workingDirectory: "/tmp/repo/worktree",
   startedAt: "2026-03-22T12:00:00.000Z",
-  updatedAt: "2026-03-22T12:00:00.000Z",
+  selectedModel: null,
 };
 
 describe("tasks query cache helpers", () => {
@@ -74,13 +73,7 @@ describe("tasks query cache helpers", () => {
 
     const updatedSession: AgentSessionRecord = {
       ...sessionFixture,
-      pendingPermissions: [
-        {
-          requestId: "perm-1",
-          permission: "read",
-          patterns: [".env"],
-        },
-      ],
+      workingDirectory: "/tmp/repo/worktree-2",
     };
 
     upsertAgentSessionInRepoTaskData(queryClient, "/repo", "task-1", updatedSession);

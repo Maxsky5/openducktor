@@ -570,9 +570,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("sends user message and appends optimistic user entry", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
+    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
     adapter.hasSession = () => true;
+    adapter.listLiveAgentSessionSnapshots = async () => [];
     adapter.sendUserMessage = async () => {
       sendCalls += 1;
     };
@@ -643,6 +645,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(latest.meta.profileId).toBe("Hephaestus (Deep Agent)");
     } finally {
       adapter.hasSession = originalHasSession;
+      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
@@ -872,10 +875,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("marks session as error when send fails", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
+    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
     const originalSendUserMessage = adapter.sendUserMessage;
     let clearCalls = 0;
 
     adapter.hasSession = () => true;
+    adapter.listLiveAgentSessionSnapshots = async () => [];
     adapter.sendUserMessage = async () => {
       throw new Error("send failed");
     };
@@ -934,6 +939,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(clearCalls).toBe(1);
     } finally {
       adapter.hasSession = originalHasSession;
+      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
