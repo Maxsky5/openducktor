@@ -3,6 +3,7 @@ import { type ReactElement, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -101,7 +102,7 @@ export function OpenRepositoryModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 pt-2">
+        <DialogBody className="space-y-4 pt-2">
           <Button
             type="button"
             size="lg"
@@ -152,10 +153,10 @@ export function OpenRepositoryModal({
               </div>
             )}
           </div>
-        </div>
+        </DialogBody>
 
         {canClose ? (
-          <DialogFooter>
+          <DialogFooter className="mt-0 border-t border-border pt-5">
             <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Close
             </Button>

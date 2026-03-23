@@ -4,10 +4,10 @@ import type {
   AgentModelSelection,
   AgentRole,
   AgentScenario,
+  AgentSessionStartMode,
 } from "@openducktor/core";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
-import type { SessionWarmupDependencies } from "../support/session-warmup";
 
 export type StartAgentSessionInput = {
   taskId: string;
@@ -15,9 +15,14 @@ export type StartAgentSessionInput = {
   scenario?: AgentScenario;
   selectedModel?: AgentModelSelection | null;
   sendKickoff?: boolean;
-  startMode?: "reuse_latest" | "fresh";
+  startMode?: AgentSessionStartMode;
+  sourceSessionId?: string | null;
   requireModelReady?: boolean;
   workingDirectoryOverride?: string | null;
+  builderContext?: {
+    sessionId?: string | null;
+    workingDirectory: string;
+  } | null;
 };
 
 export type SessionStateById = Record<string, AgentSessionState>;
@@ -55,7 +60,7 @@ export type TaskDependencies = {
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
 };
 
-export type ModelDependencies = SessionWarmupDependencies & {
+export type ModelDependencies = {
   loadRepoDefaultModel: (repoPath: string, role: AgentRole) => Promise<AgentModelSelection | null>;
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
 };
@@ -63,6 +68,7 @@ export type ModelDependencies = SessionWarmupDependencies & {
 export type RepoDependencies = {
   activeRepo: string | null;
   repoEpochRef: { current: number };
+  activeRepoRef?: { current: string | null };
   previousRepoRef: { current: string | null };
 };
 
@@ -105,9 +111,14 @@ export type StartSessionExecutionDependencies = Pick<
 export type StartSessionCreationInput = {
   scenario: AgentScenario | undefined;
   selectedModel: AgentModelSelection | null;
-  startMode: "reuse_latest" | "fresh";
+  startMode: AgentSessionStartMode;
+  sourceSessionId?: string | null;
   requireModelReady: boolean;
   workingDirectoryOverride?: string | null;
+  builderContext?: {
+    sessionId?: string | null;
+    workingDirectory: string;
+  } | null;
 };
 
 export type ResolvedRuntimeAndModel = {

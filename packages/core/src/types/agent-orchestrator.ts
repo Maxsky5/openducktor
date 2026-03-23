@@ -2,22 +2,38 @@ import type {
   AgentKickoffScenario as ContractsAgentKickoffScenario,
   AgentRole as ContractsAgentRole,
   AgentScenario as ContractsAgentScenario,
+  AgentSessionStartMode as ContractsAgentSessionStartMode,
   AgentToolName as ContractsAgentToolName,
+  KnownGitProviderId as ContractsKnownGitProviderId,
   RuntimeCapabilities,
   RuntimeDescriptor,
   RuntimeKind,
   RuntimeTransport,
   TaskPriority,
 } from "@openducktor/contracts";
-import { isAgentKickoffScenario as isContractsAgentKickoffScenario } from "@openducktor/contracts";
+import {
+  defaultAgentScenarioForRole as defaultContractsAgentScenarioForRole,
+  defaultStartModeForScenario as defaultContractsStartModeForScenario,
+  getAgentScenarioDefinition as getContractsAgentScenarioDefinition,
+  getAgentScenariosForRole as getContractsAgentScenariosForRole,
+  isAgentKickoffScenario as isContractsAgentKickoffScenario,
+  isScenarioStartModeAllowed as isContractsScenarioStartModeAllowed,
+} from "@openducktor/contracts";
 
 export type { RuntimeKind } from "@openducktor/contracts";
 
 export type AgentRole = ContractsAgentRole;
 export type AgentScenario = ContractsAgentScenario;
 export type AgentKickoffScenario = ContractsAgentKickoffScenario;
+export type KnownGitProviderId = ContractsKnownGitProviderId;
+export type AgentSessionStartMode = ContractsAgentSessionStartMode;
 export type AgentToolName = ContractsAgentToolName;
 export const isAgentKickoffScenario = isContractsAgentKickoffScenario;
+export const getAgentScenarioDefinition = getContractsAgentScenarioDefinition;
+export const getAgentScenariosForRole = getContractsAgentScenariosForRole;
+export const defaultAgentScenarioForRole = defaultContractsAgentScenarioForRole;
+export const isScenarioStartModeAllowed = isContractsScenarioStartModeAllowed;
+export const defaultStartModeForScenario = defaultContractsStartModeForScenario;
 
 export const assertAgentKickoffScenario = (scenario: AgentScenario): AgentKickoffScenario => {
   if (!isContractsAgentKickoffScenario(scenario)) {
@@ -79,6 +95,29 @@ export type AgentSessionTodoItem = {
   priority: AgentSessionTodoPriority;
 };
 
+export type AgentPendingPermissionRequest = {
+  requestId: string;
+  permission: string;
+  patterns: string[];
+  metadata?: Record<string, unknown>;
+};
+
+export type AgentPendingQuestionRequest = {
+  requestId: string;
+  questions: Array<{
+    header: string;
+    question: string;
+    options: Array<{ label: string; description: string }>;
+    multiple?: boolean;
+    custom?: boolean;
+  }>;
+};
+
+export type AgentRuntimePendingInput = {
+  permissions: AgentPendingPermissionRequest[];
+  questions: AgentPendingQuestionRequest[];
+};
+
 export type AgentToolCall =
   | {
       tool: "odt_set_spec";
@@ -118,6 +157,14 @@ export type AgentToolCall =
       args: {
         taskId: string;
         summary?: string;
+      };
+    }
+  | {
+      tool: "odt_set_pull_request";
+      args: {
+        taskId: string;
+        providerId: KnownGitProviderId;
+        number: number;
       };
     }
   | {
@@ -218,7 +265,13 @@ export type AgentRoleToolPolicy = Record<AgentRole, AgentToolName[]>;
 export const AGENT_ROLE_TOOL_POLICY: AgentRoleToolPolicy = {
   spec: ["odt_read_task", "odt_set_spec"],
   planner: ["odt_read_task", "odt_set_plan"],
-  build: ["odt_read_task", "odt_build_blocked", "odt_build_resumed", "odt_build_completed"],
+  build: [
+    "odt_read_task",
+    "odt_build_blocked",
+    "odt_build_resumed",
+    "odt_build_completed",
+    "odt_set_pull_request",
+  ],
   qa: ["odt_read_task", "odt_qa_approved", "odt_qa_rejected"],
 };
 

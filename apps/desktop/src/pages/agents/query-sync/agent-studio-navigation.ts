@@ -1,5 +1,5 @@
-import { agentRoleValues } from "@openducktor/contracts";
-import { type AgentRole, isRecord } from "@openducktor/core";
+import { agentRoleValues, agentScenarioValues } from "@openducktor/contracts";
+import { type AgentRole, type AgentScenario, isRecord } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 
 const AGENT_STUDIO_CONTEXT_STORAGE_PREFIX = "openducktor:agent-studio:context";
@@ -10,6 +10,7 @@ export const AGENT_STUDIO_QUERY_KEYS = {
   task: "task",
   session: "session",
   agent: "agent",
+  scenario: "scenario",
   autostart: "autostart",
   start: "start",
 } as const;
@@ -18,6 +19,7 @@ const AGENT_STUDIO_MANAGED_URL_QUERY_KEYS = [
   AGENT_STUDIO_QUERY_KEYS.task,
   AGENT_STUDIO_QUERY_KEYS.session,
   AGENT_STUDIO_QUERY_KEYS.agent,
+  AGENT_STUDIO_QUERY_KEYS.scenario,
   AGENT_STUDIO_QUERY_KEYS.autostart,
   AGENT_STUDIO_QUERY_KEYS.start,
 ] as const;
@@ -26,6 +28,7 @@ const AGENT_STUDIO_PERSISTED_CONTEXT_KEYS = {
   taskId: "taskId",
   role: "role",
   sessionId: "sessionId",
+  scenario: "scenario",
 } as const;
 
 export type AgentStudioQueryKey =
@@ -37,18 +40,24 @@ export type AgentStudioNavigationState = {
   taskId: string;
   sessionId: string | null;
   role: AgentRole | null;
+  scenario: AgentScenario | null;
 };
 
 export type PersistedAgentStudioContext = {
   taskId?: string;
   role?: AgentRole;
   sessionId?: string;
+  scenario?: AgentScenario;
 };
 
 const AGENT_ROLE_SET = new Set<string>(agentRoleValues);
+const AGENT_SCENARIO_SET = new Set<string>(agentScenarioValues);
 
 const isRole = (value: string | null): value is AgentRole =>
   value != null && AGENT_ROLE_SET.has(value);
+
+const isScenario = (value: string | null): value is AgentScenario =>
+  value != null && AGENT_SCENARIO_SET.has(value);
 
 const readOptionalString = (value: unknown): string | undefined => {
   if (typeof value !== "string") {
@@ -62,11 +71,14 @@ export const parseNavigationStateFromSearchParams = (
   searchParams: URLSearchParams,
 ): AgentStudioNavigationState => {
   const roleValue = readOptionalString(searchParams.get(AGENT_STUDIO_QUERY_KEYS.agent)) ?? null;
+  const scenarioValue =
+    readOptionalString(searchParams.get(AGENT_STUDIO_QUERY_KEYS.scenario)) ?? null;
 
   return {
     taskId: readOptionalString(searchParams.get(AGENT_STUDIO_QUERY_KEYS.task)) ?? "",
     sessionId: readOptionalString(searchParams.get(AGENT_STUDIO_QUERY_KEYS.session)) ?? null,
     role: isRole(roleValue) ? roleValue : null,
+    scenario: isScenario(scenarioValue) ? scenarioValue : null,
   };
 };
 
@@ -88,6 +100,9 @@ export const buildSearchParamsFromNavigationState = (
   }
   if (navigation.role) {
     next.set(AGENT_STUDIO_QUERY_KEYS.agent, navigation.role);
+  }
+  if (navigation.scenario) {
+    next.set(AGENT_STUDIO_QUERY_KEYS.scenario, navigation.scenario);
   }
 
   return next;
@@ -125,6 +140,15 @@ export const applyQueryUpdateToNavigationState = (
     }
   }
 
+  if (AGENT_STUDIO_QUERY_KEYS.scenario in updates) {
+    const scenarioValue = readOptionalString(updates.scenario) ?? null;
+    const scenario = isScenario(scenarioValue) ? scenarioValue : null;
+    if (scenario !== next.scenario) {
+      next.scenario = scenario;
+      hasChanged = true;
+    }
+  }
+
   return hasChanged ? next : current;
 };
 
@@ -133,7 +157,10 @@ export const isSameNavigationState = (
   right: AgentStudioNavigationState,
 ): boolean => {
   return (
-    left.taskId === right.taskId && left.sessionId === right.sessionId && left.role === right.role
+    left.taskId === right.taskId &&
+    left.sessionId === right.sessionId &&
+    left.role === right.role &&
+    left.scenario === right.scenario
   );
 };
 
@@ -167,11 +194,26 @@ export const parsePersistedContext = (raw: string): PersistedAgentStudioContext 
     parsed,
     AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.sessionId,
   );
+  const scenarioValue = parsePersistedContextString(
+    parsed,
+    AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.scenario,
+  );
+  const scenario: AgentScenario | undefined = scenarioValue
+    ? (() => {
+        if (!isScenario(scenarioValue)) {
+          throw new Error(
+            `Failed to parse persisted agent studio context: invalid scenario "${scenarioValue}".`,
+          );
+        }
+        return scenarioValue;
+      })()
+    : undefined;
 
   return {
     ...(taskId ? { taskId } : {}),
     ...(role ? { role } : {}),
     ...(sessionId ? { sessionId } : {}),
+    ...(scenario ? { scenario } : {}),
   };
 };
 
@@ -184,12 +226,14 @@ export const restoreNavigationFromPersistedContext = (
   const sessionId =
     current.sessionId ??
     (!current.taskId || persisted.taskId === current.taskId ? (persisted.sessionId ?? null) : null);
+  const scenario = current.scenario ?? persisted.scenario ?? null;
 
   return {
     ...current,
     taskId,
     sessionId,
     role,
+    scenario,
   };
 };
 
@@ -198,6 +242,7 @@ export const serializePersistedContext = (navigation: AgentStudioNavigationState
     [AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.taskId]: navigation.taskId || undefined,
     [AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.role]: navigation.role ?? undefined,
     [AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.sessionId]: navigation.sessionId || undefined,
+    [AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.scenario]: navigation.scenario ?? undefined,
   };
 
   return JSON.stringify(payload);

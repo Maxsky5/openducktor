@@ -553,6 +553,30 @@ mod tests {
     }
 
     #[test]
+    fn parse_remote_url_supports_https_repo_paths() {
+        assert_eq!(
+            GithubGhCliProvider::parse_remote_url("https://github.com/owner/repo.git"),
+            Some(GitProviderRepository {
+                host: "github.com".to_string(),
+                owner: "owner".to_string(),
+                name: "repo".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn parse_remote_url_supports_ssh_urls() {
+        assert_eq!(
+            GithubGhCliProvider::parse_remote_url("ssh://git@github.mycorp.com/owner/repo.git"),
+            Some(GitProviderRepository {
+                host: "github.mycorp.com".to_string(),
+                owner: "owner".to_string(),
+                name: "repo".to_string(),
+            })
+        );
+    }
+
+    #[test]
     fn build_gh_args_adds_hostname_only_when_present() {
         assert_eq!(
             GithubGhCliProvider::build_gh_args(Some("github.mycorp.com"), &["api", "repos/x/y"]),

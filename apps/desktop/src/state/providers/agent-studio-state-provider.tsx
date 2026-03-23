@@ -22,7 +22,12 @@ export function AgentStudioStateProvider({
   const { refreshTaskData } = useTaskControlContext();
   const {
     sessions,
+    bootstrapTaskSessions,
+    hydrateRequestedTaskSessionHistory,
+    reconcileLiveTaskSessions,
     loadAgentSessions,
+    readSessionModelCatalog,
+    readSessionTodos,
     removeAgentSessions,
     startAgentSession,
     forkAgentSession,
@@ -43,7 +48,12 @@ export function AgentStudioStateProvider({
     () =>
       buildAgentStateValue({
         sessions,
+        bootstrapTaskSessions,
+        hydrateRequestedTaskSessionHistory,
+        reconcileLiveTaskSessions,
         loadAgentSessions,
+        readSessionModelCatalog,
+        readSessionTodos,
         removeAgentSessions,
         startAgentSession,
         forkAgentSession,
@@ -55,9 +65,14 @@ export function AgentStudioStateProvider({
       }),
     [
       answerAgentQuestion,
+      bootstrapTaskSessions,
+      hydrateRequestedTaskSessionHistory,
       loadAgentSessions,
       removeAgentSessions,
+      readSessionModelCatalog,
+      readSessionTodos,
       forkAgentSession,
+      reconcileLiveTaskSessions,
       replyAgentPermission,
       sendAgentMessage,
       sessions,

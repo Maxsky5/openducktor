@@ -191,6 +191,9 @@ describe("use-checks", () => {
 
     try {
       await harness.mount();
+      runtimeCheck.mockClear();
+      beadsCheck.mockClear();
+      checkRepoRuntimeHealthMock.mockClear();
       await harness.run(async (value) => {
         await value.refreshChecks();
       });
@@ -224,15 +227,15 @@ describe("use-checks", () => {
 
     try {
       await harness.mount();
+      runtimeCheck.mockClear();
       await harness.run(async (value) => {
         await value.refreshRuntimeCheck();
         await value.refreshRuntimeCheck();
         await value.refreshRuntimeCheck(true);
       });
 
-      expect(runtimeCheck).toHaveBeenCalledTimes(2);
-      expect(runtimeCheck.mock.calls[0]).toEqual([false]);
-      expect(runtimeCheck.mock.calls[1]).toEqual([true]);
+      expect(runtimeCheck).toHaveBeenCalledTimes(1);
+      expect(runtimeCheck.mock.calls[0]).toEqual([true]);
       expect(harness.getLatest().hasRuntimeCheck()).toBe(true);
     } finally {
       await harness.unmount();
@@ -260,15 +263,19 @@ describe("use-checks", () => {
 
     try {
       await harness.mount();
+      beadsCheck.mockClear();
+      checkRepoRuntimeHealthMock.mockClear();
       await harness.run(async (value) => {
         await value.refreshBeadsCheckForRepo("/repo-b");
         await value.refreshRepoRuntimeHealthForRepo("/repo-b");
       });
 
-      expect(harness.getLatest().activeBeadsCheck).toBeNull();
+      expect(harness.getLatest().activeBeadsCheck?.beadsPath).toBe("/repo-a/.beads");
       expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toBeNull();
       expect(harness.getLatest().hasCachedBeadsCheck("/repo-b")).toBe(true);
       expect(harness.getLatest().hasCachedRepoRuntimeHealth("/repo-b", ["opencode"])).toBe(true);
+      expect(beadsCheck).toHaveBeenCalledTimes(1);
+      expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(1);
 
       await harness.updateArgs({ activeRepo: "/repo-b" });
       expect(harness.getLatest().activeBeadsCheck?.beadsPath).toBe("/repo-b/.beads");
@@ -276,13 +283,15 @@ describe("use-checks", () => {
         harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.availableToolIds,
       ).toEqual(["/repo-b"]);
 
+      beadsCheck.mockClear();
+      checkRepoRuntimeHealthMock.mockClear();
       await harness.run(async (value) => {
         await value.refreshBeadsCheckForRepo("/repo-b");
         await value.refreshRepoRuntimeHealthForRepo("/repo-b");
       });
 
-      expect(beadsCheck).toHaveBeenCalledTimes(1);
-      expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(1);
+      expect(beadsCheck).not.toHaveBeenCalled();
+      expect(checkRepoRuntimeHealthMock).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
       host.beadsCheck = original.beadsCheck;

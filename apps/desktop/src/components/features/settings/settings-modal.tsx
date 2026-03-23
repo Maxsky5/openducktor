@@ -88,7 +88,10 @@ export function SettingsModal({
 }: SettingsModalProps): ReactElement {
   const [state, dispatch] = useReducer(settingsModalReducer, INITIAL_SETTINGS_MODAL_STATE);
   const { globalPromptRoleTab, open, repoPromptRoleTab, repositorySection, section } = state;
-  const controller = useSettingsModalController(open);
+  const controller = useSettingsModalController({
+    open,
+    shouldLoadCatalog: open && section === "repositories" && repositorySection === "agents",
+  });
   const isInteractionDisabled = controller.isLoadingSettings || controller.isSaving;
 
   const handleSave = (): void => {

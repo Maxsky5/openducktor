@@ -21,12 +21,14 @@ export function useKanbanPageModels({
   onCloseDetails,
 }: UseKanbanPageModelsArgs): KanbanPageModels {
   const { activeRepo, isSwitchingWorkspace, loadRepoSettings } = useWorkspaceState();
+  const { repoSettings } = useAgentStudioRepoSettings({ activeRepo });
   const {
     sessions,
+    bootstrapTaskSessions,
+    hydrateRequestedTaskSessionHistory,
     loadAgentSessions,
     removeAgentSessions,
     startAgentSession,
-    forkAgentSession,
     sendAgentMessage,
     updateAgentSessionModel,
   } = useAgentState();
@@ -51,8 +53,6 @@ export function useKanbanPageModels({
   } = useTasksState();
   const navigate = useNavigate();
 
-  const { repoSettings } = useAgentStudioRepoSettings({ activeRepo });
-
   const sessionStartFlow = useKanbanSessionStartFlow({
     activeRepo,
     repoSettings,
@@ -60,6 +60,8 @@ export function useKanbanPageModels({
     sessions,
     navigate,
     loadRepoSettings,
+    bootstrapTaskSessions,
+    hydrateRequestedTaskSessionHistory,
     loadAgentSessions,
     humanRequestChangesTask,
     startAgentSession,
@@ -69,6 +71,7 @@ export function useKanbanPageModels({
   const {
     humanReviewFeedbackModal,
     sessionStartModal,
+    onPullRequestGenerate,
     onDelegate,
     onPlan,
     onQaStart,
@@ -127,10 +130,7 @@ export function useKanbanPageModels({
   const { taskApprovalModal, taskGitConflictDialog, openTaskApproval } = useTaskApprovalFlow({
     activeRepo,
     tasks,
-    sessions,
-    loadAgentSessions,
-    forkAgentSession,
-    sendAgentMessage,
+    requestPullRequestGeneration: onPullRequestGenerate,
     refreshTasks,
     onResolveGitConflict: handleResolveKanbanGitConflict,
   });

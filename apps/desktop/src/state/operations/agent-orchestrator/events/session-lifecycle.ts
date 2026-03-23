@@ -98,22 +98,26 @@ const autoRejectMutatingPermission = (
   const promptOverrides =
     context.store.sessionsRef.current[context.store.sessionId]?.promptOverrides;
   const markManualResponseRequired = (error: unknown): void => {
-    context.store.updateSession(context.store.sessionId, (current) => ({
-      ...current,
-      pendingPermissions: [
-        ...current.pendingPermissions.filter((entry) => entry.requestId !== event.requestId),
-        pendingPermission,
-      ],
-      messages: [
-        ...current.messages,
-        {
-          id: crypto.randomUUID(),
-          role: "system",
-          content: `Automatic permission rejection failed: ${errorMessage(error)}. Manual response required.`,
-          timestamp: event.timestamp,
-        },
-      ],
-    }));
+    context.store.updateSession(
+      context.store.sessionId,
+      (current) => ({
+        ...current,
+        pendingPermissions: [
+          ...current.pendingPermissions.filter((entry) => entry.requestId !== event.requestId),
+          pendingPermission,
+        ],
+        messages: [
+          ...current.messages,
+          {
+            id: crypto.randomUUID(),
+            role: "system",
+            content: `Automatic permission rejection failed: ${errorMessage(error)}. Manual response required.`,
+            timestamp: event.timestamp,
+          },
+        ],
+      }),
+      { persist: true },
+    );
   };
 
   let rejectionMessage: string;
@@ -135,21 +139,25 @@ const autoRejectMutatingPermission = (
       message: rejectionMessage,
     })
     .then(() => {
-      context.store.updateSession(context.store.sessionId, (current) => ({
-        ...current,
-        pendingPermissions: current.pendingPermissions.filter(
-          (entry) => entry.requestId !== event.requestId,
-        ),
-        messages: [
-          ...current.messages,
-          {
-            id: crypto.randomUUID(),
-            role: "system",
-            content: `Auto-rejected mutating permission (${event.permission}) for ${role} session.`,
-            timestamp: event.timestamp,
-          },
-        ],
-      }));
+      context.store.updateSession(
+        context.store.sessionId,
+        (current) => ({
+          ...current,
+          pendingPermissions: current.pendingPermissions.filter(
+            (entry) => entry.requestId !== event.requestId,
+          ),
+          messages: [
+            ...current.messages,
+            {
+              id: crypto.randomUUID(),
+              role: "system",
+              content: `Auto-rejected mutating permission (${event.permission}) for ${role} session.`,
+              timestamp: event.timestamp,
+            },
+          ],
+        }),
+        { persist: true },
+      );
     })
     .catch((error) => {
       markManualResponseRequired(error);
@@ -285,13 +293,17 @@ export const handlePermissionRequired = (
     return;
   }
 
-  context.store.updateSession(context.store.sessionId, (current) => ({
-    ...current,
-    pendingPermissions: [
-      ...current.pendingPermissions.filter((entry) => entry.requestId !== event.requestId),
-      toPendingPermission(event),
-    ],
-  }));
+  context.store.updateSession(
+    context.store.sessionId,
+    (current) => ({
+      ...current,
+      pendingPermissions: [
+        ...current.pendingPermissions.filter((entry) => entry.requestId !== event.requestId),
+        toPendingPermission(event),
+      ],
+    }),
+    { persist: true },
+  );
 };
 
 export const handleQuestionRequired = (
@@ -299,16 +311,20 @@ export const handleQuestionRequired = (
   event: Extract<SessionEvent, { type: "question_required" }>,
 ): void => {
   flushDraftBuffers(context);
-  context.store.updateSession(context.store.sessionId, (current) => ({
-    ...current,
-    pendingQuestions: [
-      ...current.pendingQuestions.filter((entry) => entry.requestId !== event.requestId),
-      {
-        requestId: event.requestId,
-        questions: event.questions,
-      },
-    ],
-  }));
+  context.store.updateSession(
+    context.store.sessionId,
+    (current) => ({
+      ...current,
+      pendingQuestions: [
+        ...current.pendingQuestions.filter((entry) => entry.requestId !== event.requestId),
+        {
+          requestId: event.requestId,
+          questions: event.questions,
+        },
+      ],
+    }),
+    { persist: true },
+  );
 };
 
 export const handleSessionTodosUpdated = (
@@ -333,36 +349,40 @@ export const handleSessionError = (
   flushDraftBuffers(context);
   clearDraftBuffers(context);
   const sessionErrorMessage = normalizeSessionErrorMessage(event.message);
-  context.store.updateSession(context.store.sessionId, (current) => {
-    const finalized = finalizeDraftAssistantMessage(
-      current,
-      event.timestamp,
-      context.turn.resolveTurnDurationMs(
-        context.store.sessionId,
+  context.store.updateSession(
+    context.store.sessionId,
+    (current) => {
+      const finalized = finalizeDraftAssistantMessage(
+        current,
         event.timestamp,
-        current.messages,
-      ),
-    );
-    const settledMessages = settleDanglingTodoToolMessages(finalized.messages, event.timestamp, {
-      outcome: "error",
-      errorMessage: sessionErrorMessage,
-    });
-    return {
-      ...finalized,
-      status: "error",
-      pendingPermissions: [],
-      pendingQuestions: [],
-      messages: [
-        ...settledMessages,
-        {
-          id: crypto.randomUUID(),
-          role: "system",
-          content: `Session error: ${sessionErrorMessage}`,
-          timestamp: event.timestamp,
-        },
-      ],
-    };
-  });
+        context.turn.resolveTurnDurationMs(
+          context.store.sessionId,
+          event.timestamp,
+          current.messages,
+        ),
+      );
+      const settledMessages = settleDanglingTodoToolMessages(finalized.messages, event.timestamp, {
+        outcome: "error",
+        errorMessage: sessionErrorMessage,
+      });
+      return {
+        ...finalized,
+        status: "error",
+        pendingPermissions: [],
+        pendingQuestions: [],
+        messages: [
+          ...settledMessages,
+          {
+            id: crypto.randomUUID(),
+            role: "system",
+            content: `Session error: ${sessionErrorMessage}`,
+            timestamp: event.timestamp,
+          },
+        ],
+      };
+    },
+    { persist: true },
+  );
   context.turn.clearTurnDuration(context.store.sessionId);
   clearTurnModelSnapshot(context);
 };
@@ -385,24 +405,28 @@ export const handleSessionFinished = (
 ): void => {
   flushDraftBuffers(context);
   clearDraftBuffers(context);
-  context.store.updateSession(context.store.sessionId, (current) => {
-    const finalized = finalizeDraftAssistantMessage(
-      current,
-      event.timestamp,
-      context.turn.resolveTurnDurationMs(
-        context.store.sessionId,
+  context.store.updateSession(
+    context.store.sessionId,
+    (current) => {
+      const finalized = finalizeDraftAssistantMessage(
+        current,
         event.timestamp,
-        current.messages,
-      ),
-    );
-    return {
-      ...finalized,
-      messages: settleDanglingTodoToolMessages(finalized.messages, event.timestamp),
-      pendingPermissions: [],
-      pendingQuestions: [],
-      status: "stopped",
-    };
-  });
+        context.turn.resolveTurnDurationMs(
+          context.store.sessionId,
+          event.timestamp,
+          current.messages,
+        ),
+      );
+      return {
+        ...finalized,
+        messages: settleDanglingTodoToolMessages(finalized.messages, event.timestamp),
+        pendingPermissions: [],
+        pendingQuestions: [],
+        status: "stopped",
+      };
+    },
+    { persist: true },
+  );
   context.turn.clearTurnDuration(context.store.sessionId);
   clearTurnModelSnapshot(context);
 };

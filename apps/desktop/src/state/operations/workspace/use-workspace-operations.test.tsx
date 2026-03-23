@@ -59,6 +59,78 @@ const mockBrowserGlobals = (windowValue: Window, documentValue: Document): (() =
   };
 };
 
+const createBrowserListenerHarness = (
+  visibilityState: DocumentVisibilityState = "visible",
+): {
+  addWindowEventListener: ReturnType<typeof mock>;
+  removeWindowEventListener: ReturnType<typeof mock>;
+  addDocumentEventListener: ReturnType<typeof mock>;
+  removeDocumentEventListener: ReturnType<typeof mock>;
+  triggerFocus: () => Promise<void>;
+  triggerVisibilityChange: (nextVisibilityState?: DocumentVisibilityState) => Promise<void>;
+  restoreBrowserGlobals: () => void;
+} => {
+  let focusHandler: (() => void) | null = null;
+  let visibilityChangeHandler: (() => void) | null = null;
+  let currentVisibilityState = visibilityState;
+
+  const addWindowEventListener = mock(
+    (event: string, handler: EventListenerOrEventListenerObject) => {
+      if (event === "focus" && typeof handler === "function") {
+        focusHandler = handler as () => void;
+      }
+    },
+  );
+  const removeWindowEventListener = mock(() => {});
+  const addDocumentEventListener = mock(
+    (event: string, handler: EventListenerOrEventListenerObject) => {
+      if (event === "visibilitychange" && typeof handler === "function") {
+        visibilityChangeHandler = handler as () => void;
+      }
+    },
+  );
+  const removeDocumentEventListener = mock(() => {});
+  const fakeWindow = {
+    addEventListener: addWindowEventListener,
+    removeEventListener: removeWindowEventListener,
+  } as unknown as Window;
+  const fakeDocument = {
+    addEventListener: addDocumentEventListener,
+    removeEventListener: removeDocumentEventListener,
+    get visibilityState() {
+      return currentVisibilityState;
+    },
+  } as unknown as Document;
+  const restoreBrowserGlobals = mockBrowserGlobals(fakeWindow, fakeDocument);
+
+  return {
+    addWindowEventListener,
+    removeWindowEventListener,
+    addDocumentEventListener,
+    removeDocumentEventListener,
+    triggerFocus: async () => {
+      if (!focusHandler) {
+        throw new Error("Expected focus handler to be registered");
+      }
+      await act(async () => {
+        focusHandler?.();
+      });
+      await flush();
+    },
+    triggerVisibilityChange: async (nextVisibilityState = "visible") => {
+      currentVisibilityState = nextVisibilityState;
+      if (!visibilityChangeHandler) {
+        throw new Error("Expected visibilitychange handler to be registered");
+      }
+      await act(async () => {
+        visibilityChangeHandler?.();
+      });
+      await flush();
+    },
+    restoreBrowserGlobals,
+  };
+};
+
 const createDeferred = <T,>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
   let reject: ((reason?: unknown) => void) | null = null;
@@ -945,26 +1017,15 @@ describe("use-workspace-operations", () => {
     }
   });
 
-  test("keeps branch probe interval/listeners mounted while branch loading and switching flags change", async () => {
+  test("keeps branch probe listeners mounted while branch loading and switching flags change", async () => {
     const setActiveRepo = mock(() => {});
-    const addWindowEventListener = mock(() => {});
-    const removeWindowEventListener = mock(() => {});
-    const setIntervalMock = mock(() => 1);
-    const clearIntervalMock = mock(() => {});
-    const addDocumentEventListener = mock(() => {});
-    const removeDocumentEventListener = mock(() => {});
-    const fakeWindow = {
-      addEventListener: addWindowEventListener,
-      removeEventListener: removeWindowEventListener,
-      setInterval: setIntervalMock,
-      clearInterval: clearIntervalMock,
-    } as unknown as Window;
-    const fakeDocument = {
-      addEventListener: addDocumentEventListener,
-      removeEventListener: removeDocumentEventListener,
-      visibilityState: "visible" as const,
-    } as unknown as Document;
-    const restoreBrowserGlobals = mockBrowserGlobals(fakeWindow, fakeDocument);
+    const {
+      addWindowEventListener,
+      removeWindowEventListener,
+      addDocumentEventListener,
+      removeDocumentEventListener,
+      restoreBrowserGlobals,
+    } = createBrowserListenerHarness();
 
     const gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -1008,7 +1069,6 @@ describe("use-workspace-operations", () => {
       await harness.mount();
       expect(addWindowEventListener).toHaveBeenCalledTimes(1);
       expect(addDocumentEventListener).toHaveBeenCalledTimes(1);
-      expect(setIntervalMock).toHaveBeenCalledTimes(1);
 
       await harness.run(async (value) => {
         await value.refreshBranches();
@@ -1019,15 +1079,12 @@ describe("use-workspace-operations", () => {
 
       expect(addWindowEventListener).toHaveBeenCalledTimes(1);
       expect(addDocumentEventListener).toHaveBeenCalledTimes(1);
-      expect(setIntervalMock).toHaveBeenCalledTimes(1);
       expect(removeWindowEventListener).not.toHaveBeenCalled();
       expect(removeDocumentEventListener).not.toHaveBeenCalled();
-      expect(clearIntervalMock).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
       expect(removeWindowEventListener).toHaveBeenCalledTimes(1);
       expect(removeDocumentEventListener).toHaveBeenCalledTimes(1);
-      expect(clearIntervalMock).toHaveBeenCalledTimes(1);
 
       host.gitGetCurrentBranch = original.gitGetCurrentBranch;
       host.gitGetBranches = original.gitGetBranches;
@@ -1038,30 +1095,8 @@ describe("use-workspace-operations", () => {
 
   test("marks branch sync degraded and throttles repeated probe failure toasts", async () => {
     const setActiveRepo = mock(() => {});
-    let intervalCallback: (() => void) | null = null;
     let probeFailureCount = 0;
-
-    const addWindowEventListener = mock(() => {});
-    const removeWindowEventListener = mock(() => {});
-    const setIntervalMock = mock((callback: () => void) => {
-      intervalCallback = callback;
-      return 1;
-    });
-    const clearIntervalMock = mock(() => {});
-    const addDocumentEventListener = mock(() => {});
-    const removeDocumentEventListener = mock(() => {});
-    const fakeWindow = {
-      addEventListener: addWindowEventListener,
-      removeEventListener: removeWindowEventListener,
-      setInterval: setIntervalMock,
-      clearInterval: clearIntervalMock,
-    } as unknown as Window;
-    const fakeDocument = {
-      addEventListener: addDocumentEventListener,
-      removeEventListener: removeDocumentEventListener,
-      visibilityState: "visible" as const,
-    } as unknown as Document;
-    const restoreBrowserGlobals = mockBrowserGlobals(fakeWindow, fakeDocument);
+    const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
 
     const gitGetCurrentBranch = mock(async () => {
       probeFailureCount += 1;
@@ -1086,15 +1121,7 @@ describe("use-workspace-operations", () => {
 
     try {
       await harness.mount();
-      const callback = intervalCallback as unknown as (() => void) | null;
-      if (!callback) {
-        throw new Error("Expected interval callback to be set");
-      }
-
-      await act(async () => {
-        callback();
-      });
-      await flush();
+      await triggerFocus();
 
       expect(harness.getLatest().branchSyncDegraded).toBe(true);
       expect(toastError).toHaveBeenCalledTimes(1);
@@ -1102,10 +1129,7 @@ describe("use-workspace-operations", () => {
         description: "[current_branch_probe] permission denied while reading branch (1)",
       });
 
-      await act(async () => {
-        callback();
-      });
-      await flush();
+      await triggerFocus();
 
       expect(harness.getLatest().branchSyncDegraded).toBe(true);
       expect(toastError).toHaveBeenCalledTimes(1);
@@ -1119,25 +1143,8 @@ describe("use-workspace-operations", () => {
 
   test("ignores stale branch probe failures after active repository changes", async () => {
     const setActiveRepo = mock(() => {});
-    let intervalCallback: (() => void) | null = null;
     const branchProbeDeferred = createDeferred<{ name: string | undefined; detached: boolean }>();
-
-    const setIntervalMock = mock((callback: () => void) => {
-      intervalCallback = callback;
-      return 1;
-    });
-    const fakeWindow = {
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      setInterval: setIntervalMock,
-      clearInterval: () => {},
-    } as unknown as Window;
-    const fakeDocument = {
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      visibilityState: "visible" as const,
-    } as unknown as Document;
-    const restoreBrowserGlobals = mockBrowserGlobals(fakeWindow, fakeDocument);
+    const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
 
     const gitGetCurrentBranch = mock(async () => branchProbeDeferred.promise);
 
@@ -1162,15 +1169,7 @@ describe("use-workspace-operations", () => {
 
     try {
       await harness.mount();
-      const callback = intervalCallback as unknown as (() => void) | null;
-      if (!callback) {
-        throw new Error("Expected interval callback to be set");
-      }
-
-      await act(async () => {
-        callback();
-      });
-      await flush();
+      await triggerFocus();
 
       await harness.updateArgs({
         activeRepo: "/repo-b",
@@ -1194,24 +1193,7 @@ describe("use-workspace-operations", () => {
   test("clears degraded branch sync state after a successful probe", async () => {
     const setActiveRepo = mock(() => {});
     let shouldFailProbe = true;
-    let intervalCallback: (() => void) | null = null;
-
-    const setIntervalMock = mock((callback: () => void) => {
-      intervalCallback = callback;
-      return 1;
-    });
-    const fakeWindow = {
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      setInterval: setIntervalMock,
-      clearInterval: () => {},
-    } as unknown as Window;
-    const fakeDocument = {
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      visibilityState: "visible" as const,
-    } as unknown as Document;
-    const restoreBrowserGlobals = mockBrowserGlobals(fakeWindow, fakeDocument);
+    const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
 
     const gitGetCurrentBranch = mock(async () => {
       if (shouldFailProbe) {
@@ -1246,23 +1228,12 @@ describe("use-workspace-operations", () => {
 
     try {
       await harness.mount();
-      const callback = intervalCallback as unknown as (() => void) | null;
-      if (!callback) {
-        throw new Error("Expected interval callback to be set");
-      }
-
-      await act(async () => {
-        callback();
-      });
-      await flush();
+      await triggerFocus();
 
       expect(harness.getLatest().branchSyncDegraded).toBe(true);
 
       shouldFailProbe = false;
-      await act(async () => {
-        callback();
-      });
-      await flush();
+      await triggerFocus();
 
       expect(harness.getLatest().branchSyncDegraded).toBe(false);
     } finally {
@@ -1275,26 +1246,9 @@ describe("use-workspace-operations", () => {
 
   test("marks branch sync degraded when refresh after branch identity change fails", async () => {
     const setActiveRepo = mock(() => {});
-    let intervalCallback: (() => void) | null = null;
     let currentBranchCallCount = 0;
     let branchesCallCount = 0;
-
-    const setIntervalMock = mock((callback: () => void) => {
-      intervalCallback = callback;
-      return 1;
-    });
-    const fakeWindow = {
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      setInterval: setIntervalMock,
-      clearInterval: () => {},
-    } as unknown as Window;
-    const fakeDocument = {
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      visibilityState: "visible" as const,
-    } as unknown as Document;
-    const restoreBrowserGlobals = mockBrowserGlobals(fakeWindow, fakeDocument);
+    const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
 
     const gitGetCurrentBranch = mock(async () => {
       currentBranchCallCount += 1;
@@ -1346,16 +1300,7 @@ describe("use-workspace-operations", () => {
       await harness.run(async (value) => {
         await value.refreshBranches();
       });
-
-      const callback = intervalCallback as unknown as (() => void) | null;
-      if (!callback) {
-        throw new Error("Expected interval callback to be set");
-      }
-
-      await act(async () => {
-        callback();
-      });
-      await flush();
+      await triggerFocus();
 
       expect(harness.getLatest().branchSyncDegraded).toBe(true);
       expect(toastError).toHaveBeenCalledWith("Branch sync probe degraded", {
@@ -1372,24 +1317,7 @@ describe("use-workspace-operations", () => {
 
   test("clears branch cache and degraded state on active repository change", async () => {
     const setActiveRepo = mock(() => {});
-    let intervalCallback: (() => void) | null = null;
-
-    const setIntervalMock = mock((callback: () => void) => {
-      intervalCallback = callback;
-      return 1;
-    });
-    const fakeWindow = {
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      setInterval: setIntervalMock,
-      clearInterval: () => {},
-    } as unknown as Window;
-    const fakeDocument = {
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      visibilityState: "visible" as const,
-    } as unknown as Document;
-    const restoreBrowserGlobals = mockBrowserGlobals(fakeWindow, fakeDocument);
+    const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
 
     const gitGetCurrentBranch = mock(async () => {
       throw new Error("permission denied while reading branch");
@@ -1409,16 +1337,7 @@ describe("use-workspace-operations", () => {
 
     try {
       await harness.mount();
-
-      const callback = intervalCallback as unknown as (() => void) | null;
-      if (!callback) {
-        throw new Error("Expected interval callback to be set");
-      }
-
-      await act(async () => {
-        callback();
-      });
-      await flush();
+      await triggerFocus();
 
       expect(harness.getLatest().branchSyncDegraded).toBe(true);
 

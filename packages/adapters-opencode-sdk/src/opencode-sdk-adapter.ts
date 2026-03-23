@@ -11,7 +11,11 @@ import {
   type EventUnsubscribe,
   type ForkAgentSessionInput,
   type ListAgentModelsInput,
-  type ListRuntimeSessionsInput,
+  type ListLiveAgentSessionPendingInput,
+  type ListLiveAgentSessionsInput,
+  type LiveAgentSessionPendingInputBySession,
+  type LiveAgentSessionSnapshot,
+  type LiveAgentSessionSummary,
   type LoadAgentFileStatusInput,
   type LoadAgentSessionDiffInput,
   type LoadAgentSessionHistoryInput,
@@ -19,7 +23,6 @@ import {
   type ReplyPermissionInput,
   type ReplyQuestionInput,
   type ResumeAgentSessionInput,
-  type RuntimeSessionSummary,
   type SendAgentUserMessageInput,
   type StartAgentSessionInput,
   toRuntimeClientInput,
@@ -44,6 +47,7 @@ import {
   subscribeSessionEvents,
 } from "./event-emitter";
 import {
+  listLiveAgentSessionPendingInput,
   loadSessionHistory,
   loadSessionTodos,
   replyPermission,
@@ -63,20 +67,21 @@ import type {
   McpServerStatus,
   OpencodeEventLogger,
   OpencodeSdkAdapterOptions,
+  RuntimeEventTransportRecord,
   SessionRecord,
 } from "./types";
 import { WORKFLOW_TOOL_CACHE_TTL_MS } from "./types";
 import { buildRoleScopedPermissionRules } from "./workflow-tool-permissions";
 import { resolveWorkflowToolSelection } from "./workflow-tool-selection";
 
-const toRuntimeSessionStatus = (status: unknown): RuntimeSessionSummary["status"] => {
+const toLiveAgentSessionStatus = (status: unknown): LiveAgentSessionSummary["status"] => {
   if (status === undefined || status === null) {
     return {
       type: "idle",
     };
   }
   if (typeof status !== "object" || !("type" in status)) {
-    throw new Error("Malformed runtime session status payload from Opencode.");
+    throw new Error("Malformed live agent session status payload from Opencode.");
   }
 
   const type = (status as { type?: unknown }).type;
@@ -114,10 +119,13 @@ const toRuntimeSessionStatus = (status: unknown): RuntimeSessionSummary["status"
     };
   }
 
-  throw new Error(`Unsupported Opencode runtime session status type: ${String(type)}`);
+  throw new Error(`Unsupported Opencode live agent session status type: ${String(type)}`);
 };
 
-const toRuntimeStatusMap = (payload: unknown, directory: string): Record<string, unknown> => {
+const toLiveAgentSessionStatusMap = (
+  payload: unknown,
+  directory: string,
+): Record<string, unknown> => {
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
     throw new Error(
       `Malformed Opencode session status response for directory '${directory}': expected an object map.`,
@@ -142,10 +150,29 @@ const requireSessionDirectory = (directory: unknown, sessionId: string): string 
   throw new Error(`Malformed Opencode session payload for '${sessionId}': missing directory.`);
 };
 
+const mergeLiveAgentSessionPendingInput = (
+  entries: LiveAgentSessionPendingInputBySession[],
+): LiveAgentSessionPendingInputBySession => {
+  const merged: LiveAgentSessionPendingInputBySession = {};
+
+  for (const entry of entries) {
+    for (const [sessionId, pendingInput] of Object.entries(entry)) {
+      const current = merged[sessionId] ?? { permissions: [], questions: [] };
+      merged[sessionId] = {
+        permissions: [...current.permissions, ...pendingInput.permissions],
+        questions: [...current.questions, ...pendingInput.questions],
+      };
+    }
+  }
+
+  return merged;
+};
+
 export class OpencodeSdkAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
 {
   private readonly sessions = new Map<string, SessionRecord>();
+  private readonly runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
   private readonly listeners: SessionEventListeners = new Map();
   private readonly now: () => string;
   private readonly createClient: ClientFactory;
@@ -167,9 +194,8 @@ export class OpencodeSdkAdapter
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
     const runtimeDefinition = this.getRuntimeDefinition();
-    const client = this.createClient(
-      toRuntimeClientInput(input.runtimeConnection, "start session"),
-    );
+    const runtimeClientInput = toRuntimeClientInput(input.runtimeConnection, "start session");
+    const client = this.createClient(runtimeClientInput);
     const created = await client.session.create({
       directory: input.workingDirectory,
       title: `${input.role.toUpperCase()} ${input.taskId}`,
@@ -188,6 +214,9 @@ export class OpencodeSdkAdapter
 
     return registerSession({
       sessions: this.sessions,
+      runtimeEventTransports: this.runtimeEventTransports,
+      createClient: this.createClient,
+      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
       sessionId,
       externalSessionId,
       sessionInput,
@@ -206,9 +235,8 @@ export class OpencodeSdkAdapter
       return existing.summary;
     }
 
-    const client = this.createClient(
-      toRuntimeClientInput(input.runtimeConnection, "resume session"),
-    );
+    const runtimeClientInput = toRuntimeClientInput(input.runtimeConnection, "resume session");
+    const client = this.createClient(runtimeClientInput);
     const detail = await client.session.get({
       directory: input.workingDirectory,
       sessionID: input.externalSessionId,
@@ -225,6 +253,9 @@ export class OpencodeSdkAdapter
 
     return registerSession({
       sessions: this.sessions,
+      runtimeEventTransports: this.runtimeEventTransports,
+      createClient: this.createClient,
+      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
       sessionId: input.sessionId,
       externalSessionId: input.externalSessionId,
       sessionInput,
@@ -238,7 +269,8 @@ export class OpencodeSdkAdapter
   }
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
-    const client = this.createClient(toRuntimeClientInput(input.runtimeConnection, "fork session"));
+    const runtimeClientInput = toRuntimeClientInput(input.runtimeConnection, "fork session");
+    const client = this.createClient(runtimeClientInput);
     const forked = await client.session.fork({
       directory: input.workingDirectory,
       sessionID: input.parentExternalSessionId,
@@ -254,6 +286,9 @@ export class OpencodeSdkAdapter
 
     return registerSession({
       sessions: this.sessions,
+      runtimeEventTransports: this.runtimeEventTransports,
+      createClient: this.createClient,
+      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
       sessionId,
       externalSessionId,
       sessionInput,
@@ -266,31 +301,69 @@ export class OpencodeSdkAdapter
     });
   }
 
-  async listRuntimeSessions(input: ListRuntimeSessionsInput): Promise<RuntimeSessionSummary[]> {
+  async listLiveAgentSessions(
+    input: ListLiveAgentSessionsInput,
+  ): Promise<LiveAgentSessionSummary[]> {
+    const snapshots = await this.listLiveAgentSessionSnapshots(input);
+    return snapshots.map(
+      ({ pendingPermissions: _pendingPermissions, pendingQuestions: _pendingQuestions, ...rest }) =>
+        rest,
+    );
+  }
+
+  async listLiveAgentSessionSnapshots(
+    input: ListLiveAgentSessionsInput,
+  ): Promise<LiveAgentSessionSnapshot[]> {
     const runtimeClientInput = toRuntimeClientInput(
       input.runtimeConnection,
-      "list runtime sessions",
+      "list live agent sessions",
     );
     const unscopedClient = this.createClient({
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
     });
     const sessionsPayload = await unscopedClient.session.list();
     const sessions = unwrapData(sessionsPayload, "list sessions");
+    const requestedDirectorySet =
+      input.directories && input.directories.length > 0
+        ? new Set(
+            input.directories
+              .map((directory) => normalizeSessionDirectory(directory))
+              .filter((directory): directory is string => directory !== undefined),
+          )
+        : null;
+    const filteredSessions =
+      requestedDirectorySet === null
+        ? sessions
+        : sessions.filter((session) => {
+            const directory = normalizeSessionDirectory(session.directory);
+            return directory !== undefined && requestedDirectorySet.has(directory);
+          });
     const sessionDirectories = Array.from(
-      new Set(sessions.map((session) => requireSessionDirectory(session.directory, session.id))),
+      new Set(
+        filteredSessions.map((session) => requireSessionDirectory(session.directory, session.id)),
+      ),
     );
     const statusEntries = await Promise.all(
       sessionDirectories.map(async (directory) => {
         const statusPayload = await unscopedClient.session.status({ directory });
         return [
           directory,
-          toRuntimeStatusMap(unwrapData(statusPayload, "get session status"), directory),
+          toLiveAgentSessionStatusMap(unwrapData(statusPayload, "get session status"), directory),
         ] as const;
       }),
     );
     const statusesByDirectory = new Map(statusEntries);
+    const pendingInputEntries = await Promise.all(
+      sessionDirectories.map((directory) =>
+        listLiveAgentSessionPendingInput(this.createClient, {
+          runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
+          workingDirectory: directory,
+        }),
+      ),
+    );
+    const pendingInputBySession = mergeLiveAgentSessionPendingInput(pendingInputEntries);
 
-    return sessions.map((session) => {
+    return filteredSessions.map((session) => {
       const normalizedDirectory = requireSessionDirectory(session.directory, session.id);
       const directoryStatuses = statusesByDirectory.get(normalizedDirectory);
       return {
@@ -298,7 +371,9 @@ export class OpencodeSdkAdapter
         title: session.title,
         workingDirectory: normalizedDirectory,
         startedAt: toIsoFromEpoch(session.time?.created, this.now),
-        status: toRuntimeSessionStatus(directoryStatuses?.[session.id]),
+        status: toLiveAgentSessionStatus(directoryStatuses?.[session.id]),
+        pendingPermissions: pendingInputBySession[session.id]?.permissions ?? [],
+        pendingQuestions: pendingInputBySession[session.id]?.questions ?? [],
       };
     });
   }
@@ -322,6 +397,15 @@ export class OpencodeSdkAdapter
       ...toRuntimeClientInput(input.runtimeConnection, "load session todos"),
       externalSessionId: input.externalSessionId,
     });
+  }
+
+  async listLiveAgentSessionPendingInput(
+    input: ListLiveAgentSessionPendingInput,
+  ): Promise<LiveAgentSessionPendingInputBySession> {
+    return listLiveAgentSessionPendingInput(
+      this.createClient,
+      toRuntimeClientInput(input.runtimeConnection, "list live agent session pending input"),
+    );
   }
 
   async listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog> {
@@ -400,8 +484,7 @@ export class OpencodeSdkAdapter
 
   async stopSession(sessionId: string): Promise<void> {
     const session = requireSession(this.sessions, sessionId);
-    await stopSessionRuntime(session);
-    this.sessions.delete(sessionId);
+    await stopSessionRuntime(session, this.sessions, this.runtimeEventTransports);
 
     this.emit(sessionId, {
       type: "session_finished",

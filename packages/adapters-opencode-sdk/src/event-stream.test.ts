@@ -6,11 +6,14 @@ import type { SessionInput, SessionRecord } from "./types";
 
 const makeClientWithEvents = (events: Event[]): OpencodeClient => {
   return {
-    event: {
-      subscribe: async () => {
-        async function* iterator(): AsyncGenerator<Event> {
+    global: {
+      event: async () => {
+        async function* iterator(): AsyncGenerator<{ directory: string; payload: Event }> {
           for (const event of events) {
-            yield event;
+            const directory =
+              (event as Event & { properties?: { directory?: string } }).properties?.directory ??
+              "/repo";
+            yield { directory, payload: event };
           }
         }
         return { stream: iterator() };
@@ -42,9 +45,11 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   input: makeSessionInput(),
   client,
   externalSessionId: "external-session-1",
-  streamAbortController: new AbortController(),
-  streamDone: Promise.resolve(),
+  eventTransportKey: "http://127.0.0.1:12345",
   emittedAssistantMessageIds: new Set<string>(),
+  partsById: new Map(),
+  messageRoleById: new Map(),
+  pendingDeltasByPartId: new Map(),
 });
 
 const runEventStream = async (events: Event[]): Promise<AgentEvent[]> => {
@@ -239,6 +244,26 @@ describe("event-stream", () => {
         priority: "medium",
       },
     ]);
+  });
+
+  test("routes directory-scoped global events only to matching working directories", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "session.idle",
+        properties: {
+          directory: "/other",
+        },
+      } as unknown as Event,
+      {
+        type: "session.idle",
+        properties: {
+          directory: "/repo",
+        },
+      } as unknown as Event,
+    ]);
+
+    const idleEvents = emitted.filter((event) => event.type === "session_idle");
+    expect(idleEvents).toHaveLength(1);
   });
 
   test("forwards every raw sdk event to logEvent before relevance filtering", async () => {

@@ -205,6 +205,15 @@ const summarizeOdtMutation = (
   if (tool === "odt_build_completed") {
     return readTrimmedString(input, ["summary", "taskId"]);
   }
+  if (tool === "odt_set_pull_request") {
+    const providerId = readTrimmedString(input, ["providerId"]);
+    const number =
+      typeof input?.number === "number" && Number.isFinite(input.number)
+        ? `#${input.number}`
+        : null;
+    const taskId = readTrimmedString(input, ["taskId"]);
+    return [taskId, providerId, number].filter((value) => value && value.length > 0).join(" · ");
+  }
   if (tool === "odt_set_plan") {
     const subtaskCount = countCollectionItems(input?.subtasks);
     if (subtaskCount !== null) {

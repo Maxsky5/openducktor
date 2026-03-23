@@ -6,7 +6,7 @@ import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
 
 type UseSettingsModalCatalogStateArgs = {
-  open: boolean;
+  enabled: boolean;
   selectedRepoPath: string | null;
   runtimeDefinitions: RuntimeDescriptor[];
 };
@@ -22,7 +22,7 @@ type SettingsModalCatalogState = {
 };
 
 export const useSettingsModalCatalogState = ({
-  open,
+  enabled,
   selectedRepoPath,
   runtimeDefinitions,
 }: UseSettingsModalCatalogStateArgs): SettingsModalCatalogState => {
@@ -39,7 +39,7 @@ export const useSettingsModalCatalogState = ({
         runtimeKind,
         loadRepoRuntimeCatalog,
       ),
-      enabled: open && Boolean(selectedRepoPath),
+      enabled: enabled && Boolean(selectedRepoPath),
     })),
   });
 

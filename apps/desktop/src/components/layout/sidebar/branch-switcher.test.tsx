@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { ReactElement } from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -11,43 +11,6 @@ let activeBranchName = "main";
 let latestOnValueChange: ((value: string) => void) | undefined;
 
 const switchBranch = mock(async (_branchName: string) => {});
-
-mock.module("@/state", () => ({
-  useWorkspaceState: () => ({
-    activeRepo: "/repo",
-    branches: [
-      {
-        name: "main",
-        isCurrent: true,
-        isRemote: false,
-      },
-    ],
-    activeBranch: {
-      name: activeBranchName,
-      detached: false,
-    },
-    isSwitchingWorkspace,
-    isLoadingBranches: false,
-    isSwitchingBranch,
-    branchSyncDegraded,
-    switchBranch,
-  }),
-}));
-
-mock.module("@/components/features/repository/branch-selector", () => ({
-  BranchSelector: ({
-    value,
-    disabled,
-    onValueChange,
-  }: {
-    value: string;
-    disabled?: boolean;
-    onValueChange?: (value: string) => void;
-  }) => {
-    latestOnValueChange = onValueChange;
-    return <div data-branch-value={value} data-disabled={disabled ? "true" : "false"} />;
-  },
-}));
 
 const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -71,6 +34,62 @@ const createDeferred = <T,>() => {
 };
 
 describe("BranchSwitcher", () => {
+  beforeAll(() => {
+    mock.module("@/state/app-state-provider", () => ({
+      AppStateProvider: ({ children }: { children: ReactElement }) => children,
+      useAgentState: () => {
+        throw new Error("useAgentState is not used in this test");
+      },
+      useChecksState: () => {
+        throw new Error("useChecksState is not used in this test");
+      },
+      useSpecState: () => {
+        throw new Error("useSpecState is not used in this test");
+      },
+      useTasksState: () => {
+        throw new Error("useTasksState is not used in this test");
+      },
+      useWorkspaceState: () => ({
+        activeRepo: "/repo",
+        branches: [
+          {
+            name: "main",
+            isCurrent: true,
+            isRemote: false,
+          },
+        ],
+        activeBranch: {
+          name: activeBranchName,
+          detached: false,
+        },
+        isSwitchingWorkspace,
+        isLoadingBranches: false,
+        isSwitchingBranch,
+        branchSyncDegraded,
+        switchBranch,
+      }),
+    }));
+
+    mock.module("@/components/features/repository/branch-selector", () => ({
+      BranchSelector: ({
+        value,
+        disabled,
+        onValueChange,
+      }: {
+        value: string;
+        disabled?: boolean;
+        onValueChange?: (value: string) => void;
+      }) => {
+        latestOnValueChange = onValueChange;
+        return <div data-branch-value={value} data-disabled={disabled ? "true" : "false"} />;
+      },
+    }));
+  });
+
+  afterAll(() => {
+    mock.restore();
+  });
+
   beforeEach(() => {
     branchSyncDegraded = false;
     isSwitchingWorkspace = false;

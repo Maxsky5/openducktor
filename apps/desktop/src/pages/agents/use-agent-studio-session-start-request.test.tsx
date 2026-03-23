@@ -14,7 +14,6 @@ const createRequest = () => ({
   taskId: "task-1",
   role: "build" as const,
   scenario: "build_implementation_start" as const,
-  startMode: "fresh" as const,
   reason: "scenario_kickoff" as const,
   selectedModel: null,
 });
@@ -37,11 +36,19 @@ describe("useAgentStudioSessionStartRequest", () => {
       expect(harness.getLatest().pendingSessionStartRequest?.requestId).toBe("session-start-0");
 
       await harness.run((state) => {
-        state.resolvePendingSessionStart("session-start-0", { selectedModel: null });
+        state.resolvePendingSessionStart("session-start-0", {
+          selectedModel: null,
+          startMode: "fresh" as const,
+          sourceSessionId: null,
+        });
       });
 
       await harness.waitFor(() => decision !== undefined);
-      expect(decision).toEqual({ selectedModel: null });
+      expect(decision).toEqual({
+        selectedModel: null,
+        startMode: "fresh",
+        sourceSessionId: null,
+      });
       expect(harness.getLatest().pendingSessionStartRequest).toBeNull();
     } finally {
       await harness.unmount();
@@ -110,7 +117,11 @@ describe("useAgentStudioSessionStartRequest", () => {
       expect(harness.getLatest().pendingSessionStartRequest?.requestId).toBe("session-start-1");
 
       await harness.run((state) => {
-        state.resolvePendingSessionStart(firstRequestId, { selectedModel: null });
+        state.resolvePendingSessionStart(firstRequestId, {
+          selectedModel: null,
+          startMode: "fresh" as const,
+          sourceSessionId: null,
+        });
       });
 
       expect(harness.getLatest().pendingSessionStartRequest?.requestId).toBe("session-start-1");

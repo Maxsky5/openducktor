@@ -12,7 +12,7 @@ use host_domain::{
     GitMergeBranchRequest, GitMergeBranchResult, GitPullRequest, GitPullResult, GitPushResult,
     GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
     GitResetWorktreeSelection, GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
-    GitWorktreeStatusData, GitWorktreeStatusSummaryData,
+    GitWorktreeStatusData, GitWorktreeStatusSummaryData, GitWorktreeSummary,
 };
 
 #[derive(Clone)]
@@ -119,6 +119,10 @@ impl GitPort for CommandGitPort {
 
     fn get_current_branch(&self, _repo_path: &Path) -> anyhow::Result<GitCurrentBranch> {
         panic!("unexpected call: get_current_branch");
+    }
+
+    fn list_worktrees(&self, _repo_path: &Path) -> anyhow::Result<Vec<GitWorktreeSummary>> {
+        panic!("unexpected call: list_worktrees");
     }
 
     fn switch_branch(

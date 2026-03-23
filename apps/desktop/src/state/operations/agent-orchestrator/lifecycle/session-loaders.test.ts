@@ -144,6 +144,31 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     expect(session?.messages).toEqual([]);
   });
 
+  test("dedupes in-flight model catalog loads for the same runtime connection", async () => {
+    const deferredCatalog = createDeferred<AgentModelCatalog>();
+    const harness = createStateHarness(createSession());
+    let catalogLoads = 0;
+    const loadSessionModelCatalog = createLoadSessionModelCatalog({
+      adapter: {
+        listAvailableModels: async () => {
+          catalogLoads += 1;
+          return deferredCatalog.promise;
+        },
+        loadSessionTodos: async () => [],
+      },
+      updateSession: harness.updateSession,
+    });
+
+    const firstLoad = loadSessionModelCatalog("session-1", "opencode", runtimeConnection);
+    const secondLoad = loadSessionModelCatalog("session-1", "opencode", runtimeConnection);
+
+    deferredCatalog.resolve(catalogFixture);
+    await Promise.all([firstLoad, secondLoad]);
+
+    expect(catalogLoads).toBe(1);
+    expect(harness.getState()["session-1"]?.modelCatalog).toEqual(catalogFixture);
+  });
+
   test("rejects invalid model catalog runtime runtimeEndpoint before adapter call", async () => {
     const harness = createStateHarness(createSession());
     let listAvailableModelsCalled = false;
@@ -226,6 +251,36 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       ),
     ).rejects.toThrow("Session runtime workingDirectory must not contain traversal segments.");
     expect(loadSessionTodosCalled).toBe(false);
+  });
+
+  test("dedupes in-flight todo loads for the same session runtime identity", async () => {
+    const deferredTodos = createDeferred<AgentSessionTodoItem[]>();
+    const harness = createStateHarness(createSession());
+    let todoLoads = 0;
+    const loadSessionTodos = createLoadSessionTodos({
+      adapter: {
+        listAvailableModels: async () => catalogFixture,
+        loadSessionTodos: async () => {
+          todoLoads += 1;
+          return deferredTodos.promise;
+        },
+      },
+      supportsSessionTodos: () => true,
+      updateSession: harness.updateSession,
+    });
+
+    const firstLoad = loadSessionTodos("session-1", "opencode", runtimeConnection, "external-1");
+    const secondLoad = loadSessionTodos("session-1", "opencode", runtimeConnection, "external-1");
+
+    deferredTodos.resolve([
+      { id: "todo-1", content: "Todo", status: "pending", priority: "medium" },
+    ]);
+    await Promise.all([firstLoad, secondLoad]);
+
+    expect(todoLoads).toBe(1);
+    expect(harness.getState()["session-1"]?.todos).toEqual([
+      { id: "todo-1", content: "Todo", status: "pending", priority: "medium" },
+    ]);
   });
 
   test("skips adapter todos loading when runtime does not support todos", async () => {

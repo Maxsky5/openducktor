@@ -98,6 +98,7 @@ describe("use-agent-studio-session-action-helpers", () => {
       task: "task-existing",
       session: "session-existing",
       agent: "spec",
+      scenario: "build_implementation_start",
       autostart: undefined,
       start: undefined,
     });

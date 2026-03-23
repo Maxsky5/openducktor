@@ -43,16 +43,20 @@ Key boundary:
 
 ### 2) Start an agent session
 1. Agent Studio triggers `startAgentSession` in `use-agent-orchestrator-operations.ts`.
-2. `start-session.ts` enforces in-flight dedupe and reuse policy (in-memory latest, then persisted metadata session, else new).
-3. For new sessions it concurrently loads task docs, resolves runtime, and loads repo default model.
-4. Runtime acquisition:
+2. `start-session.ts` enforces scenario-owned start policy:
+ - `fresh`: create a new session
+ - `reuse`: continue an existing session
+ - `fork`: create a new session from an existing source session
+3. The session-start modal resolves the final start mode from the scenario definition in `packages/contracts/src/agent-workflow-schemas.ts`.
+4. For new or forked sessions it concurrently loads task docs, resolves runtime, and loads repo default model.
+5. Runtime acquisition:
  - `build` role: `host.buildStart(repo, task, runtimeKind)` creates a build worktree and starts the configured build runtime; today only `opencode` is implemented.
  - `qa` role: `host.runtimeStart(runtimeKind, repo, task, "qa")` creates a task runtime for the selected kind.
  - `spec`/`planner`: `host.runtimeEnsure(runtimeKind, repo)` ensures a shared workspace runtime for the selected kind.
-5. Rust host resolves the requested runtime kind, then runs runtime-specific startup. Today that startup path still spawns OpenCode with `OPENCODE_CONFIG_CONTENT` containing MCP server `openducktor` and env (`ODT_REPO_PATH`, `ODT_BEADS_DIR`, `ODT_METADATA_NAMESPACE`).
-6. `OpencodeSdkAdapter` (`AgentEnginePort` implementation) starts/resumes session and subscribes to OpenCode stream events.
-7. On prompt send, adapter applies role-scoped tool gating from `AGENT_ROLE_TOOL_POLICY` (core) and runtime tool IDs, then sends `tools` selection to OpenCode.
-8. Session snapshots are persisted via `host.agentSessionUpsert` into task metadata for restart/reuse continuity.
+6. Rust host resolves the requested runtime kind, then runs runtime-specific startup. Today that startup path still spawns OpenCode with `OPENCODE_CONFIG_CONTENT` containing MCP server `openducktor` and env (`ODT_REPO_PATH`, `ODT_BEADS_DIR`, `ODT_METADATA_NAMESPACE`).
+7. `OpencodeSdkAdapter` (`AgentEnginePort` implementation) starts, resumes, or forks the session and subscribes to OpenCode stream events.
+8. On prompt send, adapter applies role-scoped tool gating from `AGENT_ROLE_TOOL_POLICY` (core) and runtime tool IDs, then sends `tools` selection to OpenCode.
+9. Session snapshots are persisted via `host.agentSessionUpsert` into task metadata for restart/reuse continuity.
 
 Critical session invariants:
 - Read-only roles (`spec`, `planner`, `qa`) must auto-reject mutating permission prompts; on auto-reply failure, permission remains actionable and a system error is emitted.
@@ -76,11 +80,22 @@ Agent-triggered path:
 4. Tool result is emitted in session stream.
 5. Frontend session-event handler detects completed ODT mutation tools and triggers task refresh.
 
+### 4) Generate a pull request
+1. The approval flow starts a Builder session with scenario `build_pull_request_generation`.
+2. That scenario is `fork`-only and must start from an existing Builder source session.
+3. The Builder uses provider-native git or GitHub tools to create or update the PR.
+4. Once the PR exists, the Builder calls `odt_set_pull_request`.
+5. `odt_set_pull_request` persists canonical PR metadata into task metadata by resolving the provider record from `providerId + number`.
+
+Key boundary:
+- The page layer no longer parses Builder chat output to create a PR.
+- PR generation is now a scenario-driven workflow step.
+
 ## Source-of-Truth Contracts and Ownership
 | Concern | Source of truth | Owner modules |
 |---|---|---|
 | Task statuses, issue types, action IDs | `packages/contracts/src/task-schemas.ts` | `@openducktor/contracts`, consumed by adapters/frontend/host |
-| Role, scenario, ODT tool IDs | `packages/contracts/src/agent-workflow-schemas.ts` | `@openducktor/contracts` |
+| Role, scenario, start mode, ODT tool IDs | `packages/contracts/src/agent-workflow-schemas.ts` | `@openducktor/contracts` |
 | Role-to-tool allowlist | `AGENT_ROLE_TOOL_POLICY` in `packages/core/src/types/agent-orchestrator.ts` | `@openducktor/core` |
 | ODT/public MCP tool schema validation | `ODT_TOOL_SCHEMAS` exported from `packages/openducktor-mcp/src/lib.ts` (defined in `src/tool-schemas.ts`) | `@openducktor/mcp` |
 | Transition legality and backend-derived actions/workflows | Rust host path: `apps/desktop/src-tauri/crates/host-application/src/app_service/workflow_rules.rs`; MCP path: `packages/openducktor-mcp/src/workflow-policy.ts` + `packages/openducktor-mcp/src/task-transitions.ts` | Rust host application + MCP workflow service |

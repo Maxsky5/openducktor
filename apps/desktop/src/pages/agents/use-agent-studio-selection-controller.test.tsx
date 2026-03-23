@@ -13,6 +13,13 @@ import {
 enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioSelectionController>[0];
+const emptyCatalog = {
+  providers: [],
+  models: [],
+  variants: [],
+  profiles: [],
+  defaultModelsByProvider: {},
+};
 
 const createTask = (id: string) => createTaskCardFixture({ id, title: id });
 
@@ -40,8 +47,11 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   sessionParam: null,
   hasExplicitRoleParam: false,
   roleFromQuery: "spec",
+  scenarioFromQuery: null,
   updateQuery: () => {},
-  loadAgentSessions: async () => {},
+  hydrateRequestedTaskSessionHistory: async () => {},
+  readSessionModelCatalog: async () => emptyCatalog,
+  readSessionTodos: async () => [],
   clearComposerInput: () => {},
   ...overrides,
 });

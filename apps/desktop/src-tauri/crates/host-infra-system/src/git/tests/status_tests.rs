@@ -182,6 +182,50 @@ fn get_worktree_status_supports_upstream_target_without_tracking_branch() {
 }
 
 #[test]
+fn get_worktree_status_uses_existing_remote_branch_when_tracking_is_missing() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-status-origin-fallback");
+    let remote = setup_bare_remote("worktree-status-origin-fallback-remote");
+    let remote_path = remote.path.to_string_lossy().to_string();
+    run_git_ok(
+        &repo.path,
+        &["remote", "add", "origin", remote_path.as_str()],
+    );
+    run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+    let git = GitCliPort::new();
+    git.switch_branch(&repo.path, "feature/worktree-origin-fallback", true)
+        .expect("feature branch should be created");
+
+    fs::write(repo.path.join("worktree-origin-fallback.txt"), "seed\n")
+        .expect("fallback file should write");
+    run_git_ok(&repo.path, &["add", "worktree-origin-fallback.txt"]);
+    run_git_ok(
+        &repo.path,
+        &["commit", "-m", "push branch without tracking"],
+    );
+    run_git_ok(
+        &repo.path,
+        &["push", "origin", "feature/worktree-origin-fallback"],
+    );
+
+    let status = git
+        .get_worktree_status(&repo.path, "main", GitDiffScope::Target)
+        .expect("fallback upstream worktree status should resolve");
+
+    assert_eq!(
+        status.upstream_ahead_behind,
+        GitUpstreamAheadBehind::Tracking {
+            ahead: 0,
+            behind: 0,
+        }
+    );
+}
+
+#[test]
 fn get_worktree_status_keeps_upstream_compare_empty_when_repo_is_dirty_and_untracked() {
     if !git_available() {
         return;

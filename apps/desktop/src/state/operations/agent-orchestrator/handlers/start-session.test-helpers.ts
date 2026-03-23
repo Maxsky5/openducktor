@@ -1,7 +1,11 @@
 import type { StartSessionDependencies } from "./start-session";
 
-export type FlatStartSessionDependencies = StartSessionDependencies["repo"] &
-  StartSessionDependencies["session"] &
+export type FlatStartSessionDependencies = Omit<
+  StartSessionDependencies["repo"],
+  "activeRepoRef"
+> & {
+  activeRepoRef?: { current: string | null };
+} & StartSessionDependencies["session"] &
   Omit<StartSessionDependencies["runtime"], "resolveBuildContinuationTarget"> &
   Partial<Pick<StartSessionDependencies["runtime"], "resolveBuildContinuationTarget">> &
   StartSessionDependencies["task"] &
@@ -15,6 +19,7 @@ export const toStartSessionDependencies = (
       activeRepo: deps.activeRepo,
       repoEpochRef: deps.repoEpochRef,
       previousRepoRef: deps.previousRepoRef,
+      ...(deps.activeRepoRef ? { activeRepoRef: deps.activeRepoRef } : {}),
     },
     session: {
       setSessionsById: deps.setSessionsById,
@@ -39,8 +44,6 @@ export const toStartSessionDependencies = (
     model: {
       loadRepoDefaultModel: deps.loadRepoDefaultModel,
       loadRepoPromptOverrides: deps.loadRepoPromptOverrides,
-      loadSessionTodos: deps.loadSessionTodos,
-      loadSessionModelCatalog: deps.loadSessionModelCatalog,
     },
   };
 };

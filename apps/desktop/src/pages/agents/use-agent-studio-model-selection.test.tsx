@@ -339,7 +339,7 @@ describe("useAgentStudioModelSelection", () => {
     await harness.unmount();
   });
 
-  test("falls back to composer catalog colors and loading state when session catalog is unavailable", async () => {
+  test("does not load the repo composer catalog while an active session owns runtime catalog loading", async () => {
     const loadCatalog = mock(async () => CATALOG);
     const activeSession = createActiveSession({
       modelCatalog: null,
@@ -353,20 +353,24 @@ describe("useAgentStudioModelSelection", () => {
       }),
     );
 
-    await harness.mount();
-    await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
+    try {
+      await harness.mount();
 
-    const state = harness.getLatest();
-    expect(state.isSelectionCatalogLoading).toBe(false);
-    expect(state.activeSessionAgentColors).toMatchObject({
-      "spec-agent": "#f59e0b",
-    });
-
-    await harness.unmount();
+      expect(loadCatalog).toHaveBeenCalledTimes(0);
+      expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
+      expect(harness.getLatest().selectedModelSelection).toEqual({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        profileId: "spec-agent",
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("keeps loading while no catalog source is available for an active session", async () => {
-    const deferredCatalog = createDeferred<AgentModelCatalog>();
     const activeSession = createActiveSession({
       modelCatalog: null,
       isLoadingModelCatalog: true,
@@ -375,19 +379,16 @@ describe("useAgentStudioModelSelection", () => {
     const harness = createHookHarness(
       createBaseProps({
         activeSession,
-        loadCatalog: async () => deferredCatalog.promise,
+        loadCatalog: async () => CATALOG,
       }),
     );
 
-    await harness.mount();
-    expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
-
-    await harness.run(() => {
-      deferredCatalog.resolve(CATALOG);
-    });
-    await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
-
-    await harness.unmount();
+    try {
+      await harness.mount();
+      expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("invalidates composer catalog and ignores stale repo loads when active repo changes", async () => {

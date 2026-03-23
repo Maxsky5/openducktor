@@ -116,10 +116,18 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     ).listAvailableModels(input);
   }
 
-  listRuntimeSessions(input: Parameters<AgentEnginePort["listRuntimeSessions"]>[0]) {
+  listLiveAgentSessions(input: Parameters<AgentEnginePort["listLiveAgentSessions"]>[0]) {
     return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "runtime session discovery"),
-    ).listRuntimeSessions(input);
+      this.requireInputRuntimeKind(input.runtimeKind, "live agent session discovery"),
+    ).listLiveAgentSessions(input);
+  }
+
+  listLiveAgentSessionSnapshots(
+    input: Parameters<AgentEnginePort["listLiveAgentSessionSnapshots"]>[0],
+  ) {
+    return this.getAdapter(
+      this.requireInputRuntimeKind(input.runtimeKind, "live agent session snapshot discovery"),
+    ).listLiveAgentSessionSnapshots(input);
   }
 
   hasSession(sessionId: string): boolean {
@@ -136,6 +144,14 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     return this.getAdapter(
       this.requireInputRuntimeKind(input.runtimeKind, "session todos"),
     ).loadSessionTodos(input);
+  }
+
+  listLiveAgentSessionPendingInput(
+    input: Parameters<AgentEnginePort["listLiveAgentSessionPendingInput"]>[0],
+  ) {
+    return this.getAdapter(
+      this.requireInputRuntimeKind(input.runtimeKind, "live agent session pending input"),
+    ).listLiveAgentSessionPendingInput(input);
   }
 
   updateSessionModel(input: Parameters<AgentEnginePort["updateSessionModel"]>[0]) {

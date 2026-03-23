@@ -42,6 +42,7 @@ const catalogFixture: AgentModelCatalog = {
 const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDependencies => ({
   getRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
   ensureRuntime: async () => runtimeFixture,
+  listRuntimesForRepo: async () => [],
   stopRuntime: async () => ({ ok: true }),
   listRuns: async () => [],
   listAvailableModels: async () => catalogFixture,
@@ -78,6 +79,33 @@ describe("opencode-catalog", () => {
       runtimeKind: "opencode",
       runtimeEndpoint: "http://127.0.0.1:4444",
       workingDirectory: "/tmp/repo/worktree",
+    });
+  });
+
+  test("reuses a cached repo runtime for catalog loads before ensuring again", async () => {
+    const ensureRuntime = mock(async () => runtimeFixture);
+    const listAvailableModels = mock(async () => catalogFixture);
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        ensureRuntime,
+        listRuntimesForRepo: async () => [
+          {
+            ...runtimeFixture,
+            workingDirectory: "/tmp/repo",
+          },
+        ],
+        listAvailableModels,
+      }),
+    );
+
+    await expect(operations.loadRepoRuntimeCatalog("/tmp/repo", "opencode")).resolves.toEqual(
+      catalogFixture,
+    );
+    expect(ensureRuntime).not.toHaveBeenCalled();
+    expect(listAvailableModels).toHaveBeenCalledWith({
+      runtimeKind: "opencode",
+      runtimeEndpoint: "http://127.0.0.1:4444",
+      workingDirectory: "/tmp/repo",
     });
   });
 
@@ -131,6 +159,37 @@ describe("opencode-catalog", () => {
     expect(result.mcpServerStatus).toBe("connected");
     expect(result.errors).toEqual([]);
     expect(connectMcpServer).not.toHaveBeenCalled();
+  });
+
+  test("reuses a cached repo runtime for health checks before ensuring again", async () => {
+    const ensureRuntime = mock(async () => runtimeFixture);
+    const getMcpStatus = mock(async () => ({
+      openducktor: {
+        status: "connected",
+        command: null,
+        args: null,
+        env: null,
+      },
+    }));
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        ensureRuntime,
+        listRuntimesForRepo: async () => [
+          {
+            ...runtimeFixture,
+            workingDirectory: "/tmp/repo",
+          },
+        ],
+        getMcpStatus,
+      }),
+    );
+
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
+
+    expect(result.runtimeOk).toBe(true);
+    expect(result.runtime?.workingDirectory).toBe("/tmp/repo");
+    expect(ensureRuntime).not.toHaveBeenCalled();
+    expect(getMcpStatus).toHaveBeenCalledTimes(1);
   });
 
   test("reports MCP status failures when status query throws", async () => {

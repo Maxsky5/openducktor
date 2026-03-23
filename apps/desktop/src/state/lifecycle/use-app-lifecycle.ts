@@ -1,11 +1,10 @@
-import { type RunEvent, type RuntimeKind, runEventSchema } from "@openducktor/contracts";
+import { type RunEvent, runEventSchema } from "@openducktor/contracts";
 import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
-import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
-import { prependRunEvent, shouldLoadChecks } from "./app-lifecycle-model";
+import { prependRunEvent } from "./app-lifecycle-model";
 
 const BEADS_PREPARATION_TOAST_DELAY_MS = 1_000;
 
@@ -23,21 +22,8 @@ type UseAppLifecycleArgs = {
     beadsOk: boolean;
     beadsError?: string | null;
   }>;
-  refreshRepoRuntimeHealthForRepo: (
-    repoPath: string,
-    force?: boolean,
-  ) => Promise<RepoRuntimeHealthMap>;
-  runtimeKinds: RuntimeKind[];
   refreshTaskData: (repoPath: string) => Promise<void>;
-  clearTaskData: () => void;
   clearBranchData: () => void;
-  clearActiveBeadsCheck: () => void;
-  clearActiveRepoRuntimeHealth: () => void;
-  setIsLoadingTasks: (value: boolean) => void;
-  setIsLoadingChecks: (value: boolean) => void;
-  hasRuntimeCheck: () => boolean;
-  hasCachedBeadsCheck: (repoPath: string) => boolean;
-  hasCachedRepoRuntimeHealth: (repoPath: string, runtimeKinds: RuntimeKind[]) => boolean;
   beadsPreparationToastDelayMs?: number;
 };
 
@@ -49,18 +35,8 @@ export function useAppLifecycle({
   refreshBranches,
   refreshRuntimeCheck,
   refreshBeadsCheckForRepo,
-  refreshRepoRuntimeHealthForRepo,
-  runtimeKinds,
   refreshTaskData,
-  clearTaskData,
   clearBranchData,
-  clearActiveBeadsCheck,
-  clearActiveRepoRuntimeHealth,
-  setIsLoadingTasks,
-  setIsLoadingChecks,
-  hasRuntimeCheck,
-  hasCachedBeadsCheck,
-  hasCachedRepoRuntimeHealth,
   beadsPreparationToastDelayMs = BEADS_PREPARATION_TOAST_DELAY_MS,
 }: UseAppLifecycleArgs): void {
   const repoLoadVersionRef = useRef(0);
@@ -130,24 +106,11 @@ export function useAppLifecycle({
 
   useEffect(() => {
     if (!activeRepo) {
-      clearTaskData();
       clearBranchData();
-      clearActiveBeadsCheck();
-      clearActiveRepoRuntimeHealth();
-      setIsLoadingTasks(false);
-      setIsLoadingChecks(false);
       return;
     }
 
     const loadVersion = ++repoLoadVersionRef.current;
-    setIsLoadingTasks(true);
-    setIsLoadingChecks(
-      shouldLoadChecks({
-        hasRuntimeCheck: hasRuntimeCheck(),
-        hasCachedBeadsCheck: hasCachedBeadsCheck(activeRepo),
-        hasCachedRepoRuntimeHealth: hasCachedRepoRuntimeHealth(activeRepo, runtimeKinds),
-      }),
-    );
     let beadsPreparationToastId: string | number | null = null;
     let beadsPreparationToastShown = false;
     let beadsPreparationTimer: ReturnType<typeof setTimeout> | null = null;
@@ -206,26 +169,10 @@ export function useAppLifecycle({
       }
     })();
     const runtimeCheckPromise = refreshRuntimeCheck(false);
-    const runtimeHealthPromise = refreshRepoRuntimeHealthForRepo(activeRepo, false);
     const branchesPromise = refreshBranches(false);
 
-    const finalizeTaskLoading = (): void => {
-      if (repoLoadVersionRef.current !== loadVersion) {
-        return;
-      }
-
-      setIsLoadingTasks(false);
-    };
-
-    void taskLoadPromise.then(finalizeTaskLoading, finalizeTaskLoading);
-
-    Promise.allSettled([
-      taskLoadPromise,
-      runtimeCheckPromise,
-      runtimeHealthPromise,
-      branchesPromise,
-    ])
-      .then(([tasksResult, runtimeResult, runtimeHealthResult, branchesResult]) => {
+    Promise.allSettled([taskLoadPromise, runtimeCheckPromise, branchesPromise])
+      .then(([tasksResult, runtimeResult, branchesResult]) => {
         if (repoLoadVersionRef.current !== loadVersion) {
           return;
         }
@@ -242,24 +189,6 @@ export function useAppLifecycle({
           });
         }
 
-        if (runtimeHealthResult.status === "rejected") {
-          toast.error("Runtime + MCP diagnostics unavailable", {
-            description: errorMessage(runtimeHealthResult.reason),
-          });
-        } else {
-          const runtimeHealthEntries = Object.values(runtimeHealthResult.value);
-          const hasRuntimeIssue = runtimeHealthEntries.some(
-            (entry) => entry && (!entry.runtimeOk || !entry.mcpOk),
-          );
-          if (hasRuntimeIssue) {
-            toast.error("Runtime + MCP unavailable", {
-              description:
-                runtimeHealthEntries.flatMap((entry) => entry?.errors ?? []).join(" | ") ||
-                "The selected runtime or OpenDucktor MCP is not ready.",
-            });
-          }
-        }
-
         if (branchesResult.status === "rejected") {
           toast.error("Repository branches unavailable", {
             description: errorMessage(branchesResult.reason),
@@ -270,8 +199,6 @@ export function useAppLifecycle({
         if (repoLoadVersionRef.current !== loadVersion) {
           return;
         }
-
-        setIsLoadingChecks(false);
       });
 
     return () => {
@@ -282,19 +209,9 @@ export function useAppLifecycle({
     activeRepo,
     beadsPreparationToastDelayMs,
     clearBranchData,
-    clearActiveBeadsCheck,
-    clearActiveRepoRuntimeHealth,
-    clearTaskData,
-    hasCachedBeadsCheck,
-    hasCachedRepoRuntimeHealth,
-    hasRuntimeCheck,
-    runtimeKinds,
     refreshBeadsCheckForRepo,
     refreshBranches,
-    refreshRepoRuntimeHealthForRepo,
     refreshRuntimeCheck,
     refreshTaskData,
-    setIsLoadingChecks,
-    setIsLoadingTasks,
   ]);
 }

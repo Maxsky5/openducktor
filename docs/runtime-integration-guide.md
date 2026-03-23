@@ -201,6 +201,23 @@ This is why `agentRuntimeStartRoleSchema` excludes `build` in `packages/contract
 
 Even though these roles route through different startup paths, every runtime integration must support all of them. OpenDucktor does not allow registering a runtime that handles only `spec`, only `planner`, or any other partial subset.
 
+## Scenario and start-mode compatibility
+
+Runtime integrations must support the session start modes used by the scenario registry:
+
+- `fresh`: create a new session
+- `reuse`: continue an existing session
+- `fork`: create a new session from an existing source session
+
+Current workflow implications:
+
+- `build_implementation_start` is `fresh` only
+- `build_after_qa_rejected`, `build_after_human_request_changes`, and `build_rebase_conflict_resolution` allow `fresh` and `reuse`
+- `build_pull_request_generation` is `fork` only
+- `qa_review` allows `fresh` and `reuse`
+
+This makes `supportsSessionFork` a hard requirement for full Builder compatibility. A runtime that cannot fork an existing Builder session cannot implement the complete OpenDucktor Builder workflow.
+
 ## Files to Change When Adding a Runtime
 
 This is the minimum checklist for a new runtime integration.
@@ -244,6 +261,12 @@ The runtime adapter implements the `AgentEnginePort` surface used by session orc
 - diff,
 - file status.
 
+It must also implement the scenario-compatible session lifecycle:
+
+- `startSession(...)` for fresh sessions
+- reuse via existing session registration/resume flows
+- `forkSession(...)` for fork-only scenarios such as `build_pull_request_generation`
+
 If a runtime does not implement one of these surfaces, the descriptor and adapter surface should reflect that so unsupported operations fail explicitly.
 
 ### 3. Runtime adapter implementation
@@ -259,6 +282,8 @@ Related mapping files:
 - `packages/adapters-opencode-sdk/src/session-runtime-utils.ts`
 
 This is the layer where `RuntimeConnection` becomes runtime-specific client input. Generic orchestrator code passes connection data in, and the adapter builds the runtime-specific client from it.
+
+For Builder PR generation, the runtime integration is responsible for making provider-native git or PR tools available to the agent. OpenDucktor persists the authoritative PR metadata only after the agent calls `odt_set_pull_request(taskId, providerId, number)`, then resolves the canonical provider record itself.
 
 ### 4. Desktop runtime registration and orchestration
 

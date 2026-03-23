@@ -8,6 +8,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 type UseAgentStudioBuildWorktreeRefreshArgs = {
   viewRole: string | null;
   activeSession: AgentSessionState | null;
+  isSessionHistoryHydrating: boolean;
   refreshWorktree: () => void;
 };
 
@@ -68,18 +69,40 @@ const canToolAffectWorktree = (meta: ToolMessageMeta): boolean => {
 export function useAgentStudioBuildWorktreeRefresh({
   viewRole,
   activeSession,
+  isSessionHistoryHydrating,
   refreshWorktree,
 }: UseAgentStudioBuildWorktreeRefreshArgs): void {
   const processedToolMessageKeysRef = useRef(new Set<string>());
   const previousSessionIdRef = useRef<string | null>(null);
+  const wasSessionHistoryHydratingRef = useRef(false);
 
   useEffect(() => {
     if (viewRole !== "build" || activeSession?.role !== "build") {
       return;
     }
 
+    if (isSessionHistoryHydrating) {
+      wasSessionHistoryHydratingRef.current = true;
+      return;
+    }
+
     if (previousSessionIdRef.current !== activeSession.sessionId) {
       previousSessionIdRef.current = activeSession.sessionId;
+      processedToolMessageKeysRef.current = new Set(
+        activeSession.messages.flatMap((message) => {
+          const meta = message.meta;
+          if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
+            return [];
+          }
+
+          return [`${activeSession.sessionId}:${message.id}`];
+        }),
+      );
+      return;
+    }
+
+    if (wasSessionHistoryHydratingRef.current) {
+      wasSessionHistoryHydratingRef.current = false;
       processedToolMessageKeysRef.current = new Set(
         activeSession.messages.flatMap((message) => {
           const meta = message.meta;
@@ -114,5 +137,5 @@ export function useAgentStudioBuildWorktreeRefresh({
     if (shouldRefresh) {
       refreshWorktree();
     }
-  }, [activeSession, refreshWorktree, viewRole]);
+  }, [activeSession, isSessionHistoryHydrating, refreshWorktree, viewRole]);
 }

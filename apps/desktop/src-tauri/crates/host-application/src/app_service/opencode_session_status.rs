@@ -59,8 +59,8 @@ pub(crate) fn load_opencode_session_statuses(
     let endpoint = match runtime_route {
         RuntimeRoute::LocalHttp { endpoint } => endpoint.as_str(),
     };
-    let parsed_endpoint =
-        Url::parse(endpoint).with_context(|| format!("Invalid OpenCode runtime endpoint: {endpoint}"))?;
+    let parsed_endpoint = Url::parse(endpoint)
+        .with_context(|| format!("Invalid OpenCode runtime endpoint: {endpoint}"))?;
     let host = parsed_endpoint
         .host_str()
         .ok_or_else(|| anyhow!("OpenCode runtime endpoint is missing a host: {endpoint}"))?;
@@ -85,9 +85,8 @@ pub(crate) fn load_opencode_session_statuses(
         .set_write_timeout(Some(Duration::from_secs(2)))
         .context("Failed configuring OpenCode session status write timeout")?;
 
-    let request = format!(
-        "GET {request_path} HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n"
-    );
+    let request =
+        format!("GET {request_path} HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n");
     stream.write_all(request.as_bytes()).with_context(|| {
         format!("Failed sending OpenCode session status request for {working_directory}")
     })?;

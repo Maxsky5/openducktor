@@ -27,15 +27,17 @@ type RefValue<T> = { current: T };
 export const createRepoStaleGuard = ({
   repoPath,
   repoEpochRef,
+  activeRepoRef,
   previousRepoRef,
 }: {
   repoPath: string;
   repoEpochRef: RefValue<number>;
+  activeRepoRef: RefValue<string | null> | undefined;
   previousRepoRef: RefValue<string | null>;
 }): (() => boolean) => {
   const repoEpochAtStart = repoEpochRef.current;
-  return (): boolean =>
-    repoEpochRef.current !== repoEpochAtStart || previousRepoRef.current !== repoPath;
+  const currentRepoAt = (): string | null => activeRepoRef?.current ?? previousRepoRef.current;
+  return (): boolean => repoEpochRef.current !== repoEpochAtStart || currentRepoAt() !== repoPath;
 };
 
 export const throwIfRepoStale = (isStaleRepoOperation: () => boolean, message: string): void => {

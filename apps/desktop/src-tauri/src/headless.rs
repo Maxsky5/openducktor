@@ -960,6 +960,7 @@ async fn dispatch_runtime_command(
         "runtime_stop" => Some(handle_runtime_stop(state, args).await),
         "runtime_ensure" => Some(handle_runtime_ensure(state, args).await),
         "agent_sessions_list" => Some(handle_agent_sessions_list(state, args)),
+        "agent_sessions_list_bulk" => Some(handle_agent_sessions_list_bulk(state, args)),
         "agent_session_upsert" => Some(handle_agent_session_upsert(state, args)),
         _ => None,
     }
@@ -2201,6 +2202,26 @@ fn handle_agent_sessions_list(state: &HeadlessState, args: Value) -> CommandResu
     handle_repo_task_operation(args, |repo_path, task_id| {
         state.service.agent_sessions_list(&repo_path, &task_id)
     })
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentSessionsListBulkArgs {
+    repo_path: String,
+    task_ids: Vec<String>,
+}
+
+fn handle_agent_sessions_list_bulk(state: &HeadlessState, args: Value) -> CommandResult {
+    let AgentSessionsListBulkArgs {
+        repo_path,
+        task_ids,
+    } = deserialize_args(args)?;
+    serialize_value(
+        state
+            .service
+            .agent_sessions_list_bulk(&repo_path, &task_ids)
+            .map_err(service_error)?,
+    )
 }
 
 fn handle_agent_session_upsert(state: &HeadlessState, args: Value) -> CommandResult {

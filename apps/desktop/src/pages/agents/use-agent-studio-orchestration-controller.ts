@@ -37,6 +37,8 @@ export type AgentStudioOrchestrationActionsContext = {
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   stopAgentSession: AgentStateContextValue["stopAgentSession"];
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
+  bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
+  hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
   loadAgentSessions: AgentStateContextValue["loadAgentSessions"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   replyAgentPermission: AgentStateContextValue["replyAgentPermission"];
@@ -217,6 +219,8 @@ export function useAgentStudioOrchestrationController({
     sendAgentMessage,
     stopAgentSession,
     updateAgentSessionModel,
+    bootstrapTaskSessions,
+    hydrateRequestedTaskSessionHistory,
     loadAgentSessions,
     humanRequestChangesTask,
     replyAgentPermission,
@@ -288,6 +292,8 @@ export function useAgentStudioOrchestrationController({
     startAgentSession,
     sendAgentMessage,
     updateAgentSessionModel,
+    bootstrapTaskSessions,
+    hydrateRequestedTaskSessionHistory,
     loadAgentSessions,
     humanRequestChangesTask,
     answerAgentQuestion,

@@ -12,11 +12,11 @@ describe("client-factory", () => {
   test("buildDefaultFactory creates an OpenCode client", () => {
     const createClient = buildDefaultFactory();
     const client = createClient({
-      baseUrl: "http://127.0.0.1:4321",
+      runtimeEndpoint: "http://127.0.0.1:4321",
       workingDirectory: "/",
     });
 
     expect(typeof client.session.create).toBe("function");
-    expect(typeof client.event.subscribe).toBe("function");
+    expect(typeof (client.global as { event?: unknown }).event).toBe("function");
   });
 });

@@ -3,7 +3,6 @@ import { createTauriHostClient } from "@openducktor/adapters-tauri-host";
 import type { ReactElement } from "react";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
-import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 
 let subscribedRunListener: ((payload: unknown) => void) | null = null;
 const toastError = mock((_message: string, _options?: { description?: string }) => "");
@@ -120,18 +119,8 @@ describe("useAppLifecycle", () => {
               beadsPath: "/repo/.beads",
               beadsError: null,
             })),
-            refreshRepoRuntimeHealthForRepo: mock(async () => ({})),
-            runtimeKinds: ["opencode"],
             refreshTaskData,
-            clearTaskData: mock(() => {}),
             clearBranchData: mock(() => {}),
-            clearActiveBeadsCheck: mock(() => {}),
-            clearActiveRepoRuntimeHealth: mock(() => {}),
-            setIsLoadingTasks: mock((_value: boolean) => {}),
-            setIsLoadingChecks: mock((_value: boolean) => {}),
-            hasRuntimeCheck: mock(() => true),
-            hasCachedBeadsCheck: mock((_repoPath: string) => true),
-            hasCachedRepoRuntimeHealth: mock((_repoPath: string, _runtimeKinds) => true),
           } satisfies HookArgs,
         }),
       );
@@ -162,7 +151,7 @@ describe("useAppLifecycle", () => {
     });
   });
 
-  test("clears task loading as soon as the repo task load finishes", async () => {
+  test("loads repo task and diagnostics checks when the active repo changes", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
 
@@ -191,10 +180,7 @@ describe("useAppLifecycle", () => {
 
     const taskLoadDeferred = createDeferred<void>();
     const runtimeRepoCheckDeferred = createDeferred<unknown>();
-    const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthMap>();
     const branchesDeferred = createDeferred<void>();
-    const setIsLoadingTasks = mock((_value: boolean) => {});
-    const setIsLoadingChecks = mock((_value: boolean) => {});
 
     let runtimeCheckCallCount = 0;
     const refreshRuntimeCheck = mock(() => {
@@ -216,53 +202,38 @@ describe("useAppLifecycle", () => {
         beadsPath: "/repo/.beads",
         beadsError: null,
       })),
-      refreshRepoRuntimeHealthForRepo: mock(async () => runtimeHealthDeferred.promise),
-      runtimeKinds: ["opencode"],
       refreshTaskData: mock(async () => taskLoadDeferred.promise),
-      clearTaskData: mock(() => {}),
       clearBranchData: mock(() => {}),
-      clearActiveBeadsCheck: mock(() => {}),
-      clearActiveRepoRuntimeHealth: mock(() => {}),
-      setIsLoadingTasks,
-      setIsLoadingChecks,
-      hasRuntimeCheck: mock(() => false),
-      hasCachedBeadsCheck: mock((_repoPath: string) => false),
-      hasCachedRepoRuntimeHealth: mock((_repoPath: string, _runtimeKinds) => false),
     };
 
     try {
       await mount(baseArgs);
-      setIsLoadingTasks.mockClear();
-      setIsLoadingChecks.mockClear();
 
       await update({
         ...currentArgs,
         activeRepo: "/repo",
       });
 
-      expect(setIsLoadingTasks).toHaveBeenCalledWith(true);
-      expect(setIsLoadingChecks).toHaveBeenCalledWith(true);
+      expect(baseArgs.refreshTaskData).toHaveBeenCalledWith("/repo");
+      expect(baseArgs.refreshBranches).toHaveBeenCalledWith(false);
 
       await act(async () => {
         taskLoadDeferred.resolve();
         await flush();
       });
 
-      expect(setIsLoadingTasks.mock.calls.some(([value]) => value === false)).toBe(true);
-      expect(setIsLoadingChecks.mock.calls.some(([value]) => value === false)).toBe(false);
+      expect(baseArgs.refreshTaskData).toHaveBeenCalledTimes(1);
 
       await act(async () => {
         runtimeRepoCheckDeferred.resolve({ runtimeOk: true });
-        runtimeHealthDeferred.resolve({});
         branchesDeferred.resolve();
         await flush();
       });
 
-      expect(setIsLoadingChecks.mock.calls.some(([value]) => value === false)).toBe(true);
+      expect(refreshRuntimeCheck).toHaveBeenCalledTimes(2);
     } finally {
       taskLoadDeferred.resolve();
       runtimeRepoCheckDeferred.resolve({ runtimeOk: true });
-      runtimeHealthDeferred.resolve({});
       branchesDeferred.resolve();
       await act(async () => {
         renderer?.unmount();
@@ -276,7 +247,6 @@ describe("useAppLifecycle", () => {
 
     const beadsDeferred = createDeferred<{ beadsOk: boolean; beadsError: null }>();
     const taskDeferred = createDeferred<void>();
-    const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthMap>();
     const branchesDeferred = createDeferred<void>();
 
     const Harness = ({ args }: { args: HookArgs }): ReactElement | null => {
@@ -293,18 +263,8 @@ describe("useAppLifecycle", () => {
       refreshBranches: mock(async () => branchesDeferred.promise),
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
       refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
-      refreshRepoRuntimeHealthForRepo: mock(async () => runtimeHealthDeferred.promise),
-      runtimeKinds: ["opencode"],
       refreshTaskData: mock(async () => taskDeferred.promise),
-      clearTaskData: mock(() => {}),
       clearBranchData: mock(() => {}),
-      clearActiveBeadsCheck: mock(() => {}),
-      clearActiveRepoRuntimeHealth: mock(() => {}),
-      setIsLoadingTasks: mock((_value: boolean) => {}),
-      setIsLoadingChecks: mock((_value: boolean) => {}),
-      hasRuntimeCheck: mock(() => false),
-      hasCachedBeadsCheck: mock((_repoPath: string) => false),
-      hasCachedRepoRuntimeHealth: mock((_repoPath: string, _runtimeKinds) => false),
       beadsPreparationToastDelayMs: 5,
     };
 
@@ -336,7 +296,6 @@ describe("useAppLifecycle", () => {
       await act(async () => {
         beadsDeferred.resolve({ beadsOk: true, beadsError: null });
         taskDeferred.resolve();
-        runtimeHealthDeferred.resolve({});
         branchesDeferred.resolve();
         await flush();
       });
@@ -348,7 +307,6 @@ describe("useAppLifecycle", () => {
     } finally {
       beadsDeferred.resolve({ beadsOk: true, beadsError: null });
       taskDeferred.resolve();
-      runtimeHealthDeferred.resolve({});
       branchesDeferred.resolve();
       await act(async () => {
         renderer?.unmount();
@@ -361,7 +319,6 @@ describe("useAppLifecycle", () => {
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
 
     const taskDeferred = createDeferred<void>();
-    const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthMap>();
     const branchesDeferred = createDeferred<void>();
 
     const Harness = ({ args }: { args: HookArgs }): ReactElement | null => {
@@ -381,18 +338,8 @@ describe("useAppLifecycle", () => {
         beadsOk: true,
         beadsError: null,
       })),
-      refreshRepoRuntimeHealthForRepo: mock(async () => runtimeHealthDeferred.promise),
-      runtimeKinds: ["opencode"],
       refreshTaskData: mock(async () => taskDeferred.promise),
-      clearTaskData: mock(() => {}),
       clearBranchData: mock(() => {}),
-      clearActiveBeadsCheck: mock(() => {}),
-      clearActiveRepoRuntimeHealth: mock(() => {}),
-      setIsLoadingTasks: mock((_value: boolean) => {}),
-      setIsLoadingChecks: mock((_value: boolean) => {}),
-      hasRuntimeCheck: mock(() => false),
-      hasCachedBeadsCheck: mock((_repoPath: string) => false),
-      hasCachedRepoRuntimeHealth: mock((_repoPath: string, _runtimeKinds) => false),
       beadsPreparationToastDelayMs: 5,
     };
 
@@ -422,13 +369,11 @@ describe("useAppLifecycle", () => {
 
       await act(async () => {
         taskDeferred.resolve();
-        runtimeHealthDeferred.resolve({});
         branchesDeferred.resolve();
         await flush();
       });
     } finally {
       taskDeferred.resolve();
-      runtimeHealthDeferred.resolve({});
       branchesDeferred.resolve();
       await act(async () => {
         renderer?.unmount();
@@ -441,7 +386,6 @@ describe("useAppLifecycle", () => {
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
 
     const beadsDeferred = createDeferred<{ beadsOk: boolean; beadsError?: string | null }>();
-    const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthMap>();
     const branchesDeferred = createDeferred<void>();
 
     const Harness = ({ args }: { args: HookArgs }): ReactElement | null => {
@@ -458,18 +402,8 @@ describe("useAppLifecycle", () => {
       refreshBranches: mock(async () => branchesDeferred.promise),
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
       refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
-      refreshRepoRuntimeHealthForRepo: mock(async () => runtimeHealthDeferred.promise),
-      runtimeKinds: ["opencode"],
       refreshTaskData: mock(async () => {}),
-      clearTaskData: mock(() => {}),
       clearBranchData: mock(() => {}),
-      clearActiveBeadsCheck: mock(() => {}),
-      clearActiveRepoRuntimeHealth: mock(() => {}),
-      setIsLoadingTasks: mock((_value: boolean) => {}),
-      setIsLoadingChecks: mock((_value: boolean) => {}),
-      hasRuntimeCheck: mock(() => false),
-      hasCachedBeadsCheck: mock((_repoPath: string) => false),
-      hasCachedRepoRuntimeHealth: mock((_repoPath: string, _runtimeKinds) => false),
       beadsPreparationToastDelayMs: 15,
     };
 
@@ -492,7 +426,6 @@ describe("useAppLifecycle", () => {
 
       await act(async () => {
         beadsDeferred.resolve({ beadsOk: false, beadsError: "init failed" });
-        runtimeHealthDeferred.resolve({});
         branchesDeferred.resolve();
         await flush();
       });
@@ -508,7 +441,6 @@ describe("useAppLifecycle", () => {
       });
     } finally {
       beadsDeferred.resolve({ beadsOk: true, beadsError: null });
-      runtimeHealthDeferred.resolve({});
       branchesDeferred.resolve();
       await act(async () => {
         renderer?.unmount();
@@ -521,7 +453,6 @@ describe("useAppLifecycle", () => {
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
 
     const beadsDeferred = createDeferred<{ beadsOk: boolean; beadsError?: string | null }>();
-    const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthMap>();
     const branchesDeferred = createDeferred<void>();
 
     const Harness = ({ args }: { args: HookArgs }): ReactElement | null => {
@@ -538,18 +469,8 @@ describe("useAppLifecycle", () => {
       refreshBranches: mock(async () => branchesDeferred.promise),
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
       refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
-      refreshRepoRuntimeHealthForRepo: mock(async () => runtimeHealthDeferred.promise),
-      runtimeKinds: ["opencode"],
       refreshTaskData: mock(async () => {}),
-      clearTaskData: mock(() => {}),
       clearBranchData: mock(() => {}),
-      clearActiveBeadsCheck: mock(() => {}),
-      clearActiveRepoRuntimeHealth: mock(() => {}),
-      setIsLoadingTasks: mock((_value: boolean) => {}),
-      setIsLoadingChecks: mock((_value: boolean) => {}),
-      hasRuntimeCheck: mock(() => false),
-      hasCachedBeadsCheck: mock((_repoPath: string) => false),
-      hasCachedRepoRuntimeHealth: mock((_repoPath: string, _runtimeKinds) => false),
       beadsPreparationToastDelayMs: 5,
     };
 
@@ -580,7 +501,6 @@ describe("useAppLifecycle", () => {
 
       await act(async () => {
         beadsDeferred.resolve({ beadsOk: false, beadsError: "store failed" });
-        runtimeHealthDeferred.resolve({});
         branchesDeferred.resolve();
         await flush();
       });
@@ -592,7 +512,6 @@ describe("useAppLifecycle", () => {
       });
     } finally {
       beadsDeferred.resolve({ beadsOk: true, beadsError: null });
-      runtimeHealthDeferred.resolve({});
       branchesDeferred.resolve();
       await act(async () => {
         renderer?.unmount();

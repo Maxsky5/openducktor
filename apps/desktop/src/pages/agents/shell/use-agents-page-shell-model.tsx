@@ -1,4 +1,11 @@
-import { type ReactElement, startTransition, useCallback, useRef, useState } from "react";
+import {
+  type ReactElement,
+  startTransition,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import { MergedPullRequestConfirmDialog } from "@/components/features/pull-requests/merged-pull-request-confirm-dialog";
 import {
@@ -8,6 +15,7 @@ import {
 import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
 import {
+  useChecksOperationsContext,
   useDelegationEventsContext,
   useRuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
@@ -58,6 +66,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const { activeRepo, activeBranch } = useWorkspaceState();
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
+  const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
+    useChecksOperationsContext();
   const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
   const {
     isLoadingTasks,
@@ -75,7 +85,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   } = useTasksState();
   const {
     sessions,
+    bootstrapTaskSessions,
+    hydrateRequestedTaskSessionHistory,
     loadAgentSessions,
+    readSessionModelCatalog,
+    readSessionTodos,
     startAgentSession,
     sendAgentMessage,
     stopAgentSession,
@@ -98,6 +112,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     sessionParam,
     hasExplicitRoleParam,
     roleFromQuery,
+    scenarioFromQuery,
     navigationPersistenceError,
     retryNavigationPersistence,
     updateQuery,
@@ -134,8 +149,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     sessionParam,
     hasExplicitRoleParam,
     roleFromQuery,
+    scenarioFromQuery,
     updateQuery: scheduleQueryUpdate,
-    loadAgentSessions,
+    hydrateRequestedTaskSessionHistory,
+    readSessionModelCatalog,
+    readSessionTodos,
     clearComposerInput,
     onContextSwitchIntent: signalContextSwitchIntent,
   });
@@ -173,6 +191,23 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     activeSession: selection.viewActiveSession,
     runCompletionSignal,
   });
+
+  useEffect(() => {
+    if (!activeRepo || runtimeDefinitions.length === 0 || isLoadingChecks) {
+      return;
+    }
+    const runtimeKinds = runtimeDefinitions.map((definition) => definition.kind);
+    if (hasCachedRepoRuntimeHealth(activeRepo, runtimeKinds)) {
+      return;
+    }
+    void refreshRepoRuntimeHealthForRepo(activeRepo, false);
+  }, [
+    activeRepo,
+    hasCachedRepoRuntimeHealth,
+    isLoadingChecks,
+    refreshRepoRuntimeHealthForRepo,
+    runtimeDefinitions,
+  ]);
 
   useAgentStudioQuerySessionSync({
     isLoadingTasks,
@@ -214,6 +249,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       sendAgentMessage,
       stopAgentSession,
       updateAgentSessionModel,
+      bootstrapTaskSessions,
+      hydrateRequestedTaskSessionHistory,
       loadAgentSessions,
       humanRequestChangesTask,
       replyAgentPermission,
@@ -251,6 +288,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     viewSelectedTask: selection.viewSelectedTask,
     panelKind: orchestration.rightPanel.panelKind,
     isPanelOpen: orchestration.rightPanel.isPanelOpen,
+    isViewSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
     documentsModel: orchestration.agentStudioWorkspaceSidebarModel,
     repoSettings: orchestration.repoSettings,
     runCompletionRecoverySignal,

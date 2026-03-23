@@ -46,6 +46,8 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   startAgentSession: async () => "session-new",
   sendAgentMessage: async () => {},
   updateAgentSessionModel: () => {},
+  bootstrapTaskSessions: async () => {},
+  hydrateRequestedTaskSessionHistory: async () => {},
   loadAgentSessions: async () => {},
   humanRequestChangesTask: async () => {},
   updateQuery: () => {},

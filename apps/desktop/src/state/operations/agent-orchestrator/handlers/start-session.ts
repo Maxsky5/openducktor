@@ -1,6 +1,12 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentScenario } from "@openducktor/core";
-import { assertAgentKickoffScenario } from "@openducktor/core";
+import type { AgentModelSelection, AgentScenario, AgentSessionStartMode } from "@openducktor/core";
+import {
+  assertAgentKickoffScenario,
+  defaultAgentScenarioForRole,
+  defaultStartModeForScenario,
+  getAgentScenarioDefinition,
+  isScenarioStartModeAllowed,
+} from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import { appQueryClient } from "@/lib/query-client";
@@ -18,9 +24,7 @@ import {
   createSessionPromptContext,
   loadSessionPromptInputs,
 } from "../support/session-prompt";
-import { warmSessionData } from "../support/session-warmup";
 import type {
-  ModelDependencies,
   ResolvedRuntimeAndModel,
   RuntimeDependencies,
   SessionDependencies,
@@ -78,6 +82,26 @@ const resolveStartTask = ({
     throw new Error(unavailableRoleErrorMessage(resolvedTask, ctx.role));
   }
   return resolvedTask;
+};
+
+const assertScenarioStartPolicy = ({
+  role,
+  scenario,
+  startMode,
+}: {
+  role: StartSessionContext["role"];
+  scenario: AgentScenario;
+  startMode: AgentSessionStartMode;
+}): void => {
+  const definition = getAgentScenarioDefinition(scenario);
+  if (definition.role !== role) {
+    throw new Error(
+      `Scenario "${scenario}" belongs to role "${definition.role}", but start was requested for role "${role}".`,
+    );
+  }
+  if (!isScenarioStartModeAllowed(scenario, startMode)) {
+    throw new Error(`Scenario "${scenario}" does not allow start mode "${startMode}".`);
+  }
 };
 
 const resolveRuntimeAndModel = async ({
@@ -298,6 +322,27 @@ const applySelectedModelToReusedSession = ({
   });
 };
 
+const resolveReuseValidationError = ({
+  canReuseSession,
+  matchesQaTarget,
+  matchesBuildTarget,
+}: {
+  canReuseSession: boolean;
+  matchesQaTarget: boolean;
+  matchesBuildTarget: boolean;
+}): string | null => {
+  if (!canReuseSession) {
+    return "its runtime or model selection does not match the requested configuration";
+  }
+  if (!matchesQaTarget) {
+    return "it does not match the required builder worktree for this QA session";
+  }
+  if (!matchesBuildTarget) {
+    return "it does not match the current builder continuation target";
+  }
+  return null;
+};
+
 const createOrReuseSession = async ({
   ctx,
   input,
@@ -308,25 +353,102 @@ const createOrReuseSession = async ({
   deps: StartSessionExecutionDependencies;
 }): Promise<StartOrReuseResult> => {
   const validatedTaskCard = ctx.role === "qa" ? resolveStartTask({ ctx, task: deps.task }) : null;
+  const explicitSourceSessionId = input.sourceSessionId?.trim() || null;
   let resolvedQaWorkingDirectory: string | null = null;
+  let resolvedBuildWorkingDirectory: string | null = null;
   const resolveExpectedQaWorkingDirectory = async (): Promise<string> => {
     if (resolvedQaWorkingDirectory !== null) {
       return resolvedQaWorkingDirectory;
     }
 
-    const overrideWorkingDirectory = normalizeWorkingDirectory(input.workingDirectoryOverride);
+    const overrideWorkingDirectory = normalizeWorkingDirectory(
+      input.builderContext?.workingDirectory,
+    );
     resolvedQaWorkingDirectory =
       overrideWorkingDirectory ||
       (await deps.runtime.resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId));
     return resolvedQaWorkingDirectory;
   };
+  const resolveExpectedBuildWorkingDirectory = async (): Promise<string> => {
+    if (resolvedBuildWorkingDirectory !== null) {
+      return resolvedBuildWorkingDirectory;
+    }
 
-  if (input.startMode === "reuse_latest") {
-    const existingSession = pickLatestSession(
-      Object.values(deps.session.sessionsRef.current).filter(
-        (entry) => entry.taskId === ctx.taskId && entry.role === ctx.role,
-      ),
+    const overrideWorkingDirectory = normalizeWorkingDirectory(input.workingDirectoryOverride);
+    resolvedBuildWorkingDirectory =
+      overrideWorkingDirectory ||
+      (await deps.runtime.resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId));
+    return resolvedBuildWorkingDirectory;
+  };
+  const existingSessionMatchesExpectedBuildTarget = async (
+    workingDirectory: string,
+  ): Promise<boolean> => {
+    if (ctx.role !== "build") {
+      return true;
+    }
+    try {
+      return (
+        normalizeWorkingDirectory(workingDirectory) ===
+        (await resolveExpectedBuildWorkingDirectory())
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  const resolveLoadedSourceSession = async (): Promise<AgentSessionState> => {
+    const existingSessionsForRole = Object.values(deps.session.sessionsRef.current).filter(
+      (entry) => entry.taskId === ctx.taskId && entry.role === ctx.role,
     );
+    const existingSourceSession = explicitSourceSessionId
+      ? existingSessionsForRole.find((entry) => entry.sessionId === explicitSourceSessionId)
+      : pickLatestSession(existingSessionsForRole);
+    if (existingSourceSession) {
+      return existingSourceSession;
+    }
+
+    const persistedSessions = await appQueryClient.fetchQuery({
+      ...agentSessionListQueryOptions(ctx.repoPath, ctx.taskId),
+    });
+    throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
+    const persistedSessionsForRole = persistedSessions.filter((entry) => entry.role === ctx.role);
+    const persistedSourceSession = explicitSourceSessionId
+      ? persistedSessionsForRole.find((entry) => entry.sessionId === explicitSourceSessionId)
+      : pickLatestSession(persistedSessionsForRole);
+    if (!persistedSourceSession) {
+      if (explicitSourceSessionId) {
+        throw new Error(
+          `Session "${explicitSourceSessionId}" is not available for task "${ctx.taskId}" and role "${ctx.role}".`,
+        );
+      }
+      throw new Error(
+        `No existing ${ctx.role} session is available to fork for task "${ctx.taskId}".`,
+      );
+    }
+    if (!deps.session.sessionsRef.current[persistedSourceSession.sessionId]) {
+      await deps.session.loadAgentSessions(ctx.taskId, {
+        mode: "requested_history",
+        targetSessionId: persistedSourceSession.sessionId,
+        historyPolicy: "requested_only",
+      });
+      throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
+    }
+    const hydratedSession = deps.session.sessionsRef.current[persistedSourceSession.sessionId];
+    if (!hydratedSession) {
+      throw new Error(
+        `Failed to hydrate session "${persistedSourceSession.sessionId}" for forking.`,
+      );
+    }
+    return hydratedSession;
+  };
+
+  if (input.startMode === "reuse") {
+    const existingSessionsForRole = Object.values(deps.session.sessionsRef.current).filter(
+      (entry) => entry.taskId === ctx.taskId && entry.role === ctx.role,
+    );
+    const existingSession = explicitSourceSessionId
+      ? existingSessionsForRole.find((entry) => entry.sessionId === explicitSourceSessionId)
+      : pickLatestSession(existingSessionsForRole);
     if (existingSession) {
       const canReuseExistingSession = canReuseSessionForSelectedModel({
         sessionRuntimeKind:
@@ -341,7 +463,26 @@ const createOrReuseSession = async ({
         (canReuseExistingSession &&
           normalizeWorkingDirectory(existingSession.workingDirectory) ===
             (await resolveExpectedQaWorkingDirectory()));
-      if (canReuseExistingSession && existingSessionMatchesQaTarget) {
+      const existingSessionMatchesBuildTarget =
+        canReuseExistingSession &&
+        (await existingSessionMatchesExpectedBuildTarget(existingSession.workingDirectory));
+      const existingSessionReuseError = resolveReuseValidationError({
+        canReuseSession: canReuseExistingSession,
+        matchesQaTarget: existingSessionMatchesQaTarget,
+        matchesBuildTarget: existingSessionMatchesBuildTarget,
+      });
+      if (
+        canReuseExistingSession &&
+        existingSessionMatchesQaTarget &&
+        existingSessionMatchesBuildTarget
+      ) {
+        if (input.scenario) {
+          assertScenarioStartPolicy({
+            role: ctx.role,
+            scenario: input.scenario,
+            startMode: input.startMode,
+          });
+        }
         applySelectedModelToReusedSession({
           repoPath: ctx.repoPath,
           sessionId: existingSession.sessionId,
@@ -353,50 +494,198 @@ const createOrReuseSession = async ({
           sessionId: existingSession.sessionId,
         };
       }
+      if (explicitSourceSessionId && existingSessionReuseError) {
+        throw new Error(
+          `Session "${explicitSourceSessionId}" cannot be reused because ${existingSessionReuseError}.`,
+        );
+      }
     }
 
     const persistedSessions = await appQueryClient.fetchQuery({
       ...agentSessionListQueryOptions(ctx.repoPath, ctx.taskId),
-      staleTime: 0,
     });
     throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
-    const latestPersistedSession = pickLatestSession(
-      persistedSessions.filter((entry) => entry.role === ctx.role),
-    );
-    const canReusePersistedSession = latestPersistedSession
+    const persistedSessionsForRole = persistedSessions.filter((entry) => entry.role === ctx.role);
+    const persistedSession = explicitSourceSessionId
+      ? persistedSessionsForRole.find((entry) => entry.sessionId === explicitSourceSessionId)
+      : pickLatestSession(persistedSessionsForRole);
+    const canReusePersistedSession = persistedSession
       ? canReuseSessionForSelectedModel({
           sessionRuntimeKind:
-            latestPersistedSession.runtimeKind ??
-            latestPersistedSession.selectedModel?.runtimeKind ??
+            persistedSession.runtimeKind ??
+            persistedSession.selectedModel?.runtimeKind ??
             DEFAULT_RUNTIME_KIND,
-          sessionSelectedModel: normalizePersistedSelection(latestPersistedSession.selectedModel),
+          sessionSelectedModel: normalizePersistedSelection(persistedSession.selectedModel),
           selectedModel: input.selectedModel,
         })
       : false;
     const persistedSessionMatchesQaTarget =
       ctx.role !== "qa" ||
-      (latestPersistedSession !== undefined &&
+      (persistedSession !== undefined &&
         canReusePersistedSession &&
-        normalizeWorkingDirectory(latestPersistedSession.workingDirectory) ===
+        normalizeWorkingDirectory(persistedSession.workingDirectory) ===
           (await resolveExpectedQaWorkingDirectory()));
-    if (latestPersistedSession && canReusePersistedSession && persistedSessionMatchesQaTarget) {
-      if (!deps.session.sessionsRef.current[latestPersistedSession.sessionId]) {
+    const persistedSessionMatchesBuildTarget =
+      persistedSession !== undefined &&
+      canReusePersistedSession &&
+      (await existingSessionMatchesExpectedBuildTarget(persistedSession.workingDirectory));
+    const persistedSessionReuseError =
+      persistedSession == null
+        ? null
+        : resolveReuseValidationError({
+            canReuseSession: canReusePersistedSession,
+            matchesQaTarget: persistedSessionMatchesQaTarget,
+            matchesBuildTarget: persistedSessionMatchesBuildTarget,
+          });
+    if (
+      persistedSession &&
+      canReusePersistedSession &&
+      persistedSessionMatchesQaTarget &&
+      persistedSessionMatchesBuildTarget
+    ) {
+      if (input.scenario) {
+        assertScenarioStartPolicy({
+          role: ctx.role,
+          scenario: input.scenario,
+          startMode: input.startMode,
+        });
+      }
+      if (!deps.session.sessionsRef.current[persistedSession.sessionId]) {
         await deps.session.loadAgentSessions(ctx.taskId, {
-          hydrateHistoryForSessionId: latestPersistedSession.sessionId,
+          mode: "requested_history",
+          targetSessionId: persistedSession.sessionId,
+          historyPolicy: "requested_only",
         });
         throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
       }
+      if (!deps.session.sessionsRef.current[persistedSession.sessionId]) {
+        throw new Error(`Failed to hydrate session "${persistedSession.sessionId}" for reuse.`);
+      }
       applySelectedModelToReusedSession({
         repoPath: ctx.repoPath,
-        sessionId: latestPersistedSession.sessionId,
+        sessionId: persistedSession.sessionId,
         selectedModel: input.selectedModel,
         session: deps.session,
       });
       return {
         kind: "reused",
-        sessionId: latestPersistedSession.sessionId,
+        sessionId: persistedSession.sessionId,
       };
     }
+
+    if (explicitSourceSessionId) {
+      if (!persistedSession) {
+        throw new Error(
+          `Session "${explicitSourceSessionId}" is not available for task "${ctx.taskId}" and role "${ctx.role}".`,
+        );
+      }
+      throw new Error(
+        `Session "${explicitSourceSessionId}" cannot be reused because ${persistedSessionReuseError ?? "it is not reusable for this start request"}.`,
+      );
+    }
+  }
+
+  if (input.startMode === "fork") {
+    const sourceSession = await resolveLoadedSourceSession();
+    const taskCard = validatedTaskCard ?? resolveStartTask({ ctx, task: deps.task });
+    const resolved = await resolveRuntimeAndModel({
+      ctx,
+      scenario: input.scenario,
+      requireModelReady: input.requireModelReady && input.selectedModel == null,
+      requestedRuntimeKind: input.selectedModel?.runtimeKind ?? null,
+      workingDirectoryOverride: sourceSession.workingDirectory,
+      taskCard,
+      deps,
+    });
+    const selectedModel =
+      input.selectedModel ?? sourceSession.selectedModel ?? resolved.resolvedDefaultModelSelection;
+    assertScenarioStartPolicy({
+      role: ctx.role,
+      scenario: resolved.resolvedScenario,
+      startMode: input.startMode,
+    });
+
+    const summary = await deps.runtime.adapter.forkSession({
+      repoPath: ctx.repoPath,
+      runtimeKind:
+        sourceSession.runtimeKind ??
+        resolved.runtime.runtimeKind ??
+        selectedModel?.runtimeKind ??
+        DEFAULT_RUNTIME_KIND,
+      runtimeConnection: {
+        endpoint: sourceSession.runtimeEndpoint || resolved.runtime.runtimeEndpoint,
+        workingDirectory: sourceSession.workingDirectory,
+      },
+      workingDirectory: sourceSession.workingDirectory,
+      taskId: ctx.taskId,
+      role: ctx.role,
+      scenario: resolved.resolvedScenario,
+      systemPrompt: resolved.systemPrompt,
+      ...(sourceSession.runtimeId ? { runtimeId: sourceSession.runtimeId } : {}),
+      ...(selectedModel ? { model: selectedModel } : {}),
+      parentExternalSessionId: sourceSession.externalSessionId,
+    });
+
+    const startedCtx: StartedSessionContext = {
+      ...ctx,
+      resolvedScenario: resolved.resolvedScenario,
+      summary,
+    };
+
+    if (ctx.isStaleRepoOperation()) {
+      await stopSessionOnStaleAndThrow({
+        reason: "start-session-stop-on-stale-after-fork",
+        runtime: deps.runtime,
+        startedCtx,
+      });
+    }
+
+    const forkedRuntime: RuntimeInfo = {
+      runtimeKind:
+        sourceSession.runtimeKind ??
+        resolved.runtime.runtimeKind ??
+        selectedModel?.runtimeKind ??
+        DEFAULT_RUNTIME_KIND,
+      runtimeId: sourceSession.runtimeId ?? resolved.runtime.runtimeId,
+      runId: sourceSession.runId ?? resolved.runtime.runId,
+      runtimeEndpoint: sourceSession.runtimeEndpoint || resolved.runtime.runtimeEndpoint,
+      workingDirectory: sourceSession.workingDirectory,
+      ...(resolved.runtime.kind ? { kind: resolved.runtime.kind } : {}),
+    };
+
+    const initialSession = buildInitialSession({
+      startedCtx,
+      selectedModel,
+      runtime: forkedRuntime,
+      systemPrompt: resolved.systemPrompt,
+      promptOverrides: resolved.promptOverrides,
+    });
+
+    deps.session.setSessionsById((current) => {
+      if (ctx.isStaleRepoOperation()) {
+        return current;
+      }
+      return {
+        ...current,
+        [summary.sessionId]: initialSession,
+      };
+    });
+    throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
+
+    persistInitialSession({
+      initialSession,
+      session: deps.session,
+      tags: createSessionStartTags(startedCtx),
+    });
+
+    return {
+      kind: "started",
+      runtimeInfo: forkedRuntime,
+      taskCard: resolved.taskCard,
+      ctx: startedCtx,
+      promptOverrides: resolved.promptOverrides,
+      resolvedDefaultModelSelection: resolved.resolvedDefaultModelSelection,
+    };
   }
 
   const taskCard = validatedTaskCard ?? resolveStartTask({ ctx, task: deps.task });
@@ -415,6 +704,11 @@ const createOrReuseSession = async ({
   });
 
   const selectedModel = input.selectedModel ?? resolved.resolvedDefaultModelSelection;
+  assertScenarioStartPolicy({
+    role: ctx.role,
+    scenario: resolved.resolvedScenario,
+    startMode: input.startMode,
+  });
   const summary = await deps.runtime.adapter.startSession({
     repoPath: ctx.repoPath,
     runtimeKind: resolved.runtime.runtimeKind ?? selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
@@ -497,41 +791,6 @@ const attachSessionListenerAndGuard = async ({
     runtime,
     startedCtx,
   });
-};
-
-const warmStartedSession = ({
-  startedCtx,
-  runtimeInfo,
-  model,
-}: {
-  startedCtx: StartedSessionContext;
-  runtimeInfo: RuntimeInfo;
-  model: ModelDependencies;
-}): void => {
-  const runtimeConnection = resolveRuntimeConnection(runtimeInfo);
-  const runtimeKind = runtimeInfo.runtimeKind ?? startedCtx.summary.runtimeKind;
-  if (!runtimeKind) {
-    throw new Error(`Runtime kind is required to warm session '${startedCtx.summary.sessionId}'.`);
-  }
-
-  warmSessionData(
-    {
-      repoPath: startedCtx.repoPath,
-      sessionId: startedCtx.summary.sessionId,
-      taskId: startedCtx.taskId,
-      role: startedCtx.role,
-      runtimeKind,
-      runtimeConnection,
-      externalSessionId: startedCtx.summary.externalSessionId,
-    },
-    {
-      loadSessionTodos: model.loadSessionTodos,
-      loadSessionModelCatalog: model.loadSessionModelCatalog,
-    },
-    {
-      operationPrefix: "start-session-warm-session",
-    },
-  );
 };
 
 const applyResolvedModelSelection = ({
@@ -668,22 +927,29 @@ export const createStartAgentSession = ({
     scenario,
     selectedModel = null,
     sendKickoff = false,
-    startMode = "reuse_latest",
+    startMode,
+    sourceSessionId = null,
     requireModelReady = false,
     workingDirectoryOverride = null,
+    builderContext = null,
   }: StartAgentSessionInput): Promise<string> => {
+    const effectiveScenario = scenario ?? defaultAgentScenarioForRole(role);
+    const effectiveStartMode = startMode ?? defaultStartModeForScenario(effectiveScenario);
     const repoPath = requireActiveRepo(repo.activeRepo);
     const normalizedWorkingDirectoryOverride = workingDirectoryOverride?.trim() ?? "";
-    const inFlightKey = `${repoPath}::${taskId}::${role}::${startMode}::${normalizedWorkingDirectoryOverride}`;
+    const normalizedBuilderWorkingDirectory = builderContext?.workingDirectory?.trim() ?? "";
+    const normalizedSourceSessionId = sourceSessionId?.trim() ?? "";
+    const inFlightKey = `${repoPath}::${taskId}::${role}::${effectiveStartMode}::${normalizedSourceSessionId}::${normalizedWorkingDirectoryOverride}::${normalizedBuilderWorkingDirectory}`;
     const existingInFlight = session.inFlightStartsByRepoTaskRef.current.get(inFlightKey);
     if (existingInFlight) {
       return existingInFlight;
     }
 
-    const startPromise = (async (): Promise<string> => {
+    const startPromise = Promise.resolve().then(async (): Promise<string> => {
       const isStaleRepoOperation = createRepoStaleGuard({
         repoPath,
         repoEpochRef: repo.repoEpochRef,
+        activeRepoRef: repo.activeRepoRef,
         previousRepoRef: repo.previousRepoRef,
       });
       throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
@@ -698,11 +964,13 @@ export const createStartAgentSession = ({
       const startResult = await createOrReuseSession({
         ctx: startCtx,
         input: {
-          scenario,
+          scenario: effectiveScenario,
           selectedModel,
-          startMode,
+          startMode: effectiveStartMode,
+          sourceSessionId,
           requireModelReady,
           workingDirectoryOverride,
+          builderContext,
         },
         deps: {
           session,
@@ -719,12 +987,6 @@ export const createStartAgentSession = ({
         startedCtx: startResult.ctx,
         session,
         runtime,
-      });
-
-      warmStartedSession({
-        startedCtx: startResult.ctx,
-        runtimeInfo: startResult.runtimeInfo,
-        model,
       });
 
       await maybeApplyDefaultModelSelection({
@@ -746,7 +1008,7 @@ export const createStartAgentSession = ({
       });
 
       return startResult.ctx.summary.sessionId;
-    })();
+    });
 
     session.inFlightStartsByRepoTaskRef.current.set(inFlightKey, startPromise);
     try {

@@ -49,6 +49,7 @@ const TASK_METHODS = [
   "qaApproved",
   "qaRejected",
   "agentSessionsList",
+  "agentSessionsListBulk",
   "agentSessionUpsert",
 ] as const satisfies readonly MethodName<TauriTaskClient>[];
 

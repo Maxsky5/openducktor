@@ -126,7 +126,26 @@ export type AgentSessionState = {
   promptOverrides?: RepoPromptOverrides;
 };
 
+export type AgentSessionLoadMode = "bootstrap" | "requested_history" | "reconcile_live";
+export type AgentSessionHistoryHydrationPolicy = "none" | "requested_only" | "live_if_empty";
+
 export type AgentSessionLoadOptions = {
-  hydrateHistoryForSessionId?: string | null;
-  reconcileLiveSessions?: boolean;
+  mode?: AgentSessionLoadMode;
+  targetSessionId?: string | null;
+  historyPolicy?: AgentSessionHistoryHydrationPolicy;
+  persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
+  preloadedRuns?: import("@openducktor/contracts").RunSummary[];
+  preloadedRuntimeLists?: Map<
+    import("@openducktor/contracts").RuntimeKind,
+    import("@openducktor/contracts").RuntimeInstanceSummary[]
+  >;
+  preloadedRuntimeConnectionsByKey?: Map<
+    string,
+    import("@openducktor/core").AgentRuntimeConnection
+  >;
+  preloadedLiveAgentSessionsByKey?: Map<
+    string,
+    import("@openducktor/core").LiveAgentSessionSnapshot[]
+  >;
+  allowRuntimeEnsure?: boolean;
 };

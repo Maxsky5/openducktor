@@ -9,6 +9,86 @@ fn parse_direct_merge_record(value: &Value) -> Option<DirectMergeRecord> {
 }
 
 impl BeadsTaskStore {
+    pub(super) fn parse_task_metadata_from_issue(&self, issue: &RawIssue) -> TaskMetadata {
+        let metadata_root = parse_metadata_root(issue.metadata.clone());
+        let namespace_key = self.current_metadata_namespace();
+        let namespace = metadata_namespace(&metadata_root, &namespace_key);
+
+        let spec_entries = namespace
+            .and_then(|ns| ns.get("documents"))
+            .and_then(|docs| docs.get("spec"))
+            .and_then(parse_markdown_entries);
+        let spec_latest = spec_entries.as_ref().and_then(|list| list.last());
+        let spec = SpecDocument {
+            markdown: spec_latest
+                .map(|entry| entry.markdown.clone())
+                .unwrap_or_default(),
+            updated_at: spec_latest.map(|entry| entry.updated_at.clone()),
+        };
+
+        let plan_entries = namespace
+            .and_then(|ns| ns.get("documents"))
+            .and_then(|docs| docs.get("implementationPlan"))
+            .and_then(parse_markdown_entries);
+        let plan_latest = plan_entries.as_ref().and_then(|list| list.last());
+        let plan = SpecDocument {
+            markdown: plan_latest
+                .map(|entry| entry.markdown.clone())
+                .unwrap_or_default(),
+            updated_at: plan_latest.map(|entry| entry.updated_at.clone()),
+        };
+
+        let qa_entries = namespace
+            .and_then(|ns| ns.get("documents"))
+            .and_then(|docs| docs.get("qaReports"))
+            .and_then(parse_qa_entries);
+        let qa_report = qa_entries
+            .as_ref()
+            .and_then(|entries| entries.last())
+            .map(|entry| QaReportDocument {
+                markdown: entry.markdown.clone(),
+                verdict: entry.verdict.clone(),
+                updated_at: entry.updated_at.clone(),
+                revision: entry.revision,
+            });
+
+        let mut agent_sessions = namespace
+            .and_then(|ns| ns.get("agentSessions"))
+            .and_then(parse_agent_sessions)
+            .unwrap_or_default();
+        agent_sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+
+        let pull_request = namespace
+            .and_then(|ns| ns.get("pullRequest"))
+            .and_then(parse_pull_request_record)
+            .or_else(|| {
+                namespace
+                    .and_then(|ns| ns.get("delivery"))
+                    .and_then(Value::as_object)
+                    .and_then(|delivery| delivery.get("linkedPullRequest"))
+                    .and_then(parse_pull_request_record)
+            });
+        let direct_merge = namespace
+            .and_then(|ns| ns.get("directMerge"))
+            .and_then(parse_direct_merge_record)
+            .or_else(|| {
+                namespace
+                    .and_then(|ns| ns.get("delivery"))
+                    .and_then(Value::as_object)
+                    .and_then(|delivery| delivery.get("directMerge"))
+                    .and_then(parse_direct_merge_record)
+            });
+
+        TaskMetadata {
+            spec,
+            plan,
+            qa_report,
+            pull_request,
+            direct_merge,
+            agent_sessions,
+        }
+    }
+
     fn compact_agent_session_for_storage(
         &self,
         mut session: AgentSessionDocument,
@@ -198,83 +278,15 @@ impl BeadsTaskStore {
         repo_path: &Path,
         task_id: &str,
     ) -> Result<TaskMetadata> {
+        let metadata_namespace = self.current_metadata_namespace();
+        let repo_key = Self::repo_key(repo_path);
+        if let Some(metadata) =
+            self.cached_task_metadata(&repo_key, &metadata_namespace, task_id)?
+        {
+            return Ok(metadata);
+        }
+
         let issue = self.show_raw_issue(repo_path, task_id)?;
-        let metadata_root = parse_metadata_root(issue.metadata);
-        let namespace_key = self.current_metadata_namespace();
-        let namespace = metadata_namespace(&metadata_root, &namespace_key);
-
-        let spec_entries = namespace
-            .and_then(|ns| ns.get("documents"))
-            .and_then(|docs| docs.get("spec"))
-            .and_then(parse_markdown_entries);
-        let spec_latest = spec_entries.as_ref().and_then(|list| list.last());
-        let spec = SpecDocument {
-            markdown: spec_latest
-                .map(|entry| entry.markdown.clone())
-                .unwrap_or_default(),
-            updated_at: spec_latest.map(|entry| entry.updated_at.clone()),
-        };
-
-        let plan_entries = namespace
-            .and_then(|ns| ns.get("documents"))
-            .and_then(|docs| docs.get("implementationPlan"))
-            .and_then(parse_markdown_entries);
-        let plan_latest = plan_entries.as_ref().and_then(|list| list.last());
-        let plan = SpecDocument {
-            markdown: plan_latest
-                .map(|entry| entry.markdown.clone())
-                .unwrap_or_default(),
-            updated_at: plan_latest.map(|entry| entry.updated_at.clone()),
-        };
-
-        let qa_entries = namespace
-            .and_then(|ns| ns.get("documents"))
-            .and_then(|docs| docs.get("qaReports"))
-            .and_then(parse_qa_entries);
-        let qa_report = qa_entries
-            .as_ref()
-            .and_then(|entries| entries.last())
-            .map(|entry| QaReportDocument {
-                markdown: entry.markdown.clone(),
-                verdict: entry.verdict.clone(),
-                updated_at: entry.updated_at.clone(),
-                revision: entry.revision,
-            });
-
-        let mut agent_sessions = namespace
-            .and_then(|ns| ns.get("agentSessions"))
-            .and_then(parse_agent_sessions)
-            .unwrap_or_default();
-        agent_sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
-
-        let pull_request = namespace
-            .and_then(|ns| ns.get("pullRequest"))
-            .and_then(parse_pull_request_record)
-            .or_else(|| {
-                namespace
-                    .and_then(|ns| ns.get("delivery"))
-                    .and_then(Value::as_object)
-                    .and_then(|delivery| delivery.get("linkedPullRequest"))
-                    .and_then(parse_pull_request_record)
-            });
-        let direct_merge = namespace
-            .and_then(|ns| ns.get("directMerge"))
-            .and_then(parse_direct_merge_record)
-            .or_else(|| {
-                namespace
-                    .and_then(|ns| ns.get("delivery"))
-                    .and_then(Value::as_object)
-                    .and_then(|delivery| delivery.get("directMerge"))
-                    .and_then(parse_direct_merge_record)
-            });
-
-        Ok(TaskMetadata {
-            spec,
-            plan,
-            qa_report,
-            pull_request,
-            direct_merge,
-            agent_sessions,
-        })
+        Ok(self.parse_task_metadata_from_issue(&issue))
     }
 }

@@ -21,4 +21,11 @@ describe("agent orchestrator role policy contract", () => {
     const fixture = loadFixture();
     expect(AGENT_ROLE_TOOL_POLICY).toEqual(fixture.roles);
   });
+
+  test("keeps odt_set_pull_request restricted to Builder sessions", () => {
+    expect(AGENT_ROLE_TOOL_POLICY.build).toContain("odt_set_pull_request");
+    expect(AGENT_ROLE_TOOL_POLICY.spec).not.toContain("odt_set_pull_request");
+    expect(AGENT_ROLE_TOOL_POLICY.planner).not.toContain("odt_set_pull_request");
+    expect(AGENT_ROLE_TOOL_POLICY.qa).not.toContain("odt_set_pull_request");
+  });
 });

@@ -170,6 +170,7 @@ describe("useAgentStudioQuerySessionSync", () => {
         {
           session: "session-1",
           agent: "planner",
+          scenario: "planner_initial",
         },
       ]);
     } finally {

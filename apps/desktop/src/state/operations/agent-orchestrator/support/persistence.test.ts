@@ -4,6 +4,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   fromPersistedSessionRecord,
   historyToChatMessages,
+  recoverPendingPermissionsFromHistory,
   recoverPendingQuestionsFromHistory,
   toPersistedSessionRecord,
 } from "./persistence";
@@ -184,6 +185,94 @@ describe("agent-orchestrator/support/persistence", () => {
         ],
       },
     ]);
+  });
+
+  test("recovers pending permissions from running tool metadata", () => {
+    const recovered = recoverPendingPermissionsFromHistory([
+      {
+        messageId: "m-assistant-permission",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:00.000Z",
+        text: "Need permission",
+        parts: [
+          {
+            kind: "tool",
+            messageId: "m-assistant-permission",
+            partId: "p-permission",
+            callId: "call-permission",
+            tool: "permission",
+            status: "running",
+            metadata: {
+              requestId: "permission-1",
+              permission: "read",
+              patterns: ["**/.env"],
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(recovered).toEqual([
+      {
+        requestId: "permission-1",
+        permission: "read",
+        patterns: ["**/.env"],
+        metadata: {
+          requestId: "permission-1",
+          permission: "read",
+          patterns: ["**/.env"],
+        },
+      },
+    ]);
+  });
+
+  test("clears recovered permissions when a later tool update completes the same request", () => {
+    const recovered = recoverPendingPermissionsFromHistory([
+      {
+        messageId: "m-assistant-permission",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:00.000Z",
+        text: "Need permission",
+        parts: [
+          {
+            kind: "tool",
+            messageId: "m-assistant-permission",
+            partId: "p-permission",
+            callId: "call-permission",
+            tool: "permission",
+            status: "running",
+            metadata: {
+              requestId: "permission-1",
+              permission: "read",
+              patterns: ["**/.env"],
+            },
+          },
+        ],
+      },
+      {
+        messageId: "m-assistant-permission-resolved",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:05.000Z",
+        text: "Permission resolved",
+        parts: [
+          {
+            kind: "tool",
+            messageId: "m-assistant-permission-resolved",
+            partId: "p-permission-completed",
+            callId: "call-permission",
+            tool: "permission",
+            status: "completed",
+            metadata: {
+              requestId: "permission-1",
+              permission: "read",
+              patterns: ["**/.env"],
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(recovered).toEqual([]);
   });
 
   test("clears recovered pending question after a synthetic answer message", () => {

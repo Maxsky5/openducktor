@@ -43,6 +43,7 @@ export function useAgentStudioQuerySessionSync({
       [AGENT_STUDIO_QUERY_KEYS.task]: undefined,
       [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
       [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
+      [AGENT_STUDIO_QUERY_KEYS.scenario]: undefined,
       [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
       [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
     });
@@ -89,6 +90,9 @@ export function useAgentStudioQuerySessionSync({
     }
     if (roleFromQuery !== activeSession.role) {
       updates[AGENT_STUDIO_QUERY_KEYS.agent] = activeSession.role;
+    }
+    if (activeSession.scenario) {
+      updates[AGENT_STUDIO_QUERY_KEYS.scenario] = activeSession.scenario;
     }
 
     if (Object.keys(updates).length === 0) {

@@ -5,7 +5,9 @@ import { act, render, waitFor } from "@testing-library/react";
 import { QueryProvider } from "@/lib/query-provider";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
-GlobalRegistrator.register();
+if (typeof document === "undefined") {
+  GlobalRegistrator.register();
+}
 
 const createDeferred = <T,>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
@@ -64,14 +66,20 @@ const repoSettings: RepoSettingsInput = {
 
 let devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
   buildState();
+let devServerStart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
+  buildState();
+let devServerStop = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
+  buildState();
+let devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
+  buildState();
 let devServerEventListener: ((payload: unknown) => void) | null = null;
 
 mock.module("@/lib/host-client", () => ({
   hostClient: {
     devServerGetState: (...args: [string, string]) => devServerGetState(...args),
-    devServerStart: async () => buildState(),
-    devServerStop: async () => buildState(),
-    devServerRestart: async () => buildState(),
+    devServerStart: (...args: [string, string]) => devServerStart(...args),
+    devServerStop: (...args: [string, string]) => devServerStop(...args),
+    devServerRestart: (...args: [string, string]) => devServerRestart(...args),
   },
   subscribeDevServerEvents: async (listener: (payload: unknown) => void) => {
     devServerEventListener = listener;
@@ -84,10 +92,174 @@ mock.module("@/lib/host-client", () => ({
 beforeEach(() => {
   devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
     buildState();
+  devServerStart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
+    buildState();
+  devServerStop = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
+    buildState();
+  devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
+    buildState();
   devServerEventListener = null;
 });
 
 describe("useAgentStudioDevServerPanel", () => {
+  test("does not subscribe to dev-server events while every script is stopped", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (latest === null) {
+        throw new Error("Hook result not ready");
+      }
+      return latest;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useAgentStudioDevServerPanel(args);
+      return null;
+    };
+
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness
+          args={{
+            repoPath: "/repo",
+            taskId: "task-7",
+            repoSettings,
+            enabled: true,
+          }}
+        />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().mode).toBe("stopped");
+      });
+      expect(devServerEventListener).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("does not query dev-server state when the repository has no configured dev servers", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    let getStateCalls = 0;
+    devServerGetState = async () => {
+      getStateCalls += 1;
+      return buildState();
+    };
+
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (latest === null) {
+        throw new Error("Hook result not ready");
+      }
+      return latest;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useAgentStudioDevServerPanel(args);
+      return null;
+    };
+
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness
+          args={{
+            repoPath: "/repo",
+            taskId: "task-7",
+            repoSettings: {
+              ...repoSettings,
+              devServers: [],
+            },
+            enabled: true,
+          }}
+        />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().mode).toBe("empty");
+      });
+      expect(getStateCalls).toBe(0);
+      expect(devServerEventListener).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("does not refetch dev-server state after a successful start mutation", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    let getStateCalls = 0;
+    devServerGetState = async () => {
+      getStateCalls += 1;
+      return buildState();
+    };
+    devServerStart = async () =>
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 4242,
+            startedAt: "2026-03-19T15:30:00.000Z",
+          }),
+        ],
+      });
+
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (latest === null) {
+        throw new Error("Hook result not ready");
+      }
+      return latest;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useAgentStudioDevServerPanel(args);
+      return null;
+    };
+
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness
+          args={{
+            repoPath: "/repo",
+            taskId: "task-7",
+            repoSettings,
+            enabled: true,
+          }}
+        />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().mode).toBe("stopped");
+      });
+      expect(getStateCalls).toBe(1);
+
+      await act(async () => {
+        getLatest().onStart();
+      });
+
+      await waitFor(() => {
+        expect(getLatest().scripts[0]?.status).toBe("running");
+      });
+      expect(getStateCalls).toBe(1);
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("reopens in loading mode until a fresh dev-server refetch completes", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
@@ -152,7 +324,6 @@ describe("useAgentStudioDevServerPanel", () => {
       repoPath: "/repo",
       taskId: "task-7",
       repoSettings,
-      activeSession: null,
       enabled: true,
     };
 
@@ -248,7 +419,6 @@ describe("useAgentStudioDevServerPanel", () => {
       repoPath: "/repo-a",
       taskId: "task-1",
       repoSettings,
-      activeSession: null,
       enabled: true,
     };
 
@@ -291,6 +461,17 @@ describe("useAgentStudioDevServerPanel", () => {
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
     type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
 
+    devServerGetState = async () =>
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 4242,
+            startedAt: "2026-03-19T15:30:00.000Z",
+          }),
+        ],
+      });
+
     let latest: HookResult | null = null;
     const getLatest = (): HookResult => {
       if (latest === null) {
@@ -311,7 +492,6 @@ describe("useAgentStudioDevServerPanel", () => {
             repoPath: "/repo",
             taskId: "task-7",
             repoSettings,
-            activeSession: null,
             enabled: true,
           }}
         />
@@ -322,7 +502,7 @@ describe("useAgentStudioDevServerPanel", () => {
 
     try {
       await waitFor(() => {
-        expect(getLatest().mode).toBe("stopped");
+        expect(getLatest().mode).toBe("active");
       });
 
       act(() => {

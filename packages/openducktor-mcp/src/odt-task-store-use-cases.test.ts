@@ -10,6 +10,7 @@ import {
   ReadTaskUseCase,
   SearchTasksUseCase,
   SetPlanUseCase,
+  SetPullRequestUseCase,
   SetSpecUseCase,
 } from "./odt-task-store-use-cases";
 
@@ -478,6 +479,197 @@ describe("odt task workflow use cases", () => {
       task: makePublicTask({ status: "in_progress" }),
     });
     expect(calls).toEqual(["init", "transition:task-1:in_progress"]);
+  });
+
+  test("SetPullRequestUseCase resolves canonical pull request metadata without changing ai_review status", async () => {
+    const aiReviewTask = makeTask({ status: "ai_review" });
+    const aiReviewIssue = makeIssue({ status: "ai_review" });
+    const calls: string[] = [];
+    let writeNamespacePayload: Record<string, unknown> | null = null;
+
+    const useCase = new SetPullRequestUseCase({
+      workflow: {
+        metadataNamespace: "openducktor",
+        ensureInitialized: async () => {
+          calls.push("init");
+        },
+        readTaskSnapshot: async (taskId) => {
+          calls.push(`read:${taskId}`);
+          return { issue: aiReviewIssue, task: aiReviewTask };
+        },
+      },
+      persistence: {
+        getNamespaceData: (issue) => {
+          calls.push(`namespace:${issue.id}`);
+          return {
+            root: {},
+            namespace: {},
+          };
+        },
+        writeNamespace: async (_taskId, _root, namespace) => {
+          calls.push("write");
+          writeNamespacePayload = namespace as Record<string, unknown>;
+        },
+      },
+      pullRequestResolver: {
+        resolve: async ({ providerId, number }) => {
+          calls.push(`resolve:${providerId}:${number}`);
+          return {
+            providerId,
+            number,
+            url: "https://github.com/openai/openducktor/pull/42",
+            state: "open",
+            createdAt: FIXED_TIMESTAMP,
+            updatedAt: FIXED_TIMESTAMP,
+            lastSyncedAt: FIXED_TIMESTAMP,
+          };
+        },
+      },
+    });
+
+    await expect(
+      useCase.execute({
+        taskId: "task-1",
+        providerId: "github",
+        number: 42,
+      }),
+    ).resolves.toEqual({
+      task: makePublicTask({ status: "ai_review" }),
+      pullRequest: {
+        providerId: "github",
+        number: 42,
+        url: "https://github.com/openai/openducktor/pull/42",
+        state: "open",
+        createdAt: FIXED_TIMESTAMP,
+        updatedAt: FIXED_TIMESTAMP,
+        lastSyncedAt: FIXED_TIMESTAMP,
+      },
+    });
+    expect(calls).toEqual([
+      "init",
+      "read:task-1",
+      "resolve:github:42",
+      "namespace:task-1",
+      "write",
+      "read:task-1",
+    ]);
+    expect(writeNamespacePayload).toEqual({
+      pullRequest: {
+        providerId: "github",
+        number: 42,
+        url: "https://github.com/openai/openducktor/pull/42",
+        state: "open",
+        createdAt: FIXED_TIMESTAMP,
+        updatedAt: FIXED_TIMESTAMP,
+        lastSyncedAt: FIXED_TIMESTAMP,
+      },
+    });
+  });
+
+  test("SetPullRequestUseCase persists canonical pull request metadata without transitioning human_review tasks", async () => {
+    const humanReviewTask = makeTask({ status: "human_review" });
+    const humanReviewIssue = makeIssue({ status: "human_review" });
+    const calls: string[] = [];
+
+    const useCase = new SetPullRequestUseCase({
+      workflow: {
+        metadataNamespace: "openducktor",
+        ensureInitialized: async () => {
+          calls.push("init");
+        },
+        readTaskSnapshot: async (taskId) => {
+          calls.push(`read:${taskId}`);
+          return { issue: humanReviewIssue, task: humanReviewTask };
+        },
+      },
+      persistence: {
+        getNamespaceData: (issue) => {
+          calls.push(`namespace:${issue.id}`);
+          return {
+            root: {},
+            namespace: {},
+          };
+        },
+        writeNamespace: async () => {
+          calls.push("write");
+        },
+      },
+      pullRequestResolver: {
+        resolve: async ({ providerId, number }) => {
+          calls.push(`resolve:${providerId}:${number}`);
+          return {
+            providerId,
+            number,
+            url: "https://github.com/openai/openducktor/pull/7",
+            state: "draft",
+            createdAt: FIXED_TIMESTAMP,
+            updatedAt: FIXED_TIMESTAMP,
+            lastSyncedAt: FIXED_TIMESTAMP,
+          };
+        },
+      },
+    });
+
+    await expect(
+      useCase.execute({
+        taskId: "task-1",
+        providerId: "github",
+        number: 7,
+      }),
+    ).resolves.toEqual({
+      task: makePublicTask({ status: "human_review" }),
+      pullRequest: {
+        providerId: "github",
+        number: 7,
+        url: "https://github.com/openai/openducktor/pull/7",
+        state: "draft",
+        createdAt: FIXED_TIMESTAMP,
+        updatedAt: FIXED_TIMESTAMP,
+        lastSyncedAt: FIXED_TIMESTAMP,
+      },
+    });
+    expect(calls).toEqual([
+      "init",
+      "read:task-1",
+      "resolve:github:7",
+      "namespace:task-1",
+      "write",
+      "read:task-1",
+    ]);
+  });
+
+  test("SetPullRequestUseCase rejects statuses outside the review flow", async () => {
+    const useCase = new SetPullRequestUseCase({
+      workflow: {
+        metadataNamespace: "openducktor",
+        ensureInitialized: async () => {},
+        readTaskSnapshot: async () => ({
+          issue: makeIssue({ status: "spec_ready" }),
+          task: makeTask({ status: "spec_ready" }),
+        }),
+      },
+      persistence: {
+        getNamespaceData: () => ({ root: {}, namespace: {} }),
+        writeNamespace: async () => {
+          throw new Error("write should not run");
+        },
+      },
+      pullRequestResolver: {
+        resolve: async () => {
+          throw new Error("resolve should not run");
+        },
+      },
+    });
+
+    await expect(
+      useCase.execute({
+        taskId: "task-1",
+        providerId: "github",
+        number: 1,
+      }),
+    ).rejects.toThrow(
+      "set_pull_request is only allowed from in_progress/ai_review/human_review (current: spec_ready)",
+    );
   });
 
   test("QaApprovedUseCase writes the qa report and status in a single task update", async () => {

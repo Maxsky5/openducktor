@@ -6,6 +6,8 @@ import type { TaskApprovalModalModel } from "./kanban-page-model-types";
 mock.module("@/components/ui/dialog", () => ({
   Dialog: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
     createElement("div", props, children),
+  DialogBody: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+    createElement("div", props, children),
   DialogContent: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
     createElement("div", props, children),
   DialogDescription: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
@@ -165,5 +167,28 @@ describe("TaskApprovalModal", () => {
     expect(html).not.toContain("Local merge ready");
     expect(html).toMatch(/<button[^>]*>Finish Later<\/button>/);
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Mark Task Done<\/button>/);
+  });
+
+  test("renders AI pull request copy for the forked builder workflow", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskApprovalModal, {
+        model: createModel({
+          stage: "approval",
+          mode: "pull_request",
+          pullRequestDraftMode: "generate_ai",
+          publishTarget: null,
+        }),
+      }),
+    );
+
+    expect(html).toContain("Generate With AI");
+    expect(html).toContain(
+      "Choose a Builder session to fork, then let Builder create or update the pull request automatically.",
+    );
+    expect(html).toContain(
+      "OpenDucktor will ask you to choose a Builder session to fork, then start PR generation in the shared session-start flow.",
+    );
+    expect(html).toContain("Start PR Generation");
+    expect(html).not.toContain("generate the pull request title and description");
   });
 });

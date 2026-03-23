@@ -7,6 +7,8 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelCatalog } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
+import { appQueryClient } from "@/lib/query-client";
+import { ensureRuntimeListFromQuery } from "@/state/queries/runtime";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { host } from "./host";
 
@@ -31,6 +33,10 @@ export type RuntimeCatalogAdapter = Pick<AgentEnginePort, "listAvailableModels">
 type RuntimeCatalogDependencies = {
   getRuntimeDefinition: (runtimeKind: RuntimeKind) => RuntimeDescriptor;
   ensureRuntime: (runtimeKind: RuntimeKind, repoPath: string) => Promise<RuntimeInstanceSummary>;
+  listRuntimesForRepo: (
+    runtimeKind: RuntimeKind,
+    repoPath: string,
+  ) => Promise<RuntimeInstanceSummary[]>;
   stopRuntime: (runtimeId: string) => Promise<{ ok: boolean }>;
   listRuns: (repoPath: string) => Promise<RunSummary[]>;
   listAvailableModels: (input: ListCatalogInput) => Promise<AgentModelCatalog>;
@@ -203,6 +209,12 @@ const hasActiveRunUsingRuntime = (runs: RunSummary[], runtimeEndpoint: string): 
   );
 };
 
+const selectCatalogRuntime = (
+  runtimes: RuntimeInstanceSummary[],
+  repoPath: string,
+): RuntimeInstanceSummary | null =>
+  runtimes.find((runtime) => runtime.workingDirectory === repoPath) ?? runtimes[0] ?? null;
+
 export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies) => {
   const probeRuntime = async (
     repoPath: string,
@@ -210,7 +222,10 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
     checkedAt: string,
   ): Promise<RuntimeProbeResult> => {
     try {
-      const runtime = await deps.ensureRuntime(runtimeKind, repoPath);
+      const existingRuntime =
+        selectCatalogRuntime(await deps.listRuntimesForRepo(runtimeKind, repoPath), repoPath) ??
+        null;
+      const runtime = existingRuntime ?? (await deps.ensureRuntime(runtimeKind, repoPath));
       return {
         ok: true,
         runtime,
@@ -322,7 +337,9 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
     repoPath: string,
     runtimeKind: RuntimeKind,
   ): Promise<AgentModelCatalog> => {
-    const runtime = await deps.ensureRuntime(runtimeKind, repoPath);
+    const existingRuntime =
+      selectCatalogRuntime(await deps.listRuntimesForRepo(runtimeKind, repoPath), repoPath) ?? null;
+    const runtime = existingRuntime ?? (await deps.ensureRuntime(runtimeKind, repoPath));
     return deps.listAvailableModels({
       runtimeKind,
       runtimeEndpoint: resolveRuntimeEndpoint(runtime.runtimeRoute),
@@ -393,6 +410,8 @@ export const createHostRuntimeCatalogOperations = (
   createRuntimeCatalogOperations({
     getRuntimeDefinition,
     ensureRuntime: (runtimeKind, repoPath) => host.runtimeEnsure(repoPath, runtimeKind),
+    listRuntimesForRepo: (runtimeKind, repoPath) =>
+      ensureRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath),
     stopRuntime: (runtimeId) => host.runtimeStop(runtimeId),
     listRuns: (repoPath) => host.runsList(repoPath),
     listAvailableModels: (input) =>

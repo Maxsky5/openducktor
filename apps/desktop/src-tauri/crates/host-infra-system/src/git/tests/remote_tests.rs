@@ -672,6 +672,78 @@ fn resolve_upstream_target_returns_tracking_ref_when_available() {
 }
 
 #[test]
+fn resolve_upstream_target_falls_back_to_existing_origin_remote_branch() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("resolve-upstream-origin-fallback");
+    let remote = setup_bare_remote("resolve-upstream-origin-fallback-remote");
+    let remote_path = remote.path.to_string_lossy().to_string();
+    run_git_ok(
+        &repo.path,
+        &["remote", "add", "origin", remote_path.as_str()],
+    );
+    run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+    let git = GitCliPort::new();
+    git.switch_branch(&repo.path, "feature/upstream-origin-fallback", true)
+        .expect("feature branch should be created");
+
+    fs::write(repo.path.join("origin-fallback.txt"), "fallback\n")
+        .expect("fallback file should write");
+    run_git_ok(&repo.path, &["add", "origin-fallback.txt"]);
+    run_git_ok(
+        &repo.path,
+        &["commit", "-m", "create fallback remote branch"],
+    );
+    run_git_ok(
+        &repo.path,
+        &["push", "origin", "feature/upstream-origin-fallback"],
+    );
+
+    let upstream = git
+        .resolve_upstream_target(&repo.path)
+        .expect("fallback upstream resolution should succeed");
+    assert_eq!(
+        upstream,
+        Some("refs/remotes/origin/feature/upstream-origin-fallback".to_string())
+    );
+}
+
+#[test]
+fn resolve_upstream_target_does_not_match_nested_remote_branch_suffixes() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("resolve-upstream-suffix-collision");
+    let remote = setup_bare_remote("resolve-upstream-suffix-collision-remote");
+    let remote_path = remote.path.to_string_lossy().to_string();
+    run_git_ok(
+        &repo.path,
+        &["remote", "add", "origin", remote_path.as_str()],
+    );
+    run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+    let git = GitCliPort::new();
+    git.switch_branch(&repo.path, "foo/branch", true)
+        .expect("nested branch should be created");
+    fs::write(repo.path.join("nested.txt"), "nested\n").expect("nested file should write");
+    run_git_ok(&repo.path, &["add", "nested.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "seed nested remote branch"]);
+    run_git_ok(&repo.path, &["push", "origin", "foo/branch"]);
+
+    git.switch_branch(&repo.path, "branch", true)
+        .expect("suffix branch should be created");
+
+    let upstream = git
+        .resolve_upstream_target(&repo.path)
+        .expect("suffix collision upstream resolution should succeed");
+    assert!(upstream.is_none());
+}
+
+#[test]
 fn resolve_upstream_target_returns_none_when_remote_ref_is_deleted() {
     if !git_available() {
         return;

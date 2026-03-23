@@ -57,8 +57,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -71,14 +69,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     expect(typeof actions.stopAgentSession).toBe("function");
   });
 
-  test("forkAgentSession logs todo warm-up failures instead of leaving an unhandled rejection", async () => {
+  test("forkAgentSession persists the forked session", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
-    const originalError = console.error;
-    const errorCalls: unknown[][] = [];
-    console.error = ((...args: unknown[]) => {
-      errorCalls.push(args);
-    }) as typeof console.error;
 
     adapter.forkSession = async () => ({
       sessionId: "session-2",
@@ -131,10 +124,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {
-        throw new Error("todo sync failed");
-      },
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -153,12 +142,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(persistedSessionId === "session-2").toBe(true);
-      expect(errorCalls).toHaveLength(1);
-      expect(errorCalls[0]?.[0]).toBe("[agent-orchestrator]");
-      expect(errorCalls[0]?.[1]).toBe("fork-session-warm-session-todos");
     } finally {
       adapter.forkSession = originalForkSession;
-      console.error = originalError;
     }
   });
 
@@ -229,8 +214,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => promptOverridesDeferred.promise,
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -315,8 +298,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -395,8 +376,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {
         clearCalls += 1;
@@ -466,8 +445,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -568,8 +545,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -646,8 +621,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -728,8 +701,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -806,8 +777,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -884,8 +853,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -948,8 +915,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {
         clearCalls += 1;
@@ -1039,8 +1004,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadSessionTodos: async () => {},
-      loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},

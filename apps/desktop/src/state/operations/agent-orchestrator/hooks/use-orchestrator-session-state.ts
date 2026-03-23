@@ -11,6 +11,7 @@ type OrchestratorMutableState = {
   sessionsById: SessionStateById;
   tasks: TaskCard[];
   runs: RunSummary[];
+  activeRepo: string | null;
   previousRepo: string | null;
   repoEpoch: number;
   inFlightStartsByRepoTask: Map<string, Promise<string>>;
@@ -27,6 +28,7 @@ type OrchestratorRefBridges = {
   sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
   taskRef: MutableRefObject<TaskCard[]>;
   runsRef: MutableRefObject<RunSummary[]>;
+  activeRepoRef: MutableRefObject<string | null>;
   previousRepoRef: MutableRefObject<string | null>;
   repoEpochRef: MutableRefObject<number>;
   inFlightStartsByRepoTaskRef: MutableRefObject<Map<string, Promise<string>>>;
@@ -84,6 +86,7 @@ export const useOrchestratorSessionState = ({
     sessionsById: {},
     tasks,
     runs,
+    activeRepo,
     previousRepo: null,
     repoEpoch: 0,
     inFlightStartsByRepoTask: new Map<string, Promise<string>>(),
@@ -100,6 +103,7 @@ export const useOrchestratorSessionState = ({
       sessionsRef: createMutableBridge(mutableStateRef, "sessionsById"),
       taskRef: createMutableBridge(mutableStateRef, "tasks"),
       runsRef: createMutableBridge(mutableStateRef, "runs"),
+      activeRepoRef: createMutableBridge(mutableStateRef, "activeRepo"),
       previousRepoRef: createMutableBridge(mutableStateRef, "previousRepo"),
       repoEpochRef: createMutableBridge(mutableStateRef, "repoEpoch"),
       inFlightStartsByRepoTaskRef: createMutableBridge(mutableStateRef, "inFlightStartsByRepoTask"),
@@ -125,9 +129,10 @@ export const useOrchestratorSessionState = ({
   }, []);
 
   useEffect(() => {
+    mutableStateRef.current.activeRepo = activeRepo;
     mutableStateRef.current.tasks = tasks;
     mutableStateRef.current.runs = runs;
-  }, [runs, tasks]);
+  }, [activeRepo, runs, tasks]);
 
   useEffect(() => {
     if (mutableStateRef.current.previousRepo === activeRepo) {

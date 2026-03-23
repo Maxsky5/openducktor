@@ -1,5 +1,4 @@
 import type { TaskApprovalContext, TaskCard } from "@openducktor/contracts";
-import { buildAgentMessagePrompt } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -8,21 +7,12 @@ import { getGitConflictCopy } from "@/features/git-conflict-resolution";
 import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { canonicalTargetBranch, checkoutTargetBranch } from "@/lib/target-branch";
-import { pickLatestSession } from "@/state/operations/agent-orchestrator/handlers/start-session-support";
 import { host } from "@/state/operations/shared/host";
-import { loadEffectivePromptOverrides } from "@/state/operations/shared/prompt-overrides";
-import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
-import {
-  loadPlanDocumentFromQuery,
-  loadQaReportDocumentFromQuery,
-  loadSpecDocumentFromQuery,
-} from "@/state/queries/documents";
 import {
   invalidateTaskApprovalContextQuery,
   loadTaskApprovalContextFromQuery,
   taskApprovalQueryKeys,
 } from "@/state/queries/task-approval";
-import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { TaskApprovalModalModel } from "./kanban-page-model-types";
 
 type ApprovalState = {
@@ -45,10 +35,7 @@ type ApprovalState = {
 type UseTaskApprovalFlowArgs = {
   activeRepo: string | null;
   tasks: TaskCard[];
-  sessions: AgentSessionState[];
-  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
-  forkAgentSession: (input: { parentSessionId: string }) => Promise<string>;
-  sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
+  requestPullRequestGeneration: (taskId: string) => Promise<void>;
   refreshTasks: () => Promise<void>;
   onResolveGitConflict?: (conflict: GitConflict, taskId: string) => Promise<boolean>;
 };
@@ -68,35 +55,6 @@ const INITIAL_GIT_CONFLICT_STATE: {
   conflictAction: null,
 };
 
-export const parseGeneratedPullRequest = (content: string): { title: string; body: string } => {
-  const boldPattern = /\*\*/g;
-  let cleaned = content.trim();
-
-  const wrappingFenceMatch = cleaned.match(/^```[\w]*\n([\s\S]*)\n```$/);
-  if (wrappingFenceMatch?.[1] != null) {
-    cleaned = wrappingFenceMatch[1];
-  }
-
-  cleaned = cleaned.replace(boldPattern, "");
-  const titlePrefix = "Title:";
-  const descriptionPrefix = "Description:";
-  const titleIndex = cleaned.indexOf(titlePrefix);
-  const descriptionIndex = cleaned.indexOf(descriptionPrefix);
-  if (titleIndex !== 0 || descriptionIndex < 0) {
-    throw new Error("Generated pull request response did not match the expected format.");
-  }
-
-  const title = cleaned.slice(titlePrefix.length, descriptionIndex).trim();
-  const body = cleaned.slice(descriptionIndex + descriptionPrefix.length).trim();
-  if (!title || !body) {
-    throw new Error("Generated pull request response is missing the title or description.");
-  }
-
-  return { title, body };
-};
-
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 const resolveApprovalStage = (
   approvalContext: TaskApprovalContext | null,
 ): ApprovalState["stage"] => (approvalContext?.directMerge ? "complete_direct_merge" : "approval");
@@ -104,10 +62,7 @@ const resolveApprovalStage = (
 export function useTaskApprovalFlow({
   activeRepo,
   tasks,
-  sessions,
-  loadAgentSessions,
-  forkAgentSession,
-  sendAgentMessage,
+  requestPullRequestGeneration,
   refreshTasks,
   onResolveGitConflict = async (): Promise<boolean> => {
     throw new Error(
@@ -137,10 +92,7 @@ export function useTaskApprovalFlow({
   const queryClient = useQueryClient();
   const [state, setState] = useState<ApprovalState | null>(INITIAL_STATE);
   const [gitConflictState, setGitConflictState] = useState(INITIAL_GIT_CONFLICT_STATE);
-  const sessionsRef = useRef(sessions);
   const approvalRequestVersionRef = useRef(0);
-
-  sessionsRef.current = sessions;
 
   const reset = useCallback(() => {
     approvalRequestVersionRef.current += 1;
@@ -237,139 +189,6 @@ export function useTaskApprovalFlow({
     [activeRepo, queryClient, reset, tasks],
   );
 
-  const waitForLoadedParentSession = useCallback(
-    async (taskId: string, sessionId: string): Promise<AgentSessionState> => {
-      await loadAgentSessions(taskId, {
-        hydrateHistoryForSessionId: sessionId,
-      });
-      for (let attempt = 0; attempt < 20; attempt += 1) {
-        const parentSession = sessionsRef.current.find((entry) => entry.sessionId === sessionId);
-        if (
-          parentSession &&
-          parentSession.runtimeEndpoint.trim().length > 0 &&
-          parentSession.workingDirectory.trim().length > 0
-        ) {
-          return parentSession;
-        }
-        await delay(50);
-      }
-      throw new Error("Failed to reconnect the parent Builder session for pull request drafting.");
-    },
-    [loadAgentSessions],
-  );
-
-  const waitForForkedAssistantReply = useCallback(
-    async (sessionId: string, baselineAssistantCount: number): Promise<string> => {
-      const isSettledSessionStatus = (status: AgentSessionState["status"]): boolean =>
-        status === "idle" || status === "stopped";
-
-      for (let attempt = 0; attempt < 240; attempt += 1) {
-        const session = sessionsRef.current.find((entry) => entry.sessionId === sessionId);
-        if (!session) {
-          throw new Error(
-            "Forked Builder session disappeared before the pull request draft completed.",
-          );
-        }
-        if (session.status === "error") {
-          throw new Error(
-            "The forked Builder session failed while generating the pull request draft.",
-          );
-        }
-
-        const assistantMessages = session.messages.filter(
-          (message) => message.role === "assistant",
-        );
-        if (
-          assistantMessages.length > baselineAssistantCount &&
-          isSettledSessionStatus(session.status)
-        ) {
-          return assistantMessages.at(-1)?.content ?? "";
-        }
-
-        await delay(500);
-      }
-
-      throw new Error(
-        "Timed out while waiting for the forked Builder session to generate the pull request draft.",
-      );
-    },
-    [],
-  );
-
-  const createPullRequestWithAi = useCallback(
-    async (currentState: ApprovalState) => {
-      if (!activeRepo) {
-        throw new Error("No active repository selected.");
-      }
-
-      const latestBuilderRecord = pickLatestSession(
-        (await loadAgentSessionListFromQuery(queryClient, activeRepo, currentState.taskId)).filter(
-          (entry) => entry.role === "build",
-        ),
-      );
-      if (!latestBuilderRecord) {
-        throw new Error("No Builder session is available to fork for pull request drafting.");
-      }
-
-      const parentSession = await waitForLoadedParentSession(
-        currentState.taskId,
-        latestBuilderRecord.sessionId,
-      );
-      const [task, overrides, spec, plan, qa] = await Promise.all([
-        Promise.resolve(tasks.find((entry) => entry.id === currentState.taskId) ?? null),
-        loadEffectivePromptOverrides(activeRepo, queryClient),
-        loadSpecDocumentFromQuery(queryClient, activeRepo, currentState.taskId),
-        loadPlanDocumentFromQuery(queryClient, activeRepo, currentState.taskId),
-        loadQaReportDocumentFromQuery(queryClient, activeRepo, currentState.taskId),
-      ]);
-      if (!task) {
-        throw new Error(`Task not found: ${currentState.taskId}`);
-      }
-
-      const forkedSessionId = await forkAgentSession({
-        parentSessionId: parentSession.sessionId,
-      });
-      const baselineAssistantCount = 0;
-      const prompt = buildAgentMessagePrompt({
-        role: "build",
-        templateId: "message.build_pull_request_draft",
-        task: {
-          taskId: task.id,
-          title: task.title,
-          issueType: task.issueType,
-          status: task.status,
-          qaRequired: task.aiReviewEnabled,
-          description: task.description,
-          specMarkdown: spec.markdown,
-          planMarkdown: plan.markdown,
-          latestQaReportMarkdown: qa.markdown,
-        },
-        overrides,
-      });
-
-      await sendAgentMessage(forkedSessionId, prompt);
-      const generated = parseGeneratedPullRequest(
-        await waitForForkedAssistantReply(forkedSessionId, baselineAssistantCount),
-      );
-      const pullRequest = await host.taskPullRequestUpsert(
-        activeRepo,
-        currentState.taskId,
-        generated.title,
-        generated.body,
-      );
-      return pullRequest;
-    },
-    [
-      activeRepo,
-      forkAgentSession,
-      queryClient,
-      sendAgentMessage,
-      tasks,
-      waitForForkedAssistantReply,
-      waitForLoadedParentSession,
-    ],
-  );
-
   const confirm = useCallback((): void => {
     if (!state || !activeRepo || state.isLoading || !state.approvalContext) {
       return;
@@ -439,51 +258,8 @@ export function useTaskApprovalFlow({
         }
 
         if (state.pullRequestDraftMode === "generate_ai") {
-          const reopenOptions = {
-            mode: "pull_request" as const,
-            pullRequestDraftMode: "generate_ai" as const,
-          };
-          const loadingToastId = toast.loading("Generating pull request", {
-            description:
-              "OpenDucktor is drafting the title and description. This can take some time.",
-          });
-          const currentState = state;
+          await requestPullRequestGeneration(state.taskId);
           reset();
-          void (async () => {
-            try {
-              const pullRequest = await createPullRequestWithAi(currentState);
-              await refreshTasks();
-              toast.success("Pull request created", {
-                id: loadingToastId,
-                description: `PR #${pullRequest.number}`,
-                action: {
-                  label: "Open",
-                  onClick: () => {
-                    void openExternalUrl(pullRequest.url).catch((error) => {
-                      toast.error("Failed to open pull request", {
-                        description: errorMessage(error),
-                      });
-                    });
-                  },
-                },
-              });
-            } catch (error) {
-              const description = errorMessage(error);
-              toast.error("Pull request generation failed", {
-                id: loadingToastId,
-                description,
-                action: {
-                  label: "Reopen",
-                  onClick: () => {
-                    openTaskApproval(currentState.taskId, {
-                      ...reopenOptions,
-                      errorMessage: description,
-                    });
-                  },
-                },
-              });
-            }
-          })();
           return;
         } else {
           const pullRequest = await host.taskPullRequestUpsert(
@@ -516,15 +292,7 @@ export function useTaskApprovalFlow({
         });
       }
     })();
-  }, [
-    activeRepo,
-    createPullRequestWithAi,
-    openTaskApproval,
-    queryClient,
-    refreshTasks,
-    reset,
-    state,
-  ]);
+  }, [activeRepo, queryClient, refreshTasks, requestPullRequestGeneration, reset, state]);
 
   const abortGitConflict = useCallback((): void => {
     if (!activeRepo || !gitConflictState.conflict || gitConflictState.isHandlingConflict) {

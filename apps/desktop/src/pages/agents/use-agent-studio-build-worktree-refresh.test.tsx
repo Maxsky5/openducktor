@@ -44,6 +44,7 @@ const createCompletedToolSession = (tool: string, id = tool, input?: Record<stri
 const createBaseArgs = (): HookArgs => ({
   viewRole: "build",
   activeSession: null,
+  isSessionHistoryHydrating: false,
   refreshWorktree: refreshWorktreeMock,
 });
 
@@ -107,6 +108,39 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
         }),
       });
       expect(refreshWorktreeMock).toHaveBeenCalledTimes(2);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not refresh for historical tool completions that arrive with session history hydration", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createAgentSessionFixture({
+        sessionId: "build-session-1",
+        role: "build",
+        messages: [],
+      }),
+      isSessionHistoryHydrating: true,
+    });
+
+    try {
+      await harness.mount();
+      expect(refreshWorktreeMock).not.toHaveBeenCalled();
+
+      await harness.update({
+        ...createBaseArgs(),
+        activeSession: createCompletedToolSession("apply_patch", "tool-1"),
+        isSessionHistoryHydrating: true,
+      });
+      expect(refreshWorktreeMock).not.toHaveBeenCalled();
+
+      await harness.update({
+        ...createBaseArgs(),
+        activeSession: createCompletedToolSession("apply_patch", "tool-1"),
+        isSessionHistoryHydrating: false,
+      });
+      expect(refreshWorktreeMock).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }

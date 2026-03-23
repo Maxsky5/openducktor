@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createElement, type ReactElement } from "react";
 import type { TasksStateContextValue } from "@/types/state-slices";
 import {
@@ -23,7 +23,10 @@ const retryNavigationPersistence = mock(() => {});
 const updateQuery = mock((_updates?: unknown) => {});
 const handleSelectTab = mock((_value: string) => {});
 const retryChatSettingsLoad = mock(() => {});
-const requestNewSessionStart = mock(async () => ({ selectedModel: null }));
+const requestNewSessionStart = mock(async () => ({
+  selectedModel: null,
+  sourceSessionId: null,
+}));
 const resolvePendingSessionStart = mock((_requestId: string, _decision: unknown) => {});
 const resolvePendingRebaseConflictResolution = mock((_requestId: string, _decision: unknown) => {});
 const handleResolveRebaseConflict = mock(async () => {});
@@ -88,6 +91,22 @@ type OrchestrationState = {
 type RightPanelState = {
   isRightPanelVisible: boolean;
   rightPanelModel: { kind: string };
+};
+
+type AgentsPageShellModelState = {
+  activeRepo: string | null;
+  navigationPersistenceError: Error | null;
+  chatSettingsLoadError: Error | null;
+  onRetryNavigationPersistence: () => void;
+  onRetryChatSettingsLoad: () => void;
+  hasSelectedTask: boolean;
+  isRightPanelVisible: boolean;
+  rightPanelModel: RightPanelState["rightPanelModel"] | null;
+  sessionStartModal: ReactElement | null;
+  gitConflictResolutionModal: ReactElement | null;
+  mergedPullRequestModal: ReactElement | null;
+  humanReviewFeedbackModal: ReactElement;
+  taskDetailsSheet: ReactElement;
 };
 
 let workspaceState = {
@@ -211,93 +230,101 @@ let rightPanelState: RightPanelState = {
   rightPanelModel,
 };
 
-mock.module("react-router-dom", () => ({
-  useNavigationType: () => "PUSH",
-  useSearchParams: () => [new URLSearchParams(), mock(() => {})],
-}));
-
-mock.module("@/state", () => ({
-  useWorkspaceState: () => workspaceState,
-  useChecksState: () => checksState,
-  useTasksState: () => tasksState,
-  useAgentState: () => agentState,
-}));
-
-mock.module("@/state/app-state-contexts", () => ({
-  useDelegationEventsContext: () => ({ runCompletionSignal: null }),
-  useRuntimeDefinitionsContext: () => runtimeDefinitionsContext,
-}));
-
-mock.module("../use-agent-studio-query-sync", () => ({
-  useAgentStudioQuerySync: () => querySyncState,
-}));
-
-mock.module("../use-agent-studio-selection-controller", () => ({
-  useAgentStudioSelectionController: () => selectionState,
-}));
-
-mock.module("../use-agent-studio-query-session-sync", () => ({
-  useAgentStudioQuerySessionSync: () => undefined,
-}));
-
-mock.module("../use-agents-page-readiness", () => ({
-  useAgentStudioReadiness: () => readinessState,
-  useRunCompletionRecoverySignal: () => "run-completion-signal",
-}));
-
-mock.module("../use-agent-studio-orchestration-controller", () => ({
-  useAgentStudioOrchestrationController: () => orchestrationState,
-}));
-
-mock.module("../use-agent-studio-session-start-request", () => ({
-  useAgentStudioSessionStartRequest: () => ({
-    pendingSessionStartRequest,
-    requestNewSessionStart,
-    resolvePendingSessionStart,
-  }),
-}));
-
-mock.module("../use-agent-studio-rebase-conflict-resolution", () => ({
-  useAgentStudioRebaseConflictResolution: () => ({
-    pendingRebaseConflictResolutionRequest,
-    resolvePendingRebaseConflictResolution,
-    handleResolveRebaseConflict,
-  }),
-}));
-
-mock.module("../use-agents-page-right-panel-model", () => ({
-  useAgentsPageRightPanelModel: () => rightPanelState,
-}));
-
-mock.module("../agents-page-session-start-modal-bridge", () => ({
-  AgentStudioSessionStartModalBridge: (props: Record<string, unknown>): ReactElement =>
-    createElement("mock-session-start-modal", props),
-}));
-
-mock.module("../agents-page-rebase-conflict-modal", () => ({
-  RebaseConflictResolutionModal: (props: Record<string, unknown>): ReactElement =>
-    createElement("mock-rebase-conflict-modal", props),
-}));
-
-mock.module("@/features/human-review-feedback/human-review-feedback-modal", () => ({
-  HumanReviewFeedbackModal: (props: Record<string, unknown>): ReactElement =>
-    createElement("mock-human-review-feedback-modal", props),
-}));
-
-mock.module("@/components/features/task-details/task-details-sheet-controller", () => ({
-  TaskDetailsSheetController: (props: Record<string, unknown>): ReactElement =>
-    createElement("mock-task-details-sheet-controller", props),
-}));
-
-mock.module("@/components/features/pull-requests/merged-pull-request-confirm-dialog", () => ({
-  MergedPullRequestConfirmDialog: (props: Record<string, unknown>): ReactElement =>
-    createElement("mock-merged-pr-dialog", props),
-}));
-
-let useAgentsPageShellModel: typeof import("./use-agents-page-shell-model").useAgentsPageShellModel;
+let useAgentsPageShellModel: () => AgentsPageShellModelState;
 
 beforeAll(async () => {
+  mock.module("react-router-dom", () => ({
+    useNavigationType: () => "PUSH",
+    useSearchParams: () => [new URLSearchParams(), mock(() => {})],
+  }));
+
+  mock.module("@/state/app-state-provider", () => ({
+    AppStateProvider: ({ children }: { children: ReactElement }) => children,
+    useWorkspaceState: () => workspaceState,
+    useChecksState: () => checksState,
+    useTasksState: () => tasksState,
+    useAgentState: () => agentState,
+    useSpecState: () => {
+      throw new Error("useSpecState is not used in this test");
+    },
+  }));
+
+  mock.module("@/state/app-state-contexts", () => ({
+    useDelegationEventsContext: () => ({ runCompletionSignal: null }),
+    useRuntimeDefinitionsContext: () => runtimeDefinitionsContext,
+  }));
+
+  mock.module("../use-agent-studio-query-sync", () => ({
+    useAgentStudioQuerySync: () => querySyncState,
+  }));
+
+  mock.module("../use-agent-studio-selection-controller", () => ({
+    useAgentStudioSelectionController: () => selectionState,
+  }));
+
+  mock.module("../use-agent-studio-query-session-sync", () => ({
+    useAgentStudioQuerySessionSync: () => undefined,
+  }));
+
+  mock.module("../use-agents-page-readiness", () => ({
+    useAgentStudioReadiness: () => readinessState,
+    useRunCompletionRecoverySignal: () => "run-completion-signal",
+  }));
+
+  mock.module("../use-agent-studio-orchestration-controller", () => ({
+    useAgentStudioOrchestrationController: () => orchestrationState,
+  }));
+
+  mock.module("../use-agent-studio-session-start-request", () => ({
+    useAgentStudioSessionStartRequest: () => ({
+      pendingSessionStartRequest,
+      requestNewSessionStart,
+      resolvePendingSessionStart,
+    }),
+  }));
+
+  mock.module("../use-agent-studio-rebase-conflict-resolution", () => ({
+    useAgentStudioRebaseConflictResolution: () => ({
+      pendingRebaseConflictResolutionRequest,
+      resolvePendingRebaseConflictResolution,
+      handleResolveRebaseConflict,
+    }),
+  }));
+
+  mock.module("../use-agents-page-right-panel-model", () => ({
+    useAgentsPageRightPanelModel: () => rightPanelState,
+  }));
+
+  mock.module("../agents-page-session-start-modal-bridge", () => ({
+    AgentStudioSessionStartModalBridge: (props: Record<string, unknown>): ReactElement =>
+      createElement("mock-session-start-modal", props),
+  }));
+
+  mock.module("../agents-page-rebase-conflict-modal", () => ({
+    RebaseConflictResolutionModal: (props: Record<string, unknown>): ReactElement =>
+      createElement("mock-rebase-conflict-modal", props),
+  }));
+
+  mock.module("@/features/human-review-feedback/human-review-feedback-modal", () => ({
+    HumanReviewFeedbackModal: (props: Record<string, unknown>): ReactElement =>
+      createElement("mock-human-review-feedback-modal", props),
+  }));
+
+  mock.module("@/components/features/task-details/task-details-sheet-controller", () => ({
+    TaskDetailsSheetController: (props: Record<string, unknown>): ReactElement =>
+      createElement("mock-task-details-sheet-controller", props),
+  }));
+
+  mock.module("@/components/features/pull-requests/merged-pull-request-confirm-dialog", () => ({
+    MergedPullRequestConfirmDialog: (props: Record<string, unknown>): ReactElement =>
+      createElement("mock-merged-pr-dialog", props),
+  }));
+
   ({ useAgentsPageShellModel } = await import("./use-agents-page-shell-model"));
+});
+
+afterAll(() => {
+  mock.restore();
 });
 
 beforeEach(() => {
@@ -415,7 +442,8 @@ beforeEach(() => {
   };
 });
 
-const createHookHarness = () => createSharedHookHarness(() => useAgentsPageShellModel(), undefined);
+const createHookHarness = () =>
+  createSharedHookHarness((_: undefined) => useAgentsPageShellModel(), undefined);
 
 describe("useAgentsPageShellModel", () => {
   test("surfaces hook state and wires modal/controller elements", async () => {

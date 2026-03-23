@@ -4,8 +4,8 @@ import type {
   RuntimeDescriptor,
   RuntimeKind,
 } from "@openducktor/contracts";
-import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { RepoRuntimeHealthCheck, RepoRuntimeHealthMap } from "@/types/diagnostics";
@@ -60,24 +60,30 @@ export function useChecks({
   checkRepoRuntimeHealth,
 }: UseChecksArgs): UseChecksResult {
   const queryClient = useQueryClient();
-  const [runtimeCheck, setRuntimeCheck] = useState<RuntimeCheck | null>(null);
-  const [activeBeadsCheck, setActiveBeadsCheck] = useState<BeadsCheck | null>(null);
-  const [activeRepoRuntimeHealthByRuntime, setActiveRepoRuntimeHealthByRuntime] =
-    useState<RepoRuntimeHealthMap>({});
-  const [isLoadingChecks, setIsLoadingChecks] = useState(false);
+  const [isManualLoadingChecks, setIsManualLoadingChecks] = useState(false);
+  const runtimeCheckQuery = useQuery(runtimeCheckQueryOptions());
+  const beadsCheckQuery = useQuery({
+    ...beadsCheckQueryOptions(activeRepo ?? "__disabled__"),
+    enabled: activeRepo !== null,
+  });
+  const runtimeHealthQuery = useQuery({
+    ...repoRuntimeHealthQueryOptions(
+      activeRepo ?? "__disabled__",
+      runtimeDefinitions,
+      checkRepoRuntimeHealth,
+    ),
+    enabled: false,
+  });
 
   const refreshRuntimeCheck = useCallback(
     async (force = false): Promise<RuntimeCheck> => {
       if (force) {
         const check = await host.runtimeCheck(true);
         queryClient.setQueryData(checksQueryKeys.runtime(), check);
-        setRuntimeCheck(check);
         return check;
       }
 
-      const check = await loadRuntimeCheckFromQuery(queryClient);
-      setRuntimeCheck(check);
-      return check;
+      return loadRuntimeCheckFromQuery(queryClient);
     },
     [queryClient],
   );
@@ -85,33 +91,23 @@ export function useChecks({
   const refreshBeadsCheckForRepo = useCallback(
     async (repoPath: string, force = false): Promise<BeadsCheck> => {
       if (force) {
-        const check = await host.beadsCheck(repoPath);
-        queryClient.setQueryData(checksQueryKeys.beads(repoPath), check);
-
-        if (repoPath === activeRepo) {
-          setActiveBeadsCheck(check);
-        }
-
-        return check;
+        await queryClient.invalidateQueries({
+          queryKey: checksQueryKeys.beads(repoPath),
+          exact: true,
+          refetchType: "none",
+        });
       }
 
-      const check = await loadBeadsCheckFromQuery(queryClient, repoPath);
-
-      if (repoPath === activeRepo) {
-        setActiveBeadsCheck(check);
-      }
-
-      return check;
+      return force
+        ? queryClient.fetchQuery(beadsCheckQueryOptions(repoPath))
+        : loadBeadsCheckFromQuery(queryClient, repoPath);
     },
-    [activeRepo, queryClient],
+    [queryClient],
   );
 
   const refreshRepoRuntimeHealthForRepo = useCallback(
     async (repoPath: string, force = false): Promise<RepoRuntimeHealthMap> => {
       if (runtimeDefinitions.length === 0) {
-        if (repoPath === activeRepo) {
-          setActiveRepoRuntimeHealthByRuntime({});
-        }
         return {};
       }
 
@@ -124,23 +120,20 @@ export function useChecks({
       if (force) {
         await queryClient.invalidateQueries({
           queryKey: queryOptions.queryKey,
+          exact: true,
+          refetchType: "none",
         });
+        return queryClient.fetchQuery(queryOptions);
       }
 
-      const runtimeHealthByRuntime = await loadRepoRuntimeHealthFromQuery(
+      return loadRepoRuntimeHealthFromQuery(
         queryClient,
         repoPath,
         runtimeDefinitions,
         checkRepoRuntimeHealth,
       );
-
-      if (repoPath === activeRepo) {
-        setActiveRepoRuntimeHealthByRuntime(runtimeHealthByRuntime);
-      }
-
-      return runtimeHealthByRuntime;
     },
-    [activeRepo, checkRepoRuntimeHealth, queryClient, runtimeDefinitions],
+    [checkRepoRuntimeHealth, queryClient, runtimeDefinitions],
   );
 
   const refreshChecks = useCallback(async (): Promise<void> => {
@@ -148,7 +141,7 @@ export function useChecks({
       return;
     }
 
-    setIsLoadingChecks(true);
+    setIsManualLoadingChecks(true);
     try {
       const runtime = await refreshRuntimeCheck(true);
       const beads = await refreshBeadsCheckForRepo(activeRepo, true);
@@ -184,7 +177,7 @@ export function useChecks({
     } catch (error) {
       toast.error("Diagnostics check unavailable", { description: errorMessage(error) });
     } finally {
-      setIsLoadingChecks(false);
+      setIsManualLoadingChecks(false);
     }
   }, [
     activeRepo,
@@ -216,46 +209,30 @@ export function useChecks({
   }, [queryClient]);
 
   const clearActiveBeadsCheck = useCallback(() => {
-    setActiveBeadsCheck(null);
+    setIsManualLoadingChecks(false);
   }, []);
 
   const clearActiveRepoRuntimeHealth = useCallback(() => {
-    setActiveRepoRuntimeHealthByRuntime({});
+    setIsManualLoadingChecks(false);
   }, []);
 
-  useEffect(() => {
-    setRuntimeCheck(
-      (queryClient.getQueryData(runtimeCheckQueryOptions().queryKey) as RuntimeCheck | undefined) ??
-        null,
-    );
-
-    if (!activeRepo) {
-      setActiveBeadsCheck(null);
-      setActiveRepoRuntimeHealthByRuntime({});
-      return;
-    }
-
-    setActiveBeadsCheck(
-      (queryClient.getQueryData(beadsCheckQueryOptions(activeRepo).queryKey) as
-        | BeadsCheck
-        | undefined) ?? null,
-    );
-    setActiveRepoRuntimeHealthByRuntime(
-      (queryClient.getQueryData(
-        checksQueryKeys.runtimeHealth(
-          activeRepo,
-          runtimeDefinitions.map((definition) => definition.kind),
-        ),
-      ) as RepoRuntimeHealthMap | undefined) ?? buildEmptyRuntimeHealthMap(runtimeDefinitions),
-    );
-  }, [activeRepo, queryClient, runtimeDefinitions]);
+  const activeRepoRuntimeHealthByRuntime =
+    activeRepo === null
+      ? {}
+      : (runtimeHealthQuery.data ?? buildEmptyRuntimeHealthMap(runtimeDefinitions));
+  const isLoadingChecks =
+    isManualLoadingChecks ||
+    runtimeCheckQuery.isFetching ||
+    (activeRepo !== null &&
+      (beadsCheckQuery.isFetching ||
+        (runtimeDefinitions.length > 0 && runtimeHealthQuery.isFetching)));
 
   return {
-    runtimeCheck,
-    activeBeadsCheck,
+    runtimeCheck: runtimeCheckQuery.data ?? null,
+    activeBeadsCheck: activeRepo === null ? null : (beadsCheckQuery.data ?? null),
     activeRepoRuntimeHealthByRuntime,
     isLoadingChecks,
-    setIsLoadingChecks,
+    setIsLoadingChecks: setIsManualLoadingChecks,
     refreshRuntimeCheck,
     refreshBeadsCheckForRepo,
     refreshRepoRuntimeHealthForRepo,

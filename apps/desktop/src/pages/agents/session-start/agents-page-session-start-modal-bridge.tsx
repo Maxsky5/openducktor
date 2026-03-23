@@ -38,8 +38,13 @@ export function useSessionStartModalRequestActivation({
       taskId: request.taskId,
       role: request.role,
       scenario: request.scenario,
-      startMode: request.startMode,
       selectedModel: request.selectedModel,
+      ...(request.existingSessionOptions
+        ? { existingSessionOptions: request.existingSessionOptions }
+        : {}),
+      ...(request.initialSourceSessionId
+        ? { initialSourceSessionId: request.initialSourceSessionId }
+        : {}),
       postStartAction: toSessionStartPostAction(request.reason),
     });
     openedRequestIdRef.current = nextRequestId;
@@ -67,8 +72,14 @@ export function AgentStudioSessionStartModalBridge({
     modelOptions,
     modelGroups,
     variantOptions,
+    availableStartModes,
+    selectedStartMode,
+    existingSessionOptions,
+    selectedSourceSessionId,
     openStartModal,
     closeStartModal,
+    handleSelectStartMode,
+    handleSelectSourceSession,
     handleSelectRuntime,
     handleSelectAgent,
     handleSelectModel,
@@ -102,7 +113,6 @@ export function AgentStudioSessionStartModalBridge({
           intent?.description ??
           buildSessionStartModalDescription({
             scenario: request.scenario,
-            startMode: request.startMode,
           }),
         confirmLabel: "Start session",
         selectedModelSelection: selection,
@@ -115,6 +125,12 @@ export function AgentStudioSessionStartModalBridge({
         modelOptions,
         modelGroups,
         variantOptions,
+        availableStartModes,
+        selectedStartMode,
+        existingSessionOptions,
+        selectedSourceSessionId,
+        onSelectStartMode: handleSelectStartMode,
+        onSelectSourceSession: handleSelectSourceSession,
         onSelectRuntime: handleSelectRuntime,
         onSelectAgent: handleSelectAgent,
         onSelectModel: handleSelectModel,
@@ -127,10 +143,17 @@ export function AgentStudioSessionStartModalBridge({
             resolveDecision(null);
           }
         },
-        onConfirm: (_runInBackground) => {
+        onConfirm: (input) => {
+          if (!input || typeof input === "boolean") {
+            return;
+          }
           resolvedRequestIdRef.current = request.requestId;
           closeStartModal();
-          onResolve(request.requestId, { selectedModel: selection ?? null });
+          onResolve(request.requestId, {
+            selectedModel: selection ?? null,
+            startMode: input.startMode,
+            sourceSessionId: input.sourceSessionId,
+          });
         },
       }}
     />

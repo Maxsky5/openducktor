@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { host } from "@/state/operations/host";
-import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
   createDeferred,
@@ -48,6 +47,8 @@ const createBaseArgs = (): HookArgs => ({
   startAgentSession: async () => "session-new",
   sendAgentMessage: async () => {},
   updateAgentSessionModel: () => {},
+  bootstrapTaskSessions: async () => {},
+  hydrateRequestedTaskSessionHistory: async () => {},
   loadAgentSessions: async () => {},
   humanRequestChangesTask: async () => {},
   updateQuery: () => {},
@@ -86,7 +87,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
   });
 
-  test("startSession reuses active session and clears fresh-start query flag", async () => {
+  test("startSession starts a fresh session even when another session is active", async () => {
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const activeSession = createSession({
       taskId: "task-1",
@@ -106,12 +107,12 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.mount();
     await harness.run(async (state) => {
       const sessionId = await state.startSession("composer_send");
-      expect(sessionId).toBe("session-active");
+      expect(sessionId).toBe("session-new");
     });
 
     expect(updateCalls).toContainEqual({
       task: "task-1",
-      session: "session-active",
+      session: "session-new",
       agent: "spec",
       autostart: undefined,
       start: undefined,
@@ -160,6 +161,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: undefined,
       agent: "planner",
+      scenario: undefined,
       autostart: undefined,
       start: undefined,
     });
@@ -167,6 +169,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: "session-spec",
       agent: "spec",
+      scenario: "spec_initial",
       autostart: undefined,
       start: undefined,
     });
@@ -178,6 +181,8 @@ describe("useAgentStudioSessionStartFlow", () => {
 
   test("resets transient starting state when switching task context", async () => {
     const selectionDeferred = createDeferred<{
+      startMode: "fresh";
+      sourceSessionId: null;
       selectedModel: HookArgs["selectionForNewSession"];
     } | null>();
     const requestNewSessionStart = mock(() => selectionDeferred.promise);
@@ -211,6 +216,8 @@ describe("useAgentStudioSessionStartFlow", () => {
 
   test("restores starting state when returning to the original task context", async () => {
     const selectionDeferred = createDeferred<{
+      startMode: "fresh";
+      sourceSessionId: null;
       selectedModel: HookArgs["selectionForNewSession"];
     } | null>();
     const requestNewSessionStart = mock(() => selectionDeferred.promise);
@@ -355,15 +362,9 @@ describe("useAgentStudioSessionStartFlow", () => {
       taskId: "task-1",
       role: "build",
       scenario: "build_after_qa_rejected",
-      selectedModel: {
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-        profileId: "spec",
-      },
+      selectedModel: null,
       sendKickoff: false,
-      startMode: "fresh",
+      startMode: "fresh" as const,
       requireModelReady: true,
       workingDirectoryOverride: "/repo/worktrees/task-1",
     });
@@ -375,6 +376,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: "session-build-rework",
       agent: "build",
+      scenario: "build_after_qa_rejected",
       autostart: undefined,
       start: undefined,
     });
@@ -462,11 +464,13 @@ describe("useAgentStudioSessionStartFlow", () => {
   });
 
   test("handleCreateSession for human changes opens the feedback modal before model selection", async () => {
-    const requestNewSessionStart = mock(async () => ({ selectedModel: null }));
+    const requestNewSessionStart = mock(async () => ({
+      startMode: "fresh" as const,
+      sourceSessionId: null,
+      selectedModel: null,
+    }));
     const startAgentSession = mock(async () => "session-build-human");
-    const loadAgentSessions = mock(
-      async (_taskId: string, _options?: AgentSessionLoadOptions) => {},
-    );
+    const bootstrapTaskSessions = mock(async () => {});
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -474,7 +478,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       scenario: "spec_initial",
       requestNewSessionStart,
       startAgentSession,
-      loadAgentSessions,
+      bootstrapTaskSessions,
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: [
         createSession({
@@ -500,7 +504,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
 
-    expect(loadAgentSessions).toHaveBeenCalledWith("task-1");
+    expect(bootstrapTaskSessions).toHaveBeenCalledWith("task-1");
     expect(harness.getLatest().humanReviewFeedbackModal?.open).toBe(true);
     expect(requestNewSessionStart).not.toHaveBeenCalled();
     expect(startAgentSession).not.toHaveBeenCalled();
@@ -510,6 +514,8 @@ describe("useAgentStudioSessionStartFlow", () => {
 
   test("startScenarioKickoff for human changes opens the feedback modal instead of starting immediately", async () => {
     const requestNewSessionStart = mock(async () => ({
+      startMode: "fresh" as const,
+      sourceSessionId: null,
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "openai",
@@ -520,9 +526,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     }));
     const startAgentSession = mock(async () => "session-build-human");
     const sendAgentMessage = mock(async () => {});
-    const loadAgentSessions = mock(
-      async (_taskId: string, _options?: AgentSessionLoadOptions) => {},
-    );
+    const bootstrapTaskSessions = mock(async () => {});
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -531,7 +535,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       requestNewSessionStart,
       startAgentSession,
       sendAgentMessage,
-      loadAgentSessions,
+      bootstrapTaskSessions,
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: [
         createSession({
@@ -550,7 +554,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
 
-    expect(loadAgentSessions).toHaveBeenCalledWith("task-1");
+    expect(bootstrapTaskSessions).toHaveBeenCalledWith("task-1");
     expect(harness.getLatest().humanReviewFeedbackModal?.open).toBe(true);
     expect(startAgentSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
@@ -562,9 +566,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     const startAgentSession = mock(async () => "session-build-human");
     const sendAgentMessage = mock(async () => {});
     const humanRequestChangesTask = mock(async () => {});
-    const loadAgentSessions = mock(
-      async (_taskId: string, _options?: AgentSessionLoadOptions) => {},
-    );
+    const bootstrapTaskSessions = mock(async () => {});
+    const hydrateRequestedTaskSessionHistory = mock(async () => {});
     const updateCalls: Array<Record<string, string | undefined>> = [];
 
     const harness = createHookHarness({
@@ -574,7 +577,8 @@ describe("useAgentStudioSessionStartFlow", () => {
       startAgentSession,
       sendAgentMessage,
       humanRequestChangesTask,
-      loadAgentSessions,
+      bootstrapTaskSessions,
+      hydrateRequestedTaskSessionHistory,
       selectedTask: createTask({ status: "human_review" }),
       activeSession: createSession({ sessionId: "session-spec", role: "spec" }),
       sessionsForTask: [
@@ -621,10 +625,11 @@ describe("useAgentStudioSessionStartFlow", () => {
       "task-1",
       "Apply the requested human changes.",
     );
-    expect(loadAgentSessions.mock.calls).toEqual([
-      ["task-1"],
-      ["task-1", { hydrateHistoryForSessionId: "session-build-older" }],
-    ]);
+    expect(bootstrapTaskSessions).toHaveBeenCalledWith("task-1");
+    expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledWith({
+      taskId: "task-1",
+      sessionId: "session-build-older",
+    });
     expect(startAgentSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).toHaveBeenCalledWith(
       "session-build-older",
@@ -643,6 +648,8 @@ describe("useAgentStudioSessionStartFlow", () => {
 
   test("human changes feedback can continue into fresh session setup", async () => {
     const requestNewSessionStart = mock(async () => ({
+      startMode: "fresh" as const,
+      sourceSessionId: null,
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "anthropic",
@@ -699,16 +706,22 @@ describe("useAgentStudioSessionStartFlow", () => {
       taskId: "task-1",
       role: "build",
       scenario: "build_after_human_request_changes",
-      startMode: "fresh",
       reason: "create_session",
-      selectedModel: {
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-        profileId: "spec",
-      },
+      existingSessionOptions: [
+        {
+          value: "session-build-latest",
+          label: "Start Implementation · Builder #1",
+          description: "2/22/2026, 12:00:00 PM · idle · session-",
+          secondaryLabel: "Latest",
+        },
+      ],
+      initialSourceSessionId: "session-build-latest",
+      selectedModel: null,
     });
+    const requestArg = (
+      requestNewSessionStart.mock.calls as unknown as Array<[Record<string, unknown>]>
+    ).at(0)?.[0];
+    expect(requestArg).not.toHaveProperty("startMode");
     expect(startAgentSession).toHaveBeenCalledWith({
       taskId: "task-1",
       role: "build",
@@ -721,7 +734,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         profileId: "builder",
       },
       sendKickoff: false,
-      startMode: "fresh",
+      startMode: "fresh" as const,
       requireModelReady: true,
       workingDirectoryOverride: "/repo/worktrees/task-1",
     });

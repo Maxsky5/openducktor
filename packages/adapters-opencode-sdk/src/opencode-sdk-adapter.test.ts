@@ -9,11 +9,15 @@ const makeMockClient = (): {
   abortCalls: unknown[];
   listCalls: unknown[];
   statusCalls: unknown[];
+  permissionListCalls: unknown[];
+  questionListCalls: unknown[];
 } => {
   const createCalls: unknown[] = [];
   const abortCalls: unknown[] = [];
   const listCalls: unknown[] = [];
   const statusCalls: unknown[] = [];
+  const permissionListCalls: unknown[] = [];
+  const questionListCalls: unknown[] = [];
 
   const client = {
     session: {
@@ -81,20 +85,81 @@ const makeMockClient = (): {
         };
       },
     },
-    event: {
-      subscribe: async () => {
-        async function* iterator(): AsyncGenerator<Event> {
+    permission: {
+      list: async (input?: unknown) => {
+        permissionListCalls.push(input);
+        const directory =
+          typeof input === "object" && input !== null && "directory" in input
+            ? (input as { directory?: string }).directory
+            : undefined;
+        return {
+          data:
+            directory === "/repo"
+              ? [
+                  {
+                    id: "perm-1",
+                    sessionID: "external-session-1",
+                    permission: "read",
+                    patterns: ["**/.env"],
+                    metadata: { source: "history" },
+                    always: [],
+                  },
+                ]
+              : [],
+          error: undefined,
+        };
+      },
+    },
+    question: {
+      list: async (input?: unknown) => {
+        questionListCalls.push(input);
+        const directory =
+          typeof input === "object" && input !== null && "directory" in input
+            ? (input as { directory?: string }).directory
+            : undefined;
+        return {
+          data:
+            directory === "/other"
+              ? [
+                  {
+                    id: "question-1",
+                    sessionID: "external-session-2",
+                    questions: [
+                      {
+                        header: "Confirm",
+                        question: "Ship it?",
+                        options: [{ label: "Yes", description: "Approve" }],
+                        custom: false,
+                      },
+                    ],
+                  },
+                ]
+              : [],
+          error: undefined,
+        };
+      },
+    },
+    global: {
+      event: async () => {
+        async function* iterator(): AsyncGenerator<{ directory: string; payload: Event }> {
           for (const event of [] as Event[]) {
-            yield event;
+            yield { directory: "/repo", payload: event };
           }
-          return;
         }
         return { stream: iterator() };
       },
     },
   } as unknown as OpencodeClient;
 
-  return { client, createCalls, abortCalls, listCalls, statusCalls };
+  return {
+    client,
+    createCalls,
+    abortCalls,
+    listCalls,
+    statusCalls,
+    permissionListCalls,
+    questionListCalls,
+  };
 };
 
 describe("opencode-sdk-adapter", () => {
@@ -137,14 +202,43 @@ describe("opencode-sdk-adapter", () => {
     expect(events.some((event) => event.type === "session_finished")).toBe(true);
   });
 
-  test("listRuntimeSessions maps server sessions and statuses", async () => {
+  test("startSession fails fast when the sdk client lacks global event streaming", async () => {
+    const mock = makeMockClient();
+    const unsupportedClient = {
+      ...mock.client,
+      global: {},
+    } as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => unsupportedClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await expect(
+      adapter.startSession({
+        sessionId: "session-1",
+        repoPath: "/repo",
+        workingDirectory: "/repo",
+        taskId: "task-1",
+        runtimeKind: "opencode",
+        role: "spec",
+        scenario: "spec_initial",
+        systemPrompt: "system",
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:12345",
+          workingDirectory: "/repo",
+        },
+      }),
+    ).rejects.toThrow("client.global.event()");
+  });
+
+  test("listLiveAgentSessions maps server sessions and statuses", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-22T12:00:00.000Z",
     });
 
-    const sessions = await adapter.listRuntimeSessions({
+    const sessions = await adapter.listLiveAgentSessions({
       runtimeKind: "opencode",
       runtimeConnection: {
         endpoint: "http://127.0.0.1:12345",
@@ -179,7 +273,74 @@ describe("opencode-sdk-adapter", () => {
     ]);
   });
 
-  test("listRuntimeSessions fails fast on malformed runtime statuses", async () => {
+  test("listLiveAgentSessionSnapshots merges status and pending input into a single live-session view", async () => {
+    const mock = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    const snapshots = await adapter.listLiveAgentSessionSnapshots({
+      runtimeKind: "opencode",
+      runtimeConnection: {
+        endpoint: "http://127.0.0.1:12345",
+        workingDirectory: "/repo",
+      },
+    });
+
+    expect(mock.listCalls).toHaveLength(1);
+    expect(mock.statusCalls).toEqual([{ directory: "/repo" }, { directory: "/other" }]);
+    expect(mock.permissionListCalls).toEqual([{ directory: "/repo" }, { directory: "/other" }]);
+    expect(mock.questionListCalls).toEqual([{ directory: "/repo" }, { directory: "/other" }]);
+    expect(snapshots).toEqual([
+      {
+        externalSessionId: "external-session-1",
+        title: "BUILD task-1",
+        workingDirectory: "/repo",
+        startedAt: "2026-02-22T12:00:00.000Z",
+        status: {
+          type: "retry",
+          attempt: 2,
+          message: "retrying",
+          nextEpochMs: 1234,
+        },
+        pendingPermissions: [
+          {
+            requestId: "perm-1",
+            permission: "read",
+            patterns: ["**/.env"],
+            metadata: { source: "history" },
+          },
+        ],
+        pendingQuestions: [],
+      },
+      {
+        externalSessionId: "external-session-2",
+        title: "OTHER task",
+        workingDirectory: "/other",
+        startedAt: "2026-02-22T12:00:00.000Z",
+        status: {
+          type: "busy",
+        },
+        pendingPermissions: [],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Confirm",
+                question: "Ship it?",
+                options: [{ label: "Yes", description: "Approve" }],
+                custom: false,
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  test("listLiveAgentSessions fails fast on malformed runtime statuses", async () => {
     const mock = makeMockClient();
     const malformedClient = {
       ...mock.client,
@@ -201,17 +362,17 @@ describe("opencode-sdk-adapter", () => {
     });
 
     await expect(
-      adapter.listRuntimeSessions({
+      adapter.listLiveAgentSessions({
         runtimeKind: "opencode",
         runtimeConnection: {
           endpoint: "http://127.0.0.1:12345",
           workingDirectory: "/repo",
         },
       }),
-    ).rejects.toThrow("Unsupported Opencode runtime session status type");
+    ).rejects.toThrow("Unsupported Opencode live agent session status type");
   });
 
-  test("listRuntimeSessions rejects non-object session status maps", async () => {
+  test("listLiveAgentSessions rejects non-object session status maps", async () => {
     const mock = makeMockClient();
     const malformedClient = {
       ...mock.client,
@@ -229,7 +390,7 @@ describe("opencode-sdk-adapter", () => {
     });
 
     await expect(
-      adapter.listRuntimeSessions({
+      adapter.listLiveAgentSessions({
         runtimeKind: "opencode",
         runtimeConnection: {
           endpoint: "http://127.0.0.1:12345",
@@ -239,7 +400,7 @@ describe("opencode-sdk-adapter", () => {
     ).rejects.toThrow("Malformed Opencode session status response for directory '/repo'");
   });
 
-  test("listRuntimeSessions normalizes directory keys for status lookups", async () => {
+  test("listLiveAgentSessions normalizes directory keys for status lookups", async () => {
     const mock = makeMockClient();
     const whitespaceClient = {
       ...mock.client,
@@ -266,7 +427,7 @@ describe("opencode-sdk-adapter", () => {
       now: () => "2026-02-22T12:00:00.000Z",
     });
 
-    const sessions = await adapter.listRuntimeSessions({
+    const sessions = await adapter.listLiveAgentSessions({
       runtimeKind: "opencode",
       runtimeConnection: {
         endpoint: "http://127.0.0.1:12345",
@@ -291,7 +452,7 @@ describe("opencode-sdk-adapter", () => {
     ]);
   });
 
-  test("listRuntimeSessions rejects sessions with invalid directories", async () => {
+  test("listLiveAgentSessions rejects sessions with invalid directories", async () => {
     const mock = makeMockClient();
     const malformedClient = {
       ...mock.client,
@@ -319,7 +480,7 @@ describe("opencode-sdk-adapter", () => {
     });
 
     await expect(
-      adapter.listRuntimeSessions({
+      adapter.listLiveAgentSessions({
         runtimeKind: "opencode",
         runtimeConnection: {
           endpoint: "http://127.0.0.1:12345",
@@ -329,5 +490,37 @@ describe("opencode-sdk-adapter", () => {
     ).rejects.toThrow(
       "Malformed Opencode session payload for 'external-session-1': missing directory.",
     );
+  });
+
+  test("listLiveAgentSessionPendingInput groups pending permissions and questions by external session id", async () => {
+    const mock = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    const pending = await adapter.listLiveAgentSessionPendingInput({
+      runtimeKind: "opencode",
+      runtimeConnection: {
+        endpoint: "http://127.0.0.1:12345",
+        workingDirectory: "/repo",
+      },
+    });
+
+    expect(mock.permissionListCalls).toEqual([{ directory: "/repo" }]);
+    expect(mock.questionListCalls).toEqual([{ directory: "/repo" }]);
+    expect(pending).toEqual({
+      "external-session-1": {
+        permissions: [
+          {
+            requestId: "perm-1",
+            permission: "read",
+            patterns: ["**/.env"],
+            metadata: { source: "history" },
+          },
+        ],
+        questions: [],
+      },
+    });
   });
 });

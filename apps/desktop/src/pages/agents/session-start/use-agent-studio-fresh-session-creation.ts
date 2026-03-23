@@ -4,8 +4,11 @@ import { assertAgentKickoffScenario } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import { toast } from "sonner";
-import type { NewSessionStartRequest } from "@/features/session-start";
-import { resolveBuildWorkingDirectoryOverride } from "@/lib/build-worktree-overrides";
+import type { NewSessionStartDecision, NewSessionStartRequest } from "@/features/session-start";
+import {
+  resolveBuildWorkingDirectoryOverride,
+  resolveQaBuilderSessionContext,
+} from "@/lib/build-worktree-overrides";
 import { errorMessage } from "@/lib/errors";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -30,19 +33,21 @@ type UseAgentStudioFreshSessionCreationArgs = {
   taskId: string;
   role: AgentRole;
   activeSession: AgentSessionState | null;
+  sessionsForTask?: AgentSessionState[];
   selectedTask: TaskCard | null;
   agentStudioReady: boolean;
   isActiveTaskHydrated: boolean;
   isSessionWorking: boolean;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
+  updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent?: () => void;
   setStartingActivityCountByContext: Dispatch<SetStateAction<Record<string, number>>>;
   startingSessionByTaskRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
-  resolveRequestedSelection: (
+  resolveRequestedDecision: (
     request: Omit<NewSessionStartRequest, "selectedModel">,
-  ) => Promise<AgentModelSelection | null | undefined>;
+  ) => Promise<NewSessionStartDecision | undefined>;
 };
 
 export function useAgentStudioFreshSessionCreation({
@@ -50,17 +55,19 @@ export function useAgentStudioFreshSessionCreation({
   taskId,
   role,
   activeSession,
+  sessionsForTask = [],
   selectedTask,
   agentStudioReady,
   isActiveTaskHydrated,
   isSessionWorking,
   startAgentSession,
   sendAgentMessage,
+  updateAgentSessionModel,
   updateQuery,
   onContextSwitchIntent,
   setStartingActivityCountByContext,
   startingSessionByTaskRef,
-  resolveRequestedSelection,
+  resolveRequestedDecision,
 }: UseAgentStudioFreshSessionCreationArgs): {
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
@@ -79,12 +86,13 @@ export function useAgentStudioFreshSessionCreation({
   );
 
   const applyFreshSessionSelectionQuery = useCallback(
-    (sessionId: string, nextRole: AgentRole): void => {
+    (sessionId: string, nextRole: AgentRole, nextScenario: AgentScenario): void => {
       updateQuery(
         buildAgentStudioSelectionQueryUpdate({
           taskId,
           sessionId,
           role: nextRole,
+          scenario: nextScenario,
         }),
       );
     },
@@ -146,6 +154,14 @@ export function useAgentStudioFreshSessionCreation({
           role: params.nextRole,
           scenario: params.nextScenario,
         });
+        const builderContext =
+          params.nextRole === "qa"
+            ? await resolveQaBuilderSessionContext({
+                activeRepo,
+                taskId,
+                sessions: sessionsForTask,
+              })
+            : null;
         return await startAgentSession({
           taskId,
           role: params.nextRole,
@@ -155,6 +171,7 @@ export function useAgentStudioFreshSessionCreation({
           startMode: "fresh",
           requireModelReady: true,
           ...(workingDirectoryOverride ? { workingDirectoryOverride } : {}),
+          ...(builderContext ? { builderContext } : {}),
         });
       } catch (error) {
         updateQuery(params.previousSelection);
@@ -165,7 +182,7 @@ export function useAgentStudioFreshSessionCreation({
         return undefined;
       }
     },
-    [activeRepo, startAgentSession, taskId, updateQuery],
+    [activeRepo, sessionsForTask, startAgentSession, taskId, updateQuery],
   );
 
   const runFreshSessionCreation = useCallback(
@@ -184,16 +201,38 @@ export function useAgentStudioFreshSessionCreation({
         incrementActivityCountRecord(current, startContextKey),
       );
       try {
-        const selectedModel = await resolveRequestedSelection({
+        const decision = await resolveRequestedDecision({
           taskId,
           role: params.nextRole,
           scenario: params.nextScenario,
-          startMode: "fresh",
           reason: "create_session",
         });
-        if (selectedModel === undefined) {
+        if (decision == null) {
           return undefined;
         }
+        if (decision.startMode === "reuse" && decision.sourceSessionId) {
+          if (decision.selectedModel) {
+            updateAgentSessionModel(decision.sourceSessionId, decision.selectedModel);
+          }
+          if (
+            shouldTriggerContextSwitchIntent({
+              currentSessionId: activeSession?.sessionId ?? null,
+              currentRole: activeSession?.role ?? role,
+              nextSessionId: decision.sourceSessionId,
+              nextRole: params.nextRole,
+            })
+          ) {
+            onContextSwitchIntent?.();
+          }
+          applyFreshSessionSelectionQuery(
+            decision.sourceSessionId,
+            params.nextRole,
+            params.nextScenario,
+          );
+          sendFreshSessionKickoff(decision.sourceSessionId, params.nextRole, params.nextScenario);
+          return decision.sourceSessionId;
+        }
+        const selectedModel = decision.selectedModel;
 
         if (
           shouldTriggerContextSwitchIntent({
@@ -217,7 +256,7 @@ export function useAgentStudioFreshSessionCreation({
           return undefined;
         }
 
-        applyFreshSessionSelectionQuery(sessionId, params.nextRole);
+        applyFreshSessionSelectionQuery(sessionId, params.nextRole, params.nextScenario);
         sendFreshSessionKickoff(sessionId, params.nextRole, params.nextScenario);
         return sessionId;
       } finally {
@@ -234,10 +273,11 @@ export function useAgentStudioFreshSessionCreation({
       setStartingActivityCountByContext,
       taskId,
       onContextSwitchIntent,
-      resolveRequestedSelection,
+      resolveRequestedDecision,
       role,
       sendFreshSessionKickoff,
       startFreshSession,
+      updateAgentSessionModel,
     ],
   );
 

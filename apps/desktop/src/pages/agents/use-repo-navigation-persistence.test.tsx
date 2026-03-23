@@ -77,6 +77,7 @@ const useHookHarness = ({ activeRepo, initialNavigation }: HookArgs) => {
       taskId: "",
       sessionId: null,
       role: null,
+      scenario: null,
     },
   );
 
@@ -157,6 +158,7 @@ describe("useRepoNavigationPersistence", () => {
           taskId: "task-from-cleanup",
           sessionId: "session-from-cleanup",
           role: "spec",
+          scenario: null,
         });
       });
 
@@ -199,6 +201,7 @@ describe("useRepoNavigationPersistence", () => {
           taskId: "task-without-role",
           sessionId: "session-without-role",
           role: null,
+          scenario: null,
         });
       });
 
@@ -248,6 +251,7 @@ describe("useRepoNavigationPersistence", () => {
         taskId: "",
         sessionId: null,
         role: null,
+        scenario: null,
       });
 
       memoryStorage.setItem(
@@ -398,6 +402,7 @@ describe("useRepoNavigationPersistence", () => {
           taskId: "task-from-cleanup",
           sessionId: "session-from-cleanup",
           role: "spec",
+          scenario: null,
         });
       });
 

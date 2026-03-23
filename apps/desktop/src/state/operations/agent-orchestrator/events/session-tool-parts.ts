@@ -18,11 +18,7 @@ import type {
   SessionPartEvent,
   SessionToolPartEventContext,
 } from "./session-event-types";
-import {
-  eventTimestampMs,
-  hasMeaningfulToolInput,
-  refreshTodosFromSessionRef,
-} from "./session-helpers";
+import { eventTimestampMs, hasMeaningfulToolInput } from "./session-helpers";
 
 type ToolPart = Extract<SessionPart, { kind: "tool" }>;
 type ToolPartStatus = ToolPart["status"];
@@ -37,7 +33,6 @@ type ToolTimingMeta = {
 
 type ToolRefreshDecision = {
   shouldRefreshTaskData: boolean;
-  shouldRefreshSessionTodos: boolean;
 };
 
 type ToolPartSessionUpdate = {
@@ -64,7 +59,6 @@ export const resolveToolRefreshDecision = (
   const transitionedToCompleted = status === "completed" && previousStatus !== "completed";
   return {
     shouldRefreshTaskData: isOdtWorkflowMutationToolName(part.tool) && transitionedToCompleted,
-    shouldRefreshSessionTodos: isTodoToolName(part.tool) && transitionedToCompleted,
   };
 };
 
@@ -214,7 +208,6 @@ export const handleToolPart = (
   const observedEventTimestampMs = eventTimestampMs(event.timestamp);
   const todoUpdateFromTool = resolveTodoUpdateFromTool(part, input, output);
   let shouldRefreshTaskData = false;
-  let shouldRefreshSessionTodos = false;
 
   context.store.updateSession(
     context.store.sessionId,
@@ -234,7 +227,6 @@ export const handleToolPart = (
       });
 
       shouldRefreshTaskData = refreshDecision.shouldRefreshTaskData;
-      shouldRefreshSessionTodos = refreshDecision.shouldRefreshSessionTodos;
 
       return nextState;
     },
@@ -253,9 +245,5 @@ export const handleToolPart = (
         },
       },
     );
-  }
-
-  if (shouldRefreshSessionTodos) {
-    refreshTodosFromSessionRef(context);
   }
 };

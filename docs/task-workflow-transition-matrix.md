@@ -17,6 +17,7 @@ MCP workflow tools:
 - `odt_build_blocked(taskId, reason)`
 - `odt_build_resumed(taskId)`
 - `odt_build_completed(taskId, summary?)`
+- `odt_set_pull_request(taskId, providerId, number)`
 - `odt_qa_approved(taskId, reportMarkdown)`
 - `odt_qa_rejected(taskId, reportMarkdown)`
 
@@ -45,6 +46,7 @@ Human actions:
 | `odt_build_blocked` | `in_progress` | reason required | `blocked` |
 | `odt_build_completed` | `in_progress` | `qaRequired=true` and latest QA verdict is not `approved` (including no QA verdict yet) | `ai_review` |
 | `odt_build_completed` | `in_progress` | `qaRequired=false` or latest QA verdict is `approved` | `human_review` |
+| `odt_set_pull_request` | `in_progress`, `ai_review`, `human_review` | provider id and PR number required; OpenDucktor resolves canonical PR metadata | unchanged |
 | `odt_qa_rejected` | `ai_review`, `human_review` | report markdown required | `in_progress` |
 | `odt_qa_approved` | `ai_review`, `human_review` | report markdown required | `human_review` |
 | `human_request_changes` | `ai_review`, `human_review` | note optional | `in_progress` |

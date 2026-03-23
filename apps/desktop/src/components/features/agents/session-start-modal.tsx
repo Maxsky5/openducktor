@@ -1,5 +1,5 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelSelection } from "@openducktor/core";
+import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import { LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
 import { AgentRuntimeCombobox } from "@/components/features/agents/agent-runtime-combobox";
@@ -7,12 +7,21 @@ import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxGroup, type ComboboxOption } from "@/components/ui/combobox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+type SessionStartModalConfirmInput =
+  | boolean
+  | {
+      runInBackground: boolean;
+      startMode: AgentSessionStartMode;
+      sourceSessionId: string | null;
+    };
 
 export type SessionStartModalModel = {
   open: boolean;
@@ -31,6 +40,12 @@ export type SessionStartModalModel = {
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];
   variantOptions: ComboboxOption[];
+  availableStartModes: AgentSessionStartMode[];
+  selectedStartMode: AgentSessionStartMode;
+  existingSessionOptions: ComboboxOption[];
+  selectedSourceSessionId: string;
+  onSelectStartMode: (startMode: AgentSessionStartMode) => void;
+  onSelectSourceSession: (sessionId: string) => void;
   onSelectRuntime: (runtimeKind: RuntimeKind) => void;
   onSelectAgent: (agent: string) => void;
   onSelectModel: (model: string) => void;
@@ -38,7 +53,7 @@ export type SessionStartModalModel = {
   allowRunInBackground?: boolean;
   isStarting: boolean;
   onOpenChange: (nextOpen: boolean) => void;
-  onConfirm: (runInBackground: boolean) => void;
+  onConfirm: (input?: SessionStartModalConfirmInput) => void;
 };
 
 export function SessionStartModal({ model }: { model: SessionStartModalModel }): ReactElement {
@@ -59,6 +74,12 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     modelOptions,
     modelGroups,
     variantOptions,
+    availableStartModes,
+    selectedStartMode,
+    existingSessionOptions,
+    selectedSourceSessionId,
+    onSelectStartMode,
+    onSelectSourceSession,
     onSelectRuntime,
     onSelectAgent,
     onSelectModel,
@@ -74,7 +95,16 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     ? `${selectedModelSelection.providerId}/${selectedModelSelection.modelId}`
     : "";
   const selectedVariant = selectedModelSelection?.variant ?? "";
-  const confirmDisabled = isStarting || isSelectionCatalogLoading || !selectedModelSelection;
+  const hasExistingSessionOptions = existingSessionOptions.length > 0;
+  const requiresExistingSession = selectedStartMode === "reuse" || selectedStartMode === "fork";
+  const hasExistingSessionSelection = existingSessionOptions.some(
+    (option) => option.value === selectedSourceSessionId,
+  );
+  const confirmDisabled =
+    isStarting ||
+    isSelectionCatalogLoading ||
+    !selectedModelSelection ||
+    (requiresExistingSession && !hasExistingSessionSelection);
   const agentDisabled = isSelectionCatalogLoading || !supportsProfiles || agentOptions.length === 0;
   const variantDisabled =
     isSelectionCatalogLoading ||
@@ -85,7 +115,11 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     if (confirmDisabled) {
       return;
     }
-    onConfirm(false);
+    onConfirm({
+      runInBackground: false,
+      startMode: selectedStartMode,
+      sourceSessionId: requiresExistingSession ? selectedSourceSessionId : null,
+    });
   };
 
   let agentHelperText: string | null = null;
@@ -95,17 +129,6 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     agentHelperText = "This runtime manages agent selection automatically.";
   } else if (agentOptions.length === 0) {
     agentHelperText = "No agent profiles are available for this runtime.";
-  }
-
-  let variantHelperText: string | null = null;
-  if (isSelectionCatalogLoading) {
-    variantHelperText = "Checking model compatibility.";
-  } else if (!selectedModelSelection) {
-    variantHelperText = "Select a model first to unlock variant choices.";
-  } else if (!supportsVariants) {
-    variantHelperText = "This runtime does not expose variants for the current selection.";
-  } else if (variantOptions.length === 0) {
-    variantHelperText = "This model does not expose named variants.";
   }
 
   return (
@@ -124,78 +147,158 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <form className="pt-2" action={handleConfirm}>
-          <fieldset className="space-y-4" disabled={isStarting}>
-            <div className="grid gap-1.5">
-              <label
-                className="text-sm font-medium text-foreground"
-                htmlFor="session-start-runtime"
-              >
-                Agent Runtime
-              </label>
-              <AgentRuntimeCombobox
-                value={selectedRuntimeKind}
-                runtimeOptions={runtimeOptions}
-                disabled={isSelectionCatalogLoading}
-                className="sm:min-w-[20rem]"
-                onValueChange={onSelectRuntime}
-              />
-            </div>
-
-            <div className="grid gap-1.5">
-              <label className="text-sm font-medium text-foreground" htmlFor="session-start-agent">
-                Agent
-              </label>
-              <Combobox
-                value={selectedAgent}
-                options={agentOptions}
-                placeholder={supportsProfiles ? "Select agent" : "Agent handled by runtime"}
-                disabled={agentDisabled}
-                className="sm:min-w-[20rem]"
-                onValueChange={onSelectAgent}
-              />
-              {agentHelperText ? (
-                <p className="text-xs text-muted-foreground">{agentHelperText}</p>
+        <form
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={(event) => {
+            event.preventDefault();
+            handleConfirm();
+          }}
+        >
+          <DialogBody className="pt-2 pb-4">
+            <fieldset className="space-y-5" disabled={isStarting}>
+              {availableStartModes.length > 1 ? (
+                <div className="grid gap-1.5">
+                  <p className="text-sm font-medium text-foreground">Session Mode</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {availableStartModes.includes("fresh") ? (
+                      <Button
+                        type="button"
+                        variant={selectedStartMode === "fresh" ? "default" : "outline"}
+                        onClick={() => onSelectStartMode("fresh")}
+                      >
+                        Start fresh
+                      </Button>
+                    ) : null}
+                    {availableStartModes.includes("reuse") ? (
+                      <Button
+                        type="button"
+                        variant={selectedStartMode === "reuse" ? "default" : "outline"}
+                        disabled={!hasExistingSessionOptions}
+                        onClick={() => onSelectStartMode("reuse")}
+                      >
+                        Reuse existing
+                      </Button>
+                    ) : null}
+                    {availableStartModes.includes("fork") ? (
+                      <Button
+                        type="button"
+                        variant={selectedStartMode === "fork" ? "default" : "outline"}
+                        disabled={!hasExistingSessionOptions}
+                        onClick={() => onSelectStartMode("fork")}
+                      >
+                        Fork existing
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
               ) : null}
-            </div>
 
-            <div className="grid gap-1.5">
-              <label className="text-sm font-medium text-foreground" htmlFor="session-start-model">
-                Model
-              </label>
-              <Combobox
-                value={selectedModel}
-                options={modelOptions}
-                groups={modelGroups}
-                placeholder={isSelectionCatalogLoading ? "Loading models..." : "Select model"}
-                disabled={isSelectionCatalogLoading}
-                className="sm:min-w-[28rem]"
-                onValueChange={onSelectModel}
-              />
-            </div>
-
-            <div className="grid gap-1.5">
-              <label
-                className="text-sm font-medium text-foreground"
-                htmlFor="session-start-variant"
-              >
-                Variant
-              </label>
-              <Combobox
-                value={selectedVariant}
-                options={variantOptions}
-                placeholder={selectedModelSelection ? "Select variant" : "Select model first"}
-                disabled={variantDisabled}
-                className="sm:min-w-[16rem]"
-                onValueChange={onSelectVariant}
-              />
-              {variantHelperText ? (
-                <p className="text-xs text-muted-foreground">{variantHelperText}</p>
+              {requiresExistingSession ? (
+                <div className="grid gap-1.5">
+                  <label
+                    className="text-sm font-medium text-foreground"
+                    htmlFor="session-start-source"
+                  >
+                    Existing Session
+                  </label>
+                  <Combobox
+                    value={selectedSourceSessionId}
+                    options={existingSessionOptions}
+                    placeholder="Select session"
+                    searchPlaceholder="Search session..."
+                    disabled={isStarting || !hasExistingSessionOptions}
+                    className="sm:min-w-[28rem]"
+                    onValueChange={onSelectSourceSession}
+                  />
+                </div>
               ) : null}
-            </div>
-          </fieldset>
 
-          <DialogFooter className="mt-5 flex w-full items-center justify-between sm:justify-between">
+              <div className="grid gap-1.5">
+                <label
+                  className="text-sm font-medium text-foreground"
+                  htmlFor="session-start-runtime"
+                >
+                  Agent Runtime
+                </label>
+                <AgentRuntimeCombobox
+                  value={selectedRuntimeKind}
+                  runtimeOptions={runtimeOptions}
+                  disabled={isSelectionCatalogLoading}
+                  className="sm:min-w-[20rem]"
+                  onValueChange={onSelectRuntime}
+                />
+              </div>
+
+              <div className="grid gap-1.5">
+                <label
+                  className="text-sm font-medium text-foreground"
+                  htmlFor="session-start-agent"
+                >
+                  Agent
+                </label>
+                <Combobox
+                  value={selectedAgent}
+                  options={agentOptions}
+                  placeholder={supportsProfiles ? "Select agent" : "Agent handled by runtime"}
+                  disabled={agentDisabled}
+                  className="sm:min-w-[20rem]"
+                  onValueChange={onSelectAgent}
+                />
+                {agentHelperText ? (
+                  <p className="text-xs text-muted-foreground">{agentHelperText}</p>
+                ) : null}
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-1.5">
+                  <label
+                    className="text-sm font-medium text-foreground"
+                    htmlFor="session-start-model"
+                  >
+                    Model
+                  </label>
+                  <Combobox
+                    value={selectedModel}
+                    options={modelOptions}
+                    groups={modelGroups}
+                    placeholder={isSelectionCatalogLoading ? "Loading models..." : "Select model"}
+                    disabled={isSelectionCatalogLoading}
+                    className="w-full"
+                    onValueChange={onSelectModel}
+                  />
+                </div>
+
+                <div className="grid gap-1.5">
+                  <label
+                    className="text-sm font-medium text-foreground"
+                    htmlFor="session-start-variant"
+                  >
+                    Variant
+                  </label>
+                  <Combobox
+                    value={selectedVariant}
+                    options={variantOptions}
+                    placeholder={
+                      isSelectionCatalogLoading
+                        ? "Checking compatibility..."
+                        : !selectedModelSelection
+                          ? "Select model first"
+                          : !supportsVariants
+                            ? "Variants handled by runtime"
+                            : variantOptions.length === 0
+                              ? "This model has no variants"
+                              : "Select variant"
+                    }
+                    disabled={variantDisabled}
+                    className="w-full"
+                    onValueChange={onSelectVariant}
+                  />
+                </div>
+              </div>
+            </fieldset>
+          </DialogBody>
+
+          <DialogFooter className="mt-0 flex w-full items-center justify-between border-t border-border pt-5 sm:justify-between">
             <Button
               type="button"
               variant="outline"
@@ -211,7 +314,13 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                   type="button"
                   variant="secondary"
                   disabled={confirmDisabled}
-                  onClick={() => onConfirm(true)}
+                  onClick={() =>
+                    onConfirm({
+                      runInBackground: true,
+                      startMode: selectedStartMode,
+                      sourceSessionId: requiresExistingSession ? selectedSourceSessionId : null,
+                    })
+                  }
                 >
                   {isStarting ? <LoaderCircle className="size-4 animate-spin" /> : null}
                   {backgroundConfirmLabel}

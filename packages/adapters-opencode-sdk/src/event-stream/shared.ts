@@ -53,10 +53,10 @@ export const applyDeltaToPart = (part: Part, field: string, delta: string): Part
   } as Part;
 };
 
-export const isRelevantEvent = (externalSessionId: string, event: Event): boolean => {
+export const readEventSessionId = (event: Event): string | undefined => {
   const properties = readEventProperties(event);
   if (!properties) {
-    return false;
+    return undefined;
   }
 
   const directSessionId = readStringProp(properties, [
@@ -66,14 +66,14 @@ export const isRelevantEvent = (externalSessionId: string, event: Event): boolea
     "session",
   ]);
   if (directSessionId) {
-    return directSessionId === externalSessionId;
+    return directSessionId;
   }
 
   const part = readRecordProp(properties, "part");
   if (part) {
     const partSessionId = readStringProp(part, ["sessionID", "sessionId", "session_id"]);
     if (partSessionId) {
-      return partSessionId === externalSessionId;
+      return partSessionId;
     }
   }
 
@@ -81,9 +81,55 @@ export const isRelevantEvent = (externalSessionId: string, event: Event): boolea
   if (info) {
     const infoSessionId = readStringProp(info, ["sessionID", "sessionId", "session_id"]);
     if (infoSessionId) {
-      return infoSessionId === externalSessionId;
+      return infoSessionId;
     }
   }
 
-  return false;
+  return undefined;
+};
+
+export const readEventDirectory = (event: Event): string | undefined => {
+  const properties = readEventProperties(event);
+  if (!properties) {
+    return undefined;
+  }
+
+  const directDirectory = readStringProp(properties, [
+    "directory",
+    "workingDirectory",
+    "working_directory",
+  ]);
+  if (directDirectory) {
+    return directDirectory;
+  }
+
+  const part = readRecordProp(properties, "part");
+  if (part) {
+    const partDirectory = readStringProp(part, [
+      "directory",
+      "workingDirectory",
+      "working_directory",
+    ]);
+    if (partDirectory) {
+      return partDirectory;
+    }
+  }
+
+  const info = readRecordProp(properties, "info");
+  if (info) {
+    const infoDirectory = readStringProp(info, [
+      "directory",
+      "workingDirectory",
+      "working_directory",
+    ]);
+    if (infoDirectory) {
+      return infoDirectory;
+    }
+  }
+
+  return undefined;
+};
+
+export const isRelevantEvent = (externalSessionId: string, event: Event): boolean => {
+  return readEventSessionId(event) === externalSessionId;
 };

@@ -4,6 +4,7 @@ import { memo, type ReactElement, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -56,18 +57,16 @@ export const GitConfirmationDialog = memo(function GitConfirmationDialog({
         className="max-w-2xl overflow-hidden border border-border bg-card p-0 shadow-2xl"
         data-testid={contentTestId}
       >
-        <div className="space-y-6 px-6 py-6 sm:px-8 sm:py-8">
-          <DialogHeader className="space-y-3 pr-10">
-            <DialogTitle className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-              {title}
-            </DialogTitle>
-            <DialogDescription className="max-w-[42rem] text-sm leading-7 text-muted-foreground sm:text-[15px]">
-              {description}
-            </DialogDescription>
-          </DialogHeader>
+        <DialogHeader className="space-y-3 px-6 py-6 pr-16 sm:px-8 sm:py-8">
+          <DialogTitle className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+            {title}
+          </DialogTitle>
+          <DialogDescription className="max-w-[42rem] text-sm leading-7 text-muted-foreground sm:text-[15px]">
+            {description}
+          </DialogDescription>
+        </DialogHeader>
 
-          {children}
-        </div>
+        <DialogBody className="px-6 pb-6 sm:px-8 sm:pb-8">{children}</DialogBody>
 
         <DialogFooter className="mt-0 flex flex-col-reverse gap-3 border-t border-border bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-5">
           <Button

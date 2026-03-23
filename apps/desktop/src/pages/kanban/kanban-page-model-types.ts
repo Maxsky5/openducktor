@@ -1,5 +1,10 @@
 import type { GitTargetBranch, RunSummary, TaskCard } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario, KanbanColumn as KanbanColumnData } from "@openducktor/core";
+import type {
+  AgentRole,
+  AgentScenario,
+  AgentSessionStartMode,
+  KanbanColumn as KanbanColumnData,
+} from "@openducktor/core";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type {
   KanbanTaskActivityState,
@@ -16,13 +21,23 @@ export type KanbanSessionStartIntent = {
   taskId: string;
   role: AgentRole;
   scenario: AgentScenario;
-  startMode: "fresh" | "reuse_latest";
+  sourceSessionId?: string | null;
+  existingSessionOptions?: Array<{
+    value: string;
+    label: string;
+    description: string;
+    secondaryLabel?: string;
+  }>;
   postStartAction: "none" | "kickoff" | "send_message";
   message?: string;
   beforeStartAction?: {
     action: "human_request_changes";
     note: string;
   };
+};
+
+export type KanbanResolvedSessionStartIntent = KanbanSessionStartIntent & {
+  startMode: AgentSessionStartMode;
 };
 
 export type TaskApprovalMode = "direct_merge" | "pull_request";

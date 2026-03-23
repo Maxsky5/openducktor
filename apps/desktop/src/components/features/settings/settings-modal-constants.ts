@@ -61,6 +61,7 @@ export const PROMPT_TEMPLATE_LABELS: Record<AgentPromptTemplateId, string> = {
   "system.scenario.build_implementation_start": "Builder Start Scenario",
   "system.scenario.build_after_qa_rejected": "Builder After QA Rejection",
   "system.scenario.build_after_human_request_changes": "Builder After Human Changes",
+  "system.scenario.build_pull_request_generation": "Builder Pull Request Generation",
   "system.scenario.build_rebase_conflict_resolution": "Builder Git Conflict Scenario",
   "system.scenario.qa_review": "QA Review Scenario",
   "kickoff.spec_initial": "Spec Kickoff",
@@ -68,8 +69,8 @@ export const PROMPT_TEMPLATE_LABELS: Record<AgentPromptTemplateId, string> = {
   "kickoff.build_implementation_start": "Builder Kickoff",
   "kickoff.build_after_qa_rejected": "Builder Kickoff After QA Rejection",
   "kickoff.build_after_human_request_changes": "Builder Kickoff After Human Changes",
+  "kickoff.build_pull_request_generation": "Builder Pull Request Generation Kickoff",
   "kickoff.qa_review": "QA Kickoff",
-  "message.build_pull_request_draft": "Builder Pull Request Draft Message",
   "message.build_rebase_conflict_resolution": "Builder Git Conflict Message",
   "permission.read_only.reject": "Read-Only Permission Rejection",
 };
@@ -99,6 +100,8 @@ export const PROMPT_TEMPLATE_DESCRIPTIONS: Record<AgentPromptTemplateId, string>
     "Scenario-specific system instructions appended when Builder resumes after a QA rejection.",
   "system.scenario.build_after_human_request_changes":
     "Scenario-specific system instructions appended when Builder resumes after human-requested changes.",
+  "system.scenario.build_pull_request_generation":
+    "Scenario-specific system instructions appended when Builder forks from an implementation session to generate or update a pull request.",
   "system.scenario.build_rebase_conflict_resolution":
     "Scenario-specific system instructions appended when a fresh Builder session is started to resolve an in-progress git conflict.",
   "system.scenario.qa_review":
@@ -111,9 +114,9 @@ export const PROMPT_TEMPLATE_DESCRIPTIONS: Record<AgentPromptTemplateId, string>
     "Initial kickoff message sent when Builder restarts after QA rejection.",
   "kickoff.build_after_human_request_changes":
     "Initial kickoff message sent when Builder restarts after human-requested changes.",
+  "kickoff.build_pull_request_generation":
+    "Initial kickoff message sent when Builder forks to generate or update a pull request.",
   "kickoff.qa_review": "Initial kickoff message sent when a QA review session is created.",
-  "message.build_pull_request_draft":
-    "Reusable in-session message sent to a forked Builder session to generate pull request title and body.",
   "message.build_rebase_conflict_resolution":
     "Reusable in-session message sent to Builder when a git operation stops on conflicts.",
   "permission.read_only.reject":

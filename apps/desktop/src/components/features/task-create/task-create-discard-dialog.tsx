@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -27,11 +28,15 @@ export function TaskCreateDiscardDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Discard unsaved markdown changes?</DialogTitle>
+        </DialogHeader>
+
+        <DialogBody className="pt-2">
           <DialogDescription>
             You have unsaved document edits. Discard them before leaving this section?
           </DialogDescription>
-        </DialogHeader>
-        <DialogFooter className="mt-6 flex-row justify-end gap-2">
+        </DialogBody>
+
+        <DialogFooter className="mt-0 flex-row justify-end gap-2 border-t border-border pt-5">
           <Button
             type="button"
             variant="outline"

@@ -1,7 +1,5 @@
 import { useEffect } from "react";
 
-const POLL_INTERVAL_MS = 30_000;
-
 type UseAgentStudioDiffPollingArgs = {
   enablePolling: boolean;
   repoPath: string | null;
@@ -20,12 +18,39 @@ export function useAgentStudioDiffPolling({
       return;
     }
 
-    const intervalId = globalThis.setInterval(() => {
+    const refreshWhenVisible = (): void => {
+      if (globalThis.document.visibilityState !== "visible") {
+        return;
+      }
+
       poll();
-    }, POLL_INTERVAL_MS);
+    };
 
     return () => {
-      globalThis.clearInterval(intervalId);
+      globalThis.removeEventListener("focus", refreshWhenVisible);
+      globalThis.document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [enablePolling, poll, repoPath, shouldBlockDiffLoading]);
+
+  useEffect(() => {
+    if (!enablePolling || !repoPath || shouldBlockDiffLoading) {
+      return;
+    }
+
+    const refreshWhenVisible = (): void => {
+      if (globalThis.document.visibilityState !== "visible") {
+        return;
+      }
+
+      poll();
+    };
+
+    globalThis.addEventListener("focus", refreshWhenVisible);
+    globalThis.document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      globalThis.removeEventListener("focus", refreshWhenVisible);
+      globalThis.document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [enablePolling, poll, repoPath, shouldBlockDiffLoading]);
 }

@@ -2,6 +2,7 @@ import { type ReactElement, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -125,15 +126,15 @@ export function GitConflictResolutionModal({
       }}
     >
       <DialogContent className="max-w-2xl overflow-hidden p-0">
-        <div className="space-y-6 px-6 py-6 sm:px-7 sm:py-7">
-          <DialogHeader className="space-y-3 pr-10">
-            <DialogTitle>Resolve git conflict with Builder</DialogTitle>
-            <DialogDescription className="max-w-[42rem] text-[15px] leading-7">
-              Choose an existing Builder session in the same worktree, or start a new
-              conflict-resolution Builder session attached to the paused worktree.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogHeader className="space-y-3 px-6 py-6 pr-16 sm:px-7 sm:py-7">
+          <DialogTitle>Resolve git conflict with Builder</DialogTitle>
+          <DialogDescription className="max-w-[42rem] text-[15px] leading-7">
+            Choose an existing Builder session in the same worktree, or start a new
+            conflict-resolution Builder session attached to the paused worktree.
+          </DialogDescription>
+        </DialogHeader>
 
+        <DialogBody className="space-y-6 px-6 pb-6 sm:px-7 sm:pb-7">
           {hasExistingSessions ? (
             <div className="space-y-3">
               <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
@@ -201,7 +202,7 @@ export function GitConflictResolutionModal({
               </div>
             </button>
           </div>
-        </div>
+        </DialogBody>
 
         <DialogFooter className="mt-0 flex flex-row items-center justify-between border-t border-border px-6 py-5 sm:px-7">
           <Button type="button" variant="outline" onClick={() => onResolve(null)}>

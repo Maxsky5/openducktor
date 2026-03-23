@@ -26,5 +26,6 @@ export {
   type ReadTaskInput,
   type SearchTasksInput,
   type SetPlanInput,
+  type SetPullRequestInput,
   type SetSpecInput,
 } from "./tool-schemas";

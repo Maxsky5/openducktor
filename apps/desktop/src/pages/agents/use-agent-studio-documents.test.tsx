@@ -145,7 +145,6 @@ afterAll(() => {
 beforeEach(() => {
   setTaskDocumentsState();
   taskDocumentsHookCalls.length = 0;
-  ensureDocumentLoadedMock.mockClear();
   reloadDocumentMock.mockClear();
   applyDocumentUpdateMock.mockClear();
 });
@@ -157,11 +156,6 @@ describe("useAgentStudioDocuments", () => {
 
     try {
       await harness.mount();
-
-      expect(ensureDocumentLoadedMock).toHaveBeenCalledTimes(3);
-      expect(ensureDocumentLoadedMock).toHaveBeenNthCalledWith(1, "spec");
-      expect(ensureDocumentLoadedMock).toHaveBeenNthCalledWith(2, "plan");
-      expect(ensureDocumentLoadedMock).toHaveBeenNthCalledWith(3, "qa");
 
       expect(reloadDocumentMock).toHaveBeenCalledTimes(3);
       expect(reloadDocumentMock).toHaveBeenNthCalledWith(1, "spec");

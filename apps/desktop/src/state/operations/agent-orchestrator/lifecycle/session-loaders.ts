@@ -1,5 +1,10 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentModelCatalog, AgentRuntimeConnection } from "@openducktor/core";
+import type {
+  AgentEnginePort,
+  AgentModelCatalog,
+  AgentRuntimeConnection,
+  AgentSessionTodoItem,
+} from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { normalizeWorkingDirectory } from "../support/core";
 import { normalizeSelectionForCatalog, pickDefaultModel } from "../support/models";
@@ -93,6 +98,12 @@ const validateRuntimeConnection = (
   workingDirectory: validateWorkingDirectory(runtimeConnection.workingDirectory),
 });
 
+const toRuntimeLoadKey = (
+  runtimeKind: RuntimeKind,
+  runtimeConnection: AgentRuntimeConnection,
+): string =>
+  `${runtimeKind}::${runtimeConnection.endpoint ?? ""}::${normalizeWorkingDirectory(runtimeConnection.workingDirectory)}`;
+
 export const createLoadSessionModelCatalog = ({
   adapter,
   updateSession,
@@ -101,6 +112,9 @@ export const createLoadSessionModelCatalog = ({
   runtimeKind: RuntimeKind,
   runtimeConnection: AgentRuntimeConnection,
 ) => Promise<void>) => {
+  const inFlightCatalogByRuntimeKey = new Map<string, Promise<AgentModelCatalog>>();
+  const catalogByRuntimeKey = new Map<string, AgentModelCatalog>();
+
   return async (
     sessionId: string,
     runtimeKind: RuntimeKind,
@@ -118,10 +132,29 @@ export const createLoadSessionModelCatalog = ({
     let catalog: AgentModelCatalog | null = null;
     try {
       const validatedRuntimeConnection = validateRuntimeConnection(runtimeConnection);
-      catalog = await adapter.listAvailableModels({
-        runtimeKind,
-        runtimeConnection: validatedRuntimeConnection,
-      });
+      const runtimeKey = toRuntimeLoadKey(runtimeKind, validatedRuntimeConnection);
+      const cachedCatalog = catalogByRuntimeKey.get(runtimeKey);
+      if (cachedCatalog) {
+        catalog = cachedCatalog;
+      } else {
+        let inFlightCatalog = inFlightCatalogByRuntimeKey.get(runtimeKey);
+        if (!inFlightCatalog) {
+          inFlightCatalog = adapter
+            .listAvailableModels({
+              runtimeKind,
+              runtimeConnection: validatedRuntimeConnection,
+            })
+            .then((loadedCatalog) => {
+              catalogByRuntimeKey.set(runtimeKey, loadedCatalog);
+              return loadedCatalog;
+            })
+            .finally(() => {
+              inFlightCatalogByRuntimeKey.delete(runtimeKey);
+            });
+          inFlightCatalogByRuntimeKey.set(runtimeKey, inFlightCatalog);
+        }
+        catalog = await inFlightCatalog;
+      }
     } finally {
       updateSession(
         sessionId,
@@ -153,6 +186,8 @@ export const createLoadSessionTodos = ({
   runtimeConnection: AgentRuntimeConnection,
   externalSessionId: string,
 ) => Promise<void>) => {
+  const inFlightTodosBySessionKey = new Map<string, Promise<AgentSessionTodoItem[]>>();
+
   return async (
     sessionId: string,
     runtimeKind: RuntimeKind,
@@ -171,11 +206,21 @@ export const createLoadSessionTodos = ({
       return;
     }
     const validatedRuntimeConnection = validateRuntimeConnection(runtimeConnection);
-    const todos = await adapter.loadSessionTodos({
-      runtimeKind,
-      runtimeConnection: validatedRuntimeConnection,
-      externalSessionId,
-    });
+    const sessionKey = `${toRuntimeLoadKey(runtimeKind, validatedRuntimeConnection)}::${externalSessionId}`;
+    let inFlightTodos = inFlightTodosBySessionKey.get(sessionKey);
+    if (!inFlightTodos) {
+      inFlightTodos = adapter
+        .loadSessionTodos({
+          runtimeKind,
+          runtimeConnection: validatedRuntimeConnection,
+          externalSessionId,
+        })
+        .finally(() => {
+          inFlightTodosBySessionKey.delete(sessionKey);
+        });
+      inFlightTodosBySessionKey.set(sessionKey, inFlightTodos);
+    }
+    const todos = await inFlightTodos;
     updateSession(
       sessionId,
       (current) => ({
