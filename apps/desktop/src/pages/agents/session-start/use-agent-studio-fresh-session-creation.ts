@@ -55,7 +55,6 @@ export function useAgentStudioFreshSessionCreation({
   taskId,
   role,
   activeSession,
-  sessionsForTask = [],
   selectedTask,
   agentStudioReady,
   isActiveTaskHydrated,
