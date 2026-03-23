@@ -120,6 +120,50 @@ describe("DefaultCanonicalPullRequestResolver", () => {
     ]);
   });
 
+  test("parses https remotes while resolving canonical pull requests", async () => {
+    const commands: string[] = [];
+    const runProcess: ProcessRunner = async (command, args) => {
+      const signature = `${command} ${args.join(" ")}`;
+      commands.push(signature);
+      if (signature === "git remote") {
+        return { ok: true, stdout: "origin", stderr: "" };
+      }
+      if (signature === "git remote get-url origin") {
+        return { ok: true, stdout: "https://github.com/openai/openducktor.git", stderr: "" };
+      }
+      if (signature === "gh api --method GET repos/openai/openducktor/pulls/42") {
+        return {
+          ok: true,
+          stdout: JSON.stringify({
+            number: 42,
+            html_url: "https://github.com/openai/openducktor/pull/42",
+            draft: false,
+            state: "open",
+            created_at: "2026-03-11T10:00:00Z",
+            updated_at: "2026-03-11T10:05:00Z",
+            merged_at: null,
+            closed_at: null,
+            head: { ref: "odt/task-1" },
+          }),
+          stderr: "",
+        };
+      }
+      throw new Error(`unexpected command: ${signature}`);
+    };
+    const resolver = makeResolver(runProcess);
+
+    await expect(resolver.resolve({ providerId: "github", number: 42 })).resolves.toMatchObject({
+      providerId: "github",
+      number: 42,
+      url: "https://github.com/openai/openducktor/pull/42",
+    });
+    expect(commands).toEqual([
+      "git remote",
+      "git remote get-url origin",
+      "gh api --method GET repos/openai/openducktor/pulls/42",
+    ]);
+  });
+
   test("fails fast when the repository cannot be resolved uniquely", async () => {
     const runProcess: ProcessRunner = async (command, args) => {
       const signature = `${command} ${args.join(" ")}`;

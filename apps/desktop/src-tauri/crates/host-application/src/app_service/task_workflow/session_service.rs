@@ -45,7 +45,10 @@ impl AppService {
         let repo_path = self.resolve_task_repo_path(repo_path)?;
         let repo_dir = Path::new(&repo_path);
         let tasks = self.task_store.list_tasks(repo_dir)?;
-        let available_task_ids = tasks.into_iter().map(|task| task.id).collect::<HashSet<_>>();
+        let available_task_ids = tasks
+            .into_iter()
+            .map(|task| task.id)
+            .collect::<HashSet<_>>();
 
         let mut sessions_by_task = HashMap::new();
         for task_id in task_ids {

@@ -1,10 +1,10 @@
-use crate::app_service::{
-    has_live_opencode_session_status, is_unreachable_opencode_session_status_error,
-    load_opencode_session_statuses, service_core::AppService, OpencodeSessionStatusMap,
-};
 use crate::app_service::workflow_rules::{
     default_qa_required_for_issue_type, is_open_state, validate_parent_relationships_for_create,
     validate_parent_relationships_for_update, validate_transition,
+};
+use crate::app_service::{
+    has_live_opencode_session_status, is_unreachable_opencode_session_status_error,
+    load_opencode_session_statuses, service_core::AppService, OpencodeSessionStatusMap,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
@@ -200,9 +200,11 @@ impl AppService {
             removed_worktrees.push(worktree_path.clone());
         }
 
-        if let Err(error) =
-            ensure_related_branches_are_unused_by_worktrees(self, context.repo_dir(), &related_local_branches)
-        {
+        if let Err(error) = ensure_related_branches_are_unused_by_worktrees(
+            self,
+            context.repo_dir(),
+            &related_local_branches,
+        ) {
             return Err(with_reset_cleanup_progress(
                 error,
                 &removed_worktrees,
@@ -368,11 +370,8 @@ impl AppService {
                 run.summary.runtime_route.clone(),
             );
 
-            if !is_live_build_run_for_task_reset(
-                run,
-                sessions,
-                &mut runtime_statuses_by_directory,
-            )? {
+            if !is_live_build_run_for_task_reset(run, sessions, &mut runtime_statuses_by_directory)?
+            {
                 continue;
             }
 
@@ -403,7 +402,10 @@ impl AppService {
             .iter()
             .filter(|session| matches!(session.role.as_str(), "build" | "qa"))
         {
-            if !matches!(session.status.as_deref(), Some("starting") | Some("running")) {
+            if !matches!(
+                session.status.as_deref(),
+                Some("starting") | Some("running")
+            ) {
                 continue;
             }
 
@@ -444,7 +446,9 @@ impl AppService {
 
             if runtime_statuses_by_directory
                 .get(worktree_key.as_str())
-                .is_some_and(|statuses| has_live_opencode_session_status(statuses, external_session_id))
+                .is_some_and(|statuses| {
+                    has_live_opencode_session_status(statuses, external_session_id)
+                })
             {
                 active_roles.insert(session.role.as_str());
             }
@@ -1007,7 +1011,12 @@ fn is_live_build_run_for_task_reset(
 
     let statuses = runtime_statuses_by_directory
         .get(directory_key.as_str())
-        .ok_or_else(|| anyhow!("Missing cached OpenCode session statuses for {}", run.worktree_path))?;
+        .ok_or_else(|| {
+            anyhow!(
+                "Missing cached OpenCode session statuses for {}",
+                run.worktree_path
+            )
+        })?;
     Ok(external_session_ids
         .iter()
         .any(|external_session_id| has_live_opencode_session_status(statuses, external_session_id)))

@@ -33,5 +33,9 @@ pub async fn agent_sessions_list_bulk(
     repo_path: String,
     task_ids: Vec<String>,
 ) -> Result<HashMap<String, Vec<AgentSessionDocument>>, String> {
-    as_error(state.service.agent_sessions_list_bulk(&repo_path, &task_ids))
+    as_error(
+        state
+            .service
+            .agent_sessions_list_bulk(&repo_path, &task_ids),
+    )
 }

@@ -203,7 +203,10 @@ fn get_worktree_status_uses_existing_remote_branch_when_tracking_is_missing() {
     fs::write(repo.path.join("worktree-origin-fallback.txt"), "seed\n")
         .expect("fallback file should write");
     run_git_ok(&repo.path, &["add", "worktree-origin-fallback.txt"]);
-    run_git_ok(&repo.path, &["commit", "-m", "push branch without tracking"]);
+    run_git_ok(
+        &repo.path,
+        &["commit", "-m", "push branch without tracking"],
+    );
     run_git_ok(
         &repo.path,
         &["push", "origin", "feature/worktree-origin-fallback"],

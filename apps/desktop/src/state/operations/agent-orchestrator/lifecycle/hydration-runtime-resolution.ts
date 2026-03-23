@@ -49,6 +49,17 @@ export const createHydrationRuntimeResolver = ({
   preloadedRuntimeConnectionsByKey?: Map<string, AgentRuntimeConnection>;
   ensureWorkspaceRuntime: (runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary | null>;
 }): ((record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>) => {
+  const isRepoRootSession = (workingDirectory: string): boolean => {
+    return normalizeWorkingDirectory(workingDirectory) === normalizeWorkingDirectory(repoPath);
+  };
+
+  const canEnsureWorkspaceRuntime = (record: AgentSessionRecord): boolean => {
+    if (record.role === "spec" || record.role === "planner") {
+      return isRepoRootSession(record.workingDirectory);
+    }
+    return false;
+  };
+
   const findRuntimeByWorkingDirectory = (
     runtimeKind: RuntimeKind,
     workingDirectory: string,
@@ -127,15 +138,7 @@ export const createHydrationRuntimeResolver = ({
       };
     }
 
-    const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
-    const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
-    const shouldEnsureWorkspaceRuntime =
-      record.role === "build" ||
-      (record.role === "qa" && normalizedWorkingDirectory !== normalizedRepoPath) ||
-      ((record.role === "spec" || record.role === "planner") &&
-        normalizedWorkingDirectory === normalizedRepoPath);
-
-    if (!shouldEnsureWorkspaceRuntime) {
+    if (!canEnsureWorkspaceRuntime(record)) {
       return {
         ok: false,
         runtimeKind,

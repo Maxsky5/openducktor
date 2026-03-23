@@ -280,7 +280,9 @@ impl BeadsTaskStore {
     ) -> Result<TaskMetadata> {
         let metadata_namespace = self.current_metadata_namespace();
         let repo_key = Self::repo_key(repo_path);
-        if let Some(metadata) = self.cached_task_metadata(&repo_key, &metadata_namespace, task_id)? {
+        if let Some(metadata) =
+            self.cached_task_metadata(&repo_key, &metadata_namespace, task_id)?
+        {
             return Ok(metadata);
         }
 

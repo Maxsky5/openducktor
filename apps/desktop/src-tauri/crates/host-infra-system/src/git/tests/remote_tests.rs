@@ -693,7 +693,10 @@ fn resolve_upstream_target_falls_back_to_existing_origin_remote_branch() {
     fs::write(repo.path.join("origin-fallback.txt"), "fallback\n")
         .expect("fallback file should write");
     run_git_ok(&repo.path, &["add", "origin-fallback.txt"]);
-    run_git_ok(&repo.path, &["commit", "-m", "create fallback remote branch"]);
+    run_git_ok(
+        &repo.path,
+        &["commit", "-m", "create fallback remote branch"],
+    );
     run_git_ok(
         &repo.path,
         &["push", "origin", "feature/upstream-origin-fallback"],

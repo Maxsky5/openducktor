@@ -1,16 +1,16 @@
-import type { KnownGitProviderId, PullRequest } from "@openducktor/contracts";
+import {
+  type GitProviderRepository,
+  gitProviderRepositoryKey,
+  type KnownGitProviderId,
+  type PullRequest,
+  parseGitProviderRepositoryFromRemoteUrl,
+} from "@openducktor/contracts";
 import { nowIso, type ProcessRunner, runProcess } from "./beads-runtime";
 
 const GITHUB_PROVIDER_ID: KnownGitProviderId = "github";
 const GIT_PROVIDER_ENV: Record<string, string> = {
   GH_PROMPT_DISABLED: "1",
   GIT_TERMINAL_PROMPT: "0",
-};
-
-type GitProviderRepository = {
-  host: string;
-  owner: string;
-  name: string;
 };
 
 type GithubPullBranchRef = {
@@ -86,61 +86,6 @@ const normalizeGitHubPullRequest = (
   };
 };
 
-const parseRemoteUrl = (url: string): GitProviderRepository | null => {
-  const trimmed = url.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-
-  const withoutSuffix = trimmed.endsWith(".git") ? trimmed.slice(0, -4) : trimmed;
-  let host = "";
-  let path = "";
-
-  if (withoutSuffix.startsWith("git@")) {
-    const remainder = withoutSuffix.slice("git@".length);
-    const split = remainder.split(":", 2);
-    if (split.length !== 2) {
-      return null;
-    }
-    host = split[0] ?? "";
-    path = split[1] ?? "";
-  } else if (withoutSuffix.startsWith("https://")) {
-    const remainder = withoutSuffix.slice("https://".length);
-    const split = remainder.split("/", 2);
-    if (split.length !== 2) {
-      return null;
-    }
-    host = split[0] ?? "";
-    path = split[1] ?? "";
-  } else if (withoutSuffix.startsWith("ssh://git@")) {
-    const remainder = withoutSuffix.slice("ssh://git@".length);
-    const split = remainder.split("/", 2);
-    if (split.length !== 2) {
-      return null;
-    }
-    host = split[0] ?? "";
-    path = split[1] ?? "";
-  } else {
-    return null;
-  }
-
-  const sanitizedHost = host.includes("@") ? (host.split("@").at(-1) ?? "") : host;
-  const [owner, name] = path.split("/", 3);
-  if (!sanitizedHost.trim() || !owner?.trim() || !name?.trim()) {
-    return null;
-  }
-
-  return {
-    host: sanitizedHost.trim(),
-    owner: owner.trim(),
-    name: name.trim(),
-  };
-};
-
-const repositoryKey = (repository: GitProviderRepository): string => {
-  return `${repository.host.toLowerCase()}::${repository.owner.toLowerCase()}::${repository.name.toLowerCase()}`;
-};
-
 export class DefaultCanonicalPullRequestResolver implements CanonicalPullRequestResolverPort {
   private readonly repoPath: string;
   private readonly runProcess: ProcessRunner;
@@ -181,7 +126,7 @@ export class DefaultCanonicalPullRequestResolver implements CanonicalPullRequest
       { remoteName: string; repository: GitProviderRepository }
     >();
     for (const remote of remotes) {
-      const key = repositoryKey(remote.repository);
+      const key = gitProviderRepositoryKey(remote.repository);
       if (!uniqueRepositories.has(key)) {
         uniqueRepositories.set(key, remote);
       }
@@ -217,7 +162,7 @@ export class DefaultCanonicalPullRequestResolver implements CanonicalPullRequest
 
     for (const remoteName of remoteNames) {
       const remoteUrl = await this.runCommand("git", ["remote", "get-url", remoteName]);
-      const repository = parseRemoteUrl(remoteUrl);
+      const repository = parseGitProviderRepositoryFromRemoteUrl(remoteUrl);
       if (!repository) {
         continue;
       }

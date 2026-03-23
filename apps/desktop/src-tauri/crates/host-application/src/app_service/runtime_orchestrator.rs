@@ -423,7 +423,8 @@ impl AppService {
 
         let session_cache_key = format!("{}::{}", run.repo_path, run.task_id);
         if !sessions_by_repo_task.contains_key(session_cache_key.as_str()) {
-            let sessions = self.agent_sessions_list(run.repo_path.as_str(), run.task_id.as_str())?;
+            let sessions =
+                self.agent_sessions_list(run.repo_path.as_str(), run.task_id.as_str())?;
             sessions_by_repo_task.insert(session_cache_key.clone(), sessions);
         }
         let sessions = sessions_by_repo_task
@@ -434,10 +435,9 @@ impl AppService {
             .filter(|session| session.role.trim() == "build")
             .filter(|session| session.runtime_kind.trim() == run.summary.runtime_kind.as_str())
             .filter(|session| {
-                super::task_workflow::normalize_path_for_comparison(session.working_directory.as_str())
-                    == super::task_workflow::normalize_path_for_comparison(
-                        run.worktree_path.as_str(),
-                    )
+                super::task_workflow::normalize_path_for_comparison(
+                    session.working_directory.as_str(),
+                ) == super::task_workflow::normalize_path_for_comparison(run.worktree_path.as_str())
             })
             .filter_map(|session| {
                 session
@@ -475,10 +475,15 @@ impl AppService {
         }
         let statuses = runtime_statuses_by_worktree
             .get(worktree_key.as_str())
-            .ok_or_else(|| anyhow!("Missing cached OpenCode session statuses for {}", worktree_key))?;
-        Ok(external_session_ids
-            .iter()
-            .any(|external_session_id| super::has_live_opencode_session_status(statuses, external_session_id)))
+            .ok_or_else(|| {
+                anyhow!(
+                    "Missing cached OpenCode session statuses for {}",
+                    worktree_key
+                )
+            })?;
+        Ok(external_session_ids.iter().any(|external_session_id| {
+            super::has_live_opencode_session_status(statuses, external_session_id)
+        }))
     }
 }
 
@@ -620,35 +625,41 @@ mod tests {
             selected_model: None,
         }];
 
-        service.runs.lock().expect("run state lock poisoned").insert(
-            "run-1".to_string(),
-            RunProcess {
-                summary: RunSummary {
-                    run_id: "run-1".to_string(),
-                    runtime_kind: AgentRuntimeKind::Opencode,
-                    runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                        endpoint: format!("http://127.0.0.1:{port}"),
+        service
+            .runs
+            .lock()
+            .expect("run state lock poisoned")
+            .insert(
+                "run-1".to_string(),
+                RunProcess {
+                    summary: RunSummary {
+                        run_id: "run-1".to_string(),
+                        runtime_kind: AgentRuntimeKind::Opencode,
+                        runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                            endpoint: format!("http://127.0.0.1:{port}"),
+                        },
+                        repo_path: "/tmp/repo".to_string(),
+                        task_id: "task-1".to_string(),
+                        branch: "odt/task-1".to_string(),
+                        worktree_path: "/tmp/repo/worktree".to_string(),
+                        port,
+                        state: host_domain::RunState::Running,
+                        last_message: None,
+                        started_at: "2026-03-17T11:00:00Z".to_string(),
                     },
+                    child: None,
+                    _opencode_process_guard: None,
                     repo_path: "/tmp/repo".to_string(),
                     task_id: "task-1".to_string(),
-                    branch: "odt/task-1".to_string(),
                     worktree_path: "/tmp/repo/worktree".to_string(),
-                    port,
-                    state: host_domain::RunState::Running,
-                    last_message: None,
-                    started_at: "2026-03-17T11:00:00Z".to_string(),
+                    repo_config: RepoConfig::default(),
                 },
-                child: None,
-                _opencode_process_guard: None,
-                repo_path: "/tmp/repo".to_string(),
-                task_id: "task-1".to_string(),
-                worktree_path: "/tmp/repo/worktree".to_string(),
-                repo_config: RepoConfig::default(),
-            },
-        );
+            );
 
         let runs = service.runs_list(Some("/tmp/repo"))?;
-        server_handle.join().expect("status server thread should finish");
+        server_handle
+            .join()
+            .expect("status server thread should finish");
 
         assert!(runs.is_empty());
         Ok(())
@@ -682,32 +693,36 @@ mod tests {
             selected_model: None,
         }];
 
-        service.runs.lock().expect("run state lock poisoned").insert(
-            "run-1".to_string(),
-            RunProcess {
-                summary: RunSummary {
-                    run_id: "run-1".to_string(),
-                    runtime_kind: AgentRuntimeKind::Opencode,
-                    runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                        endpoint: format!("http://127.0.0.1:{port}"),
+        service
+            .runs
+            .lock()
+            .expect("run state lock poisoned")
+            .insert(
+                "run-1".to_string(),
+                RunProcess {
+                    summary: RunSummary {
+                        run_id: "run-1".to_string(),
+                        runtime_kind: AgentRuntimeKind::Opencode,
+                        runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                            endpoint: format!("http://127.0.0.1:{port}"),
+                        },
+                        repo_path: "/tmp/repo".to_string(),
+                        task_id: "task-1".to_string(),
+                        branch: "odt/task-1".to_string(),
+                        worktree_path: "/tmp/repo/worktree".to_string(),
+                        port,
+                        state: host_domain::RunState::Running,
+                        last_message: None,
+                        started_at: "2026-03-17T11:00:00Z".to_string(),
                     },
+                    child: None,
+                    _opencode_process_guard: None,
                     repo_path: "/tmp/repo".to_string(),
                     task_id: "task-1".to_string(),
-                    branch: "odt/task-1".to_string(),
                     worktree_path: "/tmp/repo/worktree".to_string(),
-                    port,
-                    state: host_domain::RunState::Running,
-                    last_message: None,
-                    started_at: "2026-03-17T11:00:00Z".to_string(),
+                    repo_config: RepoConfig::default(),
                 },
-                child: None,
-                _opencode_process_guard: None,
-                repo_path: "/tmp/repo".to_string(),
-                task_id: "task-1".to_string(),
-                worktree_path: "/tmp/repo/worktree".to_string(),
-                repo_config: RepoConfig::default(),
-            },
-        );
+            );
 
         let runs = service.runs_list(Some("/tmp/repo"))?;
 

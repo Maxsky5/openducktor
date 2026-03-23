@@ -2212,7 +2212,10 @@ struct AgentSessionsListBulkArgs {
 }
 
 fn handle_agent_sessions_list_bulk(state: &HeadlessState, args: Value) -> CommandResult {
-    let AgentSessionsListBulkArgs { repo_path, task_ids } = deserialize_args(args)?;
+    let AgentSessionsListBulkArgs {
+        repo_path,
+        task_ids,
+    } = deserialize_args(args)?;
     serialize_value(
         state
             .service

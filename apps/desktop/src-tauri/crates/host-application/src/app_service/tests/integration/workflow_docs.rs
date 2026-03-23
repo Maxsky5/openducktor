@@ -389,16 +389,19 @@ fn task_delete_rejects_branch_still_checked_out_in_remaining_worktree() -> Resul
         .lock()
         .expect("task lock poisoned")
         .agent_sessions = vec![build_session];
-    git_state.lock().expect("git lock poisoned").worktrees = vec![host_domain::GitWorktreeSummary {
-        branch: "obp/parent-1-cleanup".to_string(),
-        worktree_path: repo_path.to_string(),
-    }];
+    git_state.lock().expect("git lock poisoned").worktrees =
+        vec![host_domain::GitWorktreeSummary {
+            branch: "obp/parent-1-cleanup".to_string(),
+            worktree_path: repo_path.to_string(),
+        }];
 
     let error = service
         .task_delete(repo_path, "parent-1", false)
         .expect_err("delete should fail when branch stays checked out in another worktree");
     let error_text = format!("{error:#}");
-    assert!(error_text.contains("Cannot delete implementation branch while it is still checked out"));
+    assert!(
+        error_text.contains("Cannot delete implementation branch while it is still checked out")
+    );
     assert!(error_text.contains(repo_path));
     assert!(error_text.contains("obp/parent-1-cleanup"));
 

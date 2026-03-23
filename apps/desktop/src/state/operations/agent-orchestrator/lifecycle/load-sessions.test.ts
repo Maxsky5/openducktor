@@ -1132,9 +1132,12 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     const hostModule = await import("../../shared/host");
-    const originalList = hostModule.host.agentSessionsList;
-    const originalRuntimeList = hostModule.host.runtimeList;
-    hostModule.host.agentSessionsList = async () => [
+    const typedHost = hostModule.host as Omit<typeof hostModule.host, "runtimeList"> & {
+      runtimeList: () => Promise<RuntimeInstanceSummary[]>;
+    };
+    const originalList = typedHost.agentSessionsList;
+    const originalRuntimeList = typedHost.runtimeList;
+    typedHost.agentSessionsList = async () => [
       {
         runtimeKind: "opencode",
         sessionId: "session-1",
@@ -1148,7 +1151,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo",
       },
     ];
-    hostModule.host.runtimeList = async () => [
+    hostModule.host.runtimeList = (async (): Promise<RuntimeInstanceSummary[]> => [
       {
         kind: "opencode",
         runtimeId: "runtime-1",
@@ -1158,12 +1161,12 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo",
         runtimeRoute: {
           type: "local_http" as const,
-          endpoint: "http://127.0.0.1:4555",
+          endpoint: "http://127.0.0.1:4444",
         },
         startedAt: "2026-02-22T08:00:00.000Z",
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       },
-    ];
+    ]) as typeof hostModule.host.runtimeList;
 
     try {
       await loadAgentSessions("task-1", {
@@ -1821,10 +1824,9 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(appQueryClient.getQueryState(queryKey)?.isInvalidated).toBe(true);
   });
 
-  test("rehydrates build sessions through a shared runtime when the persisted working directory is an override", async () => {
+  test("fails fast instead of ensuring a workspace runtime for build sessions on worktree directories", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
-    let observedRuntimeEndpoint: string | null = null;
     const ensuredRuntimeKinds: string[] = [];
 
     const setSessionsById = (
@@ -1845,7 +1847,6 @@ describe("agent-orchestrator-load-sessions", () => {
         return;
       }
       const next = updater(current);
-      observedRuntimeEndpoint = next.runtimeEndpoint;
       state = {
         ...state,
         [sessionId]: next,
@@ -1885,7 +1886,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo/conflict-worktree",
       },
     ];
-    hostModule.host.runtimeList = async () => [
+    hostModule.host.runtimeList = (async (): Promise<RuntimeInstanceSummary[]> => [
       {
         kind: "opencode",
         runtimeId: "runtime-shared",
@@ -1900,7 +1901,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       },
-    ];
+    ]) as typeof hostModule.host.runtimeList;
     hostModule.host.runsList = async () => [];
     hostModule.host.runtimeEnsure = async (_repoPath, runtimeKind) => {
       ensuredRuntimeKinds.push(runtimeKind);
@@ -1921,11 +1922,13 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     try {
-      await loadAgentSessions("task-1", {
-        mode: "requested_history",
-        targetSessionId: "session-1",
-        historyPolicy: "requested_only",
-      });
+      await expect(
+        loadAgentSessions("task-1", {
+          mode: "requested_history",
+          targetSessionId: "session-1",
+          historyPolicy: "requested_only",
+        }),
+      ).rejects.toThrow("No live runtime found for working directory /tmp/repo/conflict-worktree.");
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
@@ -1933,15 +1936,108 @@ describe("agent-orchestrator-load-sessions", () => {
       hostModule.host.runtimeEnsure = originalEnsure;
     }
 
-    expect(ensuredRuntimeKinds).toEqual(["opencode"]);
-    if (observedRuntimeEndpoint === null) {
-      throw new Error("Expected shared runtime hydration to set a runtime endpoint");
+    expect(ensuredRuntimeKinds).toEqual([]);
+    expect(state["session-1"]?.messages).toEqual([]);
+  });
+
+  test("fails fast instead of ensuring a workspace runtime for qa sessions on worktree directories", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    let state: Record<string, AgentSessionState> = {};
+    const ensuredRuntimeKinds: string[] = [];
+
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [sessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: createAdapter(),
+      repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession,
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const hostModule = await import("../../shared/host");
+    const originalList = hostModule.host.agentSessionsList;
+    const originalRuntimeList = hostModule.host.runtimeList;
+    const originalRunsList = hostModule.host.runsList;
+    const originalEnsure = hostModule.host.runtimeEnsure;
+    hostModule.host.agentSessionsList = async () => [
+      {
+        runtimeKind: "opencode",
+        sessionId: "session-qa-worktree",
+        externalSessionId: "external-qa-worktree",
+        taskId: "task-1",
+        role: "qa",
+        scenario: "qa_review",
+        status: "stopped",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+        workingDirectory: "/tmp/repo/worktrees/task-1",
+      },
+    ];
+    hostModule.host.runtimeList = async () => [];
+    hostModule.host.runsList = async () => [];
+    hostModule.host.runtimeEnsure = async (_repoPath, runtimeKind) => {
+      ensuredRuntimeKinds.push(runtimeKind);
+      return {
+        kind: runtimeKind,
+        runtimeId: "runtime-shared",
+        repoPath: "/tmp/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/tmp/repo",
+        runtimeRoute: {
+          type: "local_http" as const,
+          endpoint: "http://127.0.0.1:4777",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      };
+    };
+
+    try {
+      await expect(
+        loadAgentSessions("task-1", {
+          mode: "requested_history",
+          targetSessionId: "session-qa-worktree",
+          historyPolicy: "requested_only",
+        }),
+      ).rejects.toThrow("No live runtime found for working directory /tmp/repo/worktrees/task-1.");
+    } finally {
+      hostModule.host.agentSessionsList = originalList;
+      hostModule.host.runtimeList = originalRuntimeList;
+      hostModule.host.runsList = originalRunsList;
+      hostModule.host.runtimeEnsure = originalEnsure;
     }
-    if (observedRuntimeEndpoint !== "http://127.0.0.1:4666") {
-      throw new Error(`Unexpected shared runtime endpoint: ${observedRuntimeEndpoint}`);
-    }
-    expect(state["session-1"]?.workingDirectory).toBe("/tmp/repo/conflict-worktree");
-    expect(state["session-1"]?.messages[0]?.id).toBe("history:session-start:session-1");
+
+    expect(ensuredRuntimeKinds).toEqual([]);
+    expect(state["session-qa-worktree"]?.messages).toEqual([]);
   });
 
   test("resumes live persisted sessions without eagerly hydrating transcript history", async () => {
@@ -2041,9 +2137,12 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     const hostModule = await import("../../shared/host");
-    const originalList = hostModule.host.agentSessionsList;
-    const originalRuntimeList = hostModule.host.runtimeList;
-    hostModule.host.agentSessionsList = async () => [
+    const typedHost = hostModule.host as Omit<typeof hostModule.host, "runtimeList"> & {
+      runtimeList: () => Promise<RuntimeInstanceSummary[]>;
+    };
+    const originalList = typedHost.agentSessionsList;
+    const originalRuntimeList = typedHost.runtimeList;
+    typedHost.agentSessionsList = async () => [
       {
         runtimeKind: "opencode",
         sessionId: "session-1",
@@ -2057,7 +2156,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo",
       },
     ];
-    hostModule.host.runtimeList = async () => [
+    hostModule.host.runtimeList = (async (): Promise<RuntimeInstanceSummary[]> => [
       {
         kind: "opencode",
         runtimeId: "runtime-1",
@@ -2067,12 +2166,12 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo",
         runtimeRoute: {
           type: "local_http" as const,
-          endpoint: "http://127.0.0.1:4555",
+          endpoint: "http://127.0.0.1:4444",
         },
         startedAt: "2026-02-22T08:00:00.000Z",
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       },
-    ];
+    ]) as typeof hostModule.host.runtimeList;
 
     try {
       await loadAgentSessions("task-1", { mode: "reconcile_live", historyPolicy: "none" });
@@ -2085,7 +2184,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(historyLoads).toBe(0);
     expect(attachedListeners).toBe(1);
     expect(state["session-1"]?.status).toBe("running");
-    expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4555");
+    expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4444");
     expect(state["session-1"]?.messages).toEqual([]);
   });
 
@@ -2166,9 +2265,12 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     const hostModule = await import("../../shared/host");
-    const originalList = hostModule.host.agentSessionsList;
-    const originalRuntimeList = hostModule.host.runtimeList;
-    hostModule.host.agentSessionsList = async () => [
+    const typedHost = hostModule.host as Omit<typeof hostModule.host, "runtimeList"> & {
+      runtimeList: () => Promise<RuntimeInstanceSummary[]>;
+    };
+    const originalList = typedHost.agentSessionsList;
+    const originalRuntimeList = typedHost.runtimeList;
+    typedHost.agentSessionsList = async () => [
       {
         runtimeKind: "opencode",
         sessionId: "session-1",
@@ -2181,7 +2283,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo",
       },
     ];
-    hostModule.host.runtimeList = async () => [
+    hostModule.host.runtimeList = async (): Promise<RuntimeInstanceSummary[]> => [
       {
         kind: "opencode",
         runtimeId: "runtime-1",
@@ -2191,7 +2293,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo",
         runtimeRoute: {
           type: "local_http" as const,
-          endpoint: "http://127.0.0.1:4555",
+          endpoint: "http://127.0.0.1:4444",
         },
         startedAt: "2026-02-22T08:00:00.000Z",
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -2208,8 +2310,8 @@ describe("agent-orchestrator-load-sessions", () => {
       resumeDeferred.resolve(undefined);
       await loadPromise;
     } finally {
-      hostModule.host.agentSessionsList = originalList;
-      hostModule.host.runtimeList = originalRuntimeList;
+      typedHost.agentSessionsList = originalList;
+      typedHost.runtimeList = originalRuntimeList;
     }
 
     expect(attachedListeners).toBe(0);
@@ -2264,9 +2366,12 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     const hostModule = await import("../../shared/host");
-    const originalList = hostModule.host.agentSessionsList;
-    const originalRuntimeList = hostModule.host.runtimeList;
-    hostModule.host.agentSessionsList = async () => [
+    const typedHost = hostModule.host as Omit<typeof hostModule.host, "runtimeList"> & {
+      runtimeList: () => Promise<RuntimeInstanceSummary[]>;
+    };
+    const originalList = typedHost.agentSessionsList;
+    const originalRuntimeList = typedHost.runtimeList;
+    typedHost.agentSessionsList = async () => [
       {
         runtimeKind: "opencode",
         sessionId: "session-1",
@@ -2279,7 +2384,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo",
       },
     ];
-    hostModule.host.runtimeList = async () => [
+    typedHost.runtimeList = async (): Promise<RuntimeInstanceSummary[]> => [
       {
         kind: "opencode",
         runtimeId: "runtime-1",
@@ -2289,7 +2394,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo",
         runtimeRoute: {
           type: "local_http" as const,
-          endpoint: "http://127.0.0.1:4555",
+          endpoint: "http://127.0.0.1:4444",
         },
         startedAt: "2026-02-22T08:00:00.000Z",
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -2299,8 +2404,8 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", { mode: "reconcile_live", historyPolicy: "live_if_empty" });
     } finally {
-      hostModule.host.agentSessionsList = originalList;
-      hostModule.host.runtimeList = originalRuntimeList;
+      typedHost.agentSessionsList = originalList;
+      typedHost.runtimeList = originalRuntimeList;
     }
 
     expect(resumeCalls).toBe(0);
@@ -2371,9 +2476,12 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     const hostModule = await import("../../shared/host");
-    const originalList = hostModule.host.agentSessionsList;
-    const originalRuntimeList = hostModule.host.runtimeList;
-    hostModule.host.agentSessionsList = async () => [
+    const typedHost = hostModule.host as Omit<typeof hostModule.host, "runtimeList"> & {
+      runtimeList: () => Promise<RuntimeInstanceSummary[]>;
+    };
+    const originalList = typedHost.agentSessionsList;
+    const originalRuntimeList = typedHost.runtimeList;
+    typedHost.agentSessionsList = async () => [
       {
         runtimeKind: "opencode",
         sessionId: "session-1",
@@ -2386,7 +2494,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo",
       },
     ];
-    hostModule.host.runtimeList = async () => [
+    typedHost.runtimeList = async (): Promise<RuntimeInstanceSummary[]> => [
       {
         kind: "opencode",
         runtimeId: "runtime-1",
@@ -2396,7 +2504,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo",
         runtimeRoute: {
           type: "local_http" as const,
-          endpoint: "http://127.0.0.1:4555",
+          endpoint: "http://127.0.0.1:4444",
         },
         startedAt: "2026-02-22T08:00:00.000Z",
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -2406,13 +2514,13 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", { mode: "reconcile_live", historyPolicy: "live_if_empty" });
     } finally {
-      hostModule.host.agentSessionsList = originalList;
-      hostModule.host.runtimeList = originalRuntimeList;
+      typedHost.agentSessionsList = originalList;
+      typedHost.runtimeList = originalRuntimeList;
     }
 
     expect(attachedListeners).toBe(1);
     expect(state["session-1"]?.status).toBe("running");
-    expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4555");
+    expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4444");
   });
 
   test("resumes and reattaches missing adapter sessions when reconciling after a repo switch", async () => {
@@ -2496,9 +2604,12 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     const hostModule = await import("../../shared/host");
-    const originalList = hostModule.host.agentSessionsList;
-    const originalRuntimeList = hostModule.host.runtimeList;
-    hostModule.host.agentSessionsList = async () => [
+    const typedHost = hostModule.host as Omit<typeof hostModule.host, "runtimeList"> & {
+      runtimeList: () => Promise<RuntimeInstanceSummary[]>;
+    };
+    const originalList = typedHost.agentSessionsList;
+    const originalRuntimeList = typedHost.runtimeList;
+    typedHost.agentSessionsList = async () => [
       {
         runtimeKind: "opencode",
         sessionId: "session-1",
@@ -2511,28 +2622,28 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo/worktree",
       },
     ];
-    hostModule.host.runtimeList = async () => [
+    typedHost.runtimeList = async (): Promise<RuntimeInstanceSummary[]> => [
       {
         kind: "opencode",
-        runtimeId: "runtime-1",
+        runtimeId: "runtime-worktree",
         repoPath: "/tmp/repo",
-        taskId: null,
-        role: "workspace",
-        workingDirectory: "/tmp/repo",
+        taskId: "task-1",
+        role: "build",
+        workingDirectory: "/tmp/repo/worktree",
         runtimeRoute: {
           type: "local_http" as const,
           endpoint: "http://127.0.0.1:4555",
         },
         startedAt: "2026-02-22T08:00:00.000Z",
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-      },
+      } as unknown as RuntimeInstanceSummary,
     ];
 
     try {
       await loadAgentSessions("task-1", { mode: "reconcile_live", historyPolicy: "live_if_empty" });
     } finally {
-      hostModule.host.agentSessionsList = originalList;
-      hostModule.host.runtimeList = originalRuntimeList;
+      typedHost.agentSessionsList = originalList;
+      typedHost.runtimeList = originalRuntimeList;
     }
 
     expect(resumeCalls).toEqual([
@@ -2543,7 +2654,7 @@ describe("agent-orchestrator-load-sessions", () => {
     ]);
     expect(attachedListeners).toBe(1);
     expect(state["session-1"]?.status).toBe("running");
-    expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4444");
+    expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4555");
   });
 
   test("does not reattach adapter-held sessions when the runtime no longer reports them live", async () => {
@@ -2600,9 +2711,12 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     const hostModule = await import("../../shared/host");
-    const originalList = hostModule.host.agentSessionsList;
-    const originalRuntimeList = hostModule.host.runtimeList;
-    hostModule.host.agentSessionsList = async () => [
+    const typedHost = hostModule.host as typeof hostModule.host & {
+      runtimeList: () => Promise<RuntimeInstanceSummary[]>;
+    };
+    const originalList = typedHost.agentSessionsList;
+    const originalRuntimeList = typedHost.runtimeList;
+    typedHost.agentSessionsList = async () => [
       {
         runtimeKind: "opencode",
         sessionId: "session-1",
@@ -2615,7 +2729,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo/worktree",
       },
     ];
-    hostModule.host.runtimeList = async () => [
+    typedHost.runtimeList = async () => [
       {
         kind: "opencode",
         runtimeId: "runtime-1",
@@ -2635,8 +2749,8 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", { mode: "reconcile_live", historyPolicy: "live_if_empty" });
     } finally {
-      hostModule.host.agentSessionsList = originalList;
-      hostModule.host.runtimeList = originalRuntimeList;
+      typedHost.agentSessionsList = originalList;
+      typedHost.runtimeList = originalRuntimeList;
     }
 
     expect(attachedListeners).toBe(0);
@@ -2809,7 +2923,7 @@ describe("agent-orchestrator-load-sessions", () => {
           targetSessionId: "session-1",
           historyPolicy: "requested_only",
         }),
-      ).rejects.toThrow("runtime unavailable");
+      ).rejects.toThrow("No live runtime found for working directory /tmp/repo.");
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;

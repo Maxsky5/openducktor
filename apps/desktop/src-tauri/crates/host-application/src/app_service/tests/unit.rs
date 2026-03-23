@@ -47,7 +47,9 @@ fn init_git_repo(path: &std::path::Path) -> Result<()> {
     ))
 }
 
-fn spawn_opencode_session_status_server(response_body: &'static str) -> Result<(u16, std::thread::JoinHandle<()>)> {
+fn spawn_opencode_session_status_server(
+    response_body: &'static str,
+) -> Result<(u16, std::thread::JoinHandle<()>)> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let port = listener.local_addr()?.port();
     let response = format!(
@@ -898,49 +900,53 @@ fn task_reset_implementation_ignores_stale_build_run_when_runtime_session_is_idl
 
     let (port, server_handle) =
         spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"idle"}}"#)?;
-    service.runs.lock().expect("run state lock poisoned").insert(
-        "run-1".to_string(),
-        crate::app_service::RunProcess {
-            summary: serde_json::from_value(json!({
-                "runId": "run-1",
-                "runtimeKind": "opencode",
-                "runtimeRoute": {
-                    "type": "local_http",
-                    "endpoint": format!("http://127.0.0.1:{port}"),
+    service
+        .runs
+        .lock()
+        .expect("run state lock poisoned")
+        .insert(
+            "run-1".to_string(),
+            crate::app_service::RunProcess {
+                summary: serde_json::from_value(json!({
+                    "runId": "run-1",
+                    "runtimeKind": "opencode",
+                    "runtimeRoute": {
+                        "type": "local_http",
+                        "endpoint": format!("http://127.0.0.1:{port}"),
+                    },
+                    "repoPath": workspace.path.clone(),
+                    "taskId": "task-1",
+                    "branch": "odt/task-1",
+                    "worktreePath": build_worktree.to_string_lossy().to_string(),
+                    "port": port,
+                    "state": "running",
+                    "lastMessage": null,
+                    "startedAt": "2026-03-17T11:00:00Z",
+                }))?,
+                child: None,
+                _opencode_process_guard: None,
+                repo_path: workspace.path.clone(),
+                task_id: "task-1".to_string(),
+                worktree_path: build_worktree.to_string_lossy().to_string(),
+                repo_config: host_infra_system::RepoConfig {
+                    branch_prefix: "odt".to_string(),
+                    worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                    ..Default::default()
                 },
-                "repoPath": workspace.path.clone(),
-                "taskId": "task-1",
-                "branch": "odt/task-1",
-                "worktreePath": build_worktree.to_string_lossy().to_string(),
-                "port": port,
-                "state": "running",
-                "lastMessage": null,
-                "startedAt": "2026-03-17T11:00:00Z",
-            }))?,
-            child: None,
-            _opencode_process_guard: None,
-            repo_path: workspace.path.clone(),
-            task_id: "task-1".to_string(),
-            worktree_path: build_worktree.to_string_lossy().to_string(),
-            repo_config: host_infra_system::RepoConfig {
-                branch_prefix: "odt".to_string(),
-                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-                ..Default::default()
             },
-        },
-    );
+        );
 
     let updated = service.task_reset_implementation(workspace.path.as_str(), "task-1")?;
-    server_handle.join().expect("status server thread should finish");
+    server_handle
+        .join()
+        .expect("status server thread should finish");
 
     assert_eq!(updated.status, TaskStatus::ReadyForDev);
-    assert!(
-        service
-            .runs
-            .lock()
-            .expect("run state lock poisoned")
-            .is_empty()
-    );
+    assert!(service
+        .runs
+        .lock()
+        .expect("run state lock poisoned")
+        .is_empty());
     Ok(())
 }
 
@@ -1017,48 +1023,50 @@ fn task_reset_implementation_ignores_stale_build_run_when_status_endpoint_is_unr
     let port = listener.local_addr()?.port();
     drop(listener);
 
-    service.runs.lock().expect("run state lock poisoned").insert(
-        "run-1".to_string(),
-        crate::app_service::RunProcess {
-            summary: serde_json::from_value(json!({
-                "runId": "run-1",
-                "runtimeKind": "opencode",
-                "runtimeRoute": {
-                    "type": "local_http",
-                    "endpoint": format!("http://127.0.0.1:{port}"),
+    service
+        .runs
+        .lock()
+        .expect("run state lock poisoned")
+        .insert(
+            "run-1".to_string(),
+            crate::app_service::RunProcess {
+                summary: serde_json::from_value(json!({
+                    "runId": "run-1",
+                    "runtimeKind": "opencode",
+                    "runtimeRoute": {
+                        "type": "local_http",
+                        "endpoint": format!("http://127.0.0.1:{port}"),
+                    },
+                    "repoPath": workspace.path.clone(),
+                    "taskId": "task-1",
+                    "branch": "odt/task-1",
+                    "worktreePath": build_worktree.to_string_lossy().to_string(),
+                    "port": port,
+                    "state": "running",
+                    "lastMessage": null,
+                    "startedAt": "2026-03-17T11:00:00Z",
+                }))?,
+                child: None,
+                _opencode_process_guard: None,
+                repo_path: workspace.path.clone(),
+                task_id: "task-1".to_string(),
+                worktree_path: build_worktree.to_string_lossy().to_string(),
+                repo_config: host_infra_system::RepoConfig {
+                    branch_prefix: "odt".to_string(),
+                    worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                    ..Default::default()
                 },
-                "repoPath": workspace.path.clone(),
-                "taskId": "task-1",
-                "branch": "odt/task-1",
-                "worktreePath": build_worktree.to_string_lossy().to_string(),
-                "port": port,
-                "state": "running",
-                "lastMessage": null,
-                "startedAt": "2026-03-17T11:00:00Z",
-            }))?,
-            child: None,
-            _opencode_process_guard: None,
-            repo_path: workspace.path.clone(),
-            task_id: "task-1".to_string(),
-            worktree_path: build_worktree.to_string_lossy().to_string(),
-            repo_config: host_infra_system::RepoConfig {
-                branch_prefix: "odt".to_string(),
-                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-                ..Default::default()
             },
-        },
-    );
+        );
 
     let updated = service.task_reset_implementation(workspace.path.as_str(), "task-1")?;
 
     assert_eq!(updated.status, TaskStatus::ReadyForDev);
-    assert!(
-        service
-            .runs
-            .lock()
-            .expect("run state lock poisoned")
-            .is_empty()
-    );
+    assert!(service
+        .runs
+        .lock()
+        .expect("run state lock poisoned")
+        .is_empty());
     Ok(())
 }
 
@@ -1178,7 +1186,8 @@ fn task_reset_implementation_only_removes_task_managed_worktrees() -> Result<()>
 }
 
 #[test]
-fn task_reset_implementation_fails_when_branch_remains_checked_out_in_repo_worktree() -> Result<()> {
+fn task_reset_implementation_fails_when_branch_remains_checked_out_in_repo_worktree() -> Result<()>
+{
     let repo_path = unique_temp_path("reset-implementation-checked-out-branch-repo");
     fs::create_dir_all(&repo_path)?;
     init_git_repo(&repo_path)?;
@@ -1499,7 +1508,9 @@ fn task_reset_implementation_rejects_branch_still_checked_out_in_remaining_workt
         .task_reset_implementation(&repo_path.to_string_lossy(), "task-1")
         .expect_err("reset should fail when branch stays checked out in another worktree");
     let error_text = format!("{error:#}");
-    assert!(error_text.contains("Cannot delete implementation branch while it is still checked out"));
+    assert!(
+        error_text.contains("Cannot delete implementation branch while it is still checked out")
+    );
     assert!(error_text.contains(repo_path.to_string_lossy().as_ref()));
     assert!(error_text.contains("odt/task-1"));
 
