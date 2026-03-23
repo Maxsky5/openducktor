@@ -186,7 +186,6 @@ export type AgentStateContextValue = {
     requireModelReady?: boolean;
     workingDirectoryOverride?: string | null;
     builderContext?: {
-      sessionId?: string | null;
       workingDirectory: string;
     } | null;
   }) => Promise<string>;

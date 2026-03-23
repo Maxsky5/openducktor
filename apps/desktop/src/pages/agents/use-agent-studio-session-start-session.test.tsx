@@ -30,7 +30,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   role: "spec",
   scenario: "spec_initial",
   activeSession: null,
-  sessionsForTask: [],
   selectedTask: createTaskCardFixture(),
   agentStudioReady: true,
   isActiveTaskHydrated: true,
@@ -117,6 +116,52 @@ describe("useAgentStudioSessionStartSession", () => {
     await expect(specStartPromise).resolves.toBe("spec-session");
     await expect(plannerStartPromise).resolves.toBe("planner-session");
     expect(startAgentSession).toHaveBeenCalledTimes(2);
+
+    await harness.unmount();
+  });
+
+  test("wraps QA builder-context resolution failures with session-start context", async () => {
+    const resolveRequestedDecision = mock(async () => ({
+      selectedModel: null,
+      startMode: "fresh" as const,
+      sourceSessionId: null,
+    }));
+    const startAgentSession = mock(async () => "session-new");
+
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeRepo: null,
+        role: "qa",
+        scenario: "qa_review",
+        selectedTask: createTaskCardFixture({
+          agentWorkflows: {
+            spec: { required: false, canSkip: true, available: true, completed: true },
+            planner: { required: false, canSkip: true, available: true, completed: true },
+            builder: { required: true, canSkip: false, available: true, completed: true },
+            qa: { required: true, canSkip: false, available: true, completed: false },
+          },
+        }),
+        resolveRequestedDecision,
+        startAgentSession,
+      }),
+    );
+
+    await harness.mount();
+
+    let startError: unknown = null;
+    await harness.run(async (state) => {
+      try {
+        await state.startSession("composer_send");
+      } catch (error) {
+        startError = error;
+      }
+    });
+
+    expect(startError).toBeInstanceOf(Error);
+    expect((startError as Error).message).toBe(
+      "Failed to resolve QA builder context for qa qa_review on task-1: No active repository selected.",
+    );
+    expect(startAgentSession).not.toHaveBeenCalled();
 
     await harness.unmount();
   });

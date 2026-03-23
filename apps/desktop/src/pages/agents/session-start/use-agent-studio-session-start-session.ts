@@ -27,7 +27,6 @@ type UseAgentStudioSessionStartSessionArgs = {
   role: AgentRole;
   scenario: AgentScenario;
   activeSession: AgentSessionState | null;
-  sessionsForTask: AgentSessionState[];
   selectedTask: Parameters<typeof canStartSessionForRole>[0];
   agentStudioReady: boolean;
   isActiveTaskHydrated: boolean;
@@ -46,7 +45,6 @@ export function useAgentStudioSessionStartSession({
   taskId,
   role,
   scenario,
-  sessionsForTask,
   selectedTask,
   agentStudioReady,
   isActiveTaskHydrated,
@@ -107,14 +105,20 @@ export function useAgentStudioSessionStartSession({
             `Failed to resolve working directory override for ${role} ${scenario} on ${taskId}: ${description}`,
           );
         }
-        const builderContext =
-          role === "qa"
-            ? await resolveQaBuilderSessionContext({
-                activeRepo,
-                taskId,
-                sessions: sessionsForTask,
-              })
-            : null;
+        let builderContext: { workingDirectory: string } | null = null;
+        if (role === "qa") {
+          try {
+            builderContext = await resolveQaBuilderSessionContext({
+              activeRepo,
+              taskId,
+            });
+          } catch (error) {
+            const description = error instanceof Error ? error.message : "Unknown error";
+            throw new Error(
+              `Failed to resolve QA builder context for ${role} ${scenario} on ${taskId}: ${description}`,
+            );
+          }
+        }
         const sessionId = await startAgentSession({
           taskId,
           role,
@@ -154,7 +158,6 @@ export function useAgentStudioSessionStartSession({
       updateQuery,
       taskId,
       updateAgentSessionModel,
-      sessionsForTask,
     ],
   );
 
@@ -180,11 +183,13 @@ export function useAgentStudioSessionStartSession({
       const startPromise = startRequestedSession({ reason });
 
       startingSessionByTaskRef.current.set(startKey, startPromise);
-      void startPromise.finally(() => {
-        if (startingSessionByTaskRef.current.get(startKey) === startPromise) {
-          startingSessionByTaskRef.current.delete(startKey);
-        }
-      });
+      void startPromise
+        .finally(() => {
+          if (startingSessionByTaskRef.current.get(startKey) === startPromise) {
+            startingSessionByTaskRef.current.delete(startKey);
+          }
+        })
+        .catch(() => {});
 
       return startPromise;
     },

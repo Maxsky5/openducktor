@@ -8,7 +8,6 @@ import {
   resolveBuildWorkingDirectoryOverride,
   resolveQaBuilderSessionContext,
 } from "@/lib/build-worktree-overrides";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import type {
@@ -23,7 +22,6 @@ type StartKanbanSessionFlowInput = {
   selection: AgentModelSelection | null;
   startInBackground: boolean;
   tasks: TaskCard[];
-  sessions: AgentSessionState[];
   roleLabels: Record<AgentRole, string>;
   queryClient: QueryClient;
   startAgentSession: AgentStateContextValue["startAgentSession"];
@@ -40,7 +38,6 @@ export const startKanbanSessionFlow = async ({
   selection,
   startInBackground,
   tasks,
-  sessions,
   roleLabels,
   queryClient,
   startAgentSession,
@@ -61,7 +58,6 @@ export const startKanbanSessionFlow = async ({
       ? await resolveQaBuilderSessionContext({
           activeRepo,
           taskId: intent.taskId,
-          sessions,
         })
       : null;
   const sessionId = await startAgentSession({

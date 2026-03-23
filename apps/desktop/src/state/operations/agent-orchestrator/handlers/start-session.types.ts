@@ -20,7 +20,6 @@ export type StartAgentSessionInput = {
   requireModelReady?: boolean;
   workingDirectoryOverride?: string | null;
   builderContext?: {
-    sessionId?: string | null;
     workingDirectory: string;
   } | null;
 };
@@ -116,7 +115,6 @@ export type StartSessionCreationInput = {
   requireModelReady: boolean;
   workingDirectoryOverride?: string | null;
   builderContext?: {
-    sessionId?: string | null;
     workingDirectory: string;
   } | null;
 };

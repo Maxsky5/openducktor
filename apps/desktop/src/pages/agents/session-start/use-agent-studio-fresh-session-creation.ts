@@ -159,7 +159,6 @@ export function useAgentStudioFreshSessionCreation({
             ? await resolveQaBuilderSessionContext({
                 activeRepo,
                 taskId,
-                sessions: sessionsForTask,
               })
             : null;
         return await startAgentSession({
@@ -182,7 +181,7 @@ export function useAgentStudioFreshSessionCreation({
         return undefined;
       }
     },
-    [activeRepo, sessionsForTask, startAgentSession, taskId, updateQuery],
+    [activeRepo, startAgentSession, taskId, updateQuery],
   );
 
   const runFreshSessionCreation = useCallback(

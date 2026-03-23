@@ -1664,7 +1664,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           role: "qa",
           startMode: "fresh",
           builderContext: {
-            sessionId: "builder-1",
             workingDirectory: "/tmp/repo/worktree",
           },
         }),
