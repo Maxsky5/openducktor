@@ -611,17 +611,11 @@ mod tests {
             .agent_sessions = vec![AgentSessionDocument {
             session_id: "build-session".to_string(),
             external_session_id: Some("external-build-session".to_string()),
-            task_id: Some("task-1".to_string()),
             role: "build".to_string(),
-            scenario: Some("build_implementation_start".to_string()),
-            status: Some("running".to_string()),
+            scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
-            updated_at: None,
-            ended_at: None,
             runtime_kind: "opencode".to_string(),
             working_directory: "/tmp/repo/worktree".to_string(),
-            pending_permissions: Vec::new(),
-            pending_questions: Vec::new(),
             selected_model: None,
         }];
 
@@ -679,17 +673,11 @@ mod tests {
             .agent_sessions = vec![AgentSessionDocument {
             session_id: "build-session".to_string(),
             external_session_id: Some("external-build-session".to_string()),
-            task_id: Some("task-1".to_string()),
             role: "build".to_string(),
-            scenario: Some("build_implementation_start".to_string()),
-            status: Some("running".to_string()),
+            scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
-            updated_at: None,
-            ended_at: None,
             runtime_kind: "opencode".to_string(),
             working_directory: "/tmp/repo/worktree".to_string(),
-            pending_permissions: Vec::new(),
-            pending_questions: Vec::new(),
             selected_model: None,
         }];
 

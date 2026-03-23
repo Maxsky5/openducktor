@@ -74,9 +74,15 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   ...overrides,
 });
 
+const createAdapter = () => {
+  const adapter = new OpencodeSdkAdapter();
+  adapter.listLiveAgentSessionSnapshots = async () => [];
+  return adapter;
+};
+
 describe("agent-orchestrator-ensure-ready", () => {
   test("throws when attached runtime exists but local session is missing", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     adapter.hasSession = () => true;
 
@@ -117,7 +123,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     let stopCalls = 0;
     let resumeCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
@@ -189,13 +195,112 @@ describe("agent-orchestrator-ensure-ready", () => {
     }
   });
 
-  test("recovers attached error session and preserves pending requests", async () => {
+  test("blocks readiness when attached runtime snapshot reports pending input", async () => {
+    let attachCalls = 0;
+    let resumeCalls = 0;
+
+    const adapter = createAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalResumeSession = adapter.resumeSession;
+    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    adapter.hasSession = () => true;
+    adapter.resumeSession = async () => {
+      resumeCalls += 1;
+      return {
+        runtimeKind: "opencode",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+    adapter.listLiveAgentSessionSnapshots = async () => [
+      {
+        externalSessionId: "external-1",
+        title: "BUILD task-1",
+        workingDirectory: "/tmp/repo/worktree",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        status: { type: "busy" },
+        pendingPermissions: [
+          {
+            requestId: "perm-1",
+            permission: "read",
+            patterns: ["**/.env"],
+          },
+        ],
+        pendingQuestions: [],
+      },
+    ];
+
+    const sessionsRef = {
+      current: {
+        "session-1": buildSession({
+          status: "idle",
+          pendingPermissions: [],
+          pendingQuestions: [],
+        }),
+      },
+    };
+
+    const ensureReady = createEnsureSessionReady({
+      activeRepo: "/tmp/repo",
+      adapter,
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef: { current: new Map() },
+      updateSession: (_sessionId, updater) => {
+        const current = sessionsRef.current["session-1"];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current["session-1"] = updater(current);
+      },
+      attachSessionListener: () => {
+        attachCalls += 1;
+      },
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: "run-1",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({
+        specMarkdown: "",
+        planMarkdown: "",
+        qaMarkdown: "",
+      }),
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await expect(ensureReady("session-1")).rejects.toThrow(
+        "Session is waiting for pending runtime input.",
+      );
+      expect(attachCalls).toBe(1);
+      expect(resumeCalls).toBe(0);
+      expect(sessionsRef.current["session-1"]?.status).toBe("running");
+      expect(sessionsRef.current["session-1"]?.pendingPermissions).toEqual([
+        { requestId: "perm-1", permission: "read", patterns: ["**/.env"] },
+      ]);
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.resumeSession = originalResumeSession;
+      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+    }
+  });
+
+  test("recovers attached error session and clears pending requests without a live snapshot", async () => {
     let attachCalls = 0;
     let unsubscribeCalls = 0;
     let stopCalls = 0;
     let resumeCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
@@ -291,23 +396,8 @@ describe("agent-orchestrator-ensure-ready", () => {
       expect(resumeCalls).toBe(1);
       expect(attachCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.status).toBe("idle");
-      expect(sessionsRef.current["session-1"]?.pendingPermissions).toEqual([
-        { requestId: "perm-1", permission: "read", patterns: ["*"] },
-      ]);
-      expect(sessionsRef.current["session-1"]?.pendingQuestions).toEqual([
-        {
-          requestId: "question-1",
-          questions: [
-            {
-              header: "Confirm",
-              question: "Confirm",
-              options: [],
-              multiple: false,
-              custom: false,
-            },
-          ],
-        },
-      ]);
+      expect(sessionsRef.current["session-1"]?.pendingPermissions).toEqual([]);
+      expect(sessionsRef.current["session-1"]?.pendingQuestions).toEqual([]);
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;
@@ -319,7 +409,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     let resumeCalls = 0;
     let unsubscribeCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
@@ -409,7 +499,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const previousRepoRef = { current: "/tmp/repo" as string | null };
     let stopCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
@@ -482,7 +572,7 @@ describe("agent-orchestrator-ensure-ready", () => {
   test("surfaces stale-resume cleanup failures instead of masking them", async () => {
     const previousRepoRef = { current: "/tmp/repo" as string | null };
 
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
@@ -560,7 +650,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       | Parameters<InstanceType<typeof OpencodeSdkAdapter>["resumeSession"]>[0]
       | null = null;
 
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalResumeSession = adapter.resumeSession;
     adapter.hasSession = () => false;
@@ -644,7 +734,7 @@ describe("agent-orchestrator-ensure-ready", () => {
   test("does not start a runtime when prompt loading fails during resume", async () => {
     let runtimeCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     adapter.hasSession = () => false;
 
@@ -692,7 +782,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const repoEpochRef = { current: 1 };
     const previousRepoRef = { current: "/tmp/repo" as string | null };
 
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     adapter.hasSession = () => false;
 

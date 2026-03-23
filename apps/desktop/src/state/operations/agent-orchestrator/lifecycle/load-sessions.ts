@@ -24,8 +24,6 @@ import {
   defaultScenarioForRole,
   fromPersistedSessionRecord,
   historyToChatMessages,
-  recoverPendingPermissionsFromHistory,
-  recoverPendingQuestionsFromHistory,
 } from "../support/persistence";
 import { buildSessionPreludeMessages, buildSessionSystemPrompt } from "../support/session-prompt";
 import {
@@ -84,59 +82,11 @@ const mergePersistedSessionRecord = (
     scenario: persisted.scenario,
     startedAt: persisted.startedAt,
     workingDirectory: persisted.workingDirectory,
-    pendingPermissions: persisted.pendingPermissions,
-    pendingQuestions: persisted.pendingQuestions,
+    pendingPermissions: current.pendingPermissions,
+    pendingQuestions: current.pendingQuestions,
     selectedModel: mergeModelSelection(current.selectedModel, persisted.selectedModel ?? undefined),
     promptOverrides,
   };
-};
-
-const shouldPreferLivePendingInput = <T>(value: T[] | null): value is T[] => {
-  return (value?.length ?? 0) > 0;
-};
-
-const shouldKeepPersistedPendingInput = <T>(value: T[] | undefined): boolean => {
-  return (value?.length ?? 0) > 0;
-};
-
-const resolvePendingPermissionsForHydration = ({
-  livePendingPermissions,
-  persistedPendingPermissions,
-  currentPendingPermissions,
-  history,
-}: {
-  livePendingPermissions: AgentSessionState["pendingPermissions"] | null;
-  persistedPendingPermissions: AgentSessionRecord["pendingPermissions"];
-  currentPendingPermissions: AgentSessionState["pendingPermissions"];
-  history: Parameters<typeof recoverPendingPermissionsFromHistory>[0];
-}): AgentSessionState["pendingPermissions"] => {
-  if (shouldPreferLivePendingInput(livePendingPermissions)) {
-    return livePendingPermissions;
-  }
-  if (shouldKeepPersistedPendingInput(persistedPendingPermissions)) {
-    return currentPendingPermissions;
-  }
-  return recoverPendingPermissionsFromHistory(history);
-};
-
-const resolvePendingQuestionsForHydration = ({
-  livePendingQuestions,
-  persistedPendingQuestions,
-  currentPendingQuestions,
-  history,
-}: {
-  livePendingQuestions: AgentSessionState["pendingQuestions"] | null;
-  persistedPendingQuestions: AgentSessionRecord["pendingQuestions"];
-  currentPendingQuestions: AgentSessionState["pendingQuestions"];
-  history: Parameters<typeof recoverPendingQuestionsFromHistory>[0];
-}): AgentSessionState["pendingQuestions"] => {
-  if (shouldPreferLivePendingInput(livePendingQuestions)) {
-    return livePendingQuestions;
-  }
-  if (shouldKeepPersistedPendingInput(persistedPendingQuestions)) {
-    return currentPendingQuestions;
-  }
-  return recoverPendingQuestionsFromHistory(history);
 };
 
 const toLiveSessionState = (
@@ -243,6 +193,8 @@ export const createLoadAgentSessions = ({
         }
         next[record.sessionId] = {
           ...fromPersistedSessionRecord(record, taskId),
+          pendingPermissions: [],
+          pendingQuestions: [],
           promptOverrides: EMPTY_PROMPT_OVERRIDES,
         };
       }
@@ -610,8 +562,8 @@ export const createLoadAgentSessions = ({
       const liveSessionStatus = liveRuntimeSnapshot
         ? toLiveSessionState(liveRuntimeSnapshot.status)
         : null;
-      const livePendingPermissions = liveRuntimeSnapshot?.pendingPermissions ?? null;
-      const livePendingQuestions = liveRuntimeSnapshot?.pendingQuestions ?? null;
+      const livePendingPermissions = liveRuntimeSnapshot?.pendingPermissions ?? [];
+      const livePendingQuestions = liveRuntimeSnapshot?.pendingQuestions ?? [];
       if (isStaleRepoOperation()) {
         return;
       }
@@ -619,19 +571,6 @@ export const createLoadAgentSessions = ({
       updateSession(
         record.sessionId,
         (current) => {
-          const resolvedPendingPermissions = resolvePendingPermissionsForHydration({
-            livePendingPermissions,
-            persistedPendingPermissions: record.pendingPermissions,
-            currentPendingPermissions: current.pendingPermissions,
-            history,
-          });
-          const resolvedPendingQuestions = resolvePendingQuestionsForHydration({
-            livePendingQuestions,
-            persistedPendingQuestions: record.pendingQuestions,
-            currentPendingQuestions: current.pendingQuestions,
-            history,
-          });
-
           return {
             ...current,
             runtimeKind: runtimeResolution.runtimeKind,
@@ -641,8 +580,8 @@ export const createLoadAgentSessions = ({
             status: liveSessionStatus ?? current.status,
             workingDirectory,
             promptOverrides,
-            pendingPermissions: resolvedPendingPermissions,
-            pendingQuestions: resolvedPendingQuestions,
+            pendingPermissions: livePendingPermissions,
+            pendingQuestions: livePendingQuestions,
             messages: [
               ...preludeMessages,
               ...historyToChatMessages(history, {

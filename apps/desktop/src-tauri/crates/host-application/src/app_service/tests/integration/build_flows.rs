@@ -504,7 +504,6 @@ fn build_stop_aborts_matching_builder_session_on_shared_runtime() -> Result<()> 
     let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
     let mut session = make_session("task-1", "build-session");
     session.role = "build".to_string();
-    session.status = Some("running".to_string());
     session.working_directory = run.worktree_path.clone();
     session.external_session_id = Some("external-build-session".to_string());
     assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", session)?);
@@ -588,7 +587,6 @@ fn build_stop_propagates_abort_failures_without_marking_run_stopped() -> Result<
     let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
     let mut session = make_session("task-1", "build-session");
     session.role = "build".to_string();
-    session.status = Some("running".to_string());
     session.working_directory = run.worktree_path.clone();
     session.external_session_id = Some("external-build-session".to_string());
     assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", session)?);

@@ -46,6 +46,22 @@ type EnsureSessionReadyDependencies = {
 };
 
 const STALE_PREPARE_ERROR = "Workspace changed while preparing session.";
+const PENDING_INPUT_NOT_READY_ERROR = "Session is waiting for pending runtime input.";
+
+const toLiveSessionState = (
+  status: Awaited<ReturnType<AgentEnginePort["listLiveAgentSessionSnapshots"]>>[number]["status"],
+): AgentSessionState["status"] => {
+  if (status.type === "busy" || status.type === "retry") {
+    return "running";
+  }
+  return "idle";
+};
+
+const hasPendingInput = (
+  session: Pick<AgentSessionState, "pendingPermissions" | "pendingQuestions">,
+) => {
+  return session.pendingPermissions.length > 0 || session.pendingQuestions.length > 0;
+};
 
 export const createEnsureSessionReady = ({
   activeRepo,
@@ -95,6 +111,35 @@ export const createEnsureSessionReady = ({
       }
     };
 
+    const loadLiveSnapshot = async ({
+      runtimeKind,
+      runtimeEndpoint,
+      workingDirectory,
+      externalSessionId,
+    }: {
+      runtimeKind: AgentSessionState["runtimeKind"];
+      runtimeEndpoint: string;
+      workingDirectory: string;
+      externalSessionId: string;
+    }) => {
+      if (
+        !runtimeKind ||
+        runtimeEndpoint.trim().length === 0 ||
+        workingDirectory.trim().length === 0
+      ) {
+        return null;
+      }
+      const snapshots = await adapter.listLiveAgentSessionSnapshots({
+        runtimeKind,
+        runtimeConnection: {
+          endpoint: runtimeEndpoint,
+          workingDirectory,
+        },
+        directories: [workingDirectory],
+      });
+      return snapshots.find((entry) => entry.externalSessionId === externalSessionId) ?? null;
+    };
+
     assertNotStale();
     const session = sessionsRef.current[sessionId];
     if (!session) {
@@ -111,6 +156,28 @@ export const createEnsureSessionReady = ({
         attachSessionListener(repoPath, sessionId);
       }
       if (session.status !== "error") {
+        const liveSnapshot = await loadLiveSnapshot({
+          runtimeKind: session.runtimeKind,
+          runtimeEndpoint: session.runtimeEndpoint,
+          workingDirectory: session.workingDirectory,
+          externalSessionId: session.externalSessionId,
+        });
+        assertNotStale();
+        const pendingPermissions = liveSnapshot?.pendingPermissions ?? [];
+        const pendingQuestions = liveSnapshot?.pendingQuestions ?? [];
+        updateSession(
+          sessionId,
+          (current) => ({
+            ...current,
+            status: liveSnapshot ? toLiveSessionState(liveSnapshot.status) : current.status,
+            pendingPermissions,
+            pendingQuestions,
+          }),
+          { persist: false },
+        );
+        if (hasPendingInput({ pendingPermissions, pendingQuestions })) {
+          throw new Error(PENDING_INPUT_NOT_READY_ERROR);
+        }
         return;
       }
       const existingUnsubscriber = unsubscribersRef.current.get(sessionId);
@@ -186,16 +253,32 @@ export const createEnsureSessionReady = ({
 
     assertNotStale();
 
+    const liveSnapshot = await loadLiveSnapshot({
+      runtimeKind: resolvedRuntimeKind,
+      runtimeEndpoint: runtime.runtimeEndpoint,
+      workingDirectory: runtime.workingDirectory,
+      externalSessionId: session.externalSessionId,
+    });
+    assertNotStale();
+    const pendingPermissions = liveSnapshot?.pendingPermissions ?? [];
+    const pendingQuestions = liveSnapshot?.pendingQuestions ?? [];
+
     updateSession(sessionId, (current) => ({
       ...current,
-      status: "idle",
+      status: liveSnapshot ? toLiveSessionState(liveSnapshot.status) : "idle",
       runtimeKind: resolvedRuntimeKind,
       runtimeId: runtime.runtimeId,
       runId: runtime.runId,
       runtimeEndpoint: runtime.runtimeEndpoint,
       workingDirectory: runtime.workingDirectory,
       promptOverrides: promptContext.promptOverrides,
+      pendingPermissions,
+      pendingQuestions,
     }));
+
+    if (hasPendingInput({ pendingPermissions, pendingQuestions })) {
+      throw new Error(PENDING_INPUT_NOT_READY_ERROR);
+    }
 
     if (isStaleRepoOperation()) {
       return;

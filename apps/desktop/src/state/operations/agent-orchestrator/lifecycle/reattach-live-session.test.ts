@@ -44,7 +44,7 @@ const sessionStateFixture: AgentSessionState = {
 };
 
 describe("reattach-live-session", () => {
-  test("keeps persisted pending input when the live snapshot is empty", async () => {
+  test("clears pending input when the live snapshot is empty", async () => {
     let state = sessionStateFixture;
     let resumed = false;
     let attachedSessionId: string | null = null;
@@ -102,8 +102,6 @@ describe("reattach-live-session", () => {
 
     expect(resumed).toBe(true);
     expect(attachedSessionId === "session-1").toBe(true);
-    expect(state.pendingPermissions).toEqual([
-      { requestId: "permission-1", permission: "read", patterns: [".env"] },
-    ]);
+    expect(state.pendingPermissions).toEqual([]);
   });
 });

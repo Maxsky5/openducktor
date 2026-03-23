@@ -34,13 +34,6 @@ type CreateReattachLiveSessionArgs = {
   toLiveSessionState: (status: LiveAgentSessionSnapshot["status"]) => AgentSessionState["status"];
 };
 
-const preferLivePendingInput = <T>(liveValue: T[], currentValue: T[]): T[] => {
-  if (liveValue.length > 0) {
-    return liveValue;
-  }
-  return currentValue;
-};
-
 export const createReattachLiveSession = ({
   adapter,
   repoPath,
@@ -106,14 +99,8 @@ export const createReattachLiveSession = ({
         runtimeEndpoint: runtimeResolution.runtimeEndpoint,
         workingDirectory: runtimeResolution.runtimeConnection.workingDirectory,
         status: nextStatus,
-        pendingPermissions: preferLivePendingInput(
-          liveSession.pendingPermissions,
-          current.pendingPermissions,
-        ),
-        pendingQuestions: preferLivePendingInput(
-          liveSession.pendingQuestions,
-          current.pendingQuestions,
-        ),
+        pendingPermissions: liveSession.pendingPermissions,
+        pendingQuestions: liveSession.pendingQuestions,
         promptOverrides,
         selectedModel: mergeModelSelection(current.selectedModel, selectedModel ?? undefined),
       }),

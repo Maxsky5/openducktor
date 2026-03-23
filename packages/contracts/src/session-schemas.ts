@@ -52,22 +52,17 @@ export const agentSessionQuestionRequestSchema = z.object({
 });
 export type AgentSessionQuestionRequest = z.infer<typeof agentSessionQuestionRequestSchema>;
 
-const optionalStringFromNullable = optionalFromNullable(z.string());
-
 export const agentSessionRecordSchema = z.object({
   sessionId: z.string(),
-  externalSessionId: optionalStringFromNullable,
-  taskId: optionalStringFromNullable,
+  externalSessionId: optionalFromNullable(z.string()),
   role: agentSessionRoleSchema,
-  scenario: optionalFromNullable(agentSessionScenarioSchema),
-  status: optionalFromNullable(agentSessionStatusSchema),
+  scenario: agentSessionScenarioSchema,
   startedAt: z.string(),
-  updatedAt: optionalStringFromNullable,
-  endedAt: optionalStringFromNullable,
   runtimeKind: runtimeKindSchema.default("opencode"),
   workingDirectory: z.string(),
-  pendingPermissions: optionalFromNullable(z.array(agentSessionPermissionRequestSchema)),
-  pendingQuestions: optionalFromNullable(z.array(agentSessionQuestionRequestSchema)),
-  selectedModel: optionalFromNullable(agentSessionModelSelectionSchema),
+  selectedModel: z.preprocess(
+    (value) => (value === undefined ? null : value),
+    agentSessionModelSelectionSchema.nullable(),
+  ),
 });
 export type AgentSessionRecord = z.infer<typeof agentSessionRecordSchema>;

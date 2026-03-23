@@ -321,12 +321,7 @@ impl TaskStore for FakeTaskStore {
         _task_id: &str,
     ) -> Result<Vec<AgentSessionDocument>> {
         let state = self.state.lock().expect("task store lock poisoned");
-        Ok(state
-            .agent_sessions
-            .iter()
-            .filter(|session| session.task_id.as_deref() == Some(_task_id))
-            .cloned()
-            .collect())
+        Ok(state.agent_sessions.clone())
     }
 
     fn upsert_agent_session(
@@ -365,10 +360,9 @@ impl TaskStore for FakeTaskStore {
             task_id.to_string(),
             roles.iter().map(|role| (*role).to_string()).collect(),
         ));
-        state.agent_sessions.retain(|session| {
-            session.task_id.as_deref() != Some(task_id)
-                || !roles.iter().any(|role| session.role == *role)
-        });
+        state
+            .agent_sessions
+            .retain(|session| !roles.iter().any(|role| session.role == *role));
         Ok(())
     }
 
@@ -429,12 +423,7 @@ impl TaskStore for FakeTaskStore {
         let mut state = self.state.lock().expect("task store lock poisoned");
         state.metadata_get_calls.push(_task_id.to_string());
         let qa_report = state.latest_qa_report.clone();
-        let agent_sessions = state
-            .agent_sessions
-            .iter()
-            .filter(|session| session.task_id.as_deref() == Some(_task_id))
-            .cloned()
-            .collect();
+        let agent_sessions = state.agent_sessions.clone();
         Ok(TaskMetadata {
             spec: SpecDocument {
                 markdown: String::new(),
@@ -1150,21 +1139,15 @@ pub(crate) fn build_service_with_git_state(
     (service, task_state, git_state)
 }
 
-pub(crate) fn make_session(task_id: &str, session_id: &str) -> AgentSessionDocument {
+pub(crate) fn make_session(_task_id: &str, session_id: &str) -> AgentSessionDocument {
     AgentSessionDocument {
         session_id: session_id.to_string(),
         external_session_id: Some(format!("external-{session_id}")),
-        task_id: Some(task_id.to_string()),
         role: "build".to_string(),
-        scenario: Some("build_default".to_string()),
-        status: Some("running".to_string()),
+        scenario: "build_default".to_string(),
         started_at: "2026-02-20T12:00:00Z".to_string(),
-        updated_at: Some("2026-02-20T12:00:10Z".to_string()),
-        ended_at: None,
         runtime_kind: "opencode".to_string(),
         working_directory: "/tmp/repo".to_string(),
-        pending_permissions: Vec::new(),
-        pending_questions: Vec::new(),
         selected_model: None,
     }
 }

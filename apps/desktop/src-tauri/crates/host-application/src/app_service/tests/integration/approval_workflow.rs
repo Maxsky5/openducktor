@@ -291,7 +291,6 @@ fn task_direct_merge_with_publish_target_stays_resumable_until_completion() -> R
     fs::create_dir_all(&unrelated_worktree_path)?;
     let mut unrelated_session = make_session("task-1", "session-build-retry");
     unrelated_session.started_at = "2026-02-20T12:30:00Z".to_string();
-    unrelated_session.updated_at = Some("2026-02-20T12:30:10Z".to_string());
     unrelated_session.working_directory = unrelated_worktree_path.to_string_lossy().to_string();
     task_state
         .lock()
