@@ -1178,7 +1178,7 @@ fn task_reset_implementation_only_removes_task_managed_worktrees() -> Result<()>
 }
 
 #[test]
-fn task_reset_implementation_fails_before_cleanup_when_task_branch_is_checked_out() -> Result<()> {
+fn task_reset_implementation_fails_when_branch_remains_checked_out_in_repo_worktree() -> Result<()> {
     let repo_path = unique_temp_path("reset-implementation-checked-out-branch-repo");
     fs::create_dir_all(&repo_path)?;
     init_git_repo(&repo_path)?;
@@ -1221,6 +1221,13 @@ fn task_reset_implementation_fails_before_cleanup_when_task_branch_is_checked_ou
                 revision: None,
             },
         );
+    {
+        let mut state = git_state.lock().expect("git state lock poisoned");
+        state.worktrees = vec![host_domain::GitWorktreeSummary {
+            branch: "odt/task-1".to_string(),
+            worktree_path: repo_path.to_string_lossy().to_string(),
+        }];
+    }
     task_state
         .lock()
         .expect("task store lock poisoned")
@@ -1244,15 +1251,21 @@ fn task_reset_implementation_fails_before_cleanup_when_task_branch_is_checked_ou
     let error = service
         .task_reset_implementation(&repo_path.to_string_lossy(), "task-1")
         .expect_err("checked-out task branch should block reset");
-    assert!(error
-        .to_string()
-        .contains("Cannot reset implementation while branch odt/task-1 is checked out"));
+    let error_text = format!("{error:#}");
+    assert!(error_text.contains("Cannot delete implementation branch"));
+    assert!(error_text.contains("still checked out"));
+    assert!(error_text.contains("odt/task-1"));
+    assert!(error_text.contains(repo_path.to_string_lossy().as_ref()));
 
     let git_calls = &git_state.lock().expect("git state lock poisoned").calls;
+    assert!(git_calls.iter().any(|call| matches!(
+        call,
+        crate::app_service::test_support::GitCall::RemoveWorktree { worktree_path, force, .. }
+            if worktree_path == &build_worktree.to_string_lossy() && *force
+    )));
     assert!(!git_calls.iter().any(|call| matches!(
         call,
-        crate::app_service::test_support::GitCall::RemoveWorktree { .. }
-            | crate::app_service::test_support::GitCall::DeleteLocalBranch { .. }
+        crate::app_service::test_support::GitCall::DeleteLocalBranch { .. }
     )));
 
     Ok(())

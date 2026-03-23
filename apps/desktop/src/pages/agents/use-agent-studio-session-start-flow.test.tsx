@@ -710,8 +710,8 @@ describe("useAgentStudioSessionStartFlow", () => {
       existingSessionOptions: [
         {
           value: "session-build-latest",
-          label: "Builder session session-",
-          description: "Started 2/22/2026, 12:00:00 PM · Start Implementation · idle.",
+          label: "Start Implementation · Builder #1",
+          description: "2/22/2026, 12:00:00 PM · idle · session-",
           secondaryLabel: "Latest",
         },
       ],
