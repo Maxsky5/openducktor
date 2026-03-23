@@ -26,6 +26,47 @@ export type EventStreamState = {
 
 export type EventStreamRuntime = EventStreamContext & EventStreamState;
 
+const getSessionRecord = (
+  context: Pick<EventStreamContext, "sessionId" | "getSession">,
+): SessionRecord | undefined => {
+  return context.getSession(context.sessionId);
+};
+
+export const markSessionActive = (
+  context: Pick<EventStreamContext, "sessionId" | "getSession">,
+): void => {
+  const session = getSessionRecord(context);
+  if (!session) {
+    return;
+  }
+  session.hasIdleSinceActivity = false;
+};
+
+export const emitSessionIdle = (
+  context: Pick<EventStreamContext, "sessionId" | "getSession" | "emit" | "now">,
+  messageId?: string,
+): boolean => {
+  const session = getSessionRecord(context);
+  if (messageId && session?.emittedIdleMessageIds.has(messageId)) {
+    return false;
+  }
+  if (!messageId && session?.hasIdleSinceActivity) {
+    return false;
+  }
+  if (session) {
+    session.hasIdleSinceActivity = true;
+    if (messageId) {
+      session.emittedIdleMessageIds.add(messageId);
+    }
+  }
+  context.emit(context.sessionId, {
+    type: "session_idle",
+    sessionId: context.sessionId,
+    timestamp: context.now(),
+  });
+  return true;
+};
+
 export const isReasoningDeltaField = (field: string): boolean => {
   return (
     field === "reasoning_content" ||

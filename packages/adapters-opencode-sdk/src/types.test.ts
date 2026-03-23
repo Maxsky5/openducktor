@@ -17,12 +17,16 @@ describe("types", () => {
     const sessionInput: SessionInput = {
       sessionId: "session-1",
       repoPath: "/repo",
+      runtimeKind: "opencode",
+      runtimeConnection: {
+        endpoint: "http://127.0.0.1:12345",
+        workingDirectory: "/repo",
+      },
       workingDirectory: "/repo",
       taskId: "task-1",
       role: "spec",
       scenario: "spec_initial",
       systemPrompt: "system",
-      baseUrl: "http://127.0.0.1:12345",
     };
     const sessionRecord: SessionRecord = {
       summary: {
@@ -40,7 +44,9 @@ describe("types", () => {
       }),
       externalSessionId: "external-session-1",
       eventTransportKey: "http://127.0.0.1:12345",
+      hasIdleSinceActivity: false,
       emittedAssistantMessageIds: new Set<string>(),
+      emittedIdleMessageIds: new Set<string>(),
       partsById: new Map(),
       messageRoleById: new Map(),
       pendingDeltasByPartId: new Map(),
