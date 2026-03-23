@@ -78,11 +78,12 @@ export function RepositoryConfigurationSection({
     isSaving ||
     isLoadingSelectedRepoBranches ||
     defaultTargetBranchOptions.length === 0;
-  const defaultTargetBranchPlaceholder = isLoadingSelectedRepoBranches
-    ? "Loading branches..."
-    : selectedRepoBranchesError
-      ? "Branches unavailable"
-      : "Select branch...";
+  let defaultTargetBranchPlaceholder = "Select branch...";
+  if (isLoadingSelectedRepoBranches) {
+    defaultTargetBranchPlaceholder = "Loading branches...";
+  } else if (selectedRepoBranchesError) {
+    defaultTargetBranchPlaceholder = "Branches unavailable";
+  }
   const updateScriptDraft = (updater: (repoConfig: RepoConfig) => RepoConfig): void => {
     onUpdateSelectedRepoConfig((repoConfig) => {
       const nextRepoConfig = updater(repoConfig);
@@ -99,7 +100,7 @@ export function RepositoryConfigurationSection({
     });
   };
   const updateHookDraft = (key: "preStart" | "postComplete", value: string): void => {
-    const nextHookLines = parseHookLines(value);
+    const nextHookLines = parseHookLines(value).filter((line) => line.trim().length > 0);
     updateScriptDraft((repoConfig) => ({
       ...repoConfig,
       hooks: {

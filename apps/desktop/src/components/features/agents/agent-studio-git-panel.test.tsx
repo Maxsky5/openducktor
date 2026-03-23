@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { fireEvent, type RenderResult, render } from "@testing-library/react";
-import { LoaderCircle } from "lucide-react";
 import { act, createElement } from "react";
 
 const omitDialogDomProps = ({
@@ -85,7 +84,6 @@ type DomTestNode = {
   };
   readonly children: string[];
   findAll: (predicate: (node: DomTestNode) => boolean) => DomTestNode[];
-  findAllByType: (type: unknown) => DomTestNode[];
 };
 
 const wrapElement = (element: Element): DomTestNode => ({
@@ -134,14 +132,6 @@ const wrapElement = (element: Element): DomTestNode => ({
     Array.from(element.querySelectorAll("*"))
       .map((node) => wrapElement(node))
       .filter((node) => predicate(node)),
-  findAllByType: (type) => {
-    if (type === LoaderCircle) {
-      return Array.from(element.querySelectorAll('[data-lucide="loader-circle"]')).map((node) =>
-        wrapElement(node),
-      );
-    }
-    return [];
-  },
 });
 
 const wrapRoot = (rendered: RenderResult): DomTestNode =>

@@ -78,7 +78,7 @@ describe("RepositoryConfigurationSection", () => {
         ...baseRepoConfig,
         trustedHooks: true,
         hooks: {
-          preStart: ["bun install", ""],
+          preStart: ["bun install"],
           postComplete: [],
         },
       });
@@ -139,7 +139,7 @@ describe("RepositoryConfigurationSection", () => {
         trustedHooks: false,
         trustedHooksFingerprint: undefined,
         hooks: {
-          preStart: [""],
+          preStart: [],
           postComplete: [],
         },
       });

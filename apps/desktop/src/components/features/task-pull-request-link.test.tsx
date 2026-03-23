@@ -79,9 +79,10 @@ describe("TaskPullRequestLink", () => {
     const button = rendered.getByRole("button");
     expect(button.className).toContain("border-border");
     expect(button.className).toContain("bg-card");
-    const styledChildren = Array.from(rendered.container.querySelectorAll("*")).filter((node) =>
-      node.className.includes("violet"),
-    );
+    const styledChildren = Array.from(rendered.container.querySelectorAll("*")).filter((node) => {
+      const classAttr = node.getAttribute("class");
+      return classAttr?.includes("violet");
+    });
     expect(styledChildren.length).toBeGreaterThan(0);
     rendered.unmount();
   });

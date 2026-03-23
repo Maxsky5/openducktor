@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createTauriHostClient } from "@openducktor/adapters-tauri-host";
 import { act } from "react";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
@@ -82,6 +82,10 @@ beforeEach(() => {
   toastLoading.mockClear();
   toastSuccess.mockClear();
   toastDismiss.mockClear();
+});
+
+afterAll(() => {
+  mock.restore();
 });
 
 describe("useAppLifecycle", () => {
