@@ -173,6 +173,55 @@ describe("task mapping entry parsers", () => {
     });
   });
 
+  test("issueToTaskCard keeps latest QA verdict when latest QA markdown is empty", () => {
+    const issue: RawIssue = {
+      id: "task-qa-empty-latest",
+      title: "Carry QA verdict without content",
+      status: "ai_review",
+      issue_type: "task",
+      metadata: {
+        openducktor: {
+          documents: {
+            qaReports: [
+              {
+                markdown: "Has content",
+                verdict: "approved",
+                updatedAt: "2026-02-28T06:00:00Z",
+                updatedBy: "qa",
+                sourceTool: "odt_qa_approved",
+                revision: 1,
+              },
+              {
+                markdown: "   ",
+                verdict: "rejected",
+                updatedAt: "2026-02-28T07:00:00Z",
+                updatedBy: "qa",
+                sourceTool: "odt_qa_rejected",
+                revision: 2,
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    expect(issueToTaskCard(issue, "openducktor")).toMatchObject({
+      id: "task-qa-empty-latest",
+      documentSummary: {
+        spec: {
+          has: false,
+        },
+        plan: {
+          has: false,
+        },
+        qaReport: {
+          has: false,
+          verdict: "rejected",
+        },
+      },
+    });
+  });
+
   test("issueToTaskCard defaults QA summary to not_reviewed when no QA metadata exists", () => {
     const issue: RawIssue = {
       id: "task-qa-missing",
@@ -201,7 +250,6 @@ describe("task mapping entry parsers", () => {
       documentSummary: {
         spec: {
           has: false,
-          updatedAt: "2026-02-28T00:00:00Z",
         },
         plan: {
           has: false,

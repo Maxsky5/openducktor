@@ -157,19 +157,22 @@ export const issueToTaskCard = (issue: RawIssue, metadataNamespace: string): Tas
   const latestSpec = specEntries.length > 0 ? specEntries[specEntries.length - 1] : undefined;
   const latestPlan = planEntries.length > 0 ? planEntries[planEntries.length - 1] : undefined;
   const latestQa = qaEntries.length > 0 ? qaEntries[qaEntries.length - 1] : undefined;
+  const specHasContent = typeof latestSpec === "object" && latestSpec.markdown.trim().length > 0;
+  const planHasContent = typeof latestPlan === "object" && latestPlan.markdown.trim().length > 0;
+  const qaHasContent = typeof latestQa === "object" && latestQa.markdown.trim().length > 0;
 
   const documentSummary: TaskCard["documentSummary"] = {
     spec: {
-      has: typeof latestSpec === "object" && latestSpec.markdown.trim().length > 0,
-      ...(latestSpec ? { updatedAt: latestSpec.updatedAt } : {}),
+      has: specHasContent,
+      ...(specHasContent ? { updatedAt: latestSpec.updatedAt } : {}),
     },
     plan: {
-      has: typeof latestPlan === "object" && latestPlan.markdown.trim().length > 0,
-      ...(latestPlan ? { updatedAt: latestPlan.updatedAt } : {}),
+      has: planHasContent,
+      ...(planHasContent ? { updatedAt: latestPlan.updatedAt } : {}),
     },
     qaReport: {
-      has: typeof latestQa === "object",
-      ...(latestQa ? { updatedAt: latestQa.updatedAt } : {}),
+      has: qaHasContent,
+      ...(qaHasContent ? { updatedAt: latestQa.updatedAt } : {}),
       verdict: latestQa?.verdict ?? "not_reviewed",
     },
   };

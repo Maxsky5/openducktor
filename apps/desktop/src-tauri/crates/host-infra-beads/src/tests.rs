@@ -991,7 +991,8 @@ fn list_tasks_filters_events_and_populates_subtask_ids() -> Result<()> {
 }
 
 #[test]
-fn list_tasks_marks_qa_report_present_when_latest_markdown_is_empty() -> Result<()> {
+fn list_tasks_keeps_qa_verdict_but_marks_missing_content_when_latest_markdown_is_empty(
+) -> Result<()> {
     let repo = RepoFixture::new("list-qa-empty-markdown");
     let payload = json!([issue_value(
         "task-qa-empty",
@@ -1033,11 +1034,8 @@ fn list_tasks_marks_qa_report_present_when_latest_markdown_is_empty() -> Result<
     assert_eq!(tasks.len(), 1);
 
     let task = &tasks[0];
-    assert!(task.document_summary.qa_report.has);
-    assert_eq!(
-        task.document_summary.qa_report.updated_at.as_deref(),
-        Some("2026-02-20T10:00:00Z")
-    );
+    assert!(!task.document_summary.qa_report.has);
+    assert!(task.document_summary.qa_report.updated_at.is_none());
     assert_eq!(
         task.document_summary.qa_report.verdict,
         host_domain::QaWorkflowVerdict::Rejected

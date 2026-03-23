@@ -55,9 +55,15 @@ pub(crate) fn qa_document_presence(entries: Option<Vec<QaEntry>>) -> TaskQaDocum
         return TaskQaDocumentPresence::default();
     };
 
+    let has_content = !latest.markdown.trim().is_empty();
+
     TaskQaDocumentPresence {
-        has: true,
-        updated_at: Some(latest.updated_at.clone()),
+        has: has_content,
+        updated_at: if has_content {
+            Some(latest.updated_at.clone())
+        } else {
+            None
+        },
         verdict: qa_workflow_verdict_from_entry(&latest.verdict),
     }
 }
