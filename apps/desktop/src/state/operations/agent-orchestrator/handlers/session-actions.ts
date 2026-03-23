@@ -397,18 +397,27 @@ export const createAgentSessionActions = ({
 
     const roleRequiresHostStop = session.role === "build" || session.role === "qa";
     const hasLocalRuntimeSession = adapter.hasSession(sessionId);
+
     try {
       if (roleRequiresHostStop && session.runId) {
         await stopBuildRun(session.runId);
-      }
-
-      if (hasLocalRuntimeSession) {
-        await adapter.stopSession(sessionId);
       }
     } catch (error) {
       throw new Error(
         `Failed to stop ${session.role} session '${sessionId}': ${errorMessage(error)}`,
       );
+    }
+
+    if (hasLocalRuntimeSession) {
+      try {
+        await adapter.stopSession(sessionId);
+      } catch (error) {
+        console.warn(
+          "[agent-orchestrator] local session stop failed after host stop",
+          sessionId,
+          errorMessage(error),
+        );
+      }
     }
 
     const unsubscribe = unsubscribersRef.current.get(sessionId);

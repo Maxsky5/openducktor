@@ -410,6 +410,88 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }
   });
 
+  test("continues cleanup when local adapter stop fails after host stop", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalStopSession = adapter.stopSession;
+    adapter.hasSession = () => true;
+    adapter.stopSession = async () => {
+      throw new Error("local stop failed");
+    };
+
+    let clearCalls = 0;
+    let unsubscribeCalls = 0;
+
+    const unsubscribersRef = {
+      current: new Map<string, () => void>([
+        [
+          "session-1",
+          () => {
+            unsubscribeCalls += 1;
+          },
+        ],
+      ]),
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession(),
+      },
+    };
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef,
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[sessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {
+        clearCalls += 1;
+      },
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      stopBuildRun: async () => {},
+    });
+
+    const originalWarn = console.warn;
+    console.warn = () => {};
+
+    try {
+      await expect(actions.stopAgentSession("session-1")).resolves.toBeUndefined();
+      expect(clearCalls).toBe(1);
+      expect(unsubscribeCalls).toBe(1);
+      expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.stopSession = originalStopSession;
+      console.warn = originalWarn;
+    }
+  });
+
   test("does not stop shared runtime when build/qa session lacks runId", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
