@@ -705,6 +705,50 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("does not auto-scroll to bottom when container height changes while not near bottom", async () => {
+    const harness = await mountHarness(
+      {
+        rows: createRows(80),
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachContainer: true },
+    );
+
+    const container = harness.messagesContainerRef.current as
+      | (MockMessagesContainer & { clientHeight: number })
+      | null;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    const latestScrollListenerCall = container.addEventListener.mock.calls
+      .filter(([eventName]) => eventName === "scroll")
+      .at(-1);
+    const latestScrollListener = latestScrollListenerCall?.[1];
+    if (typeof latestScrollListener !== "function") {
+      throw new Error("Expected scroll listener");
+    }
+
+    container.scrollTop = 500;
+    await act(async () => {
+      latestScrollListener(new Event("scroll"));
+      await flush();
+    });
+
+    container.scrollTo.mockClear();
+    Object.assign(container, { clientHeight: 220 });
+
+    await act(async () => {
+      triggerResizeObservers();
+      await flush();
+    });
+
+    expect(container.scrollTo).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
   test("mock resize observers only unobserve the requested target", () => {
     const callback = mock(
       (_entries: ResizeObserverEntry[], _observer: ResizeObserver) => undefined,

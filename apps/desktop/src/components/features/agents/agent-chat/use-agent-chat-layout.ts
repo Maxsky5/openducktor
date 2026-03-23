@@ -34,6 +34,20 @@ export const resizeComposerTextareaElement = (
   overflowY: "auto" | "hidden";
 } => {
   const currentHeight = readComposerTextareaHeight(textarea);
+  const isEmptyDraft = textarea.value.length === 0;
+  if (isEmptyDraft) {
+    const nextHeight = COMPOSER_TEXTAREA_MIN_HEIGHT_PX;
+    const didHeightChange = Math.abs(currentHeight - nextHeight) > 0.5;
+    textarea.style.height = `${nextHeight}px`;
+    if (textarea.style.overflowY !== "hidden") {
+      textarea.style.overflowY = "hidden";
+    }
+    return {
+      didHeightChange,
+      overflowY: "hidden",
+    };
+  }
+
   textarea.style.height = "auto";
   const layout = computeComposerTextareaLayout(textarea.scrollHeight);
   const didHeightChange = Math.abs(currentHeight - layout.heightPx) > 0.5;
@@ -66,14 +80,17 @@ type UseAgentChatLayoutResult = {
 
 export const useAgentChatLayout = ({
   input,
-  activeSessionId: _activeSessionId,
+  activeSessionId,
 }: UseAgentChatLayoutInput): UseAgentChatLayoutResult => {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const resizeFrameIdRef = useRef<number | null>(null);
+  const previousInputRef = useRef(input);
+  const didInitializeTextareaForSessionRef = useRef(false);
   const [composerFormHeight, setComposerFormHeight] = useState(0);
 
-  const resizeComposerTextarea = useCallback((): void => {
+  const flushComposerTextareaResize = useCallback((): void => {
     const textarea = composerTextareaRef.current;
     if (!textarea) {
       return;
@@ -82,10 +99,71 @@ export const useAgentChatLayout = ({
     resizeComposerTextareaElement(textarea);
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Input string is an explicit resize trigger.
+  const resizeComposerTextarea = useCallback((): void => {
+    const requestAnimationFrameFn = globalThis.requestAnimationFrame;
+    if (typeof requestAnimationFrameFn !== "function") {
+      flushComposerTextareaResize();
+      return;
+    }
+
+    if (resizeFrameIdRef.current !== null) {
+      return;
+    }
+
+    resizeFrameIdRef.current = requestAnimationFrameFn(() => {
+      resizeFrameIdRef.current = null;
+      flushComposerTextareaResize();
+    });
+  }, [flushComposerTextareaResize]);
+
   useLayoutEffect(() => {
+    didInitializeTextareaForSessionRef.current = false;
+    const hasActiveSession = activeSessionId !== null;
+    if (hasActiveSession && resizeFrameIdRef.current !== null) {
+      const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;
+      if (typeof cancelAnimationFrameFn === "function") {
+        cancelAnimationFrameFn(resizeFrameIdRef.current);
+      }
+      resizeFrameIdRef.current = null;
+    }
+
+    flushComposerTextareaResize();
+    resizeComposerTextarea();
+  }, [activeSessionId, flushComposerTextareaResize, resizeComposerTextarea]);
+
+  useLayoutEffect(() => {
+    if (didInitializeTextareaForSessionRef.current) {
+      return;
+    }
+    if (!composerTextareaRef.current) {
+      return;
+    }
+
+    didInitializeTextareaForSessionRef.current = true;
+    flushComposerTextareaResize();
+    resizeComposerTextarea();
+  });
+
+  useEffect(() => {
+    if (previousInputRef.current === input) {
+      return;
+    }
+    previousInputRef.current = input;
     resizeComposerTextarea();
   }, [input, resizeComposerTextarea]);
+
+  useEffect(() => {
+    return () => {
+      if (resizeFrameIdRef.current === null) {
+        return;
+      }
+      const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;
+      if (typeof cancelAnimationFrameFn === "function") {
+        cancelAnimationFrameFn(resizeFrameIdRef.current);
+      }
+      resizeFrameIdRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     const form = composerFormRef.current;
