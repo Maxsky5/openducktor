@@ -20,7 +20,12 @@ import {
   readMessageCompletedAt,
 } from "./schemas";
 import type { EventStreamRuntime } from "./shared";
-import { applyDeltaToPart, isReasoningDeltaField } from "./shared";
+import {
+  applyDeltaToPart,
+  emitSessionIdle,
+  isReasoningDeltaField,
+  markSessionActive,
+} from "./shared";
 
 const emitAssistantPart = (runtime: EventStreamRuntime, part: Part, roleHint?: string): boolean => {
   const mapped = mapPartToAgentStreamPart(part);
@@ -32,6 +37,8 @@ const emitAssistantPart = (runtime: EventStreamRuntime, part: Part, roleHint?: s
   if (mappedRole !== "assistant") {
     return false;
   }
+
+  markSessionActive(runtime);
 
   runtime.emit(runtime.sessionId, {
     type: "assistant_part",
@@ -154,18 +161,28 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
 
   const completedAt = infoRecord ? readMessageCompletedAt(infoRecord) : undefined;
   const finish = infoRecord ? readStringProp(infoRecord, ["finish"]) : undefined;
+  const shouldEmitIdle =
+    messageId !== undefined &&
+    role === "assistant" &&
+    (completedAt !== undefined || finish === "stop");
   const shouldEmitCompletedMessage =
     messageId !== undefined &&
     role === "assistant" &&
     normalizedParts.length > 0 &&
     (completedAt !== undefined || finish === "stop");
   if (!shouldEmitCompletedMessage || !messageId) {
+    if (shouldEmitIdle) {
+      emitSessionIdle(runtime, messageId);
+    }
     return true;
   }
 
   const text = readTextFromParts(normalizedParts);
   const visible = sanitizeAssistantMessage(text);
   if (visible.length === 0) {
+    if (shouldEmitIdle) {
+      emitSessionIdle(runtime, messageId);
+    }
     return true;
   }
 
@@ -174,6 +191,9 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
   const session = runtime.getSession(runtime.sessionId);
   const emittedAssistantMessageIds = session?.emittedAssistantMessageIds;
   if (emittedAssistantMessageIds?.has(messageId)) {
+    if (shouldEmitIdle) {
+      emitSessionIdle(runtime, messageId);
+    }
     return true;
   }
 
@@ -187,6 +207,9 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     ...(assistantModel ? { model: assistantModel } : {}),
   });
   emittedAssistantMessageIds?.add(messageId);
+  if (shouldEmitIdle) {
+    emitSessionIdle(runtime, messageId);
+  }
   return true;
 };
 
@@ -210,6 +233,7 @@ const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRuntime):
     const updatedPart = applyDeltaToPart(knownPart, field, delta);
     if (updatedPart) {
       runtime.partsById.set(partId, updatedPart);
+      markSessionActive(runtime);
       emitAssistantPart(runtime, updatedPart);
       return true;
     }
@@ -233,6 +257,8 @@ const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRuntime):
     return true;
   }
   const channel = isReasoningDeltaField(field) ? "reasoning" : "text";
+
+  markSessionActive(runtime);
 
   runtime.emit(runtime.sessionId, {
     type: "assistant_delta",
