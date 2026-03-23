@@ -13,8 +13,10 @@ export function useAgentChatResizeSync({
   syncBottomIfPinned,
 }: UseAgentChatResizeSyncInput): void {
   const contentResizeFrameRef = useRef<number | null>(null);
+  const contentSettleFrameRef = useRef<number | null>(null);
   const observedContentHeightRef = useRef<number | null>(null);
   const containerResizeFrameRef = useRef<number | null>(null);
+  const containerSettleFrameRef = useRef<number | null>(null);
   const observedContainerHeightRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -30,8 +32,8 @@ export function useAgentChatResizeSync({
       return;
     }
 
-    const syncAfterResize = () => {
-      contentResizeFrameRef.current = null;
+    const runContentSyncAfterSettle = () => {
+      contentSettleFrameRef.current = null;
       const nextContent = messagesContentRef.current;
       if (!nextContent) {
         return;
@@ -47,12 +49,36 @@ export function useAgentChatResizeSync({
       syncBottomIfPinned();
     };
 
+    const syncAfterResize = () => {
+      contentResizeFrameRef.current = null;
+      const requestAnimationFrameFn = globalThis.requestAnimationFrame;
+      if (typeof requestAnimationFrameFn !== "function") {
+        runContentSyncAfterSettle();
+        return;
+      }
+      if (contentSettleFrameRef.current !== null) {
+        return;
+      }
+
+      contentSettleFrameRef.current = requestAnimationFrameFn(() => {
+        runContentSyncAfterSettle();
+      });
+    };
+
     const scheduleResizeSync = () => {
       if (contentResizeFrameRef.current !== null) {
         return;
       }
 
-      contentResizeFrameRef.current = globalThis.requestAnimationFrame(syncAfterResize);
+      const requestAnimationFrameFn = globalThis.requestAnimationFrame;
+      if (typeof requestAnimationFrameFn !== "function") {
+        syncAfterResize();
+        return;
+      }
+
+      contentResizeFrameRef.current = requestAnimationFrameFn(() => {
+        syncAfterResize();
+      });
     };
 
     const observer = new ResizeObserver(() => {
@@ -65,6 +91,10 @@ export function useAgentChatResizeSync({
       if (contentResizeFrameRef.current !== null) {
         globalThis.cancelAnimationFrame(contentResizeFrameRef.current);
         contentResizeFrameRef.current = null;
+      }
+      if (contentSettleFrameRef.current !== null) {
+        globalThis.cancelAnimationFrame(contentSettleFrameRef.current);
+        contentSettleFrameRef.current = null;
       }
     };
   }, [messagesContainerRef, messagesContentRef, syncBottomIfPinned]);
@@ -81,8 +111,8 @@ export function useAgentChatResizeSync({
       return;
     }
 
-    const syncAfterResize = () => {
-      containerResizeFrameRef.current = null;
+    const runContainerSyncAfterSettle = () => {
+      containerSettleFrameRef.current = null;
       const nextContainer = messagesContainerRef.current;
       if (!nextContainer) {
         return;
@@ -98,12 +128,36 @@ export function useAgentChatResizeSync({
       syncBottomIfPinned();
     };
 
+    const syncAfterResize = () => {
+      containerResizeFrameRef.current = null;
+      const requestAnimationFrameFn = globalThis.requestAnimationFrame;
+      if (typeof requestAnimationFrameFn !== "function") {
+        runContainerSyncAfterSettle();
+        return;
+      }
+      if (containerSettleFrameRef.current !== null) {
+        return;
+      }
+
+      containerSettleFrameRef.current = requestAnimationFrameFn(() => {
+        runContainerSyncAfterSettle();
+      });
+    };
+
     const scheduleResizeSync = () => {
       if (containerResizeFrameRef.current !== null) {
         return;
       }
 
-      containerResizeFrameRef.current = globalThis.requestAnimationFrame(syncAfterResize);
+      const requestAnimationFrameFn = globalThis.requestAnimationFrame;
+      if (typeof requestAnimationFrameFn !== "function") {
+        syncAfterResize();
+        return;
+      }
+
+      containerResizeFrameRef.current = requestAnimationFrameFn(() => {
+        syncAfterResize();
+      });
     };
 
     const observer = new ResizeObserver(() => {
@@ -116,6 +170,10 @@ export function useAgentChatResizeSync({
       if (containerResizeFrameRef.current !== null) {
         globalThis.cancelAnimationFrame(containerResizeFrameRef.current);
         containerResizeFrameRef.current = null;
+      }
+      if (containerSettleFrameRef.current !== null) {
+        globalThis.cancelAnimationFrame(containerSettleFrameRef.current);
+        containerSettleFrameRef.current = null;
       }
     };
   }, [messagesContainerRef, syncBottomIfPinned]);

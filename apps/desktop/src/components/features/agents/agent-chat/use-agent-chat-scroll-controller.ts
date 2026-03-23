@@ -195,7 +195,10 @@ export function useAgentChatScrollController({
       return;
     }
 
-    if (!isPinnedToBottomRef.current) {
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    const isWithinBottomThreshold = distanceFromBottom <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
+    if (!isPinnedToBottomRef.current && !isWithinBottomThreshold) {
       return;
     }
 
@@ -203,6 +206,7 @@ export function useAgentChatScrollController({
       top: container.scrollHeight,
       behavior: "auto",
     });
+    isPinnedToBottomRef.current = true;
     setIsNearBottom(true);
     setIsNearTop(false);
   }, [messagesContainerRef]);
