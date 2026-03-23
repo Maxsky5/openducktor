@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { subscribeOpencodeEvents } from "./event-stream";
+import { emitIdleForSession } from "./event-stream/shared";
 import type { SessionInput, SessionRecord } from "./types";
 
 const makeClientWithEvents = (events: Event[]): OpencodeClient => {
@@ -267,6 +268,41 @@ describe("event-stream", () => {
     expect(idleEvents).toHaveLength(1);
   });
 
+  test("deduplicates session_idle when session.idle arrives before a terminal assistant update", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "session.idle",
+        properties: {
+          directory: "/repo",
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-message-idle-first",
+            role: "assistant",
+            sessionID: "external-session-1",
+            finish: "stop",
+          },
+          parts: [
+            {
+              id: "text-idle-first-1",
+              sessionID: "external-session-1",
+              messageID: "assistant-message-idle-first",
+              type: "text",
+              text: "Done after idle",
+              time: { start: 1, end: 1 },
+            },
+          ],
+        },
+      } as unknown as Event,
+    ]);
+
+    const idleEvents = emitted.filter((event) => event.type === "session_idle");
+    expect(idleEvents).toHaveLength(1);
+  });
+
   test("deduplicates session_idle across repeated terminal message updates", async () => {
     const terminalEvent = {
       type: "message.updated",
@@ -294,6 +330,63 @@ describe("event-stream", () => {
     } as unknown as Event;
 
     const emitted = await runEventStream([terminalEvent, terminalEvent]);
+
+    const idleEvents = emitted.filter((event) => event.type === "session_idle");
+    expect(idleEvents).toHaveLength(1);
+  });
+
+  test("deduplicates prompt-path idle against a later stream terminal update for the same message", async () => {
+    const client = makeClientWithEvents([]);
+    const sessionRecord = makeSessionRecord(client);
+    const emitted: AgentEvent[] = [];
+
+    emitIdleForSession(
+      sessionRecord,
+      {
+        sessionId: sessionRecord.summary.sessionId,
+        emit: (_sessionId, event) => {
+          emitted.push(event);
+        },
+        now: () => "2026-02-22T12:00:00.000Z",
+      },
+      "assistant-message-prompt-bridge",
+    );
+
+    await subscribeOpencodeEvents({
+      context: {
+        sessionId: "local-session-1",
+        externalSessionId: "external-session-1",
+        input: makeSessionInput(),
+      },
+      client: makeClientWithEvents([
+        {
+          type: "message.updated",
+          properties: {
+            info: {
+              id: "assistant-message-prompt-bridge",
+              role: "assistant",
+              sessionID: "external-session-1",
+              finish: "stop",
+            },
+            parts: [
+              {
+                id: "step-prompt-bridge-1",
+                sessionID: "external-session-1",
+                messageID: "assistant-message-prompt-bridge",
+                type: "step-finish",
+                reason: "stop",
+              },
+            ],
+          },
+        } as unknown as Event,
+      ]),
+      controller: new AbortController(),
+      now: () => "2026-02-22T12:00:01.000Z",
+      emit: (_sessionId, event) => {
+        emitted.push(event);
+      },
+      getSession: () => sessionRecord,
+    });
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
     expect(idleEvents).toHaveLength(1);

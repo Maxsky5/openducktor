@@ -27,7 +27,12 @@ import {
   markSessionActive,
 } from "./shared";
 
-const emitAssistantPart = (runtime: EventStreamRuntime, part: Part, roleHint?: string): boolean => {
+const emitAssistantPart = (
+  runtime: EventStreamRuntime,
+  part: Part,
+  roleHint?: string,
+  markActive = true,
+): boolean => {
   const mapped = mapPartToAgentStreamPart(part);
   if (!mapped) {
     return false;
@@ -38,7 +43,9 @@ const emitAssistantPart = (runtime: EventStreamRuntime, part: Part, roleHint?: s
     return false;
   }
 
-  markSessionActive(runtime);
+  if (markActive) {
+    markSessionActive(runtime);
+  }
 
   runtime.emit(runtime.sessionId, {
     type: "assistant_part",
@@ -53,12 +60,13 @@ const emitKnownAssistantPartsForMessage = (
   runtime: EventStreamRuntime,
   messageId: string,
   roleHint?: string,
+  markActive = true,
 ): void => {
   for (const part of runtime.partsById.values()) {
     if (part.messageID !== messageId) {
       continue;
     }
-    emitAssistantPart(runtime, part, roleHint);
+    emitAssistantPart(runtime, part, roleHint, markActive);
   }
 };
 
@@ -118,10 +126,19 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     ? readStringProp(infoRecord, ["id", "messageID", "messageId", "message_id"])
     : undefined;
   const role = infoRecord ? readStringProp(infoRecord, ["role"]) : undefined;
+  const session = runtime.getSession(runtime.sessionId);
   const previousRole = messageId ? runtime.messageRoleById.get(messageId) : undefined;
   if (messageId && role) {
     runtime.messageRoleById.set(messageId, role);
   }
+
+  const completedAt = infoRecord ? readMessageCompletedAt(infoRecord) : undefined;
+  const finish = infoRecord ? readStringProp(infoRecord, ["finish"]) : undefined;
+  const shouldEmitIdle =
+    messageId !== undefined &&
+    role === "assistant" &&
+    (completedAt !== undefined || finish === "stop");
+  const preserveIdleState = shouldEmitIdle && session?.hasIdleSinceActivity === true;
 
   const normalizedParts: Part[] = [];
   const rawParts = readRawMessageParts(properties, infoRecord);
@@ -146,7 +163,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
 
       runtime.partsById.set(rawPartId, partWithPendingDelta);
       normalizedParts.push(partWithPendingDelta);
-      emitAssistantPart(runtime, partWithPendingDelta, role);
+      emitAssistantPart(runtime, partWithPendingDelta, role, !preserveIdleState);
     }
   }
 
@@ -156,15 +173,8 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     previousRole !== "assistant" &&
     normalizedParts.length === 0
   ) {
-    emitKnownAssistantPartsForMessage(runtime, messageId, role);
+    emitKnownAssistantPartsForMessage(runtime, messageId, role, !preserveIdleState);
   }
-
-  const completedAt = infoRecord ? readMessageCompletedAt(infoRecord) : undefined;
-  const finish = infoRecord ? readStringProp(infoRecord, ["finish"]) : undefined;
-  const shouldEmitIdle =
-    messageId !== undefined &&
-    role === "assistant" &&
-    (completedAt !== undefined || finish === "stop");
   const shouldEmitCompletedMessage =
     messageId !== undefined &&
     role === "assistant" &&
@@ -188,7 +198,6 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
 
   const totalTokens = extractMessageTotalTokens(infoRecord, normalizedParts);
   const assistantModel = readMessageModelSelection(infoRecord);
-  const session = runtime.getSession(runtime.sessionId);
   const emittedAssistantMessageIds = session?.emittedAssistantMessageIds;
   if (emittedAssistantMessageIds?.has(messageId)) {
     if (shouldEmitIdle) {
