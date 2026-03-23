@@ -412,7 +412,6 @@ impl AppService {
             };
 
             if session.role.as_str() != "build" {
-                active_roles.insert(session.role.as_str());
                 continue;
             }
 

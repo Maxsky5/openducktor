@@ -97,10 +97,53 @@ describe("reattach-live-session", () => {
       toLiveSessionState: () => "idle",
     });
 
-    await reattachLiveSession(sessionRecordFixture);
+    const reattached = await reattachLiveSession(sessionRecordFixture);
 
+    expect(reattached).toBe(true);
     expect(resumed).toBe(true);
     expect(attachedSessionId === "session-1").toBe(true);
     expect(state.pendingPermissions).toEqual([]);
+  });
+
+  test("returns false when no live snapshot matches the persisted session", async () => {
+    let state = sessionStateFixture;
+
+    const reattachLiveSession = createReattachLiveSession({
+      adapter: {
+        hasSession: () => true,
+      },
+      repoPath: "/tmp/repo",
+      taskId: "task-1",
+      taskRef: { current: [] },
+      sessionsRef: { current: { "session-1": sessionStateFixture } },
+      updateSession: (sessionId, updater) => {
+        if (sessionId !== "session-1") {
+          return;
+        }
+        state = updater(state);
+      },
+      attachSessionListener: () => {},
+      promptOverrides: {},
+      resolveHydrationRuntime: async () => ({
+        ok: true,
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+        },
+      }),
+      resumeMissingLiveSession: async () => {},
+      listLiveAgentSessions: async () => [],
+      isStaleRepoOperation: () => false,
+      toLiveSessionState: () => "idle",
+    });
+
+    const reattached = await reattachLiveSession(sessionRecordFixture);
+
+    expect(reattached).toBe(false);
+    expect(state.pendingPermissions).toEqual(sessionStateFixture.pendingPermissions);
   });
 });

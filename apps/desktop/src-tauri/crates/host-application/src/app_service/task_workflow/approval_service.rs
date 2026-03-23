@@ -1041,7 +1041,6 @@ fn latest_builder_cleanup_target(
         let right_key = right.started_at.as_str();
         left_key
             .cmp(right_key)
-            .then_with(|| left.started_at.cmp(&right.started_at))
             .then_with(|| left.session_id.cmp(&right.session_id))
     });
     builder_sessions.reverse();

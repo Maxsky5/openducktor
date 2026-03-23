@@ -78,7 +78,13 @@ export const createEnsureSessionReady = ({
   loadTaskDocuments,
   loadRepoPromptOverrides,
 }: EnsureSessionReadyDependencies) => {
-  return async (sessionId: string): Promise<void> => {
+  return async (
+    sessionId: string,
+    options?: {
+      allowPendingInput?: boolean;
+    },
+  ): Promise<void> => {
+    const allowPendingInput = options?.allowPendingInput === true;
     const repoPath = requireActiveRepo(activeRepo);
     const isStaleRepoOperation = createRepoStaleGuard({
       repoPath,
@@ -175,7 +181,7 @@ export const createEnsureSessionReady = ({
           }),
           { persist: false },
         );
-        if (hasPendingInput({ pendingPermissions, pendingQuestions })) {
+        if (!allowPendingInput && hasPendingInput({ pendingPermissions, pendingQuestions })) {
           throw new Error(PENDING_INPUT_NOT_READY_ERROR);
         }
         return;
@@ -276,7 +282,7 @@ export const createEnsureSessionReady = ({
       pendingQuestions,
     }));
 
-    if (hasPendingInput({ pendingPermissions, pendingQuestions })) {
+    if (!allowPendingInput && hasPendingInput({ pendingPermissions, pendingQuestions })) {
       throw new Error(PENDING_INPUT_NOT_READY_ERROR);
     }
 

@@ -49,14 +49,14 @@ export const createReattachLiveSession = ({
   isStaleRepoOperation: _isStaleRepoOperation,
   toLiveSessionState,
 }: CreateReattachLiveSessionArgs) => {
-  return async (record: AgentSessionRecord): Promise<void> => {
+  return async (record: AgentSessionRecord): Promise<boolean> => {
     if (typeof adapter.hasSession !== "function" || !attachSessionListener) {
-      return;
+      return false;
     }
 
     const runtimeResolution = await resolveHydrationRuntime(record);
     if (!runtimeResolution.ok) {
-      return;
+      return false;
     }
 
     const externalSessionId = record.externalSessionId ?? record.sessionId;
@@ -70,7 +70,7 @@ export const createReattachLiveSession = ({
       (session) => session.externalSessionId === externalSessionId,
     );
     if (!liveSession) {
-      return;
+      return false;
     }
 
     const nextStatus = toLiveSessionState(liveSession.status);
@@ -106,5 +106,6 @@ export const createReattachLiveSession = ({
       }),
       { persist: false },
     );
+    return true;
   };
 };

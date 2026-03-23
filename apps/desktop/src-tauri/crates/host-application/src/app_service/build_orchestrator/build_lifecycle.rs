@@ -425,7 +425,7 @@ impl AppService {
 }
 
 fn build_session_sort_key(session: &AgentSessionDocument) -> (&str, &str) {
-    (session.started_at.as_str(), session.started_at.as_str())
+    (session.started_at.as_str(), session.session_id.as_str())
 }
 
 fn is_active_build_session(session: &AgentSessionDocument) -> bool {

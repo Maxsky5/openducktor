@@ -39,7 +39,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       setSessionsById: () => {},
       sessionsRef: { current: {} },
-      taskRef: { current: [] },
+      taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
       repoEpochRef: { current: 1 },
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
@@ -274,7 +274,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       setSessionsById: () => {},
       sessionsRef,
-      taskRef: { current: [] },
+      taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
       repoEpochRef: { current: 1 },
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
@@ -352,7 +352,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       setSessionsById: () => {},
       sessionsRef,
-      taskRef: { current: [] },
+      taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
       repoEpochRef: { current: 1 },
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
@@ -421,7 +421,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       setSessionsById: () => {},
       sessionsRef,
-      taskRef: { current: [] },
+      taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
       repoEpochRef: { current: 1 },
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
@@ -465,6 +465,100 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.updateSessionModel = originalUpdateSessionModel;
+      adapter.replyPermission = originalReplyPermission;
+    }
+  });
+
+  test("replies to permission after resuming a session with pending live input", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalResumeSession = adapter.resumeSession;
+    const originalReplyPermission = adapter.replyPermission;
+    let resumeCalls = 0;
+    let replyCalls = 0;
+    adapter.hasSession = () => false;
+    adapter.listLiveAgentSessionSnapshots = async () => [
+      {
+        externalSessionId: "external-session-1",
+        title: "Build",
+        workingDirectory: "/tmp/repo",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        status: { type: "idle" },
+        pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: [".env"] }],
+        pendingQuestions: [],
+      },
+    ];
+    adapter.resumeSession = async (input) => {
+      resumeCalls += 1;
+      return {
+        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
+        role: input.role,
+        scenario: input.scenario,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        status: "idle",
+        runtimeKind: input.runtimeKind,
+      };
+    };
+    adapter.replyPermission = async () => {
+      replyCalls += 1;
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          status: "stopped",
+          externalSessionId: "external-session-1",
+          pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: [".env"] }],
+        }),
+      },
+    };
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[sessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+    });
+
+    try {
+      await actions.replyAgentPermission("session-1", "perm-1", "once");
+      expect(resumeCalls).toBe(1);
+      expect(replyCalls).toBe(1);
+      expect(sessionsRef.current["session-1"]?.pendingPermissions).toEqual([]);
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.resumeSession = originalResumeSession;
       adapter.replyPermission = originalReplyPermission;
     }
   });
@@ -521,7 +615,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       setSessionsById: () => {},
       sessionsRef,
-      taskRef: { current: [] },
+      taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
       repoEpochRef: { current: 1 },
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
@@ -563,6 +657,118 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(message.meta.metadata?.answers).toEqual([["yes"]]);
     } finally {
       adapter.hasSession = originalHasSession;
+      adapter.replyQuestion = originalReplyQuestion;
+    }
+  });
+
+  test("answers question after resuming a session with pending live input", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalResumeSession = adapter.resumeSession;
+    const originalReplyQuestion = adapter.replyQuestion;
+    let resumeCalls = 0;
+    let replyCalls = 0;
+    adapter.hasSession = () => false;
+    adapter.listLiveAgentSessionSnapshots = async () => [
+      {
+        externalSessionId: "external-session-1",
+        title: "Build",
+        workingDirectory: "/tmp/repo",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        status: { type: "idle" },
+        pendingPermissions: [],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [{ header: "Confirm", question: "Confirm", options: [], custom: false }],
+          },
+        ],
+      },
+    ];
+    adapter.resumeSession = async (input) => {
+      resumeCalls += 1;
+      return {
+        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
+        role: input.role,
+        scenario: input.scenario,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        status: "idle",
+        runtimeKind: input.runtimeKind,
+      };
+    };
+    adapter.replyQuestion = async () => {
+      replyCalls += 1;
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          status: "stopped",
+          externalSessionId: "external-session-1",
+          pendingQuestions: [
+            {
+              requestId: "question-1",
+              questions: [
+                {
+                  header: "Confirm",
+                  question: "Confirm",
+                  options: [],
+                  multiple: false,
+                  custom: false,
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    };
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map() },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[sessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+    });
+
+    try {
+      await actions.answerAgentQuestion("session-1", "question-1", [["yes"]]);
+      expect(resumeCalls).toBe(1);
+      expect(replyCalls).toBe(1);
+      expect(sessionsRef.current["session-1"]?.pendingQuestions).toEqual([]);
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.resumeSession = originalResumeSession;
       adapter.replyQuestion = originalReplyQuestion;
     }
   });

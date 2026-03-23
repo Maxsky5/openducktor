@@ -723,6 +723,48 @@ fn task_reset_implementation_rejects_active_builder_or_qa_sessions() -> Result<(
 }
 
 #[test]
+fn task_reset_implementation_ignores_stale_qa_sessions_with_persisted_external_ids() -> Result<()> {
+    let repo_path = unique_temp_path("reset-implementation-stale-qa-session-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let task = make_task("task-1", "task", TaskStatus::InProgress);
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    let repo_config = host_infra_system::RepoConfig {
+        branch_prefix: "odt".to_string(),
+        ..Default::default()
+    };
+    service.workspace_update_repo_config(&repo_path.to_string_lossy(), repo_config)?;
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "qa-session".to_string(),
+        external_session_id: Some("external-qa-session".to_string()),
+        role: "qa".to_string(),
+        scenario: "qa_review".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "opencode".to_string(),
+        working_directory: repo_path.to_string_lossy().to_string(),
+        selected_model: None,
+    }];
+
+    let reset = service.task_reset_implementation(&repo_path.to_string_lossy(), "task-1")?;
+
+    assert_eq!(reset.status, TaskStatus::Open);
+    Ok(())
+}
+
+#[test]
 fn task_reset_implementation_rejects_live_runtime_even_without_persisted_session_status(
 ) -> Result<()> {
     let repo_path = unique_temp_path("reset-implementation-live-runtime-repo");

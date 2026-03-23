@@ -494,7 +494,26 @@ export const createLoadAgentSessions = ({
           offset,
           offset + SESSION_HISTORY_HYDRATION_CONCURRENCY,
         );
-        await Promise.all(batch.map((record) => maybeResumeLiveRecord(record)));
+        const reattachResults = await Promise.all(
+          batch.map(async (record) => ({
+            record,
+            reattached: await maybeResumeLiveRecord(record),
+          })),
+        );
+        for (const { record, reattached } of reattachResults) {
+          if (reattached) {
+            continue;
+          }
+          updateSession(
+            record.sessionId,
+            (current) => ({
+              ...current,
+              pendingPermissions: [],
+              pendingQuestions: [],
+            }),
+            { persist: false },
+          );
+        }
       }
     }
 

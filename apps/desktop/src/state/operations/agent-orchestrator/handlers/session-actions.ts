@@ -444,7 +444,7 @@ export const createAgentSessionActions = ({
     message?: string,
   ): Promise<void> => {
     if (!adapter.hasSession(sessionId)) {
-      await ensureSessionReady(sessionId);
+      await ensureSessionReady(sessionId, { allowPendingInput: true });
     }
     markTurnStartedIfMissing(
       turnStartedAtBySessionRef,
@@ -477,7 +477,7 @@ export const createAgentSessionActions = ({
     answers: string[][],
   ): Promise<void> => {
     if (!adapter.hasSession(sessionId)) {
-      await ensureSessionReady(sessionId);
+      await ensureSessionReady(sessionId, { allowPendingInput: true });
     }
     markTurnStartedIfMissing(
       turnStartedAtBySessionRef,

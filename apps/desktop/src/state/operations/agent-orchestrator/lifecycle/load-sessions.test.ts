@@ -591,7 +591,7 @@ describe("agent-orchestrator-load-sessions", () => {
       taskId: "task-1",
       role: "build",
       scenario: "build_implementation_start",
-      status: "running",
+      status: "stopped",
       startedAt: "2026-02-22T08:00:00.000Z",
       runtimeKind: "opencode",
       runtimeId: "runtime-live",
@@ -1549,7 +1549,7 @@ describe("agent-orchestrator-load-sessions", () => {
       taskId: "task-1",
       role: "build",
       scenario: "build_implementation_start",
-      status: "running",
+      status: "stopped",
       startedAt: "2026-02-22T08:00:00.000Z",
       updatedAt: "2026-02-22T08:00:00.000Z",
       workingDirectory: "/tmp/repo/worktree",
@@ -2788,8 +2788,49 @@ describe("agent-orchestrator-load-sessions", () => {
   });
 
   test("does not reattach adapter-held sessions when the runtime no longer reports them live", async () => {
-    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
-    let state: Record<string, AgentSessionState> = {};
+    const existingSession: AgentSessionState = {
+      sessionId: "session-1",
+      externalSessionId: "external-1",
+      taskId: "task-1",
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "stopped",
+      startedAt: "2026-02-22T08:00:00.000Z",
+      runtimeKind: "opencode",
+      runtimeId: "runtime-1",
+      runId: null,
+      runtimeEndpoint: "http://127.0.0.1:4555",
+      workingDirectory: "/tmp/repo/worktree",
+      messages: [],
+      draftAssistantText: "",
+      draftAssistantMessageId: null,
+      draftReasoningText: "",
+      draftReasoningMessageId: null,
+      contextUsage: null,
+      pendingPermissions: [{ requestId: "permission-1", permission: "read", patterns: [".env"] }],
+      pendingQuestions: [
+        {
+          requestId: "question-1",
+          questions: [
+            {
+              header: "Continue",
+              question: "Proceed?",
+              options: [],
+              custom: true,
+            },
+          ],
+        },
+      ],
+      todos: [],
+      modelCatalog: null,
+      selectedModel: null,
+      isLoadingModelCatalog: false,
+      promptOverrides: {},
+    };
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: { "session-1": existingSession },
+    };
+    let state: Record<string, AgentSessionState> = sessionsRef.current;
     let attachedListeners = 0;
 
     const setSessionsById = (
@@ -2886,6 +2927,8 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(attachedListeners).toBe(0);
     expect(state["session-1"]?.status).toBe("stopped");
     expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4555");
+    expect(state["session-1"]?.pendingPermissions).toEqual([]);
+    expect(state["session-1"]?.pendingQuestions).toEqual([]);
   });
 
   test("skips hydration when repo epoch changes while loading persisted sessions", async () => {
