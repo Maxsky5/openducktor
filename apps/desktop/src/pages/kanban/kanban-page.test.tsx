@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoConfig,
@@ -186,128 +186,6 @@ const createRepoConfigFixture = (promptOverrides: RepoPromptOverrides = {}): Rep
   },
 });
 
-mock.module("sonner", () => ({
-  toast: {
-    success: toastSuccessMock,
-    error: toastErrorMock,
-  },
-}));
-
-mock.module("@/state/operations/host", () => ({
-  host: {
-    workspaceGetRepoConfig: workspaceGetRepoConfigMock,
-    workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
-    buildContinuationTargetGet: buildContinuationTargetGetMock,
-  },
-}));
-
-mock.module("@/state/app-state-contexts", () => ({
-  useRuntimeDefinitionsContext: () => ({
-    runtimeDefinitions: RUNTIME_DEFINITIONS,
-    isLoadingRuntimeDefinitions: false,
-    runtimeDefinitionsError: null,
-    refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
-  }),
-}));
-
-mock.module("@/components/features/kanban", () => ({
-  KanbanColumn: (props: Record<string, unknown>): ReactElement | null => {
-    latestKanbanColumnProps = props;
-    return null;
-  },
-  TaskComposerDialog: (): ReactElement | null => null,
-  TaskDetailsSheet: (): ReactElement | null => null,
-}));
-
-mock.module("./kanban-session-start-modal", () => ({
-  KanbanSessionStartModal: ({ model }: { model: Record<string, unknown> }): ReactElement | null => {
-    latestSessionStartModalModel = model;
-    return null;
-  },
-}));
-
-mock.module("@/components/features/pull-requests/merged-pull-request-confirm-dialog", () => ({
-  MergedPullRequestConfirmDialog: (props: Record<string, unknown>): ReactElement | null => {
-    latestMergedPullRequestModalProps = props;
-    return null;
-  },
-}));
-
-mock.module("./task-reset-implementation-modal", () => ({
-  TaskResetImplementationModal: ({
-    model,
-  }: {
-    model: Record<string, unknown> | null;
-  }): ReactElement | null => {
-    latestResetImplementationModalModel = model;
-    return null;
-  },
-}));
-
-mock.module("@/features/human-review-feedback/human-review-feedback-modal", () => ({
-  HumanReviewFeedbackModal: ({
-    model,
-  }: {
-    model: Record<string, unknown> | null;
-  }): ReactElement | null => {
-    latestHumanReviewFeedbackModalModel = model;
-    return null;
-  },
-}));
-
-mock.module("@/state", () => ({
-  AppStateProvider: ({ children }: { children: ReactElement }): ReactElement => children,
-  useWorkspaceState: () => ({
-    activeRepo: "/repo",
-    isSwitchingWorkspace: false,
-    loadRepoSettings: async () => REPO_SETTINGS_FIXTURE,
-  }),
-  useAgentState: () => ({
-    sessions: currentSessionsFixture,
-    bootstrapTaskSessions: bootstrapTaskSessionsMock,
-    hydrateRequestedTaskSessionHistory: hydrateRequestedTaskSessionHistoryMock,
-    reconcileLiveTaskSessions: async () => {},
-    loadAgentSessions: loadAgentSessionsMock,
-    removeAgentSessions: removeAgentSessionsMock,
-    startAgentSession: startAgentSessionMock,
-    forkAgentSession: async () => "session-forked",
-    sendAgentMessage: sendAgentMessageMock,
-    updateAgentSessionModel: updateAgentSessionModelMock,
-  }),
-  useTasksState: () => ({
-    tasks: [currentTaskFixture],
-    runs: [],
-    isLoadingTasks: false,
-    createTask: async () => {},
-    updateTask: async () => {},
-    refreshTasks: async () => {},
-    syncPullRequests: async () => {},
-    linkMergedPullRequest: async () => {},
-    cancelLinkMergedPullRequest: () => {},
-    unlinkPullRequest: async () => {},
-    detectingPullRequestTaskId: null,
-    linkingMergedPullRequestTaskId: currentLinkingMergedPullRequestTaskId,
-    unlinkingPullRequestTaskId: null,
-    pendingMergedPullRequest: currentPendingMergedPullRequest,
-    deleteTask: deleteTaskMock,
-    resetTaskImplementation: resetTaskImplementationMock,
-    transitionTask: async () => {},
-    deferTask: deferTaskMock,
-    resumeDeferredTask: resumeDeferredTaskMock,
-    humanApproveTask: humanApproveTaskMock,
-    humanRequestChangesTask: humanRequestChangesTaskMock,
-  }),
-  useChecksState: () => ({
-    beadsCheck: {
-      beadsOk: true,
-      beadsPath: "/tmp/beads.db",
-      beadsError: null,
-    },
-  }),
-  useDelegationState: () => ({}),
-  useSpecState: () => ({}),
-}));
-
 const renderPage = async (): Promise<ReactTestRenderer> => {
   const { KanbanPage } = await import("./kanban-page");
   const LocationProbe = (): ReactElement | null => {
@@ -352,6 +230,134 @@ const waitForMockCall = async (
 };
 
 describe("KanbanPage session start modal flow", () => {
+  beforeAll(() => {
+    mock.module("sonner", () => ({
+      toast: {
+        success: toastSuccessMock,
+        error: toastErrorMock,
+      },
+    }));
+
+    mock.module("@/state/operations/host", () => ({
+      host: {
+        workspaceGetRepoConfig: workspaceGetRepoConfigMock,
+        workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
+        buildContinuationTargetGet: buildContinuationTargetGetMock,
+      },
+    }));
+
+    mock.module("@/state/app-state-contexts", () => ({
+      useRuntimeDefinitionsContext: () => ({
+        runtimeDefinitions: RUNTIME_DEFINITIONS,
+        isLoadingRuntimeDefinitions: false,
+        runtimeDefinitionsError: null,
+        refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
+      }),
+    }));
+
+    mock.module("@/components/features/kanban", () => ({
+      KanbanColumn: (props: Record<string, unknown>): ReactElement | null => {
+        latestKanbanColumnProps = props;
+        return null;
+      },
+      TaskComposerDialog: (): ReactElement | null => null,
+      TaskDetailsSheet: (): ReactElement | null => null,
+    }));
+
+    mock.module("./kanban-session-start-modal", () => ({
+      KanbanSessionStartModal: ({
+        model,
+      }: {
+        model: Record<string, unknown>;
+      }): ReactElement | null => {
+        latestSessionStartModalModel = model;
+        return null;
+      },
+    }));
+
+    mock.module("@/components/features/pull-requests/merged-pull-request-confirm-dialog", () => ({
+      MergedPullRequestConfirmDialog: (props: Record<string, unknown>): ReactElement | null => {
+        latestMergedPullRequestModalProps = props;
+        return null;
+      },
+    }));
+
+    mock.module("./task-reset-implementation-modal", () => ({
+      TaskResetImplementationModal: ({
+        model,
+      }: {
+        model: Record<string, unknown> | null;
+      }): ReactElement | null => {
+        latestResetImplementationModalModel = model;
+        return null;
+      },
+    }));
+
+    mock.module("@/features/human-review-feedback/human-review-feedback-modal", () => ({
+      HumanReviewFeedbackModal: ({
+        model,
+      }: {
+        model: Record<string, unknown> | null;
+      }): ReactElement | null => {
+        latestHumanReviewFeedbackModalModel = model;
+        return null;
+      },
+    }));
+
+    mock.module("@/state/app-state-provider", () => ({
+      AppStateProvider: ({ children }: { children: ReactElement }): ReactElement => children,
+      useWorkspaceState: () => ({
+        activeRepo: "/repo",
+        isSwitchingWorkspace: false,
+        loadRepoSettings: async () => REPO_SETTINGS_FIXTURE,
+      }),
+      useAgentState: () => ({
+        sessions: currentSessionsFixture,
+        bootstrapTaskSessions: bootstrapTaskSessionsMock,
+        hydrateRequestedTaskSessionHistory: hydrateRequestedTaskSessionHistoryMock,
+        reconcileLiveTaskSessions: async () => {},
+        loadAgentSessions: loadAgentSessionsMock,
+        removeAgentSessions: removeAgentSessionsMock,
+        startAgentSession: startAgentSessionMock,
+        forkAgentSession: async () => "session-forked",
+        sendAgentMessage: sendAgentMessageMock,
+        updateAgentSessionModel: updateAgentSessionModelMock,
+      }),
+      useTasksState: () => ({
+        tasks: [currentTaskFixture],
+        runs: [],
+        isLoadingTasks: false,
+        createTask: async () => {},
+        updateTask: async () => {},
+        refreshTasks: async () => {},
+        syncPullRequests: async () => {},
+        linkMergedPullRequest: async () => {},
+        cancelLinkMergedPullRequest: () => {},
+        unlinkPullRequest: async () => {},
+        detectingPullRequestTaskId: null,
+        linkingMergedPullRequestTaskId: currentLinkingMergedPullRequestTaskId,
+        unlinkingPullRequestTaskId: null,
+        pendingMergedPullRequest: currentPendingMergedPullRequest,
+        deleteTask: deleteTaskMock,
+        resetTaskImplementation: resetTaskImplementationMock,
+        transitionTask: async () => {},
+        deferTask: deferTaskMock,
+        resumeDeferredTask: resumeDeferredTaskMock,
+        humanApproveTask: humanApproveTaskMock,
+        humanRequestChangesTask: humanRequestChangesTaskMock,
+      }),
+      useChecksState: () => ({
+        beadsCheck: {
+          beadsOk: true,
+          beadsPath: "/tmp/beads.db",
+          beadsError: null,
+        },
+      }),
+      useDelegationState: () => ({}),
+      useSpecState: () => ({}),
+    }));
+  });
+
   beforeEach(async () => {
     await clearAppQueryClient();
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
@@ -1188,27 +1194,6 @@ describe("KanbanPage session start modal flow", () => {
     expect(latestLocation).toContain("/agents?task=TASK-123");
     expect(latestLocation).toContain("agent=build");
     expect(latestLocation).toContain("scenario=build_after_human_request_changes");
-
-    await act(async () => {
-      renderer.unmount();
-    });
-  });
-
-  test("qa start opens the QA review modal", async () => {
-    currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "ai_review" });
-    const renderer = await renderPage();
-
-    await act(async () => {
-      (latestKanbanColumnProps?.onQaStart as (taskId: string) => void)("TASK-123");
-    });
-
-    expect(latestSessionStartModalModel).toEqual(
-      expect.objectContaining({
-        open: true,
-        description: "Choose whether to start fresh or reuse an existing session for QA Review.",
-        availableStartModes: ["fresh", "reuse"],
-      }),
-    );
 
     await act(async () => {
       renderer.unmount();

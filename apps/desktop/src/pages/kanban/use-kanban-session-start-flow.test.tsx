@@ -94,6 +94,30 @@ describe("resolveKanbanBuildStartScenario", () => {
 });
 
 describe("useKanbanSessionStartFlow", () => {
+  test("opens the shared session start modal for QA review", async () => {
+    const args = createBaseArgs();
+    args.tasks = [createTaskCardFixture({ id: "TASK-1", status: "ai_review" })];
+
+    const harness = createHookHarness(args);
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.onQaStart("TASK-1");
+    });
+
+    const modal = harness.getLatest().sessionStartModal;
+    expect(modal).not.toBeNull();
+    expect(modal?.title).toBe("Start QA Session");
+    expect(modal?.availableStartModes).toEqual(["fresh", "reuse"]);
+    expect(modal?.selectedStartMode).toBe("fresh");
+    expect(modal?.existingSessionOptions).toEqual([]);
+    expect(modal?.description).toBe(
+      "Choose how to start fresh or reuse an existing session for QA Review.",
+    );
+
+    await harness.unmount();
+  });
+
   test("opens the shared session start modal for pull request generation as a fork-only builder flow", async () => {
     const harness = createHookHarness(createBaseArgs());
 

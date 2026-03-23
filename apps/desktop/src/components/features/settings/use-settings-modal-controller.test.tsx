@@ -1,9 +1,10 @@
-import { afterAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import type { SettingsModalController } from "./use-settings-modal-controller";
 
 enableReactActEnvironment();
 
@@ -47,52 +48,10 @@ const useSettingsModalCatalogStateMock = mock(() => ({
   isLoadingCatalog: false,
 }));
 
-mock.module("@/state", () => ({
-  useWorkspaceState: () => ({
-    activeRepo: "/repo",
-    workspaces: [
-      {
-        path: "/repo",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: null,
-        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-        effectiveWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-      },
-    ],
-    loadSettingsSnapshot,
-    detectGithubRepository: async () => null,
-    saveGlobalGitConfig,
-    saveSettingsSnapshot,
-  }),
-  useChecksState: () => ({
-    runtimeCheck: null,
-    refreshChecks,
-  }),
-}));
-
-mock.module("@/state/app-state-contexts", () => ({
-  useRuntimeDefinitionsContext: () => ({
-    runtimeDefinitions: [],
-    isLoadingRuntimeDefinitions: false,
-    runtimeDefinitionsError: null,
-  }),
-}));
-
-mock.module("./use-settings-modal-branches-state", () => ({
-  useSettingsModalBranchesState: () => ({
-    selectedRepoBranches: [],
-    isLoadingSelectedRepoBranches: false,
-    selectedRepoBranchesError: null,
-    retrySelectedRepoBranchesLoad: () => {},
-  }),
-}));
-
-mock.module("./use-settings-modal-catalog-state", () => ({
-  useSettingsModalCatalogState: useSettingsModalCatalogStateMock,
-}));
-
-const { useSettingsModalController } = await import("./use-settings-modal-controller");
+let useSettingsModalController: (input: {
+  open: boolean;
+  shouldLoadCatalog: boolean;
+}) => SettingsModalController;
 
 const createHookHarness = (open: boolean, shouldLoadCatalog = false) =>
   createSharedHookHarness(
@@ -108,6 +67,65 @@ const createHookHarness = (open: boolean, shouldLoadCatalog = false) =>
   );
 
 describe("useSettingsModalController", () => {
+  beforeAll(async () => {
+    mock.module("@/state/app-state-provider", () => ({
+      AppStateProvider: ({ children }: { children: unknown }) => children,
+      useAgentState: () => {
+        throw new Error("useAgentState is not used in this test");
+      },
+      useWorkspaceState: () => ({
+        activeRepo: "/repo",
+        workspaces: [
+          {
+            path: "/repo",
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: null,
+            defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+            effectiveWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+          },
+        ],
+        loadSettingsSnapshot,
+        detectGithubRepository: async () => null,
+        saveGlobalGitConfig,
+        saveSettingsSnapshot,
+      }),
+      useChecksState: () => ({
+        runtimeCheck: null,
+        refreshChecks,
+      }),
+      useSpecState: () => {
+        throw new Error("useSpecState is not used in this test");
+      },
+      useTasksState: () => {
+        throw new Error("useTasksState is not used in this test");
+      },
+    }));
+
+    mock.module("@/state/app-state-contexts", () => ({
+      useRuntimeDefinitionsContext: () => ({
+        runtimeDefinitions: [],
+        isLoadingRuntimeDefinitions: false,
+        runtimeDefinitionsError: null,
+      }),
+    }));
+
+    mock.module("./use-settings-modal-branches-state", () => ({
+      useSettingsModalBranchesState: () => ({
+        selectedRepoBranches: [],
+        isLoadingSelectedRepoBranches: false,
+        selectedRepoBranchesError: null,
+        retrySelectedRepoBranchesLoad: () => {},
+      }),
+    }));
+
+    mock.module("./use-settings-modal-catalog-state", () => ({
+      useSettingsModalCatalogState: useSettingsModalCatalogStateMock,
+    }));
+
+    ({ useSettingsModalController } = await import("./use-settings-modal-controller"));
+  });
+
   afterAll(() => {
     mock.restore();
   });

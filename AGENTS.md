@@ -189,6 +189,10 @@ Keep this contract stable. If you change any item below, update all related laye
 - All non-frontend code must be deeply tested (Rust crates, `packages/core`, adapters, MCP).
 - Frontend tests are required for touched behavior.
 - Always run relevant checks before finishing — see Commands section above.
+- In Bun tests, NEVER mock shared re-export barrels such as `@/state`, `@/components`, or other `index.ts` aggregator modules. Mock the source module that owns the export instead (for example `@/state/app-state-provider`), otherwise Bun can bind an incomplete export surface and leak that mock across files.
+- In Bun tests, register `mock.module(...)` in scoped setup (`beforeAll`/`beforeEach`) and restore it explicitly (`afterAll`/`afterEach`). Do not leave module mocks active across unrelated tests.
+- Prefer focused hook/module tests over broad page-level integration tests when asserting orchestration or routing behavior. Broad page tests with React Query, routers, and heavy module mocking are much more likely to leak handles and hang the Bun runner.
+- Test fixtures must return isolated nested data. Never share mutable nested objects or arrays between tests through top-level fixture constants.
 
 ### Browser App Testing
 

@@ -76,17 +76,70 @@ export const createDeferred = <T>() => {
 export const createTaskCardFixture = (
   defaults: Partial<TaskCard> = {},
   overrides: Partial<TaskCard> = {},
-): TaskCard => ({
-  ...BASE_TASK_CARD_FIXTURE,
-  ...defaults,
-  ...overrides,
-});
+): TaskCard => {
+  const merged = {
+    ...BASE_TASK_CARD_FIXTURE,
+    ...defaults,
+    ...overrides,
+    documentSummary: {
+      ...BASE_TASK_CARD_FIXTURE.documentSummary,
+      ...defaults.documentSummary,
+      ...overrides.documentSummary,
+      spec: {
+        ...BASE_TASK_CARD_FIXTURE.documentSummary.spec,
+        ...defaults.documentSummary?.spec,
+        ...overrides.documentSummary?.spec,
+      },
+      plan: {
+        ...BASE_TASK_CARD_FIXTURE.documentSummary.plan,
+        ...defaults.documentSummary?.plan,
+        ...overrides.documentSummary?.plan,
+      },
+      qaReport: {
+        ...BASE_TASK_CARD_FIXTURE.documentSummary.qaReport,
+        ...defaults.documentSummary?.qaReport,
+        ...overrides.documentSummary?.qaReport,
+      },
+    },
+    agentWorkflows: {
+      ...BASE_TASK_CARD_FIXTURE.agentWorkflows,
+      ...defaults.agentWorkflows,
+      ...overrides.agentWorkflows,
+      spec: {
+        ...BASE_TASK_CARD_FIXTURE.agentWorkflows.spec,
+        ...defaults.agentWorkflows?.spec,
+        ...overrides.agentWorkflows?.spec,
+      },
+      planner: {
+        ...BASE_TASK_CARD_FIXTURE.agentWorkflows.planner,
+        ...defaults.agentWorkflows?.planner,
+        ...overrides.agentWorkflows?.planner,
+      },
+      builder: {
+        ...BASE_TASK_CARD_FIXTURE.agentWorkflows.builder,
+        ...defaults.agentWorkflows?.builder,
+        ...overrides.agentWorkflows?.builder,
+      },
+      qa: {
+        ...BASE_TASK_CARD_FIXTURE.agentWorkflows.qa,
+        ...defaults.agentWorkflows?.qa,
+        ...overrides.agentWorkflows?.qa,
+      },
+    },
+  } satisfies TaskCard;
+
+  return structuredClone(merged);
+};
 
 export const createAgentSessionFixture = (
   defaults: Partial<AgentSessionState> = {},
   overrides: Partial<AgentSessionState> = {},
-): AgentSessionState => ({
-  ...BASE_AGENT_SESSION_FIXTURE,
-  ...defaults,
-  ...overrides,
-});
+): AgentSessionState => {
+  const merged = {
+    ...BASE_AGENT_SESSION_FIXTURE,
+    ...defaults,
+    ...overrides,
+  } satisfies AgentSessionState;
+
+  return structuredClone(merged);
+};
