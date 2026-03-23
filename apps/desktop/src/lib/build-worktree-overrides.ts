@@ -2,7 +2,7 @@ import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { host } from "@/state/operations/shared/host";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
-export const isBuildFollowUpScenario = (role: AgentRole, scenario: AgentScenario): boolean => {
+const isBuildFollowUpScenario = (role: AgentRole, scenario: AgentScenario): boolean => {
   return (
     role === "build" &&
     (scenario === "build_after_qa_rejected" || scenario === "build_after_human_request_changes")

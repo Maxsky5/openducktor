@@ -14,7 +14,7 @@ import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { runOrchestratorSideEffect } from "../../../state/operations/agent-orchestrator/support/async-side-effects";
-import { loadEffectivePromptOverrides } from "../../../state/operations/shared/prompt-overrides";
+import { loadEffectivePromptOverrides } from "../../../state/operations/prompt-overrides";
 import { kickoffPromptForScenario } from "../agents-page-constants";
 import { buildRoleEnabledMapForTask, type SessionCreateOption } from "../agents-page-session-tabs";
 import {

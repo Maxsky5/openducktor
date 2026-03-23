@@ -76,8 +76,7 @@ const EMPTY_SCOPE_SNAPSHOT: ScopeSnapshot = {
   diffHash: null,
 };
 
-export const ALL_SCOPES: DiffScope[] = ["target", "uncommitted"];
-export const ALL_LOAD_DATA_MODES: LoadDataMode[] = ["full", "summary"];
+const ALL_SCOPES: DiffScope[] = ["target", "uncommitted"];
 
 export const createInitialDiffBatchState = (): DiffBatchState => ({
   byScope: {

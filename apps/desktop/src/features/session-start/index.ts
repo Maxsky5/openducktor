@@ -17,7 +17,6 @@ export type {
   NewSessionStartDecision,
   NewSessionStartRequest,
   RequestNewSessionStart,
-  SessionStartExistingSessionOption,
   SessionStartRequestReason,
 } from "./session-start-types";
 export type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
@@ -27,9 +26,3 @@ export {
   toSessionStartPostAction,
   useSessionStartModalCoordinator,
 } from "./use-session-start-modal-coordinator";
-export {
-  type SessionStartModalIntent,
-  type SessionStartModalSource,
-  type SessionStartPostAction,
-  useSessionStartModalState,
-} from "./use-session-start-modal-state";

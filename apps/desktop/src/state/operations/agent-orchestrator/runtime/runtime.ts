@@ -14,8 +14,8 @@ import {
   loadSpecDocumentFromQuery,
 } from "../../../queries/documents";
 import { loadRepoConfigFromQuery } from "../../../queries/workspace";
+import { loadEffectivePromptOverrides } from "../../prompt-overrides";
 import { host } from "../../shared/host";
-import { loadEffectivePromptOverrides } from "../../shared/prompt-overrides";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { normalizeWorkingDirectory, runningStates, toBaseUrl } from "../support/core";
 
@@ -29,7 +29,7 @@ export type RuntimeInfo = {
   workingDirectory: string;
 };
 
-export const toRuntimeConnection = (
+const toRuntimeConnection = (
   runtimeEndpoint: string,
   workingDirectory: string,
 ): AgentRuntimeConnection => ({
@@ -37,7 +37,7 @@ export const toRuntimeConnection = (
   workingDirectory,
 });
 
-export const resolveRuntimeEndpoint = (runtimeRoute: RuntimeRoute): string => {
+const resolveRuntimeEndpoint = (runtimeRoute: RuntimeRoute): string => {
   switch (runtimeRoute.type) {
     case "local_http":
       return runtimeRoute.endpoint;

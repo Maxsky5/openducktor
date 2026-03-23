@@ -10,7 +10,7 @@ import {
 } from "@/lib/build-worktree-overrides";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
-import { loadEffectivePromptOverrides } from "../../state/operations/shared/prompt-overrides";
+import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import type {
   KanbanResolvedSessionStartIntent,
   KanbanSessionStartIntent,

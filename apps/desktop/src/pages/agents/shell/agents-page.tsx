@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
-import { AgentsPageLayout } from "./agents-page-layout";
+import { AgentsPageLayout } from "../agents-page-layout";
 import { useAgentsPageShellModel } from "./use-agents-page-shell-model";
 
 export function AgentsPage(): ReactElement {

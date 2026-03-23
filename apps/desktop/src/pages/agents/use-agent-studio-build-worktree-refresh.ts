@@ -1,8 +1,6 @@
 import { useEffect, useRef } from "react";
-import {
-  isReadOnlyShellCommand,
-  isSafeReadToolName,
-} from "@/state/operations/shared/permission-policy";
+import { isReadOnlyShellCommand, isSafeReadToolName } from "@/state/operations/permission-policy";
+
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 type UseAgentStudioBuildWorktreeRefreshArgs = {

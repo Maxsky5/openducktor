@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { buildGitConflictResolutionPrompt } from "@/features/session-start";
 import { errorMessage } from "@/lib/errors";
-import { loadEffectivePromptOverrides } from "@/state/operations/shared/prompt-overrides";
+import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { getGitConflictCopy } from "./conflict-copy";

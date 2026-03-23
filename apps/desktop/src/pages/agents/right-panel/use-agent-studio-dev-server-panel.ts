@@ -29,7 +29,7 @@ type SelectedScriptMemory = Map<string, string>;
 
 const buildTaskMemoryKey = (repoPath: string, taskId: string): string => `${repoPath}::${taskId}`;
 
-export const trimDevServerLogLines = (lines: DevServerLogLine[]): DevServerLogLine[] => {
+const trimDevServerLogLines = (lines: DevServerLogLine[]): DevServerLogLine[] => {
   if (lines.length <= MAX_BUFFERED_LOG_LINES) {
     return lines;
   }

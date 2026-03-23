@@ -64,7 +64,7 @@ type UseKanbanSessionStartFlowResult = {
   onHumanRequestChanges: (taskId: string) => void;
 };
 
-export const findLatestSessionByRoleForTask = (
+const findLatestSessionByRoleForTask = (
   sessions: AgentSessionState[],
   taskId: string,
   role: AgentRole,
@@ -72,7 +72,7 @@ export const findLatestSessionByRoleForTask = (
   return findSessionsByRoleForTask(sessions, taskId, role)[0] ?? null;
 };
 
-export const findSessionsByRoleForTask = (
+const findSessionsByRoleForTask = (
   sessions: AgentSessionState[],
   taskId: string,
   role: AgentRole,
@@ -82,7 +82,7 @@ export const findSessionsByRoleForTask = (
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 };
 
-export const resolveKanbanPlanningStartPreference = (
+const resolveKanbanPlanningStartPreference = (
   tasks: TaskCard[],
   taskId: string,
   action: "set_spec" | "set_plan",

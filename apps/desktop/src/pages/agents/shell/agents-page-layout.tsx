@@ -70,7 +70,7 @@ function AgentsPageModalContent({
   );
 }
 
-export type AgentsPageLayoutProps = {
+type AgentsPageLayoutProps = {
   activeRepo: string | null;
   navigationPersistenceError: Error | null;
   chatSettingsLoadError: Error | null;

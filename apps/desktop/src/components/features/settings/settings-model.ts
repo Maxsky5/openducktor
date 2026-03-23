@@ -9,12 +9,12 @@ type HookDraftInput = {
 
 type RepoDevServerDraftInput = RepoDevServerScript;
 
-export type DevServerDraftValidationErrors = {
+type DevServerDraftValidationErrors = {
   name?: string;
   command?: string;
 };
 
-export type DevServerDraftValidationMap = Record<string, DevServerDraftValidationErrors>;
+type DevServerDraftValidationMap = Record<string, DevServerDraftValidationErrors>;
 
 type RepoScriptDraftInput = {
   hooks: HookDraftInput;
@@ -33,7 +33,7 @@ const normalizeDevServerName = (name: string): string => name.trim();
 
 const normalizeDevServerCommand = (command: string): string => command.trim();
 
-export const getDevServerDraftValidationErrors = (
+const getDevServerDraftValidationErrors = (
   devServer: RepoDevServerDraftInput,
 ): DevServerDraftValidationErrors | null => {
   const errors: DevServerDraftValidationErrors = {};

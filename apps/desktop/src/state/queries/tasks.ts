@@ -34,7 +34,7 @@ export const repoTaskDataQueryOptions = (repoPath: string) =>
     staleTime: TASK_DATA_STALE_TIME_MS,
   });
 
-export const repoRunsQueryOptions = (repoPath: string) =>
+const repoRunsQueryOptions = (repoPath: string) =>
   queryOptions({
     queryKey: taskQueryKeys.runs(repoPath),
     queryFn: (): Promise<RunSummary[]> => host.runsList(repoPath),

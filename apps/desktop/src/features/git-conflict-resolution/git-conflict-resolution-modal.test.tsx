@@ -4,10 +4,8 @@ import { createElement } from "react";
 import TestRenderer, { act, type ReactTestRenderer } from "react-test-renderer";
 import type { GitConflict } from "@/features/agent-studio-git";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import {
-  type PendingGitConflictResolutionRequest,
-  useGitConflictResolutionModalState,
-} from "./index";
+import { useGitConflictResolutionModalState } from "./git-conflict-resolution-modal";
+import type { PendingGitConflictResolutionRequest } from "./use-git-conflict-resolution";
 
 const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
