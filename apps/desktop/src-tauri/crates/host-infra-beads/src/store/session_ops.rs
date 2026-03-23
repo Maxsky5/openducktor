@@ -103,12 +103,17 @@ impl BeadsTaskStore {
             return Err(anyhow!("Agent session role is required"));
         }
 
-        let scenario = session
-            .scenario
+        let external_session_id = session
+            .external_session_id
             .as_mut()
-            .ok_or_else(|| anyhow!("Agent session scenario is required"))?;
-        *scenario = scenario.trim().to_string();
-        if scenario.is_empty() {
+            .ok_or_else(|| anyhow!("Agent session externalSessionId is required"))?;
+        *external_session_id = external_session_id.trim().to_string();
+        if external_session_id.is_empty() {
+            return Err(anyhow!("Agent session externalSessionId is required"));
+        }
+
+        session.scenario = session.scenario.trim().to_string();
+        if session.scenario.is_empty() {
             return Err(anyhow!("Agent session scenario is required"));
         }
 
@@ -121,11 +126,6 @@ impl BeadsTaskStore {
         if session.working_directory.is_empty() {
             return Err(anyhow!("Agent session workingDirectory is required"));
         }
-
-        session.task_id = None;
-        session.status = None;
-        session.updated_at = None;
-        session.ended_at = None;
 
         Ok(session)
     }

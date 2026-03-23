@@ -4,8 +4,6 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   fromPersistedSessionRecord,
   historyToChatMessages,
-  recoverPendingPermissionsFromHistory,
-  recoverPendingQuestionsFromHistory,
   toPersistedSessionRecord,
 } from "./persistence";
 
@@ -13,15 +11,10 @@ const recordFixture: AgentSessionRecord = {
   runtimeKind: "opencode",
   sessionId: "session-1",
   externalSessionId: "external-1",
-  taskId: "task-1",
   role: "build",
   scenario: "build_implementation_start",
-  status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
-  updatedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/tmp/repo/worktree",
-  pendingPermissions: [],
-  pendingQuestions: [],
   selectedModel: {
     runtimeKind: "opencode",
     providerId: "openai",
@@ -36,64 +29,42 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(hydrated.runtimeKind).toBe("opencode");
     expect(hydrated.runtimeId).toBeNull();
     expect(hydrated.runId).toBeNull();
+    expect(hydrated.pendingPermissions).toEqual([]);
+    expect(hydrated.pendingQuestions).toEqual([]);
     expect(hydrated.selectedModel?.modelId).toBe("gpt-5");
     expect(hydrated.isLoadingModelCatalog).toBe(false);
   });
 
-  test("preserves pending input requests across persistence hydration", () => {
-    const hydrated = fromPersistedSessionRecord(
-      {
-        ...recordFixture,
-        pendingPermissions: [
-          {
-            requestId: "permission-1",
-            permission: "read",
-            patterns: ["**/*"],
-            metadata: { source: "tool" },
-          },
-        ],
-        pendingQuestions: [
-          {
-            requestId: "question-1",
-            questions: [
-              {
-                header: "Confirm",
-                question: "Need input",
-                options: [{ label: "Yes", description: "Confirm" }],
-                custom: true,
-              },
-            ],
-          },
-        ],
-      },
-      "task-1",
-    );
+  test("does not persist pending input requests in session snapshots", () => {
+    const hydrated = fromPersistedSessionRecord(recordFixture, "task-1");
+    const withPendingInput: AgentSessionState = {
+      ...hydrated,
+      pendingPermissions: [
+        {
+          requestId: "permission-1",
+          permission: "read",
+          patterns: ["**/*"],
+          metadata: { source: "tool" },
+        },
+      ],
+      pendingQuestions: [
+        {
+          requestId: "question-1",
+          questions: [
+            {
+              header: "Confirm",
+              question: "Need input",
+              options: [{ label: "Yes", description: "Confirm" }],
+              custom: true,
+            },
+          ],
+        },
+      ],
+    };
 
-    expect(hydrated.pendingPermissions).toEqual([
-      {
-        requestId: "permission-1",
-        permission: "read",
-        patterns: ["**/*"],
-        metadata: { source: "tool" },
-      },
-    ]);
-    expect(hydrated.pendingQuestions).toEqual([
-      {
-        requestId: "question-1",
-        questions: [
-          {
-            header: "Confirm",
-            question: "Need input",
-            options: [{ label: "Yes", description: "Confirm" }],
-            custom: true,
-          },
-        ],
-      },
-    ]);
-
-    const persisted = toPersistedSessionRecord(hydrated);
-    expect(persisted.pendingPermissions).toEqual(hydrated.pendingPermissions);
-    expect(persisted.pendingQuestions).toEqual(hydrated.pendingQuestions);
+    const persisted = toPersistedSessionRecord(withPendingInput);
+    expect("pendingPermissions" in persisted).toBe(false);
+    expect("pendingQuestions" in persisted).toBe(false);
   });
 
   test("persists compact session fields and keeps scenario", () => {
@@ -104,14 +75,8 @@ describe("agent-orchestrator/support/persistence", () => {
     const persisted = toPersistedSessionRecord(session);
     expect(persisted.scenario).toBe("build_implementation_start");
     expect(persisted.runtimeKind).toBe("opencode");
-    expect(persisted.status).toBeUndefined();
-    expect(persisted.endedAt).toBeUndefined();
-    expect(persisted.pendingPermissions).toEqual([]);
-    expect(persisted.pendingQuestions).toEqual([]);
-    expect("runtimeId" in persisted).toBe(false);
-    expect("runId" in persisted).toBe(false);
-    expect("runtimeEndpoint" in persisted).toBe(false);
-    expect("runtimeTransport" in persisted).toBe(false);
+    expect(persisted.selectedModel).toEqual(recordFixture.selectedModel);
+    expect("taskId" in persisted).toBe(false);
   });
 
   test("preserves non-default runtime kind across persistence", () => {
@@ -140,431 +105,6 @@ describe("agent-orchestrator/support/persistence", () => {
       selectedModel: null,
     });
     expect(messages).toEqual([]);
-  });
-
-  test("recovers unanswered pending questions from history tool metadata", () => {
-    const recovered = recoverPendingQuestionsFromHistory([
-      {
-        messageId: "m-assistant-question",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:00.000Z",
-        text: "Need input",
-        parts: [
-          {
-            kind: "tool",
-            messageId: "m-assistant-question",
-            partId: "p-question",
-            callId: "call-question",
-            tool: "question",
-            status: "completed",
-            metadata: {
-              requestId: "question-1",
-              questions: [
-                {
-                  header: "Confirm",
-                  question: "Which runtime should we use?",
-                  options: [{ label: "OpenCode", description: "Use OpenCode" }],
-                  custom: true,
-                },
-              ],
-            },
-          },
-        ],
-      },
-    ]);
-
-    expect(recovered).toEqual([
-      {
-        requestId: "question-1",
-        questions: [
-          {
-            header: "Confirm",
-            question: "Which runtime should we use?",
-            options: [{ label: "OpenCode", description: "Use OpenCode" }],
-            custom: true,
-          },
-        ],
-      },
-    ]);
-  });
-
-  test("recovers pending permissions from running tool metadata", () => {
-    const recovered = recoverPendingPermissionsFromHistory([
-      {
-        messageId: "m-assistant-permission",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:00.000Z",
-        text: "Need permission",
-        parts: [
-          {
-            kind: "tool",
-            messageId: "m-assistant-permission",
-            partId: "p-permission",
-            callId: "call-permission",
-            tool: "permission",
-            status: "running",
-            metadata: {
-              requestId: "permission-1",
-              permission: "read",
-              patterns: ["**/.env"],
-            },
-          },
-        ],
-      },
-    ]);
-
-    expect(recovered).toEqual([
-      {
-        requestId: "permission-1",
-        permission: "read",
-        patterns: ["**/.env"],
-        metadata: {
-          requestId: "permission-1",
-          permission: "read",
-          patterns: ["**/.env"],
-        },
-      },
-    ]);
-  });
-
-  test("clears recovered permissions when a later tool update completes the same request", () => {
-    const recovered = recoverPendingPermissionsFromHistory([
-      {
-        messageId: "m-assistant-permission",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:00.000Z",
-        text: "Need permission",
-        parts: [
-          {
-            kind: "tool",
-            messageId: "m-assistant-permission",
-            partId: "p-permission",
-            callId: "call-permission",
-            tool: "permission",
-            status: "running",
-            metadata: {
-              requestId: "permission-1",
-              permission: "read",
-              patterns: ["**/.env"],
-            },
-          },
-        ],
-      },
-      {
-        messageId: "m-assistant-permission-resolved",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:05.000Z",
-        text: "Permission resolved",
-        parts: [
-          {
-            kind: "tool",
-            messageId: "m-assistant-permission-resolved",
-            partId: "p-permission-completed",
-            callId: "call-permission",
-            tool: "permission",
-            status: "completed",
-            metadata: {
-              requestId: "permission-1",
-              permission: "read",
-              patterns: ["**/.env"],
-            },
-          },
-        ],
-      },
-    ]);
-
-    expect(recovered).toEqual([]);
-  });
-
-  test("clears recovered pending question after a synthetic answer message", () => {
-    const recovered = recoverPendingQuestionsFromHistory([
-      {
-        messageId: "m-assistant-question",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:00.000Z",
-        text: "Need input",
-        parts: [
-          {
-            kind: "tool",
-            messageId: "m-assistant-question",
-            partId: "p-question",
-            callId: "call-question",
-            tool: "question",
-            status: "completed",
-            input: {
-              requestID: "question-1",
-              questions: [{ header: "Confirm", question: "Which runtime should we use?" }],
-            },
-          },
-        ],
-      },
-      {
-        messageId: "m-user-answer",
-        role: "user",
-        timestamp: "2026-02-22T08:00:05.000Z",
-        text: "Use OpenCode",
-        parts: [
-          {
-            kind: "text",
-            messageId: "m-user-answer",
-            partId: "p-answer",
-            text: "Use OpenCode",
-            synthetic: true,
-            completed: true,
-          },
-        ],
-      },
-    ]);
-
-    expect(recovered).toEqual([]);
-  });
-
-  test("recovers pending questions from tool output when prompts have no separate header", () => {
-    const recovered = recoverPendingQuestionsFromHistory([
-      {
-        messageId: "m-assistant-question",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:00.000Z",
-        text: "Need input",
-        parts: [
-          {
-            kind: "tool",
-            messageId: "m-assistant-question",
-            partId: "p-question",
-            callId: "call-question",
-            tool: "question",
-            status: "completed",
-            output: JSON.stringify({
-              requestId: "question-2",
-              questions: [
-                {
-                  title: "What would you like me to do with this test task?",
-                  options: [{ label: "Write a spec" }],
-                },
-              ],
-            }),
-          },
-        ],
-      },
-    ]);
-
-    expect(recovered).toEqual([
-      {
-        requestId: "question-2",
-        questions: [
-          {
-            header: "What would you like me to do with this test task?",
-            question: "What would you like me to do with this test task?",
-            options: [{ label: "Write a spec", description: "Write a spec" }],
-          },
-        ],
-      },
-    ]);
-  });
-
-  test("recovers pending questions from running tool input when request id is absent", () => {
-    const recovered = recoverPendingQuestionsFromHistory([
-      {
-        messageId: "m-assistant-question",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:00.000Z",
-        text: "Need input",
-        parts: [
-          {
-            kind: "tool",
-            messageId: "m-assistant-question",
-            partId: "p-question",
-            callId: "call-question",
-            tool: "question",
-            status: "running",
-            input: {
-              questions: [
-                {
-                  header: "Task Action",
-                  question: "What should I do next?",
-                  options: [{ label: "Continue", description: "Keep going" }],
-                },
-              ],
-            },
-          },
-        ],
-      },
-    ]);
-
-    expect(recovered).toEqual([
-      {
-        requestId: "call-question",
-        questions: [
-          {
-            header: "Task Action",
-            question: "What should I do next?",
-            options: [{ label: "Continue", description: "Keep going" }],
-          },
-        ],
-      },
-    ]);
-  });
-
-  test("removes recovered questions when a later tool update carries answers for the same request", () => {
-    const recovered = recoverPendingQuestionsFromHistory([
-      {
-        messageId: "m-assistant-question",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:00.000Z",
-        text: "Need input",
-        parts: [
-          {
-            kind: "tool",
-            messageId: "m-assistant-question",
-            partId: "p-question",
-            callId: "call-question",
-            tool: "question",
-            status: "running",
-            metadata: {
-              requestId: "question-1",
-              questions: [{ header: "Confirm", question: "Ship it?" }],
-            },
-          },
-        ],
-      },
-      {
-        messageId: "m-assistant-answered",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:05.000Z",
-        text: "Answered",
-        parts: [
-          {
-            kind: "tool",
-            messageId: "m-assistant-answered",
-            partId: "p-question-answered",
-            callId: "call-question",
-            tool: "question",
-            status: "completed",
-            metadata: {
-              requestId: "question-1",
-              questions: [{ header: "Confirm", question: "Ship it?" }],
-              answers: [["Yes"]],
-            },
-          },
-        ],
-      },
-    ]);
-
-    expect(recovered).toEqual([]);
-  });
-
-  test("treats output response payloads as answered question state", () => {
-    const recovered = recoverPendingQuestionsFromHistory([
-      {
-        messageId: "m-assistant-question",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:00.000Z",
-        text: "Need input",
-        parts: [
-          {
-            kind: "tool",
-            messageId: "m-assistant-question",
-            partId: "p-question",
-            callId: "call-question",
-            tool: "question",
-            status: "completed",
-            output: JSON.stringify({
-              requestId: "question-1",
-              questions: [{ header: "Confirm", question: "Ship it?" }],
-              response: [["Yes"]],
-            }),
-          },
-        ],
-      },
-    ]);
-
-    expect(recovered).toEqual([]);
-  });
-
-  test("matches synthetic answers to the correct recovered request when the answer text is unique", () => {
-    const recovered = recoverPendingQuestionsFromHistory([
-      {
-        messageId: "m-assistant-question-1",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:00.000Z",
-        text: "Need first input",
-        parts: [
-          {
-            kind: "tool",
-            messageId: "m-assistant-question-1",
-            partId: "p-question-1",
-            callId: "call-question-1",
-            tool: "question",
-            status: "completed",
-            metadata: {
-              requestId: "question-1",
-              questions: [
-                {
-                  header: "First",
-                  question: "Choose first",
-                  options: [{ label: "Alpha", description: "Pick alpha" }],
-                },
-              ],
-            },
-          },
-        ],
-      },
-      {
-        messageId: "m-assistant-question-2",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:01.000Z",
-        text: "Need second input",
-        parts: [
-          {
-            kind: "tool",
-            messageId: "m-assistant-question-2",
-            partId: "p-question-2",
-            callId: "call-question-2",
-            tool: "question",
-            status: "completed",
-            metadata: {
-              requestId: "question-2",
-              questions: [
-                {
-                  header: "Second",
-                  question: "Choose second",
-                  options: [{ label: "Beta", description: "Pick beta" }],
-                },
-              ],
-            },
-          },
-        ],
-      },
-      {
-        messageId: "m-user-answer",
-        role: "user",
-        timestamp: "2026-02-22T08:00:05.000Z",
-        text: "Beta",
-        parts: [
-          {
-            kind: "text",
-            messageId: "m-user-answer",
-            partId: "p-answer",
-            text: "Beta",
-            synthetic: true,
-            completed: true,
-          },
-        ],
-      },
-    ]);
-
-    expect(recovered).toEqual([
-      {
-        requestId: "question-1",
-        questions: [
-          {
-            header: "First",
-            question: "Choose first",
-            options: [{ label: "Alpha", description: "Pick alpha" }],
-          },
-        ],
-      },
-    ]);
   });
 
   test("maps history parts into chat timeline entries", () => {

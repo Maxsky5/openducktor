@@ -10,6 +10,28 @@ import { createLoadAgentSessions } from "./load-sessions";
 
 const taskFixture = createTaskCardFixture({ title: "Task" });
 
+const persistedSessionRecord = (
+  input: {
+    sessionId: string;
+    externalSessionId: string;
+    role: AgentSessionRecord["role"];
+    scenario: AgentSessionRecord["scenario"];
+    startedAt: string;
+    workingDirectory: string;
+    runtimeKind?: AgentSessionRecord["runtimeKind"];
+    selectedModel?: AgentSessionRecord["selectedModel"];
+  } & Record<string, unknown>,
+): AgentSessionRecord => ({
+  runtimeKind: input.runtimeKind ?? "opencode",
+  sessionId: input.sessionId,
+  externalSessionId: input.externalSessionId,
+  role: input.role,
+  scenario: input.scenario,
+  startedAt: input.startedAt,
+  workingDirectory: input.workingDirectory,
+  selectedModel: input.selectedModel ?? null,
+});
+
 const createAdapter = (
   overrides: Partial<Parameters<typeof createLoadAgentSessions>[0]["adapter"]> = {},
 ): Parameters<typeof createLoadAgentSessions>[0]["adapter"] => ({
@@ -121,7 +143,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const originalList = (await import("../../shared/host")).host.agentSessionsList;
     (await import("../../shared/host")).host.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
@@ -146,7 +168,7 @@ describe("agent-orchestrator-load-sessions", () => {
             ],
           },
         ],
-      },
+      }),
     ];
 
     try {
@@ -157,25 +179,11 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(Object.keys(state)).toContain("session-1");
     expect(state["session-1"]?.status).toBe("stopped");
-    expect(state["session-1"]?.pendingPermissions).toEqual([
-      { requestId: "permission-1", permission: "read", patterns: ["**/*"] },
-    ]);
-    expect(state["session-1"]?.pendingQuestions).toEqual([
-      {
-        requestId: "question-1",
-        questions: [
-          {
-            header: "Question",
-            question: "Need answer",
-            options: [],
-            custom: true,
-          },
-        ],
-      },
-    ]);
+    expect(state["session-1"]?.pendingPermissions).toEqual([]);
+    expect(state["session-1"]?.pendingQuestions).toEqual([]);
   });
 
-  test("merges persisted pending input into an existing session entry", async () => {
+  test("does not merge persisted pending input into an existing session entry", async () => {
     const existingSession: AgentSessionState = {
       sessionId: "session-1",
       externalSessionId: "external-1",
@@ -241,7 +249,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     hostModule.host.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
@@ -266,7 +274,7 @@ describe("agent-orchestrator-load-sessions", () => {
             ],
           },
         ],
-      },
+      }),
     ];
 
     try {
@@ -276,25 +284,11 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(state["session-1"]?.messages).toEqual(existingSession.messages);
-    expect(state["session-1"]?.pendingPermissions).toEqual([
-      { requestId: "permission-1", permission: "read", patterns: ["**/*"] },
-    ]);
-    expect(state["session-1"]?.pendingQuestions).toEqual([
-      {
-        requestId: "question-1",
-        questions: [
-          {
-            header: "Question",
-            question: "Need answer",
-            options: [],
-            custom: true,
-          },
-        ],
-      },
-    ]);
+    expect(state["session-1"]?.pendingPermissions).toEqual([]);
+    expect(state["session-1"]?.pendingQuestions).toEqual([]);
   });
 
-  test("keeps persisted pending permissions when the live snapshot reports no pending input", async () => {
+  test("clears pending permissions when the live snapshot reports no pending input", async () => {
     const existingSession: AgentSessionState = {
       sessionId: "session-1",
       externalSessionId: "external-1",
@@ -339,7 +333,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     hostModule.host.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
@@ -350,7 +344,7 @@ describe("agent-orchestrator-load-sessions", () => {
         updatedAt: "2026-02-22T08:00:01.000Z",
         workingDirectory: "/tmp/repo/worktree",
         pendingPermissions: [{ requestId: "permission-1", permission: "read", patterns: [".env"] }],
-      },
+      }),
     ];
 
     appQueryClient.setQueryData(runtimeQueryKeys.list("opencode", "/tmp/repo"), [
@@ -419,9 +413,145 @@ describe("agent-orchestrator-load-sessions", () => {
       hostModule.host.agentSessionsList = originalList;
     }
 
-    expect(state["session-1"]?.pendingPermissions).toEqual([
-      { requestId: "permission-1", permission: "read", patterns: [".env"] },
+    expect(state["session-1"]?.pendingPermissions).toEqual([]);
+  });
+
+  test("does not recover pending input from transcript history when no live snapshot exists", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": {
+          sessionId: "session-1",
+          externalSessionId: "external-1",
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_implementation_start",
+          status: "idle",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          runtimeKind: "opencode",
+          runtimeId: null,
+          runId: null,
+          runtimeEndpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          contextUsage: null,
+          pendingPermissions: [],
+          pendingQuestions: [],
+          todos: [],
+          modelCatalog: null,
+          selectedModel: null,
+          isLoadingModelCatalog: false,
+          promptOverrides: {},
+        },
+      },
+    };
+    let state: Record<string, AgentSessionState> = sessionsRef.current;
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const hostModule = await import("../../shared/host");
+    const originalList = hostModule.host.agentSessionsList;
+    hostModule.host.agentSessionsList = async () => [
+      persistedSessionRecord({
+        runtimeKind: "opencode",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:01.000Z",
+        workingDirectory: "/tmp/repo/worktree",
+        pendingPermissions: [{ requestId: "permission-1", permission: "read", patterns: [".env"] }],
+      }),
+    ];
+
+    appQueryClient.setQueryData(runtimeQueryKeys.list("opencode", "/tmp/repo"), [
+      {
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        repoPath: "/tmp/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/tmp/repo",
+        runtimeRoute: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4444",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      } satisfies RuntimeInstanceSummary,
     ]);
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: createAdapter({
+        loadSessionHistory: async () => [
+          {
+            messageId: "m-1",
+            role: "assistant",
+            timestamp: "2026-02-22T08:00:00.000Z",
+            text: "Need permission",
+            parts: [
+              {
+                kind: "tool",
+                messageId: "m-1",
+                partId: "p-1",
+                callId: "call-1",
+                tool: "permission",
+                status: "running",
+                metadata: {
+                  requestId: "perm-from-history",
+                  permission: "read",
+                  patterns: ["**/.env"],
+                },
+              },
+            ],
+          },
+        ],
+        listLiveAgentSessionSnapshots: async () => [],
+      }),
+      repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession: (sessionId, updater) => {
+        const current = state[sessionId];
+        if (!current) {
+          return;
+        }
+        state = {
+          ...state,
+          [sessionId]: updater(current),
+        };
+        sessionsRef.current = state;
+      },
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await loadAgentSessions("task-1", {
+        mode: "requested_history",
+        targetSessionId: "session-1",
+        historyPolicy: "requested_only",
+      });
+    } finally {
+      hostModule.host.agentSessionsList = originalList;
+    }
+
+    expect(state["session-1"]?.pendingPermissions).toEqual([]);
+    expect(state["session-1"]?.pendingQuestions).toEqual([]);
   });
 
   test("hydrates requested session history from the current live runtime without re-resolving runtimes", async () => {
@@ -461,7 +591,7 @@ describe("agent-orchestrator-load-sessions", () => {
       taskId: "task-1",
       role: "build",
       scenario: "build_implementation_start",
-      status: "running",
+      status: "stopped",
       startedAt: "2026-02-22T08:00:00.000Z",
       runtimeKind: "opencode",
       runtimeId: "runtime-live",
@@ -540,7 +670,7 @@ describe("agent-orchestrator-load-sessions", () => {
       targetSessionId: "session-live",
       historyPolicy: "requested_only",
       persistedRecords: [
-        {
+        persistedSessionRecord({
           runtimeKind: "opencode",
           sessionId: "session-live",
           externalSessionId: "external-live",
@@ -553,7 +683,7 @@ describe("agent-orchestrator-load-sessions", () => {
           workingDirectory: "/tmp/repo/worktree",
           pendingPermissions: [],
           pendingQuestions: [],
-        },
+        }),
       ],
       preloadedLiveAgentSessionsByKey: new Map([
         [
@@ -677,7 +807,7 @@ describe("agent-orchestrator-load-sessions", () => {
       mode: "requested_history",
       targetSessionId: "session-1",
       persistedRecords: [
-        {
+        persistedSessionRecord({
           runtimeKind: "opencode",
           sessionId: "session-1",
           externalSessionId: "external-1",
@@ -687,7 +817,7 @@ describe("agent-orchestrator-load-sessions", () => {
           startedAt: "2026-02-22T08:00:00.000Z",
           updatedAt: "2026-02-22T08:00:00.000Z",
           workingDirectory: "/tmp/repo/worktree",
-        },
+        }),
       ],
     });
 
@@ -781,7 +911,7 @@ describe("agent-orchestrator-load-sessions", () => {
       targetSessionId: "session-live",
       historyPolicy: "requested_only",
       persistedRecords: [
-        {
+        persistedSessionRecord({
           runtimeKind: "opencode",
           sessionId: "session-live",
           externalSessionId: "external-live",
@@ -794,7 +924,7 @@ describe("agent-orchestrator-load-sessions", () => {
           workingDirectory: "/tmp/repo/worktree",
           pendingPermissions: [],
           pendingQuestions: [],
-        },
+        }),
       ],
     });
 
@@ -851,7 +981,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalList = hostModule.host.agentSessionsList;
     const originalRunsList = hostModule.host.runsList;
     hostModule.host.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
@@ -862,7 +992,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
-      },
+      }),
     ];
     hostModule.host.runsList = async () => {
       runLoads += 1;
@@ -920,7 +1050,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalEnsure = hostModule.host.runtimeEnsure;
     const ensuredRuntimeKinds: string[] = [];
     hostModule.host.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "claude-code",
         sessionId: "session-1",
         externalSessionId: "external-1",
@@ -936,7 +1066,7 @@ describe("agent-orchestrator-load-sessions", () => {
           providerId: "anthropic",
           modelId: "claude-3-7-sonnet",
         },
-      },
+      }),
     ];
     hostModule.host.runtimeList = async (_repoPath, runtimeKind = "opencode") => [
       {
@@ -1062,7 +1192,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
-      } as AgentSessionRecord,
+      } as unknown as AgentSessionRecord,
     ];
 
     try {
@@ -1138,7 +1268,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalList = typedHost.agentSessionsList;
     const originalRuntimeList = typedHost.runtimeList;
     typedHost.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
@@ -1149,7 +1279,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
-      },
+      }),
     ];
     hostModule.host.runtimeList = (async (): Promise<RuntimeInstanceSummary[]> => [
       {
@@ -1261,7 +1391,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalRuntimeList = hostModule.host.runtimeList;
     const originalRunsList = hostModule.host.runsList;
     hostModule.host.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
@@ -1272,7 +1402,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo/worktree",
-      },
+      }),
     ];
     hostModule.host.runtimeList = async () => [];
     hostModule.host.runsList = async () => [
@@ -1412,20 +1542,20 @@ describe("agent-orchestrator-load-sessions", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const record: AgentSessionRecord = {
+    const record = persistedSessionRecord({
       runtimeKind: "opencode",
       sessionId: "session-1",
       externalSessionId: "external-session-1",
       taskId: "task-1",
       role: "build",
       scenario: "build_implementation_start",
-      status: "running",
+      status: "stopped",
       startedAt: "2026-02-22T08:00:00.000Z",
       updatedAt: "2026-02-22T08:00:00.000Z",
       workingDirectory: "/tmp/repo/worktree",
       pendingPermissions: [],
       pendingQuestions: [],
-    };
+    });
     const hostRuntimeList: RuntimeInstanceSummary[] = [
       {
         kind: "opencode",
@@ -1506,7 +1636,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo/worktree",
-      } as AgentSessionRecord,
+      } as unknown as AgentSessionRecord,
     ];
 
     try {
@@ -1572,7 +1702,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalRuntimeList = hostModule.host.runtimeList;
     const originalRunsList = hostModule.host.runsList;
     hostModule.host.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-qa-1",
         externalSessionId: "external-qa-1",
@@ -1583,7 +1713,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo/worktree",
-      },
+      }),
     ];
     hostModule.host.runtimeList = async () => [];
     hostModule.host.runsList = async () => [
@@ -1672,7 +1802,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalRunsList = hostModule.host.runsList;
     const originalEnsure = hostModule.host.runtimeEnsure;
     hostModule.host.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-qa-root",
         externalSessionId: "external-qa-root",
@@ -1683,7 +1813,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo/",
-      },
+      }),
     ];
     hostModule.host.runtimeList = async () => [];
     hostModule.host.runsList = async () => [];
@@ -1779,7 +1909,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalRunsList = hostModule.host.runsList;
     const originalEnsure = hostModule.host.runtimeEnsure;
     hostModule.host.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
@@ -1789,7 +1919,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
-      },
+      }),
     ];
     hostModule.host.runtimeList = async () => [];
     hostModule.host.runsList = async () => [];
@@ -1873,7 +2003,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalRunsList = hostModule.host.runsList;
     const originalEnsure = hostModule.host.runtimeEnsure;
     hostModule.host.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
@@ -1884,7 +2014,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo/conflict-worktree",
-      },
+      }),
     ];
     hostModule.host.runtimeList = (async (): Promise<RuntimeInstanceSummary[]> => [
       {
@@ -1988,7 +2118,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalRunsList = hostModule.host.runsList;
     const originalEnsure = hostModule.host.runtimeEnsure;
     hostModule.host.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-qa-worktree",
         externalSessionId: "external-qa-worktree",
@@ -1999,7 +2129,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo/worktrees/task-1",
-      },
+      }),
     ];
     hostModule.host.runtimeList = async () => [];
     hostModule.host.runsList = async () => [];
@@ -2143,7 +2273,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalList = typedHost.agentSessionsList;
     const originalRuntimeList = typedHost.runtimeList;
     typedHost.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
@@ -2154,7 +2284,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
-      },
+      }),
     ];
     hostModule.host.runtimeList = (async (): Promise<RuntimeInstanceSummary[]> => [
       {
@@ -2271,7 +2401,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalList = typedHost.agentSessionsList;
     const originalRuntimeList = typedHost.runtimeList;
     typedHost.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
@@ -2281,7 +2411,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
-      },
+      }),
     ];
     hostModule.host.runtimeList = async (): Promise<RuntimeInstanceSummary[]> => [
       {
@@ -2372,7 +2502,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalList = typedHost.agentSessionsList;
     const originalRuntimeList = typedHost.runtimeList;
     typedHost.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
@@ -2382,7 +2512,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
-      },
+      }),
     ];
     typedHost.runtimeList = async (): Promise<RuntimeInstanceSummary[]> => [
       {
@@ -2482,7 +2612,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalList = typedHost.agentSessionsList;
     const originalRuntimeList = typedHost.runtimeList;
     typedHost.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
@@ -2492,7 +2622,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
-      },
+      }),
     ];
     typedHost.runtimeList = async (): Promise<RuntimeInstanceSummary[]> => [
       {
@@ -2610,7 +2740,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalList = typedHost.agentSessionsList;
     const originalRuntimeList = typedHost.runtimeList;
     typedHost.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
@@ -2620,7 +2750,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo/worktree",
-      },
+      }),
     ];
     typedHost.runtimeList = async (): Promise<RuntimeInstanceSummary[]> => [
       {
@@ -2658,8 +2788,49 @@ describe("agent-orchestrator-load-sessions", () => {
   });
 
   test("does not reattach adapter-held sessions when the runtime no longer reports them live", async () => {
-    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
-    let state: Record<string, AgentSessionState> = {};
+    const existingSession: AgentSessionState = {
+      sessionId: "session-1",
+      externalSessionId: "external-1",
+      taskId: "task-1",
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "stopped",
+      startedAt: "2026-02-22T08:00:00.000Z",
+      runtimeKind: "opencode",
+      runtimeId: "runtime-1",
+      runId: null,
+      runtimeEndpoint: "http://127.0.0.1:4555",
+      workingDirectory: "/tmp/repo/worktree",
+      messages: [],
+      draftAssistantText: "",
+      draftAssistantMessageId: null,
+      draftReasoningText: "",
+      draftReasoningMessageId: null,
+      contextUsage: null,
+      pendingPermissions: [{ requestId: "permission-1", permission: "read", patterns: [".env"] }],
+      pendingQuestions: [
+        {
+          requestId: "question-1",
+          questions: [
+            {
+              header: "Continue",
+              question: "Proceed?",
+              options: [],
+              custom: true,
+            },
+          ],
+        },
+      ],
+      todos: [],
+      modelCatalog: null,
+      selectedModel: null,
+      isLoadingModelCatalog: false,
+      promptOverrides: {},
+    };
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: { "session-1": existingSession },
+    };
+    let state: Record<string, AgentSessionState> = sessionsRef.current;
     let attachedListeners = 0;
 
     const setSessionsById = (
@@ -2717,7 +2888,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalList = typedHost.agentSessionsList;
     const originalRuntimeList = typedHost.runtimeList;
     typedHost.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
@@ -2727,7 +2898,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo/worktree",
-      },
+      }),
     ];
     typedHost.runtimeList = async () => [
       {
@@ -2756,6 +2927,8 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(attachedListeners).toBe(0);
     expect(state["session-1"]?.status).toBe("stopped");
     expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4555");
+    expect(state["session-1"]?.pendingPermissions).toEqual([]);
+    expect(state["session-1"]?.pendingQuestions).toEqual([]);
   });
 
   test("skips hydration when repo epoch changes while loading persisted sessions", async () => {
@@ -2806,7 +2979,7 @@ describe("agent-orchestrator-load-sessions", () => {
       previousRepoRef.current = "/tmp/other-repo";
 
       listDeferred.resolve([
-        {
+        persistedSessionRecord({
           runtimeKind: "opencode",
           sessionId: "session-stale",
           externalSessionId: "external-stale",
@@ -2817,7 +2990,7 @@ describe("agent-orchestrator-load-sessions", () => {
           startedAt: "2026-02-22T08:00:00.000Z",
           updatedAt: "2026-02-22T08:00:00.000Z",
           workingDirectory: "/tmp/repo",
-        },
+        }),
       ]);
       await loadPromise;
     } finally {
@@ -2885,7 +3058,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalQaGetReport = hostModule.host.qaGetReport;
 
     hostModule.host.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
@@ -2896,7 +3069,7 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
-      },
+      }),
     ];
     hostModule.host.runtimeList = async () => [];
     hostModule.host.runsList = async () => [];

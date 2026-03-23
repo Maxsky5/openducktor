@@ -224,21 +224,15 @@ fn assert_beads_env(call: &RecordedCall) {
     );
 }
 
-fn make_session(session_id: &str, started_at: &str, status: &str) -> AgentSessionDocument {
+fn make_session(session_id: &str, started_at: &str, _status: &str) -> AgentSessionDocument {
     AgentSessionDocument {
         session_id: session_id.to_string(),
         external_session_id: Some(format!("external-{session_id}")),
-        task_id: Some("task-1".to_string()),
         role: "build".to_string(),
-        scenario: Some("build_default".to_string()),
-        status: Some(status.to_string()),
+        scenario: "build_default".to_string(),
         started_at: started_at.to_string(),
-        updated_at: Some(started_at.to_string()),
-        ended_at: None,
         runtime_kind: "opencode".to_string(),
         working_directory: "/repo".to_string(),
-        pending_permissions: Vec::new(),
-        pending_questions: Vec::new(),
         selected_model: None,
     }
 }
@@ -501,34 +495,10 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
         {
             "sessionId": "obp-session-1",
             "externalSessionId": "session-opencode-1",
-            "taskId": "task-1",
             "role": "spec",
             "scenario": "spec_initial",
-            "status": "idle",
             "startedAt": "2026-02-18T17:20:00Z",
-            "updatedAt": "2026-02-18T17:21:00Z",
-            "endedAt": null,
-            "runtimeId": "runtime-1",
-            "runId": null,
-            "baseUrl": "http://127.0.0.1:4173",
             "workingDirectory": "/repo",
-            "pendingPermissions": [{
-                "requestId": "permission-1",
-                "permission": "read",
-                "patterns": ["**/*"]
-            }],
-            "pendingQuestions": [{
-                "requestId": "question-1",
-                "questions": [{
-                    "header": "Confirm",
-                    "question": "Need answer",
-                    "options": [{
-                        "label": "Yes",
-                        "description": "Confirm"
-                    }],
-                    "custom": true
-                }]
-            }],
             "selectedModel": {
                 "providerId": "openai",
                 "modelId": "gpt-5",
@@ -547,20 +517,14 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
         sessions[0].external_session_id.as_deref(),
         Some("session-opencode-1")
     );
-    assert_eq!(sessions[0].pending_permissions.len(), 1);
-    assert_eq!(sessions[0].pending_questions.len(), 1);
 
     let legacy_sessions = parse_agent_sessions(&json!([
         {
             "sessionId": "legacy-planner-session",
             "externalSessionId": "legacy-opencode-session",
-            "taskId": "task-1",
             "role": "planner",
             "scenario": "planner_revision",
-            "status": "idle",
             "startedAt": "2026-02-18T17:22:00Z",
-            "updatedAt": "2026-02-18T17:23:00Z",
-            "endedAt": null,
             "runtimeKind": "opencode",
             "workingDirectory": "/repo",
             "selectedModel": null
@@ -568,10 +532,7 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
     ]))
     .expect("legacy agent sessions");
     assert_eq!(legacy_sessions.len(), 1);
-    assert_eq!(
-        legacy_sessions[0].scenario.as_deref(),
-        Some("planner_initial")
-    );
+    assert_eq!(legacy_sessions[0].scenario, "planner_initial");
 }
 
 #[test]
@@ -610,16 +571,9 @@ fn metadata_parsing_benchmark_scaffold() {
                 json!({
                     "sessionId": format!("obp-session-{index}"),
                     "externalSessionId": format!("session-opencode-{index}"),
-                    "taskId": "task-1",
                     "role": "build",
                     "scenario": "build_default",
-                    "status": "running",
                     "startedAt": "2026-02-18T17:20:00Z",
-                    "updatedAt": "2026-02-18T17:21:00Z",
-                    "endedAt": null,
-                    "runtimeId": "runtime-1",
-                    "runId": null,
-                    "baseUrl": "http://127.0.0.1:4173",
                     "workingDirectory": "/repo",
                     "selectedModel": null
                 })
@@ -1972,8 +1926,7 @@ fn upsert_agent_session_updates_existing_session_without_duplication() -> Result
     ]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
-    let mut updated = make_session("session-1", "2026-02-20T12:00:00Z", "running");
-    updated.updated_at = Some("2026-02-20T12:01:00Z".to_string());
+    let updated = make_session("session-1", "2026-02-20T12:00:00Z", "running");
     store.upsert_agent_session(repo.path(), "task-1", updated)?;
 
     let calls = runner.take_calls();

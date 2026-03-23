@@ -478,49 +478,31 @@ fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_
             AgentSessionDocument {
                 session_id: "spec-session".to_string(),
                 external_session_id: None,
-                task_id: Some("task-1".to_string()),
                 role: "spec".to_string(),
-                scenario: Some("spec_initial".to_string()),
-                status: Some("stopped".to_string()),
+                scenario: "spec_initial".to_string(),
                 started_at: "2026-03-17T10:00:00Z".to_string(),
-                updated_at: None,
-                ended_at: None,
                 runtime_kind: "opencode".to_string(),
                 working_directory: repo_path.to_string_lossy().to_string(),
-                pending_permissions: Vec::new(),
-                pending_questions: Vec::new(),
                 selected_model: None,
             },
             AgentSessionDocument {
                 session_id: "build-session".to_string(),
                 external_session_id: None,
-                task_id: Some("task-1".to_string()),
                 role: "build".to_string(),
-                scenario: Some("build_implementation_start".to_string()),
-                status: Some("stopped".to_string()),
+                scenario: "build_implementation_start".to_string(),
                 started_at: "2026-03-17T11:00:00Z".to_string(),
-                updated_at: None,
-                ended_at: None,
                 runtime_kind: "opencode".to_string(),
                 working_directory: build_worktree.to_string_lossy().to_string(),
-                pending_permissions: Vec::new(),
-                pending_questions: Vec::new(),
                 selected_model: None,
             },
             AgentSessionDocument {
                 session_id: "qa-session".to_string(),
                 external_session_id: None,
-                task_id: Some("task-1".to_string()),
                 role: "qa".to_string(),
-                scenario: Some("qa_review".to_string()),
-                status: Some("stopped".to_string()),
+                scenario: "qa_review".to_string(),
                 started_at: "2026-03-17T12:00:00Z".to_string(),
-                updated_at: None,
-                ended_at: None,
                 runtime_kind: "opencode".to_string(),
                 working_directory: qa_worktree.to_string_lossy().to_string(),
-                pending_permissions: Vec::new(),
-                pending_questions: Vec::new(),
                 selected_model: None,
             },
         ];
@@ -722,18 +704,12 @@ fn task_reset_implementation_rejects_active_builder_or_qa_sessions() -> Result<(
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
         session_id: "build-session".to_string(),
-        external_session_id: None,
-        task_id: Some("task-1".to_string()),
+        external_session_id: Some("external-build-session".to_string()),
         role: "build".to_string(),
-        scenario: Some("build_implementation_start".to_string()),
-        status: Some("running".to_string()),
+        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
-        updated_at: None,
-        ended_at: None,
         runtime_kind: "opencode".to_string(),
         working_directory: repo_path.to_string_lossy().to_string(),
-        pending_permissions: Vec::new(),
-        pending_questions: Vec::new(),
         selected_model: None,
     }];
 
@@ -743,6 +719,48 @@ fn task_reset_implementation_rejects_active_builder_or_qa_sessions() -> Result<(
     assert!(error
         .to_string()
         .contains("Stop the active session(s) first"));
+    Ok(())
+}
+
+#[test]
+fn task_reset_implementation_ignores_stale_qa_sessions_with_persisted_external_ids() -> Result<()> {
+    let repo_path = unique_temp_path("reset-implementation-stale-qa-session-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let task = make_task("task-1", "task", TaskStatus::InProgress);
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    let repo_config = host_infra_system::RepoConfig {
+        branch_prefix: "odt".to_string(),
+        ..Default::default()
+    };
+    service.workspace_update_repo_config(&repo_path.to_string_lossy(), repo_config)?;
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "qa-session".to_string(),
+        external_session_id: Some("external-qa-session".to_string()),
+        role: "qa".to_string(),
+        scenario: "qa_review".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "opencode".to_string(),
+        working_directory: repo_path.to_string_lossy().to_string(),
+        selected_model: None,
+    }];
+
+    let reset = service.task_reset_implementation(&repo_path.to_string_lossy(), "task-1")?;
+
+    assert_eq!(reset.status, TaskStatus::Open);
     Ok(())
 }
 
@@ -777,17 +795,11 @@ fn task_reset_implementation_rejects_live_runtime_even_without_persisted_session
         .agent_sessions = vec![AgentSessionDocument {
         session_id: "build-session".to_string(),
         external_session_id: None,
-        task_id: Some("task-1".to_string()),
         role: "build".to_string(),
-        scenario: Some("build_implementation_start".to_string()),
-        status: None,
+        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
-        updated_at: None,
-        ended_at: None,
         runtime_kind: "opencode".to_string(),
         working_directory: repo_path.to_string_lossy().to_string(),
-        pending_permissions: Vec::new(),
-        pending_questions: Vec::new(),
         selected_model: None,
     }];
     service
@@ -884,17 +896,11 @@ fn task_reset_implementation_ignores_stale_build_run_when_runtime_session_is_idl
         .agent_sessions = vec![AgentSessionDocument {
         session_id: "build-session".to_string(),
         external_session_id: Some("external-build-session".to_string()),
-        task_id: Some("task-1".to_string()),
         role: "build".to_string(),
-        scenario: Some("build_implementation_start".to_string()),
-        status: Some("running".to_string()),
+        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
-        updated_at: None,
-        ended_at: None,
         runtime_kind: "opencode".to_string(),
         working_directory: build_worktree.to_string_lossy().to_string(),
-        pending_permissions: Vec::new(),
-        pending_questions: Vec::new(),
         selected_model: None,
     }];
 
@@ -1005,17 +1011,11 @@ fn task_reset_implementation_ignores_stale_build_run_when_status_endpoint_is_unr
         .agent_sessions = vec![AgentSessionDocument {
         session_id: "build-session".to_string(),
         external_session_id: Some("external-build-session".to_string()),
-        task_id: Some("task-1".to_string()),
         role: "build".to_string(),
-        scenario: Some("build_implementation_start".to_string()),
-        status: Some("running".to_string()),
+        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
-        updated_at: None,
-        ended_at: None,
         runtime_kind: "opencode".to_string(),
         working_directory: build_worktree.to_string_lossy().to_string(),
-        pending_permissions: Vec::new(),
-        pending_questions: Vec::new(),
         selected_model: None,
     }];
 
@@ -1137,33 +1137,21 @@ fn task_reset_implementation_only_removes_task_managed_worktrees() -> Result<()>
         AgentSessionDocument {
             session_id: "build-session".to_string(),
             external_session_id: None,
-            task_id: Some("task-1".to_string()),
             role: "build".to_string(),
-            scenario: Some("build_implementation_start".to_string()),
-            status: Some("stopped".to_string()),
+            scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
-            updated_at: None,
-            ended_at: None,
             runtime_kind: "opencode".to_string(),
             working_directory: managed_worktree.to_string_lossy().to_string(),
-            pending_permissions: Vec::new(),
-            pending_questions: Vec::new(),
             selected_model: None,
         },
         AgentSessionDocument {
             session_id: "qa-session".to_string(),
             external_session_id: None,
-            task_id: Some("task-1".to_string()),
             role: "qa".to_string(),
-            scenario: Some("qa_review".to_string()),
-            status: Some("stopped".to_string()),
+            scenario: "qa_review".to_string(),
             started_at: "2026-03-17T12:00:00Z".to_string(),
-            updated_at: None,
-            ended_at: None,
             runtime_kind: "opencode".to_string(),
             working_directory: unrelated_worktree.to_string_lossy().to_string(),
-            pending_permissions: Vec::new(),
-            pending_questions: Vec::new(),
             selected_model: None,
         },
     ];
@@ -1243,17 +1231,11 @@ fn task_reset_implementation_fails_when_branch_remains_checked_out_in_repo_workt
         .agent_sessions = vec![AgentSessionDocument {
         session_id: "build-session".to_string(),
         external_session_id: None,
-        task_id: Some("task-1".to_string()),
         role: "build".to_string(),
-        scenario: Some("build_implementation_start".to_string()),
-        status: Some("stopped".to_string()),
+        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
-        updated_at: None,
-        ended_at: None,
         runtime_kind: "opencode".to_string(),
         working_directory: build_worktree.to_string_lossy().to_string(),
-        pending_permissions: Vec::new(),
-        pending_questions: Vec::new(),
         selected_model: None,
     }];
 
@@ -1331,17 +1313,11 @@ fn task_reset_implementation_reports_partial_cleanup_progress_when_branch_delete
         .agent_sessions = vec![AgentSessionDocument {
         session_id: "build-session".to_string(),
         external_session_id: None,
-        task_id: Some("task-1".to_string()),
         role: "build".to_string(),
-        scenario: Some("build_implementation_start".to_string()),
-        status: Some("stopped".to_string()),
+        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
-        updated_at: None,
-        ended_at: None,
         runtime_kind: "opencode".to_string(),
         working_directory: build_worktree.to_string_lossy().to_string(),
-        pending_permissions: Vec::new(),
-        pending_questions: Vec::new(),
         selected_model: None,
     }];
 
@@ -1409,17 +1385,11 @@ fn task_reset_implementation_reports_partial_cleanup_progress_when_store_cleanup
         state.agent_sessions = vec![AgentSessionDocument {
             session_id: "build-session".to_string(),
             external_session_id: None,
-            task_id: Some("task-1".to_string()),
             role: "build".to_string(),
-            scenario: Some("build_implementation_start".to_string()),
-            status: Some("stopped".to_string()),
+            scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
-            updated_at: None,
-            ended_at: None,
             runtime_kind: "opencode".to_string(),
             working_directory: build_worktree.to_string_lossy().to_string(),
-            pending_permissions: Vec::new(),
-            pending_questions: Vec::new(),
             selected_model: None,
         }];
     }
@@ -1490,17 +1460,11 @@ fn task_reset_implementation_rejects_branch_still_checked_out_in_remaining_workt
         .agent_sessions = vec![AgentSessionDocument {
         session_id: "build-session".to_string(),
         external_session_id: None,
-        task_id: Some("task-1".to_string()),
         role: "build".to_string(),
-        scenario: Some("build_implementation_start".to_string()),
-        status: Some("stopped".to_string()),
+        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
-        updated_at: None,
-        ended_at: None,
         runtime_kind: "opencode".to_string(),
         working_directory: build_worktree.to_string_lossy().to_string(),
-        pending_permissions: Vec::new(),
-        pending_questions: Vec::new(),
         selected_model: None,
     }];
 

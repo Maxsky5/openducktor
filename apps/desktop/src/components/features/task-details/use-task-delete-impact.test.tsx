@@ -13,6 +13,7 @@ const makeSession = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionR
   scenario: overrides.scenario ?? "build_implementation_start",
   startedAt: overrides.startedAt ?? "2026-03-06T10:00:00.000Z",
   workingDirectory: overrides.workingDirectory ?? "/repo",
+  selectedModel: null,
   ...overrides,
 });
 

@@ -402,25 +402,16 @@ impl AppService {
             .iter()
             .filter(|session| matches!(session.role.as_str(), "build" | "qa"))
         {
-            if !matches!(
-                session.status.as_deref(),
-                Some("starting") | Some("running")
-            ) {
-                continue;
-            }
-
             let external_session_id = session
                 .external_session_id
                 .as_deref()
                 .map(str::trim)
                 .filter(|value| !value.is_empty());
             let Some(external_session_id) = external_session_id else {
-                active_roles.insert(session.role.as_str());
                 continue;
             };
 
             if session.role.as_str() != "build" {
-                active_roles.insert(session.role.as_str());
                 continue;
             }
 

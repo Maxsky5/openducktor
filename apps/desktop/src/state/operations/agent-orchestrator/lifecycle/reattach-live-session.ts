@@ -34,13 +34,6 @@ type CreateReattachLiveSessionArgs = {
   toLiveSessionState: (status: LiveAgentSessionSnapshot["status"]) => AgentSessionState["status"];
 };
 
-const preferLivePendingInput = <T>(liveValue: T[], currentValue: T[]): T[] => {
-  if (liveValue.length > 0) {
-    return liveValue;
-  }
-  return currentValue;
-};
-
 export const createReattachLiveSession = ({
   adapter,
   repoPath,
@@ -56,14 +49,14 @@ export const createReattachLiveSession = ({
   isStaleRepoOperation: _isStaleRepoOperation,
   toLiveSessionState,
 }: CreateReattachLiveSessionArgs) => {
-  return async (record: AgentSessionRecord): Promise<void> => {
+  return async (record: AgentSessionRecord): Promise<boolean> => {
     if (typeof adapter.hasSession !== "function" || !attachSessionListener) {
-      return;
+      return false;
     }
 
     const runtimeResolution = await resolveHydrationRuntime(record);
     if (!runtimeResolution.ok) {
-      return;
+      return false;
     }
 
     const externalSessionId = record.externalSessionId ?? record.sessionId;
@@ -77,7 +70,7 @@ export const createReattachLiveSession = ({
       (session) => session.externalSessionId === externalSessionId,
     );
     if (!liveSession) {
-      return;
+      return false;
     }
 
     const nextStatus = toLiveSessionState(liveSession.status);
@@ -106,18 +99,13 @@ export const createReattachLiveSession = ({
         runtimeEndpoint: runtimeResolution.runtimeEndpoint,
         workingDirectory: runtimeResolution.runtimeConnection.workingDirectory,
         status: nextStatus,
-        pendingPermissions: preferLivePendingInput(
-          liveSession.pendingPermissions,
-          current.pendingPermissions,
-        ),
-        pendingQuestions: preferLivePendingInput(
-          liveSession.pendingQuestions,
-          current.pendingQuestions,
-        ),
+        pendingPermissions: liveSession.pendingPermissions,
+        pendingQuestions: liveSession.pendingQuestions,
         promptOverrides,
         selectedModel: mergeModelSelection(current.selectedModel, selectedModel ?? undefined),
       }),
       { persist: false },
     );
+    return true;
   };
 };

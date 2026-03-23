@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { clearAppQueryClient } from "@/lib/query-client";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -14,6 +15,28 @@ import {
 const createStartAgentSessionWithFlatDeps = (deps: FlatStartSessionDependencies) => {
   return createStartAgentSession(toStartSessionDependencies(deps));
 };
+
+const persistedSessionRecord = (
+  input: {
+    sessionId: string;
+    externalSessionId: string;
+    role: AgentSessionRecord["role"];
+    scenario: AgentSessionRecord["scenario"];
+    startedAt: string;
+    workingDirectory: string;
+    runtimeKind?: AgentSessionRecord["runtimeKind"];
+    selectedModel?: AgentSessionRecord["selectedModel"];
+  } & Record<string, unknown>,
+): AgentSessionRecord => ({
+  runtimeKind: input.runtimeKind ?? "opencode",
+  sessionId: input.sessionId,
+  externalSessionId: input.externalSessionId,
+  role: input.role,
+  scenario: input.scenario,
+  startedAt: input.startedAt,
+  workingDirectory: input.workingDirectory,
+  selectedModel: input.selectedModel ?? null,
+});
 
 const withCapturedConsoleError = async (
   run: (calls: unknown[][]) => Promise<void>,
@@ -777,7 +800,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     host.agentSessionsList = async () => {
       persistedListCalls += 1;
       return [
-        {
+        persistedSessionRecord({
           runtimeKind: "opencode",
           sessionId: "persisted-build",
           externalSessionId: "persisted-build-ext",
@@ -791,7 +814,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           runId: "run-2",
           runtimeEndpoint: "http://127.0.0.1:4444",
           workingDirectory: "/tmp/repo/worktree",
-        },
+        }),
       ];
     };
 
@@ -953,7 +976,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "persisted-2",
         externalSessionId: "external-2",
@@ -967,8 +990,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
         runId: "run-2",
         runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
-      },
-      {
+      }),
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "persisted-1",
         externalSessionId: "external-1",
@@ -982,8 +1005,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
         runId: "run-1",
         runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
-      },
-      {
+      }),
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "persisted-build-newer",
         externalSessionId: "external-build-newer",
@@ -997,7 +1020,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         runId: "run-3",
         runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
-      },
+      }),
     ];
 
     const sessionsRef = { current: {} };
@@ -1206,7 +1229,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [
-      {
+      persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "persisted-opencode",
         externalSessionId: "external-opencode",
@@ -1226,7 +1249,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           modelId: "gpt-5",
           profileId: "Ares",
         },
-      },
+      }),
     ];
 
     const sessionsRef = { current: {} };

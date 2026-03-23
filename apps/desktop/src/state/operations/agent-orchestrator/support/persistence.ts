@@ -7,412 +7,21 @@ import {
   defaultAgentScenarioForRole,
 } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
-import { isQuestionToolName } from "@/lib/question-tools";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
-type RecoveredPendingPermissionRequest = AgentSessionState["pendingPermissions"][number];
-type RecoveredPendingQuestionRequest = AgentSessionState["pendingQuestions"][number] & {
-  answered: boolean;
-};
-
-const normalizePersistedPendingPermissions = (
-  permissions: AgentSessionRecord["pendingPermissions"],
-): AgentSessionState["pendingPermissions"] =>
-  (permissions ?? []).map((entry) => ({
-    requestId: entry.requestId,
-    permission: entry.permission,
-    patterns: [...entry.patterns],
-    ...(entry.metadata ? { metadata: entry.metadata } : {}),
-  }));
-
-const normalizePersistedPendingQuestions = (
-  questions: AgentSessionRecord["pendingQuestions"],
-): AgentSessionState["pendingQuestions"] =>
-  (questions ?? []).map((entry) => ({
-    requestId: entry.requestId,
-    questions: entry.questions.map((question) => ({
-      header: question.header,
-      question: question.question,
-      options: question.options.map((option) => ({
-        label: option.label,
-        description: option.description,
-      })),
-      ...(typeof question.multiple === "boolean" ? { multiple: question.multiple } : {}),
-      ...(typeof question.custom === "boolean" ? { custom: question.custom } : {}),
-    })),
-  }));
-
-const asRecord = (value: unknown): Record<string, unknown> | null => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
-  }
-  return value as Record<string, unknown>;
-};
-
-const parseJsonRecord = (value: string | undefined): Record<string, unknown> | null => {
-  if (!value) {
-    return null;
-  }
-  const trimmed = value.trim();
-  if (!trimmed.startsWith("{")) {
-    return null;
-  }
-  try {
-    return asRecord(JSON.parse(trimmed));
-  } catch {
-    return null;
-  }
-};
-
-const readString = (source: Record<string, unknown> | null, keys: string[]): string | null => {
-  if (!source) {
-    return null;
-  }
-  for (const key of keys) {
-    const value = source[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value.trim();
-    }
-  }
-  return null;
-};
-
-const readBoolean = (source: Record<string, unknown> | null, keys: string[]): boolean | null => {
-  if (!source) {
-    return null;
-  }
-  for (const key of keys) {
-    const value = source[key];
-    if (typeof value === "boolean") {
-      return value;
-    }
-  }
-  return null;
-};
-
-const normalizeRecoveredQuestions = (
-  rawQuestions: unknown,
-): AgentSessionState["pendingQuestions"][number]["questions"] => {
-  if (!Array.isArray(rawQuestions)) {
-    return [];
-  }
-
-  return rawQuestions.flatMap((entry) => {
-    const question = asRecord(entry);
-    if (!question) {
-      return [];
-    }
-    const prompt = readString(question, ["question", "prompt", "header", "title", "label", "name"]);
-    if (!prompt) {
-      return [];
-    }
-    const header = readString(question, ["header", "title", "label", "name"]) ?? prompt;
-    const rawOptions = Array.isArray(question.options) ? question.options : [];
-    const options = rawOptions.flatMap((optionEntry) => {
-      const option = asRecord(optionEntry);
-      const label = readString(option, ["label"]);
-      if (!label) {
-        return [];
-      }
-      const description = readString(option, ["description"]) ?? label;
-      return [{ label, description }];
-    });
-
-    const multiple = readBoolean(question, ["multiple"]);
-    const custom = readBoolean(question, ["custom"]);
-
-    return [
-      {
-        header,
-        question: prompt,
-        options,
-        ...(typeof multiple === "boolean" ? { multiple } : {}),
-        ...(typeof custom === "boolean" ? { custom } : {}),
-      },
-    ];
-  });
-};
-
-const normalizeRecoveredPatterns = (rawPatterns: unknown): string[] => {
-  if (!Array.isArray(rawPatterns)) {
-    return [];
-  }
-
-  return rawPatterns.filter((entry): entry is string => typeof entry === "string");
-};
-
-const normalizeAnswerValues = (value: unknown): string[] => {
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? [trimmed] : [];
-  }
-  if (Array.isArray(value)) {
-    return value.flatMap((entry) => normalizeAnswerValues(entry));
-  }
-  if (!value || typeof value !== "object") {
-    return [];
-  }
-  const record = value as Record<string, unknown>;
-  return normalizeAnswerValues(
-    record.answers ??
-      record.answer ??
-      record.response ??
-      record.responses ??
-      record.value ??
-      record.text,
-  );
-};
-
-const normalizeAnswerGroups = (value: unknown): string[][] => {
-  if (Array.isArray(value)) {
-    return value.map((entry) => normalizeAnswerValues(entry));
-  }
-  if (!value || typeof value !== "object") {
-    return [];
-  }
-  const record = value as Record<string, unknown>;
-  const nested =
-    record.answers ??
-    record.answer ??
-    record.responses ??
-    record.response ??
-    record.result ??
-    record.value;
-  if (nested === undefined) {
-    return Object.values(record)
-      .map((entry) => normalizeAnswerValues(entry))
-      .filter((entry) => entry.length > 0);
-  }
-  return normalizeAnswerGroups(nested);
-};
-
-const hasQuestionAnswers = (
-  metadata: Record<string, unknown> | null,
-  input: Record<string, unknown> | null,
-  output: Record<string, unknown> | null,
-): boolean => {
-  const answerCandidates = [
-    output?.answers,
-    output?.answer,
-    output?.responses,
-    output?.response,
-    output?.result,
-    output?.value,
-    metadata?.answers,
-    metadata?.answer,
-    metadata?.responses,
-    metadata?.response,
-    input?.answers,
-    input?.answer,
-    input?.responses,
-    input?.response,
-  ];
-
-  return answerCandidates.some((candidate) =>
-    normalizeAnswerGroups(candidate).some((group) =>
-      group.some((entry) => entry.trim().length > 0),
-    ),
-  );
-};
-
-const normalizeComparableText = (value: string): string => value.trim().toLowerCase();
-
-const findSyntheticAnsweredRequestId = (
-  pendingQueue: AgentSessionState["pendingQuestions"],
-  message: AgentSessionHistoryMessage,
-): string | null => {
-  const answerText = normalizeComparableText(message.text);
-  if (answerText.length === 0) {
-    return null;
-  }
-
-  const matches = pendingQueue.filter((request) =>
-    request.questions.some((question) =>
-      question.options.some((option) => {
-        const label = normalizeComparableText(option.label);
-        const description = normalizeComparableText(option.description);
-        return label === answerText || description === answerText;
-      }),
-    ),
-  );
-
-  return matches.length === 1 ? (matches[0]?.requestId ?? null) : null;
-};
-
-const readPendingQuestionRequest = (
-  part: Extract<HistoryPart, { kind: "tool" }>,
-): RecoveredPendingQuestionRequest | null => {
-  if (!isQuestionToolName(part.tool)) {
-    return null;
-  }
-
-  const metadata = asRecord(part.metadata);
-  const input = asRecord(part.input);
-  const output = parseJsonRecord(part.output);
-  const requestId =
-    readString(metadata, ["requestId", "requestID", "questionRequestId", "id"]) ??
-    readString(input, ["requestId", "requestID", "questionRequestId", "id"]) ??
-    readString(output, ["requestId", "requestID", "questionRequestId", "id"]) ??
-    part.callId ??
-    part.partId;
-
-  const questions = normalizeRecoveredQuestions(
-    metadata?.questions ?? input?.questions ?? output?.questions,
-  );
-  if (questions.length === 0) {
-    return null;
-  }
-
-  return {
-    requestId,
-    questions,
-    answered: hasQuestionAnswers(metadata, input, output),
-  };
-};
-
-const readPendingPermissionRequest = (
-  part: Extract<HistoryPart, { kind: "tool" }>,
-): RecoveredPendingPermissionRequest | null => {
-  const metadata = asRecord(part.metadata);
-  const input = asRecord(part.input);
-  const output = parseJsonRecord(part.output);
-  const requestId =
-    readString(metadata, ["requestId", "requestID", "permissionRequestId", "id"]) ??
-    readString(input, ["requestId", "requestID", "permissionRequestId", "id"]) ??
-    readString(output, ["requestId", "requestID", "permissionRequestId", "id"]) ??
-    part.callId ??
-    part.partId;
-  const permission =
-    readString(metadata, ["permission"]) ??
-    readString(input, ["permission"]) ??
-    readString(output, ["permission"]);
-  if (!requestId || !permission) {
-    return null;
-  }
-
-  const metadataPatterns = normalizeRecoveredPatterns(metadata?.patterns);
-  const inputPatterns = normalizeRecoveredPatterns(input?.patterns);
-  const outputPatterns = normalizeRecoveredPatterns(output?.patterns);
-  const patterns =
-    metadataPatterns.length > 0
-      ? metadataPatterns
-      : inputPatterns.length > 0
-        ? inputPatterns
-        : outputPatterns;
-
-  const resolvedMetadata = metadata ?? input ?? output ?? undefined;
-  return {
-    requestId,
-    permission,
-    patterns,
-    ...(resolvedMetadata ? { metadata: resolvedMetadata } : {}),
-  };
-};
-
-export const recoverPendingQuestionsFromHistory = (
-  history: AgentSessionHistoryMessage[],
-): AgentSessionState["pendingQuestions"] => {
-  const pendingQueue: AgentSessionState["pendingQuestions"] = [];
-
-  for (const message of history) {
-    for (const part of message.parts) {
-      if (part.kind !== "tool") {
-        continue;
-      }
-      const request = readPendingQuestionRequest(part);
-      if (!request) {
-        continue;
-      }
-
-      if (request.answered) {
-        const answeredIndex = pendingQueue.findIndex(
-          (entry) => entry.requestId === request.requestId,
-        );
-        if (answeredIndex >= 0) {
-          pendingQueue.splice(answeredIndex, 1);
-        }
-        continue;
-      }
-
-      const existingIndex = pendingQueue.findIndex(
-        (entry) => entry.requestId === request.requestId,
-      );
-      if (existingIndex >= 0) {
-        pendingQueue.splice(existingIndex, 1);
-      }
-      pendingQueue.push({
-        requestId: request.requestId,
-        questions: request.questions,
-      });
-    }
-
-    if (isSyntheticHistoryUserMessage(message) && pendingQueue.length > 0) {
-      const answeredRequestId = findSyntheticAnsweredRequestId(pendingQueue, message);
-      if (answeredRequestId) {
-        const answeredIndex = pendingQueue.findIndex(
-          (entry) => entry.requestId === answeredRequestId,
-        );
-        if (answeredIndex >= 0) {
-          pendingQueue.splice(answeredIndex, 1);
-          continue;
-        }
-      }
-
-      pendingQueue.shift();
-    }
-  }
-
-  return pendingQueue;
-};
-
-export const recoverPendingPermissionsFromHistory = (
-  history: AgentSessionHistoryMessage[],
-): AgentSessionState["pendingPermissions"] => {
-  const pendingPermissions: AgentSessionState["pendingPermissions"] = [];
-
-  for (const message of history) {
-    for (const part of message.parts) {
-      if (part.kind !== "tool") {
-        continue;
-      }
-      const permission = readPendingPermissionRequest(part);
-      if (!permission) {
-        continue;
-      }
-
-      const existingIndex = pendingPermissions.findIndex(
-        (entry) => entry.requestId === permission.requestId,
-      );
-      if (existingIndex >= 0) {
-        pendingPermissions.splice(existingIndex, 1);
-      }
-
-      if (part.status === "completed" || part.status === "error") {
-        continue;
-      }
-
-      pendingPermissions.push(permission);
-    }
-  }
-
-  return pendingPermissions;
-};
 
 export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => ({
   sessionId: session.sessionId,
   externalSessionId: session.externalSessionId,
-  taskId: session.taskId,
   role: session.role,
   scenario: session.scenario,
   startedAt: session.startedAt,
   runtimeKind: session.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
   workingDirectory: session.workingDirectory,
-  pendingPermissions: session.pendingPermissions,
-  pendingQuestions: session.pendingQuestions,
   selectedModel: session.selectedModel
     ? {
         runtimeKind:
@@ -422,7 +31,7 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
         ...(session.selectedModel.variant ? { variant: session.selectedModel.variant } : {}),
         ...(session.selectedModel.profileId ? { profileId: session.selectedModel.profileId } : {}),
       }
-    : undefined,
+    : null,
 });
 
 export const defaultScenarioForRole = (role: AgentRole): AgentScenario => {
@@ -436,9 +45,9 @@ export const fromPersistedSessionRecord = (
   return {
     sessionId: session.sessionId,
     externalSessionId: session.externalSessionId ?? session.sessionId,
-    taskId: session.taskId ?? fallbackTaskId,
+    taskId: fallbackTaskId,
     role: session.role,
-    scenario: session.scenario ?? defaultScenarioForRole(session.role),
+    scenario: session.scenario,
     // Persisted Beads records are durable session metadata only.
     // Live state must always be derived from the runtime on hydration/reconciliation.
     status: "stopped",
@@ -454,8 +63,8 @@ export const fromPersistedSessionRecord = (
     draftReasoningText: "",
     draftReasoningMessageId: null,
     contextUsage: null,
-    pendingPermissions: normalizePersistedPendingPermissions(session.pendingPermissions),
-    pendingQuestions: normalizePersistedPendingQuestions(session.pendingQuestions),
+    pendingPermissions: [],
+    pendingQuestions: [],
     todos: [],
     modelCatalog: null,
     selectedModel: normalizePersistedSelection(session.selectedModel),

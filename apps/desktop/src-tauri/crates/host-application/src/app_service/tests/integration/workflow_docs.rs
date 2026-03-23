@@ -244,11 +244,11 @@ fn task_delete_removes_managed_worktrees_and_related_branches() -> Result<()> {
     build_session.working_directory = worktree_path.to_string();
     let mut qa_session = make_session("parent-1", "qa-session");
     qa_session.role = "qa".to_string();
-    qa_session.scenario = Some("qa_review".to_string());
+    qa_session.scenario = "qa_review".to_string();
     qa_session.working_directory = format!("{worktree_path}/");
     let mut planner_session = make_session("parent-1", "planner-session");
     planner_session.role = "planner".to_string();
-    planner_session.scenario = Some("planner_initial".to_string());
+    planner_session.scenario = "planner_initial".to_string();
     planner_session.working_directory = repo_path.to_string();
     let (service, task_state, git_state) = build_service_with_git_state(
         vec![parent],
@@ -1658,19 +1658,6 @@ fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
 
     let mut upsert_session = make_session("wrong-task", "session-2");
     upsert_session.working_directory = repo_path.to_string();
-    upsert_session.pending_questions = vec![host_domain::AgentSessionQuestionRequestDocument {
-        request_id: "question-1".to_string(),
-        questions: vec![host_domain::AgentSessionQuestionItemDocument {
-            header: "Confirm".to_string(),
-            question: "Need answer".to_string(),
-            options: vec![host_domain::AgentSessionQuestionOptionDocument {
-                label: "Yes".to_string(),
-                description: "Confirm".to_string(),
-            }],
-            multiple: None,
-            custom: Some(true),
-        }],
-    }];
     let upserted = service.agent_session_upsert(repo_path, "task-1", upsert_session)?;
     assert!(upserted);
 
@@ -1678,10 +1665,9 @@ fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
     assert_eq!(task_state.upserted_sessions.len(), 1);
     assert_eq!(task_state.upserted_sessions[0].0, "task-1");
     assert_eq!(
-        task_state.upserted_sessions[0].1.task_id.as_deref(),
-        Some("task-1")
+        task_state.upserted_sessions[0].1.external_session_id,
+        Some("external-session-2".to_string())
     );
-    assert_eq!(task_state.upserted_sessions[0].1.pending_questions.len(), 1);
     Ok(())
 }
 

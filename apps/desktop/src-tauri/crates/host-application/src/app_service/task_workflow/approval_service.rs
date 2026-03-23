@@ -1037,17 +1037,10 @@ fn latest_builder_cleanup_target(
         .filter(|session| session.role == "build")
         .collect::<Vec<_>>();
     builder_sessions.sort_by(|left, right| {
-        let left_key = left
-            .updated_at
-            .as_deref()
-            .unwrap_or(left.started_at.as_str());
-        let right_key = right
-            .updated_at
-            .as_deref()
-            .unwrap_or(right.started_at.as_str());
+        let left_key = left.started_at.as_str();
+        let right_key = right.started_at.as_str();
         left_key
             .cmp(right_key)
-            .then_with(|| left.started_at.cmp(&right.started_at))
             .then_with(|| left.session_id.cmp(&right.session_id))
     });
     builder_sessions.reverse();

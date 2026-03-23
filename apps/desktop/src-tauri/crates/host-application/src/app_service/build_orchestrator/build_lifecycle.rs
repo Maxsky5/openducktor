@@ -425,28 +425,14 @@ impl AppService {
 }
 
 fn build_session_sort_key(session: &AgentSessionDocument) -> (&str, &str) {
-    (
-        session
-            .updated_at
-            .as_deref()
-            .unwrap_or(session.started_at.as_str()),
-        session.started_at.as_str(),
-    )
+    (session.started_at.as_str(), session.session_id.as_str())
 }
 
 fn is_active_build_session(session: &AgentSessionDocument) -> bool {
-    if session
-        .ended_at
+    session
+        .external_session_id
         .as_deref()
         .is_some_and(|value| !value.trim().is_empty())
-    {
-        return false;
-    }
-
-    !matches!(
-        session.status.as_deref().map(str::trim),
-        Some("stopped") | Some("error")
-    )
 }
 
 fn normalize_path_for_comparison(path: &str) -> PathBuf {

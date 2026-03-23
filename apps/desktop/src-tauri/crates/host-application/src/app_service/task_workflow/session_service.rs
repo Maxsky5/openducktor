@@ -20,12 +20,9 @@ impl AppService {
         &self,
         repo_path: &str,
         task_id: &str,
-        mut session: AgentSessionDocument,
+        session: AgentSessionDocument,
     ) -> Result<bool> {
         let repo_path = self.resolve_task_repo_path(repo_path)?;
-        if session.task_id.as_deref() != Some(task_id) {
-            session.task_id = Some(task_id.to_string());
-        }
         validate_task_agent_session(self, repo_path.as_str(), &session)?;
         self.task_store
             .upsert_agent_session(Path::new(&repo_path), task_id, session)
@@ -108,11 +105,7 @@ impl AppService {
         let latest_builder_session = sessions
             .into_iter()
             .filter(|session| TaskAgentRole::parse(session.role.trim()) == Some(TaskAgentRole::Build))
-            .max_by(|left, right| {
-                session_sort_key(left)
-                    .cmp(&session_sort_key(right))
-                    .then_with(|| left.session_id.cmp(&right.session_id))
-            })
+            .max_by(|left, right| session_sort_key(left).cmp(&session_sort_key(right)))
             .ok_or_else(|| {
                 anyhow!(
                     "Builder continuation cannot start until a builder worktree exists for task {task_id}. Start Builder first."
@@ -132,13 +125,7 @@ impl AppService {
 }
 
 fn session_sort_key(session: &AgentSessionDocument) -> (&str, &str) {
-    (
-        session
-            .updated_at
-            .as_deref()
-            .unwrap_or(session.started_at.as_str()),
-        session.started_at.as_str(),
-    )
+    (session.started_at.as_str(), session.session_id.as_str())
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

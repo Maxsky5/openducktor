@@ -161,6 +161,8 @@ Prefer light shades for backgrounds (`bg-sky-50`) and dark for text (`text-sky-7
 
 - Beads is the sole source of truth for tasks in V1.
 - Lifecycle state is Beads `status` (not labels/phases).
+- Beads metadata must store durable task/workflow state only. Do not persist transient runtime or session interaction state there.
+- Never serialize pending permissions, pending questions, live runtime routes, in-progress transcripts, tool streaming state, or other recoverable live-only values into Beads metadata/models. Rehydrate those from the live runtime, event stream, or runtime-owned history instead.
 - Canonical statuses:
   - built-in: `open`, `in_progress`, `blocked`, `deferred`, `closed`
   - custom: `spec_ready`, `ready_for_dev`, `ai_review`, `human_review`
