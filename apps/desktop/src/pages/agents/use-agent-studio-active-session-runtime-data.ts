@@ -100,8 +100,9 @@ export const useAgentStudioActiveSessionRuntimeData = ({
     const resolvedCatalog = session.modelCatalog ?? catalogQuery.data ?? null;
     const resolvedTodos = session.todos.length > 0 ? session.todos : (todosQuery.data ?? []);
     const isLoadingModelCatalog =
-      session.isLoadingModelCatalog ||
-      (runtimeQueryInput !== null && resolvedCatalog === null && catalogQuery.isPending);
+      runtimeQueryInput !== null
+        ? resolvedCatalog === null && catalogQuery.isPending
+        : session.isLoadingModelCatalog && resolvedCatalog === null;
 
     if (
       resolvedCatalog === session.modelCatalog &&

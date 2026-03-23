@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
-import type { ReactElement } from "react";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { act } from "react";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { useTaskDeleteDialog } from "./use-task-delete-dialog";
 
 type HarnessProps = {
@@ -45,62 +45,52 @@ const makeTask = (id: string): TaskCard => ({
   },
 });
 
-type HookState = ReturnType<typeof useTaskDeleteDialog>;
-
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-};
-
 describe("use-task-delete-dialog", () => {
-  let root: ReactTestRenderer | null = null;
-  let latest: HookState | null = null;
+  let latest: ReturnType<typeof useTaskDeleteDialog> | null = null;
+  let harness: ReturnType<typeof createSharedHookHarness<HarnessProps, null>> | null = null;
 
-  const Harness = (props: HarnessProps): ReactElement | null => {
-    latest = useTaskDeleteDialog({
-      sheetOpen: props.sheetOpen,
-      task: props.task,
-      hasSubtasks: props.hasSubtasks,
-      onOpenChange: props.onOpenChange,
-      onDelete: props.onDelete,
-    });
-    return null;
-  };
+  const createHarness = (props: HarnessProps) =>
+    createSharedHookHarness((currentProps: HarnessProps) => {
+      latest = useTaskDeleteDialog({
+        sheetOpen: currentProps.sheetOpen,
+        task: currentProps.task,
+        hasSubtasks: currentProps.hasSubtasks,
+        onOpenChange: currentProps.onOpenChange,
+        onDelete: currentProps.onDelete,
+      });
+      return null;
+    }, props);
 
   const mount = async (props: HarnessProps): Promise<void> => {
-    await act(async () => {
-      root = create(<Harness {...props} />);
-      await flush();
-    });
+    harness = createHarness(props);
+    await harness.mount();
   };
 
   const update = async (props: HarnessProps): Promise<void> => {
-    await act(async () => {
-      root?.update(<Harness {...props} />);
-      await flush();
-    });
+    if (!harness) {
+      throw new Error("Harness not mounted");
+    }
+    await harness.update(props);
   };
 
-  const run = async (fn: () => void): Promise<void> => {
-    await act(async () => {
-      fn();
-      await flush();
+  const run = async (fn: () => void | Promise<void>): Promise<void> => {
+    if (!harness) {
+      throw new Error("Harness not mounted");
+    }
+    await harness.run(async () => {
+      await fn();
     });
   };
 
   beforeEach(() => {
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
     latest = null;
+    harness = null;
   });
 
   afterEach(async () => {
-    if (root) {
-      await act(async () => {
-        root?.unmount();
-        await flush();
-      });
-    }
-    root = null;
+    await harness?.unmount();
+    harness = null;
     latest = null;
   });
 
@@ -167,9 +157,8 @@ describe("use-task-delete-dialog", () => {
     await run(() => latest?.handleDeleteDialogOpenChange(false));
     expect(latest?.isDeleteDialogOpen).toBe(true);
 
-    await act(async () => {
+    await run(() => {
       resolveDelete?.();
-      await flush();
     });
 
     expect(latest?.isDeletePending).toBe(false);

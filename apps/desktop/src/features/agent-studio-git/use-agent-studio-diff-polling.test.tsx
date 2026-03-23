@@ -9,10 +9,6 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioDiffPolling>[0];
 
-type GlobalDocumentOverride = typeof globalThis & {
-  document: Document | undefined;
-};
-
 type WindowEventTargetOverride = typeof globalThis & {
   addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void;
   removeEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void;
@@ -21,22 +17,26 @@ type WindowEventTargetOverride = typeof globalThis & {
 
 const createVisibilityStateController = () => {
   let visibilityState: DocumentVisibilityState = "visible";
-  const documentTarget = new EventTarget();
   const windowTarget = new EventTarget();
-  const originalDocument = (globalThis as GlobalDocumentOverride).document;
+  const originalVisibilityState = Object.getOwnPropertyDescriptor(document, "visibilityState");
+  const originalDocumentDispatchEventDescriptor = Object.getOwnPropertyDescriptor(
+    document,
+    "dispatchEvent",
+  );
   const originalAddEventListener = globalThis.addEventListener.bind(globalThis);
   const originalRemoveEventListener = globalThis.removeEventListener.bind(globalThis);
   const originalDispatchEvent = globalThis.dispatchEvent.bind(globalThis);
 
-  const documentOverride = documentTarget as EventTarget & {
-    visibilityState: DocumentVisibilityState;
-  };
-  Object.defineProperty(documentOverride, "visibilityState", {
+  Object.defineProperty(document, "visibilityState", {
     configurable: true,
     get: () => visibilityState,
   });
 
-  (globalThis as GlobalDocumentOverride).document = documentOverride as unknown as Document;
+  Object.defineProperty(document, "dispatchEvent", {
+    configurable: true,
+    writable: true,
+    value: EventTarget.prototype.dispatchEvent.bind(document),
+  });
   (globalThis as WindowEventTargetOverride).addEventListener =
     windowTarget.addEventListener.bind(windowTarget);
   (globalThis as WindowEventTargetOverride).removeEventListener =
@@ -49,10 +49,15 @@ const createVisibilityStateController = () => {
       visibilityState = value;
     },
     restore() {
-      if (originalDocument === undefined) {
-        Reflect.deleteProperty(globalThis, "document");
+      if (originalVisibilityState) {
+        Object.defineProperty(document, "visibilityState", originalVisibilityState);
       } else {
-        (globalThis as GlobalDocumentOverride).document = originalDocument;
+        Reflect.deleteProperty(document, "visibilityState");
+      }
+      if (originalDocumentDispatchEventDescriptor) {
+        Object.defineProperty(document, "dispatchEvent", originalDocumentDispatchEventDescriptor);
+      } else {
+        Reflect.deleteProperty(document, "dispatchEvent");
       }
       (globalThis as WindowEventTargetOverride).addEventListener = originalAddEventListener;
       (globalThis as WindowEventTargetOverride).removeEventListener = originalRemoveEventListener;

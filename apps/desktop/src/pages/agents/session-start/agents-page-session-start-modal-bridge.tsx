@@ -9,7 +9,7 @@ import {
 } from "@/features/session-start";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { NewSessionStartDecision } from "../use-agent-studio-session-actions";
-import type { PendingSessionStartRequest } from "./use-agent-studio-session-start-request";
+import type { PendingSessionStartRequest } from "../use-agent-studio-session-start-request";
 
 type AgentStudioSessionStartModalBridgeProps = {
   request: PendingSessionStartRequest;

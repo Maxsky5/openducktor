@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { GitBranch, RepoConfig } from "@openducktor/contracts";
-import { createElement } from "react";
-import { act, create } from "react-test-renderer";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { createElement, useState } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { RepositoryConfigurationSection } from "./settings-repository-configuration-section";
 
@@ -29,58 +29,76 @@ const renderSection = (
   selectedRepoConfig: RepoConfig,
   onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void,
   options?: { showDevServerValidationErrors?: boolean },
-): ReturnType<typeof create> => {
-  let renderer!: ReturnType<typeof create>;
+) =>
+  render(
+    createElement(RepositoryConfigurationSection, {
+      selectedRepoConfig,
+      selectedRepoEffectiveWorktreeBasePath: null,
+      selectedRepoBranches: [] as GitBranch[],
+      selectedRepoBranchesError: null,
+      isLoadingSettings: false,
+      isSaving: false,
+      isPickingWorktreeBasePath: false,
+      isLoadingSelectedRepoBranches: false,
+      onRetrySelectedRepoBranchesLoad: () => {},
+      onPickWorktreeBasePath: async () => {},
+      onUpdateSelectedRepoConfig,
+      ...(options?.showDevServerValidationErrors !== undefined
+        ? { showDevServerValidationErrors: options.showDevServerValidationErrors }
+        : {}),
+    }),
+  );
 
-  act(() => {
-    renderer = create(
-      createElement(RepositoryConfigurationSection, {
-        selectedRepoConfig,
-        selectedRepoEffectiveWorktreeBasePath: null,
-        selectedRepoBranches: [] as GitBranch[],
-        selectedRepoBranchesError: null,
-        isLoadingSettings: false,
-        isSaving: false,
-        isPickingWorktreeBasePath: false,
-        isLoadingSelectedRepoBranches: false,
-        onRetrySelectedRepoBranchesLoad: () => {},
-        onPickWorktreeBasePath: async () => {},
-        onUpdateSelectedRepoConfig,
-        ...(options?.showDevServerValidationErrors !== undefined
-          ? { showDevServerValidationErrors: options.showDevServerValidationErrors }
-          : {}),
-      }),
-    );
-  });
+const renderStatefulSection = (initialRepoConfig: RepoConfig) => {
+  let latestRepoConfig = initialRepoConfig;
 
-  return renderer;
+  const Wrapper = () => {
+    const [selectedRepoConfig, setSelectedRepoConfig] = useState(initialRepoConfig);
+    latestRepoConfig = selectedRepoConfig;
+
+    return createElement(RepositoryConfigurationSection, {
+      selectedRepoConfig,
+      selectedRepoEffectiveWorktreeBasePath: null,
+      selectedRepoBranches: [] as GitBranch[],
+      selectedRepoBranchesError: null,
+      isLoadingSettings: false,
+      isSaving: false,
+      isPickingWorktreeBasePath: false,
+      isLoadingSelectedRepoBranches: false,
+      onRetrySelectedRepoBranchesLoad: () => {},
+      onPickWorktreeBasePath: async () => {},
+      onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => {
+        setSelectedRepoConfig((current) => updater(current));
+      },
+    });
+  };
+
+  const rendered = render(createElement(Wrapper));
+
+  return {
+    rendered,
+    getLatestRepoConfig: () => latestRepoConfig,
+  };
 };
 
 describe("RepositoryConfigurationSection", () => {
-  test("marks scripts as trusted when a script command is entered", () => {
-    const updaters: Array<(current: RepoConfig) => RepoConfig> = [];
-    const onUpdateSelectedRepoConfig = mock((updater: (current: RepoConfig) => RepoConfig) => {
-      updaters.push(updater);
-    });
-    const renderer = renderSection(baseRepoConfig, onUpdateSelectedRepoConfig);
+  test("preserves hook draft blank rows while marking scripts as trusted", () => {
+    const { rendered, getLatestRepoConfig } = renderStatefulSection(baseRepoConfig);
 
     try {
-      const preStartTextarea = renderer.root.findByProps({ id: "repo-pre-start-hooks" });
-
-      act(() => {
-        preStartTextarea.props.onChange({
-          currentTarget: {
-            value: "bun install\n",
-          },
-        });
-      });
-
-      const updater = updaters[0];
-      if (!updater) {
-        throw new Error("Expected repo config updater");
+      const preStartTextarea = rendered.container.querySelector("#repo-pre-start-hooks");
+      if (!(preStartTextarea instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected repo pre-start hooks textarea");
       }
 
-      expect(updater(baseRepoConfig)).toEqual({
+      fireEvent.change(preStartTextarea, {
+        target: {
+          value: "bun install\n",
+        },
+      });
+
+      expect(preStartTextarea.value).toBe("bun install\n");
+      expect(getLatestRepoConfig()).toEqual({
         ...baseRepoConfig,
         trustedHooks: true,
         hooks: {
@@ -89,7 +107,7 @@ describe("RepositoryConfigurationSection", () => {
         },
       });
     } finally {
-      renderer.unmount();
+      rendered.unmount();
     }
   });
 
@@ -98,7 +116,7 @@ describe("RepositoryConfigurationSection", () => {
     const onUpdateSelectedRepoConfig = mock((updater: (current: RepoConfig) => RepoConfig) => {
       updaters.push(updater);
     });
-    const renderer = renderSection(
+    const rendered = renderSection(
       {
         ...baseRepoConfig,
         trustedHooks: true,
@@ -113,14 +131,15 @@ describe("RepositoryConfigurationSection", () => {
     );
 
     try {
-      const preStartTextarea = renderer.root.findByProps({ id: "repo-pre-start-hooks" });
+      const preStartTextarea = rendered.container.querySelector("#repo-pre-start-hooks");
+      if (!(preStartTextarea instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected repo pre-start hooks textarea");
+      }
 
-      act(() => {
-        preStartTextarea.props.onChange({
-          currentTarget: {
-            value: "",
-          },
-        });
+      fireEvent.change(preStartTextarea, {
+        target: {
+          value: "",
+        },
       });
 
       const updater = updaters[0];
@@ -149,7 +168,31 @@ describe("RepositoryConfigurationSection", () => {
         },
       });
     } finally {
-      renderer.unmount();
+      rendered.unmount();
+    }
+  });
+
+  test("preserves worktree file copy blank rows during textarea round-trip", () => {
+    const { rendered, getLatestRepoConfig } = renderStatefulSection(baseRepoConfig);
+
+    try {
+      const worktreeFileCopiesTextarea = rendered.container.querySelector(
+        "#repo-worktree-file-copies",
+      );
+      if (!(worktreeFileCopiesTextarea instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected repo worktree file copies textarea");
+      }
+
+      fireEvent.change(worktreeFileCopiesTextarea, {
+        target: {
+          value: ".env\n",
+        },
+      });
+
+      expect(worktreeFileCopiesTextarea.value).toBe(".env\n");
+      expect(getLatestRepoConfig().worktreeFileCopies).toEqual([".env", ""]);
+    } finally {
+      rendered.unmount();
     }
   });
 
@@ -158,7 +201,7 @@ describe("RepositoryConfigurationSection", () => {
     const onUpdateSelectedRepoConfig = mock((updater: (current: RepoConfig) => RepoConfig) => {
       updaters.push(updater);
     });
-    const renderer = renderSection(
+    const rendered = renderSection(
       {
         ...baseRepoConfig,
         devServers: [{ id: "frontend", name: "Frontend", command: "" }],
@@ -167,14 +210,15 @@ describe("RepositoryConfigurationSection", () => {
     );
 
     try {
-      const commandInput = renderer.root.findByProps({ id: "repo-dev-server-command-frontend" });
+      const commandInput = rendered.container.querySelector("#repo-dev-server-command-frontend");
+      if (!(commandInput instanceof HTMLInputElement)) {
+        throw new Error("Expected repo dev server command input");
+      }
 
-      act(() => {
-        commandInput.props.onChange({
-          currentTarget: {
-            value: "bun run dev",
-          },
-        });
+      fireEvent.change(commandInput, {
+        target: {
+          value: "bun run dev",
+        },
       });
 
       const updater = updaters[0];
@@ -193,12 +237,12 @@ describe("RepositoryConfigurationSection", () => {
         devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
       });
     } finally {
-      renderer.unmount();
+      rendered.unmount();
     }
   });
 
   test("shows inline validation for blank dev server fields", () => {
-    const renderer = renderSection(
+    const rendered = renderSection(
       {
         ...baseRepoConfig,
         devServers: [{ id: "frontend", name: "", command: "" }],
@@ -208,21 +252,32 @@ describe("RepositoryConfigurationSection", () => {
     );
 
     try {
-      const nameInput = renderer.root.findByProps({ id: "repo-dev-server-name-frontend" });
-      const commandInput = renderer.root.findByProps({ id: "repo-dev-server-command-frontend" });
-      const nameError = renderer.root.findByProps({ id: "repo-dev-server-name-frontend-error" });
-      const commandError = renderer.root.findByProps({
-        id: "repo-dev-server-command-frontend-error",
-      });
+      const nameInput = rendered.container.querySelector("#repo-dev-server-name-frontend");
+      const commandInput = rendered.container.querySelector("#repo-dev-server-command-frontend");
+      const nameError = rendered.container.querySelector("#repo-dev-server-name-frontend-error");
+      const commandError = rendered.container.querySelector(
+        "#repo-dev-server-command-frontend-error",
+      );
 
-      expect(nameInput.props["aria-invalid"]).toBe(true);
-      expect(nameInput.props["aria-describedby"]).toBe("repo-dev-server-name-frontend-error");
-      expect(commandInput.props["aria-invalid"]).toBe(true);
-      expect(commandInput.props["aria-describedby"]).toBe("repo-dev-server-command-frontend-error");
-      expect(nameError.props.children).toBe("Tab label is required.");
-      expect(commandError.props.children).toBe("Command is required.");
+      if (!(nameInput instanceof HTMLInputElement) || !(commandInput instanceof HTMLInputElement)) {
+        throw new Error("Expected dev server inputs");
+      }
+      if (!(nameError instanceof HTMLElement) || !(commandError instanceof HTMLElement)) {
+        throw new Error("Expected dev server inline errors");
+      }
+
+      expect(nameInput.getAttribute("aria-invalid")).toBe("true");
+      expect(nameInput.getAttribute("aria-describedby")).toBe(
+        "repo-dev-server-name-frontend-error",
+      );
+      expect(commandInput.getAttribute("aria-invalid")).toBe("true");
+      expect(commandInput.getAttribute("aria-describedby")).toBe(
+        "repo-dev-server-command-frontend-error",
+      );
+      expect(nameError.textContent).toBe("Tab label is required.");
+      expect(commandError.textContent).toBe("Command is required.");
     } finally {
-      renderer.unmount();
+      rendered.unmount();
     }
   });
 
@@ -231,24 +286,13 @@ describe("RepositoryConfigurationSection", () => {
     const onUpdateSelectedRepoConfig = mock((updater: (current: RepoConfig) => RepoConfig) => {
       updaters.push(updater);
     });
-    const renderer = renderSection(baseRepoConfig, onUpdateSelectedRepoConfig);
+    const rendered = renderSection(baseRepoConfig, onUpdateSelectedRepoConfig);
     const originalRandomUuid = crypto.randomUUID;
     crypto.randomUUID = () => "00000000-0000-4000-8000-000000000002";
 
     try {
-      const addButton = renderer.root.findAllByType("button").find((button) => {
-        const children = Array.isArray(button.props.children)
-          ? button.props.children
-          : [button.props.children];
-        return children.includes("Add server");
-      });
-      if (!addButton) {
-        throw new Error("Expected Add server button");
-      }
-
-      act(() => {
-        addButton.props.onClick();
-      });
+      const addButton = screen.getByRole("button", { name: "Add server" });
+      fireEvent.click(addButton);
 
       const updater = updaters[0];
       if (!updater) {
@@ -267,7 +311,7 @@ describe("RepositoryConfigurationSection", () => {
       });
     } finally {
       crypto.randomUUID = originalRandomUuid;
-      renderer.unmount();
+      rendered.unmount();
     }
   });
 
@@ -283,14 +327,10 @@ describe("RepositoryConfigurationSection", () => {
         { id: "backend", name: "Backend", command: "bun run api" },
       ],
     };
-    const renderer = renderSection(repoConfig, onUpdateSelectedRepoConfig);
+    const rendered = renderSection(repoConfig, onUpdateSelectedRepoConfig);
 
     try {
-      const moveUpButton = renderer.root.findByProps({ "aria-label": "Move Backend up" });
-
-      act(() => {
-        moveUpButton.props.onClick();
-      });
+      fireEvent.click(screen.getByRole("button", { name: "Move Backend up" }));
 
       const updater = updaters[0];
       if (!updater) {
@@ -302,7 +342,7 @@ describe("RepositoryConfigurationSection", () => {
         { id: "frontend", name: "Frontend", command: "bun run dev" },
       ]);
     } finally {
-      renderer.unmount();
+      rendered.unmount();
     }
   });
 
@@ -318,14 +358,10 @@ describe("RepositoryConfigurationSection", () => {
         { id: "backend", name: "Backend", command: "bun run api" },
       ],
     };
-    const renderer = renderSection(repoConfig, onUpdateSelectedRepoConfig);
+    const rendered = renderSection(repoConfig, onUpdateSelectedRepoConfig);
 
     try {
-      const deleteButton = renderer.root.findByProps({ "aria-label": "Delete Backend" });
-
-      act(() => {
-        deleteButton.props.onClick();
-      });
+      fireEvent.click(screen.getByRole("button", { name: "Delete Backend" }));
 
       const updater = updaters[0];
       if (!updater) {
@@ -336,7 +372,7 @@ describe("RepositoryConfigurationSection", () => {
         { id: "frontend", name: "Frontend", command: "bun run dev" },
       ]);
     } finally {
-      renderer.unmount();
+      rendered.unmount();
     }
   });
 });

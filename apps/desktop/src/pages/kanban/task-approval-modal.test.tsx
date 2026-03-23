@@ -1,24 +1,17 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TaskApprovalModalModel } from "./kanban-page-model-types";
 
-mock.module("@/components/ui/dialog", () => ({
-  Dialog: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
-  DialogBody: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
-  DialogContent: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
-  DialogDescription: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("p", props, children),
-  DialogFooter: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
-  DialogHeader: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
-  DialogTitle: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("h2", props, children),
-}));
+const omitDialogDomProps = ({
+  onOpenChange: _onOpenChange,
+  open: _open,
+  ...props
+}: {
+  onOpenChange?: unknown;
+  open?: unknown;
+  [key: string]: unknown;
+}) => props;
 
 const noop = () => {};
 
@@ -61,7 +54,32 @@ describe("TaskApprovalModal", () => {
   let TaskApprovalModal: typeof import("./task-approval-modal").TaskApprovalModal;
 
   beforeAll(async () => {
+    mock.module("@/components/ui/dialog", () => ({
+      Dialog: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", omitDialogDomProps(props), children),
+      DialogBody: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", omitDialogDomProps(props), children),
+      DialogContent: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", omitDialogDomProps(props), children),
+      DialogDescription: ({
+        children,
+        ...props
+      }: {
+        children: ReactNode;
+        [key: string]: unknown;
+      }) => createElement("p", omitDialogDomProps(props), children),
+      DialogFooter: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", omitDialogDomProps(props), children),
+      DialogHeader: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", omitDialogDomProps(props), children),
+      DialogTitle: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("h2", omitDialogDomProps(props), children),
+    }));
     ({ TaskApprovalModal } = await import("./task-approval-modal"));
+  });
+
+  afterAll(() => {
+    mock.restore();
   });
 
   test("renders explicit completion copy for merged local branches", () => {

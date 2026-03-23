@@ -1,4 +1,4 @@
-export type TaskDocumentSectionKey = "spec" | "plan" | "qa";
+type TaskDocumentSectionKey = "spec" | "plan" | "qa";
 
 type SectionLoadState = {
   inFlight: boolean;

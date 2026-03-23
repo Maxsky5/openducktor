@@ -1,7 +1,7 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
-import { createElement, type ReactNode } from "react";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { render } from "@testing-library/react";
+import { act, createElement, type ReactNode } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 
 enableReactActEnvironment();
@@ -55,58 +55,58 @@ const controllerMock = {
   confirmDiscard: () => {},
 };
 
-mock.module("@/components/features/task-create", () => ({
-  TaskCreateDiscardDialog: () => null,
-  useTaskCreateModalController: () => controllerMock,
-}));
-
-mock.module("@/components/ui/dialog", () => ({
-  Dialog: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
-  DialogBody: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
-  DialogContent: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
-  DialogDescription: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("p", props, children),
-  DialogFooter: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
-  DialogHeader: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
-  DialogTitle: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("h2", props, children),
-}));
-
 describe("TaskCreateModal", () => {
   let TaskCreateModal: typeof import("./task-create-modal").TaskCreateModal;
 
   beforeAll(async () => {
+    mock.module("@/components/features/task-create", () => ({
+      TaskCreateDiscardDialog: () => null,
+      useTaskCreateModalController: () => controllerMock,
+    }));
+    mock.module("@/components/features/task-composer/task-document-editor", () => ({
+      TaskDocumentEditor: () => createElement("div", null, "Mock task document editor"),
+    }));
+    mock.module("@/components/ui/dialog", () => ({
+      Dialog: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", null, children),
+      DialogBody: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", null, children),
+      DialogContent: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", null, children),
+      DialogDescription: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("p", null, children),
+      DialogFooter: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", null, children),
+      DialogHeader: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", null, children),
+      DialogTitle: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("h2", null, children),
+    }));
     ({ TaskCreateModal } = await import("./task-create-modal"));
+  });
+
+  afterAll(() => {
+    mock.restore();
   });
 
   test("renders the edit modal shell for the document editor flow", async () => {
     const task = { id: "TASK-123" } as TaskCard;
-    let renderer!: ReactTestRenderer;
+    const rendered = render(
+      createElement(TaskCreateModal, {
+        open: true,
+        onOpenChange: () => {},
+        tasks: [task],
+        task,
+      }),
+    );
+
+    expect(rendered.container.textContent).toContain("Edit Task");
+    expect(rendered.container.textContent).toContain("Markdown");
+    expect(rendered.container.textContent).toContain("Preview");
+    expect(rendered.container.textContent).toContain("Save Spec");
 
     await act(async () => {
-      renderer = create(
-        createElement(TaskCreateModal, {
-          open: true,
-          onOpenChange: () => {},
-          tasks: [task],
-          task,
-        }),
-      );
-    });
-
-    const tree = JSON.stringify(renderer.toJSON());
-    expect(tree).toContain("Edit Task");
-    expect(tree).toContain("Markdown");
-    expect(tree).toContain("Preview");
-    expect(tree).toContain("Save Spec");
-
-    await act(async () => {
-      renderer.unmount();
+      rendered.unmount();
     });
   });
 });

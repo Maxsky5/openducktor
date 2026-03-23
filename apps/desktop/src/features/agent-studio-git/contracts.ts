@@ -48,10 +48,6 @@ export type GitConflict = {
   workingDir: string | null;
 };
 
-export type AgentStudioRebaseConflictOperation = GitConflictOperation;
-export type AgentStudioRebaseConflictAction = GitConflictAction;
-export type AgentStudioRebaseConflict = GitConflict;
-
 export type AgentStudioPendingForcePush = {
   remote: string;
   branch: string;

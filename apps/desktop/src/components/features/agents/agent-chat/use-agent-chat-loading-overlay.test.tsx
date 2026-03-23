@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { useAgentChatLoadingOverlay } from "./use-agent-chat-loading-overlay";
 
 (
@@ -9,143 +8,52 @@ import { useAgentChatLoadingOverlay } from "./use-agent-chat-loading-overlay";
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-type OverlayHookProps = {
-  sessionId: string | null;
-  isSessionViewLoading: boolean;
-};
-
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-};
-
 describe("useAgentChatLoadingOverlay", () => {
   test("keeps the overlay visible until session loading settles", async () => {
-    const latestVisibleRef: { current: boolean | null } = { current: null };
-
-    const Harness = (props: OverlayHookProps): null => {
-      latestVisibleRef.current = useAgentChatLoadingOverlay(props);
-      return null;
-    };
-
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
-    await act(async () => {
-      renderer = TestRenderer.create(
-        createElement(Harness, {
-          sessionId: "session-1",
-          isSessionViewLoading: true,
-        }),
-      );
-      await flush();
+    const harness = createSharedHookHarness(useAgentChatLoadingOverlay, {
+      sessionId: "session-1",
+      isSessionViewLoading: true,
     });
 
-    expect(latestVisibleRef.current).toBe(true);
+    await harness.mount();
+    expect(harness.getLatest()).toBe(true);
 
-    await act(async () => {
-      renderer?.update(
-        createElement(Harness, {
-          sessionId: "session-1",
-          isSessionViewLoading: false,
-        }),
-      );
-      await flush();
-    });
+    await harness.update({ sessionId: "session-1", isSessionViewLoading: false });
+    expect(harness.getLatest()).toBe(false);
 
-    expect(latestVisibleRef.current).toBe(false);
-
-    await act(async () => {
-      renderer?.unmount();
-      await flush();
-    });
+    await harness.unmount();
   });
 
   test("does not re-show the overlay for same-session steady state updates", async () => {
-    const latestVisibleRef: { current: boolean | null } = { current: null };
-
-    const Harness = (props: OverlayHookProps): null => {
-      latestVisibleRef.current = useAgentChatLoadingOverlay(props);
-      return null;
-    };
-
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
-    await act(async () => {
-      renderer = TestRenderer.create(
-        createElement(Harness, {
-          sessionId: "session-1",
-          isSessionViewLoading: false,
-        }),
-      );
-      await flush();
+    const harness = createSharedHookHarness(useAgentChatLoadingOverlay, {
+      sessionId: "session-1",
+      isSessionViewLoading: false,
     });
 
-    expect(latestVisibleRef.current).toBe(false);
+    await harness.mount();
+    expect(harness.getLatest()).toBe(false);
 
-    await act(async () => {
-      renderer?.update(
-        createElement(Harness, {
-          sessionId: "session-1",
-          isSessionViewLoading: false,
-        }),
-      );
-      await flush();
-    });
+    await harness.update({ sessionId: "session-1", isSessionViewLoading: false });
+    expect(harness.getLatest()).toBe(false);
 
-    expect(latestVisibleRef.current).toBe(false);
-
-    await act(async () => {
-      renderer?.unmount();
-      await flush();
-    });
+    await harness.unmount();
   });
 
   test("starts a new loading cycle when the selected session changes", async () => {
-    const latestVisibleRef: { current: boolean | null } = { current: null };
-
-    const Harness = (props: OverlayHookProps): null => {
-      latestVisibleRef.current = useAgentChatLoadingOverlay(props);
-      return null;
-    };
-
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
-    await act(async () => {
-      renderer = TestRenderer.create(
-        createElement(Harness, {
-          sessionId: "session-1",
-          isSessionViewLoading: false,
-        }),
-      );
-      await flush();
+    const harness = createSharedHookHarness(useAgentChatLoadingOverlay, {
+      sessionId: "session-1",
+      isSessionViewLoading: false,
     });
 
-    expect(latestVisibleRef.current).toBe(false);
+    await harness.mount();
+    expect(harness.getLatest()).toBe(false);
 
-    await act(async () => {
-      renderer?.update(
-        createElement(Harness, {
-          sessionId: "session-2",
-          isSessionViewLoading: true,
-        }),
-      );
-      await flush();
-    });
+    await harness.update({ sessionId: "session-2", isSessionViewLoading: true });
+    expect(harness.getLatest()).toBe(true);
 
-    expect(latestVisibleRef.current).toBe(true);
+    await harness.update({ sessionId: "session-2", isSessionViewLoading: false });
+    expect(harness.getLatest()).toBe(false);
 
-    await act(async () => {
-      renderer?.update(
-        createElement(Harness, {
-          sessionId: "session-2",
-          isSessionViewLoading: false,
-        }),
-      );
-      await flush();
-    });
-
-    expect(latestVisibleRef.current).toBe(false);
-
-    await act(async () => {
-      renderer?.unmount();
-      await flush();
-    });
+    await harness.unmount();
   });
 });

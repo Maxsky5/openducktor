@@ -193,7 +193,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
     };
 
     updateAutoScroll();
-    logViewport.addEventListener("scroll", updateAutoScroll);
+    logViewport.addEventListener("scroll", updateAutoScroll, { passive: true });
     return () => {
       logViewport.removeEventListener("scroll", updateAutoScroll);
     };

@@ -5,8 +5,6 @@ import type { DiffDataState } from "./contracts";
 import { useAgentStudioDiffController } from "./use-agent-studio-diff-controller";
 import { useAgentStudioWorktreeResolution } from "./use-agent-studio-worktree-resolution";
 
-export type { DiffDataState, DiffScope } from "./contracts";
-
 export function useAgentStudioDiffData({
   repoPath,
   sessionWorkingDirectory,

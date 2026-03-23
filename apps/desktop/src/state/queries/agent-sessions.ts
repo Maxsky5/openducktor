@@ -19,16 +19,6 @@ export const agentSessionListQueryOptions = (repoPath: string, taskId: string) =
     staleTime: AGENT_SESSION_LIST_STALE_TIME_MS,
   });
 
-export const agentSessionListBulkQueryOptions = (repoPath: string, taskIds: string[]) => {
-  const normalizedTaskIds = [...new Set(taskIds)].sort();
-  return queryOptions({
-    queryKey: agentSessionQueryKeys.bulk(repoPath, normalizedTaskIds),
-    queryFn: (): Promise<Record<string, AgentSessionRecord[]>> =>
-      host.agentSessionsListBulk(repoPath, normalizedTaskIds),
-    staleTime: AGENT_SESSION_LIST_STALE_TIME_MS,
-  });
-};
-
 export const loadAgentSessionListFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
@@ -41,24 +31,6 @@ export const loadAgentSessionListFromQuery = (
     ...agentSessionListQueryOptions(repoPath, taskId),
     ...(options?.forceFresh ? { staleTime: 0 } : {}),
   });
-
-export const loadAgentSessionListsFromQuery = (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskIds: string[],
-  options?: {
-    forceFresh?: boolean;
-  },
-): Promise<Record<string, AgentSessionRecord[]>> => {
-  if (taskIds.length === 0) {
-    return Promise.resolve({});
-  }
-
-  return queryClient.fetchQuery({
-    ...agentSessionListBulkQueryOptions(repoPath, taskIds),
-    ...(options?.forceFresh ? { staleTime: 0 } : {}),
-  });
-};
 
 export const upsertAgentSessionRecordInQuery = (
   queryClient: QueryClient,

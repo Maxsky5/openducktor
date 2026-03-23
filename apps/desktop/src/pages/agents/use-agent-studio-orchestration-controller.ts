@@ -24,12 +24,12 @@ export type AgentStudioOrchestrationReadinessContext = {
   refreshChecks: () => Promise<void>;
 };
 
-export type AgentStudioOrchestrationComposerContext = {
+type AgentStudioOrchestrationComposerContext = {
   input: string;
   setInput: (value: string) => void;
 };
 
-export type AgentStudioOrchestrationActionsContext = {
+type AgentStudioOrchestrationActionsContext = {
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent: () => void;
   openTaskDetails: () => void;
@@ -45,7 +45,7 @@ export type AgentStudioOrchestrationActionsContext = {
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
   requestNewSessionStart?: RequestNewSessionStart;
 };
-export type UseAgentStudioOrchestrationControllerArgs = {
+type UseAgentStudioOrchestrationControllerArgs = {
   activeRepo: string | null;
   selection: AgentStudioOrchestrationSelectionContext;
   readiness: AgentStudioOrchestrationReadinessContext;

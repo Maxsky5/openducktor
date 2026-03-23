@@ -209,8 +209,10 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     expect(harness.getLatest().isStarting).toBe(false);
 
-    selectionDeferred.resolve(null);
-    await startPromise;
+    await harness.run(async () => {
+      selectionDeferred.resolve(null);
+      await startPromise;
+    });
     await harness.unmount();
   });
 
@@ -261,9 +263,11 @@ describe("useAgentStudioSessionStartFlow", () => {
     expect(requestNewSessionStart).toHaveBeenCalledTimes(1);
     expect(harness.getLatest().isStarting).toBe(true);
 
-    selectionDeferred.resolve(null);
-    await firstStartPromise;
-    await resumedStartPromise;
+    await harness.run(async () => {
+      selectionDeferred.resolve(null);
+      await firstStartPromise;
+      await resumedStartPromise;
+    });
     expect(startAgentSession).toHaveBeenCalledTimes(0);
     await harness.waitFor((state) => !state.isStarting);
     await harness.unmount();
@@ -305,7 +309,11 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.waitFor((state) => state.isStarting);
     expect(harness.getLatest().isStarting).toBe(true);
 
-    startDeferred.resolve("session-planner");
+    await harness.run(async () => {
+      startDeferred.resolve("session-planner");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     await harness.waitFor((state) => !state.isStarting);
     await harness.unmount();
   });
@@ -347,7 +355,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
 
     await harness.mount();
-    await harness.run((state) => {
+    await harness.run(async (state) => {
       state.handleCreateSession({
         id: "build:build_after_qa_rejected:fresh",
         role: "build",
@@ -356,7 +364,11 @@ describe("useAgentStudioSessionStartFlow", () => {
         description: "Create a new builder session in the existing worktree",
         disabled: false,
       });
+      await Promise.resolve();
+      await Promise.resolve();
     });
+    await harness.waitFor(() => startAgentSession.mock.calls.length > 0);
+    await harness.waitFor(() => sendAgentMessage.mock.calls.length > 0);
 
     expect(startAgentSession).toHaveBeenCalledWith({
       taskId: "task-1",
@@ -491,7 +503,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
 
     await harness.mount();
-    await harness.run((state) => {
+    await harness.run(async (state) => {
       state.handleCreateSession({
         id: "build:build_after_human_request_changes:fresh",
         role: "build",
@@ -500,6 +512,8 @@ describe("useAgentStudioSessionStartFlow", () => {
         description: "Create a new builder session after human review",
         disabled: false,
       });
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
@@ -619,6 +633,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
     await harness.run(async (state) => {
       await state.humanReviewFeedbackModal?.onConfirm();
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(humanRequestChangesTask).toHaveBeenCalledWith(
@@ -701,6 +717,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.run(async (state) => {
       await state.humanReviewFeedbackModal?.onConfirm();
     });
+    await harness.waitFor(() => startAgentSession.mock.calls.length > 0);
+    await harness.waitFor(() => sendAgentMessage.mock.calls.length > 0);
 
     expect(requestNewSessionStart).toHaveBeenCalledWith({
       taskId: "task-1",

@@ -26,7 +26,7 @@ const TaskDocumentEditor = lazy(async () => {
   return { default: module.TaskDocumentEditor };
 });
 
-export type TaskCreateModalProps = {
+type TaskCreateModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tasks: TaskCard[];

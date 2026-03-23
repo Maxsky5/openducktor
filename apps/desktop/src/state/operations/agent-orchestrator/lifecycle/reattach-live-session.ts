@@ -2,21 +2,7 @@ import type { AgentSessionRecord, RuntimeKind, TaskCard } from "@openducktor/con
 import type { AgentRuntimeConnection, LiveAgentSessionSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
-
-type ResolvedHydrationRuntime =
-  | {
-      ok: true;
-      runtimeKind: RuntimeKind;
-      runtimeId: string | null;
-      runId: string | null;
-      runtimeEndpoint: string;
-      runtimeConnection: AgentRuntimeConnection;
-    }
-  | {
-      ok: false;
-      runtimeKind: RuntimeKind;
-      reason: string;
-    };
+import type { ResolvedHydrationRuntime } from "./hydration-runtime-resolution";
 
 type CreateReattachLiveSessionArgs = {
   adapter: {

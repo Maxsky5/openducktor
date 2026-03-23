@@ -1,7 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { isQaRejectedTask } from "./task-qa";
 
-export type BuildContinuationScenario =
+type BuildContinuationScenario =
   | "build_implementation_start"
   | "build_after_qa_rejected"
   | "build_after_human_request_changes";

@@ -13,6 +13,7 @@ type BranchSelectorProps = {
   className?: string;
   popoverClassName?: string;
   triggerClassName?: string;
+  triggerAriaLabelledBy?: string;
   wrapOptionLabels?: boolean;
 };
 
@@ -27,6 +28,7 @@ export function BranchSelector({
   className,
   popoverClassName,
   triggerClassName,
+  triggerAriaLabelledBy,
   wrapOptionLabels = true,
 }: BranchSelectorProps) {
   return (
@@ -45,6 +47,7 @@ export function BranchSelector({
           triggerClassName,
         )}
         onValueChange={onValueChange}
+        {...(triggerAriaLabelledBy !== undefined ? { triggerAriaLabelledBy } : {})}
         {...(popoverClassName !== undefined ? { className: popoverClassName } : {})}
       />
     </div>

@@ -5,10 +5,10 @@ import {
   type RuntimeCheck,
   type RuntimeKind,
 } from "@openducktor/contracts";
-import { createElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import type { PropsWithChildren, ReactElement } from "react";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { host } from "../shared/host";
 
@@ -16,11 +16,6 @@ const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
-
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-};
 
 const makeRuntimeCheck = (overrides: Partial<RuntimeCheck> = {}): RuntimeCheck => ({
   gitOk: true,
@@ -101,20 +96,15 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
     return null;
   };
 
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
+  const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+    <QueryProvider useIsolatedClient>{children}</QueryProvider>
+  );
+
+  const sharedHarness = createSharedHookHarness(Harness, { args: currentArgs }, { wrapper });
 
   return {
     mount: async () => {
-      await act(async () => {
-        renderer = TestRenderer.create(
-          createElement(
-            QueryProvider,
-            { useIsolatedClient: true },
-            createElement(Harness, { args: currentArgs }),
-          ),
-        );
-      });
-      await flush();
+      await sharedHarness.mount();
     },
     updateArgs: async (nextArgs: Partial<HookHarnessArgs>) => {
       currentArgs = {
@@ -123,25 +113,15 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
         checkRepoRuntimeHealth:
           nextArgs.checkRepoRuntimeHealth ?? currentArgs.checkRepoRuntimeHealth,
       };
-      await act(async () => {
-        renderer?.update(
-          createElement(
-            QueryProvider,
-            { useIsolatedClient: true },
-            createElement(Harness, { args: currentArgs }),
-          ),
-        );
-      });
-      await flush();
+      await sharedHarness.update({ args: currentArgs });
     },
     run: async (fn: (value: HookResult) => Promise<void> | void) => {
       if (!latest) {
         throw new Error("Hook not mounted");
       }
-      await act(async () => {
+      await sharedHarness.run(async () => {
         await fn(latest as HookResult);
       });
-      await flush();
     },
     getLatest: () => {
       if (!latest) {
@@ -149,11 +129,15 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
       }
       return latest;
     },
+    waitFor: async (predicate: (value: HookResult) => boolean, timeoutMs?: number) => {
+      await sharedHarness.waitFor(() => latest !== null && predicate(latest), timeoutMs);
+    },
     unmount: async () => {
-      await act(async () => {
-        renderer?.unmount();
-      });
-      renderer = null;
+      try {
+        await sharedHarness.unmount();
+      } finally {
+        latest = null;
+      }
     },
   };
 };
@@ -197,6 +181,7 @@ describe("use-checks", () => {
       await harness.run(async (value) => {
         await value.refreshChecks();
       });
+      await harness.waitFor((value) => value.isLoadingChecks === false);
 
       expect(runtimeCheck).not.toHaveBeenCalled();
       expect(beadsCheck).not.toHaveBeenCalled();
@@ -263,12 +248,15 @@ describe("use-checks", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.activeBeadsCheck?.beadsPath === "/repo-a/.beads");
       beadsCheck.mockClear();
       checkRepoRuntimeHealthMock.mockClear();
       await harness.run(async (value) => {
         await value.refreshBeadsCheckForRepo("/repo-b");
         await value.refreshRepoRuntimeHealthForRepo("/repo-b");
       });
+      await harness.waitFor((value) => value.hasCachedBeadsCheck("/repo-b"));
+      await harness.waitFor((value) => value.hasCachedRepoRuntimeHealth("/repo-b", ["opencode"]));
 
       expect(harness.getLatest().activeBeadsCheck?.beadsPath).toBe("/repo-a/.beads");
       expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toBeNull();

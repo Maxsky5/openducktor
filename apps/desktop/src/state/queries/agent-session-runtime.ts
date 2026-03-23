@@ -13,7 +13,7 @@ const normalizeWorkingDirectory = (workingDirectory: string): string => workingD
 
 const normalizeRuntimeEndpoint = (runtimeEndpoint: string): string => runtimeEndpoint.trim();
 
-export const agentSessionRuntimeQueryKeys = {
+const agentSessionRuntimeQueryKeys = {
   all: ["agent-session-runtime"] as const,
   modelCatalog: (runtimeKind: RuntimeKind, runtimeConnection: AgentRuntimeConnection) =>
     [

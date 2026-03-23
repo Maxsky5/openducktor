@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { createElement, createRef } from "react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import TestRenderer, { act } from "react-test-renderer";
 import {
   buildMessage,
   buildPermissionRequest,
@@ -419,17 +419,14 @@ describe("AgentChatThread", () => {
       session,
     };
 
-    let renderer!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      renderer = TestRenderer.create(
-        createElement(AgentChatThread, {
-          model,
-        }),
-      );
-      await flush();
-    });
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model,
+      }),
+    );
+    await act(flush);
 
-    expect(JSON.stringify(renderer.toJSON())).toContain("Message 80");
+    expect(rendered.container.textContent).toContain("Message 80");
 
     const nextSession = buildSession({
       sessionId: session.sessionId,
@@ -443,25 +440,19 @@ describe("AgentChatThread", () => {
       status: "idle",
     });
 
-    await act(async () => {
-      renderer.update(
-        createElement(AgentChatThread, {
-          model: {
-            ...model,
-            session: nextSession,
-          },
-        }),
-      );
-      await flush();
-    });
+    rendered.rerender(
+      createElement(AgentChatThread, {
+        model: {
+          ...model,
+          session: nextSession,
+        },
+      }),
+    );
+    await act(flush);
 
-    const nextJson = JSON.stringify(renderer.toJSON());
-    expect(nextJson).toContain("Message 81");
-    expect(nextJson).not.toContain("Message 21");
-    await act(async () => {
-      renderer.unmount();
-      await flush();
-    });
+    expect(rendered.container.textContent).toContain("Message 81");
+    expect(rendered.container.textContent).not.toContain("Message 21");
+    rendered.unmount();
   });
 
   test("shows loading overlay while session context is switching", () => {
@@ -483,79 +474,55 @@ describe("AgentChatThread", () => {
 
   test("renders native scroll controls for top and bottom navigation", async () => {
     setGlobalWindow(globalThis);
-    const rendererRef: { current: TestRenderer.ReactTestRenderer | null } = { current: null };
-    const messagesContainerNodeRef: { current: ScrollContainerMock | null } = { current: null };
-
-    const createNodeMock = (element: React.ReactElement): HTMLDivElement => {
-      const props = (element.props ?? {}) as Record<string, unknown>;
-      const className = typeof props.className === "string" ? props.className : "";
-      const isMessagesContainer = className.includes("hide-scrollbar");
-      const node = createContainer();
-      if (isMessagesContainer) {
-        messagesContainerNodeRef.current = node as unknown as ScrollContainerMock;
-      }
-      return node;
-    };
-
-    await act(async () => {
-      rendererRef.current = TestRenderer.create(
-        createElement(AgentChatThread, {
-          model: {
-            ...baseModel,
-            messagesContainerRef: createRef<HTMLDivElement>(),
-            session: buildLongSession("session-scroll", 80),
-          },
-        }),
-        { createNodeMock },
-      );
-      await flush();
-    });
-
-    const mountedRenderer = rendererRef.current;
-    if (!mountedRenderer) {
-      throw new Error("Expected renderer");
-    }
-
-    const buttons = mountedRenderer.root.findAllByType("button");
-    const scrollToTopButton = buttons.find(
-      (button) => button.props["aria-label"] === "Scroll to top",
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model: {
+          ...baseModel,
+          messagesContainerRef: createRef<HTMLDivElement>(),
+          session: buildLongSession("session-scroll", 80),
+        },
+      }),
     );
-    const scrollToBottomButton = buttons.find(
-      (button) => button.props["aria-label"] === "Scroll to bottom",
-    );
+    await act(flush);
 
-    expect(scrollToTopButton).toBeDefined();
-    expect(scrollToBottomButton).toBeDefined();
-
-    await act(async () => {
-      scrollToTopButton?.props.onClick();
-      await flush();
-    });
-
-    const containerNode = messagesContainerNodeRef.current;
+    const containerNode = rendered.container.querySelector(".hide-scrollbar") as
+      | (HTMLDivElement & ScrollContainerMock)
+      | null;
     if (!containerNode) {
       throw new Error("Expected messages container node");
     }
-    const scrollToMock = containerNode.scrollTo;
-
-    expect(scrollToMock).toHaveBeenCalledWith({
-      top: 0,
-      behavior: "auto",
+    const scrollToMock = mock(() => {});
+    Object.defineProperty(containerNode, "scrollTo", {
+      configurable: true,
+      value: scrollToMock,
+    });
+    Object.defineProperty(containerNode, "clientHeight", {
+      configurable: true,
+      value: 320,
+    });
+    Object.defineProperty(containerNode, "scrollHeight", {
+      configurable: true,
+      value: 2000,
+    });
+    Object.defineProperty(containerNode, "scrollTop", {
+      configurable: true,
+      writable: true,
+      value: 1680,
     });
 
-    await act(async () => {
-      scrollToBottomButton?.props.onClick();
-      await flush();
-    });
+    const scrollToTopButton = screen.getByRole("button", { name: "Scroll to top" });
+    const scrollToBottomButton = screen.getByRole("button", { name: "Scroll to bottom" });
 
-    expect(scrollToMock).toHaveBeenCalledWith({
-      top: 2_000,
-      behavior: "auto",
-    });
+    fireEvent.click(scrollToTopButton);
+    await act(flush);
 
-    await act(async () => {
-      mountedRenderer.unmount();
-      await flush();
-    });
+    expect(scrollToMock).toHaveBeenCalledWith({ top: 0, behavior: "auto" });
+
+    fireEvent.click(scrollToBottomButton);
+    await act(flush);
+
+    expect(scrollToMock).toHaveBeenCalledWith({ top: 2_000, behavior: "auto" });
+
+    rendered.unmount();
   });
 });

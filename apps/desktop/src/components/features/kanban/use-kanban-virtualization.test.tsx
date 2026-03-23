@@ -1,7 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { KanbanColumn as KanbanColumnData } from "@openducktor/core";
-import { createElement, type ReactElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import type { RenderResult } from "@testing-library/react";
+import { render } from "@testing-library/react";
+import { act, createElement, type ReactElement } from "react";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { useKanbanVirtualization } from "./use-kanban-virtualization";
 
 (
@@ -18,11 +20,6 @@ const createTasks = (count: number): KanbanColumnData["tasks"] =>
     id: `task-${index}`,
   })) as KanbanColumnData["tasks"];
 
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-};
-
 const getVirtualizedRenderModel = (
   state: HookState,
 ): Extract<HookState["renderModel"], { kind: "virtualized" }> => {
@@ -34,60 +31,7 @@ const getVirtualizedRenderModel = (
 };
 
 const createHarness = (initialProps: HookArgs) => {
-  let latest: HookState | null = null;
-
-  const Harness = (props: HookArgs): ReactElement | null => {
-    latest = useKanbanVirtualization(props);
-    return null;
-  };
-
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
-
-  const mount = async (): Promise<void> => {
-    await act(async () => {
-      renderer = TestRenderer.create(createElement(Harness, initialProps));
-      await flush();
-    });
-  };
-
-  const update = async (nextProps: HookArgs): Promise<void> => {
-    if (!renderer) {
-      throw new Error("Renderer not mounted");
-    }
-
-    await act(async () => {
-      renderer?.update(createElement(Harness, nextProps));
-      await flush();
-    });
-  };
-
-  const run = async (fn: () => void): Promise<void> => {
-    await act(async () => {
-      fn();
-      await flush();
-    });
-  };
-
-  const getLatest = (): HookState => {
-    if (!latest) {
-      throw new Error("Hook state unavailable");
-    }
-
-    return latest;
-  };
-
-  const unmount = async (): Promise<void> => {
-    if (!renderer) {
-      return;
-    }
-
-    await act(async () => {
-      renderer?.unmount();
-      await flush();
-    });
-  };
-
-  return { mount, update, run, getLatest, unmount };
+  return createSharedHookHarness(useKanbanVirtualization, initialProps);
 };
 
 const attachContainer = async (
@@ -119,17 +63,16 @@ const createPairHarness = (initialPropsList: [HookArgs, HookArgs]) => {
     return null;
   };
 
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
+  let rendered: RenderResult | null = null;
 
   const mount = async (): Promise<void> => {
     await act(async () => {
-      renderer = TestRenderer.create(
+      rendered = render(
         createElement(HarnessGroup, {
           firstHook: initialPropsList[0],
           secondHook: initialPropsList[1],
         }),
       );
-      await flush();
     });
   };
 
@@ -138,18 +81,18 @@ const createPairHarness = (initialPropsList: [HookArgs, HookArgs]) => {
   const run = async (fn: () => void): Promise<void> => {
     await act(async () => {
       fn();
-      await flush();
     });
   };
 
   const unmount = async (): Promise<void> => {
-    if (!renderer) {
+    if (!rendered) {
       return;
     }
+    const mounted = rendered;
+    rendered = null;
 
     await act(async () => {
-      renderer?.unmount();
-      await flush();
+      mounted.unmount();
     });
   };
 

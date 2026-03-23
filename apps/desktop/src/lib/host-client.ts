@@ -7,8 +7,8 @@ import {
 import { isBrowserAppMode } from "@/lib/browser-mode";
 import { isTauriRuntime } from "@/lib/runtime";
 
-export type RunEventListener = (payload: unknown) => void;
-export type HostBridge = {
+type RunEventListener = (payload: unknown) => void;
+type HostBridge = {
   client: TauriHostClient;
   subscribeRunEvents: (listener: RunEventListener) => Promise<() => void>;
   subscribeDevServerEvents: (listener: RunEventListener) => Promise<() => void>;
@@ -85,9 +85,6 @@ export const createHostBridge = (): HostBridge => ({
 
 export const hostBridge = createHostBridge();
 
-export const createHostClient = (): TauriHostClient => createHostCommands();
-
 export const hostClient = hostBridge.client;
 
-export const subscribeRunEvents = hostBridge.subscribeRunEvents;
 export const subscribeDevServerEvents = hostBridge.subscribeDevServerEvents;

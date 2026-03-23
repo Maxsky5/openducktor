@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -12,8 +12,6 @@ import { useAgentStudioModelSelection } from "./use-agent-studio-model-selection
 
 enableReactActEnvironment();
 
-const TEST_RENDERER_DEPRECATION_WARNING = "react-test-renderer is deprecated";
-const originalConsoleError = console.error;
 let messageCounter = 0;
 
 type HookArgs = Parameters<typeof useAgentStudioModelSelection>[0];
@@ -151,19 +149,6 @@ const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 describe("useAgentStudioModelSelection", () => {
-  beforeEach(() => {
-    console.error = (...args: unknown[]): void => {
-      if (typeof args[0] === "string" && args[0].includes(TEST_RENDERER_DEPRECATION_WARNING)) {
-        return;
-      }
-      originalConsoleError(...args);
-    };
-  });
-
-  afterEach(() => {
-    console.error = originalConsoleError;
-  });
-
   test("uses repo role defaults when available", async () => {
     const harness = createHookHarness(
       createBaseProps({

@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactElement, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactElement, useEffect, useReducer, useRef } from "react";
 import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
 import javascript from "react-syntax-highlighter/dist/esm/languages/prism/javascript";
 import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
@@ -64,9 +64,65 @@ type MarkdownSyntaxLoadFailure = {
   message: string;
 };
 type ThemeLoadResult = { status: "loaded"; theme: PrismTheme } | { status: "failed"; error: Error };
+type MarkdownSyntaxBlockState = {
+  languageRegistrationVersion: number;
+  oneDarkTheme: PrismTheme | null;
+  themeLoadFailure: MarkdownSyntaxLoadFailure | null;
+  grammarLoadFailure: MarkdownSyntaxLoadFailure | null;
+};
+type MarkdownSyntaxBlockAction =
+  | { type: "theme_reset" }
+  | { type: "theme_loaded"; theme: PrismTheme }
+  | { type: "theme_failed"; message: string }
+  | { type: "grammar_reset" }
+  | { type: "grammar_loaded" }
+  | { type: "grammar_failed"; message: string };
 
 let cachedOneDarkTheme: PrismTheme | null = null;
 let oneDarkThemePromise: Promise<ThemeLoadResult> | null = null;
+
+const createInitialState = (): MarkdownSyntaxBlockState => ({
+  languageRegistrationVersion: 0,
+  oneDarkTheme: cachedOneDarkTheme,
+  themeLoadFailure: null,
+  grammarLoadFailure: null,
+});
+
+const markdownSyntaxBlockReducer = (
+  state: MarkdownSyntaxBlockState,
+  action: MarkdownSyntaxBlockAction,
+): MarkdownSyntaxBlockState => {
+  switch (action.type) {
+    case "theme_reset":
+      return state.themeLoadFailure ? { ...state, themeLoadFailure: null } : state;
+    case "theme_loaded":
+      return {
+        ...state,
+        oneDarkTheme: action.theme,
+        themeLoadFailure: null,
+      };
+    case "theme_failed":
+      return {
+        ...state,
+        themeLoadFailure: { message: action.message },
+      };
+    case "grammar_reset":
+      return state.grammarLoadFailure ? { ...state, grammarLoadFailure: null } : state;
+    case "grammar_loaded":
+      return {
+        ...state,
+        languageRegistrationVersion: state.languageRegistrationVersion + 1,
+        grammarLoadFailure: null,
+      };
+    case "grammar_failed":
+      return {
+        ...state,
+        grammarLoadFailure: { message: action.message },
+      };
+    default:
+      return state;
+  }
+};
 
 const loadOneDarkTheme = async (): Promise<ThemeLoadResult> => {
   if (cachedOneDarkTheme) {
@@ -110,11 +166,10 @@ export default function MarkdownSyntaxBlock({
   className,
 }: MarkdownSyntaxBlockProps): ReactElement {
   const { theme } = useTheme();
-  const [, setLanguageRegistrationVersion] = useState(0);
-  const [oneDarkTheme, setOneDarkTheme] = useState<PrismTheme | null>(() => cachedOneDarkTheme);
-  const [themeLoadFailure, setThemeLoadFailure] = useState<MarkdownSyntaxLoadFailure | null>(null);
-  const [grammarLoadFailure, setGrammarLoadFailure] = useState<MarkdownSyntaxLoadFailure | null>(
-    null,
+  const [{ oneDarkTheme, themeLoadFailure, grammarLoadFailure }, dispatch] = useReducer(
+    markdownSyntaxBlockReducer,
+    undefined,
+    createInitialState,
   );
   const normalizedLanguage = markdownSyntaxLanguageRegistry.normalizeLanguage(language);
   const previousNormalizedLanguageRef = useRef(normalizedLanguage);
@@ -124,7 +179,12 @@ export default function MarkdownSyntaxBlock({
     markdownSyntaxLanguageRegistry.isLanguageRegistered(normalizedLanguage);
   const isDark = theme === "dark";
   const loadFailure = themeLoadFailure ?? grammarLoadFailure;
-  const loadFailureKind = themeLoadFailure ? "theme" : grammarLoadFailure ? "language" : undefined;
+  let loadFailureKind: "theme" | "language" | undefined;
+  if (themeLoadFailure) {
+    loadFailureKind = "theme";
+  } else if (grammarLoadFailure) {
+    loadFailureKind = "language";
+  }
 
   const renderPlainCodeBlock = (): ReactElement => (
     <div
@@ -144,12 +204,12 @@ export default function MarkdownSyntaxBlock({
 
   useEffect(() => {
     if (!isDark) {
-      setThemeLoadFailure(null);
+      dispatch({ type: "theme_reset" });
       return;
     }
 
     if (oneDarkTheme) {
-      setThemeLoadFailure(null);
+      dispatch({ type: "theme_reset" });
       return;
     }
 
@@ -161,14 +221,14 @@ export default function MarkdownSyntaxBlock({
       }
 
       if (result.status === "failed") {
-        setThemeLoadFailure({
+        dispatch({
+          type: "theme_failed",
           message: `failed to load the dark Prism theme (${errorMessage(result.error)})`,
         });
         return;
       }
 
-      setThemeLoadFailure(null);
-      setOneDarkTheme(result.theme);
+      dispatch({ type: "theme_loaded", theme: result.theme });
     });
 
     return () => {
@@ -179,7 +239,7 @@ export default function MarkdownSyntaxBlock({
   useEffect(() => {
     if (previousNormalizedLanguageRef.current !== normalizedLanguage) {
       previousNormalizedLanguageRef.current = normalizedLanguage;
-      setGrammarLoadFailure(null);
+      dispatch({ type: "grammar_reset" });
     }
   }, [normalizedLanguage]);
 
@@ -202,7 +262,8 @@ export default function MarkdownSyntaxBlock({
         }
 
         if (result.status === "failed") {
-          setGrammarLoadFailure({
+          dispatch({
+            type: "grammar_failed",
             message: `failed to load the ${normalizedLanguage} grammar (${errorMessage(result.error)})`,
           });
           return;
@@ -212,8 +273,7 @@ export default function MarkdownSyntaxBlock({
           return;
         }
 
-        setGrammarLoadFailure(null);
-        setLanguageRegistrationVersion((version) => version + 1);
+        dispatch({ type: "grammar_loaded" });
       });
 
     return () => {

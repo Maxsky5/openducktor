@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { createElement, createRef } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import { act, createRef } from "react";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import { CHAT_OVERSCAN, CHAT_SHIFT_SIZE, CHAT_WINDOW_SIZE } from "./agent-chat-thread-windowing";
 import { useAgentChatWindow } from "./use-agent-chat-window";
@@ -115,13 +115,13 @@ const mountHarness = async (
   props: HarnessProps,
   options?: { attachContainer?: boolean; attachContent?: boolean },
 ): Promise<{
-  latestResultRef: { current: HookResult | null };
+  getLatestResult: () => HookResult;
   messagesContainerRef: ReturnType<typeof createHarness>["messagesContainerRef"];
   messagesContentRef: ReturnType<typeof createHarness>["messagesContentRef"];
   update: (nextProps: HarnessProps) => Promise<void>;
   unmount: () => Promise<void>;
 }> => {
-  const { Harness, latestResultRef, messagesContainerRef, messagesContentRef } = createHarness();
+  const { latestResultRef, messagesContainerRef, messagesContentRef } = createHarness();
   const shouldAttachContent = options?.attachContent ?? options?.attachContainer ?? false;
   if (options?.attachContainer) {
     setRefCurrent(messagesContainerRef, createMessagesContainer());
@@ -130,32 +130,24 @@ const mountHarness = async (
     setRefCurrent(messagesContentRef, createMessagesContent());
   }
 
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
-  await act(async () => {
-    renderer = TestRenderer.create(createElement(Harness, props));
-    await flush();
-  });
-
-  const update = async (nextProps: HarnessProps): Promise<void> => {
-    await act(async () => {
-      renderer?.update(createElement(Harness, nextProps));
-      await flush();
+  const harness = createSharedHookHarness((nextProps: HarnessProps) => {
+    const result = useAgentChatWindow({
+      ...nextProps,
+      messagesContainerRef,
+      messagesContentRef,
     });
-  };
+    latestResultRef.current = result;
+    return result;
+  }, props);
 
-  const unmount = async (): Promise<void> => {
-    await act(async () => {
-      renderer?.unmount();
-      await flush();
-    });
-  };
+  await harness.mount();
 
   return {
-    latestResultRef,
+    getLatestResult: () => getLatestResult(latestResultRef),
     messagesContainerRef,
     messagesContentRef,
-    update,
-    unmount,
+    update: (nextProps: HarnessProps) => harness.update(nextProps),
+    unmount: () => harness.unmount(),
   };
 };
 
@@ -310,7 +302,7 @@ describe("useAgentChatWindow", () => {
       isSessionViewLoading: false,
     });
 
-    const result = getLatestResult(harness.latestResultRef);
+    const result = harness.getLatestResult();
     expect(result.windowedRows).toEqual([]);
     expect(result.windowStart).toBe(0);
     expect(result.windowEnd).toBe(-1);
@@ -328,7 +320,7 @@ describe("useAgentChatWindow", () => {
       isSessionViewLoading: false,
     });
 
-    const result = getLatestResult(harness.latestResultRef);
+    const result = harness.getLatestResult();
     expect(result.windowedRows).toEqual(rows);
     expect(result.windowStart).toBe(0);
     expect(result.windowEnd).toBe(rows.length - 1);
@@ -344,7 +336,7 @@ describe("useAgentChatWindow", () => {
       isSessionViewLoading: false,
     });
 
-    const result = getLatestResult(harness.latestResultRef);
+    const result = harness.getLatestResult();
     expect(result.windowStart).toBe(Math.max(0, rows.length - CHAT_WINDOW_SIZE - CHAT_OVERSCAN));
     expect(result.windowEnd).toBe(rows.length - 1);
     expect(result.windowedRows).toEqual(rows.slice(result.windowStart, result.windowEnd + 1));
@@ -359,7 +351,7 @@ describe("useAgentChatWindow", () => {
       isSessionViewLoading: false,
     });
 
-    const result = getLatestResult(harness.latestResultRef);
+    const result = harness.getLatestResult();
     expect(result.isNearBottom).toBe(true);
 
     await harness.unmount();
@@ -373,7 +365,7 @@ describe("useAgentChatWindow", () => {
     });
 
     await act(async () => {
-      getLatestResult(harness.latestResultRef).scrollToTop();
+      harness.getLatestResult().scrollToTop();
       await flush();
     });
 
@@ -384,7 +376,7 @@ describe("useAgentChatWindow", () => {
       isSessionViewLoading: false,
     });
 
-    const result = getLatestResult(harness.latestResultRef);
+    const result = harness.getLatestResult();
     expect(result.windowStart).toBe(
       Math.max(0, nextRows.length - CHAT_WINDOW_SIZE - CHAT_OVERSCAN),
     );
@@ -464,7 +456,7 @@ describe("useAgentChatWindow", () => {
       isSessionViewLoading: false,
     });
 
-    const result = getLatestResult(harness.latestResultRef);
+    const result = harness.getLatestResult();
     expect(result.windowStart).toBe(21);
     expect(result.windowEnd).toBe(80);
     expect(result.windowedRows.at(-1)).toEqual(nextRows.at(-1));
@@ -544,7 +536,7 @@ describe("useAgentChatWindow", () => {
 
     expect(container.scrollTop).toBe(950);
 
-    const result = getLatestResult(harness.latestResultRef);
+    const result = harness.getLatestResult();
     expect(result.isAutoFollowingToBottom).toBe(false);
 
     await harness.unmount();
@@ -607,7 +599,7 @@ describe("useAgentChatWindow", () => {
       await flush();
     });
 
-    expect(getLatestResult(harness.latestResultRef).isAutoFollowingToBottom).toBe(true);
+    expect(harness.getLatestResult().isAutoFollowingToBottom).toBe(true);
 
     const frameAtHalfway = queuedFrameCallbacks.shift();
     if (!frameAtHalfway) {
@@ -621,7 +613,7 @@ describe("useAgentChatWindow", () => {
     });
 
     expect(container.scrollTop).toBeGreaterThan(780);
-    expect(getLatestResult(harness.latestResultRef).isAutoFollowingToBottom).toBe(true);
+    expect(harness.getLatestResult().isAutoFollowingToBottom).toBe(true);
 
     const frameAtEnd = queuedFrameCallbacks.shift();
     if (!frameAtEnd) {
@@ -634,7 +626,7 @@ describe("useAgentChatWindow", () => {
     });
 
     expect(container.scrollTop).toBe(950);
-    expect(getLatestResult(harness.latestResultRef).isAutoFollowingToBottom).toBe(false);
+    expect(harness.getLatestResult().isAutoFollowingToBottom).toBe(false);
 
     await harness.unmount();
   });
@@ -669,7 +661,7 @@ describe("useAgentChatWindow", () => {
       behavior: "auto",
     });
 
-    const result = getLatestResult(harness.latestResultRef);
+    const result = harness.getLatestResult();
     expect(result.isNearBottom).toBe(true);
     expect(result.isNearTop).toBe(false);
 
@@ -706,7 +698,7 @@ describe("useAgentChatWindow", () => {
       behavior: "auto",
     });
 
-    const result = getLatestResult(harness.latestResultRef);
+    const result = harness.getLatestResult();
     expect(result.isNearBottom).toBe(true);
     expect(result.isNearTop).toBe(false);
 
@@ -759,7 +751,7 @@ describe("useAgentChatWindow", () => {
       isSessionViewLoading: false,
     });
 
-    const result = getLatestResult(harness.latestResultRef);
+    const result = harness.getLatestResult();
     expect(result.windowStart).toBe(0);
     expect(result.windowEnd).toBe(29);
     expect(result.windowedRows).toEqual(nextRows);
@@ -775,11 +767,11 @@ describe("useAgentChatWindow", () => {
     });
 
     await act(async () => {
-      getLatestResult(harness.latestResultRef).scrollToTop();
+      harness.getLatestResult().scrollToTop();
       await flush();
     });
 
-    const result = getLatestResult(harness.latestResultRef);
+    const result = harness.getLatestResult();
     expect(result.windowStart).toBe(0);
     expect(result.windowEnd).toBe(Math.min(79, CHAT_WINDOW_SIZE + CHAT_OVERSCAN - 1));
     expect(result.isNearTop).toBe(true);
@@ -806,7 +798,7 @@ describe("useAgentChatWindow", () => {
     container.scrollTo.mockClear();
 
     await act(async () => {
-      getLatestResult(harness.latestResultRef).scrollToTop();
+      harness.getLatestResult().scrollToTop();
       await flush();
     });
 
@@ -836,13 +828,13 @@ describe("useAgentChatWindow", () => {
     );
 
     await act(async () => {
-      getLatestResult(harness.latestResultRef).scrollToTop();
+      harness.getLatestResult().scrollToTop();
       await flush();
     });
 
     const sentinelElement = createMessagesContainer();
     await act(async () => {
-      getLatestResult(harness.latestResultRef).bottomSentinelRef(sentinelElement);
+      harness.getLatestResult().bottomSentinelRef(sentinelElement);
       await flush();
     });
 
@@ -856,7 +848,7 @@ describe("useAgentChatWindow", () => {
       await flush();
     });
 
-    let result = getLatestResult(harness.latestResultRef);
+    let result = harness.getLatestResult();
     expect(result.windowStart).toBe(0);
     expect(result.windowEnd).toBe(Math.min(79, CHAT_WINDOW_SIZE + CHAT_OVERSCAN - 1));
 
@@ -875,7 +867,7 @@ describe("useAgentChatWindow", () => {
       await flush();
     });
 
-    result = getLatestResult(harness.latestResultRef);
+    result = harness.getLatestResult();
     expect(result.windowStart).toBe(10);
     expect(result.windowEnd).toBe(79);
 
@@ -890,16 +882,16 @@ describe("useAgentChatWindow", () => {
     });
 
     await act(async () => {
-      getLatestResult(harness.latestResultRef).scrollToTop();
+      harness.getLatestResult().scrollToTop();
       await flush();
     });
 
     await act(async () => {
-      getLatestResult(harness.latestResultRef).scrollToBottom();
+      harness.getLatestResult().scrollToBottom();
       await flush();
     });
 
-    const result = getLatestResult(harness.latestResultRef);
+    const result = harness.getLatestResult();
     expect(result.windowStart).toBe(20);
     expect(result.windowEnd).toBe(79);
     expect(result.isNearBottom).toBe(true);
@@ -923,14 +915,14 @@ describe("useAgentChatWindow", () => {
     }
 
     await act(async () => {
-      getLatestResult(harness.latestResultRef).scrollToTop();
+      harness.getLatestResult().scrollToTop();
       await flush();
     });
 
     container.scrollTo.mockClear();
 
     await act(async () => {
-      getLatestResult(harness.latestResultRef).scrollToBottom();
+      harness.getLatestResult().scrollToBottom();
       await flush();
     });
 
@@ -950,13 +942,13 @@ describe("useAgentChatWindow", () => {
     });
 
     await act(async () => {
-      getLatestResult(harness.latestResultRef).scrollToTop();
+      harness.getLatestResult().scrollToTop();
       await flush();
     });
 
     const sentinelElement = createMessagesContainer();
     await act(async () => {
-      getLatestResult(harness.latestResultRef).bottomSentinelRef(sentinelElement);
+      harness.getLatestResult().bottomSentinelRef(sentinelElement);
       await flush();
     });
 
@@ -976,7 +968,7 @@ describe("useAgentChatWindow", () => {
       isSessionViewLoading: false,
     });
 
-    const result = getLatestResult(harness.latestResultRef);
+    const result = harness.getLatestResult();
     expect(result.windowStart).toBe(21);
     expect(result.windowEnd).toBe(80);
     const lastRow = result.windowedRows.at(-1);
@@ -996,7 +988,7 @@ describe("useAgentChatWindow", () => {
       isSessionViewLoading: false,
     });
 
-    const result = getLatestResult(harness.latestResultRef);
+    const result = harness.getLatestResult();
     expect(result.windowedRows).toEqual(rows.slice(result.windowStart, result.windowEnd + 1));
 
     await harness.unmount();

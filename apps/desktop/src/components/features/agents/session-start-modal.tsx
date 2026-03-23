@@ -147,13 +147,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <form
-          className="flex min-h-0 flex-1 flex-col"
-          onSubmit={(event) => {
-            event.preventDefault();
-            handleConfirm();
-          }}
-        >
+        <form className="flex min-h-0 flex-1 flex-col" action={handleConfirm}>
           <DialogBody className="pt-2 pb-4">
             <fieldset className="space-y-5" disabled={isStarting}>
               {availableStartModes.length > 1 ? (

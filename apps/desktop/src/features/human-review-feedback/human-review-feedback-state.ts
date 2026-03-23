@@ -26,13 +26,11 @@ const toPromptTaskContext = (task: TaskCard | undefined) => {
   };
 };
 
-export const resolveRequestChangesScenario = (
-  task: TaskCard | undefined,
-): BuildRequestChangesScenario => {
+const resolveRequestChangesScenario = (task: TaskCard | undefined): BuildRequestChangesScenario => {
   return resolveBuildRequestChangesScenario(task);
 };
 
-export const buildHumanReviewMessage = (
+const buildHumanReviewMessage = (
   task: TaskCard | undefined,
   taskId: string,
   scenario: BuildRequestChangesScenario,

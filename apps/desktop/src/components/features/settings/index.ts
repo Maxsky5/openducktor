@@ -14,11 +14,4 @@ export {
 export {
   buildDevServerDraftValidationMap,
   countDevServerDraftValidationErrors,
-  getDevServerDraftValidationErrors,
-  hasConfiguredHookCommands,
-  hasConfiguredRepoScriptCommands,
-  normalizeDevServers,
-  normalizeHooksWithTrust,
-  normalizeRepoScriptsWithTrust,
-  parseHookLines,
 } from "./settings-model";

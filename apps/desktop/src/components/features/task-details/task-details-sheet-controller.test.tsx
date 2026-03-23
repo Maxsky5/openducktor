@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
-import { createElement, createRef, type ReactElement } from "react";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { render } from "@testing-library/react";
+import { act, createElement, createRef, type ReactElement } from "react";
 import {
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -52,10 +52,7 @@ describe("TaskDetailsSheetController", () => {
       });
     };
 
-    let renderer!: ReactTestRenderer;
-    await act(async () => {
-      renderer = create(createElement(Parent));
-    });
+    const rendered = render(createElement(Parent));
 
     expect(parentRenderCount).toBe(1);
     expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
@@ -84,7 +81,7 @@ describe("TaskDetailsSheetController", () => {
     );
 
     await act(async () => {
-      renderer.unmount();
+      rendered.unmount();
     });
   });
 
@@ -96,21 +93,18 @@ describe("TaskDetailsSheetController", () => {
     const onDetectPullRequest = mock((_taskId: string) => {});
     const onUnlinkPullRequest = mock((_taskId: string) => {});
 
-    let renderer!: ReactTestRenderer;
-    await act(async () => {
-      renderer = create(
-        createElement(TaskDetailsSheetController, {
-          ref: controllerRef,
-          allTasks: [task],
-          runs: [],
-          workflowActionsEnabled: false,
-          onDetectPullRequest,
-          onUnlinkPullRequest,
-          detectingPullRequestTaskId: "task-1",
-          unlinkingPullRequestTaskId: "task-1",
-        }),
-      );
-    });
+    const rendered = render(
+      createElement(TaskDetailsSheetController, {
+        ref: controllerRef,
+        allTasks: [task],
+        runs: [],
+        workflowActionsEnabled: false,
+        onDetectPullRequest,
+        onUnlinkPullRequest,
+        detectingPullRequestTaskId: "task-1",
+        unlinkingPullRequestTaskId: "task-1",
+      }),
+    );
 
     await act(async () => {
       controllerRef.current?.openTask(task.id);
@@ -129,7 +123,7 @@ describe("TaskDetailsSheetController", () => {
     );
 
     await act(async () => {
-      renderer.unmount();
+      rendered.unmount();
     });
   });
 });

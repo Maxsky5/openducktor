@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { BeadsCheck, RunSummary, TaskCard, TaskCreateInput } from "@openducktor/contracts";
-import { createElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import type { PropsWithChildren, ReactElement } from "react";
 import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { host } from "../shared/host";
 import { useTaskOperations } from "./use-task-operations";
 
@@ -13,10 +13,10 @@ const reactActEnvironment = globalThis as typeof globalThis & {
 };
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-};
+const TASK_REFRESH_WARNING = "Pull request sync failed during task refresh";
+const originalConsoleError = console.error;
+const originalConsoleWarn = console.warn;
+const originalToastSuccess = toast.success;
 
 const createDeferred = <T,>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
@@ -71,42 +71,27 @@ const createHookHarness = (initialArgs: HookArgs) => {
     return null;
   };
 
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
+  const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+    <QueryProvider useIsolatedClient>{children}</QueryProvider>
+  );
+
+  const sharedHarness = createSharedHookHarness(Harness, { args: currentArgs }, { wrapper });
 
   return {
     mount: async () => {
-      await act(async () => {
-        renderer = TestRenderer.create(
-          createElement(
-            QueryProvider,
-            { useIsolatedClient: true },
-            createElement(Harness, { args: currentArgs }),
-          ),
-        );
-      });
-      await flush();
+      await sharedHarness.mount();
     },
     updateArgs: async (nextArgs: HookArgs) => {
       currentArgs = nextArgs;
-      await act(async () => {
-        renderer?.update(
-          createElement(
-            QueryProvider,
-            { useIsolatedClient: true },
-            createElement(Harness, { args: currentArgs }),
-          ),
-        );
-      });
-      await flush();
+      await sharedHarness.update({ args: currentArgs });
     },
     run: async (fn: (value: ReturnType<typeof useTaskOperations>) => Promise<void> | void) => {
       if (!latest) {
         throw new Error("Hook not mounted");
       }
-      await act(async () => {
+      await sharedHarness.run(async () => {
         await fn(latest as ReturnType<typeof useTaskOperations>);
       });
-      await flush();
     },
     getLatest: () => {
       if (!latest) {
@@ -114,11 +99,14 @@ const createHookHarness = (initialArgs: HookArgs) => {
       }
       return latest;
     },
+    waitFor: async (
+      predicate: (value: ReturnType<typeof useTaskOperations>) => boolean,
+      timeoutMs?: number,
+    ) => {
+      await sharedHarness.waitFor(() => latest !== null && predicate(latest), timeoutMs);
+    },
     unmount: async () => {
-      await act(async () => {
-        renderer?.unmount();
-      });
-      renderer = null;
+      await sharedHarness.unmount();
     },
   };
 };
@@ -126,6 +114,29 @@ const createHookHarness = (initialArgs: HookArgs) => {
 describe("use-task-operations", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
+    console.error = (...args: Parameters<typeof console.error>): void => {
+      const [firstArg] = args;
+      if (typeof firstArg === "string" && firstArg.startsWith(TASK_REFRESH_WARNING)) {
+        return;
+      }
+      originalConsoleError(...args);
+    };
+    console.warn = (...args: Parameters<typeof console.warn>): void => {
+      const [firstArg] = args;
+      if (typeof firstArg === "string" && firstArg.startsWith(TASK_REFRESH_WARNING)) {
+        return;
+      }
+      originalConsoleWarn(...args);
+    };
+    (toast as { success: typeof toast.success }).success = mock(
+      (_message: string, _options?: { description?: string }) => "",
+    ) as unknown as typeof toast.success;
+  });
+
+  afterEach(() => {
+    console.error = originalConsoleError;
+    console.warn = originalConsoleWarn;
+    toast.success = originalToastSuccess;
   });
 
   test("refreshTaskData filters deferred tasks and loads runs", async () => {
@@ -172,6 +183,7 @@ describe("use-task-operations", () => {
       await harness.run(async (value) => {
         await value.refreshTaskData("/repo");
       });
+      await harness.waitFor((value) => value.tasks.map((task) => task.id).join(",") === "A");
 
       expect(harness.getLatest().tasks.map((task) => task.id)).toEqual(["A"]);
       expect(harness.getLatest().runs).toHaveLength(1);
@@ -213,12 +225,13 @@ describe("use-task-operations", () => {
       await harness.run(async (value) => {
         await value.refreshTaskData("/repo");
       });
+      await harness.waitFor((value) => value.tasks[0]?.status === "open");
       expect(harness.getLatest().tasks[0]?.status).toBe("open");
 
       await harness.run(async (value) => {
         await value.refreshTaskData("/repo");
       });
-      await flush();
+      await harness.waitFor((value) => value.tasks[0]?.status === "ready_for_dev");
 
       expect(tasksList).toHaveBeenCalledTimes(3);
       expect(runsList).toHaveBeenCalledTimes(3);
@@ -259,13 +272,13 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
-      await flush();
+      await harness.waitFor((value) => value.tasks[0]?.status === "in_progress");
       expect(harness.getLatest().tasks[0]?.status).toBe("in_progress");
 
       await harness.run(async (value) => {
         await value.resetTaskImplementation("A");
       });
-      await flush();
+      await harness.waitFor((value) => value.tasks[0]?.status === "ready_for_dev");
 
       expect(taskResetImplementation).toHaveBeenCalledWith("/repo", "A");
       expect(harness.getLatest().tasks[0]?.status).toBe("ready_for_dev");
@@ -377,7 +390,6 @@ describe("use-task-operations", () => {
       ]);
 
       await refreshPromise;
-      await flush();
 
       expect(harness.getLatest().tasks).toEqual([]);
       expect(harness.getLatest().runs).toEqual([]);
@@ -561,7 +573,7 @@ describe("use-task-operations", () => {
       expect(harness.getLatest().unlinkingPullRequestTaskId).toBeNull();
       expect(harness.getLatest().isLoadingTasks).toBe(false);
 
-      await act(async () => {
+      await harness.run(async () => {
         detection.resolve({
           outcome: "linked",
           pullRequest: {
@@ -578,7 +590,6 @@ describe("use-task-operations", () => {
         });
         await syncPromise;
       });
-      await flush();
 
       expect(harness.getLatest().detectingPullRequestTaskId).toBeNull();
     } finally {
@@ -1062,11 +1073,10 @@ describe("use-task-operations", () => {
       expect(harness.getLatest().detectingPullRequestTaskId).toBeNull();
       expect(harness.getLatest().isLoadingTasks).toBe(false);
 
-      await act(async () => {
+      await harness.run(async () => {
         unlink.resolve({ ok: true });
         await unlinkPromise;
       });
-      await flush();
 
       expect(harness.getLatest().unlinkingPullRequestTaskId).toBeNull();
     } finally {

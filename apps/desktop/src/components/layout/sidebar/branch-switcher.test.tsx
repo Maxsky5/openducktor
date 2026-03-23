@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { createElement } from "react";
+import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import TestRenderer, { act, type ReactTestRenderer } from "react-test-renderer";
 
 let branchSyncDegraded = false;
 let isSwitchingWorkspace = false;
@@ -136,17 +136,8 @@ describe("BranchSwitcher", () => {
     switchBranch.mockImplementation(() => deferred.promise);
     const { BranchSwitcher } = await import("./branch-switcher");
 
-    let renderer: ReactTestRenderer | null = null;
-    const render = (): ReactElement => createElement(BranchSwitcher);
-
-    await act(async () => {
-      renderer = TestRenderer.create(render());
-    });
-
-    if (!renderer) {
-      throw new Error("Expected branch switcher renderer to mount");
-    }
-    const mountedRenderer: ReactTestRenderer = renderer;
+    const renderBranchSwitcher = (): ReactElement => createElement(BranchSwitcher);
+    const rendered = render(renderBranchSwitcher());
 
     expect(latestOnValueChange).toBeDefined();
 
@@ -156,14 +147,10 @@ describe("BranchSwitcher", () => {
 
     isSwitchingBranch = true;
     await act(async () => {
-      mountedRenderer.update(render());
+      rendered.rerender(renderBranchSwitcher());
     });
 
-    expect(
-      mountedRenderer.root.findByProps({
-        "data-branch-value": "feature/desloppify",
-      }),
-    ).toBeTruthy();
+    expect(rendered.container.innerHTML).toContain('data-branch-value="feature/desloppify"');
 
     activeBranchName = "feature/desloppify";
     isSwitchingBranch = false;
@@ -175,17 +162,13 @@ describe("BranchSwitcher", () => {
     activeBranchName = "release";
     isSwitchingBranch = true;
     await act(async () => {
-      mountedRenderer.update(render());
+      rendered.rerender(renderBranchSwitcher());
     });
 
-    expect(
-      mountedRenderer.root.findByProps({
-        "data-branch-value": "release",
-      }),
-    ).toBeTruthy();
+    expect(rendered.container.innerHTML).toContain('data-branch-value="release"');
 
     await act(async () => {
-      mountedRenderer.unmount();
+      rendered.unmount();
     });
   });
 });

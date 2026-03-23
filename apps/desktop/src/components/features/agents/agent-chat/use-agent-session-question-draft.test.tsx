@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createElement, type ReactElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import { QUESTION_SUMMARY_TAB_ID, useQuestionDraft } from "./use-agent-session-question-draft";
 
@@ -10,10 +9,7 @@ import { QUESTION_SUMMARY_TAB_ID, useQuestionDraft } from "./use-agent-session-q
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const TEST_RENDERER_DEPRECATION_WARNING = "react-test-renderer is deprecated";
 const originalConsoleError = console.error;
-
-type HookState = ReturnType<typeof useQuestionDraft>;
 
 type QuestionOverride = Partial<AgentQuestionRequest["questions"][number]>;
 
@@ -37,71 +33,16 @@ const buildRequest = (overrides: Partial<AgentQuestionRequest> = {}): AgentQuest
   ...overrides,
 });
 
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-};
-
 const createHookHarness = (initialRequest: AgentQuestionRequest) => {
-  let latest: HookState | null = null;
-  let currentRequest = initialRequest;
-
-  const Harness = ({ request }: { request: AgentQuestionRequest }): ReactElement | null => {
-    latest = useQuestionDraft({ request });
-    return null;
-  };
-
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
-
-  const mount = async (): Promise<void> => {
-    await act(async () => {
-      renderer = TestRenderer.create(createElement(Harness, { request: currentRequest }));
-      await flush();
-    });
-  };
-
-  const update = async (request: AgentQuestionRequest): Promise<void> => {
-    currentRequest = request;
-    await act(async () => {
-      renderer?.update(createElement(Harness, { request }));
-      await flush();
-    });
-  };
-
-  const run = async (fn: (state: HookState) => void | Promise<void>): Promise<void> => {
-    await act(async () => {
-      const state = latest;
-      if (!state) {
-        throw new Error("Hook state unavailable");
-      }
-      await fn(state);
-      await flush();
-    });
-  };
-
-  const getLatest = (): HookState => {
-    if (!latest) {
-      throw new Error("Hook state unavailable");
-    }
-    return latest;
-  };
-
-  const unmount = async (): Promise<void> => {
-    await act(async () => {
-      renderer?.unmount();
-      await flush();
-    });
-  };
-
-  return { mount, update, run, getLatest, unmount };
+  return createSharedHookHarness(
+    ({ request }: { request: AgentQuestionRequest }) => useQuestionDraft({ request }),
+    { request: initialRequest },
+  );
 };
 
 describe("useQuestionDraft", () => {
   beforeEach(() => {
     console.error = (...args: unknown[]): void => {
-      if (typeof args[0] === "string" && args[0].includes(TEST_RENDERER_DEPRECATION_WARNING)) {
-        return;
-      }
       originalConsoleError(...args);
     };
   });
@@ -257,7 +198,7 @@ describe("useQuestionDraft", () => {
     expect(harness.getLatest().activeTabId).toBe("1");
     expect(harness.getLatest().submitError).toBe("Submission failed");
 
-    await harness.update(requestTwo);
+    await harness.update({ request: requestTwo });
 
     const latest = harness.getLatest();
     expect(latest.activeTabId).toBe("0");

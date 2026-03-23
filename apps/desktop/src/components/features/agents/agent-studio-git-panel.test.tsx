@@ -1,47 +1,22 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { LoaderCircle } from "lucide-react";
-import { createElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { fireEvent, type RenderResult, render } from "@testing-library/react";
+import { act, createElement } from "react";
+
+const omitDialogDomProps = ({
+  onOpenChange: _onOpenChange,
+  open: _open,
+  ...props
+}: {
+  onOpenChange?: unknown;
+  open?: unknown;
+  [key: string]: unknown;
+}) => props;
 
 (
   globalThis as typeof globalThis & {
     IS_REACT_ACT_ENVIRONMENT?: boolean;
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
-
-const TEST_RENDERER_DEPRECATION_WARNING = "react-test-renderer is deprecated";
-const originalConsoleError = console.error;
-
-mock.module("@/components/ui/tooltip", () => ({
-  TooltipProvider: ({ children }: { children: React.ReactNode }) =>
-    createElement("div", null, children),
-  Tooltip: ({ children }: { children: React.ReactNode }) => createElement("div", null, children),
-  TooltipTrigger: ({ children }: { children: React.ReactNode }) =>
-    createElement("div", null, children),
-  TooltipContent: ({ children }: { children: React.ReactNode }) =>
-    createElement("div", null, children),
-}));
-
-mock.module("@/components/ui/dialog", () => ({
-  Dialog: ({ children, open }: { children: React.ReactNode; open?: boolean }) =>
-    open === false ? null : createElement("div", null, children),
-  DialogContent: ({ children, ...props }: { children: React.ReactNode; [key: string]: unknown }) =>
-    createElement("div", props, children),
-  DialogHeader: ({ children }: { children: React.ReactNode }) =>
-    createElement("div", null, children),
-  DialogTitle: ({ children }: { children: React.ReactNode }) =>
-    createElement("div", null, children),
-  DialogDescription: ({ children }: { children: React.ReactNode }) =>
-    createElement("div", null, children),
-  DialogBody: ({ children }: { children: React.ReactNode }) => createElement("div", null, children),
-  DialogFooter: ({ children }: { children: React.ReactNode }) =>
-    createElement("div", null, children),
-}));
-
-mock.module("@/components/features/agents/pierre-diff-viewer", () => ({
-  PierreDiffPreloader: () => null,
-  PierreDiffViewer: () => createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
-}));
 
 type AgentStudioGitPanelComponent =
   typeof import("./agent-studio-git-panel")["AgentStudioGitPanel"];
@@ -96,91 +71,120 @@ const flush = async (): Promise<void> => {
   await Promise.resolve();
 };
 
-const findByTestId = (
-  root: TestRenderer.ReactTestInstance,
-  testId: string,
-): TestRenderer.ReactTestInstance => {
-  const matches = root.findAll(
-    (node) => node.props["data-testid"] === testId && typeof node.type === "string",
-  );
-  if (matches.length !== 1) {
+type DomTestNode = {
+  readonly element: Element;
+  readonly type: string;
+  readonly props: {
+    className?: string;
+    title?: string | null;
+    disabled?: boolean;
+    value?: string;
+    onClick: (event?: { stopPropagation?: () => void }) => void;
+    onChange: (event: { currentTarget?: { value?: string }; target?: { value?: string } }) => void;
+  };
+  readonly children: string[];
+  findAll: (predicate: (node: DomTestNode) => boolean) => DomTestNode[];
+};
+
+const wrapElement = (element: Element): DomTestNode => ({
+  element,
+  type: element.tagName.toLowerCase(),
+  get props() {
+    const htmlElement = element as HTMLElement;
+    const reactPropsKey = Object.keys(htmlElement).find((key) => key.startsWith("__reactProps$"));
+    const reactProps = reactPropsKey
+      ? ((htmlElement as unknown as Record<string, unknown>)[reactPropsKey] as {
+          onClick?: (event?: unknown) => void;
+          onChange?: (event?: unknown) => void;
+        })
+      : null;
+    return {
+      className: htmlElement.className,
+      title: htmlElement.getAttribute("title"),
+      disabled: (htmlElement as HTMLButtonElement | HTMLInputElement).disabled,
+      value: (htmlElement as HTMLInputElement).value,
+      onClick: (event: { stopPropagation?: () => void } = {}) => {
+        if (reactProps?.onClick) {
+          reactProps.onClick(event);
+          return;
+        }
+        fireEvent.click(htmlElement, event ?? {});
+      },
+      onChange: (event: { currentTarget?: { value?: string }; target?: { value?: string } }) => {
+        const nextValue = event.currentTarget?.value ?? event.target?.value ?? "";
+        if (reactProps?.onChange) {
+          reactProps.onChange({
+            currentTarget: { value: nextValue },
+            target: { value: nextValue },
+          });
+          return;
+        }
+        fireEvent.change(htmlElement, { target: { value: nextValue } });
+      },
+    };
+  },
+  get children() {
+    return Array.from(element.childNodes)
+      .map((child) => child.textContent ?? "")
+      .filter((child) => child.length > 0);
+  },
+  findAll: (predicate) =>
+    Array.from(element.querySelectorAll("*"))
+      .map((node) => wrapElement(node))
+      .filter((node) => predicate(node)),
+});
+
+const wrapRoot = (rendered: RenderResult): DomTestNode =>
+  ({
+    ...wrapElement(rendered.container),
+    findAll: (predicate) =>
+      Array.from(rendered.container.querySelectorAll("*"))
+        .map((node) => wrapElement(node))
+        .filter((node) => predicate(node)),
+  }) satisfies DomTestNode;
+
+const findByTestId = (root: DomTestNode, testId: string): DomTestNode => {
+  const effectiveMatches = Array.from(
+    root.element.querySelectorAll(`[data-testid="${testId}"]`),
+  ).map((node) => wrapElement(node));
+  if (effectiveMatches.length !== 1) {
     throw new Error(
-      `Expected exactly one host element for data-testid=${testId}, got ${matches.length}`,
+      `Expected exactly one host element for data-testid=${testId}, got ${effectiveMatches.length}`,
     );
   }
-  const match = matches[0];
+  const match = effectiveMatches[0];
   if (!match) {
     throw new Error(`Missing host element for data-testid=${testId}`);
   }
   return match;
 };
 
-const countByTestId = (root: TestRenderer.ReactTestInstance, testId: string): number =>
-  root.findAll((node) => node.props["data-testid"] === testId && typeof node.type === "string")
-    .length;
+const countByTestId = (root: DomTestNode, testId: string): number =>
+  root.element.querySelectorAll(`[data-testid="${testId}"]`).length;
 
-const findDiffScopeTabs = (
-  root: TestRenderer.ReactTestInstance,
-  value: "target" | "uncommitted",
-): TestRenderer.ReactTestInstance => {
-  const matches = root.findAll(
-    (node) => node.props["data-slot"] === "tabs" && node.props.value === value,
+const findDiffScopeTabs = (root: DomTestNode, value: "target" | "uncommitted"): DomTestNode =>
+  findByTestId(
+    root,
+    value === "target"
+      ? "agent-studio-git-diff-scope-target"
+      : "agent-studio-git-diff-scope-uncommitted",
   );
-  if (matches.length !== 1) {
-    throw new Error(
-      `Expected exactly one diff scope tabs root for value=${value}, got ${matches.length}`,
-    );
-  }
-  const match = matches[0];
-  if (!match) {
-    throw new Error(`Missing diff scope tabs root for value=${value}`);
-  }
-  return match;
-};
 
-const ensureRenderer = (
-  renderer: TestRenderer.ReactTestRenderer | null,
-): TestRenderer.ReactTestRenderer => {
+const ensureRenderer = (renderer: RenderResult | null): RenderResult => {
   if (!renderer) {
     throw new Error("AgentStudioGitPanel renderer is not initialized");
   }
   return renderer;
 };
 
-const getRoot = (
-  renderer: TestRenderer.ReactTestRenderer | null,
-): TestRenderer.ReactTestInstance => {
-  return ensureRenderer(renderer).root;
-};
+const getRoot = (renderer: RenderResult | null): DomTestNode => wrapRoot(ensureRenderer(renderer));
 
-const hasVisibleText = (root: TestRenderer.ReactTestInstance, text: string): boolean => {
-  return (
-    root.findAll(
-      (node) =>
-        typeof node.type === "string" &&
-        node.children.some((child) => typeof child === "string" && child.includes(text)),
-    ).length > 0
-  );
-};
+const hasVisibleText = (root: DomTestNode, text: string): boolean =>
+  getNodeText(root).includes(text);
 
-const getNodeText = (node: TestRenderer.ReactTestInstance): string => {
-  return (node.children as unknown[])
-    .map((child) => {
-      if (typeof child === "string" || typeof child === "number") {
-        return String(child);
-      }
-      if (child != null && typeof child === "object" && "children" in child) {
-        return getNodeText(child as TestRenderer.ReactTestInstance);
-      }
-      return "";
-    })
-    .join("");
-};
+const getNodeText = (node: DomTestNode): string => node.children.join("");
 
-const findButtonByText = (
-  root: TestRenderer.ReactTestInstance,
-  text: string,
-): TestRenderer.ReactTestInstance => {
+const findButtonByText = (root: DomTestNode, text: string): DomTestNode => {
   const matches = root.findAll(
     (node) => node.type === "button" && getNodeText(node).includes(text),
   );
@@ -199,28 +203,57 @@ const findButtonByText = (
 
 describe("AgentStudioGitPanel", () => {
   beforeAll(async () => {
+    mock.module("@/components/ui/tooltip", () => ({
+      TooltipProvider: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+      Tooltip: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+      TooltipTrigger: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+      TooltipContent: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+    }));
+    mock.module("@/components/ui/dialog", () => ({
+      Dialog: ({ children, open }: { children: React.ReactNode; open?: boolean }) =>
+        open === false ? null : createElement("div", null, children),
+      DialogContent: ({
+        children,
+        ...props
+      }: {
+        children: React.ReactNode;
+        [key: string]: unknown;
+      }) => createElement("div", omitDialogDomProps(props), children),
+      DialogHeader: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+      DialogTitle: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+      DialogDescription: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+      DialogBody: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+      DialogFooter: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+    }));
+    mock.module("@/components/layout/theme-provider", () => ({
+      useTheme: () => ({ theme: "light", setTheme: () => {} }),
+    }));
+    mock.module("@pierre/diffs/react", () => ({
+      FileDiff: () => createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
+      useWorkerPool: () => null,
+    }));
     ({ AgentStudioGitPanel } = await import("./agent-studio-git-panel"));
   });
 
-  beforeEach(() => {
-    console.error = (...args: unknown[]): void => {
-      if (typeof args[0] === "string" && args[0].includes(TEST_RENDERER_DEPRECATION_WARNING)) {
-        return;
-      }
-      originalConsoleError(...args);
-    };
-  });
-
-  afterEach(() => {
-    console.error = originalConsoleError;
+  afterAll(() => {
+    mock.restore();
   });
 
   test("renders branch context labels and git action controls", async () => {
     const refresh = mock(() => {});
     const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, { model: baseModel({ refresh, setDiffScope }) }),
       );
       await flush();
@@ -255,7 +288,7 @@ describe("AgentStudioGitPanel", () => {
 
     await act(async () => {
       findByTestId(root, "agent-studio-git-refresh-button").props.onClick();
-      findDiffScopeTabs(root, "target").props.onValueChange("uncommitted");
+      fireEvent.mouseDown(findDiffScopeTabs(root, "uncommitted").element, { button: 0 });
       await flush();
     });
 
@@ -269,10 +302,10 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("renders a pull request link badge when the selected task has a linked PR", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
 
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             pullRequest: {
@@ -306,10 +339,10 @@ describe("AgentStudioGitPanel", () => {
 
   test("renders and triggers the detect PR button when the action is available", async () => {
     const onDetectPullRequest = mock(async () => {});
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
 
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             onDetectPullRequest,
@@ -337,10 +370,10 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("omits the detect PR button when no detection action is provided", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
 
     await act(async () => {
-      renderer = TestRenderer.create(createElement(AgentStudioGitPanel, { model: baseModel() }));
+      renderer = render(createElement(AgentStudioGitPanel, { model: baseModel() }));
       await flush();
     });
 
@@ -355,10 +388,10 @@ describe("AgentStudioGitPanel", () => {
 
   test("omits the detect PR button when a pull request is already linked", async () => {
     const onDetectPullRequest = mock(async () => {});
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
 
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             onDetectPullRequest,
@@ -394,10 +427,10 @@ describe("AgentStudioGitPanel", () => {
     const commitAll = mock(async (_message: string) => true);
     const pushBranch = mock(async () => {});
     const pullFromUpstream = mock(async () => {});
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
 
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             contextMode: "repository",
@@ -433,10 +466,10 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("shows a clear no-upstream message in repository compare mode", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
 
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             contextMode: "repository",
@@ -470,9 +503,9 @@ describe("AgentStudioGitPanel", () => {
   test("enforces disabled safety states for rebase and commit controls", async () => {
     const commitAll = mock(async (_message: string) => true);
 
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             branch: null,
@@ -502,7 +535,7 @@ describe("AgentStudioGitPanel", () => {
     ).toBe(true);
 
     await act(async () => {
-      ensureRenderer(renderer).update(
+      ensureRenderer(renderer).rerender(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
@@ -517,7 +550,7 @@ describe("AgentStudioGitPanel", () => {
     expect(Boolean(findByTestId(root, "agent-studio-git-rebase-button").props.disabled)).toBe(true);
 
     await act(async () => {
-      ensureRenderer(renderer).update(
+      ensureRenderer(renderer).rerender(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
@@ -552,9 +585,9 @@ describe("AgentStudioGitPanel", () => {
     const commitAll = mock(async (_message: string) => true);
     const refresh = mock(() => {});
 
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             diffScope: "target",
@@ -574,14 +607,14 @@ describe("AgentStudioGitPanel", () => {
     expect(countByTestId(root, "agent-studio-git-commit-submit-button")).toBe(0);
 
     await act(async () => {
-      findDiffScopeTabs(root, "target").props.onValueChange("uncommitted");
+      fireEvent.mouseDown(findDiffScopeTabs(root, "uncommitted").element, { button: 0 });
       await flush();
     });
     expect(setDiffScope).toHaveBeenCalledTimes(1);
     expect(setDiffScope).toHaveBeenCalledWith("uncommitted");
 
     await act(async () => {
-      ensureRenderer(renderer).update(
+      ensureRenderer(renderer).rerender(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             diffScope: "uncommitted",
@@ -602,7 +635,7 @@ describe("AgentStudioGitPanel", () => {
     expect(Boolean(submitButton.props.disabled)).toBe(true);
 
     await act(async () => {
-      findDiffScopeTabs(root, "uncommitted").props.onValueChange("target");
+      fireEvent.mouseDown(findDiffScopeTabs(root, "target").element, { button: 0 });
       await flush();
     });
     expect(setDiffScope).toHaveBeenCalledTimes(2);
@@ -643,10 +676,10 @@ describe("AgentStudioGitPanel", () => {
 
   test("notifies selected-file changes when a diff entry is expanded or collapsed", async () => {
     const setSelectedFile = mock((_path: string | null) => {});
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
 
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             fileDiffs: [
@@ -688,10 +721,10 @@ describe("AgentStudioGitPanel", () => {
 
   test("handles rapid consecutive file toggles without stale expansion state", async () => {
     const setSelectedFile = mock((_path: string | null) => {});
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
 
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             fileDiffs: [
@@ -735,9 +768,9 @@ describe("AgentStudioGitPanel", () => {
     const rebaseOntoTarget = mock(async () => {});
     const pullFromUpstream = mock(async () => {});
 
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             branch: null,
@@ -764,7 +797,7 @@ describe("AgentStudioGitPanel", () => {
     expect(Boolean(rebaseButton.props.disabled)).toBe(true);
     expect(Boolean(pullButton.props.disabled)).toBe(true);
     expect(Boolean(pushButton.props.disabled)).toBe(true);
-    expect(Boolean(Boolean(refreshButton.props.disabled))).toBe(false);
+    expect(Boolean(refreshButton.props.disabled)).toBe(false);
 
     await act(async () => {
       commitInput.props.onChange({ currentTarget: { value: "fix: handle detached head" } });
@@ -777,7 +810,7 @@ describe("AgentStudioGitPanel", () => {
     expect(commitAll).toHaveBeenCalledWith("fix: handle detached head");
 
     await act(async () => {
-      ensureRenderer(renderer).update(
+      ensureRenderer(renderer).rerender(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             branch: null,
@@ -802,7 +835,7 @@ describe("AgentStudioGitPanel", () => {
     expect(Boolean(refreshButton.props.disabled)).toBe(true);
 
     await act(async () => {
-      ensureRenderer(renderer).update(
+      ensureRenderer(renderer).rerender(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             branch: null,
@@ -830,10 +863,10 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("disables push when the branch is already up to date with upstream", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
 
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             fileStatuses: [],
@@ -858,10 +891,10 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("uses a loader icon while pushing", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
 
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             isPushing: true,
@@ -873,7 +906,7 @@ describe("AgentStudioGitPanel", () => {
 
     const root = getRoot(renderer);
     const pushButton = findByTestId(root, "agent-studio-git-push-button");
-    expect(pushButton.findAllByType(LoaderCircle)).toHaveLength(1);
+    expect(pushButton.element.querySelector("svg")).toBeTruthy();
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
@@ -885,9 +918,9 @@ describe("AgentStudioGitPanel", () => {
     const pushBranch = mock(async () => {});
     const pullFromUpstream = mock(async () => {});
 
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             upstreamAheadBehind: { ahead: 4, behind: 3 },
@@ -919,9 +952,9 @@ describe("AgentStudioGitPanel", () => {
   test("disables pull with uncommitted changes and explains why", async () => {
     const pullFromUpstream = mock(async () => {});
 
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             upstreamAheadBehind: { ahead: 0, behind: 2 },
@@ -951,9 +984,9 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("hides the generic lock banner when the conflict strip is already visible", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             isGitActionsLocked: true,
@@ -1026,9 +1059,9 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("hides the generic lock banner when builder locking is tooltip-only", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             isGitActionsLocked: true,
@@ -1051,9 +1084,9 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("renders the generic lock banner when explicitly requested", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             isGitActionsLocked: true,
@@ -1077,9 +1110,9 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("renders persisted pull-rebase conflicts in the strip without auto-opening the modal", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             gitConflict: {
@@ -1119,9 +1152,9 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("auto-opens the conflict modal only when the controller emits a fresh conflict-open signal", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(createElement(AgentStudioGitPanel, { model: baseModel() }));
+      renderer = render(createElement(AgentStudioGitPanel, { model: baseModel() }));
       await flush();
     });
 
@@ -1137,7 +1170,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     await act(async () => {
-      ensureRenderer(renderer).update(
+      ensureRenderer(renderer).rerender(
         createElement(AgentStudioGitPanel, { model: persistedConflictModel }),
       );
       await flush();
@@ -1159,7 +1192,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     await act(async () => {
-      ensureRenderer(renderer).update(
+      ensureRenderer(renderer).rerender(
         createElement(AgentStudioGitPanel, { model: actionConflictModel }),
       );
       await flush();
@@ -1174,9 +1207,9 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("shows abort loading state and disables both conflict actions while abort is pending", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(createElement(AgentStudioGitPanel, { model: baseModel() }));
+      renderer = render(createElement(AgentStudioGitPanel, { model: baseModel() }));
       await flush();
     });
 
@@ -1195,7 +1228,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     await act(async () => {
-      ensureRenderer(renderer).update(
+      ensureRenderer(renderer).rerender(
         createElement(AgentStudioGitPanel, { model: abortPendingModel }),
       );
       await flush();
@@ -1227,9 +1260,9 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("shows ask-builder loading state and disables both conflict actions while request is pending", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(createElement(AgentStudioGitPanel, { model: baseModel() }));
+      renderer = render(createElement(AgentStudioGitPanel, { model: baseModel() }));
       await flush();
     });
 
@@ -1248,7 +1281,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     await act(async () => {
-      ensureRenderer(renderer).update(
+      ensureRenderer(renderer).rerender(
         createElement(AgentStudioGitPanel, { model: askBuilderPendingModel }),
       );
       await flush();
@@ -1279,9 +1312,9 @@ describe("AgentStudioGitPanel", () => {
 
   test("closes the conflict modal before sending the ask-builder action", async () => {
     const askBuilder = mock(async () => {});
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(createElement(AgentStudioGitPanel, { model: baseModel() }));
+      renderer = render(createElement(AgentStudioGitPanel, { model: baseModel() }));
       await flush();
     });
 
@@ -1299,7 +1332,9 @@ describe("AgentStudioGitPanel", () => {
     });
 
     await act(async () => {
-      ensureRenderer(renderer).update(createElement(AgentStudioGitPanel, { model: conflictModel }));
+      ensureRenderer(renderer).rerender(
+        createElement(AgentStudioGitPanel, { model: conflictModel }),
+      );
       await flush();
     });
 
@@ -1321,9 +1356,9 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("marks conflicted files in the uncommitted changes list", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             diffScope: "uncommitted",
@@ -1365,9 +1400,9 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("renders expanded file diff rows and mounts mocked diff viewer", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             diffScope: "target",
@@ -1424,9 +1459,9 @@ describe("AgentStudioGitPanel", () => {
 
   test("shows file reset only in uncommitted scope and opens confirmation without toggling", async () => {
     const requestFileReset = mock((_filePath: string) => {});
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             diffScope: "uncommitted",
@@ -1467,7 +1502,7 @@ describe("AgentStudioGitPanel", () => {
     expect(findByTestId(root, "agent-studio-git-reset-modal")).toBeTruthy();
 
     await act(async () => {
-      ensureRenderer(renderer).update(
+      ensureRenderer(renderer).rerender(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             diffScope: "target",
@@ -1496,9 +1531,9 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("disables file reset controls when reset actions are unavailable", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             diffScope: "uncommitted",
@@ -1531,9 +1566,9 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("shows basename-first file paths with the full path in the tooltip", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = TestRenderer.create(
+      renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             diffScope: "uncommitted",

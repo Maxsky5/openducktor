@@ -17,7 +17,7 @@ type SessionPromptInput = {
   documents: TaskDocuments;
 };
 
-export type SessionPromptContext = {
+type SessionPromptContext = {
   documents: TaskDocuments;
   promptOverrides: RepoPromptOverrides;
   systemPrompt: string;

@@ -1,7 +1,15 @@
-import { describe, expect, test } from "bun:test";
-import { getHunkResetAnnotations, getRenderableFileDiff } from "./pierre-diff-viewer";
+import { describe, expect, mock, test } from "bun:test";
 
-const requireFileDiff = (fileDiff: ReturnType<typeof getRenderableFileDiff>["fileDiff"]) => {
+mock.module("@pierre/diffs/react", () => ({
+  FileDiff: () => null,
+  useWorkerPool: () => null,
+}));
+
+const pierreViewerModule = await import("./pierre-diff-viewer");
+
+const requireFileDiff = (
+  fileDiff: ReturnType<typeof import("./pierre-diff-viewer")["getRenderableFileDiff"]>["fileDiff"],
+) => {
   expect(fileDiff).not.toBeNull();
   if (fileDiff == null) {
     throw new Error("Expected parsed file diff metadata");
@@ -10,7 +18,8 @@ const requireFileDiff = (fileDiff: ReturnType<typeof getRenderableFileDiff>["fil
 };
 
 describe("getRenderableFileDiff", () => {
-  test("parses valid git patches", () => {
+  test("parses valid git patches", async () => {
+    const { getRenderableFileDiff } = pierreViewerModule;
     const patch =
       "diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n";
 
@@ -21,7 +30,8 @@ describe("getRenderableFileDiff", () => {
     expect(result.fileDiff?.name.endsWith("src/app.ts")).toBe(true);
   });
 
-  test("normalizes hunk-only patches with the current file path", () => {
+  test("normalizes hunk-only patches with the current file path", async () => {
+    const { getRenderableFileDiff } = pierreViewerModule;
     const result = getRenderableFileDiff("@@ -1 +1 @@\n-old\n+new\n", "src/hunk.ts");
 
     expect(result.normalizedPatch).toBe(
@@ -30,7 +40,8 @@ describe("getRenderableFileDiff", () => {
     expect(result.fileDiff?.name.endsWith("src/hunk.ts")).toBe(true);
   });
 
-  test("keeps normalized raw diff text when parsing still fails", () => {
+  test("keeps normalized raw diff text when parsing still fails", async () => {
+    const { getRenderableFileDiff } = pierreViewerModule;
     const result = getRenderableFileDiff(
       "Index: src/app.ts\n=====\ninvalid diff body",
       "src/app.ts",
@@ -40,7 +51,8 @@ describe("getRenderableFileDiff", () => {
     expect(result.fallbackPatch).toBe("Index: src/app.ts\n=====\ninvalid diff body\n");
   });
 
-  test("builds hunk reset annotations for the first and subsequent hunks", () => {
+  test("builds hunk reset annotations for the first and subsequent hunks", async () => {
+    const { getHunkResetAnnotations, getRenderableFileDiff } = pierreViewerModule;
     const patch = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",
@@ -75,7 +87,8 @@ describe("getRenderableFileDiff", () => {
     ]);
   });
 
-  test("falls back to deletion lines for delete-only hunks", () => {
+  test("falls back to deletion lines for delete-only hunks", async () => {
+    const { getHunkResetAnnotations, getRenderableFileDiff } = pierreViewerModule;
     const patch = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",

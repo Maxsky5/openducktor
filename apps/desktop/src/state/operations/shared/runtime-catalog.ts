@@ -401,7 +401,7 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
   };
 };
 
-export type RuntimeCatalogOperations = ReturnType<typeof createRuntimeCatalogOperations>;
+type RuntimeCatalogOperations = ReturnType<typeof createRuntimeCatalogOperations>;
 
 export const createHostRuntimeCatalogOperations = (
   getAdapter: (runtimeKind: RuntimeKind) => RuntimeCatalogAdapter,
