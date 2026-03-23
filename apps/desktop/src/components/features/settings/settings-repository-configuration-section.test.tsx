@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { GitBranch, RepoConfig } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { RepositoryConfigurationSection } from "./settings-repository-configuration-section";
 
@@ -49,13 +49,41 @@ const renderSection = (
     }),
   );
 
-describe("RepositoryConfigurationSection", () => {
-  test("marks scripts as trusted when a script command is entered", () => {
-    const updaters: Array<(current: RepoConfig) => RepoConfig> = [];
-    const onUpdateSelectedRepoConfig = mock((updater: (current: RepoConfig) => RepoConfig) => {
-      updaters.push(updater);
+const renderStatefulSection = (initialRepoConfig: RepoConfig) => {
+  let latestRepoConfig = initialRepoConfig;
+
+  const Wrapper = () => {
+    const [selectedRepoConfig, setSelectedRepoConfig] = useState(initialRepoConfig);
+    latestRepoConfig = selectedRepoConfig;
+
+    return createElement(RepositoryConfigurationSection, {
+      selectedRepoConfig,
+      selectedRepoEffectiveWorktreeBasePath: null,
+      selectedRepoBranches: [] as GitBranch[],
+      selectedRepoBranchesError: null,
+      isLoadingSettings: false,
+      isSaving: false,
+      isPickingWorktreeBasePath: false,
+      isLoadingSelectedRepoBranches: false,
+      onRetrySelectedRepoBranchesLoad: () => {},
+      onPickWorktreeBasePath: async () => {},
+      onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => {
+        setSelectedRepoConfig((current) => updater(current));
+      },
     });
-    const rendered = renderSection(baseRepoConfig, onUpdateSelectedRepoConfig);
+  };
+
+  const rendered = render(createElement(Wrapper));
+
+  return {
+    rendered,
+    getLatestRepoConfig: () => latestRepoConfig,
+  };
+};
+
+describe("RepositoryConfigurationSection", () => {
+  test("preserves hook draft blank rows while marking scripts as trusted", () => {
+    const { rendered, getLatestRepoConfig } = renderStatefulSection(baseRepoConfig);
 
     try {
       const preStartTextarea = rendered.container.querySelector("#repo-pre-start-hooks");
@@ -69,16 +97,12 @@ describe("RepositoryConfigurationSection", () => {
         },
       });
 
-      const updater = updaters[0];
-      if (!updater) {
-        throw new Error("Expected repo config updater");
-      }
-
-      expect(updater(baseRepoConfig)).toEqual({
+      expect(preStartTextarea.value).toBe("bun install\n");
+      expect(getLatestRepoConfig()).toEqual({
         ...baseRepoConfig,
         trustedHooks: true,
         hooks: {
-          preStart: ["bun install"],
+          preStart: ["bun install", ""],
           postComplete: [],
         },
       });
@@ -139,10 +163,34 @@ describe("RepositoryConfigurationSection", () => {
         trustedHooks: false,
         trustedHooksFingerprint: undefined,
         hooks: {
-          preStart: [],
+          preStart: [""],
           postComplete: [],
         },
       });
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("preserves worktree file copy blank rows during textarea round-trip", () => {
+    const { rendered, getLatestRepoConfig } = renderStatefulSection(baseRepoConfig);
+
+    try {
+      const worktreeFileCopiesTextarea = rendered.container.querySelector(
+        "#repo-worktree-file-copies",
+      );
+      if (!(worktreeFileCopiesTextarea instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected repo worktree file copies textarea");
+      }
+
+      fireEvent.change(worktreeFileCopiesTextarea, {
+        target: {
+          value: ".env\n",
+        },
+      });
+
+      expect(worktreeFileCopiesTextarea.value).toBe(".env\n");
+      expect(getLatestRepoConfig().worktreeFileCopies).toEqual([".env", ""]);
     } finally {
       rendered.unmount();
     }

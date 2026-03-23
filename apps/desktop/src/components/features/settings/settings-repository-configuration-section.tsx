@@ -100,7 +100,7 @@ export function RepositoryConfigurationSection({
     });
   };
   const updateHookDraft = (key: "preStart" | "postComplete", value: string): void => {
-    const nextHookLines = parseHookLines(value).filter((line) => line.trim().length > 0);
+    const nextHookLines = parseHookLines(value);
     updateScriptDraft((repoConfig) => ({
       ...repoConfig,
       hooks: {
@@ -612,9 +612,7 @@ function RepositoryWorktreeFileCopiesSection({
           const worktreeFileCopiesInput = event.currentTarget.value;
           onUpdateSelectedRepoConfig((repoConfig) => ({
             ...repoConfig,
-            worktreeFileCopies: parseHookLines(worktreeFileCopiesInput).filter(
-              (line) => line.trim().length > 0,
-            ),
+            worktreeFileCopies: parseHookLines(worktreeFileCopiesInput),
           }));
         }}
       />

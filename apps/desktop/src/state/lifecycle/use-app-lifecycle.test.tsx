@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createTauriHostClient } from "@openducktor/adapters-tauri-host";
 import { act } from "react";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
@@ -8,53 +8,6 @@ const toastError = mock((_message: string, _options?: { description?: string }) 
 const toastLoading = mock((_message: string, _options?: { description?: string }) => "toast-id");
 const toastSuccess = mock((_message: string, _options?: { description?: string }) => "");
 const toastDismiss = mock((_toastId?: string | number) => {});
-
-mock.module("@/lib/host-client", () => ({
-  createHostBridge: () => ({
-    client: createTauriHostClient(async () => {
-      throw new Error("Tauri runtime not available. Run inside the desktop shell.");
-    }),
-    subscribeRunEvents: async (listener: (payload: unknown) => void) => {
-      subscribedRunListener = listener;
-      return () => {
-        subscribedRunListener = null;
-      };
-    },
-  }),
-  createHostClient: () =>
-    createTauriHostClient(async () => {
-      throw new Error("Tauri runtime not available. Run inside the desktop shell.");
-    }),
-  hostBridge: {
-    client: createTauriHostClient(async () => {
-      throw new Error("Tauri runtime not available. Run inside the desktop shell.");
-    }),
-    subscribeRunEvents: async (listener: (payload: unknown) => void) => {
-      subscribedRunListener = listener;
-      return () => {
-        subscribedRunListener = null;
-      };
-    },
-  },
-  hostClient: createTauriHostClient(async () => {
-    throw new Error("Tauri runtime not available. Run inside the desktop shell.");
-  }),
-  subscribeRunEvents: async (listener: (payload: unknown) => void) => {
-    subscribedRunListener = listener;
-    return () => {
-      subscribedRunListener = null;
-    };
-  },
-}));
-
-mock.module("sonner", () => ({
-  toast: {
-    error: toastError,
-    loading: toastLoading,
-    success: toastSuccess,
-    dismiss: toastDismiss,
-  },
-}));
 
 const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -77,6 +30,51 @@ const createDeferred = <T,>() => {
 };
 
 beforeEach(() => {
+  mock.module("@/lib/host-client", () => ({
+    createHostBridge: () => ({
+      client: createTauriHostClient(async () => {
+        throw new Error("Tauri runtime not available. Run inside the desktop shell.");
+      }),
+      subscribeRunEvents: async (listener: (payload: unknown) => void) => {
+        subscribedRunListener = listener;
+        return () => {
+          subscribedRunListener = null;
+        };
+      },
+    }),
+    createHostClient: () =>
+      createTauriHostClient(async () => {
+        throw new Error("Tauri runtime not available. Run inside the desktop shell.");
+      }),
+    hostBridge: {
+      client: createTauriHostClient(async () => {
+        throw new Error("Tauri runtime not available. Run inside the desktop shell.");
+      }),
+      subscribeRunEvents: async (listener: (payload: unknown) => void) => {
+        subscribedRunListener = listener;
+        return () => {
+          subscribedRunListener = null;
+        };
+      },
+    },
+    hostClient: createTauriHostClient(async () => {
+      throw new Error("Tauri runtime not available. Run inside the desktop shell.");
+    }),
+    subscribeRunEvents: async (listener: (payload: unknown) => void) => {
+      subscribedRunListener = listener;
+      return () => {
+        subscribedRunListener = null;
+      };
+    },
+  }));
+  mock.module("sonner", () => ({
+    toast: {
+      error: toastError,
+      loading: toastLoading,
+      success: toastSuccess,
+      dismiss: toastDismiss,
+    },
+  }));
   subscribedRunListener = null;
   toastError.mockClear();
   toastLoading.mockClear();
@@ -84,7 +82,7 @@ beforeEach(() => {
   toastDismiss.mockClear();
 });
 
-afterAll(() => {
+afterEach(() => {
   mock.restore();
 });
 
