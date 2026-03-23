@@ -2,7 +2,13 @@
   "roles": {
     "spec": ["odt_read_task", "odt_set_spec"],
     "planner": ["odt_read_task", "odt_set_plan"],
-    "build": ["odt_read_task", "odt_build_blocked", "odt_build_resumed", "odt_build_completed"],
+    "build": [
+      "odt_read_task",
+      "odt_build_blocked",
+      "odt_build_resumed",
+      "odt_build_completed",
+      "odt_set_pull_request"
+    ],
     "qa": ["odt_read_task", "odt_qa_approved", "odt_qa_rejected"]
   },
   "tools": [
@@ -12,6 +18,7 @@
     "odt_build_blocked",
     "odt_build_resumed",
     "odt_build_completed",
+    "odt_set_pull_request",
     "odt_qa_approved",
     "odt_qa_rejected"
   ],

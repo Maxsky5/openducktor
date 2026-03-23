@@ -2,19 +2,23 @@ import {
   type AgentScenario,
   type AgentSessionStartMode,
   defaultStartModeForScenario,
+  getAgentScenarioDefinition,
 } from "@openducktor/core";
-import type { SessionStartReusableSessionOption } from "./session-start-types";
+import type { SessionStartExistingSessionOption } from "./session-start-types";
 
 export const resolveScenarioStartMode = ({
   scenario,
-  reusableSessionOptions,
+  existingSessionOptions,
 }: {
   scenario: AgentScenario;
-  reusableSessionOptions: SessionStartReusableSessionOption[];
+  existingSessionOptions: SessionStartExistingSessionOption[];
 }): AgentSessionStartMode => {
   const preferredStartMode = defaultStartModeForScenario(scenario);
-  if (preferredStartMode !== "reuse" || reusableSessionOptions.length > 0) {
+  const needsExistingSession = preferredStartMode === "reuse" || preferredStartMode === "fork";
+  if (!needsExistingSession || existingSessionOptions.length > 0) {
     return preferredStartMode;
   }
-  return "fresh";
+  return getAgentScenarioDefinition(scenario).allowedStartModes.includes("fresh")
+    ? "fresh"
+    : preferredStartMode;
 };

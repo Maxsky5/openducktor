@@ -39,7 +39,7 @@ describe("useAgentStudioSessionStartRequest", () => {
         state.resolvePendingSessionStart("session-start-0", {
           selectedModel: null,
           startMode: "fresh" as const,
-          reuseSessionId: null,
+          sourceSessionId: null,
         });
       });
 
@@ -47,7 +47,7 @@ describe("useAgentStudioSessionStartRequest", () => {
       expect(decision).toEqual({
         selectedModel: null,
         startMode: "fresh",
-        reuseSessionId: null,
+        sourceSessionId: null,
       });
       expect(harness.getLatest().pendingSessionStartRequest).toBeNull();
     } finally {
@@ -120,7 +120,7 @@ describe("useAgentStudioSessionStartRequest", () => {
         state.resolvePendingSessionStart(firstRequestId, {
           selectedModel: null,
           startMode: "fresh" as const,
-          reuseSessionId: null,
+          sourceSessionId: null,
         });
       });
 

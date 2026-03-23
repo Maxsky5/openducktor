@@ -32,7 +32,7 @@ import {
   pickDefaultSelectionForCatalog,
   roleDefaultSelectionFor,
 } from "./session-start-selection";
-import type { SessionStartReusableSessionOption } from "./session-start-types";
+import type { SessionStartExistingSessionOption } from "./session-start-types";
 
 export type SessionStartModalSource = "agent_studio" | "kanban";
 export type SessionStartPostAction = "none" | "kickoff" | "send_message";
@@ -42,8 +42,8 @@ export type SessionStartModalIntent = {
   taskId: string;
   role: AgentRole;
   scenario: AgentScenario;
-  reusableSessionOptions?: SessionStartReusableSessionOption[];
-  initialReusableSessionId?: string | null;
+  existingSessionOptions?: SessionStartExistingSessionOption[];
+  initialSourceSessionId?: string | null;
   postStartAction: SessionStartPostAction;
   message?: string;
   selectedModel?: AgentModelSelection | null;
@@ -74,12 +74,12 @@ type UseSessionStartModalStateResult = {
   variantOptions: ComboboxOption[];
   availableStartModes: AgentSessionStartMode[];
   selectedStartMode: AgentSessionStartMode;
-  reusableSessionOptions: SessionStartReusableSessionOption[];
-  selectedReusableSessionId: string;
+  existingSessionOptions: SessionStartExistingSessionOption[];
+  selectedSourceSessionId: string;
   openStartModal: (nextIntent: SessionStartModalIntent) => void;
   closeStartModal: () => void;
   handleSelectStartMode: (startMode: AgentSessionStartMode) => void;
-  handleSelectReusableSession: (sessionId: string) => void;
+  handleSelectSourceSession: (sessionId: string) => void;
   handleSelectRuntime: (runtimeKind: RuntimeKind) => void;
   handleSelectAgent: (profileId: string) => void;
   handleSelectModel: (modelKey: string) => void;
@@ -124,7 +124,7 @@ export function useSessionStartModalState({
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
   const [selection, setSelection] = useState<AgentModelSelection | null>(null);
   const [selectedStartMode, setSelectedStartMode] = useState<AgentSessionStartMode>("fresh");
-  const [selectedReusableSessionId, setSelectedReusableSessionId] = useState("");
+  const [selectedSourceSessionId, setSelectedSourceSessionId] = useState("");
   const [requestedRuntimeKind, setRequestedRuntimeKind] =
     useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
   const activeRole = intent?.role ?? null;
@@ -132,7 +132,7 @@ export function useSessionStartModalState({
     () => (intent ? getAgentScenarioDefinition(intent.scenario).allowedStartModes : ["fresh"]),
     [intent],
   );
-  const reusableSessionOptions = intent?.reusableSessionOptions ?? [];
+  const existingSessionOptions = intent?.existingSessionOptions ?? [];
   const runtimeOptions = useMemo(
     () => toAgentRuntimeOptions(runtimeDefinitions),
     [runtimeDefinitions],
@@ -171,18 +171,18 @@ export function useSessionStartModalState({
     setIntent(null);
     setSelection(null);
     setSelectedStartMode("fresh");
-    setSelectedReusableSessionId("");
+    setSelectedSourceSessionId("");
   }, []);
 
   const openStartModal = useCallback(
     (nextIntent: SessionStartModalIntent) => {
-      const reusableSessionOptions = nextIntent.reusableSessionOptions ?? [];
+      const existingSessionOptions = nextIntent.existingSessionOptions ?? [];
       const initialStartMode = resolveScenarioStartMode({
         scenario: nextIntent.scenario,
-        reusableSessionOptions,
+        existingSessionOptions,
       });
-      const initialReusableSessionId =
-        nextIntent.initialReusableSessionId?.trim() || reusableSessionOptions[0]?.value || "";
+      const initialSourceSessionId =
+        nextIntent.initialSourceSessionId?.trim() || existingSessionOptions[0]?.value || "";
       const initialRuntimeKind = resolveRuntimeKindSelection({
         runtimeDefinitions,
         requestedRuntimeKind:
@@ -194,7 +194,7 @@ export function useSessionStartModalState({
       setRequestedRuntimeKind(initialRuntimeKind);
       setIntent(nextIntent);
       setSelectedStartMode(initialStartMode);
-      setSelectedReusableSessionId(initialReusableSessionId);
+      setSelectedSourceSessionId(initialSourceSessionId);
       setSelection(
         resolveInitialSelection(
           repoSettings,
@@ -210,16 +210,16 @@ export function useSessionStartModalState({
 
   const handleSelectStartMode = useCallback(
     (startMode: AgentSessionStartMode): void => {
-      if (startMode === "reuse" && reusableSessionOptions.length === 0) {
+      if ((startMode === "reuse" || startMode === "fork") && existingSessionOptions.length === 0) {
         return;
       }
       setSelectedStartMode(startMode);
     },
-    [reusableSessionOptions],
+    [existingSessionOptions],
   );
 
-  const handleSelectReusableSession = useCallback((sessionId: string): void => {
-    setSelectedReusableSessionId(sessionId);
+  const handleSelectSourceSession = useCallback((sessionId: string): void => {
+    setSelectedSourceSessionId(sessionId);
   }, []);
 
   useEffect(() => {
@@ -242,17 +242,17 @@ export function useSessionStartModalState({
   }, [activeRole, catalog, intent?.selectedModel, repoSettings, selectedRuntimeKind]);
 
   useEffect(() => {
-    if (selectedStartMode !== "reuse") {
+    if (selectedStartMode !== "reuse" && selectedStartMode !== "fork") {
       return;
     }
-    if (reusableSessionOptions.length > 0) {
+    if (existingSessionOptions.length > 0) {
       return;
     }
     if (!availableStartModes.includes("fresh")) {
       return;
     }
     setSelectedStartMode("fresh");
-  }, [availableStartModes, reusableSessionOptions, selectedStartMode]);
+  }, [availableStartModes, existingSessionOptions, selectedStartMode]);
 
   const handleSelectRuntime = useCallback(
     (runtimeKindValue: RuntimeKind): void => {
@@ -422,12 +422,12 @@ export function useSessionStartModalState({
     variantOptions,
     availableStartModes,
     selectedStartMode,
-    reusableSessionOptions,
-    selectedReusableSessionId,
+    existingSessionOptions,
+    selectedSourceSessionId,
     openStartModal,
     closeStartModal,
     handleSelectStartMode,
-    handleSelectReusableSession,
+    handleSelectSourceSession,
     handleSelectRuntime,
     handleSelectAgent,
     handleSelectModel,

@@ -304,16 +304,6 @@ impl AppService {
             Some(pull_request.record.clone()),
         )?;
 
-        let current_task = self.load_task_context(repo_path.as_str(), task_id)?.task;
-        if current_task.status == TaskStatus::AiReview {
-            let _ = self.task_transition(
-                repo_path.as_str(),
-                task_id,
-                TaskStatus::HumanReview,
-                Some("Human approved via pull request"),
-            )?;
-        }
-
         Ok(pull_request.record)
     }
 

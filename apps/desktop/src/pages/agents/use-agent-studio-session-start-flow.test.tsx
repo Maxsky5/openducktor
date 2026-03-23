@@ -182,7 +182,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   test("resets transient starting state when switching task context", async () => {
     const selectionDeferred = createDeferred<{
       startMode: "fresh";
-      reuseSessionId: null;
+      sourceSessionId: null;
       selectedModel: HookArgs["selectionForNewSession"];
     } | null>();
     const requestNewSessionStart = mock(() => selectionDeferred.promise);
@@ -217,7 +217,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   test("restores starting state when returning to the original task context", async () => {
     const selectionDeferred = createDeferred<{
       startMode: "fresh";
-      reuseSessionId: null;
+      sourceSessionId: null;
       selectedModel: HookArgs["selectionForNewSession"];
     } | null>();
     const requestNewSessionStart = mock(() => selectionDeferred.promise);
@@ -376,6 +376,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: "session-build-rework",
       agent: "build",
+      scenario: "build_after_qa_rejected",
       autostart: undefined,
       start: undefined,
     });
@@ -465,7 +466,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   test("handleCreateSession for human changes opens the feedback modal before model selection", async () => {
     const requestNewSessionStart = mock(async () => ({
       startMode: "fresh" as const,
-      reuseSessionId: null,
+      sourceSessionId: null,
       selectedModel: null,
     }));
     const startAgentSession = mock(async () => "session-build-human");
@@ -514,7 +515,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   test("startScenarioKickoff for human changes opens the feedback modal instead of starting immediately", async () => {
     const requestNewSessionStart = mock(async () => ({
       startMode: "fresh" as const,
-      reuseSessionId: null,
+      sourceSessionId: null,
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "openai",
@@ -648,7 +649,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   test("human changes feedback can continue into fresh session setup", async () => {
     const requestNewSessionStart = mock(async () => ({
       startMode: "fresh" as const,
-      reuseSessionId: null,
+      sourceSessionId: null,
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "anthropic",
@@ -706,7 +707,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       role: "build",
       scenario: "build_after_human_request_changes",
       reason: "create_session",
-      reusableSessionOptions: [
+      existingSessionOptions: [
         {
           value: "session-build-latest",
           label: "Builder session session-",
@@ -714,7 +715,7 @@ describe("useAgentStudioSessionStartFlow", () => {
           secondaryLabel: "Latest",
         },
       ],
-      initialReusableSessionId: "session-build-latest",
+      initialSourceSessionId: "session-build-latest",
       selectedModel: null,
     });
     const requestArg = (

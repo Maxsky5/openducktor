@@ -202,6 +202,11 @@ export const ODT_REGISTERED_TOOL_SPECS: Readonly<RegisteredToolSpecs> = {
     description: "Transition in_progress task to ai_review/human_review according to qaRequired.",
     execute: (store, input) => store.buildCompleted(input),
   },
+  odt_set_pull_request: {
+    description:
+      "Persist the canonical pull request metadata for a task after Builder creates or updates the pull request with provider-native tools. The tool resolves authoritative metadata from providerId and pull request number.",
+    execute: (store, input) => store.setPullRequest(input),
+  },
   odt_qa_approved: {
     description: "Append approved QA report and transition ai_review->human_review.",
     execute: (store, input) => store.qaApproved(input),

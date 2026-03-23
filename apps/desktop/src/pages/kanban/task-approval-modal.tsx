@@ -70,7 +70,8 @@ const PULL_REQUEST_DRAFT_OPTIONS: Array<{
   {
     value: "generate_ai",
     label: "Generate With AI",
-    description: "Fork the latest Builder session and draft the pull request automatically.",
+    description:
+      "Choose a Builder session to fork, then let Builder create or update the pull request automatically.",
   },
 ];
 
@@ -236,7 +237,7 @@ export function TaskApprovalModal({
   let confirmLabel = "Merge Locally";
   if (model.mode === "pull_request") {
     confirmLabel =
-      model.pullRequestDraftMode === "manual" ? "Create Pull Request" : "Generate And Create";
+      model.pullRequestDraftMode === "manual" ? "Create Pull Request" : "Start PR Generation";
   }
   let completionButtonLabel = "Mark Task Done";
   if (model.isSubmitting && hasPublishTarget) {
@@ -412,9 +413,8 @@ export function TaskApprovalModal({
                         </div>
                       ) : (
                         <div className="rounded-2xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
-                          OpenDucktor will fork the latest Builder session, generate the pull
-                          request title and description in the background, then create or update the
-                          pull request.
+                          OpenDucktor will ask you to choose a Builder session to fork, then start
+                          PR generation in the shared session-start flow.
                         </div>
                       )}
 

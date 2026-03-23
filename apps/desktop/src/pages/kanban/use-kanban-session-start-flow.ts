@@ -55,6 +55,7 @@ type UseKanbanSessionStartFlowArgs = {
 type UseKanbanSessionStartFlowResult = {
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   sessionStartModal: SessionStartModalModel | null;
+  onPullRequestGenerate: (taskId: string) => Promise<void>;
   onDelegate: (taskId: string) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
@@ -149,12 +150,12 @@ export function useKanbanSessionStartFlow({
     variantOptions,
     availableStartModes,
     selectedStartMode,
-    reusableSessionOptions,
-    selectedReusableSessionId,
+    existingSessionOptions,
+    selectedSourceSessionId,
     openStartModal,
     closeStartModal,
     handleSelectStartMode,
-    handleSelectReusableSession,
+    handleSelectSourceSession,
     handleSelectRuntime,
     handleSelectAgent,
     handleSelectModel,
@@ -227,8 +228,9 @@ export function useKanbanSessionStartFlow({
         taskId: intent.taskId,
         role: intent.role,
         scenario: intent.scenario,
-        reusableSessionOptions:
-          intent.reusableSessionOptions ??
+        ...(intent.sourceSessionId ? { initialSourceSessionId: intent.sourceSessionId } : {}),
+        existingSessionOptions:
+          intent.existingSessionOptions ??
           buildReusableSessionOptions({
             sessions: sessionsRef.current.filter((session) => session.taskId === intent.taskId),
             role: intent.role,
@@ -276,8 +278,8 @@ export function useKanbanSessionStartFlow({
         | boolean
         | {
             runInBackground?: boolean;
-            startMode?: "fresh" | "reuse";
-            reuseSessionId?: string | null;
+            startMode?: "fresh" | "reuse" | "fork";
+            sourceSessionId?: string | null;
           },
     ): void => {
       const latestIntent = sessionStartIntentRef.current;
@@ -290,7 +292,7 @@ export function useKanbanSessionStartFlow({
         typeof input === "boolean"
           ? defaultStartModeForScenario(latestIntent.scenario)
           : (input?.startMode ?? defaultStartModeForScenario(latestIntent.scenario));
-      const reuseSessionId = typeof input === "boolean" ? null : (input?.reuseSessionId ?? null);
+      const sourceSessionId = typeof input === "boolean" ? null : (input?.sourceSessionId ?? null);
 
       const intent: KanbanResolvedSessionStartIntent = {
         taskId: latestIntent.taskId,
@@ -298,7 +300,7 @@ export function useKanbanSessionStartFlow({
         scenario: latestIntent.scenario,
         startMode,
         postStartAction: latestIntent.postStartAction,
-        ...(reuseSessionId ? { reuseSessionId } : {}),
+        ...(sourceSessionId ? { sourceSessionId } : {}),
         ...(latestIntent.message ? { message: latestIntent.message } : {}),
         ...(sessionStartBeforeActionRef.current
           ? { beforeStartAction: sessionStartBeforeActionRef.current }
@@ -352,6 +354,28 @@ export function useKanbanSessionStartFlow({
       loadRepoSettings,
       queryClient,
     ],
+  );
+
+  const onPullRequestGenerate = useCallback(
+    async (taskId: string): Promise<void> => {
+      const builderSessions = findSessionsByRoleForTask(sessionsRef.current, taskId, "build");
+      if (builderSessions.length === 0) {
+        throw new Error(`No Builder session is available to fork for task "${taskId}".`);
+      }
+
+      openSessionStartModal({
+        taskId,
+        role: "build",
+        scenario: "build_pull_request_generation",
+        sourceSessionId: builderSessions[0]?.sessionId ?? null,
+        existingSessionOptions: buildReusableSessionOptions({
+          sessions: builderSessions,
+          role: "build",
+        }),
+        postStartAction: "kickoff",
+      });
+    },
+    [openSessionStartModal],
   );
 
   const onDelegate = useCallback(
@@ -562,10 +586,10 @@ export function useKanbanSessionStartFlow({
       variantOptions,
       availableStartModes,
       selectedStartMode,
-      reusableSessionOptions,
-      selectedReusableSessionId,
+      existingSessionOptions,
+      selectedSourceSessionId,
       onSelectStartMode: handleSelectStartMode,
-      onSelectReusableSession: handleSelectReusableSession,
+      onSelectSourceSession: handleSelectSourceSession,
       onSelectRuntime: handleSelectRuntime,
       onSelectAgent: handleSelectAgent,
       onSelectModel: handleSelectModel,
@@ -589,7 +613,7 @@ export function useKanbanSessionStartFlow({
     handleSelectModel,
     handleSelectVariant,
     handleSelectStartMode,
-    handleSelectReusableSession,
+    handleSelectSourceSession,
     isCatalogLoading,
     isSessionStartModalOpen,
     isStartingSession,
@@ -597,8 +621,8 @@ export function useKanbanSessionStartFlow({
     modelOptions,
     runtimeOptions,
     availableStartModes,
-    reusableSessionOptions,
-    selectedReusableSessionId,
+    existingSessionOptions,
+    selectedSourceSessionId,
     selectedStartMode,
     selectedRuntimeKind,
     sessionStartIntent,
@@ -611,6 +635,7 @@ export function useKanbanSessionStartFlow({
   return {
     humanReviewFeedbackModal,
     sessionStartModal,
+    onPullRequestGenerate,
     onDelegate,
     onPlan,
     onQaStart,

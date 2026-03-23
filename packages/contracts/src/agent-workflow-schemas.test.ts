@@ -27,6 +27,7 @@ describe("agent-workflow-schemas", () => {
       "build_implementation_start",
       "build_after_qa_rejected",
       "build_after_human_request_changes",
+      "build_pull_request_generation",
       "build_rebase_conflict_resolution",
     ]);
     expect(getAgentScenariosForRole("qa")).toEqual(["qa_review"]);
@@ -40,6 +41,7 @@ describe("agent-workflow-schemas", () => {
     expect(defaultStartModeForScenario("build_implementation_start")).toBe("fresh");
     expect(defaultStartModeForScenario("build_after_qa_rejected")).toBe("reuse");
     expect(defaultStartModeForScenario("build_after_human_request_changes")).toBe("reuse");
+    expect(defaultStartModeForScenario("build_pull_request_generation")).toBe("fork");
     expect(defaultStartModeForScenario("build_rebase_conflict_resolution")).toBe("reuse");
   });
 
@@ -50,6 +52,9 @@ describe("agent-workflow-schemas", () => {
     expect(isScenarioStartModeAllowed("build_implementation_start", "reuse")).toBe(false);
     expect(isScenarioStartModeAllowed("build_after_qa_rejected", "reuse")).toBe(true);
     expect(isScenarioStartModeAllowed("build_after_human_request_changes", "reuse")).toBe(true);
+    expect(isScenarioStartModeAllowed("build_pull_request_generation", "reuse")).toBe(false);
+    expect(isScenarioStartModeAllowed("build_pull_request_generation", "fork")).toBe(true);
+    expect(isScenarioStartModeAllowed("build_pull_request_generation", "fresh")).toBe(false);
     expect(isScenarioStartModeAllowed("build_rebase_conflict_resolution", "reuse")).toBe(true);
   });
 });

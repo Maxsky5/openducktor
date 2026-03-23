@@ -210,27 +210,27 @@ export function useAgentStudioFreshSessionCreation({
         if (decision == null) {
           return undefined;
         }
-        if (decision.reuseSessionId) {
+        if (decision.startMode === "reuse" && decision.sourceSessionId) {
           if (decision.selectedModel) {
-            updateAgentSessionModel(decision.reuseSessionId, decision.selectedModel);
+            updateAgentSessionModel(decision.sourceSessionId, decision.selectedModel);
           }
           if (
             shouldTriggerContextSwitchIntent({
               currentSessionId: activeSession?.sessionId ?? null,
               currentRole: activeSession?.role ?? role,
-              nextSessionId: decision.reuseSessionId,
+              nextSessionId: decision.sourceSessionId,
               nextRole: params.nextRole,
             })
           ) {
             onContextSwitchIntent?.();
           }
           applyFreshSessionSelectionQuery(
-            decision.reuseSessionId,
+            decision.sourceSessionId,
             params.nextRole,
             params.nextScenario,
           );
-          sendFreshSessionKickoff(decision.reuseSessionId, params.nextRole, params.nextScenario);
-          return decision.reuseSessionId;
+          sendFreshSessionKickoff(decision.sourceSessionId, params.nextRole, params.nextScenario);
+          return decision.sourceSessionId;
         }
         const selectedModel = decision.selectedModel;
 

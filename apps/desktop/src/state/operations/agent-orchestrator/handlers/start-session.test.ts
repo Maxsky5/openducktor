@@ -348,7 +348,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           role: "build",
           scenario: "build_after_human_request_changes",
           startMode: "reuse",
-          reuseSessionId: "chosen",
+          sourceSessionId: "chosen",
         }),
       ).resolves.toBe("chosen");
       expect(persistedListCalls).toBe(0);
@@ -1048,12 +1048,118 @@ describe("agent-orchestrator/handlers/start-session", () => {
         role: "build",
         scenario: "build_after_human_request_changes",
         startMode: "reuse",
-        reuseSessionId: "persisted-build-newer",
+        sourceSessionId: "persisted-build-newer",
       });
       expect(sessionId).toBe("persisted-build-newer");
       expect(loadAgentSessionsCalls).toBe(1);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
+  test("forks from the selected source session for pull request generation", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalForkSession = adapter.forkSession;
+    const persistedSnapshots: AgentSessionState[] = [];
+    let sessionsById: Record<string, AgentSessionState> = {
+      "source-build": {
+        runtimeKind: "opencode",
+        sessionId: "source-build",
+        externalSessionId: "external-source-build",
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+        startedAt: "2026-02-22T08:10:00.000Z",
+        runtimeId: "runtime-1",
+        runId: "run-2",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+        messages: [],
+        draftAssistantText: "",
+        draftAssistantMessageId: null,
+        draftReasoningText: "",
+        draftReasoningMessageId: null,
+        pendingPermissions: [],
+        pendingQuestions: [],
+        todos: [],
+        modelCatalog: null,
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          profileId: "builder",
+        },
+        isLoadingModelCatalog: false,
+      },
+    };
+
+    adapter.forkSession = async (input) => {
+      expect(input.taskId).toBe("task-1");
+      expect(input.role).toBe("build");
+      expect(input.scenario).toBe("build_pull_request_generation");
+      expect(input.parentExternalSessionId).toBe("external-source-build");
+      expect(input.runtimeConnection).toEqual({
+        endpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      });
+      return {
+        runtimeKind: "opencode",
+        sessionId: "forked-pr-session",
+        externalSessionId: "external-forked-pr-session",
+        startedAt: "2026-02-22T08:20:00.000Z",
+        role: "build",
+        scenario: "build_pull_request_generation",
+        status: "idle",
+      };
+    };
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: (updater) => {
+        sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
+      },
+      sessionsRef: { current: sessionsById },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        runId: "run-2",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async (session) => {
+        persistedSnapshots.push(session);
+      },
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      const sessionId = await start({
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_pull_request_generation",
+        startMode: "fork",
+        sourceSessionId: "source-build",
+      });
+
+      expect(sessionId).toBe("forked-pr-session");
+      expect(sessionsById["forked-pr-session"]?.scenario).toBe("build_pull_request_generation");
+      expect(sessionsById["forked-pr-session"]?.workingDirectory).toBe("/tmp/repo/worktree");
+      expect(persistedSnapshots).toHaveLength(1);
+      expect(persistedSnapshots[0]?.sessionId).toBe("forked-pr-session");
+    } finally {
+      adapter.forkSession = originalForkSession;
     }
   });
 
@@ -1293,7 +1399,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         role: "build",
         scenario: "build_after_human_request_changes",
         startMode: "reuse",
-        reuseSessionId: "persisted-claude",
+        sourceSessionId: "persisted-claude",
         selectedModel: {
           runtimeKind: "claude-code",
           providerId: "anthropic",

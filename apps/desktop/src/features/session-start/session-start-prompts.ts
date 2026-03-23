@@ -41,6 +41,7 @@ export const SCENARIO_LABELS: Record<AgentScenario, string> = {
   build_after_qa_rejected: getAgentScenarioDefinition("build_after_qa_rejected").label,
   build_after_human_request_changes: getAgentScenarioDefinition("build_after_human_request_changes")
     .label,
+  build_pull_request_generation: getAgentScenarioDefinition("build_pull_request_generation").label,
   build_rebase_conflict_resolution: getAgentScenarioDefinition("build_rebase_conflict_resolution")
     .label,
   qa_review: getAgentScenarioDefinition("qa_review").label,

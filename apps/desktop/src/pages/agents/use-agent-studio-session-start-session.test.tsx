@@ -54,12 +54,12 @@ describe("useAgentStudioSessionStartSession", () => {
     const specSelection = createDeferred<{
       selectedModel: null;
       startMode: "fresh";
-      reuseSessionId: null;
+      sourceSessionId: null;
     } | null>();
     const plannerSelection = createDeferred<{
       selectedModel: null;
       startMode: "fresh";
-      reuseSessionId: null;
+      sourceSessionId: null;
     } | null>();
     const resolveRequestedDecision = mock(async (request: { role: string }) =>
       request.role === "spec" ? specSelection.promise : plannerSelection.promise,
@@ -106,12 +106,12 @@ describe("useAgentStudioSessionStartSession", () => {
     specSelection.resolve({
       selectedModel: null,
       startMode: "fresh",
-      reuseSessionId: null,
+      sourceSessionId: null,
     });
     plannerSelection.resolve({
       selectedModel: null,
       startMode: "fresh",
-      reuseSessionId: null,
+      sourceSessionId: null,
     });
 
     await expect(specStartPromise).resolves.toBe("spec-session");

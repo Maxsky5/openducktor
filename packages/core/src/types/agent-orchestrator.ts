@@ -4,6 +4,7 @@ import type {
   AgentScenario as ContractsAgentScenario,
   AgentSessionStartMode as ContractsAgentSessionStartMode,
   AgentToolName as ContractsAgentToolName,
+  KnownGitProviderId as ContractsKnownGitProviderId,
   RuntimeCapabilities,
   RuntimeDescriptor,
   RuntimeKind,
@@ -24,6 +25,7 @@ export type { RuntimeKind } from "@openducktor/contracts";
 export type AgentRole = ContractsAgentRole;
 export type AgentScenario = ContractsAgentScenario;
 export type AgentKickoffScenario = ContractsAgentKickoffScenario;
+export type KnownGitProviderId = ContractsKnownGitProviderId;
 export type AgentSessionStartMode = ContractsAgentSessionStartMode;
 export type AgentToolName = ContractsAgentToolName;
 export const isAgentKickoffScenario = isContractsAgentKickoffScenario;
@@ -158,6 +160,14 @@ export type AgentToolCall =
       };
     }
   | {
+      tool: "odt_set_pull_request";
+      args: {
+        taskId: string;
+        providerId: KnownGitProviderId;
+        number: number;
+      };
+    }
+  | {
       tool: "odt_qa_approved";
       args: {
         taskId: string;
@@ -255,7 +265,13 @@ export type AgentRoleToolPolicy = Record<AgentRole, AgentToolName[]>;
 export const AGENT_ROLE_TOOL_POLICY: AgentRoleToolPolicy = {
   spec: ["odt_read_task", "odt_set_spec"],
   planner: ["odt_read_task", "odt_set_plan"],
-  build: ["odt_read_task", "odt_build_blocked", "odt_build_resumed", "odt_build_completed"],
+  build: [
+    "odt_read_task",
+    "odt_build_blocked",
+    "odt_build_resumed",
+    "odt_build_completed",
+    "odt_set_pull_request",
+  ],
   qa: ["odt_read_task", "odt_qa_approved", "odt_qa_rejected"],
 };
 

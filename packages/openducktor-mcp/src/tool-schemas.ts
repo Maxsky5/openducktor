@@ -1,6 +1,7 @@
 import {
   type AgentToolName,
   issueTypeSchema,
+  knownGitProviderIdSchema,
   planSubtaskInputSchema,
   taskPrioritySchema,
 } from "@openducktor/contracts";
@@ -56,6 +57,14 @@ export const BuildCompletedInputSchema = z
   .object({
     taskId: z.string().trim().min(1),
     summary: z.string().optional(),
+  })
+  .strict();
+
+export const SetPullRequestInputSchema = z
+  .object({
+    taskId: z.string().trim().min(1),
+    providerId: knownGitProviderIdSchema,
+    number: z.number().int().positive(),
   })
   .strict();
 
@@ -120,6 +129,7 @@ export type SetPlanInput = z.infer<typeof SetPlanInputSchema>;
 export type BuildBlockedInput = z.infer<typeof BuildBlockedInputSchema>;
 export type BuildResumedInput = z.infer<typeof BuildResumedInputSchema>;
 export type BuildCompletedInput = z.infer<typeof BuildCompletedInputSchema>;
+export type SetPullRequestInput = z.infer<typeof SetPullRequestInputSchema>;
 export type QaApprovedInput = z.infer<typeof QaApprovedInputSchema>;
 export type QaRejectedInput = z.infer<typeof QaRejectedInputSchema>;
 export type CreateTaskInput = z.infer<typeof CreateTaskInputSchema>;
@@ -132,6 +142,7 @@ const ODT_WORKFLOW_TOOL_SCHEMAS = {
   odt_build_blocked: BuildBlockedInputSchema,
   odt_build_resumed: BuildResumedInputSchema,
   odt_build_completed: BuildCompletedInputSchema,
+  odt_set_pull_request: SetPullRequestInputSchema,
   odt_qa_approved: QaApprovedInputSchema,
   odt_qa_rejected: QaRejectedInputSchema,
 } as const satisfies Record<AgentToolName, z.ZodTypeAny>;

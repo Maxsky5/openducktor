@@ -125,6 +125,7 @@ const TOOL_ARG_SPEC: Record<AgentToolName, string> = {
   odt_build_blocked: `odt_build_blocked({"taskId": string, "reason": string})`,
   odt_build_resumed: `odt_build_resumed({"taskId": string})`,
   odt_build_completed: `odt_build_completed({"taskId": string, "summary"?: string})`,
+  odt_set_pull_request: `odt_set_pull_request({"taskId": string, "providerId": "github", "number": number})`,
   odt_qa_approved: `odt_qa_approved({"taskId": string, "reportMarkdown": string})`,
   odt_qa_rejected: `odt_qa_rejected({"taskId": string, "reportMarkdown": string})`,
 };
@@ -280,6 +281,18 @@ Address every QA rejection item before calling odt_build_completed again.`,
     template: `Scenario: Rework after human requested changes.
 Incorporate requested changes and provide a clean completion summary via odt_build_completed.`,
   },
+  "system.scenario.build_pull_request_generation": {
+    id: "system.scenario.build_pull_request_generation",
+    purpose: "system",
+    builtinVersion: 2,
+    template: `Scenario: Pull request generation.
+Create or update the canonical pull request for this task from the current forked Builder worktree.
+Use the runtime's native git and GitHub tools to inspect branch state, push the source branch if needed, and create or update the pull request.
+After the pull request exists, call odt_set_pull_request exactly once with taskId {{task.id}}, providerId "github", and the pull request number.
+OpenDucktor will resolve and persist the canonical pull request metadata itself.
+Do not call odt_build_completed in this scenario.
+Do not respond with a pull request title/body for the UI to parse.`,
+  },
   "system.scenario.build_rebase_conflict_resolution": {
     id: "system.scenario.build_rebase_conflict_resolution",
     purpose: "system",
@@ -331,38 +344,19 @@ Call odt_qa_approved or odt_qa_rejected exactly once per review pass.`,
     template:
       "Apply all human-requested changes and call odt_build_completed when done.\nUse taskId {{task.id}} for every odt_* tool call.",
   },
+  "kickoff.build_pull_request_generation": {
+    id: "kickoff.build_pull_request_generation",
+    purpose: "kickoff",
+    builtinVersion: 2,
+    template:
+      'Create or update the GitHub pull request for this task from the current Builder worktree, then call odt_set_pull_request with taskId {{task.id}}, providerId "github", and the pull request number.\nUse taskId {{task.id}} for every odt_* tool call.',
+  },
   "kickoff.qa_review": {
     id: "kickoff.qa_review",
     purpose: "kickoff",
     builtinVersion: 1,
     template:
       "Perform QA review now and call exactly one of odt_qa_approved or odt_qa_rejected.\nUse taskId {{task.id}} for every odt_* tool call.",
-  },
-  "message.build_pull_request_draft": {
-    id: "message.build_pull_request_draft",
-    purpose: "message",
-    builtinVersion: 1,
-    template: `Generate a pull request title and description for this task.
-
-Requirements:
-- Base the result on the implemented work in this forked builder session.
-- Use the task title, description, spec, plan, latest QA report, and actual code changes.
-- Be specific about the user-visible outcome and major implementation points.
-- Do not mention that this came from an AI, agent, or forked session.
-- Respond with exactly this format:
-Title: <single-line title>
-Description:
-<markdown body>
-
-Task context:
-- id: {{task.id}}
-- title: {{task.title}}
-- issueType: {{task.issueType}}
-- status: {{task.status}}
-- description: {{task.description}}
-- spec: {{task.specMarkdown}}
-- implementationPlan: {{task.planMarkdown}}
-- latestQaReport: {{task.latestQaReportMarkdown}}`,
   },
   "message.build_rebase_conflict_resolution": {
     id: "message.build_rebase_conflict_resolution",
@@ -421,6 +415,7 @@ const KICKOFF_TEMPLATE_IDS: Record<AgentKickoffScenario, AgentPromptTemplateId> 
   build_implementation_start: "kickoff.build_implementation_start",
   build_after_qa_rejected: "kickoff.build_after_qa_rejected",
   build_after_human_request_changes: "kickoff.build_after_human_request_changes",
+  build_pull_request_generation: "kickoff.build_pull_request_generation",
   qa_review: "kickoff.qa_review",
 };
 

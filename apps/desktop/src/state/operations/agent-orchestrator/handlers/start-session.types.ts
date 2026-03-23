@@ -4,6 +4,7 @@ import type {
   AgentModelSelection,
   AgentRole,
   AgentScenario,
+  AgentSessionStartMode,
 } from "@openducktor/core";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
@@ -14,8 +15,8 @@ export type StartAgentSessionInput = {
   scenario?: AgentScenario;
   selectedModel?: AgentModelSelection | null;
   sendKickoff?: boolean;
-  startMode?: "reuse" | "fresh";
-  reuseSessionId?: string | null;
+  startMode?: AgentSessionStartMode;
+  sourceSessionId?: string | null;
   requireModelReady?: boolean;
   workingDirectoryOverride?: string | null;
   builderContext?: {
@@ -110,8 +111,8 @@ export type StartSessionExecutionDependencies = Pick<
 export type StartSessionCreationInput = {
   scenario: AgentScenario | undefined;
   selectedModel: AgentModelSelection | null;
-  startMode: "reuse" | "fresh";
-  reuseSessionId?: string | null;
+  startMode: AgentSessionStartMode;
+  sourceSessionId?: string | null;
   requireModelReady: boolean;
   workingDirectoryOverride?: string | null;
   builderContext?: {

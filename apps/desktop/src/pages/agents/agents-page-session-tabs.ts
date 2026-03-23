@@ -7,6 +7,12 @@ import {
 } from "@openducktor/core";
 import type { AgentStudioTaskTab } from "@/components/features/agents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import {
+  buildRoleSessionSequenceById,
+  compareAgentSessionRecency,
+  formatAgentSessionOptionDescription,
+  formatAgentSessionOptionLabel,
+} from "@/lib/agent-session-options";
 import { buildRoleWorkflowMapForTask as resolveRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -46,16 +52,6 @@ type RoleSessionSummary = {
   latestSession: AgentSessionState | null;
   workflowSession: AgentSessionState | null;
   liveSession: AgentWorkflowStepLiveSession;
-};
-
-const compareSessionRecency = (a: AgentSessionState, b: AgentSessionState): number => {
-  if (a.startedAt !== b.startedAt) {
-    return a.startedAt > b.startedAt ? -1 : 1;
-  }
-  if (a.sessionId === b.sessionId) {
-    return 0;
-  }
-  return a.sessionId > b.sessionId ? -1 : 1;
 };
 
 const toLiveSessionState = (session: AgentSessionState): AgentWorkflowStepLiveSession => {
@@ -127,7 +123,7 @@ const normalizeTaskTabs = (entries: unknown): string[] => {
 export const buildLatestSessionByTaskMap = (
   sessions: AgentSessionState[],
 ): Map<string, AgentSessionState> => {
-  const sortedSessions = [...sessions].sort(compareSessionRecency);
+  const sortedSessions = [...sessions].sort(compareAgentSessionRecency);
   const next = new Map<string, AgentSessionState>();
   for (const entry of sortedSessions) {
     if (!next.has(entry.taskId)) {
@@ -305,7 +301,7 @@ export const buildLatestSessionByRoleMap = (
     qa: null,
   };
 
-  const sortedSessions = [...sessionsForTask].sort(compareSessionRecency);
+  const sortedSessions = [...sessionsForTask].sort(compareAgentSessionRecency);
 
   for (const role of ALL_AGENT_ROLES) {
     map[role] = sortedSessions.find((entry) => entry.role === role) ?? null;
@@ -317,7 +313,7 @@ export const buildLatestSessionByRoleMap = (
 export const buildRoleSessionSummaryMap = (
   sessionsForTask: AgentSessionState[],
 ): Record<AgentRole, RoleSessionSummary> => {
-  const sortedSessions = [...sessionsForTask].sort(compareSessionRecency);
+  const sortedSessions = [...sessionsForTask].sort(compareAgentSessionRecency);
   const map: Record<AgentRole, RoleSessionSummary> = {
     spec: {
       latestSession: null,
@@ -356,14 +352,6 @@ export const buildRoleSessionSummaryMap = (
   return map;
 };
 
-const describeSessionOption = (session: AgentSessionState): string => {
-  const startedAt = new Date(session.startedAt);
-  const startedAtLabel = Number.isNaN(startedAt.getTime())
-    ? session.startedAt
-    : startedAt.toLocaleString();
-  return `${startedAtLabel} · ${session.status} · ${session.sessionId.slice(0, 8)}`;
-};
-
 export const buildSessionSelectorGroups = (params: {
   sessionsForTask: AgentSessionState[];
   scenarioLabels: Record<AgentScenario, string>;
@@ -376,30 +364,16 @@ export const buildSessionSelectorGroups = (params: {
     if (roleSessions.length === 0) {
       continue;
     }
-    const roleSessionNumberById = new Map(
-      [...roleSessions]
-        .sort((a, b) => {
-          if (a.startedAt !== b.startedAt) {
-            return a.startedAt < b.startedAt ? -1 : 1;
-          }
-          if (a.sessionId === b.sessionId) {
-            return 0;
-          }
-          return a.sessionId < b.sessionId ? -1 : 1;
-        })
-        .map((session, index) => [session.sessionId, index + 1]),
-    );
+    const roleSessionNumberById = buildRoleSessionSequenceById(roleSessions);
     const roleOptions: ComboboxOption[] = roleSessions.map((session, index) => ({
       value: session.sessionId,
-      label: (() => {
-        const scenarioLabel = params.scenarioLabels[session.scenario];
-        const roleLabel = params.roleLabelByRole[session.role];
-        const baseLabel =
-          scenarioLabel === roleLabel ? roleLabel : `${scenarioLabel} · ${roleLabel}`;
-        const sessionNumber = roleSessionNumberById.get(session.sessionId) ?? index + 1;
-        return `${baseLabel} #${sessionNumber}`;
-      })(),
-      description: describeSessionOption(session),
+      label: formatAgentSessionOptionLabel({
+        session,
+        sessionNumber: roleSessionNumberById.get(session.sessionId) ?? index + 1,
+        scenarioLabels: params.scenarioLabels,
+        roleLabelByRole: params.roleLabelByRole,
+      }),
+      description: formatAgentSessionOptionDescription(session),
       searchKeywords: [role, session.scenario, session.sessionId],
     }));
     groups.push({

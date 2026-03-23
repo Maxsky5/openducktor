@@ -38,7 +38,7 @@ export const confirmHumanReviewFeedbackFlow = async ({
       taskId: state.taskId,
       role: "build",
       scenario: state.scenario,
-      reusableSessionOptions: [],
+      existingSessionOptions: [],
       postStartAction: "send_message",
       message: trimmedMessage,
       beforeStartAction: {

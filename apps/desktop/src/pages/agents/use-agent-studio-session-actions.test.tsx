@@ -418,7 +418,7 @@ describe("useAgentStudioSessionActions", () => {
     } as const;
     const requestNewSessionStart = mock(async () => ({
       startMode: "fresh" as const,
-      reuseSessionId: null,
+      sourceSessionId: null,
       selectedModel: requestedSelection,
     }));
     const startAgentSession = mock(async () => "session-new");
@@ -666,6 +666,7 @@ describe("useAgentStudioSessionActions", () => {
         task: "task-1",
         session: "session-plan",
         agent: "planner",
+        scenario: "planner_initial",
         autostart: undefined,
         start: undefined,
       });
@@ -727,7 +728,7 @@ describe("useAgentStudioSessionActions", () => {
   test("handleCreateSession requests model selection with create_session reason", async () => {
     const requestNewSessionStart = mock(async () => ({
       startMode: "fresh" as const,
-      reuseSessionId: null,
+      sourceSessionId: null,
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "anthropic",
@@ -993,7 +994,7 @@ describe("useAgentStudioSessionActions", () => {
   test("startScenarioKickoff requests session selection with kickoff reason", async () => {
     const requestNewSessionStart = mock(async () => ({
       startMode: "fresh" as const,
-      reuseSessionId: null,
+      sourceSessionId: null,
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "openai",

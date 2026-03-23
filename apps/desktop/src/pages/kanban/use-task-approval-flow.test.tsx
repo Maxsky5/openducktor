@@ -223,10 +223,7 @@ describe("useTaskApprovalFlow", () => {
             description: "Task description",
           }),
         ],
-        sessions: [],
-        hydrateRequestedTaskSessionHistory: async () => {},
-        forkAgentSession: async () => "forked-session",
-        sendAgentMessage: async () => {},
+        requestPullRequestGeneration: async () => {},
         refreshTasks: async () => {},
       });
       return null;
@@ -299,10 +296,7 @@ describe("useTaskApprovalFlow", () => {
             description: "Task description",
           }),
         ],
-        sessions: [],
-        hydrateRequestedTaskSessionHistory: async () => {},
-        forkAgentSession: async () => "forked-session",
-        sendAgentMessage: async () => {},
+        requestPullRequestGeneration: async () => {},
         refreshTasks: async () => {},
       });
       return null;
@@ -379,10 +373,7 @@ describe("useTaskApprovalFlow", () => {
             description: "Task description",
           }),
         ],
-        sessions: [],
-        hydrateRequestedTaskSessionHistory: async () => {},
-        forkAgentSession: async () => "forked-session",
-        sendAgentMessage: async () => {},
+        requestPullRequestGeneration: async () => {},
         refreshTasks: async () => {},
       });
       return null;
@@ -461,10 +452,7 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue = useTaskApprovalFlow({
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        sessions: [],
-        hydrateRequestedTaskSessionHistory: async () => {},
-        forkAgentSession: async () => "forked-session",
-        sendAgentMessage: async () => {},
+        requestPullRequestGeneration: async () => {},
         refreshTasks: async () => {},
       });
       return null;
@@ -527,10 +515,7 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue = useTaskApprovalFlow({
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        sessions: [],
-        hydrateRequestedTaskSessionHistory: async () => {},
-        forkAgentSession: async () => "forked-session",
-        sendAgentMessage: async () => {},
+        requestPullRequestGeneration: async () => {},
         refreshTasks: async () => {},
       });
       return null;
@@ -616,10 +601,7 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue = useTaskApprovalFlow({
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        sessions: [],
-        hydrateRequestedTaskSessionHistory: async () => {},
-        forkAgentSession: async () => "forked-session",
-        sendAgentMessage: async () => {},
+        requestPullRequestGeneration: async () => {},
         refreshTasks: async () => {},
       });
       return null;
@@ -693,10 +675,7 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue = useTaskApprovalFlow({
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        sessions: [],
-        hydrateRequestedTaskSessionHistory: async () => {},
-        forkAgentSession: async () => "forked-session",
-        sendAgentMessage: async () => {},
+        requestPullRequestGeneration: async () => {},
         refreshTasks: refreshTasksMock,
       });
       return null;
@@ -734,9 +713,9 @@ describe("useTaskApprovalFlow", () => {
     });
   });
 
-  test("creates an AI pull request when the forked reply is already present before the waiter starts", async () => {
+  test("starts pull request generation with a forked builder session", async () => {
     const refreshTasksMock = mock(async () => {});
-    const loadAgentSessionsMock = mock(async () => {});
+    const requestPullRequestGenerationMock = mock(async () => {});
     taskApprovalContextGetMock.mockResolvedValue({
       taskId: "TASK-1",
       taskStatus: "human_review",
@@ -759,55 +738,12 @@ describe("useTaskApprovalFlow", () => {
     } satisfies TaskApprovalContext as unknown as never);
 
     const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
-    const builderSession = createAgentSessionFixture({
-      sessionId: "builder-session",
-      taskId: "TASK-1",
-      role: "build",
-      scenario: "build_implementation_start",
-      status: "idle",
-      startedAt: "2026-03-12T12:00:00Z",
-      messages: [
-        {
-          id: "assistant-builder",
-          role: "assistant",
-          content: "Builder context",
-          timestamp: "2026-03-12T12:00:00Z",
-        },
-      ],
-    });
-    const forkedSession = createAgentSessionFixture({
-      sessionId: "forked-session",
-      taskId: "TASK-1",
-      role: "build",
-      scenario: "build_implementation_start",
-      status: "running",
-      startedAt: "2026-03-12T12:01:00Z",
-      messages: [
-        {
-          id: "assistant-builder",
-          role: "assistant",
-          content: "Builder context",
-          timestamp: "2026-03-12T12:00:00Z",
-        },
-      ],
-    });
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow({
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        sessions: [builderSession, forkedSession],
-        hydrateRequestedTaskSessionHistory: loadAgentSessionsMock,
-        forkAgentSession: async () => "forked-session",
-        sendAgentMessage: async () => {
-          forkedSession.messages.push({
-            id: "assistant-forked",
-            role: "assistant",
-            content: "Title: PR\nDescription: Body",
-            timestamp: "2026-03-12T12:02:00Z",
-          });
-          forkedSession.status = "stopped";
-        },
+        requestPullRequestGeneration: requestPullRequestGenerationMock,
         refreshTasks: refreshTasksMock,
       });
       return null;
@@ -835,29 +771,21 @@ describe("useTaskApprovalFlow", () => {
 
     await act(async () => {
       latestHarnessValue?.taskApprovalModal?.onConfirm();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await Promise.resolve();
     });
 
-    expect(loadAgentSessionsMock).toHaveBeenCalledWith({
-      taskId: "TASK-1",
-      sessionId: "builder-session",
-    });
-    expect(taskPullRequestUpsertMock).toHaveBeenCalledWith("/repo", "TASK-1", "PR", "Body");
-    expect(refreshTasksMock).toHaveBeenCalledTimes(1);
-    expect(toastSuccessMock).toHaveBeenCalledWith(
-      "Pull request created",
-      expect.objectContaining({
-        id: "toast-id",
-        description: "PR #17",
-      }),
-    );
+    expect(requestPullRequestGenerationMock).toHaveBeenCalledWith("TASK-1");
+    expect(taskPullRequestUpsertMock).not.toHaveBeenCalled();
+    expect(refreshTasksMock).not.toHaveBeenCalled();
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
 
     await act(async () => {
       renderer.unmount();
     });
   });
 
-  test("closes the modal and shows a reopenable error toast while AI pull request generation runs in background", async () => {
+  test("keeps the modal open when pull request generation cannot start", async () => {
     taskApprovalContextGetMock.mockResolvedValue({
       taskId: "TASK-1",
       taskStatus: "human_review",
@@ -878,52 +806,17 @@ describe("useTaskApprovalFlow", () => {
         },
       ],
     } satisfies TaskApprovalContext as unknown as never);
-    taskPullRequestUpsertMock.mockRejectedValueOnce(new Error("Generation crashed"));
+    const requestPullRequestGenerationMock = mock(async () => {
+      throw new Error("Generation crashed");
+    });
 
     const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
-    const builderSession = createAgentSessionFixture({
-      sessionId: "builder-session",
-      taskId: "TASK-1",
-      role: "build",
-      scenario: "build_implementation_start",
-      status: "idle",
-      startedAt: "2026-03-12T12:00:00Z",
-      messages: [
-        {
-          id: "assistant-builder",
-          role: "assistant",
-          content: "Builder context",
-          timestamp: "2026-03-12T12:00:00Z",
-        },
-      ],
-    });
-    const forkedSession = createAgentSessionFixture({
-      sessionId: "forked-session",
-      taskId: "TASK-1",
-      role: "build",
-      scenario: "build_implementation_start",
-      status: "idle",
-      startedAt: "2026-03-12T12:01:00Z",
-      messages: [],
-    });
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow({
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        sessions: [builderSession, forkedSession],
-        hydrateRequestedTaskSessionHistory: async () => {},
-        forkAgentSession: async () => "forked-session",
-        sendAgentMessage: async () => {
-          setTimeout(() => {
-            forkedSession.messages.push({
-              id: "assistant-forked",
-              role: "assistant",
-              content: "Title: PR\nDescription: Body",
-              timestamp: "2026-03-12T12:02:00Z",
-            });
-          }, 0);
-        },
+        requestPullRequestGeneration: requestPullRequestGenerationMock,
         refreshTasks: async () => {},
       });
       return null;
@@ -954,35 +847,16 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
-    expect(toastLoadingMock).toHaveBeenCalled();
-
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 650));
-    });
-
-    expect(toastErrorMock).toHaveBeenCalledWith(
-      "Pull request generation failed",
-      expect.objectContaining({
-        description: "Generation crashed",
-        action: expect.objectContaining({ label: "Reopen" }),
-      }),
-    );
-
-    const firstErrorToastCall = toastErrorMock.mock.calls[0] as unknown[] | undefined;
-    const errorToastOptions = firstErrorToastCall?.[1] as {
-      action?: { onClick: () => void };
-    };
-    expect(errorToastOptions.action).toBeDefined();
-
-    await act(async () => {
-      errorToastOptions.action?.onClick();
-      await Promise.resolve();
-    });
-
+    expect(requestPullRequestGenerationMock).toHaveBeenCalledTimes(1);
     expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
     expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("pull_request");
-    expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBe("Generation crashed");
+    expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBeNull();
+
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Approval failed",
+      expect.objectContaining({ description: "Generation crashed" }),
+    );
+    expect(taskPullRequestUpsertMock).not.toHaveBeenCalled();
 
     await act(async () => {
       renderer.unmount();

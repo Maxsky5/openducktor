@@ -24,7 +24,7 @@ describe("use-session-start-modal-coordinator", () => {
       buildSessionStartModalDescription({
         scenario: "build_after_human_request_changes",
       }),
-    ).toBe("Choose whether to start fresh or reuse an existing session for Apply Human Changes.");
+    ).toBe("Choose how to start fresh or reuse an existing session for Apply Human Changes.");
   });
 
   test("maps session-start reasons to post actions", () => {

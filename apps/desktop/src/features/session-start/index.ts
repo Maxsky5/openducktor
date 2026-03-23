@@ -17,8 +17,8 @@ export type {
   NewSessionStartDecision,
   NewSessionStartRequest,
   RequestNewSessionStart,
+  SessionStartExistingSessionOption,
   SessionStartRequestReason,
-  SessionStartReusableSessionOption,
 } from "./session-start-types";
 export type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 export {

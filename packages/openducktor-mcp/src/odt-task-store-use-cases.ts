@@ -1,9 +1,11 @@
+import type { PullRequest } from "@openducktor/contracts";
 import type {
   PublicTaskCreateInput,
   TaskPersistencePort,
   TaskSearchFilters,
 } from "./beads-persistence";
-import type { PublicTask, RawIssue, TaskStatus } from "./contracts";
+import type { CanonicalPullRequestResolverPort } from "./canonical-pull-request-resolver";
+import type { JsonObject, PublicTask, RawIssue, TaskStatus } from "./contracts";
 import type { EpicSubtaskReplacementService } from "./epic-subtask-replacement";
 import type { TaskDocumentsSnapshot } from "./metadata-docs";
 import { normalizePlanSubtasks } from "./plan-subtasks";
@@ -20,11 +22,13 @@ import type {
   ReadTaskInput,
   SearchTasksInput,
   SetPlanInput,
+  SetPullRequestInput,
   SetSpecInput,
 } from "./tool-schemas";
 import {
   assertNoValidationError,
   getSetPlanError,
+  getSetPullRequestError,
   getSetSpecError,
   validatePlanSubtaskRules,
 } from "./workflow-policy";
@@ -49,6 +53,7 @@ export type OdtTaskStoreUseCases = {
   buildBlocked: OdtTaskStoreUseCase<BuildBlockedInput, BuildBlockedResult>;
   buildResumed: OdtTaskStoreUseCase<BuildResumedInput, BuildResumedResult>;
   buildCompleted: OdtTaskStoreUseCase<BuildCompletedInput, BuildCompletedResult>;
+  setPullRequest: OdtTaskStoreUseCase<SetPullRequestInput, SetPullRequestResult>;
   qaApproved: OdtTaskStoreUseCase<QaApprovedInput, QaApprovedResult>;
   qaRejected: OdtTaskStoreUseCase<QaRejectedInput, QaRejectedResult>;
 };
@@ -90,6 +95,11 @@ export type BuildResumedResult = {
 export type BuildCompletedResult = {
   task: PublicTask;
   summary?: string;
+};
+
+export type SetPullRequestResult = {
+  task: PublicTask;
+  pullRequest: PullRequest;
 };
 
 export type QaApprovedResult = {
@@ -444,6 +454,63 @@ export class BuildCompletedUseCase
   }
 }
 
+type SetPullRequestUseCaseDeps = {
+  workflow: Pick<
+    OdtTaskWorkflowRuntimePort,
+    "ensureInitialized" | "metadataNamespace" | "readTaskSnapshot"
+  >;
+  persistence: Pick<TaskPersistencePort, "getNamespaceData" | "writeNamespace">;
+  pullRequestResolver: CanonicalPullRequestResolverPort;
+};
+
+const toPullRequestMetadata = (pullRequest: PullRequest): JsonObject => ({
+  providerId: pullRequest.providerId,
+  number: pullRequest.number,
+  url: pullRequest.url,
+  state: pullRequest.state,
+  createdAt: pullRequest.createdAt,
+  updatedAt: pullRequest.updatedAt,
+  ...(pullRequest.lastSyncedAt ? { lastSyncedAt: pullRequest.lastSyncedAt } : {}),
+  ...(pullRequest.mergedAt ? { mergedAt: pullRequest.mergedAt } : {}),
+  ...(pullRequest.closedAt ? { closedAt: pullRequest.closedAt } : {}),
+});
+
+export class SetPullRequestUseCase
+  implements OdtTaskStoreUseCase<SetPullRequestInput, SetPullRequestResult>
+{
+  private readonly workflow: SetPullRequestUseCaseDeps["workflow"];
+  private readonly persistence: SetPullRequestUseCaseDeps["persistence"];
+  private readonly pullRequestResolver: SetPullRequestUseCaseDeps["pullRequestResolver"];
+
+  constructor(deps: SetPullRequestUseCaseDeps) {
+    this.workflow = deps.workflow;
+    this.persistence = deps.persistence;
+    this.pullRequestResolver = deps.pullRequestResolver;
+  }
+
+  async execute(input: SetPullRequestInput): Promise<SetPullRequestResult> {
+    await this.workflow.ensureInitialized();
+    const { issue, task } = await this.workflow.readTaskSnapshot(input.taskId);
+    assertNoValidationError(getSetPullRequestError(task.status));
+    const pullRequest = await this.pullRequestResolver.resolve({
+      providerId: input.providerId,
+      number: input.number,
+    });
+
+    const { root, namespace } = this.persistence.getNamespaceData(issue);
+    await this.persistence.writeNamespace(input.taskId, root, {
+      ...namespace,
+      pullRequest: toPullRequestMetadata(pullRequest),
+    });
+    const { issue: refreshedIssue } = await this.workflow.readTaskSnapshot(input.taskId);
+
+    return {
+      task: issueToPublicTask(refreshedIssue, this.workflow.metadataNamespace),
+      pullRequest,
+    };
+  }
+}
+
 type QaUseCaseDeps = {
   workflow: Pick<
     OdtTaskWorkflowRuntimePort,
@@ -527,6 +594,7 @@ export type CreateOdtTaskStoreUseCasesDeps = {
   workflow: OdtTaskWorkflowRuntimePort;
   documentStore: TaskDocumentPort;
   epicSubtaskReplacementService: EpicSubtaskReplacementPort;
+  pullRequestResolver: CanonicalPullRequestResolverPort;
   invalidateTaskIndex(): void;
 };
 
@@ -564,6 +632,11 @@ export const createOdtTaskStoreUseCases = (
   buildCompleted: new BuildCompletedUseCase({
     workflow: deps.workflow,
     documentStore: deps.documentStore,
+  }),
+  setPullRequest: new SetPullRequestUseCase({
+    workflow: deps.workflow,
+    persistence: deps.persistence,
+    pullRequestResolver: deps.pullRequestResolver,
   }),
   qaApproved: new QaApprovedUseCase({
     workflow: deps.workflow,

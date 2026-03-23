@@ -39,11 +39,11 @@ export function useSessionStartModalRequestActivation({
       role: request.role,
       scenario: request.scenario,
       selectedModel: request.selectedModel,
-      ...(request.reusableSessionOptions
-        ? { reusableSessionOptions: request.reusableSessionOptions }
+      ...(request.existingSessionOptions
+        ? { existingSessionOptions: request.existingSessionOptions }
         : {}),
-      ...(request.initialReusableSessionId
-        ? { initialReusableSessionId: request.initialReusableSessionId }
+      ...(request.initialSourceSessionId
+        ? { initialSourceSessionId: request.initialSourceSessionId }
         : {}),
       postStartAction: toSessionStartPostAction(request.reason),
     });
@@ -74,12 +74,12 @@ export function AgentStudioSessionStartModalBridge({
     variantOptions,
     availableStartModes,
     selectedStartMode,
-    reusableSessionOptions,
-    selectedReusableSessionId,
+    existingSessionOptions,
+    selectedSourceSessionId,
     openStartModal,
     closeStartModal,
     handleSelectStartMode,
-    handleSelectReusableSession,
+    handleSelectSourceSession,
     handleSelectRuntime,
     handleSelectAgent,
     handleSelectModel,
@@ -127,10 +127,10 @@ export function AgentStudioSessionStartModalBridge({
         variantOptions,
         availableStartModes,
         selectedStartMode,
-        reusableSessionOptions,
-        selectedReusableSessionId,
+        existingSessionOptions,
+        selectedSourceSessionId,
         onSelectStartMode: handleSelectStartMode,
-        onSelectReusableSession: handleSelectReusableSession,
+        onSelectSourceSession: handleSelectSourceSession,
         onSelectRuntime: handleSelectRuntime,
         onSelectAgent: handleSelectAgent,
         onSelectModel: handleSelectModel,
@@ -152,7 +152,7 @@ export function AgentStudioSessionStartModalBridge({
           onResolve(request.requestId, {
             selectedModel: selection ?? null,
             startMode: input.startMode,
-            reuseSessionId: input.reuseSessionId,
+            sourceSessionId: input.sourceSessionId,
           });
         },
       }}

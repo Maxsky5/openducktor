@@ -17,6 +17,7 @@ import {
   type NewSessionStartDecision,
   type NewSessionStartRequest,
 } from "@/features/session-start";
+import { compareAgentSessionRecency } from "@/lib/agent-session-options";
 import { resolveBuildWorkingDirectoryOverride } from "@/lib/build-worktree-overrides";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
@@ -27,18 +28,8 @@ import {
   shouldTriggerContextSwitchIntent,
 } from "./use-agent-studio-session-action-helpers";
 
-const compareSessionRecency = (a: AgentSessionState, b: AgentSessionState): number => {
-  if (a.startedAt !== b.startedAt) {
-    return a.startedAt > b.startedAt ? -1 : 1;
-  }
-  if (a.sessionId === b.sessionId) {
-    return 0;
-  }
-  return a.sessionId > b.sessionId ? -1 : 1;
-};
-
 const findBuilderSessions = (sessions: AgentSessionState[]): AgentSessionState[] => {
-  return sessions.filter((session) => session.role === "build").sort(compareSessionRecency);
+  return sessions.filter((session) => session.role === "build").sort(compareAgentSessionRecency);
 };
 
 type UseAgentStudioHumanReviewFeedbackFlowArgs = {
@@ -200,20 +191,19 @@ export function useAgentStudioHumanReviewFeedbackFlow({
             role: "build",
             scenario: humanReviewFeedbackState.scenario,
             reason: "create_session",
-            reusableSessionOptions: buildReusableSessionOptions({
+            existingSessionOptions: buildReusableSessionOptions({
               sessions: humanReviewFeedbackState.builderSessions,
               role: "build",
             }),
-            initialReusableSessionId:
-              humanReviewFeedbackState.builderSessions[0]?.sessionId ?? null,
+            initialSourceSessionId: humanReviewFeedbackState.builderSessions[0]?.sessionId ?? null,
           });
           if (decision == null) {
             return;
           }
-          const reuseSessionId = decision.reuseSessionId;
-          if (reuseSessionId) {
+          const sourceSessionId = decision.startMode === "reuse" ? decision.sourceSessionId : null;
+          if (sourceSessionId) {
             setHumanReviewFeedbackState((current) =>
-              current ? { ...current, selectedTarget: reuseSessionId } : current,
+              current ? { ...current, selectedTarget: sourceSessionId } : current,
             );
             return;
           }

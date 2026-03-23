@@ -94,8 +94,13 @@ Must not own:
 
 - Owns session start and reuse policy.
 - Enforces scenario-driven start-mode rules.
+- Supports all three start modes:
+  - `fresh`
+  - `reuse`
+  - `fork`
 - Uses stale-repo guards across async boundaries.
 - Rolls back newly created remote sessions when the repo context becomes stale.
+- Builder PR generation now goes through this same path using scenario `build_pull_request_generation`, which is `fork`-only.
 
 `handlers/public-operations.ts`
 
@@ -177,23 +182,29 @@ These invariants must hold after any change:
 - bootstrap, reconcile, and requested-history hydration must remain separate intents
 - avoid reintroducing one generic “loader” path with ad hoc flags
 
-2. Live runtime state wins over persisted hints
+2. Session start policy is scenario-owned
+- callers choose a scenario
+- allowed start modes come from `packages/contracts/src/agent-workflow-schemas.ts`
+- UI resolves the actual mode and source session when needed
+- page code must not hardcode builder follow-up or PR-generation behavior outside the scenario registry
+
+3. Live runtime state wins over persisted hints
 - for live resumed sessions, runtime status + runtime pending input are authoritative
 - persisted pending permissions/questions are recovery data, not the primary live source of truth
 
-3. Event transport is shared at runtime boundary
+4. Event transport is shared at runtime boundary
 - OpenCode uses one `/global/event` stream per runtime endpoint
 - do not reintroduce per-session or per-worktree event streams at the desktop layer
 
-4. Active-session reads stay query-owned
+5. Active-session reads stay query-owned
 - model catalog, todos, repo config, task docs, diff state, and dev-server state should remain request/response reads owned by TanStack Query or a dedicated read-model hook
 - they must not move back into repo hydration or stream handlers
 
-5. Read-only role permission policy remains strict
+6. Read-only role permission policy remains strict
 - `spec`, `planner`, and `qa` must continue auto-rejecting mutating permission requests
 - failures must remain visible/actionable, not silently ignored
 
-6. Stale repo guards remain fail-fast
+7. Stale repo guards remain fail-fast
 - session start/resume/hydration must not leak sessions across repo switches
 
 ## Regression Test Anchors

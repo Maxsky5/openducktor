@@ -1,6 +1,10 @@
 import { BeadsPersistence, type TaskPersistencePort } from "./beads-persistence";
 import { nowIso, type TimeProvider } from "./beads-runtime";
 import { BeadsRuntimeClient, type BeadsRuntimeClientDeps } from "./beads-runtime-client";
+import {
+  type CanonicalPullRequestResolverPort,
+  DefaultCanonicalPullRequestResolver,
+} from "./canonical-pull-request-resolver";
 import { EpicSubtaskReplacementService } from "./epic-subtask-replacement";
 import { createSubtask, deleteTaskById } from "./epic-subtasks";
 import {
@@ -22,6 +26,7 @@ import {
   ReadTaskInputSchema,
   SearchTasksInputSchema,
   SetPlanInputSchema,
+  SetPullRequestInputSchema,
   SetSpecInputSchema,
 } from "./tool-schemas";
 
@@ -33,6 +38,7 @@ export type OdtTaskStoreDeps = {
   documentStore?: TaskDocumentPort;
   taskIndexCache?: TaskIndexCache;
   epicSubtaskReplacementService?: EpicSubtaskReplacementService;
+  pullRequestResolver?: CanonicalPullRequestResolverPort;
 };
 
 export class OdtTaskStore {
@@ -65,6 +71,12 @@ export class OdtTaskStore {
             false,
           ),
       });
+    const pullRequestResolver =
+      deps.pullRequestResolver ??
+      new DefaultCanonicalPullRequestResolver(this.repoPath, {
+        ...(deps.runProcess ? { runProcess: deps.runProcess } : {}),
+        ...(deps.now ? { now: deps.now } : {}),
+      });
     this.metadataNamespace = persistence.metadataNamespace;
     const workflow = createOdtTaskWorkflowRuntime({
       persistence,
@@ -75,6 +87,7 @@ export class OdtTaskStore {
       workflow,
       documentStore,
       epicSubtaskReplacementService,
+      pullRequestResolver,
       invalidateTaskIndex: () => taskIndexCache.invalidate(),
     });
   }
@@ -144,6 +157,12 @@ export class OdtTaskStore {
     rawInput: unknown,
   ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["buildCompleted"]["execute"]>>> {
     return this.executeUseCase(rawInput, BuildCompletedInputSchema, this.useCases.buildCompleted);
+  }
+
+  async setPullRequest(
+    rawInput: unknown,
+  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["setPullRequest"]["execute"]>>> {
+    return this.executeUseCase(rawInput, SetPullRequestInputSchema, this.useCases.setPullRequest);
   }
 
   async qaApproved(

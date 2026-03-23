@@ -71,7 +71,7 @@ export const startKanbanSessionFlow = async ({
     selectedModel: selection,
     sendKickoff: false,
     startMode: intent.startMode,
-    ...(intent.reuseSessionId ? { reuseSessionId: intent.reuseSessionId } : {}),
+    ...(intent.sourceSessionId ? { sourceSessionId: intent.sourceSessionId } : {}),
     requireModelReady: true,
     ...(workingDirectoryOverride ? { workingDirectoryOverride } : {}),
     ...(builderContext ? { builderContext } : {}),

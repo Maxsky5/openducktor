@@ -17,8 +17,15 @@ import {
   useSessionStartModalState,
 } from "./use-session-start-modal-state";
 
-const startModeLabelFor = (startMode: "fresh" | "reuse"): string =>
-  startMode === "fresh" ? "Start a fresh session" : "Reuse an existing session";
+const startModeLabelFor = (startMode: "fresh" | "reuse" | "fork"): string => {
+  if (startMode === "fresh") {
+    return "Start a fresh session";
+  }
+  if (startMode === "reuse") {
+    return "Reuse an existing session";
+  }
+  return "Fork an existing session";
+};
 
 export const buildSessionStartModalTitle = (role: AgentRole): string => {
   const roleLabel = AGENT_ROLE_LABELS[role] ?? role.toUpperCase();
@@ -33,7 +40,17 @@ export const buildSessionStartModalDescription = ({
   const scenarioLabel = SCENARIO_LABELS[scenario] ?? scenario;
   const allowedStartModes = getAgentScenarioDefinition(scenario).allowedStartModes;
   if (allowedStartModes.length > 1) {
-    return `Choose whether to start fresh or reuse an existing session for ${scenarioLabel}.`;
+    const allowedModeLabels = allowedStartModes.map((mode) => {
+      if (mode === "fresh") {
+        return "start fresh";
+      }
+      if (mode === "reuse") {
+        return "reuse an existing session";
+      }
+      return "fork an existing session";
+    });
+    const conjunction = allowedModeLabels.length === 2 ? " or " : ", ";
+    return `Choose how to ${allowedModeLabels.join(conjunction)} for ${scenarioLabel}.`;
   }
   return `${startModeLabelFor(defaultStartModeForScenario(scenario))} for ${scenarioLabel}.`;
 };

@@ -21,8 +21,8 @@ export type KanbanSessionStartIntent = {
   taskId: string;
   role: AgentRole;
   scenario: AgentScenario;
-  reuseSessionId?: string | null;
-  reusableSessionOptions?: Array<{
+  sourceSessionId?: string | null;
+  existingSessionOptions?: Array<{
     value: string;
     label: string;
     description: string;

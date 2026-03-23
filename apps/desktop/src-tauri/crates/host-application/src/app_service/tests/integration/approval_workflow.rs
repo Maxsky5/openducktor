@@ -1100,7 +1100,7 @@ fn task_pull_request_unlink_clears_linked_pull_request() -> Result<()> {
 }
 
 #[test]
-fn task_pull_request_upsert_creates_pr_and_transitions_ai_review_to_human_review() -> Result<()> {
+fn task_pull_request_upsert_creates_pr_without_transitioning_ai_review_status() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("approval-pr-create");
     let repo = root.join("repo");
@@ -1177,7 +1177,7 @@ fn task_pull_request_upsert_creates_pr_and_transitions_ai_review_to_human_review
         .iter()
         .find(|task| task.id == "task-1")
         .ok_or_else(|| anyhow!("task not found after PR upsert"))?;
-    assert_eq!(task.status, TaskStatus::HumanReview);
+    assert_eq!(task.status, TaskStatus::AiReview);
     drop(state);
 
     let gh_log_contents = fs::read_to_string(&gh_log)?;

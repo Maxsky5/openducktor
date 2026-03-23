@@ -56,7 +56,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   resolveRequestedDecision: async () => ({
     selectedModel: null,
     startMode: "fresh",
-    reuseSessionId: null,
+    sourceSessionId: null,
   }),
   ...overrides,
 });

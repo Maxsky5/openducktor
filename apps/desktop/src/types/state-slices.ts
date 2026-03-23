@@ -182,7 +182,7 @@ export type AgentStateContextValue = {
     selectedModel?: AgentModelSelection | null;
     sendKickoff?: boolean;
     startMode?: AgentSessionStartMode;
-    reuseSessionId?: string | null;
+    sourceSessionId?: string | null;
     requireModelReady?: boolean;
     workingDirectoryOverride?: string | null;
     builderContext?: {

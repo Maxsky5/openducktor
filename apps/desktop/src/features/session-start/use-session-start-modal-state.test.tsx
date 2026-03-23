@@ -356,7 +356,7 @@ describe("useSessionStartModalState", () => {
         taskId: "TASK-7",
         role: "qa",
         scenario: "qa_review",
-        reusableSessionOptions: [
+        existingSessionOptions: [
           {
             value: "session-2",
             label: "QA session 2",
@@ -368,7 +368,7 @@ describe("useSessionStartModalState", () => {
             description: "First session",
           },
         ],
-        initialReusableSessionId: "session-1",
+        initialSourceSessionId: "session-1",
         postStartAction: "kickoff",
         title: "Start QA Session",
       });
@@ -376,7 +376,7 @@ describe("useSessionStartModalState", () => {
 
     expect(harness.getLatest().availableStartModes).toEqual(["fresh", "reuse"]);
     expect(harness.getLatest().selectedStartMode).toBe("reuse");
-    expect(harness.getLatest().selectedReusableSessionId).toBe("session-1");
+    expect(harness.getLatest().selectedSourceSessionId).toBe("session-1");
 
     await harness.unmount();
   });
@@ -392,7 +392,7 @@ describe("useSessionStartModalState", () => {
         taskId: "TASK-8",
         role: "qa",
         scenario: "qa_review",
-        reusableSessionOptions: [],
+        existingSessionOptions: [],
         postStartAction: "kickoff",
         title: "Start QA Session",
       });
@@ -400,7 +400,7 @@ describe("useSessionStartModalState", () => {
 
     expect(harness.getLatest().availableStartModes).toEqual(["fresh", "reuse"]);
     expect(harness.getLatest().selectedStartMode).toBe("fresh");
-    expect(harness.getLatest().selectedReusableSessionId).toBe("");
+    expect(harness.getLatest().selectedSourceSessionId).toBe("");
 
     await harness.unmount();
   });

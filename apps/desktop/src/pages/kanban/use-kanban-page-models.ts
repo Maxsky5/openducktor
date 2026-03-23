@@ -29,7 +29,6 @@ export function useKanbanPageModels({
     loadAgentSessions,
     removeAgentSessions,
     startAgentSession,
-    forkAgentSession,
     sendAgentMessage,
     updateAgentSessionModel,
   } = useAgentState();
@@ -72,6 +71,7 @@ export function useKanbanPageModels({
   const {
     humanReviewFeedbackModal,
     sessionStartModal,
+    onPullRequestGenerate,
     onDelegate,
     onPlan,
     onQaStart,
@@ -130,10 +130,7 @@ export function useKanbanPageModels({
   const { taskApprovalModal, taskGitConflictDialog, openTaskApproval } = useTaskApprovalFlow({
     activeRepo,
     tasks,
-    sessions,
-    hydrateRequestedTaskSessionHistory,
-    forkAgentSession,
-    sendAgentMessage,
+    requestPullRequestGeneration: onPullRequestGenerate,
     refreshTasks,
     onResolveGitConflict: handleResolveKanbanGitConflict,
   });

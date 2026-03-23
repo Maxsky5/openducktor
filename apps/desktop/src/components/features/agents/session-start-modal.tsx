@@ -20,7 +20,7 @@ type SessionStartModalConfirmInput =
   | {
       runInBackground: boolean;
       startMode: AgentSessionStartMode;
-      reuseSessionId: string | null;
+      sourceSessionId: string | null;
     };
 
 export type SessionStartModalModel = {
@@ -42,10 +42,10 @@ export type SessionStartModalModel = {
   variantOptions: ComboboxOption[];
   availableStartModes: AgentSessionStartMode[];
   selectedStartMode: AgentSessionStartMode;
-  reusableSessionOptions: ComboboxOption[];
-  selectedReusableSessionId: string;
+  existingSessionOptions: ComboboxOption[];
+  selectedSourceSessionId: string;
   onSelectStartMode: (startMode: AgentSessionStartMode) => void;
-  onSelectReusableSession: (sessionId: string) => void;
+  onSelectSourceSession: (sessionId: string) => void;
   onSelectRuntime: (runtimeKind: RuntimeKind) => void;
   onSelectAgent: (agent: string) => void;
   onSelectModel: (model: string) => void;
@@ -76,10 +76,10 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     variantOptions,
     availableStartModes,
     selectedStartMode,
-    reusableSessionOptions,
-    selectedReusableSessionId,
+    existingSessionOptions,
+    selectedSourceSessionId,
     onSelectStartMode,
-    onSelectReusableSession,
+    onSelectSourceSession,
     onSelectRuntime,
     onSelectAgent,
     onSelectModel,
@@ -95,16 +95,16 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     ? `${selectedModelSelection.providerId}/${selectedModelSelection.modelId}`
     : "";
   const selectedVariant = selectedModelSelection?.variant ?? "";
-  const hasReusableSessionOptions = reusableSessionOptions.length > 0;
-  const requiresReusableSession = selectedStartMode === "reuse";
-  const hasReusableSessionSelection = reusableSessionOptions.some(
-    (option) => option.value === selectedReusableSessionId,
+  const hasExistingSessionOptions = existingSessionOptions.length > 0;
+  const requiresExistingSession = selectedStartMode === "reuse" || selectedStartMode === "fork";
+  const hasExistingSessionSelection = existingSessionOptions.some(
+    (option) => option.value === selectedSourceSessionId,
   );
   const confirmDisabled =
     isStarting ||
     isSelectionCatalogLoading ||
     !selectedModelSelection ||
-    (requiresReusableSession && !hasReusableSessionSelection);
+    (requiresExistingSession && !hasExistingSessionSelection);
   const agentDisabled = isSelectionCatalogLoading || !supportsProfiles || agentOptions.length === 0;
   const variantDisabled =
     isSelectionCatalogLoading ||
@@ -118,7 +118,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     onConfirm({
       runInBackground: false,
       startMode: selectedStartMode,
-      reuseSessionId: selectedStartMode === "reuse" ? selectedReusableSessionId : null,
+      sourceSessionId: requiresExistingSession ? selectedSourceSessionId : null,
     });
   };
 
@@ -173,32 +173,42 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                       <Button
                         type="button"
                         variant={selectedStartMode === "reuse" ? "default" : "outline"}
-                        disabled={!hasReusableSessionOptions}
+                        disabled={!hasExistingSessionOptions}
                         onClick={() => onSelectStartMode("reuse")}
                       >
                         Reuse existing
+                      </Button>
+                    ) : null}
+                    {availableStartModes.includes("fork") ? (
+                      <Button
+                        type="button"
+                        variant={selectedStartMode === "fork" ? "default" : "outline"}
+                        disabled={!hasExistingSessionOptions}
+                        onClick={() => onSelectStartMode("fork")}
+                      >
+                        Fork existing
                       </Button>
                     ) : null}
                   </div>
                 </div>
               ) : null}
 
-              {selectedStartMode === "reuse" ? (
+              {requiresExistingSession ? (
                 <div className="grid gap-1.5">
                   <label
                     className="text-sm font-medium text-foreground"
-                    htmlFor="session-start-reuse"
+                    htmlFor="session-start-source"
                   >
                     Existing Session
                   </label>
                   <Combobox
-                    value={selectedReusableSessionId}
-                    options={reusableSessionOptions}
+                    value={selectedSourceSessionId}
+                    options={existingSessionOptions}
                     placeholder="Select session"
                     searchPlaceholder="Search session..."
-                    disabled={isStarting || !hasReusableSessionOptions}
+                    disabled={isStarting || !hasExistingSessionOptions}
                     className="sm:min-w-[28rem]"
-                    onValueChange={onSelectReusableSession}
+                    onValueChange={onSelectSourceSession}
                   />
                 </div>
               ) : null}
@@ -308,8 +318,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                     onConfirm({
                       runInBackground: true,
                       startMode: selectedStartMode,
-                      reuseSessionId:
-                        selectedStartMode === "reuse" ? selectedReusableSessionId : null,
+                      sourceSessionId: requiresExistingSession ? selectedSourceSessionId : null,
                     })
                   }
                 >

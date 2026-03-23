@@ -114,40 +114,43 @@ export function useAgentStudioSessionStartFlow({
         request.role === role && request.taskId === taskId
           ? (selectionForNewSession ?? null)
           : null;
-      const reusableSessionOptions =
-        request.reusableSessionOptions ??
-        (getAgentScenarioDefinition(request.scenario).allowedStartModes.includes("reuse")
+      const existingSessionOptions =
+        request.existingSessionOptions ??
+        (getAgentScenarioDefinition(request.scenario).allowedStartModes.some(
+          (mode) => mode === "reuse" || mode === "fork",
+        )
           ? buildReusableSessionOptions({
               sessions: sessionsForTask.filter((session) => session.taskId === request.taskId),
               role: request.role,
             })
           : []);
-      const initialReusableSessionId =
-        request.initialReusableSessionId ??
+      const initialSourceSessionId =
+        request.initialSourceSessionId ??
         (activeSession &&
         activeSession.taskId === request.taskId &&
         activeSession.role === request.role &&
-        reusableSessionOptions.some((option) => option.value === activeSession.sessionId)
+        existingSessionOptions.some((option) => option.value === activeSession.sessionId)
           ? activeSession.sessionId
-          : (reusableSessionOptions[0]?.value ?? null));
+          : (existingSessionOptions[0]?.value ?? null));
 
       if (!requestNewSessionStart) {
         const startMode = resolveScenarioStartMode({
           scenario: request.scenario,
-          reusableSessionOptions,
+          existingSessionOptions,
         });
         return {
           selectedModel: requestedSelection,
           startMode,
-          reuseSessionId: startMode === "reuse" ? initialReusableSessionId : null,
+          sourceSessionId:
+            startMode === "reuse" || startMode === "fork" ? initialSourceSessionId : null,
         };
       }
 
       const decision = await requestNewSessionStart({
         ...request,
         selectedModel: requestedSelection,
-        ...(reusableSessionOptions.length > 0 ? { reusableSessionOptions } : {}),
-        ...(initialReusableSessionId ? { initialReusableSessionId } : {}),
+        ...(existingSessionOptions.length > 0 ? { existingSessionOptions } : {}),
+        ...(initialSourceSessionId ? { initialSourceSessionId } : {}),
       });
       if (!decision) {
         return undefined;

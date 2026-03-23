@@ -81,16 +81,16 @@ export function useAgentStudioSessionStartSession({
           return undefined;
         }
         const selectedModel = decision.selectedModel;
-        if (decision.reuseSessionId) {
+        if (decision.startMode === "reuse" && decision.sourceSessionId) {
           if (selectedModel) {
-            updateAgentSessionModel(decision.reuseSessionId, selectedModel);
+            updateAgentSessionModel(decision.sourceSessionId, selectedModel);
           }
           applyAgentStudioSelectionQuery(updateQuery, {
             taskId,
-            sessionId: decision.reuseSessionId,
+            sessionId: decision.sourceSessionId,
             role,
           });
-          return decision.reuseSessionId;
+          return decision.sourceSessionId;
         }
 
         let workingDirectoryOverride: string | null = null;
@@ -122,7 +122,7 @@ export function useAgentStudioSessionStartSession({
           selectedModel,
           sendKickoff: false,
           startMode: decision.startMode,
-          ...(decision.reuseSessionId ? { reuseSessionId: decision.reuseSessionId } : {}),
+          ...(decision.sourceSessionId ? { sourceSessionId: decision.sourceSessionId } : {}),
           requireModelReady: true,
           ...(workingDirectoryOverride ? { workingDirectoryOverride } : {}),
           ...(builderContext ? { builderContext } : {}),

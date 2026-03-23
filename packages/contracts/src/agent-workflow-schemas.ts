@@ -1,13 +1,14 @@
 import { z } from "zod";
 
 export const agentRoleValues = ["spec", "planner", "build", "qa"] as const;
-export const agentSessionStartModeValues = ["fresh", "reuse"] as const;
+export const agentSessionStartModeValues = ["fresh", "reuse", "fork"] as const;
 export const agentScenarioValues = [
   "spec_initial",
   "planner_initial",
   "build_implementation_start",
   "build_after_qa_rejected",
   "build_after_human_request_changes",
+  "build_pull_request_generation",
   "build_rebase_conflict_resolution",
   "qa_review",
 ] as const;
@@ -17,6 +18,7 @@ export const agentKickoffScenarioValues = [
   "build_implementation_start",
   "build_after_qa_rejected",
   "build_after_human_request_changes",
+  "build_pull_request_generation",
   "qa_review",
 ] as const;
 export const agentToolNameValues = [
@@ -26,6 +28,7 @@ export const agentToolNameValues = [
   "odt_build_blocked",
   "odt_build_resumed",
   "odt_build_completed",
+  "odt_set_pull_request",
   "odt_qa_approved",
   "odt_qa_rejected",
 ] as const;
@@ -84,6 +87,13 @@ export const agentScenarioDefinitionByScenario = {
     label: "Apply Human Changes",
     allowedStartModes: ["fresh", "reuse"],
     defaultStartMode: "reuse",
+    supportsKickoff: true,
+  },
+  build_pull_request_generation: {
+    role: "build",
+    label: "Generate Pull Request",
+    allowedStartModes: ["fork"],
+    defaultStartMode: "fork",
     supportsKickoff: true,
   },
   build_rebase_conflict_resolution: {

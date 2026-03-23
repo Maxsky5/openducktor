@@ -31,6 +31,11 @@ const SET_PLAN_ALLOWED_STATUSES: Readonly<Record<IssueType, readonly TaskStatus[
   task: ["open", "spec_ready", "ready_for_dev"],
   bug: ["open", "spec_ready", "ready_for_dev"],
 };
+const SET_PULL_REQUEST_ALLOWED_STATUSES: readonly TaskStatus[] = [
+  "in_progress",
+  "ai_review",
+  "human_review",
+];
 
 const EPIC_SUBTASK_REPLACEMENT_ALLOWED_STATUSES: readonly TaskStatus[] = [
   "open",
@@ -99,6 +104,13 @@ export const getSetPlanError = (task: TaskCard): string | null => {
     return null;
   }
   return `set_plan is not allowed for issue type ${task.issueType} from status ${task.status}`;
+};
+
+export const getSetPullRequestError = (status: TaskStatus): string | null => {
+  if (isStatusAllowed(status, SET_PULL_REQUEST_ALLOWED_STATUSES)) {
+    return null;
+  }
+  return `set_pull_request is only allowed from in_progress/ai_review/human_review (current: ${status})`;
 };
 
 export const assertNoValidationError = (error: string | null): void => {
