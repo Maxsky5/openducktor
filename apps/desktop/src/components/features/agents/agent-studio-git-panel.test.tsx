@@ -983,6 +983,34 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
+  test("disables rebase with uncommitted changes and explains why", async () => {
+    const rebaseOntoTarget = mock(async () => {});
+
+    let renderer: RenderResult | null = null;
+    await act(async () => {
+      renderer = render(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            commitsAheadBehind: { ahead: 0, behind: 2 },
+            fileStatuses: [{ path: "src/dirty.ts", staged: false, status: "M" }],
+            rebaseOntoTarget,
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    const rebaseButton = findByTestId(root, "agent-studio-git-rebase-button");
+    expect(Boolean(rebaseButton.props.disabled)).toBe(true);
+    expect(hasVisibleText(root, "Commit or stash changes before rebasing")).toBe(true);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
   test("hides the generic lock banner when the conflict strip is already visible", async () => {
     let renderer: RenderResult | null = null;
     await act(async () => {
