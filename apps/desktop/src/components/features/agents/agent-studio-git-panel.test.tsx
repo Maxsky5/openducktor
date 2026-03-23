@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { LoaderCircle } from "lucide-react";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 
@@ -32,6 +33,7 @@ mock.module("@/components/ui/dialog", () => ({
     createElement("div", null, children),
   DialogDescription: ({ children }: { children: React.ReactNode }) =>
     createElement("div", null, children),
+  DialogBody: ({ children }: { children: React.ReactNode }) => createElement("div", null, children),
   DialogFooter: ({ children }: { children: React.ReactNode }) =>
     createElement("div", null, children),
 }));
@@ -820,6 +822,58 @@ describe("AgentStudioGitPanel", () => {
     });
 
     expect(Boolean(refreshButton.props.disabled)).toBe(true);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("disables push when the branch is already up to date with upstream", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            fileStatuses: [],
+            uncommittedFileCount: 0,
+            upstreamAheadBehind: { ahead: 0, behind: 0 },
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    const pushButton = findByTestId(root, "agent-studio-git-push-button");
+    expect(Boolean(pushButton.props.disabled)).toBe(true);
+    expect(hasVisibleText(root, "Branch is up to date with upstream")).toBe(true);
+    expect(countByTestId(root, "agent-studio-git-ahead-count")).toBe(0);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("uses a loader icon while pushing", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            isPushing: true,
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    const pushButton = findByTestId(root, "agent-studio-git-push-button");
+    expect(pushButton.findAllByType(LoaderCircle)).toHaveLength(1);
 
     await act(async () => {
       ensureRenderer(renderer).unmount();

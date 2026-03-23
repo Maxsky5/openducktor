@@ -1,4 +1,13 @@
-import { ArrowDown, ArrowRight, ArrowUp, GitBranch, Link2, RefreshCw, Target } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
+  GitBranch,
+  Link2,
+  LoaderCircle,
+  RefreshCw,
+  Target,
+} from "lucide-react";
 import type { ReactElement } from "react";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { Badge } from "@/components/ui/badge";
@@ -311,7 +320,7 @@ function GitActionRow({
         <GitActionIconButton
           testId="agent-studio-git-push-button"
           srLabel="Push branch"
-          icon={ArrowUp}
+          icon={isPushing ? LoaderCircle : ArrowUp}
           onClick={pushBranch ? () => void pushBranch() : null}
           disabled={!canPush}
           tooltip={pushTooltip}
@@ -319,7 +328,7 @@ function GitActionRow({
             pushAheadCount != null && pushAheadCount > 0
               ? {
                   testId: "agent-studio-git-ahead-count",
-                  value: pushAheadCount,
+                  value: pushAheadCount ?? 0,
                   toneClassName: "text-emerald-600 dark:text-emerald-400",
                 }
               : undefined
@@ -457,7 +466,10 @@ export function GitInfoHeader({
   const pushBehindCount = upstreamAheadBehind?.behind ?? null;
   const hasTargetAhead = targetAheadCount != null && targetAheadCount > 0;
   const hasUncommittedFiles = uncommittedFileCount > 0;
+  const hasUpstreamAhead = pushAheadCount != null && pushAheadCount > 0;
   const hasUpstreamBehind = pushBehindCount != null && pushBehindCount > 0;
+  const canPublishUntrackedBranch = upstreamStatus === "untracked";
+  const hasPushAction = canPublishUntrackedBranch || hasUpstreamAhead || hasUpstreamBehind;
   const isAnyActionInFlight = isCommitting || isPushing || isRebasing;
   const canRefresh = !isLoading && !isAnyActionInFlight;
   const canRebase =
@@ -475,7 +487,11 @@ export function GitInfoHeader({
     !isGitActionsLocked &&
     pullFromUpstream != null;
   const canPush =
-    !isDetachedHead && !isAnyActionInFlight && !isGitActionsLocked && pushBranch != null;
+    !isDetachedHead &&
+    hasPushAction &&
+    !isAnyActionInFlight &&
+    !isGitActionsLocked &&
+    pushBranch != null;
   const rebaseTooltip = isRebasing
     ? "Rebasing"
     : isGitActionsLocked
@@ -503,11 +519,13 @@ export function GitInfoHeader({
     ? "Pushing"
     : isGitActionsLocked
       ? (gitActionsLockReason ?? "Git actions are disabled.")
-      : hasUpstreamBehind
-        ? `Push branch (${pushBehindCount} behind; confirmation may be required)`
-        : pushAheadCount != null && pushAheadCount > 0
-          ? `Push branch (${pushAheadCount} ahead)`
-          : "Push branch";
+      : canPublishUntrackedBranch
+        ? "Publish branch"
+        : hasUpstreamBehind
+          ? `Push branch (${pushBehindCount} behind; confirmation may be required)`
+          : hasUpstreamAhead
+            ? `Push branch (${pushAheadCount} ahead)`
+            : "Branch is up to date with upstream";
 
   const handleScopeChange = (scope: DiffScope): void => {
     if (diffScope === scope) {

@@ -12,6 +12,59 @@ struct UpstreamTargetConfig {
 }
 
 impl GitCliPort {
+    fn matches_remote_branch_name(remote_ref: &str, branch: &str) -> bool {
+        let Some(remainder) = remote_ref.strip_prefix("refs/remotes/") else {
+            return false;
+        };
+        let Some((_, remote_branch)) = remainder.split_once('/') else {
+            return false;
+        };
+        remote_branch == branch
+    }
+
+    fn resolve_fallback_remote_ref_for_branch_impl(
+        &self,
+        repo_path: &Path,
+        branch: &str,
+    ) -> Result<Option<String>> {
+        let (ok, stdout, stderr) = self.run_git_allow_failure(
+            repo_path,
+            &["for-each-ref", "--format=%(refname)", "refs/remotes"],
+        )?;
+        if !ok {
+            return Err(anyhow!(
+                "Failed to list remote refs while resolving upstream for branch {}: {}",
+                branch,
+                combine_output(stdout, stderr)
+            ));
+        }
+
+        let mut matches = stdout
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .filter(|line| Self::matches_remote_branch_name(line, branch))
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        if matches.is_empty() {
+            return Ok(None);
+        }
+
+        let preferred_origin_ref = format!("refs/remotes/origin/{branch}");
+        if let Some(origin_ref) = matches
+            .iter()
+            .find(|candidate| candidate.as_str() == preferred_origin_ref.as_str())
+        {
+            return Ok(Some(origin_ref.clone()));
+        }
+
+        if matches.len() == 1 {
+            return Ok(matches.pop());
+        }
+
+        Ok(None)
+    }
+
     fn is_non_fast_forward_push_rejection(output: &str) -> bool {
         output
             .lines()
@@ -204,21 +257,21 @@ impl GitCliPort {
         let (remote_ok, remote_stdout, _) =
             self.run_git_allow_failure(repo_path, &["config", "--get", remote_key.as_str()])?;
         if !remote_ok {
-            return Ok(None);
+            return self.resolve_fallback_remote_ref_for_branch_impl(repo_path, branch);
         }
         let remote = remote_stdout.trim();
         if remote.is_empty() {
-            return Ok(None);
+            return self.resolve_fallback_remote_ref_for_branch_impl(repo_path, branch);
         }
 
         let (merge_ok, merge_stdout, _) =
             self.run_git_allow_failure(repo_path, &["config", "--get", merge_key.as_str()])?;
         if !merge_ok {
-            return Ok(None);
+            return self.resolve_fallback_remote_ref_for_branch_impl(repo_path, branch);
         }
         let merge_ref = merge_stdout.trim();
         if merge_ref.is_empty() {
-            return Ok(None);
+            return self.resolve_fallback_remote_ref_for_branch_impl(repo_path, branch);
         }
 
         let upstream_ref = resolve_upstream_ref(remote, merge_ref);
@@ -227,7 +280,7 @@ impl GitCliPort {
             &["show-ref", "--verify", "--quiet", upstream_ref.as_str()],
         )?;
         if !exists_ok {
-            return Ok(None);
+            return self.resolve_fallback_remote_ref_for_branch_impl(repo_path, branch);
         }
 
         Ok(Some(upstream_ref))
