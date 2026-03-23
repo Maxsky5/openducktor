@@ -250,6 +250,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": buildSession({
+          role: "planner",
+          runId: null,
+          runtimeId: null,
           pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: ["*"] }],
           pendingQuestions: [
             {
@@ -314,16 +317,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }
   });
 
-  test("keeps local stop cleanup even when remote stop throws", async () => {
+  test("keeps session active when authoritative build stop fails", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
-    const originalStopSession = adapter.stopSession;
     let clearCalls = 0;
-
-    adapter.hasSession = () => true;
-    adapter.stopSession = async () => {
-      throw new Error("remote stop failed");
-    };
+    let unsubscribeCalls = 0;
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
@@ -343,6 +341,87 @@ describe("agent-orchestrator/handlers/session-actions", () => {
               ],
             },
           ],
+        }),
+      },
+    };
+
+    const stopBuildRun = async () => {
+      throw new Error("build stop failed");
+    };
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: {
+        current: new Map([
+          [
+            "session-1",
+            () => {
+              unsubscribeCalls += 1;
+            },
+          ],
+        ]),
+      },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[sessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {
+        clearCalls += 1;
+      },
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      stopBuildRun,
+    });
+
+    try {
+      await expect(actions.stopAgentSession("session-1")).rejects.toThrow(
+        "Failed to stop build session 'session-1': build stop failed",
+      );
+      expect(clearCalls).toBe(0);
+      expect(unsubscribeCalls).toBe(0);
+      expect(sessionsRef.current["session-1"]?.status).toBe("running");
+      expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(1);
+      expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(1);
+    } finally {
+      adapter.hasSession = originalHasSession;
+    }
+  });
+
+  test("stops runtime-backed qa sessions via runtime stop", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    adapter.hasSession = () => false;
+    let runtimeStopCalls = 0;
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          role: "qa",
+          runId: null,
+          runtimeId: "runtime-1",
         }),
       },
     };
@@ -377,19 +456,102 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
-      clearTurnDuration: () => {
-        clearCalls += 1;
-      },
+      clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
+      stopRuntime: async (runtimeId) => {
+        runtimeStopCalls += 1;
+        expect(runtimeId).toBe("runtime-1");
+      },
     });
 
     try {
       await actions.stopAgentSession("session-1");
-      expect(clearCalls).toBe(1);
+      expect(runtimeStopCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
-      expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
-      expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
+    } finally {
+      adapter.hasSession = originalHasSession;
+    }
+  });
+
+  test("refreshes backend-owned state after successful host stop", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalStopSession = adapter.stopSession;
+    adapter.hasSession = () => true;
+    let refreshTaskDataCalls = 0;
+    let loadAgentSessionsCalls = 0;
+    let localStopCalls = 0;
+    const invalidationCalls: Array<{ repoPath: string; taskId: string; runtimeKind?: string }> = [];
+
+    adapter.stopSession = async () => {
+      localStopCalls += 1;
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          runtimeKind: "opencode",
+          runId: "run-1",
+        }),
+      },
+    };
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map() },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[sessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {
+        loadAgentSessionsCalls += 1;
+      },
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {
+        refreshTaskDataCalls += 1;
+      },
+      persistSessionSnapshot: async () => {},
+      stopBuildRun: async () => {},
+      invalidateSessionStopQueries: async (input) => {
+        invalidationCalls.push(input);
+      },
+    });
+
+    try {
+      await actions.stopAgentSession("session-1");
+      expect(localStopCalls).toBe(1);
+      expect(refreshTaskDataCalls).toBe(1);
+      expect(loadAgentSessionsCalls).toBe(1);
+      expect(invalidationCalls).toEqual([
+        {
+          repoPath: "/tmp/repo",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        },
+      ]);
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;
@@ -1006,13 +1168,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("allows stopping a running session even when role is unavailable", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
-    const originalStopSession = adapter.stopSession;
     let stopCalls = 0;
 
-    adapter.hasSession = () => true;
-    adapter.stopSession = async () => {
-      stopCalls += 1;
-    };
+    adapter.hasSession = () => false;
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
@@ -1066,6 +1224,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
+      stopBuildRun: async () => {
+        stopCalls += 1;
+      },
     });
 
     try {
@@ -1074,7 +1235,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
     } finally {
       adapter.hasSession = originalHasSession;
-      adapter.stopSession = originalStopSession;
     }
   });
 

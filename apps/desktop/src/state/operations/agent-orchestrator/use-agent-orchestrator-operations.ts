@@ -14,6 +14,9 @@ import type {
 } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { appQueryClient } from "@/lib/query-client";
+import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import { runtimeQueryKeys } from "@/state/queries/runtime";
+import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import type {
   AgentChatMessage,
   AgentSessionLoadOptions,
@@ -440,6 +443,37 @@ export function useAgentOrchestratorOperations({
     [refBridges, refreshTaskData],
   );
 
+  const invalidateSessionStopQueries = useCallback(
+    async ({
+      repoPath,
+      taskId,
+      runtimeKind,
+    }: {
+      repoPath: string;
+      taskId: string;
+      runtimeKind?: RuntimeKind;
+    }): Promise<void> => {
+      await Promise.all([
+        invalidateRepoTaskQueries(appQueryClient, repoPath),
+        appQueryClient.invalidateQueries({
+          queryKey: agentSessionQueryKeys.list(repoPath, taskId),
+          exact: true,
+          refetchType: "none",
+        }),
+        ...(runtimeKind
+          ? [
+              appQueryClient.invalidateQueries({
+                queryKey: runtimeQueryKeys.list(runtimeKind, repoPath),
+                exact: true,
+                refetchType: "none",
+              }),
+            ]
+          : []),
+      ]);
+    },
+    [],
+  );
+
   const sessionActions = useMemo(
     () =>
       createAgentSessionActions({
@@ -467,6 +501,13 @@ export function useAgentOrchestratorOperations({
         clearTurnDuration,
         refreshTaskData,
         persistSessionSnapshot,
+        stopBuildRun: async (runId) => {
+          await host.buildStop(runId);
+        },
+        stopRuntime: async (runtimeId) => {
+          await host.runtimeStop(runtimeId);
+        },
+        invalidateSessionStopQueries,
       }),
     [
       activeRepo,
@@ -476,6 +517,7 @@ export function useAgentOrchestratorOperations({
       commitSessions,
       ensureRuntime,
       loadAgentSessions,
+      invalidateSessionStopQueries,
       persistSessionSnapshot,
       refBridges,
       refreshTaskData,

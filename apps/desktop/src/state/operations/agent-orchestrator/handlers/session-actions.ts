@@ -1,4 +1,4 @@
-import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides, RuntimeKind, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { errorMessage } from "@/lib/errors";
@@ -43,6 +43,13 @@ type SessionActionsDependencies = {
   clearTurnDuration: (sessionId: string) => void;
   refreshTaskData: (repoPath: string) => Promise<void>;
   persistSessionSnapshot: (session: AgentSessionState) => Promise<void>;
+  stopBuildRun?: (runId: string) => Promise<void>;
+  stopRuntime?: (runtimeId: string) => Promise<void>;
+  invalidateSessionStopQueries?: (input: {
+    repoPath: string;
+    taskId: string;
+    runtimeKind?: RuntimeKind;
+  }) => Promise<void>;
 };
 
 export type ForkAgentSessionActionInput = {
@@ -124,6 +131,13 @@ export const createAgentSessionActions = ({
   clearTurnDuration,
   refreshTaskData,
   persistSessionSnapshot,
+  stopBuildRun = async () => {
+    throw new Error("Build stop operation is unavailable.");
+  },
+  stopRuntime = async () => {
+    throw new Error("Runtime stop operation is unavailable.");
+  },
+  invalidateSessionStopQueries,
 }: SessionActionsDependencies) => {
   const ensureSessionReady = createEnsureSessionReady({
     activeRepo,
@@ -385,35 +399,57 @@ export const createAgentSessionActions = ({
       return;
     }
 
+    const roleRequiresHostStop = session.role === "build" || session.role === "qa";
+    const hasLocalRuntimeSession = adapter.hasSession(sessionId);
+    try {
+      if (roleRequiresHostStop && session.runId) {
+        await stopBuildRun(session.runId);
+      } else if (roleRequiresHostStop && session.runtimeId) {
+        await stopRuntime(session.runtimeId);
+      }
+
+      if (hasLocalRuntimeSession) {
+        await adapter.stopSession(sessionId);
+      }
+    } catch (error) {
+      throw new Error(
+        `Failed to stop ${session.role} session '${sessionId}': ${errorMessage(error)}`,
+      );
+    }
+
     const unsubscribe = unsubscribersRef.current.get(sessionId);
     unsubscribe?.();
     unsubscribersRef.current.delete(sessionId);
+    clearTurnDuration(sessionId);
+    if (turnModelBySessionRef) {
+      delete turnModelBySessionRef.current[sessionId];
+    }
 
-    try {
-      if (adapter.hasSession(sessionId)) {
-        await adapter.stopSession(sessionId);
-      }
-    } catch {
-    } finally {
-      clearTurnDuration(sessionId);
-      if (turnModelBySessionRef) {
-        delete turnModelBySessionRef.current[sessionId];
-      }
+    updateSession(
+      sessionId,
+      (current) => ({
+        ...current,
+        status: "stopped",
+        draftAssistantText: "",
+        draftAssistantMessageId: null,
+        draftReasoningText: "",
+        draftReasoningMessageId: null,
+        pendingPermissions: [],
+        pendingQuestions: [],
+      }),
+      { persist: true },
+    );
 
-      updateSession(
-        sessionId,
-        (current) => ({
-          ...current,
-          status: "stopped",
-          draftAssistantText: "",
-          draftAssistantMessageId: null,
-          draftReasoningText: "",
-          draftReasoningMessageId: null,
-          pendingPermissions: [],
-          pendingQuestions: [],
+    if (activeRepo) {
+      await Promise.all([
+        invalidateSessionStopQueries?.({
+          repoPath: activeRepo,
+          taskId: session.taskId,
+          ...(session.runtimeKind ? { runtimeKind: session.runtimeKind } : {}),
         }),
-        { persist: true },
-      );
+        refreshTaskData(activeRepo),
+        loadAgentSessions(session.taskId),
+      ]);
     }
   };
 
