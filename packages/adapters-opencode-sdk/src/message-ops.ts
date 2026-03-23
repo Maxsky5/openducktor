@@ -10,6 +10,7 @@ import type {
   SendAgentUserMessageInput,
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
+import { emitIdleForSession, setSessionActive } from "./event-stream/shared";
 import {
   extractMessageTotalTokens,
   readMessageModelSelection,
@@ -47,26 +48,6 @@ const readStringArray = (record: Record<string, unknown>, key: string): string[]
     return [];
   }
   return value.filter((entry): entry is string => typeof entry === "string");
-};
-
-const markSessionActive = (session: SessionRecord): void => {
-  session.hasIdleSinceActivity = false;
-};
-
-const emitSessionIdle = (
-  session: SessionRecord,
-  emit: (event: AgentEvent) => void,
-  now: () => string,
-) => {
-  if (session.hasIdleSinceActivity) {
-    return;
-  }
-  session.hasIdleSinceActivity = true;
-  emit({
-    type: "session_idle",
-    sessionId: session.summary.sessionId,
-    timestamp: now(),
-  });
 };
 
 const normalizeQuestionOptions = (
@@ -342,7 +323,7 @@ export const sendUserMessage = async (input: {
     if (!mappedPart) {
       continue;
     }
-    markSessionActive(input.session);
+    setSessionActive(input.session);
     input.emit({
       type: "assistant_part",
       sessionId: input.session.summary.sessionId,
@@ -362,7 +343,7 @@ export const sendUserMessage = async (input: {
     if (!responseMessageId) {
       throw new Error("Prompt session returned assistant text without a message id.");
     }
-    markSessionActive(input.session);
+    setSessionActive(input.session);
     input.emit({
       type: "assistant_message",
       sessionId: input.session.summary.sessionId,
@@ -373,10 +354,17 @@ export const sendUserMessage = async (input: {
       ...(assistantModel ? { model: assistantModel } : {}),
     });
     input.session.emittedAssistantMessageIds.add(responseMessageId);
-    input.session.emittedIdleMessageIds.add(responseMessageId);
   }
 
-  emitSessionIdle(input.session, input.emit, input.now);
+  emitIdleForSession(
+    input.session,
+    {
+      sessionId: input.session.summary.sessionId,
+      emit: (_sessionId, event) => input.emit(event),
+      now: input.now,
+    },
+    responseMessageId ?? undefined,
+  );
 };
 
 export const replyPermission = async (

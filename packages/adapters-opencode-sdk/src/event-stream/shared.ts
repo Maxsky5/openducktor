@@ -26,6 +26,44 @@ export type EventStreamState = {
 
 export type EventStreamRuntime = EventStreamContext & EventStreamState;
 
+export const setSessionActive = (session: SessionRecord | undefined): void => {
+  if (!session) {
+    return;
+  }
+  session.hasIdleSinceActivity = false;
+};
+
+type SessionIdleEmitter = {
+  sessionId: string;
+  emit: (sessionId: string, event: AgentEvent) => void;
+  now: () => string;
+};
+
+export const emitIdleForSession = (
+  session: SessionRecord | undefined,
+  emitter: SessionIdleEmitter,
+  messageId?: string,
+): boolean => {
+  if (messageId && session?.emittedIdleMessageIds.has(messageId)) {
+    return false;
+  }
+  if (session?.hasIdleSinceActivity) {
+    return false;
+  }
+  if (session) {
+    session.hasIdleSinceActivity = true;
+    if (messageId) {
+      session.emittedIdleMessageIds.add(messageId);
+    }
+  }
+  emitter.emit(emitter.sessionId, {
+    type: "session_idle",
+    sessionId: emitter.sessionId,
+    timestamp: emitter.now(),
+  });
+  return true;
+};
+
 const getSessionRecord = (
   context: Pick<EventStreamContext, "sessionId" | "getSession">,
 ): SessionRecord | undefined => {
@@ -35,36 +73,14 @@ const getSessionRecord = (
 export const markSessionActive = (
   context: Pick<EventStreamContext, "sessionId" | "getSession">,
 ): void => {
-  const session = getSessionRecord(context);
-  if (!session) {
-    return;
-  }
-  session.hasIdleSinceActivity = false;
+  setSessionActive(getSessionRecord(context));
 };
 
 export const emitSessionIdle = (
   context: Pick<EventStreamContext, "sessionId" | "getSession" | "emit" | "now">,
   messageId?: string,
 ): boolean => {
-  const session = getSessionRecord(context);
-  if (messageId && session?.emittedIdleMessageIds.has(messageId)) {
-    return false;
-  }
-  if (!messageId && session?.hasIdleSinceActivity) {
-    return false;
-  }
-  if (session) {
-    session.hasIdleSinceActivity = true;
-    if (messageId) {
-      session.emittedIdleMessageIds.add(messageId);
-    }
-  }
-  context.emit(context.sessionId, {
-    type: "session_idle",
-    sessionId: context.sessionId,
-    timestamp: context.now(),
-  });
-  return true;
+  return emitIdleForSession(getSessionRecord(context), context, messageId);
 };
 
 export const isReasoningDeltaField = (field: string): boolean => {
