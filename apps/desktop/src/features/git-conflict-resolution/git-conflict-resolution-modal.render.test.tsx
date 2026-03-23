@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { createElement } from "react";
@@ -10,29 +10,6 @@ const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
-
-mock.module("@/components/ui/dialog", () => ({
-  Dialog: ({
-    children,
-    open,
-  }: {
-    children?: ReactNode;
-    open?: boolean;
-    [key: string]: unknown;
-  }): ReactElement | null => (open === false ? null : createElement("div", null, children)),
-  DialogBody: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
-    createElement("div", null, children),
-  DialogContent: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
-    createElement("div", null, children),
-  DialogDescription: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
-    createElement("p", null, children),
-  DialogFooter: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
-    createElement("div", null, children),
-  DialogHeader: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
-    createElement("div", null, children),
-  DialogTitle: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
-    createElement("h2", null, children),
-}));
 
 let GitConflictResolutionModal: typeof import("./git-conflict-resolution-modal").GitConflictResolutionModal;
 
@@ -85,7 +62,33 @@ const createRequest = (
 });
 
 beforeAll(async () => {
+  mock.module("@/components/ui/dialog", () => ({
+    Dialog: ({
+      children,
+      open,
+    }: {
+      children?: ReactNode;
+      open?: boolean;
+      [key: string]: unknown;
+    }): ReactElement | null => (open === false ? null : createElement("div", null, children)),
+    DialogBody: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
+      createElement("div", null, children),
+    DialogContent: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
+      createElement("div", null, children),
+    DialogDescription: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
+      createElement("p", null, children),
+    DialogFooter: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
+      createElement("div", null, children),
+    DialogHeader: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
+      createElement("div", null, children),
+    DialogTitle: ({ children }: { children?: ReactNode; [key: string]: unknown }) =>
+      createElement("h2", null, children),
+  }));
   ({ GitConflictResolutionModal } = await import("./git-conflict-resolution-modal"));
+});
+
+afterAll(() => {
+  mock.restore();
 });
 
 const renderModal = (request: PendingGitConflictResolutionRequest, onResolve: () => void) =>

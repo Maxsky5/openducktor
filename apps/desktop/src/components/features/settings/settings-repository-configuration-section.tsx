@@ -243,6 +243,8 @@ function RepositoryBranchSettingsSection({
   onRetrySelectedRepoBranchesLoad: () => void;
   onUpdateSelectedRepoConfig: UpdateSelectedRepoConfig;
 }): ReactElement {
+  const defaultTargetBranchLabelId = "repo-default-target-branch-label";
+
   return (
     <div className="grid gap-2 md:grid-cols-2">
       <div className="grid gap-2">
@@ -262,13 +264,14 @@ function RepositoryBranchSettingsSection({
       </div>
 
       <div className="grid gap-2">
-        <Label>Default target branch</Label>
+        <Label id={defaultTargetBranchLabelId}>Default target branch</Label>
         <BranchSelector
           value={targetBranchSelectorValue}
           options={defaultTargetBranchOptions}
           disabled={isDefaultTargetBranchPickerDisabled}
           placeholder={defaultTargetBranchPlaceholder}
           searchPlaceholder="Search branch..."
+          triggerAriaLabelledBy={defaultTargetBranchLabelId}
           onValueChange={(nextBranch) =>
             onUpdateSelectedRepoConfig((repoConfig) => ({
               ...repoConfig,
@@ -608,7 +611,9 @@ function RepositoryWorktreeFileCopiesSection({
           const worktreeFileCopiesInput = event.currentTarget.value;
           onUpdateSelectedRepoConfig((repoConfig) => ({
             ...repoConfig,
-            worktreeFileCopies: parseHookLines(worktreeFileCopiesInput),
+            worktreeFileCopies: parseHookLines(worktreeFileCopiesInput).filter(
+              (line) => line.trim().length > 0,
+            ),
           }));
         }}
       />

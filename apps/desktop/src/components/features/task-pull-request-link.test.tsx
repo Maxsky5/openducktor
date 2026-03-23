@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 
@@ -11,17 +11,22 @@ import { createElement } from "react";
 const openExternalUrlMock = mock(async () => {});
 const toastErrorMock = mock(() => {});
 
-mock.module("@/lib/open-external-url", () => ({
-  openExternalUrl: openExternalUrlMock,
-}));
-
-mock.module("sonner", () => ({
-  toast: {
-    error: toastErrorMock,
-  },
-}));
-
 describe("TaskPullRequestLink", () => {
+  beforeAll(() => {
+    mock.module("@/lib/open-external-url", () => ({
+      openExternalUrl: openExternalUrlMock,
+    }));
+    mock.module("sonner", () => ({
+      toast: {
+        error: toastErrorMock,
+      },
+    }));
+  });
+
+  afterAll(() => {
+    mock.restore();
+  });
+
   beforeEach(() => {
     openExternalUrlMock.mockClear();
     toastErrorMock.mockClear();
@@ -72,9 +77,6 @@ describe("TaskPullRequestLink", () => {
     );
 
     const button = rendered.getByRole("button");
-    if (!button) {
-      throw new Error("Expected pull request button");
-    }
     expect(button.className).toContain("border-border");
     expect(button.className).toContain("bg-card");
     const styledChildren = Array.from(rendered.container.querySelectorAll("*")).filter((node) =>

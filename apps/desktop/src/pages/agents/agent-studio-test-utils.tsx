@@ -84,15 +84,23 @@ export const createHookHarness = <Props, State>(
   useHook: (props: Props) => State,
   initialProps: Props,
 ) => {
+  const checksOperationsContext = {
+    ...TEST_CHECKS_OPERATIONS_CONTEXT,
+  };
+  const runtimeDefinitionsContext = {
+    ...TEST_RUNTIME_DEFINITIONS_CONTEXT,
+    runtimeDefinitions: [...TEST_RUNTIME_DEFINITIONS_CONTEXT.runtimeDefinitions],
+  };
+
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
       ChecksOperationsContext.Provider,
-      { value: TEST_CHECKS_OPERATIONS_CONTEXT },
+      { value: checksOperationsContext },
       createElement(
         QueryProvider,
         { useIsolatedClient: true },
         createElement(RuntimeDefinitionsContext.Provider, {
-          value: TEST_RUNTIME_DEFINITIONS_CONTEXT,
+          value: runtimeDefinitionsContext,
           children,
         }),
       ),

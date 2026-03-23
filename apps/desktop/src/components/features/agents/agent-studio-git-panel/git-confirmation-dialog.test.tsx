@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import { ArrowUp } from "lucide-react";
 import { act } from "react";
@@ -9,18 +9,11 @@ import { act } from "react";
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const originalConsoleError = console.error;
-
 describe("GitConfirmationDialog", () => {
   let GitConfirmationDialog: typeof import("./git-confirmation-dialog")["GitConfirmationDialog"];
 
   beforeEach(async () => {
-    console.error = (...args: unknown[]): void => originalConsoleError(...args);
     ({ GitConfirmationDialog } = await import("./git-confirmation-dialog"));
-  });
-
-  afterEach(() => {
-    console.error = originalConsoleError;
   });
 
   test("keeps the normal confirm label when disabled but not pending", async () => {

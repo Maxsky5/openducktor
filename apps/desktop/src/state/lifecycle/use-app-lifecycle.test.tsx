@@ -114,26 +114,27 @@ describe("useAppLifecycle", () => {
       } satisfies HookArgs,
     });
     await harness.mount();
+    try {
+      refreshTaskData.mockClear();
+      if (!subscribedRunListener) {
+        throw new Error("Expected run event listener to be registered");
+      }
 
-    refreshTaskData.mockClear();
-    if (!subscribedRunListener) {
-      throw new Error("Expected run event listener to be registered");
-    }
-
-    await harness.run(() => {
-      subscribedRunListener?.({
-        type: "run_finished",
-        runId: "run-1",
-        message: "done",
-        timestamp: "2026-03-15T10:00:00.000Z",
-        success: true,
+      await harness.run(() => {
+        subscribedRunListener?.({
+          type: "run_finished",
+          runId: "run-1",
+          message: "done",
+          timestamp: "2026-03-15T10:00:00.000Z",
+          success: true,
+        });
       });
-    });
 
-    expect(setRunCompletionSignal).toHaveBeenCalledWith("run-1", "run_finished");
-    expect(refreshTaskData).toHaveBeenCalledWith("/repo");
-
-    await harness.unmount();
+      expect(setRunCompletionSignal).toHaveBeenCalledWith("run-1", "run_finished");
+      expect(refreshTaskData).toHaveBeenCalledWith("/repo");
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("loads repo task and diagnostics checks when the active repo changes", async () => {

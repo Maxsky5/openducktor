@@ -309,8 +309,10 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.waitFor((state) => state.isStarting);
     expect(harness.getLatest().isStarting).toBe(true);
 
-    await harness.run(() => {
+    await harness.run(async () => {
       startDeferred.resolve("session-planner");
+      await Promise.resolve();
+      await Promise.resolve();
     });
     await harness.waitFor((state) => !state.isStarting);
     await harness.unmount();

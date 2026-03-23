@@ -88,9 +88,11 @@ const createPairHarness = (initialPropsList: [HookArgs, HookArgs]) => {
     if (!rendered) {
       return;
     }
+    const mounted = rendered;
+    rendered = null;
 
     await act(async () => {
-      rendered?.unmount();
+      mounted.unmount();
     });
   };
 

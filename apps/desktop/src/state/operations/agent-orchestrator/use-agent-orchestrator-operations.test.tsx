@@ -182,7 +182,11 @@ const createHookHarness = (args: {
   };
 
   const unmount = async () => {
-    await sharedHarness.unmount();
+    try {
+      await sharedHarness.unmount();
+    } finally {
+      latest = null;
+    }
   };
 
   const updateArgs = async (

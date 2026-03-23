@@ -19,7 +19,10 @@ const createVisibilityStateController = () => {
   let visibilityState: DocumentVisibilityState = "visible";
   const windowTarget = new EventTarget();
   const originalVisibilityState = Object.getOwnPropertyDescriptor(document, "visibilityState");
-  const originalDocumentDispatchEvent = document.dispatchEvent.bind(document);
+  const originalDocumentDispatchEventDescriptor = Object.getOwnPropertyDescriptor(
+    document,
+    "dispatchEvent",
+  );
   const originalAddEventListener = globalThis.addEventListener.bind(globalThis);
   const originalRemoveEventListener = globalThis.removeEventListener.bind(globalThis);
   const originalDispatchEvent = globalThis.dispatchEvent.bind(globalThis);
@@ -29,7 +32,11 @@ const createVisibilityStateController = () => {
     get: () => visibilityState,
   });
 
-  document.dispatchEvent = EventTarget.prototype.dispatchEvent.bind(document);
+  Object.defineProperty(document, "dispatchEvent", {
+    configurable: true,
+    writable: true,
+    value: EventTarget.prototype.dispatchEvent.bind(document),
+  });
   (globalThis as WindowEventTargetOverride).addEventListener =
     windowTarget.addEventListener.bind(windowTarget);
   (globalThis as WindowEventTargetOverride).removeEventListener =
@@ -47,7 +54,11 @@ const createVisibilityStateController = () => {
       } else {
         Reflect.deleteProperty(document, "visibilityState");
       }
-      document.dispatchEvent = originalDocumentDispatchEvent;
+      if (originalDocumentDispatchEventDescriptor) {
+        Object.defineProperty(document, "dispatchEvent", originalDocumentDispatchEventDescriptor);
+      } else {
+        Reflect.deleteProperty(document, "dispatchEvent");
+      }
       (globalThis as WindowEventTargetOverride).addEventListener = originalAddEventListener;
       (globalThis as WindowEventTargetOverride).removeEventListener = originalRemoveEventListener;
       (globalThis as WindowEventTargetOverride).dispatchEvent = originalDispatchEvent;

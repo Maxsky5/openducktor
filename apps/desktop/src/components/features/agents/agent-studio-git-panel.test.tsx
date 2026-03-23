@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { fireEvent, type RenderResult, render } from "@testing-library/react";
 import { LoaderCircle } from "lucide-react";
 import { act, createElement } from "react";
@@ -18,37 +18,6 @@ const omitDialogDomProps = ({
     IS_REACT_ACT_ENVIRONMENT?: boolean;
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
-
-mock.module("@/components/ui/tooltip", () => ({
-  TooltipProvider: ({ children }: { children: React.ReactNode }) =>
-    createElement("div", null, children),
-  Tooltip: ({ children }: { children: React.ReactNode }) => createElement("div", null, children),
-  TooltipTrigger: ({ children }: { children: React.ReactNode }) =>
-    createElement("div", null, children),
-  TooltipContent: ({ children }: { children: React.ReactNode }) =>
-    createElement("div", null, children),
-}));
-
-mock.module("@/components/ui/dialog", () => ({
-  Dialog: ({ children, open }: { children: React.ReactNode; open?: boolean }) =>
-    open === false ? null : createElement("div", null, children),
-  DialogContent: ({ children, ...props }: { children: React.ReactNode; [key: string]: unknown }) =>
-    createElement("div", omitDialogDomProps(props), children),
-  DialogHeader: ({ children }: { children: React.ReactNode }) =>
-    createElement("div", null, children),
-  DialogTitle: ({ children }: { children: React.ReactNode }) =>
-    createElement("div", null, children),
-  DialogDescription: ({ children }: { children: React.ReactNode }) =>
-    createElement("div", null, children),
-  DialogBody: ({ children }: { children: React.ReactNode }) => createElement("div", null, children),
-  DialogFooter: ({ children }: { children: React.ReactNode }) =>
-    createElement("div", null, children),
-}));
-
-mock.module("@/components/features/agents/pierre-diff-viewer", () => ({
-  PierreDiffPreloader: () => null,
-  PierreDiffViewer: () => createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
-}));
 
 type AgentStudioGitPanelComponent =
   typeof import("./agent-studio-git-panel")["AgentStudioGitPanel"];
@@ -244,7 +213,49 @@ const findButtonByText = (root: DomTestNode, text: string): DomTestNode => {
 
 describe("AgentStudioGitPanel", () => {
   beforeAll(async () => {
+    mock.module("@/components/ui/tooltip", () => ({
+      TooltipProvider: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+      Tooltip: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+      TooltipTrigger: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+      TooltipContent: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+    }));
+    mock.module("@/components/ui/dialog", () => ({
+      Dialog: ({ children, open }: { children: React.ReactNode; open?: boolean }) =>
+        open === false ? null : createElement("div", null, children),
+      DialogContent: ({
+        children,
+        ...props
+      }: {
+        children: React.ReactNode;
+        [key: string]: unknown;
+      }) => createElement("div", omitDialogDomProps(props), children),
+      DialogHeader: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+      DialogTitle: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+      DialogDescription: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+      DialogBody: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+      DialogFooter: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", null, children),
+    }));
+    mock.module("@/components/layout/theme-provider", () => ({
+      useTheme: () => ({ theme: "light", setTheme: () => {} }),
+    }));
+    mock.module("@pierre/diffs/react", () => ({
+      FileDiff: () => createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
+      useWorkerPool: () => null,
+    }));
     ({ AgentStudioGitPanel } = await import("./agent-studio-git-panel"));
+  });
+
+  afterAll(() => {
+    mock.restore();
   });
 
   test("renders branch context labels and git action controls", async () => {
@@ -796,7 +807,7 @@ describe("AgentStudioGitPanel", () => {
     expect(Boolean(rebaseButton.props.disabled)).toBe(true);
     expect(Boolean(pullButton.props.disabled)).toBe(true);
     expect(Boolean(pushButton.props.disabled)).toBe(true);
-    expect(Boolean(Boolean(refreshButton.props.disabled))).toBe(false);
+    expect(Boolean(refreshButton.props.disabled)).toBe(false);
 
     await act(async () => {
       commitInput.props.onChange({ currentTarget: { value: "fix: handle detached head" } });

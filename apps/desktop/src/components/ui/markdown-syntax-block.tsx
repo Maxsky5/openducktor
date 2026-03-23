@@ -179,7 +179,12 @@ export default function MarkdownSyntaxBlock({
     markdownSyntaxLanguageRegistry.isLanguageRegistered(normalizedLanguage);
   const isDark = theme === "dark";
   const loadFailure = themeLoadFailure ?? grammarLoadFailure;
-  const loadFailureKind = themeLoadFailure ? "theme" : grammarLoadFailure ? "language" : undefined;
+  let loadFailureKind: "theme" | "language" | undefined;
+  if (themeLoadFailure) {
+    loadFailureKind = "theme";
+  } else if (grammarLoadFailure) {
+    loadFailureKind = "language";
+  }
 
   const renderPlainCodeBlock = (): ReactElement => (
     <div

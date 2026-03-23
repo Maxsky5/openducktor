@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { render } from "@testing-library/react";
 import { act, createElement, type ReactNode } from "react";
@@ -55,37 +55,38 @@ const controllerMock = {
   confirmDiscard: () => {},
 };
 
-mock.module("@/components/features/task-create", () => ({
-  TaskCreateDiscardDialog: () => null,
-  useTaskCreateModalController: () => controllerMock,
-}));
-
-mock.module("@/components/features/task-composer/task-document-editor", () => ({
-  TaskDocumentEditor: () => createElement("div", null, "Mock task document editor"),
-}));
-
-mock.module("@/components/ui/dialog", () => ({
-  Dialog: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", null, children),
-  DialogBody: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", null, children),
-  DialogContent: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", null, children),
-  DialogDescription: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("p", null, children),
-  DialogFooter: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", null, children),
-  DialogHeader: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", null, children),
-  DialogTitle: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("h2", null, children),
-}));
-
 describe("TaskCreateModal", () => {
   let TaskCreateModal: typeof import("./task-create-modal").TaskCreateModal;
 
   beforeAll(async () => {
+    mock.module("@/components/features/task-create", () => ({
+      TaskCreateDiscardDialog: () => null,
+      useTaskCreateModalController: () => controllerMock,
+    }));
+    mock.module("@/components/features/task-composer/task-document-editor", () => ({
+      TaskDocumentEditor: () => createElement("div", null, "Mock task document editor"),
+    }));
+    mock.module("@/components/ui/dialog", () => ({
+      Dialog: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", null, children),
+      DialogBody: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", null, children),
+      DialogContent: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", null, children),
+      DialogDescription: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("p", null, children),
+      DialogFooter: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", null, children),
+      DialogHeader: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", null, children),
+      DialogTitle: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("h2", null, children),
+    }));
     ({ TaskCreateModal } = await import("./task-create-modal"));
+  });
+
+  afterAll(() => {
+    mock.restore();
   });
 
   test("renders the edit modal shell for the document editor flow", async () => {

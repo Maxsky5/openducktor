@@ -133,7 +133,11 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
       await sharedHarness.waitFor(() => latest !== null && predicate(latest), timeoutMs);
     },
     unmount: async () => {
-      await sharedHarness.unmount();
+      try {
+        await sharedHarness.unmount();
+      } finally {
+        latest = null;
+      }
     },
   };
 };

@@ -5,7 +5,7 @@ mock.module("@pierre/diffs/react", () => ({
   useWorkerPool: () => null,
 }));
 
-const pierreViewerModulePromise = import("./pierre-diff-viewer");
+const pierreViewerModule = await import("./pierre-diff-viewer");
 
 const requireFileDiff = (
   fileDiff: ReturnType<typeof import("./pierre-diff-viewer")["getRenderableFileDiff"]>["fileDiff"],
@@ -19,7 +19,7 @@ const requireFileDiff = (
 
 describe("getRenderableFileDiff", () => {
   test("parses valid git patches", async () => {
-    const { getRenderableFileDiff } = await pierreViewerModulePromise;
+    const { getRenderableFileDiff } = pierreViewerModule;
     const patch =
       "diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n";
 
@@ -31,7 +31,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("normalizes hunk-only patches with the current file path", async () => {
-    const { getRenderableFileDiff } = await pierreViewerModulePromise;
+    const { getRenderableFileDiff } = pierreViewerModule;
     const result = getRenderableFileDiff("@@ -1 +1 @@\n-old\n+new\n", "src/hunk.ts");
 
     expect(result.normalizedPatch).toBe(
@@ -41,7 +41,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("keeps normalized raw diff text when parsing still fails", async () => {
-    const { getRenderableFileDiff } = await pierreViewerModulePromise;
+    const { getRenderableFileDiff } = pierreViewerModule;
     const result = getRenderableFileDiff(
       "Index: src/app.ts\n=====\ninvalid diff body",
       "src/app.ts",
@@ -52,7 +52,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("builds hunk reset annotations for the first and subsequent hunks", async () => {
-    const { getHunkResetAnnotations, getRenderableFileDiff } = await pierreViewerModulePromise;
+    const { getHunkResetAnnotations, getRenderableFileDiff } = pierreViewerModule;
     const patch = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",
@@ -88,7 +88,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("falls back to deletion lines for delete-only hunks", async () => {
-    const { getHunkResetAnnotations, getRenderableFileDiff } = await pierreViewerModulePromise;
+    const { getHunkResetAnnotations, getRenderableFileDiff } = pierreViewerModule;
     const patch = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",

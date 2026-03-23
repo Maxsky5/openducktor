@@ -354,10 +354,10 @@ describe("useAgentStudioSessionActions", () => {
     await harness.waitFor((state) => state.isSending);
     expect(sendAgentMessage).toHaveBeenCalledTimes(1);
 
-    await harness.run(() => {
+    await harness.run(async () => {
       firstSendDeferred.resolve();
+      await firstSendPromise;
     });
-    await firstSendPromise;
     await harness.waitFor((state) => !state.isSending);
     await harness.unmount();
   });

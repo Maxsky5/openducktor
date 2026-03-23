@@ -13,13 +13,6 @@ enableReactActEnvironment();
 const workflowActionGroupRenderMock = mock((_: unknown) => {});
 const noop = (): void => {};
 
-mock.module("@/components/features/kanban/task-workflow-action-group", () => ({
-  TaskWorkflowActionGroup: (props: unknown): ReactElement | null => {
-    workflowActionGroupRenderMock(props);
-    return null;
-  },
-}));
-
 describe("KanbanTaskCard memoization", () => {
   let KanbanTaskCard: typeof import("./kanban-task-card").KanbanTaskCard;
 
@@ -28,6 +21,12 @@ describe("KanbanTaskCard memoization", () => {
   });
 
   beforeAll(async () => {
+    mock.module("@/components/features/kanban/task-workflow-action-group", () => ({
+      TaskWorkflowActionGroup: (props: unknown): ReactElement | null => {
+        workflowActionGroupRenderMock(props);
+        return null;
+      },
+    }));
     ({ KanbanTaskCard } = await import("./kanban-task-card"));
   });
 
