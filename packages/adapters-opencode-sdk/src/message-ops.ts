@@ -10,6 +10,7 @@ import type {
   SendAgentUserMessageInput,
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
+import { emitIdleForSession, setSessionActive } from "./event-stream/shared";
 import {
   extractMessageTotalTokens,
   readMessageModelSelection,
@@ -322,6 +323,7 @@ export const sendUserMessage = async (input: {
     if (!mappedPart) {
       continue;
     }
+    setSessionActive(input.session);
     input.emit({
       type: "assistant_part",
       sessionId: input.session.summary.sessionId,
@@ -341,6 +343,7 @@ export const sendUserMessage = async (input: {
     if (!responseMessageId) {
       throw new Error("Prompt session returned assistant text without a message id.");
     }
+    setSessionActive(input.session);
     input.emit({
       type: "assistant_message",
       sessionId: input.session.summary.sessionId,
@@ -353,11 +356,15 @@ export const sendUserMessage = async (input: {
     input.session.emittedAssistantMessageIds.add(responseMessageId);
   }
 
-  input.emit({
-    type: "session_idle",
-    sessionId: input.session.summary.sessionId,
-    timestamp: input.now(),
-  });
+  emitIdleForSession(
+    input.session,
+    {
+      sessionId: input.session.summary.sessionId,
+      emit: (_sessionId, event) => input.emit(event),
+      now: input.now,
+    },
+    responseMessageId ?? undefined,
+  );
 };
 
 export const replyPermission = async (

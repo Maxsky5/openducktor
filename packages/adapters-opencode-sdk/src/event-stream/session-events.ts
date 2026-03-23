@@ -9,6 +9,7 @@ import {
   readTodoPayload,
 } from "./schemas";
 import type { EventStreamRuntime } from "./shared";
+import { emitSessionIdle, markSessionActive } from "./shared";
 
 const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   if (event.type !== "session.status") {
@@ -22,6 +23,9 @@ const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): bo
   }
 
   if (status.type === "busy" || status.type === "idle") {
+    if (status.type === "busy") {
+      markSessionActive(runtime);
+    }
     runtime.emit(runtime.sessionId, {
       type: "session_status",
       sessionId: runtime.sessionId,
@@ -31,6 +35,7 @@ const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): bo
     return true;
   }
 
+  markSessionActive(runtime);
   runtime.emit(runtime.sessionId, {
     type: "session_status",
     sessionId: runtime.sessionId,
@@ -55,6 +60,7 @@ const handlePermissionAskedEvent = (event: Event, runtime: EventStreamRuntime): 
   if (!parsed) {
     return true;
   }
+  markSessionActive(runtime);
   runtime.emit(runtime.sessionId, {
     type: "permission_required",
     sessionId: runtime.sessionId,
@@ -78,6 +84,7 @@ const handleQuestionAskedEvent = (event: Event, runtime: EventStreamRuntime): bo
     return true;
   }
 
+  markSessionActive(runtime);
   runtime.emit(runtime.sessionId, {
     type: "question_required",
     sessionId: runtime.sessionId,
@@ -114,11 +121,7 @@ const handleSessionIdleEvent = (event: Event, runtime: EventStreamRuntime): bool
     return false;
   }
 
-  runtime.emit(runtime.sessionId, {
-    type: "session_idle",
-    sessionId: runtime.sessionId,
-    timestamp: runtime.now(),
-  });
+  emitSessionIdle(runtime);
   return true;
 };
 

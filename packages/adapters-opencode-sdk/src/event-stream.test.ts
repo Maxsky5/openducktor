@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { subscribeOpencodeEvents } from "./event-stream";
+import { emitIdleForSession } from "./event-stream/shared";
 import type { SessionInput, SessionRecord } from "./types";
 
 const makeClientWithEvents = (events: Event[]): OpencodeClient => {
@@ -25,12 +26,16 @@ const makeClientWithEvents = (events: Event[]): OpencodeClient => {
 const makeSessionInput = (): SessionInput => ({
   sessionId: "local-session-1",
   repoPath: "/repo",
+  runtimeKind: "opencode",
+  runtimeConnection: {
+    endpoint: "http://127.0.0.1:12345",
+    workingDirectory: "/repo",
+  },
   workingDirectory: "/repo",
   taskId: "task-1",
   role: "spec",
   scenario: "spec_initial",
   systemPrompt: "System prompt",
-  baseUrl: "http://127.0.0.1:12345",
 });
 
 const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
@@ -46,7 +51,9 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   client,
   externalSessionId: "external-session-1",
   eventTransportKey: "http://127.0.0.1:12345",
+  hasIdleSinceActivity: false,
   emittedAssistantMessageIds: new Set<string>(),
+  emittedIdleMessageIds: new Set<string>(),
   partsById: new Map(),
   messageRoleById: new Map(),
   pendingDeltasByPartId: new Map(),
@@ -163,6 +170,226 @@ describe("event-stream", () => {
       variant: "high",
     });
     expect(emitted.some((event) => event.type === "assistant_part")).toBe(true);
+  });
+
+  test("emits session_idle for stop-finished assistant turns without visible text", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-message-stop-only",
+            role: "assistant",
+            sessionID: "external-session-1",
+            finish: "stop",
+          },
+          parts: [
+            {
+              id: "step-1",
+              sessionID: "external-session-1",
+              messageID: "assistant-message-stop-only",
+              type: "step-finish",
+              reason: "stop",
+            },
+          ],
+        },
+      } as unknown as Event,
+    ]);
+
+    const idleEvents = emitted.filter((event) => event.type === "session_idle");
+    expect(idleEvents).toHaveLength(1);
+    expect(emitted.some((event) => event.type === "assistant_message")).toBe(false);
+  });
+
+  test("emits session_idle when assistant completion has completed time without finish stop", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-message-completed-time",
+            role: "assistant",
+            sessionID: "external-session-1",
+            time: {
+              completed: 1,
+            },
+          },
+          parts: [
+            {
+              id: "text-completed-time-1",
+              sessionID: "external-session-1",
+              messageID: "assistant-message-completed-time",
+              type: "text",
+              text: "Completed without finish stop",
+              time: { start: 1, end: 1 },
+            },
+          ],
+        },
+      } as unknown as Event,
+    ]);
+
+    const idleEvents = emitted.filter((event) => event.type === "session_idle");
+    expect(idleEvents).toHaveLength(1);
+    expect(emitted.some((event) => event.type === "assistant_message")).toBe(true);
+  });
+
+  test("deduplicates session_idle when a terminal assistant update is followed by session.idle", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-message-terminal-idle",
+            role: "assistant",
+            sessionID: "external-session-1",
+            finish: "stop",
+          },
+          parts: [
+            {
+              id: "text-terminal-idle-1",
+              sessionID: "external-session-1",
+              messageID: "assistant-message-terminal-idle",
+              type: "text",
+              text: "Done once",
+              time: { start: 1, end: 1 },
+            },
+          ],
+        },
+      } as unknown as Event,
+      {
+        type: "session.idle",
+        properties: {
+          directory: "/repo",
+        },
+      } as unknown as Event,
+    ]);
+
+    const idleEvents = emitted.filter((event) => event.type === "session_idle");
+    expect(idleEvents).toHaveLength(1);
+  });
+
+  test("deduplicates session_idle when session.idle arrives before a terminal assistant update", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "session.idle",
+        properties: {
+          directory: "/repo",
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-message-idle-first",
+            role: "assistant",
+            sessionID: "external-session-1",
+            finish: "stop",
+          },
+          parts: [
+            {
+              id: "text-idle-first-1",
+              sessionID: "external-session-1",
+              messageID: "assistant-message-idle-first",
+              type: "text",
+              text: "Done after idle",
+              time: { start: 1, end: 1 },
+            },
+          ],
+        },
+      } as unknown as Event,
+    ]);
+
+    const idleEvents = emitted.filter((event) => event.type === "session_idle");
+    expect(idleEvents).toHaveLength(1);
+  });
+
+  test("deduplicates session_idle across repeated terminal message updates", async () => {
+    const terminalEvent = {
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "assistant-message-duplicate-terminal",
+          role: "assistant",
+          sessionID: "external-session-1",
+          finish: "stop",
+          time: {
+            completed: 1,
+          },
+        },
+        parts: [
+          {
+            id: "text-duplicate-terminal-1",
+            sessionID: "external-session-1",
+            messageID: "assistant-message-duplicate-terminal",
+            type: "text",
+            text: "Done twice",
+            time: { start: 1, end: 1 },
+          },
+        ],
+      },
+    } as unknown as Event;
+
+    const emitted = await runEventStream([terminalEvent, terminalEvent]);
+
+    const idleEvents = emitted.filter((event) => event.type === "session_idle");
+    expect(idleEvents).toHaveLength(1);
+  });
+
+  test("deduplicates prompt-path idle against a later stream terminal update for the same message", async () => {
+    const client = makeClientWithEvents([]);
+    const sessionRecord = makeSessionRecord(client);
+    const emitted: AgentEvent[] = [];
+
+    emitIdleForSession(
+      sessionRecord,
+      {
+        sessionId: sessionRecord.summary.sessionId,
+        emit: (_sessionId, event) => {
+          emitted.push(event);
+        },
+        now: () => "2026-02-22T12:00:00.000Z",
+      },
+      "assistant-message-prompt-bridge",
+    );
+
+    await subscribeOpencodeEvents({
+      context: {
+        sessionId: "local-session-1",
+        externalSessionId: "external-session-1",
+        input: makeSessionInput(),
+      },
+      client: makeClientWithEvents([
+        {
+          type: "message.updated",
+          properties: {
+            info: {
+              id: "assistant-message-prompt-bridge",
+              role: "assistant",
+              sessionID: "external-session-1",
+              finish: "stop",
+            },
+            parts: [
+              {
+                id: "step-prompt-bridge-1",
+                sessionID: "external-session-1",
+                messageID: "assistant-message-prompt-bridge",
+                type: "step-finish",
+                reason: "stop",
+              },
+            ],
+          },
+        } as unknown as Event,
+      ]),
+      controller: new AbortController(),
+      now: () => "2026-02-22T12:00:01.000Z",
+      emit: (_sessionId, event) => {
+        emitted.push(event);
+      },
+      getSession: () => sessionRecord,
+    });
+
+    const idleEvents = emitted.filter((event) => event.type === "session_idle");
+    expect(idleEvents).toHaveLength(1);
   });
 
   test("replays known assistant parts when the assistant role becomes known later", async () => {
