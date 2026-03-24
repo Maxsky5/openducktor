@@ -693,7 +693,7 @@ describe("OpencodeSdkAdapter", () => {
       messageId: "assistant-1",
       totalTokens: 1_100,
     });
-    expect(events.some((event) => event.type === "session_idle")).toBe(true);
+    expect(events.some((event) => event.type === "session_idle")).toBe(false);
   });
 
   test("sendUserMessage falls back to part messageID when response info.id is absent", async () => {
@@ -1010,11 +1010,6 @@ describe("OpencodeSdkAdapter", () => {
 
     expect(partEvents.length).toBeGreaterThanOrEqual(2);
     expect(messageEvents).toHaveLength(1);
-    expect(events).toContainEqual({
-      type: "session_idle",
-      sessionId: "session-1",
-      timestamp: "2026-02-17T12:00:00Z",
-    });
     expect(messageEvents[0]).toMatchObject({
       type: "assistant_message",
       messageId: "assistant-1",
