@@ -1003,6 +1003,8 @@ describe("AgentStudioGitPanel", () => {
     const root = getRoot(renderer);
     const rebaseButton = findByTestId(root, "agent-studio-git-rebase-button");
     expect(Boolean(rebaseButton.props.disabled)).toBe(true);
+    expect(rebaseButton.props.className).toContain("disabled:pointer-events-auto");
+    expect(rebaseButton.props.className).toContain("disabled:cursor-not-allowed");
     expect(hasVisibleText(root, "Commit or stash changes before rebasing")).toBe(true);
 
     await act(async () => {

@@ -295,6 +295,7 @@ function GitActionRow({
                   }
                 : undefined
             }
+            wrapTrigger
           />
         )}
         <span className="inline-flex" data-testid="agent-studio-git-pull-tooltip-trigger">
