@@ -154,7 +154,10 @@ export const createOrchestratorPublicOperations = ({
     withErrorToast("Failed to send message", () =>
       sessionActions.sendAgentMessage(sessionId, content),
     ),
-  stopAgentSession: sessionActions.stopAgentSession,
+  stopAgentSession: (sessionId: string): Promise<void> =>
+    withErrorToast("Failed to stop agent session", () =>
+      sessionActions.stopAgentSession(sessionId),
+    ),
   updateAgentSessionModel: sessionActions.updateAgentSessionModel,
   replyAgentPermission: sessionActions.replyAgentPermission,
   answerAgentQuestion: sessionActions.answerAgentQuestion,

@@ -549,17 +549,17 @@ export const createLoadAgentSessions = ({
         );
         return;
       }
-
+      const { runtimeKind, runtimeId, runId, runtimeEndpoint } = runtimeResolution;
       const externalSessionId = record.externalSessionId ?? record.sessionId;
       if (!shouldHydrateHistory) {
         updateSession(
           record.sessionId,
           (current) => ({
             ...current,
-            runtimeKind: runtimeResolution.runtimeKind,
-            runtimeId: runtimeResolution.runtimeId,
-            runId: runtimeResolution.runId,
-            runtimeEndpoint: runtimeResolution.runtimeEndpoint,
+            runtimeKind,
+            runtimeId,
+            runId,
+            runtimeEndpoint,
             workingDirectory,
             promptOverrides: current.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
           }),
@@ -595,10 +595,10 @@ export const createLoadAgentSessions = ({
         (current) => {
           return {
             ...current,
-            runtimeKind: runtimeResolution.runtimeKind,
-            runtimeId: runtimeResolution.runtimeId,
-            runId: runtimeResolution.runId,
-            runtimeEndpoint: runtimeResolution.runtimeEndpoint,
+            runtimeKind,
+            runtimeId,
+            runId,
+            runtimeEndpoint,
             status: liveSessionStatus ?? current.status,
             workingDirectory,
             promptOverrides,

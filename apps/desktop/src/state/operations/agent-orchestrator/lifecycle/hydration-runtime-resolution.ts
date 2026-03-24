@@ -90,19 +90,6 @@ export const createHydrationRuntimeResolver = ({
   return async (record: AgentSessionRecord): Promise<ResolvedHydrationRuntime> => {
     const runtimeKind = readPersistedRuntimeKind(record);
     const workingDirectory = record.workingDirectory;
-    const preloadedRuntimeConnection = preloadedRuntimeConnectionsByKey?.get(
-      runtimeWorkingDirectoryKey(runtimeKind, workingDirectory),
-    );
-    if (preloadedRuntimeConnection) {
-      return {
-        ok: true,
-        runtimeKind,
-        runtimeId: null,
-        runId: null,
-        runtimeEndpoint: preloadedRuntimeConnection.endpoint ?? "",
-        runtimeConnection: preloadedRuntimeConnection,
-      };
-    }
 
     if (record.role === "build" || record.role === "qa") {
       const run = findRunByWorkingDirectory(runtimeKind, workingDirectory);
@@ -135,6 +122,20 @@ export const createHydrationRuntimeResolver = ({
         runId: null,
         runtimeEndpoint,
         runtimeConnection,
+      };
+    }
+
+    const preloadedRuntimeConnection = preloadedRuntimeConnectionsByKey?.get(
+      runtimeWorkingDirectoryKey(runtimeKind, workingDirectory),
+    );
+    if (preloadedRuntimeConnection) {
+      return {
+        ok: true,
+        runtimeKind,
+        runtimeId: null,
+        runId: null,
+        runtimeEndpoint: preloadedRuntimeConnection.endpoint ?? "",
+        runtimeConnection: preloadedRuntimeConnection,
       };
     }
 

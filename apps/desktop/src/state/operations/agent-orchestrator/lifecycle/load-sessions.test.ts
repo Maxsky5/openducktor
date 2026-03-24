@@ -128,6 +128,21 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef.current = state;
     };
 
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [sessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
     const loadAgentSessions = createLoadAgentSessions({
       activeRepo: "/tmp/repo",
       adapter: createAdapter(),
@@ -137,7 +152,7 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
-      updateSession: () => {},
+      updateSession,
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -233,6 +248,21 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef.current = state;
     };
 
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [sessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
     const loadAgentSessions = createLoadAgentSessions({
       activeRepo: "/tmp/repo",
       adapter: createAdapter(),
@@ -242,7 +272,7 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
-      updateSession: () => {},
+      updateSession,
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -1026,6 +1056,21 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef.current = state;
     };
 
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [sessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
     const loadAgentSessions = createLoadAgentSessions({
       activeRepo: "/tmp/repo",
       adapter: createAdapter({
@@ -1040,7 +1085,7 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
-      updateSession: () => {},
+      updateSession,
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -1127,6 +1172,8 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(ensuredRuntimeKinds).toEqual([]);
     expect(observedRuntimeEndpoint).toBe("http://127.0.0.1:4555");
     expect(state["session-1"]?.runtimeKind).toBe("claude-code");
+    expect(state["session-1"]?.runtimeId).toBe("runtime-1");
+    expect(state["session-1"]?.runId).toBeNull();
   });
 
   test("rejects requested-session warmup when persisted runtime metadata is missing", async () => {
@@ -1751,6 +1798,8 @@ describe("agent-orchestrator-load-sessions", () => {
       throw new Error("Expected QA hydration to resolve a live runtime endpoint");
     }
     expect(String(observedRuntimeEndpoint)).toBe("http://127.0.0.1:4444");
+    expect(state["session-qa-1"]?.runId).toBe("run-1");
+    expect(state["session-qa-1"]?.runtimeId).toBeNull();
     expect(state["session-qa-1"]?.messages[0]?.id).toBe("history:session-start:session-qa-1");
   });
 

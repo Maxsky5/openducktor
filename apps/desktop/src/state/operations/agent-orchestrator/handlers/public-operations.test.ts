@@ -230,6 +230,43 @@ describe("agent-orchestrator-public-operations", () => {
     }
   });
 
+  test("shows toast and rethrows stop errors", async () => {
+    const originalToastError = toast.error;
+    const toastError = mock(() => "");
+    toast.error = toastError;
+
+    const operations = createOrchestratorPublicOperations({
+      sessionsById: {},
+      bootstrapTaskSessions: async () => {},
+      hydrateRequestedTaskSessionHistory: async () => {},
+      reconcileLiveTaskSessions: async () => {},
+      loadAgentSessions: async () => {},
+      readSessionModelCatalog: async () => ({
+        providers: [],
+        models: [],
+        variants: [],
+        profiles: [],
+        defaultModelsByProvider: {},
+      }),
+      readSessionTodos: async () => [],
+      removeAgentSessions: () => {},
+      sessionActions: createSessionActions({
+        stopAgentSession: async () => {
+          throw new Error("stop failed");
+        },
+      }),
+    });
+
+    try {
+      await expect(operations.stopAgentSession("session-1")).rejects.toThrow("stop failed");
+      expect(toastError).toHaveBeenCalledWith("Failed to stop agent session", {
+        description: "stop failed",
+      });
+    } finally {
+      toast.error = originalToastError;
+    }
+  });
+
   test("forwards explicit session removals without toast wrapping", () => {
     const removeAgentSessions = mock(() => {});
     const operations = createOrchestratorPublicOperations({

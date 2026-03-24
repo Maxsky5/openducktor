@@ -10,7 +10,6 @@ use host_domain::{
 use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
 use std::fs;
-use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -22,9 +21,9 @@ use crate::app_service::test_support::{
     build_service_with_git_state, build_service_with_store, create_failing_opencode,
     create_fake_bd, create_fake_opencode, create_orphanable_opencode, empty_patch, init_git_repo,
     lock_env, make_emitter, make_session, make_task, prepend_path, process_is_alive,
-    remove_env_var, set_env_var, spawn_sleep_process, unique_temp_path,
-    wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
-    write_executable_script, FakeTaskStore, GitCall, TaskStoreState,
+    remove_env_var, set_env_var, spawn_opencode_session_status_server, spawn_sleep_process,
+    unique_temp_path, wait_for_orphaned_opencode_process, wait_for_path_exists,
+    wait_for_process_exit, write_executable_script, FakeTaskStore, GitCall, TaskStoreState,
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
@@ -616,18 +615,21 @@ fn task_delete_rejects_active_builder_runs() {
         .lock()
         .expect("task lock poisoned")
         .agent_sessions = vec![build_session];
+    let (port, server_handle) =
+        spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"busy"}}"#)
+            .expect("status server should start");
     service.runs.lock().expect("run lock poisoned").insert(
         "run-1".to_string(),
         RunProcess {
             summary: RunSummary {
                 run_id: "run-1".to_string(),
                 runtime_kind: AgentRuntimeKind::Opencode,
-                runtime_route: AgentRuntimeKind::Opencode.route_for_port(4444),
+                runtime_route: AgentRuntimeKind::Opencode.route_for_port(port),
                 repo_path: repo_path.to_string(),
                 task_id: "parent-1".to_string(),
                 branch: "obp/parent-1-cleanup".to_string(),
                 worktree_path: worktree_path.to_string(),
-                port: 4444,
+                port,
                 state: RunState::Running,
                 last_message: None,
                 started_at: "2026-02-20T12:00:00Z".to_string(),
@@ -664,6 +666,9 @@ fn task_delete_rejects_active_builder_runs() {
     assert!(
         format!("{error:#}").contains("Cannot delete tasks with active builder work in progress")
     );
+    server_handle
+        .join()
+        .expect("status server thread should finish");
     let task_state = task_state.lock().expect("task lock poisoned");
     assert!(task_state.delete_calls.is_empty());
     drop(task_state);

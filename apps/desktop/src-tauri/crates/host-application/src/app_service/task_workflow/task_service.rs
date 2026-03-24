@@ -8,8 +8,9 @@ use crate::app_service::{
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentSessionDocument, CreateTaskInput, GitWorktreeSummary, QaWorkflowVerdict, RunState,
-    RuntimeRole, TaskCard, TaskMetadata, TaskStatus, UpdateTaskPatch, DEFAULT_BRANCH_PREFIX,
+    AgentRuntimeKind, AgentSessionDocument, CreateTaskInput, GitWorktreeSummary, QaWorkflowVerdict,
+    RunState, RuntimeRole, RuntimeRoute, TaskCard, TaskMetadata, TaskStatus, UpdateTaskPatch,
+    DEFAULT_BRANCH_PREFIX,
 };
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -81,9 +82,16 @@ impl AppService {
             collect_task_delete_targets(&context.repo.tasks, task_id, delete_subtasks);
         let target_task_ids = target_tasks
             .iter()
-            .map(|task| task.id.as_str())
+            .map(|task| task.id.clone())
             .collect::<Vec<_>>();
-        self.ensure_no_active_task_delete_runs(context.repo.repo_path.as_str(), &target_task_ids)?;
+        let target_task_id_refs = target_task_ids
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        self.ensure_no_active_task_delete_runs(
+            context.repo.repo_path.as_str(),
+            &target_task_id_refs,
+        )?;
         let normalized_repo = normalize_path_for_comparison(context.repo.repo_path.as_str());
         let branch_prefix = self
             .config_store
@@ -122,7 +130,11 @@ impl AppService {
             .filter(|branch| !branch.is_remote)
             .filter(|branch| {
                 target_task_ids.iter().any(|task_id| {
-                    is_related_task_branch(branch.name.as_str(), branch_prefix.as_str(), task_id)
+                    is_related_task_branch(
+                        branch.name.as_str(),
+                        branch_prefix.as_str(),
+                        task_id.as_str(),
+                    )
                 })
             })
             .map(|branch| branch.name)
@@ -151,6 +163,12 @@ impl AppService {
         self.task_store
             .delete_task(context.repo_dir(), task_id, delete_subtasks)
             .with_context(|| format!("Failed to delete task {task_id}"))?;
+        for target_task_id in &target_task_ids {
+            self.clear_task_runs(context.repo.repo_path.as_str(), target_task_id)
+                .with_context(|| {
+                    format!("Failed to clear run state for deleted task {target_task_id}")
+                })?;
+        }
         Ok(())
     }
 
@@ -306,26 +324,18 @@ impl AppService {
     }
 
     fn ensure_no_active_task_delete_runs(&self, repo_path: &str, task_ids: &[&str]) -> Result<()> {
-        let normalized_repo = normalize_path_for_comparison(repo_path);
-        let runs = self
-            .runs
-            .lock()
-            .map_err(|_| anyhow!("Run state lock poisoned"))?;
-        let active_task_ids = runs
-            .values()
-            .filter(|run| normalize_path_for_comparison(run.repo_path.as_str()) == normalized_repo)
-            .filter(|run| task_ids.iter().any(|task_id| *task_id == run.task_id))
-            .filter(|run| {
-                matches!(
-                    run.summary.state,
-                    RunState::Starting
-                        | RunState::Running
-                        | RunState::Blocked
-                        | RunState::AwaitingDoneConfirmation
-                )
-            })
-            .map(|run| run.task_id.clone())
-            .collect::<HashSet<_>>();
+        let mut active_task_ids = HashSet::new();
+        for task_id in task_ids {
+            let sessions = self.agent_sessions_list(repo_path, task_id)?;
+            let evidence = self
+                .collect_active_task_work_evidence(repo_path, task_id, &sessions)
+                .with_context(|| {
+                    format!("Failed checking active task work before deleting {task_id}")
+                })?;
+            if evidence.has_any_activity() {
+                active_task_ids.insert((*task_id).to_string());
+            }
+        }
 
         if active_task_ids.is_empty() {
             return Ok(());
@@ -343,6 +353,34 @@ impl AppService {
         task_id: &str,
         sessions: &[AgentSessionDocument],
     ) -> Result<()> {
+        let evidence = self
+            .collect_active_task_work_evidence(repo_path, task_id, sessions)
+            .with_context(|| {
+                format!("Failed checking live runtime state before resetting {task_id}")
+            })?;
+
+        if evidence.has_active_run {
+            return Err(anyhow!(
+                "Cannot reset implementation while builder work is active for task {task_id}. Stop the active run first."
+            ));
+        }
+
+        if evidence.active_session_roles.is_empty() {
+            return Ok(());
+        }
+
+        Err(anyhow!(
+            "Cannot reset implementation while active {} session(s) exist for task {task_id}. Stop the active session(s) first.",
+            evidence.active_session_roles.join("/")
+        ))
+    }
+
+    fn collect_active_task_work_evidence(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+        sessions: &[AgentSessionDocument],
+    ) -> Result<TaskActiveWorkEvidence> {
         let normalized_repo = normalize_path_for_comparison(repo_path);
         let runs = self
             .runs
@@ -379,23 +417,7 @@ impl AppService {
             break;
         }
         drop(runs);
-
-        if has_active_run {
-            return Err(anyhow!(
-                "Cannot reset implementation while builder work is active for task {task_id}. Stop the active run first."
-            ));
-        }
-
-        let active_runtime_roles = collect_active_runtime_roles_for_task(self, repo_path, task_id)
-            .with_context(|| {
-                format!("Failed checking live runtime state before resetting {task_id}")
-            })?;
-        if !active_runtime_roles.is_empty() {
-            return Err(anyhow!(
-                "Cannot reset implementation while active {} session(s) exist for task {task_id}. Stop the active session(s) first.",
-                active_runtime_roles.join("/")
-            ));
-        }
+        let repo_runtime_routes_by_kind = self.collect_repo_runtime_routes_by_kind(repo_path)?;
 
         let mut active_roles = HashSet::new();
         for session in sessions
@@ -411,17 +433,17 @@ impl AppService {
                 continue;
             };
 
-            if session.role.as_str() != "build" {
-                continue;
-            }
-
             let worktree_key = normalize_path_key(session.working_directory.as_str());
-            let Some(runtime_route) = runtime_routes_by_worktree.get(worktree_key.as_str()) else {
-                active_roles.insert(session.role.as_str());
+            let fallback_runtime_kind = parse_runtime_kind(session.runtime_kind.as_str());
+            let worktree_runtime_route = runtime_routes_by_worktree.get(worktree_key.as_str());
+            let repo_runtime_route =
+                fallback_runtime_kind.and_then(|kind| repo_runtime_routes_by_kind.get(&kind));
+            let runtime_route = worktree_runtime_route.or(repo_runtime_route);
+            let Some(runtime_route) = runtime_route else {
                 continue;
             };
             if !runtime_statuses_by_directory.contains_key(worktree_key.as_str()) {
-                let statuses = load_opencode_session_statuses(
+                let mut statuses = load_opencode_session_statuses(
                     runtime_route,
                     session.working_directory.as_str(),
                 )
@@ -432,7 +454,35 @@ impl AppService {
                         Err(error)
                     }
                 })?;
-                runtime_statuses_by_directory.insert(worktree_key.clone(), statuses);
+
+                if statuses.is_empty() {
+                    if let (Some(primary_route), Some(fallback_route)) =
+                        (worktree_runtime_route, repo_runtime_route)
+                    {
+                        let primary_endpoint = runtime_route_endpoint(primary_route);
+                        let fallback_endpoint = runtime_route_endpoint(fallback_route);
+                        if primary_endpoint != fallback_endpoint {
+                            let fallback_statuses = load_opencode_session_statuses(
+                                fallback_route,
+                                session.working_directory.as_str(),
+                            )
+                            .or_else(|error| {
+                                if is_unreachable_opencode_session_status_error(&error) {
+                                    Ok(OpencodeSessionStatusMap::new())
+                                } else {
+                                    Err(error)
+                                }
+                            })?;
+                            if !fallback_statuses.is_empty() {
+                                statuses = fallback_statuses;
+                            }
+                        }
+                    }
+                }
+
+                if !statuses.is_empty() {
+                    runtime_statuses_by_directory.insert(worktree_key.clone(), statuses);
+                }
             }
 
             if runtime_statuses_by_directory
@@ -444,16 +494,46 @@ impl AppService {
                 active_roles.insert(session.role.as_str());
             }
         }
-        if active_roles.is_empty() {
-            return Ok(());
+        let mut active_session_roles = active_roles
+            .into_iter()
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        active_session_roles.sort_unstable();
+
+        Ok(TaskActiveWorkEvidence {
+            has_active_run,
+            active_session_roles,
+        })
+    }
+
+    fn collect_repo_runtime_routes_by_kind(
+        &self,
+        repo_path: &str,
+    ) -> Result<HashMap<AgentRuntimeKind, RuntimeRoute>> {
+        let normalized_repo = normalize_path_for_comparison(repo_path);
+        let runtimes = self
+            .agent_runtimes
+            .lock()
+            .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
+        let mut routes_by_kind = HashMap::new();
+
+        for runtime in runtimes.values() {
+            if normalize_path_for_comparison(runtime.summary.repo_path.as_str()) != normalized_repo
+            {
+                continue;
+            }
+
+            if runtime.summary.role == RuntimeRole::Workspace {
+                routes_by_kind.insert(runtime.summary.kind, runtime.summary.runtime_route.clone());
+                continue;
+            }
+
+            routes_by_kind
+                .entry(runtime.summary.kind)
+                .or_insert_with(|| runtime.summary.runtime_route.clone());
         }
 
-        let mut roles = active_roles.into_iter().collect::<Vec<_>>();
-        roles.sort_unstable();
-        Err(anyhow!(
-            "Cannot reset implementation while active {} session(s) exist for task {task_id}. Stop the active session(s) first.",
-            roles.join("/")
-        ))
+        Ok(routes_by_kind)
     }
 
     pub fn task_transition(
@@ -625,6 +705,31 @@ impl AppService {
         self.task_store
             .get_task_metadata(std::path::Path::new(&repo_path), task_id)
             .with_context(|| format!("Failed to load task metadata for {task_id}"))
+    }
+}
+
+#[derive(Default)]
+struct TaskActiveWorkEvidence {
+    has_active_run: bool,
+    active_session_roles: Vec<String>,
+}
+
+impl TaskActiveWorkEvidence {
+    fn has_any_activity(&self) -> bool {
+        self.has_active_run || !self.active_session_roles.is_empty()
+    }
+}
+
+fn parse_runtime_kind(value: &str) -> Option<AgentRuntimeKind> {
+    match value.trim() {
+        "opencode" => Some(AgentRuntimeKind::Opencode),
+        _ => None,
+    }
+}
+
+fn runtime_route_endpoint(route: &RuntimeRoute) -> &str {
+    match route {
+        RuntimeRoute::LocalHttp { endpoint } => endpoint.as_str(),
     }
 }
 
@@ -912,49 +1017,6 @@ fn with_reset_cleanup_progress(
     error.context(progress.join("\n"))
 }
 
-fn collect_active_runtime_roles_for_task(
-    service: &AppService,
-    repo_path: &str,
-    task_id: &str,
-) -> Result<Vec<&'static str>> {
-    let normalized_repo = normalize_path_for_comparison(repo_path);
-    let mut runtimes = service
-        .agent_runtimes
-        .lock()
-        .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-    let mut active_roles = HashSet::new();
-
-    for runtime in runtimes.values_mut() {
-        if normalize_path_for_comparison(runtime.summary.repo_path.as_str()) != normalized_repo {
-            continue;
-        }
-        if runtime.summary.task_id.as_deref() != Some(task_id) {
-            continue;
-        }
-        match runtime.summary.role {
-            RuntimeRole::Build | RuntimeRole::Qa => {}
-            _ => continue,
-        }
-
-        match runtime.child.try_wait() {
-            Ok(Some(_)) => continue,
-            Ok(None) => {
-                active_roles.insert(runtime.summary.role.as_str());
-            }
-            Err(error) => {
-                return Err(anyhow!(
-                    "Failed checking runtime {} for task {task_id}: {error}",
-                    runtime.summary.runtime_id
-                ));
-            }
-        }
-    }
-
-    let mut roles = active_roles.into_iter().collect::<Vec<_>>();
-    roles.sort_unstable();
-    Ok(roles)
-}
-
 fn is_live_build_run_for_task_reset(
     run: &crate::app_service::RunProcess,
     sessions: &[AgentSessionDocument],
@@ -997,6 +1059,9 @@ fn is_live_build_run_for_task_reset(
                 }
             })?,
         };
+        if statuses.is_empty() {
+            return Ok(false);
+        }
         runtime_statuses_by_directory.insert(directory_key.clone(), statuses);
     }
 
