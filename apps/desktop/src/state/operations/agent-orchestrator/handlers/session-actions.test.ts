@@ -320,6 +320,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("keeps session active when authoritative build stop fails", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
+    const originalStopSession = adapter.stopSession;
+    let localStopCalls = 0;
+    adapter.hasSession = () => true;
+    adapter.stopSession = async () => {
+      localStopCalls += 1;
+    };
     let clearCalls = 0;
     let unsubscribeCalls = 0;
 
@@ -401,12 +407,14 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         "Failed to stop build session 'session-1': build stop failed",
       );
       expect(clearCalls).toBe(0);
+      expect(localStopCalls).toBe(0);
       expect(unsubscribeCalls).toBe(0);
       expect(sessionsRef.current["session-1"]?.status).toBe("running");
       expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(1);
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(1);
     } finally {
       adapter.hasSession = originalHasSession;
+      adapter.stopSession = originalStopSession;
     }
   });
 
@@ -414,8 +422,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
     const originalStopSession = adapter.stopSession;
+    const callOrder: string[] = [];
     adapter.hasSession = () => true;
     adapter.stopSession = async () => {
+      callOrder.push("local-stop");
       throw new Error("local stop failed");
     };
 
@@ -474,7 +484,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
       refreshTaskData: async () => {},
       persistSessionSnapshot: async () => {},
-      stopBuildRun: async () => {},
+      stopBuildRun: async () => {
+        callOrder.push("host-stop");
+      },
     });
 
     const originalWarn = console.warn;
@@ -482,6 +494,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     try {
       await expect(actions.stopAgentSession("session-1")).resolves.toBeUndefined();
+      expect(callOrder).toEqual(["host-stop", "local-stop"]);
       expect(clearCalls).toBe(1);
       expect(unsubscribeCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.status).toBe("stopped");

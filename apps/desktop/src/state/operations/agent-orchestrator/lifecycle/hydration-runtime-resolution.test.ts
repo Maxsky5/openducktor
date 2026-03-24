@@ -17,13 +17,11 @@ const createRecord = (
   runtimeKind: "opencode",
   sessionId: "session-1",
   externalSessionId: "external-1",
-  taskId: "task-1",
   role,
   scenario: role === "qa" ? "qa_review" : "build_implementation_start",
-  status: "running",
   startedAt: "2026-03-01T10:00:00.000Z",
-  updatedAt: "2026-03-01T10:00:00.000Z",
   workingDirectory,
+  selectedModel: null,
 });
 
 const createRun = (workingDirectory: string): RunSummary => ({
