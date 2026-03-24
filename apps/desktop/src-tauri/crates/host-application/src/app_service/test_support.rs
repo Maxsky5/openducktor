@@ -1251,6 +1251,7 @@ pub(crate) fn spawn_opencode_session_status_server(
     response_body: &'static str,
 ) -> Result<(u16, std::thread::JoinHandle<()>)> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
+    listener.set_nonblocking(true)?;
     let port = listener.local_addr()?.port();
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1258,11 +1259,24 @@ pub(crate) fn spawn_opencode_session_status_server(
         response_body
     );
     let handle = std::thread::spawn(move || {
-        if let Ok((mut stream, _)) = listener.accept() {
-            let mut request_buffer = [0_u8; 4096];
-            let _ = stream.read(&mut request_buffer);
-            let _ = stream.write_all(response.as_bytes());
-            let _ = stream.flush();
+        let deadline = Instant::now() + Duration::from_secs(1);
+        loop {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    let mut request_buffer = [0_u8; 4096];
+                    let _ = stream.read(&mut request_buffer);
+                    let _ = stream.write_all(response.as_bytes());
+                    let _ = stream.flush();
+                    break;
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    if Instant::now() >= deadline {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(_) => break,
+            }
         }
     });
     Ok((port, handle))

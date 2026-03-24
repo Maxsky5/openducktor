@@ -435,16 +435,15 @@ impl AppService {
 
             let worktree_key = normalize_path_key(session.working_directory.as_str());
             let fallback_runtime_kind = parse_runtime_kind(session.runtime_kind.as_str());
-            let runtime_route = runtime_routes_by_worktree
-                .get(worktree_key.as_str())
-                .or_else(|| {
-                    fallback_runtime_kind.and_then(|kind| repo_runtime_routes_by_kind.get(&kind))
-                });
+            let worktree_runtime_route = runtime_routes_by_worktree.get(worktree_key.as_str());
+            let repo_runtime_route =
+                fallback_runtime_kind.and_then(|kind| repo_runtime_routes_by_kind.get(&kind));
+            let runtime_route = worktree_runtime_route.or(repo_runtime_route);
             let Some(runtime_route) = runtime_route else {
                 continue;
             };
             if !runtime_statuses_by_directory.contains_key(worktree_key.as_str()) {
-                let statuses = load_opencode_session_statuses(
+                let mut statuses = load_opencode_session_statuses(
                     runtime_route,
                     session.working_directory.as_str(),
                 )
@@ -455,7 +454,35 @@ impl AppService {
                         Err(error)
                     }
                 })?;
-                runtime_statuses_by_directory.insert(worktree_key.clone(), statuses);
+
+                if statuses.is_empty() {
+                    if let (Some(primary_route), Some(fallback_route)) =
+                        (worktree_runtime_route, repo_runtime_route)
+                    {
+                        let primary_endpoint = runtime_route_endpoint(primary_route);
+                        let fallback_endpoint = runtime_route_endpoint(fallback_route);
+                        if primary_endpoint != fallback_endpoint {
+                            let fallback_statuses = load_opencode_session_statuses(
+                                fallback_route,
+                                session.working_directory.as_str(),
+                            )
+                            .or_else(|error| {
+                                if is_unreachable_opencode_session_status_error(&error) {
+                                    Ok(OpencodeSessionStatusMap::new())
+                                } else {
+                                    Err(error)
+                                }
+                            })?;
+                            if !fallback_statuses.is_empty() {
+                                statuses = fallback_statuses;
+                            }
+                        }
+                    }
+                }
+
+                if !statuses.is_empty() {
+                    runtime_statuses_by_directory.insert(worktree_key.clone(), statuses);
+                }
             }
 
             if runtime_statuses_by_directory
@@ -697,6 +724,12 @@ fn parse_runtime_kind(value: &str) -> Option<AgentRuntimeKind> {
     match value.trim() {
         "opencode" => Some(AgentRuntimeKind::Opencode),
         _ => None,
+    }
+}
+
+fn runtime_route_endpoint(route: &RuntimeRoute) -> &str {
+    match route {
+        RuntimeRoute::LocalHttp { endpoint } => endpoint.as_str(),
     }
 }
 
@@ -1026,6 +1059,9 @@ fn is_live_build_run_for_task_reset(
                 }
             })?,
         };
+        if statuses.is_empty() {
+            return Ok(false);
+        }
         runtime_statuses_by_directory.insert(directory_key.clone(), statuses);
     }
 

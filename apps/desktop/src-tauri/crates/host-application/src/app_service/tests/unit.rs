@@ -1002,6 +1002,100 @@ fn task_delete_rejects_live_build_session_status_with_repo_runtime_without_run()
 }
 
 #[test]
+fn task_delete_rejects_live_build_session_status_with_stale_run_route_and_repo_runtime_fallback(
+) -> Result<()> {
+    let repo_path = unique_temp_path("delete-task-live-shared-runtime-fallback-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let task = make_task("task-1", "task", TaskStatus::InProgress);
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            ..Default::default()
+        },
+    )?;
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "build-session".to_string(),
+        external_session_id: Some("external-build-session".to_string()),
+        role: "build".to_string(),
+        scenario: "build_implementation_start".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "opencode".to_string(),
+        working_directory: repo_path.to_string_lossy().to_string(),
+        selected_model: None,
+    }];
+
+    let stale_route_port = {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.local_addr()?.port()
+    };
+    service
+        .runs
+        .lock()
+        .expect("run state lock poisoned")
+        .insert(
+            "run-stale".to_string(),
+            crate::app_service::RunProcess {
+                summary: serde_json::from_value(json!({
+                    "runId": "run-stale",
+                    "runtimeKind": "opencode",
+                    "runtimeRoute": {
+                        "type": "local_http",
+                        "endpoint": format!("http://127.0.0.1:{stale_route_port}"),
+                    },
+                    "repoPath": repo_path.to_string_lossy().to_string(),
+                    "taskId": "task-1",
+                    "branch": "odt/task-1",
+                    "worktreePath": repo_path.to_string_lossy().to_string(),
+                    "port": stale_route_port,
+                    "state": "running",
+                    "lastMessage": null,
+                    "startedAt": "2026-03-17T11:00:00Z",
+                }))?,
+                child: None,
+                _opencode_process_guard: None,
+                repo_path: repo_path.to_string_lossy().to_string(),
+                task_id: "task-1".to_string(),
+                worktree_path: repo_path.to_string_lossy().to_string(),
+                repo_config: host_infra_system::RepoConfig {
+                    branch_prefix: "odt".to_string(),
+                    ..Default::default()
+                },
+            },
+        );
+
+    let (port, server_handle) =
+        spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"busy"}}"#)?;
+    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
+
+    let error = service
+        .task_delete(&repo_path.to_string_lossy(), "task-1", false)
+        .expect_err("live shared-runtime session should block delete");
+    assert!(error
+        .to_string()
+        .contains("Cannot delete tasks with active builder work in progress"));
+    server_handle
+        .join()
+        .expect("status server thread should finish");
+    Ok(())
+}
+
+#[test]
 fn task_delete_clears_stale_runs_after_successful_delete() -> Result<()> {
     let repo_path = unique_temp_path("delete-task-clears-stale-runs-repo");
     fs::create_dir_all(&repo_path)?;
@@ -1167,6 +1261,100 @@ fn task_reset_implementation_rejects_live_build_session_status() -> Result<()> {
     assert!(error
         .to_string()
         .contains("Cannot reset implementation while"));
+    server_handle
+        .join()
+        .expect("status server thread should finish");
+    Ok(())
+}
+
+#[test]
+fn task_reset_implementation_rejects_live_build_session_status_with_stale_run_route_and_repo_runtime_fallback(
+) -> Result<()> {
+    let repo_path = unique_temp_path("reset-implementation-live-shared-runtime-fallback-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let task = make_task("task-1", "task", TaskStatus::InProgress);
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            ..Default::default()
+        },
+    )?;
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "build-session".to_string(),
+        external_session_id: Some("external-build-session".to_string()),
+        role: "build".to_string(),
+        scenario: "build_implementation_start".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "opencode".to_string(),
+        working_directory: repo_path.to_string_lossy().to_string(),
+        selected_model: None,
+    }];
+
+    let stale_route_port = {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.local_addr()?.port()
+    };
+    service
+        .runs
+        .lock()
+        .expect("run state lock poisoned")
+        .insert(
+            "run-stale".to_string(),
+            crate::app_service::RunProcess {
+                summary: serde_json::from_value(json!({
+                    "runId": "run-stale",
+                    "runtimeKind": "opencode",
+                    "runtimeRoute": {
+                        "type": "local_http",
+                        "endpoint": format!("http://127.0.0.1:{stale_route_port}"),
+                    },
+                    "repoPath": repo_path.to_string_lossy().to_string(),
+                    "taskId": "task-1",
+                    "branch": "odt/task-1",
+                    "worktreePath": repo_path.to_string_lossy().to_string(),
+                    "port": stale_route_port,
+                    "state": "running",
+                    "lastMessage": null,
+                    "startedAt": "2026-03-17T11:00:00Z",
+                }))?,
+                child: None,
+                _opencode_process_guard: None,
+                repo_path: repo_path.to_string_lossy().to_string(),
+                task_id: "task-1".to_string(),
+                worktree_path: repo_path.to_string_lossy().to_string(),
+                repo_config: host_infra_system::RepoConfig {
+                    branch_prefix: "odt".to_string(),
+                    ..Default::default()
+                },
+            },
+        );
+
+    let (port, server_handle) =
+        spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"busy"}}"#)?;
+    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
+
+    let error = service
+        .task_reset_implementation(&repo_path.to_string_lossy(), "task-1")
+        .expect_err("live shared-runtime session should block reset");
+    assert!(error
+        .to_string()
+        .contains("Cannot reset implementation while active build session(s) exist"));
     server_handle
         .join()
         .expect("status server thread should finish");
