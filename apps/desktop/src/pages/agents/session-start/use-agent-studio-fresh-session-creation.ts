@@ -40,7 +40,6 @@ type UseAgentStudioFreshSessionCreationArgs = {
   isSessionWorking: boolean;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
-  updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent?: () => void;
   setStartingActivityCountByContext: Dispatch<SetStateAction<Record<string, number>>>;
@@ -61,7 +60,6 @@ export function useAgentStudioFreshSessionCreation({
   isSessionWorking,
   startAgentSession,
   sendAgentMessage,
-  updateAgentSessionModel,
   updateQuery,
   onContextSwitchIntent,
   setStartingActivityCountByContext,
@@ -209,9 +207,6 @@ export function useAgentStudioFreshSessionCreation({
           return undefined;
         }
         if (decision.startMode === "reuse" && decision.sourceSessionId) {
-          if (decision.selectedModel) {
-            updateAgentSessionModel(decision.sourceSessionId, decision.selectedModel);
-          }
           if (
             shouldTriggerContextSwitchIntent({
               currentSessionId: activeSession?.sessionId ?? null,
@@ -275,7 +270,6 @@ export function useAgentStudioFreshSessionCreation({
       role,
       sendFreshSessionKickoff,
       startFreshSession,
-      updateAgentSessionModel,
     ],
   );
 

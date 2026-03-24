@@ -1,4 +1,5 @@
 import type { AgentRole } from "@openducktor/core";
+import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import {
   buildRoleSessionSequenceById,
   compareAgentSessionRecency,
@@ -29,6 +30,13 @@ export const buildReusableSessionOptions = ({
       roleLabelByRole: AGENT_ROLE_LABELS,
     }),
     description: formatAgentSessionOptionDescription(session),
+    selectedModel: session.selectedModel
+      ? {
+          ...session.selectedModel,
+          runtimeKind:
+            session.selectedModel.runtimeKind ?? session.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+        }
+      : null,
     ...(index === 0 ? { secondaryLabel: "Latest" } : {}),
   }));
 };

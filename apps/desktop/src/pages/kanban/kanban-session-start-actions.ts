@@ -64,7 +64,7 @@ export const startKanbanSessionFlow = async ({
     taskId: intent.taskId,
     role: intent.role,
     scenario: intent.scenario,
-    selectedModel: selection,
+    selectedModel: intent.startMode === "reuse" ? null : selection,
     sendKickoff: false,
     startMode: intent.startMode,
     ...(intent.sourceSessionId ? { sourceSessionId: intent.sourceSessionId } : {}),
@@ -73,7 +73,7 @@ export const startKanbanSessionFlow = async ({
     ...(builderContext ? { builderContext } : {}),
   });
 
-  if (selection) {
+  if (selection && intent.startMode !== "reuse") {
     updateAgentSessionModel(sessionId, selection);
   }
 

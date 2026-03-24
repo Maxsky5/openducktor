@@ -537,6 +537,44 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
+  test("reuse confirm does not overwrite the reused session model", async () => {
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onDelegate as (taskId: string) => void)("TASK-123");
+    });
+
+    await act(async () => {
+      (
+        latestSessionStartModalModel?.onConfirm as (input: {
+          runInBackground?: boolean;
+          startMode?: "fresh" | "reuse" | "fork";
+          sourceSessionId?: string | null;
+        }) => void
+      )({
+        startMode: "reuse",
+        sourceSessionId: "session-existing",
+      });
+      await Promise.resolve();
+    });
+
+    expect(startAgentSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "TASK-123",
+        role: "build",
+        scenario: "build_implementation_start",
+        startMode: "reuse",
+        sourceSessionId: "session-existing",
+        selectedModel: null,
+      }),
+    );
+    expect(updateAgentSessionModelMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   test("background kickoff pending does not keep modal in loading state on next open", async () => {
     let resolveKickoff: (() => void) | null = null;
     sendAgentMessageMock.mockImplementationOnce(

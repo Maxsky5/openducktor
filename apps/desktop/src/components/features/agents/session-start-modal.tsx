@@ -96,17 +96,21 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     : "";
   const selectedVariant = selectedModelSelection?.variant ?? "";
   const hasExistingSessionOptions = existingSessionOptions.length > 0;
+  const isReuseMode = selectedStartMode === "reuse";
   const requiresExistingSession = selectedStartMode === "reuse" || selectedStartMode === "fork";
   const hasExistingSessionSelection = existingSessionOptions.some(
     (option) => option.value === selectedSourceSessionId,
   );
   const confirmDisabled =
     isStarting ||
-    isSelectionCatalogLoading ||
-    !selectedModelSelection ||
+    (!isReuseMode && (isSelectionCatalogLoading || !selectedModelSelection)) ||
     (requiresExistingSession && !hasExistingSessionSelection);
-  const agentDisabled = isSelectionCatalogLoading || !supportsProfiles || agentOptions.length === 0;
+  const runtimeDisabled = isSelectionCatalogLoading || isReuseMode;
+  const agentDisabled =
+    isReuseMode || isSelectionCatalogLoading || !supportsProfiles || agentOptions.length === 0;
+  const modelDisabled = isReuseMode || isSelectionCatalogLoading;
   const variantDisabled =
+    isReuseMode ||
     isSelectionCatalogLoading ||
     !selectedModelSelection ||
     !supportsVariants ||
@@ -123,7 +127,9 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   };
 
   let agentHelperText: string | null = null;
-  if (isSelectionCatalogLoading) {
+  if (isReuseMode) {
+    agentHelperText = "Reuse mode keeps the previous session agent/model/variant.";
+  } else if (isSelectionCatalogLoading) {
     agentHelperText = "Loading agents for the selected runtime.";
   } else if (!supportsProfiles) {
     agentHelperText = "This runtime manages agent selection automatically.";
@@ -217,7 +223,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                 <AgentRuntimeCombobox
                   value={selectedRuntimeKind}
                   runtimeOptions={runtimeOptions}
-                  disabled={isSelectionCatalogLoading}
+                  disabled={runtimeDisabled}
                   className="sm:min-w-[20rem]"
                   onValueChange={onSelectRuntime}
                 />
@@ -256,7 +262,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                     options={modelOptions}
                     groups={modelGroups}
                     placeholder={isSelectionCatalogLoading ? "Loading models..." : "Select model"}
-                    disabled={isSelectionCatalogLoading}
+                    disabled={modelDisabled}
                     className="w-full"
                     onValueChange={onSelectModel}
                   />

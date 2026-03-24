@@ -265,7 +265,6 @@ export function useAgentStudioSessionStartFlow({
     isSessionWorking,
     startAgentSession,
     sendAgentMessage,
-    updateAgentSessionModel,
     updateQuery,
     ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
     setStartingActivityCountByContext,

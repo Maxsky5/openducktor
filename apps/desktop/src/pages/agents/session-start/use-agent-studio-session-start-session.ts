@@ -80,9 +80,6 @@ export function useAgentStudioSessionStartSession({
         }
         const selectedModel = decision.selectedModel;
         if (decision.startMode === "reuse" && decision.sourceSessionId) {
-          if (selectedModel) {
-            updateAgentSessionModel(decision.sourceSessionId, selectedModel);
-          }
           applyAgentStudioSelectionQuery(updateQuery, {
             taskId,
             sessionId: decision.sourceSessionId,
@@ -132,7 +129,7 @@ export function useAgentStudioSessionStartSession({
           ...(builderContext ? { builderContext } : {}),
         });
 
-        if (selectedModel) {
+        if (selectedModel && decision.startMode !== "reuse") {
           updateAgentSessionModel(sessionId, selectedModel);
         }
 
