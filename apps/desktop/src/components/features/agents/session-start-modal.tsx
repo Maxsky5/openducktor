@@ -127,10 +127,10 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   };
 
   let agentHelperText: string | null = null;
-  if (isSelectionCatalogLoading) {
-    agentHelperText = "Loading agents for the selected runtime.";
-  } else if (isReuseMode) {
+  if (isReuseMode) {
     agentHelperText = "Reuse mode keeps the previous session agent/model/variant.";
+  } else if (isSelectionCatalogLoading) {
+    agentHelperText = "Loading agents for the selected runtime.";
   } else if (!supportsProfiles) {
     agentHelperText = "This runtime manages agent selection automatically.";
   } else if (agentOptions.length === 0) {

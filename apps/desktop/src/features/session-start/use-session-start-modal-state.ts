@@ -123,6 +123,44 @@ const resolveSourceSelection = (
   return selectedOption?.selectedModel ?? null;
 };
 
+const applyReuseSourceSelection = ({
+  catalog,
+  options,
+  runtimeDefinitions,
+  sourceSessionId,
+  setRequestedRuntimeKind,
+  setSelection,
+}: {
+  catalog: AgentModelCatalog | null;
+  options: SessionStartExistingSessionOption[];
+  runtimeDefinitions: RuntimeDescriptor[];
+  sourceSessionId: string;
+  setRequestedRuntimeKind: (runtimeKind: RuntimeKind) => void;
+  setSelection: (selection: AgentModelSelection | null) => void;
+}): void => {
+  const sourceSelection = resolveSourceSelection(options, sourceSessionId);
+  const nextRuntimeKind = resolveRuntimeKindSelection({
+    runtimeDefinitions,
+    requestedRuntimeKind: sourceSelection?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+  });
+  setRequestedRuntimeKind(nextRuntimeKind);
+
+  if (!sourceSelection) {
+    setSelection(null);
+    return;
+  }
+
+  setSelection(
+    normalizeSelectionForCatalog(catalog, {
+      ...sourceSelection,
+      runtimeKind: nextRuntimeKind,
+    }) ?? {
+      ...sourceSelection,
+      runtimeKind: nextRuntimeKind,
+    },
+  );
+};
+
 export function useSessionStartModalState({
   activeRepo,
   repoSettings,
@@ -233,24 +271,14 @@ export function useSessionStartModalState({
         return;
       }
       setSelectedSourceSessionId(nextSourceSessionId);
-      const sourceSelection = resolveSourceSelection(existingSessionOptions, nextSourceSessionId);
-      if (!sourceSelection) {
-        return;
-      }
-      const nextRuntimeKind = resolveRuntimeKindSelection({
+      applyReuseSourceSelection({
+        catalog,
+        options: existingSessionOptions,
         runtimeDefinitions,
-        requestedRuntimeKind: sourceSelection.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+        sourceSessionId: nextSourceSessionId,
+        setRequestedRuntimeKind,
+        setSelection,
       });
-      setRequestedRuntimeKind(nextRuntimeKind);
-      setSelection(
-        normalizeSelectionForCatalog(catalog, {
-          ...sourceSelection,
-          runtimeKind: nextRuntimeKind,
-        }) ?? {
-          ...sourceSelection,
-          runtimeKind: nextRuntimeKind,
-        },
-      );
     },
     [catalog, existingSessionOptions, runtimeDefinitions, selectedSourceSessionId],
   );
@@ -261,30 +289,23 @@ export function useSessionStartModalState({
       if (selectedStartMode !== "reuse") {
         return;
       }
-      const sourceSelection = resolveSourceSelection(existingSessionOptions, sessionId);
-      if (!sourceSelection) {
-        return;
-      }
-      const nextRuntimeKind = resolveRuntimeKindSelection({
+      applyReuseSourceSelection({
+        catalog,
+        options: existingSessionOptions,
         runtimeDefinitions,
-        requestedRuntimeKind: sourceSelection.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+        sourceSessionId: sessionId,
+        setRequestedRuntimeKind,
+        setSelection,
       });
-      setRequestedRuntimeKind(nextRuntimeKind);
-      setSelection(
-        normalizeSelectionForCatalog(catalog, {
-          ...sourceSelection,
-          runtimeKind: nextRuntimeKind,
-        }) ?? {
-          ...sourceSelection,
-          runtimeKind: nextRuntimeKind,
-        },
-      );
     },
     [catalog, existingSessionOptions, runtimeDefinitions, selectedStartMode],
   );
 
   useEffect(() => {
     if (!activeRole) {
+      return;
+    }
+    if (selectedStartMode === "reuse") {
       return;
     }
 
@@ -300,22 +321,36 @@ export function useSessionStartModalState({
       const next = normalizedCurrent ?? fallback;
       return isSameSelection(current, next) ? current : next;
     });
-  }, [activeRole, catalog, intent?.selectedModel, repoSettings, selectedRuntimeKind]);
+  }, [
+    activeRole,
+    catalog,
+    intent?.selectedModel,
+    repoSettings,
+    selectedRuntimeKind,
+    selectedStartMode,
+  ]);
 
   useEffect(() => {
     if (selectedStartMode !== "reuse") {
       return;
     }
-    const sourceSelection = resolveSourceSelection(existingSessionOptions, selectedSourceSessionId);
-    if (!sourceSelection) {
+    if (!selectedSourceSessionId) {
       return;
     }
+    const sourceSelection = resolveSourceSelection(existingSessionOptions, selectedSourceSessionId);
     const nextRuntimeKind = resolveRuntimeKindSelection({
       runtimeDefinitions,
-      requestedRuntimeKind: sourceSelection.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+      requestedRuntimeKind: sourceSelection?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
     });
-    if (nextRuntimeKind !== requestedRuntimeKind) {
-      setRequestedRuntimeKind(nextRuntimeKind);
+    setRequestedRuntimeKind((current) => {
+      if (current === nextRuntimeKind) {
+        return current;
+      }
+      return nextRuntimeKind;
+    });
+    if (!sourceSelection) {
+      setSelection((current) => (current === null ? current : null));
+      return;
     }
     const nextSelection = normalizeSelectionForCatalog(catalog, {
       ...sourceSelection,
@@ -328,7 +363,6 @@ export function useSessionStartModalState({
   }, [
     catalog,
     existingSessionOptions,
-    requestedRuntimeKind,
     runtimeDefinitions,
     selectedSourceSessionId,
     selectedStartMode,
