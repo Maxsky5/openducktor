@@ -118,4 +118,74 @@ describe("SessionStartModal", () => {
 
     unmount();
   });
+
+  test("disables runtime and model selectors when reusing an existing session", () => {
+    const { container, unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          availableStartModes: ["fresh", "reuse"],
+          selectedStartMode: "reuse",
+          existingSessionOptions: [{ value: "session-1", label: "Session #1" }],
+          selectedSourceSessionId: "session-1",
+        }),
+      }),
+    );
+
+    const runtimeCombobox = container.querySelector("agent-runtime-combobox");
+    if (!runtimeCombobox) {
+      throw new Error("Expected runtime combobox element");
+    }
+    expect(runtimeCombobox.hasAttribute("disabled")).toBe(true);
+
+    const allComboboxes = container.querySelectorAll("mock-combobox");
+    expect(allComboboxes.length).toBeGreaterThanOrEqual(4);
+
+    const sourceCombobox = allComboboxes[0];
+    const agentCombobox = allComboboxes[1];
+    const modelCombobox = allComboboxes[2];
+    const variantCombobox = allComboboxes[3];
+
+    if (!sourceCombobox || !agentCombobox || !modelCombobox || !variantCombobox) {
+      throw new Error("Expected existing session + agent/model/variant comboboxes");
+    }
+
+    expect(sourceCombobox.hasAttribute("disabled")).toBe(false);
+    expect(agentCombobox.hasAttribute("disabled")).toBe(true);
+    expect(modelCombobox.hasAttribute("disabled")).toBe(true);
+    expect(variantCombobox.hasAttribute("disabled")).toBe(true);
+
+    unmount();
+  });
+
+  test("allows reuse confirm while catalog is loading", () => {
+    const onConfirm = mock(() => {});
+    const { container, unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          isSelectionCatalogLoading: true,
+          selectedModelSelection: null,
+          availableStartModes: ["fresh", "reuse"],
+          selectedStartMode: "reuse",
+          existingSessionOptions: [{ value: "session-1", label: "Session #1" }],
+          selectedSourceSessionId: "session-1",
+          onConfirm,
+        }),
+      }),
+    );
+
+    const form = container.querySelector("form");
+    if (!form) {
+      throw new Error("Expected form element");
+    }
+
+    fireEvent.submit(form);
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      runInBackground: false,
+      startMode: "reuse",
+      sourceSessionId: "session-1",
+    });
+
+    unmount();
+  });
 });
