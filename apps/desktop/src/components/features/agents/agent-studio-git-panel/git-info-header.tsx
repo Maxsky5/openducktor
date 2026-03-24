@@ -295,6 +295,7 @@ function GitActionRow({
                   }
                 : undefined
             }
+            wrapTrigger
           />
         )}
         <span className="inline-flex" data-testid="agent-studio-git-pull-tooltip-trigger">
@@ -476,6 +477,7 @@ export function GitInfoHeader({
     !isRepositoryMode &&
     !isDetachedHead &&
     hasTargetBranch &&
+    !hasUncommittedFiles &&
     !isAnyActionInFlight &&
     !isGitActionsLocked &&
     rebaseOntoTarget != null;
@@ -496,9 +498,11 @@ export function GitInfoHeader({
     ? "Rebasing"
     : isGitActionsLocked
       ? (gitActionsLockReason ?? "Git actions are disabled.")
-      : rebaseBehindCount != null && rebaseBehindCount > 0
-        ? `Rebase onto target (${rebaseBehindCount} behind)`
-        : "Rebase onto target";
+      : hasUncommittedFiles
+        ? "Commit or stash changes before rebasing"
+        : rebaseBehindCount != null && rebaseBehindCount > 0
+          ? `Rebase onto target (${rebaseBehindCount} behind)`
+          : "Rebase onto target";
   const pullTooltip = isRebasing
     ? "Pulling"
     : isGitActionsLocked
