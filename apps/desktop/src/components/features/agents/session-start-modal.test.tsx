@@ -188,4 +188,26 @@ describe("SessionStartModal", () => {
 
     unmount();
   });
+
+  test("shows reuse helper text even when catalog is loading", () => {
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          isSelectionCatalogLoading: true,
+          selectedModelSelection: null,
+          availableStartModes: ["fresh", "reuse"],
+          selectedStartMode: "reuse",
+          existingSessionOptions: [{ value: "session-1", label: "Session #1" }],
+          selectedSourceSessionId: "session-1",
+        }),
+      }),
+    );
+
+    expect(
+      screen.getByText("Reuse mode keeps the previous session agent/model/variant."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Loading agents for the selected runtime.")).toBeNull();
+
+    unmount();
+  });
 });

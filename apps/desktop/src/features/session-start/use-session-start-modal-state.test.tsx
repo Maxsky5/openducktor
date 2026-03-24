@@ -52,6 +52,12 @@ const CATALOG: AgentModelCatalog = {
   ],
 };
 
+const ALTERNATE_RUNTIME_DESCRIPTOR = {
+  ...OPENCODE_RUNTIME_DESCRIPTOR,
+  kind: "alternate-runtime",
+  label: "Alternate Runtime",
+} as const;
+
 const createRepoSettings = (
   overrides: Partial<RepoSettingsInput["agentDefaults"]> = {},
 ): RepoSettingsInput => ({
@@ -390,7 +396,11 @@ describe("useSessionStartModalState", () => {
   });
 
   test("locks selection to selected source session model in reuse mode", async () => {
-    const harness = createHookHarness(createBaseProps());
+    const harness = createHookHarness(
+      createBaseProps({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, ALTERNATE_RUNTIME_DESCRIPTOR],
+      }),
+    );
 
     await harness.mount();
 
@@ -406,7 +416,7 @@ describe("useSessionStartModalState", () => {
             label: "Builder session 2",
             description: "Latest builder session",
             selectedModel: {
-              runtimeKind: "opencode",
+              runtimeKind: "alternate-runtime",
               providerId: "anthropic",
               modelId: "claude-sonnet",
               variant: "default",
@@ -433,6 +443,7 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selectedStartMode).toBe("reuse");
+    expect(harness.getLatest().selectedRuntimeKind).toBe("opencode");
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "opencode",
       providerId: "openai",
@@ -445,13 +456,68 @@ describe("useSessionStartModalState", () => {
       harness.getLatest().handleSelectSourceSession("session-newer");
     });
 
+    expect(harness.getLatest().selectedRuntimeKind).toBe("alternate-runtime");
     expect(harness.getLatest().selection).toEqual({
-      runtimeKind: "opencode",
+      runtimeKind: "alternate-runtime",
       providerId: "anthropic",
       modelId: "claude-sonnet",
       variant: "default",
       profileId: "build-agent",
     });
+
+    await harness.unmount();
+  });
+
+  test("clears locked selection when reused source session has no model", async () => {
+    const harness = createHookHarness(createBaseProps());
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-10",
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        existingSessionOptions: [
+          {
+            value: "session-with-model",
+            label: "Builder session with model",
+            description: "Session with persisted model",
+            selectedModel: {
+              runtimeKind: "opencode",
+              providerId: "openai",
+              modelId: "gpt-5",
+              variant: "high",
+              profileId: "spec-agent",
+            },
+          },
+          {
+            value: "session-without-model",
+            label: "Builder session without model",
+            description: "Session without persisted model",
+            selectedModel: null,
+          },
+        ],
+        initialSourceSessionId: "session-with-model",
+        postStartAction: "kickoff",
+        title: "Start Builder Session",
+      });
+    });
+
+    expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "spec-agent",
+    });
+
+    await harness.run(() => {
+      harness.getLatest().handleSelectSourceSession("session-without-model");
+    });
+
+    expect(harness.getLatest().selection).toBeNull();
 
     await harness.unmount();
   });
