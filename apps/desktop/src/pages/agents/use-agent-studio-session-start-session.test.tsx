@@ -165,4 +165,45 @@ describe("useAgentStudioSessionStartSession", () => {
 
     await harness.unmount();
   });
+
+  test("does not overwrite selected model when reusing an existing session", async () => {
+    const updateAgentSessionModel = mock(() => {});
+    const updateQuery = mock(() => {});
+    const startAgentSession = mock(async () => "session-new");
+    const harness = createHookHarness(
+      createBaseArgs({
+        startAgentSession,
+        updateAgentSessionModel,
+        updateQuery,
+        resolveRequestedDecision: async () => ({
+          selectedModel: {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "high",
+            profileId: "Hephaestus",
+          },
+          startMode: "reuse",
+          sourceSessionId: "session-existing",
+        }),
+      }),
+    );
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.startSession("composer_send");
+    });
+
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(updateAgentSessionModel).not.toHaveBeenCalled();
+    expect(updateQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task: "task-1",
+        session: "session-existing",
+        agent: "spec",
+      }),
+    );
+
+    await harness.unmount();
+  });
 });

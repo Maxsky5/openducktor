@@ -388,4 +388,71 @@ describe("useSessionStartModalState", () => {
 
     await harness.unmount();
   });
+
+  test("locks selection to selected source session model in reuse mode", async () => {
+    const harness = createHookHarness(createBaseProps());
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-9",
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        existingSessionOptions: [
+          {
+            value: "session-newer",
+            label: "Builder session 2",
+            description: "Latest builder session",
+            selectedModel: {
+              runtimeKind: "opencode",
+              providerId: "anthropic",
+              modelId: "claude-sonnet",
+              variant: "default",
+              profileId: "build-agent",
+            },
+          },
+          {
+            value: "session-older",
+            label: "Builder session 1",
+            description: "Older builder session",
+            selectedModel: {
+              runtimeKind: "opencode",
+              providerId: "openai",
+              modelId: "gpt-5",
+              variant: "high",
+              profileId: "spec-agent",
+            },
+          },
+        ],
+        initialSourceSessionId: "session-older",
+        postStartAction: "kickoff",
+        title: "Start Builder Session",
+      });
+    });
+
+    expect(harness.getLatest().selectedStartMode).toBe("reuse");
+    expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "spec-agent",
+    });
+
+    await harness.run(() => {
+      harness.getLatest().handleSelectSourceSession("session-newer");
+    });
+
+    expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "opencode",
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+      variant: "default",
+      profileId: "build-agent",
+    });
+
+    await harness.unmount();
+  });
 });

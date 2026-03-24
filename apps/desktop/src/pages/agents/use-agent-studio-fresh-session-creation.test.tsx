@@ -48,7 +48,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isSessionWorking: false,
   startAgentSession: async () => "session-new",
   sendAgentMessage: async () => {},
-  updateAgentSessionModel: () => {},
   updateQuery: () => {},
   setStartingActivityCountByContext: createSetStartingActivityCountByContext(),
   startingSessionByTaskRef: {
