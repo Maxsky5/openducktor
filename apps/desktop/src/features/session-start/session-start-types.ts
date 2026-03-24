@@ -10,6 +10,7 @@ export type SessionStartExistingSessionOption = {
   label: string;
   description: string;
   secondaryLabel?: string;
+  selectedModel?: AgentModelSelection | null;
 };
 
 export type SessionStartRequestReason =

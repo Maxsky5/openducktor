@@ -112,6 +112,17 @@ const resolveInitialSelection = (
   );
 };
 
+const resolveSourceSelection = (
+  options: SessionStartExistingSessionOption[],
+  sourceSessionId: string,
+): AgentModelSelection | null => {
+  if (!sourceSessionId) {
+    return null;
+  }
+  const selectedOption = options.find((option) => option.value === sourceSessionId);
+  return selectedOption?.selectedModel ?? null;
+};
+
 export function useSessionStartModalState({
   activeRepo,
   repoSettings,
@@ -214,13 +225,63 @@ export function useSessionStartModalState({
         return;
       }
       setSelectedStartMode(startMode);
+      if (startMode !== "reuse") {
+        return;
+      }
+      const nextSourceSessionId = selectedSourceSessionId || existingSessionOptions[0]?.value || "";
+      if (!nextSourceSessionId) {
+        return;
+      }
+      setSelectedSourceSessionId(nextSourceSessionId);
+      const sourceSelection = resolveSourceSelection(existingSessionOptions, nextSourceSessionId);
+      if (!sourceSelection) {
+        return;
+      }
+      const nextRuntimeKind = resolveRuntimeKindSelection({
+        runtimeDefinitions,
+        requestedRuntimeKind: sourceSelection.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+      });
+      setRequestedRuntimeKind(nextRuntimeKind);
+      setSelection(
+        normalizeSelectionForCatalog(catalog, {
+          ...sourceSelection,
+          runtimeKind: nextRuntimeKind,
+        }) ?? {
+          ...sourceSelection,
+          runtimeKind: nextRuntimeKind,
+        },
+      );
     },
-    [existingSessionOptions],
+    [catalog, existingSessionOptions, runtimeDefinitions, selectedSourceSessionId],
   );
 
-  const handleSelectSourceSession = useCallback((sessionId: string): void => {
-    setSelectedSourceSessionId(sessionId);
-  }, []);
+  const handleSelectSourceSession = useCallback(
+    (sessionId: string): void => {
+      setSelectedSourceSessionId(sessionId);
+      if (selectedStartMode !== "reuse") {
+        return;
+      }
+      const sourceSelection = resolveSourceSelection(existingSessionOptions, sessionId);
+      if (!sourceSelection) {
+        return;
+      }
+      const nextRuntimeKind = resolveRuntimeKindSelection({
+        runtimeDefinitions,
+        requestedRuntimeKind: sourceSelection.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+      });
+      setRequestedRuntimeKind(nextRuntimeKind);
+      setSelection(
+        normalizeSelectionForCatalog(catalog, {
+          ...sourceSelection,
+          runtimeKind: nextRuntimeKind,
+        }) ?? {
+          ...sourceSelection,
+          runtimeKind: nextRuntimeKind,
+        },
+      );
+    },
+    [catalog, existingSessionOptions, runtimeDefinitions, selectedStartMode],
+  );
 
   useEffect(() => {
     if (!activeRole) {
@@ -240,6 +301,38 @@ export function useSessionStartModalState({
       return isSameSelection(current, next) ? current : next;
     });
   }, [activeRole, catalog, intent?.selectedModel, repoSettings, selectedRuntimeKind]);
+
+  useEffect(() => {
+    if (selectedStartMode !== "reuse") {
+      return;
+    }
+    const sourceSelection = resolveSourceSelection(existingSessionOptions, selectedSourceSessionId);
+    if (!sourceSelection) {
+      return;
+    }
+    const nextRuntimeKind = resolveRuntimeKindSelection({
+      runtimeDefinitions,
+      requestedRuntimeKind: sourceSelection.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+    });
+    if (nextRuntimeKind !== requestedRuntimeKind) {
+      setRequestedRuntimeKind(nextRuntimeKind);
+    }
+    const nextSelection = normalizeSelectionForCatalog(catalog, {
+      ...sourceSelection,
+      runtimeKind: nextRuntimeKind,
+    }) ?? {
+      ...sourceSelection,
+      runtimeKind: nextRuntimeKind,
+    };
+    setSelection((current) => (isSameSelection(current, nextSelection) ? current : nextSelection));
+  }, [
+    catalog,
+    existingSessionOptions,
+    requestedRuntimeKind,
+    runtimeDefinitions,
+    selectedSourceSessionId,
+    selectedStartMode,
+  ]);
 
   useEffect(() => {
     if (selectedStartMode !== "reuse" && selectedStartMode !== "fork") {
