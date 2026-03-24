@@ -186,4 +186,54 @@ describe("useAgentStudioFreshSessionCreation", () => {
 
     await harness.unmount();
   });
+
+  test("reuses an existing session without starting a fresh one", async () => {
+    const startAgentSession = mock(async () => "session-new");
+    const sendAgentMessage = mock(async () => {});
+    const harness = createHookHarness(
+      createBaseArgs({
+        role: "build",
+        activeSession: createAgentSessionFixture({
+          sessionId: "active-build",
+          role: "build",
+          scenario: "build_implementation_start",
+          taskId: "task-1",
+        }),
+        startAgentSession,
+        sendAgentMessage,
+        resolveRequestedDecision: async () => ({
+          selectedModel: {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "high",
+            profileId: "Hephaestus",
+          },
+          startMode: "reuse",
+          sourceSessionId: "session-existing",
+        }),
+      }),
+    );
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleCreateSession({
+        id: "build:build_implementation_start:reuse",
+        role: "build",
+        scenario: "build_implementation_start",
+        label: "Builder · Continue",
+        description: "Reuse latest builder session",
+        disabled: false,
+      });
+    });
+    await harness.waitFor(() => sendAgentMessage.mock.calls.length > 0);
+
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).toHaveBeenCalledWith(
+      "session-existing",
+      expect.stringContaining("task-1"),
+    );
+
+    await harness.unmount();
+  });
 });
