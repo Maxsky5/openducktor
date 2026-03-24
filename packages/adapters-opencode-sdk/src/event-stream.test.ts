@@ -172,7 +172,7 @@ describe("event-stream", () => {
     expect(emitted.some((event) => event.type === "assistant_part")).toBe(true);
   });
 
-  test("emits session_idle for stop-finished assistant turns without visible text", async () => {
+  test("does not emit session_idle for stop-finished assistant turns without visible text", async () => {
     const emitted = await runEventStream([
       {
         type: "message.updated",
@@ -197,11 +197,11 @@ describe("event-stream", () => {
     ]);
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
-    expect(idleEvents).toHaveLength(1);
+    expect(idleEvents).toHaveLength(0);
     expect(emitted.some((event) => event.type === "assistant_message")).toBe(false);
   });
 
-  test("emits session_idle when assistant completion has completed time without finish stop", async () => {
+  test("does not emit session_idle when assistant completion has completed time without finish stop", async () => {
     const emitted = await runEventStream([
       {
         type: "message.updated",
@@ -229,11 +229,11 @@ describe("event-stream", () => {
     ]);
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
-    expect(idleEvents).toHaveLength(1);
+    expect(idleEvents).toHaveLength(0);
     expect(emitted.some((event) => event.type === "assistant_message")).toBe(true);
   });
 
-  test("deduplicates session_idle when a terminal assistant update is followed by session.idle", async () => {
+  test("emits only the upstream session.idle when a terminal assistant update is followed by session.idle", async () => {
     const emitted = await runEventStream([
       {
         type: "message.updated",
@@ -268,7 +268,7 @@ describe("event-stream", () => {
     expect(idleEvents).toHaveLength(1);
   });
 
-  test("deduplicates session_idle when session.idle arrives before a terminal assistant update", async () => {
+  test("preserves existing idle state when session.idle arrives before a terminal assistant update", async () => {
     const emitted = await runEventStream([
       {
         type: "session.idle",
@@ -303,7 +303,7 @@ describe("event-stream", () => {
     expect(idleEvents).toHaveLength(1);
   });
 
-  test("deduplicates session_idle across repeated terminal message updates", async () => {
+  test("does not emit session_idle across repeated terminal message updates", async () => {
     const terminalEvent = {
       type: "message.updated",
       properties: {
@@ -332,7 +332,7 @@ describe("event-stream", () => {
     const emitted = await runEventStream([terminalEvent, terminalEvent]);
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
-    expect(idleEvents).toHaveLength(1);
+    expect(idleEvents).toHaveLength(0);
   });
 
   test("deduplicates prompt-path idle against a later stream terminal update for the same message", async () => {
