@@ -484,7 +484,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("applies selected model immediately when reusing an in-memory session", async () => {
+  test("keeps existing selected model when reusing an in-memory session", async () => {
     const selectedModel: AgentModelSelection = {
       runtimeKind: "opencode",
       providerId: "openai",
@@ -493,6 +493,13 @@ describe("agent-orchestrator/handlers/start-session", () => {
       profileId: "Hephaestus",
     };
     let persistedSessions = 0;
+    const existingSelectedModel: AgentModelSelection = {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "medium",
+      profileId: "Sisyphus",
+    };
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         reused: {
@@ -517,7 +524,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           pendingQuestions: [],
           todos: [],
           modelCatalog: null,
-          selectedModel: null,
+          selectedModel: existingSelectedModel,
           isLoadingModelCatalog: false,
         },
       },
@@ -572,14 +579,14 @@ describe("agent-orchestrator/handlers/start-session", () => {
           selectedModel,
         }),
       ).resolves.toBe("reused");
-      expect(sessionsRef.current.reused?.selectedModel).toEqual(selectedModel);
-      expect(persistedSessions).toBe(1);
+      expect(sessionsRef.current.reused?.selectedModel).toEqual(existingSelectedModel);
+      expect(persistedSessions).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
     }
   });
 
-  test("starts a fresh session instead of reusing when selected runtime differs in memory", async () => {
+  test("reuses in-memory session even when selected runtime differs", async () => {
     const selectedModel: AgentModelSelection = {
       runtimeKind: "claude-code",
       providerId: "anthropic",
@@ -650,6 +657,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
+      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
       ensureRuntime: async () => ({
         kind: "claude-code",
         runtimeId: "runtime-claude",
@@ -667,17 +675,23 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      await expect(start({ taskId: "task-1", role: "build", selectedModel })).resolves.toBe(
-        "fresh-runtime-session",
-      );
-      expect(startCalls).toBe(1);
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_after_human_request_changes",
+          startMode: "reuse",
+          selectedModel,
+        }),
+      ).resolves.toBe("reused");
+      expect(startCalls).toBe(0);
     } finally {
       adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
     }
   });
 
-  test("starts a fresh session instead of reusing when selected agent profile differs", async () => {
+  test("reuses in-memory session even when selected agent profile differs", async () => {
     const selectedModel: AgentModelSelection = {
       runtimeKind: "opencode",
       providerId: "openai",
@@ -750,6 +764,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
+      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
@@ -767,10 +782,16 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      await expect(start({ taskId: "task-1", role: "build", selectedModel })).resolves.toBe(
-        "fresh-profile-session",
-      );
-      expect(startCalls).toBe(1);
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_after_human_request_changes",
+          startMode: "reuse",
+          selectedModel,
+        }),
+      ).resolves.toBe("reused");
+      expect(startCalls).toBe(0);
     } finally {
       adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
@@ -1201,7 +1222,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("starts a fresh session instead of reusing persisted session when selected runtime differs", async () => {
+  test("reuses persisted session when selected runtime differs", async () => {
     const selectedModel: AgentModelSelection = {
       runtimeKind: "claude-code",
       providerId: "anthropic",
@@ -1263,6 +1284,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
+      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
       ensureRuntime: async () => ({
         kind: "claude-code",
         runtimeId: "runtime-claude",
@@ -1276,10 +1298,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadAgentSessions: async () => {
         loadAgentSessionsCalls += 1;
         sessionsRef.current = {
-          "persisted-claude": {
-            runtimeKind: "claude-code",
-            sessionId: "persisted-claude",
-            externalSessionId: "external-claude",
+          "persisted-opencode": {
+            runtimeKind: "opencode",
+            sessionId: "persisted-opencode",
+            externalSessionId: "external-opencode",
             taskId: "task-1",
             role: "build",
             scenario: "build_after_human_request_changes",
@@ -1299,10 +1321,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
             todos: [],
             modelCatalog: null,
             selectedModel: {
-              runtimeKind: "claude-code",
-              providerId: "anthropic",
-              modelId: "claude-3-7-sonnet",
-              profileId: "Hephaestus",
+              runtimeKind: "opencode",
+              providerId: "openai",
+              modelId: "gpt-5",
+              profileId: "Ares",
             },
             isLoadingModelCatalog: false,
           },
@@ -1314,11 +1336,17 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      await expect(start({ taskId: "task-1", role: "build", selectedModel })).resolves.toBe(
-        "fresh-runtime-session",
-      );
-      expect(loadAgentSessionsCalls).toBe(0);
-      expect(startCalls).toBe(1);
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_after_human_request_changes",
+          startMode: "reuse",
+          selectedModel,
+        }),
+      ).resolves.toBe("persisted-opencode");
+      expect(loadAgentSessionsCalls).toBe(1);
+      expect(startCalls).toBe(0);
     } finally {
       adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
