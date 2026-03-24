@@ -40,7 +40,7 @@ use std::ffi::OsString;
 use std::fs;
 #[cfg(unix)]
 use std::fs::Permissions;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -1245,6 +1245,27 @@ pub(crate) fn init_git_repo(path: &Path) -> Result<()> {
         .stderr(Stdio::null())
         .status();
     Ok(())
+}
+
+pub(crate) fn spawn_opencode_session_status_server(
+    response_body: &'static str,
+) -> Result<(u16, std::thread::JoinHandle<()>)> {
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    let port = listener.local_addr()?.port();
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        response_body.len(),
+        response_body
+    );
+    let handle = std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut request_buffer = [0_u8; 4096];
+            let _ = stream.read(&mut request_buffer);
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.flush();
+        }
+    });
+    Ok((port, handle))
 }
 
 pub(crate) fn create_fake_opencode(path: &Path) -> Result<()> {
