@@ -10,7 +10,7 @@ import type {
   SendAgentUserMessageInput,
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
-import { emitIdleForSession, setSessionActive } from "./event-stream/shared";
+import { setSessionActive } from "./event-stream/shared";
 import {
   extractMessageTotalTokens,
   readMessageModelSelection,
@@ -355,16 +355,6 @@ export const sendUserMessage = async (input: {
     });
     input.session.emittedAssistantMessageIds.add(responseMessageId);
   }
-
-  emitIdleForSession(
-    input.session,
-    {
-      sessionId: input.session.summary.sessionId,
-      emit: (_sessionId, event) => input.emit(event),
-      now: input.now,
-    },
-    responseMessageId ?? undefined,
-  );
 };
 
 export const replyPermission = async (
