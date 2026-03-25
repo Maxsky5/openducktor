@@ -1,8 +1,15 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TEST_ROLE_OPTIONS } from "./agent-chat/agent-chat-test-fixtures";
 import { AgentStudioHeader } from "./agent-studio-header";
+
+(
+  globalThis as typeof globalThis & {
+    IS_REACT_ACT_ENVIRONMENT?: boolean;
+  }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 const roleIcon = (index: number) => {
   const option = TEST_ROLE_OPTIONS[index];
@@ -119,8 +126,15 @@ describe("AgentStudioHeader", () => {
     expect(html).toContain("Rework Agent Studio UI");
     expect(html).toContain("fairnest-97f");
     expect(html).toContain('aria-label="Open task details"');
+    expect(html).toMatch(/aria-label="Session history[^"]*"/);
     expect(html).toContain(">Open<");
     expect(html).toContain("Create session");
+    expect(html).not.toMatch(/flex-wrap/);
+    expect(html).toContain("mt-1 flex items-center gap-1.5");
+    const taskIdIndex = html.indexOf("fairnest-97f");
+    const openButtonIndex = html.indexOf('aria-label="Open task details"');
+    expect(taskIdIndex).toBeGreaterThan(-1);
+    expect(openButtonIndex).toBeGreaterThan(taskIdIndex);
     expect(html).not.toContain("Viewing Session");
     expect(html).not.toContain("Sessions:");
     expect(html).not.toContain("Messages:");
@@ -141,6 +155,75 @@ describe("AgentStudioHeader", () => {
     );
 
     expect(html).toContain("Agent Studio");
+  });
+
+  test("adds full task title as hover affordance on truncated heading", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: buildModel(),
+      }),
+    );
+
+    expect(html).toContain('title="Rework Agent Studio UI"');
+  });
+
+  test("shows selected session label in history trigger title", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: buildModel(),
+      }),
+    );
+
+    expect(html).toContain('title="Session history · Spec Revision · Spec"');
+  });
+
+  test("opens session history menu with grouped options and selects session", () => {
+    const onValueChange = mock(() => {});
+    const { unmount } = render(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          sessionSelector: {
+            value: "spec-session",
+            groups: [
+              {
+                label: "Spec sessions",
+                options: [
+                  {
+                    value: "spec-session",
+                    label: "Spec Revision · Spec",
+                    description: "Today · idle",
+                  },
+                ],
+              },
+              {
+                label: "Build sessions",
+                options: [
+                  {
+                    value: "build-session",
+                    label: "Builder Draft · Build",
+                    description: "Today · running",
+                  },
+                ],
+              },
+            ],
+            disabled: false,
+            onValueChange,
+          },
+        },
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Session history/i }));
+
+    expect(screen.getByText("Spec sessions")).toBeTruthy();
+    expect(screen.getByText("Build sessions")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Builder Draft · Build"));
+
+    expect(onValueChange).toHaveBeenCalledWith("build-session");
+
+    unmount();
   });
 
   test("hides the task details button when no task is selected", () => {
@@ -167,7 +250,47 @@ describe("AgentStudioHeader", () => {
       }),
     );
 
-    expect(html).toContain("disabled");
+    expect(html).toMatch(
+      /<button[^>]*(aria-label="Session history[^"]*"[^>]*disabled=""|disabled=""[^>]*aria-label="Session history[^"]*")/,
+    );
+    expect(html).toMatch(
+      /<button[^>]*(aria-label="Create session"[^>]*disabled=""|disabled=""[^>]*aria-label="Create session")/,
+    );
+  });
+
+  test("disables session history trigger when studio is not ready", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          agentStudioReady: false,
+        },
+      }),
+    );
+
+    expect(html).toMatch(/aria-label="Session history[^"]*"/);
+    expect(html).toMatch(
+      /<button[^>]*(aria-label="Session history[^"]*"[^>]*disabled=""|disabled=""[^>]*aria-label="Session history[^"]*")/,
+    );
+  });
+
+  test("disables session history trigger when selector is disabled", () => {
+    const model = buildModel();
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...model,
+          sessionSelector: {
+            ...model.sessionSelector,
+            disabled: true,
+          },
+        },
+      }),
+    );
+
+    expect(html).toMatch(
+      /<button[^>]*(aria-label="Session history[^"]*"[^>]*disabled=""|disabled=""[^>]*aria-label="Session history[^"]*")/,
+    );
   });
 
   test("disables create session while a session is starting without showing a loader", () => {
