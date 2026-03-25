@@ -532,7 +532,31 @@ describe("agents-page-session-tabs", () => {
     });
   });
 
-  test("shows qa step as active in ai_review when a new qa review session is running", () => {
+  test.each([
+    {
+      name: "running",
+      session: buildSession({ role: "qa", status: "running", scenario: "qa_review" }),
+      expected: { tone: "in_progress" as const, liveSession: "running" as const },
+    },
+    {
+      name: "waiting_input",
+      session: buildSession({
+        role: "qa",
+        status: "running",
+        scenario: "qa_review",
+        pendingQuestions: [{ requestId: "q-1", questions: [] }],
+      }),
+      expected: { tone: "waiting_input" as const, liveSession: "waiting_input" as const },
+    },
+    {
+      name: "error",
+      session: buildSession({ role: "qa", status: "error", scenario: "qa_review" }),
+      expected: { tone: "failed" as const, liveSession: "error" as const },
+    },
+  ])("shows qa step as active in ai_review when a new qa review session is $name", ({
+    session,
+    expected,
+  }) => {
     const task = buildTask({
       issueType: "feature",
       status: "ai_review",
@@ -559,15 +583,15 @@ describe("agents-page-session-tabs", () => {
       },
       roleSessionByRole: buildRoleSessionSummaryMap([
         buildSession({ role: "build", status: "stopped", scenario: "build_after_qa_rejected" }),
-        buildSession({ role: "qa", status: "running", scenario: "qa_review" }),
+        session,
       ]),
     });
 
     expect(states.qa).toEqual({
-      tone: "in_progress",
+      tone: expected.tone,
       availability: "available",
       completion: "in_progress",
-      liveSession: "running",
+      liveSession: expected.liveSession,
     });
   });
 
