@@ -1,18 +1,20 @@
 import { runBunAuditJson } from "./audit-utils";
 
-const HONO_ADVISORY_ID = "GHSA-xh87-mx6m-69f3";
-const HONO_MIN_SAFE_VERSION = "4.12.2";
+const HONO_ADVISORY_IDS = ["GHSA-xh87-mx6m-69f3", "GHSA-v8w9-8mx6-g223"] as const;
+const HONO_MIN_SAFE_VERSION = "4.12.7";
 
 const { parsed, exitCode } = runBunAuditJson("[deps:audit:hono]");
 
 const honoAdvisories = Array.isArray(parsed.hono) ? parsed.hono : [];
-const hasVulnerableHono = honoAdvisories.some((advisory) => {
-  return advisory.url?.includes(HONO_ADVISORY_ID);
+const detectedAdvisoryIds = HONO_ADVISORY_IDS.filter((advisoryId) => {
+  return honoAdvisories.some((advisory) => advisory.url?.includes(advisoryId));
 });
 
-if (hasVulnerableHono) {
+if (detectedAdvisoryIds.length > 0) {
   console.error(
-    `[deps:audit:hono] ${HONO_ADVISORY_ID} detected for hono. Lockfile must resolve hono >=${HONO_MIN_SAFE_VERSION}.`,
+    `[deps:audit:hono] Advisory detected for hono: ${detectedAdvisoryIds.join(
+      ", ",
+    )}. Lockfile must resolve hono >=${HONO_MIN_SAFE_VERSION}.`,
   );
   process.exit(1);
 }
