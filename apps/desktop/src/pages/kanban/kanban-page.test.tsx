@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoConfig,
@@ -10,6 +10,7 @@ import { act, isValidElement, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
+import { host } from "@/state/operations/host";
 import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -20,6 +21,9 @@ import {
 enableReactActEnvironment();
 
 const originalConsoleError = console.error;
+const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
 
 const startAgentSessionMock = mock(async () => "session-1");
 const sendAgentMessageMock = mock(async () => {});
@@ -324,27 +328,11 @@ const confirmSessionStartModal = async (input?: {
 };
 
 describe("KanbanPage session start modal flow", () => {
-  beforeAll(() => {
+  beforeEach(() => {
     mock.module("sonner", () => ({
       toast: {
         success: toastSuccessMock,
         error: toastErrorMock,
-      },
-    }));
-
-    mock.module("@/state/operations/host", () => ({
-      host: {
-        workspaceGetRepoConfig: workspaceGetRepoConfigMock,
-        workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
-        buildContinuationTargetGet: buildContinuationTargetGetMock,
-      },
-    }));
-
-    mock.module("@/state/operations/shared/host", () => ({
-      host: {
-        workspaceGetRepoConfig: workspaceGetRepoConfigMock,
-        workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
-        buildContinuationTargetGet: buildContinuationTargetGetMock,
       },
     }));
 
@@ -467,6 +455,11 @@ describe("KanbanPage session start modal flow", () => {
 
   beforeEach(async () => {
     await clearAppQueryClient();
+    host.workspaceGetRepoConfig = workspaceGetRepoConfigMock as typeof host.workspaceGetRepoConfig;
+    host.workspaceGetSettingsSnapshot =
+      workspaceGetSettingsSnapshotMock as typeof host.workspaceGetSettingsSnapshot;
+    host.buildContinuationTargetGet =
+      buildContinuationTargetGetMock as typeof host.buildContinuationTargetGet;
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
     currentSessionsFixture = [
       {
@@ -547,9 +540,15 @@ describe("KanbanPage session start modal flow", () => {
     }));
   });
 
+  afterEach(() => {
+    host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+    host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+    host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
+    mock.restore();
+  });
+
   afterAll(() => {
     console.error = originalConsoleError;
-    mock.restore();
   });
 
   test("delegate action opens modal and foreground confirm navigates to Agent Studio", async () => {

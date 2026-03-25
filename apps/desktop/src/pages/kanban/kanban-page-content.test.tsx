@@ -1,12 +1,8 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import type { ReactElement } from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
-
-mock.module("@/components/features/kanban", () => ({
-  KanbanColumn: (): ReactElement => <div data-testid="kanban-column" />,
-}));
 
 const model: KanbanPageContentModel = {
   isLoadingTasks: false,
@@ -33,8 +29,21 @@ const model: KanbanPageContentModel = {
 };
 
 describe("KanbanPageContent", () => {
-  test("keeps the horizontal scroll region stretched across the remaining page height", async () => {
-    const { KanbanPageContent } = await import("./kanban-page-content");
+  let KanbanPageContent: typeof import("./kanban-page-content").KanbanPageContent;
+
+  beforeAll(async () => {
+    mock.module("@/components/features/kanban", () => ({
+      KanbanColumn: (): ReactElement => <div data-testid="kanban-column" />,
+    }));
+
+    ({ KanbanPageContent } = await import("./kanban-page-content"));
+  });
+
+  afterAll(() => {
+    mock.restore();
+  });
+
+  test("keeps the horizontal scroll region stretched across the remaining page height", () => {
     const html = renderToStaticMarkup(createElement(KanbanPageContent, { model }));
 
     expect(html).toContain("flex-1");
@@ -44,8 +53,7 @@ describe("KanbanPageContent", () => {
     expect(html).toContain("min-h-full");
   });
 
-  test("renders a blocking board loader while the initial task load is in progress", async () => {
-    const { KanbanPageContent } = await import("./kanban-page-content");
+  test("renders a blocking board loader while the initial task load is in progress", () => {
     const html = renderToStaticMarkup(
       createElement(KanbanPageContent, {
         model: {
@@ -61,8 +69,7 @@ describe("KanbanPageContent", () => {
     expect(html).not.toContain('data-testid="kanban-refresh-indicator"');
   });
 
-  test("does not render a refresh indicator when tasks are already visible", async () => {
-    const { KanbanPageContent } = await import("./kanban-page-content");
+  test("does not render a refresh indicator when tasks are already visible", () => {
     const html = renderToStaticMarkup(
       createElement(KanbanPageContent, {
         model: {

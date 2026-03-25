@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { ComponentProps, ReactElement } from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -10,38 +10,46 @@ import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
 import type { KanbanTaskCard } from "./kanban-task-card";
 
 const renderedCards: Array<{ taskId: string; taskActivityState: string | undefined }> = [];
-
-mock.module("@/components/features/kanban/kanban-task-card", () => ({
-  KanbanTaskCard: ({
-    task,
-    taskActivityState,
-  }: ComponentProps<typeof KanbanTaskCard>): ReactElement => {
-    renderedCards.push({ taskId: task.id, taskActivityState });
-    return <div data-task-id={task.id} data-activity-state={taskActivityState} />;
-  },
-}));
-
-mock.module("@/components/features/kanban/use-kanban-virtualization", () => ({
-  useKanbanVirtualization: ({ tasks }: { tasks: Array<{ id: string }> }) => ({
-    containerRef: () => {},
-    renderModel: {
-      kind: "simple" as const,
-      visibleTasks: tasks,
-    },
-    measurementVersion: 0,
-    onMeasuredHeight: () => {},
-  }),
-}));
+let KanbanColumn: typeof import("./kanban-column").KanbanColumn;
 
 const noop = (): void => {};
 
 describe("KanbanColumn", () => {
+  beforeAll(async () => {
+    mock.module("@/components/features/kanban/kanban-task-card", () => ({
+      KanbanTaskCard: ({
+        task,
+        taskActivityState,
+      }: ComponentProps<typeof KanbanTaskCard>): ReactElement => {
+        renderedCards.push({ taskId: task.id, taskActivityState });
+        return <div data-task-id={task.id} data-activity-state={taskActivityState} />;
+      },
+    }));
+
+    mock.module("@/components/features/kanban/use-kanban-virtualization", () => ({
+      useKanbanVirtualization: ({ tasks }: { tasks: Array<{ id: string }> }) => ({
+        containerRef: () => {},
+        renderModel: {
+          kind: "simple" as const,
+          visibleTasks: tasks,
+        },
+        measurementVersion: 0,
+        onMeasuredHeight: () => {},
+      }),
+    }));
+
+    ({ KanbanColumn } = await import("./kanban-column"));
+  });
+
+  afterAll(() => {
+    mock.restore();
+  });
+
   beforeEach(() => {
     renderedCards.length = 0;
   });
 
-  test("passes waiting-input ordering data through to rendered task cards", async () => {
-    const { KanbanColumn } = await import("./kanban-column");
+  test("passes waiting-input ordering data through to rendered task cards", () => {
     const waitingTask = createTaskCardFixture({ id: "TASK-WAITING", title: "Need answer" });
     const activeTask = createTaskCardFixture({ id: "TASK-ACTIVE", title: "Still running" });
     const idleTask = createTaskCardFixture({ id: "TASK-IDLE", title: "Queued" });
