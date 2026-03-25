@@ -7,6 +7,7 @@ import {
   Circle,
   CircleDashed,
   CircleDotDashed,
+  History,
   LoaderCircle,
   Plus,
   Sparkles,
@@ -15,11 +16,12 @@ import { type ReactElement, useMemo, useState } from "react";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Button } from "@/components/ui/button";
 import { CardHeader, CardTitle } from "@/components/ui/card";
-import { Combobox, type ComboboxGroup } from "@/components/ui/combobox";
+import type { ComboboxGroup } from "@/components/ui/combobox";
 import {
   Command,
   CommandEmpty,
   CommandGroup,
+  CommandInput,
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
@@ -186,13 +188,25 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
   } = model;
 
   const [isCreateSessionMenuOpen, setIsCreateSessionMenuOpen] = useState(false);
+  const [isSessionMenuOpen, setIsSessionMenuOpen] = useState(false);
 
   const normalizedTaskTitle = taskTitle?.trim() ?? "";
   const hasTaskTitle = normalizedTaskTitle.length > 0;
   const normalizedTaskId = taskId?.trim() ?? "";
   const hasTaskId = normalizedTaskId.length > 0;
   const canOpenTaskDetails = hasTaskId && Boolean(model.onOpenTaskDetails);
-  const sessionSelectorOptions = sessionSelector.groups.flatMap((group) => group.options);
+  const sessionGroupsWithOptions = useMemo(
+    () => sessionSelector.groups.filter((group) => group.options.length > 0),
+    [sessionSelector.groups],
+  );
+  const sessionSelectorOptions = useMemo(
+    () => sessionGroupsWithOptions.flatMap((group) => group.options),
+    [sessionGroupsWithOptions],
+  );
+  const selectedSessionOption = useMemo(
+    () => sessionSelectorOptions.find((option) => option.value === sessionSelector.value) ?? null,
+    [sessionSelector.value, sessionSelectorOptions],
+  );
   const createOptionsByRole = useMemo(
     () =>
       sessionCreateOptions.reduce(
@@ -209,40 +223,96 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
   );
 
   return (
-    <CardHeader className="space-y-2 border-b border-border bg-card pb-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <CardTitle className="max-w-160 truncate text-xl">
+    <CardHeader className="border-b border-border bg-card pb-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <CardTitle
+              className="truncate text-xl"
+              title={hasTaskTitle ? normalizedTaskTitle : undefined}
+            >
               {hasTaskTitle ? normalizedTaskTitle : "Agent Studio"}
             </CardTitle>
-            {canOpenTaskDetails ? (
+          </div>
+          {hasTaskId ? (
+            <div className="mt-1 flex items-center gap-1.5">
+              <TaskIdBadge taskId={normalizedTaskId} />
+              {canOpenTaskDetails ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-auto shrink-0 gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground transition hover:border-border hover:bg-muted hover:text-muted-foreground"
+                  title="Open task details"
+                  aria-label="Open task details"
+                  onClick={() => model.onOpenTaskDetails?.()}
+                >
+                  <ArrowUpRightFromSquare className="size-3" />
+                  Open
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-stretch gap-2">
+          <Popover open={isSessionMenuOpen} onOpenChange={setIsSessionMenuOpen}>
+            <PopoverTrigger asChild>
               <Button
                 type="button"
-                variant="ghost"
-                className="h-auto shrink-0 gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground transition hover:border-border hover:bg-muted hover:text-muted-foreground"
-                title="Open task details"
-                aria-label="Open task details"
-                onClick={() => model.onOpenTaskDetails?.()}
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 rounded-md"
+                disabled={sessionSelector.disabled || !agentStudioReady}
+                title={
+                  selectedSessionOption
+                    ? `Session history · ${selectedSessionOption.label}`
+                    : "Session history"
+                }
+                aria-label={
+                  selectedSessionOption
+                    ? `Session history, selected ${selectedSessionOption.label}`
+                    : "Session history"
+                }
               >
-                <ArrowUpRightFromSquare className="size-3" />
-                Open
+                <History className="size-4" />
               </Button>
-            ) : null}
-          </div>
-          {hasTaskId ? <TaskIdBadge taskId={normalizedTaskId} /> : null}
-        </div>
-        <div className="flex min-w-56 max-w-full items-stretch gap-2 sm:min-w-[18rem]">
-          <div className="min-w-0 flex-1">
-            <Combobox
-              value={sessionSelector.value}
-              options={sessionSelectorOptions}
-              groups={sessionSelector.groups}
-              placeholder="Select session"
-              disabled={sessionSelector.disabled || !agentStudioReady}
-              onValueChange={sessionSelector.onValueChange}
-            />
-          </div>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-80 p-0">
+              <Command>
+                <CommandInput placeholder="Search sessions…" className="h-8 text-sm" />
+                <CommandList>
+                  <CommandEmpty>No sessions available.</CommandEmpty>
+                  {sessionGroupsWithOptions.map((group) => (
+                    <CommandGroup key={group.label} heading={group.label}>
+                      {group.options.map((option) => (
+                        <CommandItem
+                          key={option.value}
+                          value={`${group.label} ${option.label} ${option.description ?? ""}`}
+                          onSelect={() => {
+                            sessionSelector.onValueChange(option.value);
+                            setIsSessionMenuOpen(false);
+                          }}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-foreground">
+                              {option.label}
+                            </p>
+                            {option.description ? (
+                              <p className="truncate text-[11px] text-muted-foreground">
+                                {option.description}
+                              </p>
+                            ) : null}
+                          </div>
+                          {sessionSelector.value === option.value ? (
+                            <Check className="ml-auto size-3.5 shrink-0 text-muted-foreground" />
+                          ) : null}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  ))}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
           <Popover open={isCreateSessionMenuOpen} onOpenChange={setIsCreateSessionMenuOpen}>
             <PopoverTrigger asChild>
               <Button
