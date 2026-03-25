@@ -241,6 +241,9 @@ export const buildWorkflowStateByRole = (params: {
     },
   };
   const qaRejected = isQaRejectedTask(params.task);
+  const qaRejectedInAiReview =
+    params.task?.status === "ai_review" &&
+    params.task.documentSummary.qaReport.verdict === "rejected";
 
   for (const role of ALL_AGENT_ROLES) {
     const workflow = params.roleWorkflowsByTask[role];
@@ -248,6 +251,9 @@ export const buildWorkflowStateByRole = (params: {
     const availability = deriveWorkflowAvailability(workflow);
     const latestRoleSession = sessionSummary.latestSession;
     const liveSession = sessionSummary.liveSession;
+    const hasActiveQaSession =
+      role === "qa" &&
+      (liveSession === "running" || liveSession === "waiting_input" || liveSession === "error");
     let completion: AgentWorkflowStepState["completion"] = "not_started";
 
     if (role === "build" && qaRejected) {
@@ -260,7 +266,7 @@ export const buildWorkflowStateByRole = (params: {
       !qaRejected
     ) {
       completion = "done";
-    } else if (role === "qa" && qaRejected) {
+    } else if (role === "qa" && (qaRejected || (qaRejectedInAiReview && !hasActiveQaSession))) {
       completion = "rejected";
     } else if (workflow.completed) {
       completion = "done";
