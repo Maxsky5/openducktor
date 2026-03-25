@@ -5,12 +5,31 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
+import { errorMessage } from "@/lib/errors";
+import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import type { RepoRuntimeHealthCheck, RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { host } from "../operations/host";
 
 const RUNTIME_CHECK_STALE_TIME_MS = 5 * 60_000;
 const BEADS_CHECK_STALE_TIME_MS = 60_000;
 const RUNTIME_HEALTH_STALE_TIME_MS = 60_000;
+
+const buildRuntimeHealthErrorCheck = (
+  runtimeHealthError: string,
+  checkedAt: string,
+): RepoRuntimeHealthCheck => ({
+  runtimeOk: false,
+  runtimeError: runtimeHealthError,
+  runtime: null,
+  mcpOk: false,
+  mcpError: runtimeHealthError,
+  mcpServerName: ODT_MCP_SERVER_NAME,
+  mcpServerStatus: null,
+  mcpServerError: runtimeHealthError,
+  availableToolIds: [],
+  checkedAt,
+  errors: [runtimeHealthError],
+});
 
 const normalizeRuntimeKinds = (runtimeKinds: RuntimeKind[]): RuntimeKind[] =>
   [...runtimeKinds].sort();
@@ -58,7 +77,9 @@ export const repoRuntimeHealthQueryOptions = (
     queryFn: async (): Promise<RepoRuntimeHealthMap> => {
       const checks = await Promise.all(
         runtimeDefinitions.map(async (definition) => {
-          const check = await checkRepoRuntimeHealth(repoPath, definition.kind);
+          const check = await checkRepoRuntimeHealth(repoPath, definition.kind).catch((error) =>
+            buildRuntimeHealthErrorCheck(errorMessage(error), new Date().toISOString()),
+          );
           return [definition.kind, check] as const;
         }),
       );

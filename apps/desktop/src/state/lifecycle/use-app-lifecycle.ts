@@ -1,5 +1,5 @@
 import { type RunEvent, runEventSchema } from "@openducktor/contracts";
-import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useLayoutEffect, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
@@ -43,7 +43,7 @@ export function useAppLifecycle({
   const activeRepoRef = useRef(activeRepo);
   const refreshTaskDataRef = useRef(refreshTaskData);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     activeRepoRef.current = activeRepo;
     refreshTaskDataRef.current = refreshTaskData;
   }, [activeRepo, refreshTaskData]);
