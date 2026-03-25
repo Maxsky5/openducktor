@@ -5,7 +5,7 @@ import type {
 } from "@openducktor/contracts";
 import { devServerEventSchema } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   AgentStudioDevServerPanelMode,
   AgentStudioDevServerPanelModel,
@@ -423,7 +423,7 @@ export function useAgentStudioDevServerPanel({
     [effectiveState?.scripts, rememberedScriptId, selectedScriptId],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     selectedScriptIdRef.current = effectiveSelectedScriptId;
     syncSelectedScriptLogBuffer(effectiveSelectedScriptId);
   }, [effectiveSelectedScriptId, syncSelectedScriptLogBuffer]);
