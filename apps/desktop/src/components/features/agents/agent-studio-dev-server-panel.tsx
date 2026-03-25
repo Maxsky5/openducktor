@@ -128,6 +128,53 @@ const buildRenderedLogLine = (
   offset: number,
 ): AgentStudioDevServerLogEntry | null => getDevServerLogEntryAt(buffer, offset);
 
+const AgentStudioDevServerLogRow = memo(function AgentStudioDevServerLogRow({
+  logLine,
+}: {
+  logLine: AgentStudioDevServerLogEntry;
+}): ReactElement {
+  return (
+    <div
+      key={logLine.id}
+      className="flex gap-3 [content-visibility:auto] [contain-intrinsic-size:20px]"
+      data-testid="agent-studio-dev-server-log-line"
+    >
+      <span className="shrink-0 text-[var(--dev-server-terminal-subtle)]">
+        {formatLogTimestamp(logLine.timestamp)}
+      </span>
+      <span className="shrink-0 text-[var(--dev-server-terminal-muted)]">[{logLine.stream}]</span>
+      <span
+        className={cn("min-w-0 whitespace-pre-wrap break-words", streamClassName(logLine.stream))}
+      >
+        {logLine.text}
+      </span>
+    </div>
+  );
+});
+
+const AgentStudioDevServerLogList = memo(function AgentStudioDevServerLogList({
+  logBuffer,
+}: {
+  logBuffer: AgentStudioDevServerLogBuffer;
+}): ReactElement {
+  const logRows = useMemo(() => {
+    const rows: ReactElement[] = [];
+
+    for (let offset = 0; offset < logBuffer.size; offset += 1) {
+      const logLine = buildRenderedLogLine(logBuffer, offset);
+      if (!logLine) {
+        continue;
+      }
+
+      rows.push(<AgentStudioDevServerLogRow key={logLine.id} logLine={logLine} />);
+    }
+
+    return rows;
+  }, [logBuffer]);
+
+  return <div className="space-y-1 px-4 py-4 font-mono text-[11px] leading-5">{logRows}</div>;
+});
+
 export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel({
   model,
 }: {
@@ -414,38 +461,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
                 <div ref={logViewportContainerRef} className="min-h-0 flex-1 overflow-hidden">
                   <ScrollArea className="h-full min-h-0 bg-[var(--dev-server-terminal-panel)]">
                     {selectedScriptLogCount > 0 && selectedScriptLogBuffer ? (
-                      <div className="space-y-1 px-4 py-4 font-mono text-[11px] leading-5">
-                        {Array.from({ length: selectedScriptLogBuffer.size }, (_, offset) => {
-                          const logLine = buildRenderedLogLine(selectedScriptLogBuffer, offset);
-
-                          if (!logLine) {
-                            return null;
-                          }
-
-                          return (
-                            <div
-                              key={logLine.id}
-                              className="flex gap-3 [content-visibility:auto] [contain-intrinsic-size:20px]"
-                              data-testid="agent-studio-dev-server-log-line"
-                            >
-                              <span className="shrink-0 text-[var(--dev-server-terminal-subtle)]">
-                                {formatLogTimestamp(logLine.timestamp)}
-                              </span>
-                              <span className="shrink-0 text-[var(--dev-server-terminal-muted)]">
-                                [{logLine.stream}]
-                              </span>
-                              <span
-                                className={cn(
-                                  "min-w-0 whitespace-pre-wrap break-words",
-                                  streamClassName(logLine.stream),
-                                )}
-                              >
-                                {logLine.text}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
+                      <AgentStudioDevServerLogList logBuffer={selectedScriptLogBuffer} />
                     ) : (
                       <div
                         className="flex h-full min-h-0 items-center justify-center px-6 py-8 text-center text-sm text-[var(--dev-server-terminal-muted)]"

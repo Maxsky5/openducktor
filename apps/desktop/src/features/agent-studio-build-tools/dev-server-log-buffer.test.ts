@@ -46,9 +46,7 @@ describe("dev-server-log-buffer", () => {
 
     expect(trimmed).toHaveLength(MAX_BUFFERED_DEV_SERVER_LOG_LINES);
     expect(trimmed[0]?.text).toBe("line-2");
-    expect(trimmed.at(-1)?.text).toBe(
-      `line-${MAX_BUFFERED_DEV_SERVER_LOG_LINES + 1}`,
-    );
+    expect(trimmed.at(-1)?.text).toBe(`line-${MAX_BUFFERED_DEV_SERVER_LOG_LINES + 1}`);
   });
 
   test("stores sanitized log entries and rotates in ring order", () => {
@@ -72,8 +70,13 @@ describe("dev-server-log-buffer", () => {
 
     const buffer = getDevServerLogBuffer(store, "frontend");
     expect(buffer?.size).toBe(MAX_BUFFERED_DEV_SERVER_LOG_LINES);
-    expect(getDevServerLogEntryAt(buffer!, 0)?.text).toBe("line-1");
-    expect(getDevServerLogEntryAt(buffer!, buffer!.size - 1)?.text).toBe(
+    expect(buffer).not.toBeNull();
+    if (!buffer) {
+      throw new Error("Expected frontend log buffer to exist.");
+    }
+
+    expect(getDevServerLogEntryAt(buffer, 0)?.text).toBe("line-1");
+    expect(getDevServerLogEntryAt(buffer, buffer.size - 1)?.text).toBe(
       `line-${MAX_BUFFERED_DEV_SERVER_LOG_LINES}`,
     );
   });
@@ -107,9 +110,13 @@ describe("dev-server-log-buffer", () => {
     );
 
     expect(getDevServerLogBuffer(store, "stale")).toBeNull();
-    expect(getDevServerLogEntryAt(getDevServerLogBuffer(store, "frontend")!, 0)?.text).toBe(
-      "frontend failed",
-    );
+    const syncedBuffer = getDevServerLogBuffer(store, "frontend");
+    expect(syncedBuffer).not.toBeNull();
+    if (!syncedBuffer) {
+      throw new Error("Expected frontend log buffer after sync.");
+    }
+
+    expect(getDevServerLogEntryAt(syncedBuffer, 0)?.text).toBe("frontend failed");
 
     replaceDevServerLogBuffer(store, "frontend", [
       {
@@ -120,8 +127,12 @@ describe("dev-server-log-buffer", () => {
       },
     ]);
 
-    expect(getDevServerLogEntryAt(getDevServerLogBuffer(store, "frontend")!, 0)?.text).toBe(
-      "restarted",
-    );
+    const replacedBuffer = getDevServerLogBuffer(store, "frontend");
+    expect(replacedBuffer).not.toBeNull();
+    if (!replacedBuffer) {
+      throw new Error("Expected frontend log buffer after replace.");
+    }
+
+    expect(getDevServerLogEntryAt(replacedBuffer, 0)?.text).toBe("restarted");
   });
 });

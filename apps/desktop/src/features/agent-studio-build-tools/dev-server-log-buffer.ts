@@ -1,4 +1,8 @@
-import type { DevServerGroupState, DevServerLogLine, DevServerScriptState } from "@openducktor/contracts";
+import type {
+  DevServerGroupState,
+  DevServerLogLine,
+  DevServerScriptState,
+} from "@openducktor/contracts";
 
 const ESC = String.fromCharCode(27);
 const CSI = String.fromCharCode(155);

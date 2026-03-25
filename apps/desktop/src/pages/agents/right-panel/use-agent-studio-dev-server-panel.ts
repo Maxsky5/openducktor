@@ -6,19 +6,20 @@ import type {
 import { devServerEventSchema } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DevServerLogBufferStore } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import type {
+  AgentStudioDevServerPanelMode,
+  AgentStudioDevServerPanelModel,
+} from "@/components/features/agents/agent-studio-dev-server-panel";
 import {
+  type AgentStudioDevServerLogBuffer,
   appendDevServerLogLine,
   createDevServerLogBufferStore,
+  type DevServerLogBufferStore,
   getDevServerLogBuffer,
   replaceDevServerLogBuffer,
   syncDevServerLogBufferStore,
   trimDevServerLogLines,
 } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
-import type {
-  AgentStudioDevServerPanelMode,
-  AgentStudioDevServerPanelModel,
-} from "@/components/features/agents/agent-studio-dev-server-panel";
 import { errorMessage } from "@/lib/errors";
 import { hostClient, subscribeDevServerEvents } from "@/lib/host-client";
 import { devServerGroupStateQueryOptions, devServerQueryKeys } from "@/state/queries/dev-servers";
@@ -140,7 +141,8 @@ export function useAgentStudioDevServerPanel({
   const selectedScriptIdRef = useRef<string | null>(null);
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
   const [liveState, setLiveState] = useState<DevServerGroupState | null>(null);
-  const [selectedScriptLogRevision, setSelectedScriptLogRevision] = useState(0);
+  const [selectedScriptLogBuffer, setSelectedScriptLogBuffer] =
+    useState<AgentStudioDevServerLogBuffer | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
 
@@ -198,6 +200,10 @@ export function useAgentStudioDevServerPanel({
     taskId,
   ]);
 
+  const syncSelectedScriptLogBuffer = useCallback((scriptId: string | null): void => {
+    setSelectedScriptLogBuffer(getDevServerLogBuffer(logBuffersRef.current, scriptId));
+  }, []);
+
   const syncStateFromEvent = useCallback(
     (event: DevServerEvent): void => {
       if (!repoPath || !taskId) {
@@ -238,10 +244,10 @@ export function useAgentStudioDevServerPanel({
             ? event.script.scriptId
             : event.logLine.scriptId;
       if (selectedId && touchedScriptId === selectedId) {
-        setSelectedScriptLogRevision((revision) => revision + 1);
+        syncSelectedScriptLogBuffer(selectedId);
       }
     },
-    [queryClient, repoPath, taskId],
+    [queryClient, repoPath, syncSelectedScriptLogBuffer, taskId],
   );
 
   useEffect(() => {
@@ -252,7 +258,7 @@ export function useAgentStudioDevServerPanel({
       logBuffersRef.current.clear();
       setLiveState(null);
       setSelectedScriptId(null);
-      setSelectedScriptLogRevision(0);
+      setSelectedScriptLogBuffer(null);
       setActionError(null);
       setSubscriptionError(null);
     }
@@ -263,7 +269,7 @@ export function useAgentStudioDevServerPanel({
       setActionError(null);
       setSubscriptionError(null);
       setSelectedScriptId(null);
-      setSelectedScriptLogRevision(0);
+      setSelectedScriptLogBuffer(null);
       return;
     }
 
@@ -274,12 +280,13 @@ export function useAgentStudioDevServerPanel({
     ) {
       syncDevServerLogBufferStore(logBuffersRef.current, stateQuery.data);
       setLiveState(stateQuery.data);
-      setSelectedScriptLogRevision((revision) => revision + 1);
+      syncSelectedScriptLogBuffer(selectedScriptIdRef.current);
     }
   }, [
     queryActivationState.enabled,
     queryActivationState.since,
     queryEnabled,
+    syncSelectedScriptLogBuffer,
     stateQuery.data,
     stateQuery.dataUpdatedAt,
     taskMemoryKey,
@@ -294,9 +301,9 @@ export function useAgentStudioDevServerPanel({
       syncDevServerLogBufferStore(logBuffersRef.current, nextState);
       queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), nextState);
       setLiveState(nextState);
-      setSelectedScriptLogRevision((revision) => revision + 1);
+      syncSelectedScriptLogBuffer(selectedScriptIdRef.current);
     },
-    [queryClient, repoPath, taskId],
+    [queryClient, repoPath, syncSelectedScriptLogBuffer, taskId],
   );
 
   const invalidateState = useCallback((): void => {
@@ -409,7 +416,8 @@ export function useAgentStudioDevServerPanel({
 
   useEffect(() => {
     selectedScriptIdRef.current = effectiveSelectedScriptId;
-  }, [effectiveSelectedScriptId]);
+    syncSelectedScriptLogBuffer(effectiveSelectedScriptId);
+  }, [effectiveSelectedScriptId, syncSelectedScriptLogBuffer]);
 
   useEffect(() => {
     if (!shouldSubscribeToEvents || repoPath === null || taskId === null) {
@@ -492,10 +500,6 @@ export function useAgentStudioDevServerPanel({
 
   const selectedScript =
     effectiveState?.scripts.find((script) => script.scriptId === effectiveSelectedScriptId) ?? null;
-  const selectedScriptLogBuffer = useMemo(
-    () => getDevServerLogBuffer(logBuffersRef.current, effectiveSelectedScriptId),
-    [effectiveSelectedScriptId, selectedScriptLogRevision],
-  );
   const isExpanded = isDevServerPanelExpanded(
     effectiveState?.scripts ?? [],
     startMutation.isPending || restartMutation.isPending,
