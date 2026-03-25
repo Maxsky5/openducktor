@@ -1,9 +1,9 @@
 mod approval_context_service;
 mod approval_service;
-mod cleanup_plans;
 mod approval_support;
 mod builder_branch_service;
 mod builder_cleanup_service;
+mod cleanup_plans;
 mod direct_merge_workflow_service;
 mod document_service;
 mod implementation_reset_service;

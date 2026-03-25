@@ -1186,6 +1186,17 @@ describe("TauriHostClient", () => {
     });
   });
 
+  test("build continuation target returns null when host reports no target", async () => {
+    const { client } = createClient((command) => {
+      if (command === "build_continuation_target_get") {
+        return null;
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.buildContinuationTargetGet("/repo", "task-1")).resolves.toBeNull();
+  });
+
   test("runtime and build ack commands reject malformed host payloads", async () => {
     const { client } = createClient((command) => {
       switch (command) {

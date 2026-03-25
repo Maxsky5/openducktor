@@ -74,12 +74,12 @@ const buildContinuationTargetGet = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
-): Promise<BuildContinuationTarget> => {
+): Promise<BuildContinuationTarget | null> => {
   const payload = await invokeFn("build_continuation_target_get", {
     repoPath,
     taskId,
   });
-  return buildContinuationTargetSchema.parse(payload);
+  return buildContinuationTargetSchema.nullable().parse(payload);
 };
 
 const runtimeStop = async (invokeFn: InvokeFn, runtimeId: string): Promise<{ ok: boolean }> => {
@@ -362,7 +362,7 @@ export class TauriAgentClient {
   async buildContinuationTargetGet(
     repoPath: string,
     taskId: string,
-  ): Promise<BuildContinuationTarget> {
+  ): Promise<BuildContinuationTarget | null> {
     return buildContinuationTargetGet(this.invokeFn, repoPath, taskId);
   }
 

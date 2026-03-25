@@ -12,6 +12,7 @@ import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import { host } from "../../shared/host";
+import { MISSING_BUILD_TARGET_ERROR } from "../handlers/start-session-constants";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { normalizeWorkingDirectory, runningStates, toBaseUrl } from "../support/core";
 
@@ -124,7 +125,7 @@ export const loadRepoPromptOverrides = async (repoPath: string): Promise<RepoPro
 export const loadBuildContinuationTarget = async (
   repoPath: string,
   taskId: string,
-): Promise<BuildContinuationTarget> => {
+): Promise<BuildContinuationTarget | null> => {
   return host.buildContinuationTargetGet(repoPath, taskId);
 };
 
@@ -233,9 +234,14 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
     }
 
     if (role === "qa") {
-      const workingDirectory =
-        targetWorkingDirectory ||
-        (await host.buildContinuationTargetGet(repoPath, taskId)).workingDirectory;
+      const continuationTarget =
+        targetWorkingDirectory.length === 0
+          ? await host.buildContinuationTargetGet(repoPath, taskId)
+          : null;
+      const workingDirectory = targetWorkingDirectory || continuationTarget?.workingDirectory;
+      if (!workingDirectory) {
+        throw new Error(MISSING_BUILD_TARGET_ERROR);
+      }
       const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
       const matchingRun = runsRef.current.find(
         (entry) =>
