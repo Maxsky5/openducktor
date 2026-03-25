@@ -66,7 +66,7 @@ impl<'a> ApprovalContextService<'a> {
                 direct_merge: Some(direct_merge),
                 suggested_squash_commit_message: None,
                 providers: PullRequestProviderService::new(self.service)
-                    .provider_availability(Path::new(&context.repo.repo_path), &repo_config),
+                    .provider_statuses(Path::new(&context.repo.repo_path), &repo_config),
             });
         }
 
@@ -122,7 +122,7 @@ impl<'a> ApprovalContextService<'a> {
             direct_merge: None,
             suggested_squash_commit_message: None,
             providers: PullRequestProviderService::new(self.service)
-                .provider_availability(Path::new(&context.repo.repo_path), &repo_config),
+                .provider_statuses(Path::new(&context.repo.repo_path), &repo_config),
         })
     }
 }

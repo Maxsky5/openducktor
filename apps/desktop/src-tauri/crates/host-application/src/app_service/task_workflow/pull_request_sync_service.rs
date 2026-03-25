@@ -19,7 +19,7 @@ impl<'a> PullRequestSyncService<'a> {
         let repo_path = self.service.resolve_task_repo_path(repo_path)?;
         let tasks = self.service.task_store.list_tasks(Path::new(&repo_path))?;
         let provider_service = PullRequestProviderService::new(self.service);
-        if !provider_service.sync_available() {
+        if !provider_service.sync_policy(repo_path.as_str())?.available {
             return Ok(false);
         }
 
