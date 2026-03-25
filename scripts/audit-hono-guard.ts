@@ -7,7 +7,11 @@ const { parsed, exitCode } = runBunAuditJson("[deps:audit:hono]");
 
 const honoAdvisories = Array.isArray(parsed.hono) ? parsed.hono : [];
 const detectedAdvisoryIds = HONO_ADVISORY_IDS.filter((advisoryId) => {
-  return honoAdvisories.some((advisory) => advisory.url?.includes(advisoryId));
+  const advisoryIdLower = advisoryId.toLowerCase();
+  return honoAdvisories.some((advisory) => {
+    const advisoryUrl = advisory.url?.trim().toLowerCase() ?? "";
+    return advisoryUrl.includes(advisoryIdLower);
+  });
 });
 
 if (detectedAdvisoryIds.length > 0) {
