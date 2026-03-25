@@ -1689,6 +1689,51 @@ describe("OpencodeSdkAdapter", () => {
     });
   });
 
+  test("listAvailableModels applies OpenCode default colors for native agents without explicit color", async () => {
+    const mock = makeMockClient({
+      agentsResponse: [
+        {
+          name: "build",
+          description: "Native build agent",
+          mode: "subagent",
+          hidden: true,
+          native: true,
+        },
+        {
+          name: "plan",
+          description: "Native planning agent",
+          mode: "primary",
+          hidden: false,
+          native: true,
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const catalog = await adapter.listAvailableModels({
+      runtimeKind: "opencode",
+      runtimeConnection: defaultRuntimeConnection,
+    });
+
+    expect(catalog.profiles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "build",
+          label: "build",
+          color: "var(--icon-agent-build-base)",
+        }),
+        expect.objectContaining({
+          id: "plan",
+          label: "plan",
+          color: "var(--icon-agent-plan-base)",
+        }),
+      ]),
+    );
+  });
+
   test("listAvailableModels preserves agent names exactly as reported by opencode", async () => {
     const mock = makeMockClient({
       agentsResponse: [

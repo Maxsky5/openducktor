@@ -4,6 +4,22 @@ import { asUnknownRecord, readStringProp } from "./guards";
 import { mapProviderListToCatalog, toToolIdList } from "./payload-mappers";
 import type { ClientFactory, McpServerStatus } from "./types";
 
+const OPENCODE_DEFAULT_AGENT_COLORS: Record<string, string> = {
+  ask: "var(--icon-agent-ask-base)",
+  build: "var(--icon-agent-build-base)",
+  docs: "var(--icon-agent-docs-base)",
+  plan: "var(--icon-agent-plan-base)",
+};
+
+const resolveAgentColor = (agentName: string, explicitColor: unknown): string | undefined => {
+  if (typeof explicitColor === "string" && explicitColor.trim().length > 0) {
+    return explicitColor;
+  }
+
+  const normalizedName = agentName.trim().toLowerCase();
+  return OPENCODE_DEFAULT_AGENT_COLORS[normalizedName];
+};
+
 export const listAvailableModels = async (
   createClient: ClientFactory,
   input: {
@@ -38,15 +54,18 @@ export const listAvailableModels = async (
   const baseCatalog = mapProviderListToCatalog(providerData);
   const rawAgents = Array.isArray(agentsData)
     ? agentsData
-        .map((entry) => ({
-          id: entry.name,
-          label: entry.name,
-          ...(entry.description ? { description: entry.description } : {}),
-          mode: entry.mode,
-          ...(entry.hidden !== undefined ? { hidden: entry.hidden } : {}),
-          ...(entry.native !== undefined ? { native: entry.native } : {}),
-          ...(typeof entry.color === "string" ? { color: entry.color } : {}),
-        }))
+        .map((entry) => {
+          const resolvedColor = resolveAgentColor(entry.name, entry.color);
+          return {
+            id: entry.name,
+            label: entry.name,
+            ...(entry.description ? { description: entry.description } : {}),
+            mode: entry.mode,
+            ...(entry.hidden !== undefined ? { hidden: entry.hidden } : {}),
+            ...(entry.native !== undefined ? { native: entry.native } : {}),
+            ...(resolvedColor !== undefined ? { color: resolvedColor } : {}),
+          };
+        })
         .sort((a, b) => a.label.localeCompare(b.label))
     : [];
 
