@@ -6,14 +6,12 @@ import type {
   StartSessionCreationInput,
   StartSessionExecutionDependencies,
 } from "./start-session.types";
+import { registerStartedSession, stopSessionOnStaleAndThrow } from "./start-session-persistence";
+import { assertScenarioStartPolicy, resolveStartTask } from "./start-session-policies";
 import {
-  assertScenarioStartPolicy,
-  registerStartedSession,
   resolveFreshStartTargetWorkingDirectory,
   resolveRuntimeAndModel,
-  resolveStartTask,
-  stopSessionOnStaleAndThrow,
-} from "./start-session-shared";
+} from "./start-session-runtime";
 
 type FreshStrategyInput = {
   ctx: StartSessionContext;

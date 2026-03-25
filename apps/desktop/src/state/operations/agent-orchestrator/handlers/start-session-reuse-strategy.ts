@@ -8,9 +8,8 @@ import type {
   StartSessionCreationInput,
   StartSessionExecutionDependencies,
 } from "./start-session.types";
-import { assertScenarioStartPolicy, resolveReuseValidationError } from "./start-session-shared";
-
-const STALE_START_ERROR = "Workspace changed while starting session.";
+import { STALE_START_ERROR } from "./start-session-constants";
+import { assertScenarioStartPolicy, resolveReuseValidationError } from "./start-session-policies";
 
 type ReuseStrategyInput = {
   ctx: StartSessionContext;

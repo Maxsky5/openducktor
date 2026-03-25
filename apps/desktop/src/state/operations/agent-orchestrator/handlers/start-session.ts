@@ -16,20 +16,19 @@ import type {
   StartSessionDependencies,
   TaskDependencies,
 } from "./start-session.types";
+import { STALE_START_ERROR } from "./start-session-constants";
 import { executeForkStart } from "./start-session-fork-strategy";
 import { executeFreshStart } from "./start-session-fresh-strategy";
+import { stopSessionOnStaleAndThrow } from "./start-session-persistence";
+import { resolveStartTask } from "./start-session-policies";
 import { executeReuseStart } from "./start-session-reuse-strategy";
 import {
   resolveFreshStartTargetWorkingDirectoryForStart,
-  resolveStartTask,
   serializeSelectedModelKey,
-  stopSessionOnStaleAndThrow,
-} from "./start-session-shared";
+} from "./start-session-runtime";
 import { createSessionStartTags } from "./start-session-support";
 
 export type { StartAgentSessionInput, StartSessionDependencies } from "./start-session.types";
-
-const STALE_START_ERROR = "Workspace changed while starting session.";
 
 const createOrReuseSession = async ({
   ctx,
