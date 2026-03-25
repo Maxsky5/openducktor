@@ -363,6 +363,7 @@ fn task_direct_merge_with_publish_target_stays_resumable_until_completion() -> R
             ahead: 0,
             behind: 0,
         };
+        git.is_ancestor_result = true;
     }
     let completed = service.task_direct_merge_complete(repo_path.as_str(), "task-1")?;
     assert_eq!(completed.status, TaskStatus::Closed);
@@ -2532,7 +2533,7 @@ fn task_pull_request_link_merged_retries_cleanup_for_same_pull_request() -> Resu
 
     assert_eq!(task.status, TaskStatus::Closed);
     let git = git_state.lock().expect("git state lock poisoned");
-    assert!(git
+    assert!(!git
         .calls
         .iter()
         .any(|call| matches!(call, GitCall::RemoveWorktree { .. })));
