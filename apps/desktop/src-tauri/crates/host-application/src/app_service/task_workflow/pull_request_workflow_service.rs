@@ -1,16 +1,14 @@
 use super::approval_context_service::ApprovalContextService;
 use super::approval_support::{
     ensure_clean_builder_worktree, ensure_pull_request_management_status,
-    is_editable_pull_request_state, normalize_approval_target_branch,
-    store_linked_pull_request_metadata,
 };
+use super::builder_branch_service::BuilderBranchService;
 use super::builder_cleanup_service::BuilderCleanupService;
 use super::pull_request_provider_service::PullRequestProviderService;
-use crate::app_service::git_provider::{GitHostingProvider, ResolvedPullRequest};
+use crate::app_service::git_provider::ResolvedPullRequest;
 use crate::app_service::service_core::AppService;
 use anyhow::{anyhow, Result};
 use host_domain::{PullRequestRecord, TaskCard, TaskPullRequestDetectResult, TaskStatus};
-use std::path::Path;
 
 pub(super) struct PullRequestWorkflowService<'a> {
     service: &'a AppService,
@@ -38,54 +36,20 @@ impl<'a> PullRequestWorkflowService<'a> {
             .load_open_task_approval_context(repo_path, task_id)?;
         ensure_clean_builder_worktree(&approval)?;
         let repo_path = self.service.resolve_task_repo_path(repo_path)?;
-        let provider_service = PullRequestProviderService::new(self.service);
-        let provider = provider_service.github_provider();
-        let repository = provider_service.github_pull_request_repository(repo_path.as_str())?;
-        let remote_name = provider.resolve_remote_name(Path::new(&repo_path), &repository)?;
-        match self.service.git_push_branch(
+        let pull_request = PullRequestProviderService::new(self.service).upsert_pull_request(
             repo_path.as_str(),
-            approval.working_directory.as_deref(),
-            Some(remote_name.as_str()),
-            approval.source_branch.as_str(),
-            true,
-            false,
-        )? {
-            host_domain::GitPushResult::Pushed { .. } => {}
-            host_domain::GitPushResult::RejectedNonFastForward { output, .. } => {
-                return Err(anyhow!(
-                    "Failed to push the builder branch before creating the pull request: {output}"
-                ));
-            }
-        }
+            &approval,
+            title,
+            body,
+        )?;
 
-        let pull_request = match approval.pull_request {
-            Some(existing)
-                if existing.provider_id == "github"
-                    && is_editable_pull_request_state(existing.state.as_str()) =>
-            {
-                provider.update_pull_request(
-                    Path::new(&repo_path),
-                    &repository,
-                    existing.number,
-                    title.trim(),
-                    body,
-                )?
-            }
-            _ => provider.create_pull_request(
-                Path::new(&repo_path),
-                &repository,
-                approval.source_branch.as_str(),
-                approval.target_branch.checkout_branch().as_str(),
-                title.trim(),
-                body,
-            )?,
-        };
-
-        self.service
-            .task_store
-            .set_direct_merge_record(Path::new(&repo_path), task_id, None)?;
+        self.service.task_store.set_direct_merge_record(
+            std::path::Path::new(&repo_path),
+            task_id,
+            None,
+        )?;
         self.service.task_store.set_pull_request(
-            Path::new(&repo_path),
+            std::path::Path::new(&repo_path),
             task_id,
             Some(pull_request.record.clone()),
         )?;
@@ -107,9 +71,11 @@ impl<'a> PullRequestWorkflowService<'a> {
             ));
         }
         let repo_path = self.service.resolve_task_repo_path(repo_path)?;
-        self.service
-            .task_store
-            .set_pull_request(Path::new(&repo_path), task_id, None)?;
+        self.service.task_store.set_pull_request(
+            std::path::Path::new(&repo_path),
+            task_id,
+            None,
+        )?;
         Ok(true)
     }
 
@@ -132,22 +98,23 @@ impl<'a> PullRequestWorkflowService<'a> {
             ));
         }
 
-        let (source_branch, target_branch) =
-            self.builder_branch_details(context.repo.repo_path.as_str(), task_id, "detection")?;
+        let builder_context = BuilderBranchService::new(self.service).load_builder_branch_context(
+            context.repo.repo_path.as_str(),
+            task_id,
+            "Pull request detection",
+        )?;
+        let target_branch = BuilderBranchService::new(self.service)
+            .target_branch_for_repo(context.repo.repo_path.as_str())?
+            .checkout_branch();
         let repo_path = self.service.resolve_task_repo_path(repo_path)?;
         let provider_service = PullRequestProviderService::new(self.service);
-        let provider = provider_service.github_provider();
-        let repository = provider_service.github_pull_request_repository(repo_path.as_str())?;
-        let _remote_name = provider.resolve_remote_name(Path::new(&repo_path), &repository)?;
-        let pull_request = provider.find_open_pull_request_for_branch(
-            Path::new(&repo_path),
-            &repository,
-            source_branch.as_str(),
+        let pull_request = provider_service.find_open_pull_request_for_branch(
+            repo_path.as_str(),
+            builder_context.source_branch.as_str(),
         )?;
 
         if let Some(pull_request) = pull_request {
-            let record = store_linked_pull_request_metadata(
-                self.service,
+            let record = provider_service.store_linked_pull_request_metadata(
                 repo_path.as_str(),
                 task_id,
                 pull_request,
@@ -157,15 +124,14 @@ impl<'a> PullRequestWorkflowService<'a> {
             });
         }
 
-        let pull_request = provider.find_pull_request_for_branch(
-            Path::new(&repo_path),
-            &repository,
-            source_branch.as_str(),
+        let pull_request = provider_service.find_pull_request_for_branch(
+            repo_path.as_str(),
+            builder_context.source_branch.as_str(),
         )?;
 
         let Some(pull_request) = pull_request else {
             return Ok(TaskPullRequestDetectResult::NotFound {
-                source_branch,
+                source_branch: builder_context.source_branch,
                 target_branch,
             });
         };
@@ -177,7 +143,7 @@ impl<'a> PullRequestWorkflowService<'a> {
         }
 
         Ok(TaskPullRequestDetectResult::NotFound {
-            source_branch,
+            source_branch: builder_context.source_branch,
             target_branch,
         })
     }
@@ -215,17 +181,19 @@ impl<'a> PullRequestWorkflowService<'a> {
         }
 
         let repo_path = self.service.resolve_task_repo_path(repo_path)?;
-        let (source_branch, _target_branch) =
-            self.builder_branch_details(context.repo.repo_path.as_str(), task_id, "linking")?;
+        let builder_context = BuilderBranchService::new(self.service).load_builder_branch_context(
+            context.repo.repo_path.as_str(),
+            task_id,
+            "Pull request linking",
+        )?;
 
         if metadata.pull_request.is_none() {
-            store_linked_pull_request_metadata(
-                self.service,
+            PullRequestProviderService::new(self.service).store_linked_pull_request_metadata(
                 repo_path.as_str(),
                 task_id,
                 ResolvedPullRequest {
                     record: pull_request,
-                    source_branch: source_branch.clone(),
+                    source_branch: builder_context.source_branch.clone(),
                 },
             )?;
         }
@@ -242,37 +210,9 @@ impl<'a> PullRequestWorkflowService<'a> {
         BuilderCleanupService::new(self.service).finalize_direct_merge_cleanup(
             repo_path.as_str(),
             task_id,
-            source_branch.as_str(),
+            builder_context.source_branch.as_str(),
             false,
         )?;
         Ok(task)
-    }
-
-    fn builder_branch_details(
-        &self,
-        repo_path: &str,
-        task_id: &str,
-        operation: &str,
-    ) -> Result<(String, String)> {
-        let repo_config = self.service.workspace_get_repo_config(repo_path)?;
-        let working_directory = self
-            .service
-            .build_continuation_target_get(repo_path, task_id)?
-            .working_directory;
-        let current_branch = self
-            .service
-            .git_port
-            .get_current_branch(Path::new(&working_directory))?;
-        if current_branch.detached {
-            return Err(anyhow!(
-                "Pull request {operation} requires a builder branch, but the latest builder workspace is detached."
-            ));
-        }
-        let source_branch = current_branch
-            .name
-            .ok_or_else(|| anyhow!("Pull request {operation} requires a builder branch name."))?;
-        let target_branch =
-            normalize_approval_target_branch(&repo_config.default_target_branch)?.checkout_branch();
-        Ok((source_branch, target_branch))
     }
 }

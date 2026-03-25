@@ -1,11 +1,11 @@
 use super::approval_support::{
-    ensure_human_approval_status, github_provider_availability, is_terminal_task_status,
-    latest_builder_cleanup_target, normalize_approval_target_branch,
-    normalize_recorded_target_branch, publish_recorded_target_branch, publish_target_branch,
-    to_domain_merge_method,
+    ensure_human_approval_status, is_terminal_task_status, normalize_recorded_target_branch,
+    publish_recorded_target_branch, publish_target_branch, to_domain_merge_method,
 };
+use super::builder_branch_service::BuilderBranchService;
+use super::pull_request_provider_service::PullRequestProviderService;
 use crate::app_service::service_core::AppService;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use host_domain::{GitDiffScope, TaskApprovalContext};
 use std::path::Path;
 
@@ -40,17 +40,17 @@ impl<'a> ApprovalContextService<'a> {
         {
             let target_branch = normalize_recorded_target_branch(&direct_merge.target_branch)?;
             let publish_target = publish_recorded_target_branch(&direct_merge.target_branch)?;
-            let working_directory = latest_builder_cleanup_target(
-                self.service,
-                context.repo.repo_path.as_str(),
-                task_id,
-                Some(direct_merge.source_branch.as_str()),
-            )?
-            .and_then(|target| {
-                Path::new(target.working_directory.as_str())
-                    .exists()
-                    .then_some(target.working_directory)
-            });
+            let working_directory = BuilderBranchService::new(self.service)
+                .latest_cleanup_target(
+                    context.repo.repo_path.as_str(),
+                    task_id,
+                    Some(direct_merge.source_branch.as_str()),
+                )?
+                .and_then(|target| {
+                    Path::new(target.working_directory.as_str())
+                        .exists()
+                        .then_some(target.working_directory)
+                });
 
             return Ok(TaskApprovalContext {
                 task_id: task_id.to_string(),
@@ -65,10 +65,8 @@ impl<'a> ApprovalContextService<'a> {
                 pull_request: metadata.pull_request,
                 direct_merge: Some(direct_merge),
                 suggested_squash_commit_message: None,
-                providers: vec![github_provider_availability(
-                    Path::new(&context.repo.repo_path),
-                    &repo_config,
-                )],
+                providers: PullRequestProviderService::new(self.service)
+                    .provider_availability(Path::new(&context.repo.repo_path), &repo_config),
             });
         }
 
@@ -96,26 +94,16 @@ impl<'a> ApprovalContextService<'a> {
             .service
             .task_metadata_get(context.repo.repo_path.as_str(), task_id)?;
         let config = self.service.config_store.load()?;
-        let target_branch = normalize_approval_target_branch(&repo_config.default_target_branch)?;
+        let builder_context = BuilderBranchService::new(self.service).load_builder_branch_context(
+            context.repo.repo_path.as_str(),
+            task_id,
+            "Human approval",
+        )?;
+        let target_branch = BuilderBranchService::new(self.service)
+            .target_branch_for_repo(context.repo.repo_path.as_str())?;
         let publish_target = publish_target_branch(&repo_config.default_target_branch)?;
-        let working_directory = self
-            .service
-            .build_continuation_target_get(context.repo.repo_path.as_str(), task_id)?
-            .working_directory;
-        let current_branch = self
-            .service
-            .git_port
-            .get_current_branch(Path::new(&working_directory))?;
-        if current_branch.detached {
-            return Err(anyhow!(
-                "Human approval requires a builder branch, but the latest builder workspace is detached."
-            ));
-        }
-        let source_branch = current_branch
-            .name
-            .ok_or_else(|| anyhow!("Human approval requires a builder branch name."))?;
         let worktree_status = self.service.git_port.get_worktree_status_summary(
-            Path::new(&working_directory),
+            Path::new(&builder_context.working_directory),
             target_branch.canonical().as_str(),
             GitDiffScope::Uncommitted,
         )?;
@@ -123,8 +111,8 @@ impl<'a> ApprovalContextService<'a> {
         Ok(TaskApprovalContext {
             task_id: task_id.to_string(),
             task_status: context.task.status.as_cli_value().to_string(),
-            working_directory: Some(working_directory),
-            source_branch,
+            working_directory: Some(builder_context.working_directory),
+            source_branch: builder_context.source_branch,
             target_branch,
             publish_target,
             default_merge_method: to_domain_merge_method(config.git.default_merge_method),
@@ -133,10 +121,8 @@ impl<'a> ApprovalContextService<'a> {
             pull_request: metadata.pull_request,
             direct_merge: None,
             suggested_squash_commit_message: None,
-            providers: vec![github_provider_availability(
-                Path::new(&context.repo.repo_path),
-                &repo_config,
-            )],
+            providers: PullRequestProviderService::new(self.service)
+                .provider_availability(Path::new(&context.repo.repo_path), &repo_config),
         })
     }
 }

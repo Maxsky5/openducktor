@@ -1,4 +1,4 @@
-use super::approval_support::latest_builder_cleanup_target;
+use super::builder_branch_service::BuilderBranchService;
 use crate::app_service::service_core::AppService;
 use anyhow::Result;
 use host_domain::{DirectMergeRecord, GitMergeMethod};
@@ -49,8 +49,8 @@ impl<'a> BuilderCleanupService<'a> {
     ) -> Result<()> {
         self.service.stop_dev_servers_for_task(repo_path, task_id)?;
 
-        if let Some(cleanup_target) =
-            latest_builder_cleanup_target(self.service, repo_path, task_id, Some(source_branch))?
+        if let Some(cleanup_target) = BuilderBranchService::new(self.service)
+            .latest_cleanup_target(repo_path, task_id, Some(source_branch))?
         {
             let normalized_repo = std::fs::canonicalize(repo_path)
                 .unwrap_or_else(|_| Path::new(repo_path).to_path_buf());

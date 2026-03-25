@@ -1,9 +1,6 @@
-use super::approval_support::{
-    github_repository_from_config, is_syncable_pull_request_state, is_terminal_task_status,
-};
+use super::approval_support::{is_syncable_pull_request_state, is_terminal_task_status};
 use super::builder_cleanup_service::BuilderCleanupService;
 use super::pull_request_provider_service::PullRequestProviderService;
-use crate::app_service::git_provider::GitHostingProvider;
 use crate::app_service::service_core::AppService;
 use anyhow::Result;
 use host_domain::TaskStatus;
@@ -22,13 +19,9 @@ impl<'a> PullRequestSyncService<'a> {
         let repo_path = self.service.resolve_task_repo_path(repo_path)?;
         let tasks = self.service.task_store.list_tasks(Path::new(&repo_path))?;
         let provider_service = PullRequestProviderService::new(self.service);
-        let provider = provider_service.github_provider();
-        if !provider.is_available() {
+        if !provider_service.sync_available() {
             return Ok(false);
         }
-        let github_repository = github_repository_from_config(
-            &self.service.workspace_get_repo_config(repo_path.as_str())?,
-        );
 
         for task in tasks {
             if is_terminal_task_status(&task.status) {
@@ -41,21 +34,15 @@ impl<'a> PullRequestSyncService<'a> {
             else {
                 continue;
             };
-            if pull_request.provider_id != "github" {
-                continue;
-            }
             if !is_syncable_pull_request_state(pull_request.state.as_str()) {
                 continue;
             }
 
-            let Some(repository) = github_repository.as_ref() else {
+            let Some(updated) =
+                provider_service.fetch_linked_pull_request(repo_path.as_str(), &pull_request)?
+            else {
                 continue;
             };
-            let updated = provider.fetch_pull_request(
-                Path::new(&repo_path),
-                repository,
-                pull_request.number,
-            )?;
             self.service.task_store.set_pull_request(
                 Path::new(&repo_path),
                 task.id.as_str(),
