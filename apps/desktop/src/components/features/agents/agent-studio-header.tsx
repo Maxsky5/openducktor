@@ -21,6 +21,7 @@ import {
   Command,
   CommandEmpty,
   CommandGroup,
+  CommandInput,
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
@@ -277,6 +278,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
             </PopoverTrigger>
             <PopoverContent align="end" className="w-80 p-0">
               <Command>
+                <CommandInput placeholder="Search sessions…" className="h-8 text-sm" />
                 <CommandList>
                   <CommandEmpty>No sessions available.</CommandEmpty>
                   {sessionGroupsWithOptions.map((group) => (

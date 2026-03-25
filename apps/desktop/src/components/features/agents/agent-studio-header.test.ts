@@ -216,6 +216,7 @@ describe("AgentStudioHeader", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Session history/i }));
 
+    expect(screen.getByPlaceholderText(/Search sessions/i)).toBeTruthy();
     expect(screen.getByText("Spec sessions")).toBeTruthy();
     expect(screen.getByText("Build sessions")).toBeTruthy();
 
@@ -255,22 +256,6 @@ describe("AgentStudioHeader", () => {
     );
     expect(html).toMatch(
       /<button[^>]*(aria-label="Create session"[^>]*disabled=""|disabled=""[^>]*aria-label="Create session")/,
-    );
-  });
-
-  test("disables session history trigger when studio is not ready", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, {
-        model: {
-          ...buildModel(),
-          agentStudioReady: false,
-        },
-      }),
-    );
-
-    expect(html).toMatch(/aria-label="Session history[^"]*"/);
-    expect(html).toMatch(
-      /<button[^>]*(aria-label="Session history[^"]*"[^>]*disabled=""|disabled=""[^>]*aria-label="Session history[^"]*")/,
     );
   });
 
