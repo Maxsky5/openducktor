@@ -35,7 +35,7 @@ impl<'a> BuilderBranchService<'a> {
             .build_continuation_target_get(repo_path, task_id)?
             .ok_or_else(|| {
                 anyhow!(
-                    "Builder continuation cannot start until a builder worktree exists for task {task_id}. Start Builder first."
+                    "{operation_label} requires a builder worktree for task {task_id}. Start Builder first."
                 )
             })?
             .working_directory;
@@ -204,6 +204,38 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "Pull request detection requires a builder branch, but the latest builder workspace is detached."
+        );
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn load_builder_branch_context_uses_operation_label_when_worktree_is_missing() -> Result<()> {
+        let root = unique_temp_path("builder-branch-missing");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+                revision: None,
+            },
+            config_store,
+        );
+        let repo_path = repo.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
+
+        let error = BuilderBranchService::new(&service)
+            .load_builder_branch_context(repo_path.as_str(), "task-1", "Pull request detection")
+            .expect_err("missing builder worktree should be rejected");
+        assert_eq!(
+            error.to_string(),
+            "Pull request detection requires a builder worktree for task task-1. Start Builder first."
         );
 
         let _ = fs::remove_dir_all(root);

@@ -454,7 +454,7 @@ fn build_continuation_target_get_returns_none_when_builder_worktree_is_missing()
 
     let config_store = AppConfigStore::from_path(repo_root.join("config.json"));
     let repo_path = repo.to_string_lossy().to_string();
-    let (service, _task_state, _git_state) = build_service_with_store(
+    let (service, task_state, _git_state) = build_service_with_store(
         vec![make_task(
             "task-1",
             "task",
@@ -469,6 +469,19 @@ fn build_continuation_target_get_returns_none_when_builder_worktree_is_missing()
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
+
+    let mut session = make_session("task-1", "build-session-missing");
+    session.role = "build".to_string();
+    session.started_at = "2026-02-22T09:00:00.000Z".to_string();
+    session.working_directory = repo_root
+        .join("worktrees")
+        .join("missing-task-1")
+        .to_string_lossy()
+        .to_string();
+    task_state
+        .lock()
+        .expect("task lock poisoned")
+        .agent_sessions = vec![session];
 
     let target = service
         .build_continuation_target_get(repo_path.as_str(), "task-1")

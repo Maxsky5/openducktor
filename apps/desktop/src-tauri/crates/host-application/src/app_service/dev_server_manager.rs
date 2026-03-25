@@ -66,7 +66,6 @@ impl AppService {
                 "No builder dev server scripts are configured for {repo_path}. Add them in repository settings first."
             ));
         }
-        validate_hook_trust(repo_path.as_str(), &repo_config)?;
         let worktree_path = self
             .build_continuation_target_get(repo_path.as_str(), task_id)?
             .ok_or_else(|| {
@@ -75,6 +74,7 @@ impl AppService {
                 )
             })?
             .working_directory;
+        validate_hook_trust(repo_path.as_str(), &repo_config)?;
         let key = dev_server_group_key(repo_path.as_str(), task_id);
 
         {
@@ -1083,9 +1083,12 @@ fn stop_process_group(pid: u32, timeout: Duration) -> Result<()> {
 mod tests {
     use super::*;
     use crate::app_service::test_support::{
-        build_service_with_state, lock_env, set_env_var, spawn_sleep_process_group,
-        unique_temp_path, wait_for_path_exists, wait_for_process_exit, write_executable_script,
+        build_service_with_state, build_service_with_store, init_git_repo, lock_env, make_task,
+        set_env_var, spawn_sleep_process_group, unique_temp_path, wait_for_path_exists,
+        wait_for_process_exit, write_executable_script,
     };
+    use host_domain::{GitCurrentBranch, TaskStatus};
+    use host_infra_system::AppConfigStore;
     use std::fs;
     use std::sync::{Arc, Mutex};
     use std::thread;
@@ -1295,6 +1298,55 @@ mod tests {
         assert!(script.buffered_log_lines.iter().any(|line| line
             .text
             .contains("Dev server command is empty for Frontend")));
+    }
+
+    #[test]
+    fn dev_server_start_requires_builder_worktree_before_hook_trust() {
+        let root = unique_temp_path("dev-server-start-missing-worktree");
+        let repo = root.join("repo");
+        init_git_repo(&repo).expect("test repo should initialize");
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "task", TaskStatus::InProgress)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+                revision: None,
+            },
+            config_store,
+        );
+        let repo_path = repo.to_string_lossy().to_string();
+        service
+            .workspace_add(repo_path.as_str())
+            .expect("workspace should add");
+        service
+            .workspace_update_repo_config(
+                repo_path.as_str(),
+                RepoConfig {
+                    dev_servers: vec![RepoDevServerScript {
+                        id: "frontend".to_string(),
+                        name: "Frontend".to_string(),
+                        command: "bun run dev".to_string(),
+                    }],
+                    trusted_hooks: false,
+                    trusted_hooks_fingerprint: None,
+                    ..Default::default()
+                },
+            )
+            .expect("repo config should persist");
+
+        let emitter: DevServerEmitter = Arc::new(|_| {});
+        let error = service
+            .dev_server_start(repo_path.as_str(), "task-1", emitter)
+            .expect_err("missing builder worktree should fail before hook trust");
+        assert_eq!(
+            error.to_string(),
+            "Builder continuation cannot start until a builder worktree exists for task task-1. Start Builder first."
+        );
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

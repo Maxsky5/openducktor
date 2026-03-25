@@ -112,11 +112,20 @@ impl AppService {
             return Ok(None);
         };
 
-        let working_directory = validate_build_continuation_working_directory(
+        let working_directory = match validate_build_continuation_working_directory(
             repo_path.as_str(),
             task_id,
             &latest_builder_session.working_directory,
-        )?;
+        ) {
+            Ok(working_directory) => working_directory,
+            Err(error) => {
+                let message = error.to_string();
+                if message.contains("The latest builder workspace does not exist") {
+                    return Ok(None);
+                }
+                return Err(error);
+            }
+        };
         Ok(Some(BuildContinuationTarget {
             working_directory,
             source: BuildContinuationTargetSource::BuilderSession,
