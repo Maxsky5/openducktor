@@ -123,11 +123,6 @@ const getEmptyLogMessage = (script: DevServerScriptState): string => {
   return "Logs will appear here once this dev server writes output.";
 };
 
-const buildRenderedLogLine = (
-  buffer: AgentStudioDevServerLogBuffer,
-  offset: number,
-): AgentStudioDevServerLogEntry | null => getDevServerLogEntryAt(buffer, offset);
-
 const AgentStudioDevServerLogRow = memo(function AgentStudioDevServerLogRow({
   logLine,
 }: {
@@ -135,7 +130,6 @@ const AgentStudioDevServerLogRow = memo(function AgentStudioDevServerLogRow({
 }): ReactElement {
   return (
     <div
-      key={logLine.id}
       className="flex gap-3 [content-visibility:auto] [contain-intrinsic-size:20px]"
       data-testid="agent-studio-dev-server-log-line"
     >
@@ -160,8 +154,8 @@ const AgentStudioDevServerLogList = memo(function AgentStudioDevServerLogList({
   const logRows = useMemo(() => {
     const rows: ReactElement[] = [];
 
-    for (let offset = 0; offset < logBuffer.size; offset += 1) {
-      const logLine = buildRenderedLogLine(logBuffer, offset);
+    for (let offset = 0; offset < logBuffer.entries.length; offset += 1) {
+      const logLine = getDevServerLogEntryAt(logBuffer, offset);
       if (!logLine) {
         continue;
       }
@@ -190,7 +184,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
   const selectedTabsValue = model.selectedScriptId ?? model.scripts[0]?.scriptId ?? "__none__";
   const selectedScriptContent = selectedScript ?? model.scripts[0] ?? null;
   const selectedScriptLogBuffer = model.selectedScriptLogBuffer;
-  const selectedScriptLogCount = selectedScriptLogBuffer?.size ?? 0;
+  const selectedScriptLogCount = selectedScriptLogBuffer?.entries.length ?? 0;
 
   useEffect(() => {
     if (!copiedWorktreePath) {

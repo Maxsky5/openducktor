@@ -204,6 +204,14 @@ export function useAgentStudioDevServerPanel({
     setSelectedScriptLogBuffer(getDevServerLogBuffer(logBuffersRef.current, scriptId));
   }, []);
 
+  const hydrateLogBuffersFromState = useCallback((state: DevServerGroupState | null): void => {
+    if (logBuffersRef.current.size > 0) {
+      return;
+    }
+
+    syncDevServerLogBufferStore(logBuffersRef.current, state);
+  }, []);
+
   const syncStateFromEvent = useCallback(
     (event: DevServerEvent): void => {
       if (!repoPath || !taskId) {
@@ -278,11 +286,12 @@ export function useAgentStudioDevServerPanel({
       stateQuery.data &&
       stateQuery.dataUpdatedAt >= queryActivationState.since
     ) {
-      syncDevServerLogBufferStore(logBuffersRef.current, stateQuery.data);
+      hydrateLogBuffersFromState(stateQuery.data);
       setLiveState(stateQuery.data);
       syncSelectedScriptLogBuffer(selectedScriptIdRef.current);
     }
   }, [
+    hydrateLogBuffersFromState,
     queryActivationState.enabled,
     queryActivationState.since,
     queryEnabled,
@@ -298,12 +307,12 @@ export function useAgentStudioDevServerPanel({
         return;
       }
 
-      syncDevServerLogBufferStore(logBuffersRef.current, nextState);
+      hydrateLogBuffersFromState(nextState);
       queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), nextState);
       setLiveState(nextState);
       syncSelectedScriptLogBuffer(selectedScriptIdRef.current);
     },
-    [queryClient, repoPath, syncSelectedScriptLogBuffer, taskId],
+    [hydrateLogBuffersFromState, queryClient, repoPath, syncSelectedScriptLogBuffer, taskId],
   );
 
   const invalidateState = useCallback((): void => {

@@ -59,6 +59,13 @@ describe("dev-server-log-buffer", () => {
       timestamp: "2026-03-25T10:00:00.000Z",
     });
 
+    const initialBuffer = getDevServerLogBuffer(store, "frontend");
+    expect(initialBuffer).not.toBeNull();
+    if (!initialBuffer) {
+      throw new Error("Expected initial frontend log buffer to exist.");
+    }
+    expect(getDevServerLogEntryAt(initialBuffer, 0)?.text).toBe("ready");
+
     for (let index = 1; index <= MAX_BUFFERED_DEV_SERVER_LOG_LINES; index += 1) {
       appendDevServerLogLine(store, {
         scriptId: "frontend",
@@ -69,16 +76,47 @@ describe("dev-server-log-buffer", () => {
     }
 
     const buffer = getDevServerLogBuffer(store, "frontend");
-    expect(buffer?.size).toBe(MAX_BUFFERED_DEV_SERVER_LOG_LINES);
+    expect(buffer?.entries.length).toBe(MAX_BUFFERED_DEV_SERVER_LOG_LINES);
     expect(buffer).not.toBeNull();
     if (!buffer) {
       throw new Error("Expected frontend log buffer to exist.");
     }
 
     expect(getDevServerLogEntryAt(buffer, 0)?.text).toBe("line-1");
-    expect(getDevServerLogEntryAt(buffer, buffer.size - 1)?.text).toBe(
+    expect(getDevServerLogEntryAt(buffer, buffer.entries.length - 1)?.text).toBe(
       `line-${MAX_BUFFERED_DEV_SERVER_LOG_LINES}`,
     );
+  });
+
+  test("returned buffer snapshots stay stable after later appends", () => {
+    const store = createDevServerLogBufferStore();
+
+    for (let index = 0; index < MAX_BUFFERED_DEV_SERVER_LOG_LINES; index += 1) {
+      appendDevServerLogLine(store, {
+        scriptId: "frontend",
+        stream: "stdout",
+        text: `line-${index}`,
+        timestamp: `2026-03-25T10:00:${String(index % 60).padStart(2, "0")}.000Z`,
+      });
+    }
+
+    const previousSnapshot = getDevServerLogBuffer(store, "frontend");
+    expect(previousSnapshot).not.toBeNull();
+    if (!previousSnapshot) {
+      throw new Error("Expected frontend snapshot before wrap.");
+    }
+
+    appendDevServerLogLine(store, {
+      scriptId: "frontend",
+      stream: "stdout",
+      text: "latest",
+      timestamp: "2026-03-25T10:01:00.000Z",
+    });
+
+    expect(getDevServerLogEntryAt(previousSnapshot, 0)?.text).toBe("line-0");
+    expect(
+      getDevServerLogEntryAt(previousSnapshot, previousSnapshot.entries.length - 1)?.text,
+    ).toBe(`line-${MAX_BUFFERED_DEV_SERVER_LOG_LINES - 1}`);
   });
 
   test("replaces and prunes script buffers when syncing state", () => {

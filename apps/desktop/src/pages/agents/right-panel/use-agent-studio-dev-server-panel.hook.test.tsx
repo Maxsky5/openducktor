@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerGroupState, DevServerScriptState } from "@openducktor/contracts";
 import { act, render, waitFor } from "@testing-library/react";
+import { getDevServerLogEntryAt } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import { QueryProvider } from "@/lib/query-provider";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
@@ -283,6 +284,14 @@ describe("useAgentStudioDevServerPanel", () => {
       }
       return latest;
     };
+    const getSelectedLogText = (): string | undefined => {
+      const selectedLogBuffer = getLatest().selectedScriptLogBuffer;
+      if (!selectedLogBuffer) {
+        return undefined;
+      }
+
+      return getDevServerLogEntryAt(selectedLogBuffer, 0)?.text;
+    };
 
     const Harness = ({ args }: { args: HookArgs }) => {
       latest = useAgentStudioDevServerPanel(args);
@@ -322,10 +331,98 @@ describe("useAgentStudioDevServerPanel", () => {
       });
 
       await waitFor(() => {
-        expect(getLatest().selectedScriptLogBuffer?.size).toBe(1);
+        expect(getLatest().selectedScriptLogBuffer?.entries.length).toBe(1);
       });
       expect(getLatest().selectedScript?.bufferedLogLines).toHaveLength(0);
-      expect(getLatest().selectedScriptLogBuffer?.entries[0]?.text).toBe("ready");
+      expect(getSelectedLogText()).toBe("ready");
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("preserves newer streamed log lines when mutation state syncs stale query data", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    const runningState = buildState({
+      scripts: [
+        buildScript({
+          status: "running",
+          pid: 4242,
+          startedAt: "2026-03-19T15:30:00.000Z",
+        }),
+      ],
+    });
+
+    devServerGetState = async () => runningState;
+    devServerRestart = async () => runningState;
+
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (latest === null) {
+        throw new Error("Hook result not ready");
+      }
+      return latest;
+    };
+    const getSelectedLogText = (): string | undefined => {
+      const selectedLogBuffer = getLatest().selectedScriptLogBuffer;
+      if (!selectedLogBuffer) {
+        return undefined;
+      }
+
+      return getDevServerLogEntryAt(selectedLogBuffer, 0)?.text;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useAgentStudioDevServerPanel(args);
+      return null;
+    };
+
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness
+          args={{
+            repoPath: "/repo",
+            taskId: "task-7",
+            repoSettings,
+            enabled: true,
+          }}
+        />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().mode).toBe("active");
+      });
+
+      await act(async () => {
+        devServerEventListener?.({
+          type: "log_line",
+          repoPath: "/repo",
+          taskId: "task-7",
+          logLine: {
+            scriptId: "frontend",
+            stream: "stdout",
+            text: "fresh-line",
+            timestamp: "2026-03-19T15:30:01.000Z",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(getSelectedLogText()).toBe("fresh-line");
+      });
+
+      await act(async () => {
+        getLatest().onRestart();
+      });
+
+      await waitFor(() => {
+        expect(getLatest().isRestartPending).toBe(false);
+      });
+      expect(getSelectedLogText()).toBe("fresh-line");
     } finally {
       view.unmount();
     }

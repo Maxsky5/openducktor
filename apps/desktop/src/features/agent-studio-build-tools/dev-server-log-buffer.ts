@@ -22,8 +22,6 @@ export type AgentStudioDevServerLogEntry = {
 
 export type AgentStudioDevServerLogBuffer = {
   entries: readonly AgentStudioDevServerLogEntry[];
-  head: number;
-  size: number;
 };
 
 type DevServerLogBufferState = {
@@ -143,9 +141,14 @@ export const getDevServerLogBuffer = (
   }
 
   return {
-    entries: buffer.entries,
-    head: buffer.head,
-    size: buffer.size,
+    entries: Array.from({ length: buffer.size }, (_, offset) => {
+      const entry = buffer.entries[(buffer.head + offset) % MAX_BUFFERED_DEV_SERVER_LOG_LINES];
+      if (!entry) {
+        throw new Error(`Missing dev server log entry at logical offset ${offset}.`);
+      }
+
+      return entry;
+    }),
   };
 };
 
@@ -153,9 +156,9 @@ export const getDevServerLogEntryAt = (
   buffer: AgentStudioDevServerLogBuffer,
   offset: number,
 ): AgentStudioDevServerLogEntry | null => {
-  if (offset < 0 || offset >= buffer.size || buffer.entries.length === 0) {
+  if (offset < 0 || offset >= buffer.entries.length) {
     return null;
   }
 
-  return buffer.entries[(buffer.head + offset) % buffer.entries.length] ?? null;
+  return buffer.entries[offset] ?? null;
 };

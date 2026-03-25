@@ -86,8 +86,6 @@ const devServerModel: AgentStudioDevServerPanelModel = {
       stream: logLine.stream,
       text: logLine.text,
     })),
-    head: 0,
-    size: selectedScript.bufferedLogLines.length,
   } satisfies AgentStudioDevServerLogBuffer,
   error: null,
   isStartPending: false,

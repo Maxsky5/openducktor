@@ -15,8 +15,6 @@ const buildLogBuffer = (script: DevServerScriptState): AgentStudioDevServerLogBu
     stream: logLine.stream,
     text: logLine.text,
   })),
-  head: 0,
-  size: script.bufferedLogLines.length,
 });
 
 const baseModel = (
