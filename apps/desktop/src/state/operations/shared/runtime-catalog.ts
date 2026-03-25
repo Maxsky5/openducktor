@@ -7,6 +7,7 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelCatalog } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
+import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import { appQueryClient } from "@/lib/query-client";
 import { ensureRuntimeListFromQuery } from "@/state/queries/runtime";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
@@ -74,7 +75,6 @@ type NormalizedMcpStatus = {
   mcpServerError: string | null;
 };
 
-const ODT_MCP_SERVER_NAME = "openducktor";
 const ACTIVE_RUN_STATES = new Set<RunSummary["state"]>([
   "starting",
   "running",

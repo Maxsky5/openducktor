@@ -3,6 +3,7 @@ import {
   type BeadsCheck,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeCheck,
+  type RuntimeDescriptor,
   type RuntimeKind,
 } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
@@ -53,6 +54,16 @@ const makeRepoHealth = (
   errors: [],
   ...overrides,
 });
+
+const MOCK_RUNTIME_DESCRIPTOR: RuntimeDescriptor = {
+  kind: "mock-runtime",
+  label: "Mock Runtime",
+  description: "Mock runtime descriptor for per-kind health tests.",
+  readOnlyRoleBlockedTools: [],
+  capabilities: {
+    ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+  },
+};
 
 const toastError = mock((_message: string, _options?: { description?: string }) => {});
 const toastSuccess = mock((_message: string, _options?: { description?: string }) => {});
@@ -259,7 +270,9 @@ describe("use-checks", () => {
       await harness.waitFor((value) => value.hasCachedRepoRuntimeHealth("/repo-b", ["opencode"]));
 
       expect(harness.getLatest().activeBeadsCheck?.beadsPath).toBe("/repo-a/.beads");
-      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toBeNull();
+      expect(
+        harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.availableToolIds,
+      ).toEqual(["/repo-a"]);
       expect(harness.getLatest().hasCachedBeadsCheck("/repo-b")).toBe(true);
       expect(harness.getLatest().hasCachedRepoRuntimeHealth("/repo-b", ["opencode"])).toBe(true);
       expect(beadsCheck).toHaveBeenCalledTimes(1);
@@ -370,6 +383,127 @@ describe("use-checks", () => {
     } finally {
       await harness.unmount();
       host.runtimeCheck = original.runtimeCheck;
+    }
+  });
+
+  test("projects runtime health query failures as unhealthy runtime state", async () => {
+    repoHealthHandler = async () => {
+      throw new Error("runtime health unreachable");
+    };
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+
+    try {
+      await harness.mount();
+
+      await harness.run(async (value) => {
+        await expect(value.refreshRepoRuntimeHealthForRepo("/repo-a", true)).resolves.toBeDefined();
+      });
+
+      await harness.waitFor((value) => {
+        const runtimeHealth = value.activeRepoRuntimeHealthByRuntime.opencode;
+        return runtimeHealth != null && runtimeHealth.runtimeOk === false;
+      });
+
+      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toEqual(
+        expect.objectContaining({
+          runtimeOk: false,
+          mcpOk: false,
+          runtimeError: "runtime health unreachable",
+        }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("prefers runtime health query error state over stale successful data", async () => {
+    let shouldFailRefresh = false;
+    repoHealthHandler = async () => {
+      if (shouldFailRefresh) {
+        throw new Error("runtime health refresh failed");
+      }
+      return makeRepoHealth({ availableToolIds: ["healthy"] });
+    };
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => {
+        return value.activeRepoRuntimeHealthByRuntime.opencode?.runtimeOk === true;
+      });
+
+      shouldFailRefresh = true;
+
+      await harness.run(async (value) => {
+        await expect(value.refreshRepoRuntimeHealthForRepo("/repo-a", true)).resolves.toBeDefined();
+      });
+
+      await harness.waitFor((value) => {
+        const runtimeHealth = value.activeRepoRuntimeHealthByRuntime.opencode;
+        return runtimeHealth != null && runtimeHealth.runtimeOk === false;
+      });
+
+      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toEqual(
+        expect.objectContaining({
+          runtimeOk: false,
+          mcpOk: false,
+          runtimeError: "runtime health refresh failed",
+        }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps healthy runtime kinds when one runtime health probe fails", async () => {
+    repoHealthHandler = async (_repoPath, runtimeKind) => {
+      if (runtimeKind === "mock-runtime") {
+        throw new Error("mock runtime probe failed");
+      }
+      return makeRepoHealth({ availableToolIds: [runtimeKind] });
+    };
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, MOCK_RUNTIME_DESCRIPTOR],
+    });
+
+    try {
+      await harness.mount();
+
+      await harness.run(async (value) => {
+        await expect(value.refreshRepoRuntimeHealthForRepo("/repo-a", true)).resolves.toBeDefined();
+      });
+
+      await harness.waitFor((value) => {
+        const opencodeHealth = value.activeRepoRuntimeHealthByRuntime.opencode;
+        const mockRuntimeHealth = value.activeRepoRuntimeHealthByRuntime["mock-runtime"];
+        return opencodeHealth != null && mockRuntimeHealth != null;
+      });
+
+      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toEqual(
+        expect.objectContaining({
+          runtimeOk: true,
+          availableToolIds: ["opencode"],
+        }),
+      );
+      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime["mock-runtime"]).toEqual(
+        expect.objectContaining({
+          runtimeOk: false,
+          mcpOk: false,
+          runtimeError: "mock runtime probe failed",
+        }),
+      );
+    } finally {
+      await harness.unmount();
     }
   });
 });

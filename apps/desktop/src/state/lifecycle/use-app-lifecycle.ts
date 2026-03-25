@@ -1,5 +1,5 @@
 import { type RunEvent, runEventSchema } from "@openducktor/contracts";
-import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useLayoutEffect, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
@@ -43,7 +43,7 @@ export function useAppLifecycle({
   const activeRepoRef = useRef(activeRepo);
   const refreshTaskDataRef = useRef(refreshTaskData);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     activeRepoRef.current = activeRepo;
     refreshTaskDataRef.current = refreshTaskData;
   }, [activeRepo, refreshTaskData]);
@@ -169,11 +169,21 @@ export function useAppLifecycle({
       }
     })();
     const runtimeCheckPromise = refreshRuntimeCheck(false);
-    const branchesPromise = refreshBranches(false);
+    const isStaleRepoLoad = (): boolean =>
+      repoLoadVersionRef.current !== loadVersion || activeRepoRef.current !== activeRepo;
 
-    Promise.allSettled([taskLoadPromise, runtimeCheckPromise, branchesPromise])
-      .then(([tasksResult, runtimeResult, branchesResult]) => {
-        if (repoLoadVersionRef.current !== loadVersion) {
+    void refreshBranches(false).catch((error: unknown) => {
+      if (isStaleRepoLoad()) {
+        return;
+      }
+      toast.error("Repository branches unavailable", {
+        description: errorMessage(error),
+      });
+    });
+
+    Promise.allSettled([taskLoadPromise, runtimeCheckPromise])
+      .then(([tasksResult, runtimeResult]) => {
+        if (isStaleRepoLoad()) {
           return;
         }
 
@@ -186,12 +196,6 @@ export function useAppLifecycle({
         if (runtimeResult.status === "rejected") {
           toast.error("Runtime checks unavailable", {
             description: errorMessage(runtimeResult.reason),
-          });
-        }
-
-        if (branchesResult.status === "rejected") {
-          toast.error("Repository branches unavailable", {
-            description: errorMessage(branchesResult.reason),
           });
         }
       })
