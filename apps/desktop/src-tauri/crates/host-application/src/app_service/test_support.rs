@@ -88,6 +88,7 @@ pub(crate) struct TaskStoreState {
     pub(crate) tasks: Vec<TaskCard>,
     pub(crate) list_error: Option<String>,
     pub(crate) delete_calls: Vec<(String, bool)>,
+    pub(crate) delete_error: Option<String>,
     pub(crate) created_inputs: Vec<CreateTaskInput>,
     pub(crate) updated_patches: Vec<(String, UpdateTaskPatch)>,
     pub(crate) spec_get_calls: Vec<String>,
@@ -202,6 +203,9 @@ impl TaskStore for FakeTaskStore {
 
     fn delete_task(&self, _repo_path: &Path, task_id: &str, delete_subtasks: bool) -> Result<bool> {
         let mut state = self.state.lock().expect("task store lock poisoned");
+        if let Some(message) = state.delete_error.as_ref() {
+            return Err(anyhow!(message.clone()));
+        }
         state
             .delete_calls
             .push((task_id.to_string(), delete_subtasks));
@@ -982,6 +986,7 @@ pub(crate) fn build_service_with_git_state_enforced(
         tasks,
         list_error: None,
         delete_calls: Vec::new(),
+        delete_error: None,
         created_inputs: Vec::new(),
         updated_patches: Vec::new(),
         spec_get_calls: Vec::new(),
@@ -1066,6 +1071,7 @@ pub(crate) fn build_service_with_git_state(
         tasks,
         list_error: None,
         delete_calls: Vec::new(),
+        delete_error: None,
         created_inputs: Vec::new(),
         updated_patches: Vec::new(),
         spec_get_calls: Vec::new(),
@@ -1537,6 +1543,7 @@ pub(crate) fn build_service_with_store(
         tasks,
         list_error: None,
         delete_calls: Vec::new(),
+        delete_error: None,
         created_inputs: Vec::new(),
         updated_patches: Vec::new(),
         spec_get_calls: Vec::new(),

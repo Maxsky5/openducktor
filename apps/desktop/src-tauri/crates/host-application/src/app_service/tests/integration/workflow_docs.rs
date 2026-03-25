@@ -204,7 +204,7 @@ fn task_delete_allows_cascade_and_forwards_delete_flag() -> Result<()> {
         repo_path,
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+            worktree_base_path: Some("/tmp".to_string()),
             branch_prefix: "obp".to_string(),
             default_target_branch: host_infra_system::GitTargetBranch {
                 remote: Some("origin".to_string()),
@@ -267,7 +267,7 @@ fn task_delete_removes_managed_worktrees_and_related_branches() -> Result<()> {
         repo_path,
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+            worktree_base_path: Some("/tmp".to_string()),
             branch_prefix: "obp".to_string(),
             default_target_branch: host_infra_system::GitTargetBranch {
                 remote: Some("origin".to_string()),
@@ -283,6 +283,18 @@ fn task_delete_removes_managed_worktrees_and_related_branches() -> Result<()> {
             agent_defaults: Default::default(),
         },
     )?;
+    git_state
+        .lock()
+        .expect("git lock poisoned")
+        .current_branches_by_path
+        .insert(
+            worktree_path.to_string(),
+            GitCurrentBranch {
+                name: Some("obp/parent-1-cleanup".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
 
     task_state
         .lock()
@@ -367,7 +379,7 @@ fn task_delete_rejects_branch_still_checked_out_in_remaining_worktree() -> Resul
         repo_path,
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+            worktree_base_path: Some("/tmp".to_string()),
             branch_prefix: "obp".to_string(),
             default_target_branch: host_infra_system::GitTargetBranch {
                 remote: Some("origin".to_string()),
@@ -383,6 +395,18 @@ fn task_delete_rejects_branch_still_checked_out_in_remaining_worktree() -> Resul
             agent_defaults: Default::default(),
         },
     )?;
+    git_state
+        .lock()
+        .expect("git lock poisoned")
+        .current_branches_by_path
+        .insert(
+            worktree_path.to_string(),
+            GitCurrentBranch {
+                name: Some("obp/parent-1-cleanup".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
 
     task_state
         .lock()
@@ -448,7 +472,7 @@ fn task_delete_cascade_cleans_descendant_worktrees() -> Result<()> {
         repo_path,
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+            worktree_base_path: Some("/tmp".to_string()),
             branch_prefix: "obp".to_string(),
             default_target_branch: host_infra_system::GitTargetBranch {
                 remote: Some("origin".to_string()),
@@ -464,6 +488,18 @@ fn task_delete_cascade_cleans_descendant_worktrees() -> Result<()> {
             agent_defaults: Default::default(),
         },
     )?;
+    git_state
+        .lock()
+        .expect("git lock poisoned")
+        .current_branches_by_path
+        .insert(
+            child_worktree_path.to_string(),
+            GitCurrentBranch {
+                name: Some("obp/child-1-cleanup".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
 
     task_state
         .lock()
@@ -527,7 +563,7 @@ fn task_delete_stops_before_store_delete_when_worktree_cleanup_fails() {
             repo_path,
             RepoConfig {
                 default_runtime_kind: "opencode".to_string(),
-                worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+                worktree_base_path: Some("/tmp".to_string()),
                 branch_prefix: "obp".to_string(),
                 default_target_branch: host_infra_system::GitTargetBranch {
                     remote: Some("origin".to_string()),
@@ -544,6 +580,18 @@ fn task_delete_stops_before_store_delete_when_worktree_cleanup_fails() {
             },
         )
         .expect("repo config update should succeed");
+    git_state
+        .lock()
+        .expect("git lock poisoned")
+        .current_branches_by_path
+        .insert(
+            worktree_path.to_string(),
+            GitCurrentBranch {
+                name: Some("obp/parent-1-cleanup".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
 
     task_state
         .lock()
@@ -593,7 +641,7 @@ fn task_delete_rejects_active_builder_runs() {
             repo_path,
             RepoConfig {
                 default_runtime_kind: "opencode".to_string(),
-                worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+                worktree_base_path: Some("/tmp".to_string()),
                 branch_prefix: "obp".to_string(),
                 default_target_branch: host_infra_system::GitTargetBranch {
                     remote: Some("origin".to_string()),
@@ -641,7 +689,7 @@ fn task_delete_rejects_active_builder_runs() {
             worktree_path: worktree_path.to_string(),
             repo_config: RepoConfig {
                 default_runtime_kind: "opencode".to_string(),
-                worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+                worktree_base_path: Some("/tmp".to_string()),
                 branch_prefix: "obp".to_string(),
                 default_target_branch: host_infra_system::GitTargetBranch {
                     remote: Some("origin".to_string()),
@@ -714,7 +762,7 @@ fn task_delete_retries_branch_cleanup_after_worktree_was_removed() -> Result<()>
         repo_path,
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+            worktree_base_path: Some("/tmp".to_string()),
             branch_prefix: "obp".to_string(),
             default_target_branch: host_infra_system::GitTargetBranch {
                 remote: Some("origin".to_string()),
@@ -730,6 +778,18 @@ fn task_delete_retries_branch_cleanup_after_worktree_was_removed() -> Result<()>
             agent_defaults: Default::default(),
         },
     )?;
+    git_state
+        .lock()
+        .expect("git lock poisoned")
+        .current_branches_by_path
+        .insert(
+            worktree_path.to_string(),
+            GitCurrentBranch {
+                name: Some("obp/parent-1-cleanup".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
 
     task_state
         .lock()
@@ -774,6 +834,253 @@ fn task_delete_retries_branch_cleanup_after_worktree_was_removed() -> Result<()>
         task_state.delete_calls,
         vec![("parent-1".to_string(), false)]
     );
+    Ok(())
+}
+
+#[test]
+fn task_delete_only_removes_task_managed_worktrees() -> Result<()> {
+    let repo_path = unique_temp_path("task-delete-owned-worktrees-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+    let worktree_base = repo_path.join("worktrees");
+    let managed_worktree = worktree_base.join("task-1");
+    let unrelated_worktree = worktree_base.join("user-scratch");
+    fs::create_dir_all(&managed_worktree)?;
+    fs::create_dir_all(&unrelated_worktree)?;
+
+    let task = make_task("task-1", "task", TaskStatus::Open);
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![task],
+        vec![
+            GitBranch {
+                name: "odt/task-1".to_string(),
+                is_current: false,
+                is_remote: false,
+            },
+            GitBranch {
+                name: "user/scratch".to_string(),
+                is_current: false,
+                is_remote: false,
+            },
+        ],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        RepoConfig {
+            branch_prefix: "odt".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            ..Default::default()
+        },
+    )?;
+    {
+        let mut state = git_state.lock().expect("git state lock poisoned");
+        state.current_branches_by_path.insert(
+            managed_worktree.to_string_lossy().to_string(),
+            GitCurrentBranch {
+                name: Some("odt/task-1".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
+        state.current_branches_by_path.insert(
+            unrelated_worktree.to_string_lossy().to_string(),
+            GitCurrentBranch {
+                name: Some("user/scratch".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
+    }
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![
+        AgentSessionDocument {
+            session_id: "build-session".to_string(),
+            external_session_id: None,
+            role: "build".to_string(),
+            scenario: "build_implementation_start".to_string(),
+            started_at: "2026-03-17T11:00:00Z".to_string(),
+            runtime_kind: "opencode".to_string(),
+            working_directory: managed_worktree.to_string_lossy().to_string(),
+            selected_model: None,
+        },
+        AgentSessionDocument {
+            session_id: "qa-session".to_string(),
+            external_session_id: None,
+            role: "qa".to_string(),
+            scenario: "qa_review".to_string(),
+            started_at: "2026-03-17T12:00:00Z".to_string(),
+            runtime_kind: "opencode".to_string(),
+            working_directory: unrelated_worktree.to_string_lossy().to_string(),
+            selected_model: None,
+        },
+    ];
+
+    service.task_delete(&repo_path.to_string_lossy(), "task-1", false)?;
+
+    let git_calls = &git_state.lock().expect("git state lock poisoned").calls;
+    assert!(git_calls.iter().any(|call| matches!(
+        call,
+        GitCall::RemoveWorktree { worktree_path, force, .. }
+            if worktree_path == &managed_worktree.to_string_lossy() && *force
+    )));
+    assert!(!git_calls.iter().any(|call| matches!(
+        call,
+        GitCall::RemoveWorktree { worktree_path, .. }
+            if worktree_path == &unrelated_worktree.to_string_lossy()
+    )));
+
+    Ok(())
+}
+
+#[test]
+fn task_delete_reports_partial_cleanup_progress_when_store_delete_fails() -> Result<()> {
+    let repo_path = unique_temp_path("task-delete-progress-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+    let worktree_base = repo_path.join("worktrees");
+    let managed_worktree = worktree_base.join("task-1");
+    fs::create_dir_all(&managed_worktree)?;
+
+    let task = make_task("task-1", "task", TaskStatus::Open);
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![task],
+        vec![GitBranch {
+            name: "odt/task-1".to_string(),
+            is_current: false,
+            is_remote: false,
+        }],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        RepoConfig {
+            branch_prefix: "odt".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            ..Default::default()
+        },
+    )?;
+    git_state
+        .lock()
+        .expect("git state lock poisoned")
+        .current_branches_by_path
+        .insert(
+            managed_worktree.to_string_lossy().to_string(),
+            GitCurrentBranch {
+                name: Some("odt/task-1".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
+    {
+        let mut state = task_state.lock().expect("task store lock poisoned");
+        state.agent_sessions = vec![AgentSessionDocument {
+            session_id: "build-session".to_string(),
+            external_session_id: None,
+            role: "build".to_string(),
+            scenario: "build_implementation_start".to_string(),
+            started_at: "2026-03-17T11:00:00Z".to_string(),
+            runtime_kind: "opencode".to_string(),
+            working_directory: managed_worktree.to_string_lossy().to_string(),
+            selected_model: None,
+        }];
+        state.delete_error = Some("store delete failed".to_string());
+    }
+
+    let error = service
+        .task_delete(&repo_path.to_string_lossy(), "task-1", false)
+        .expect_err("task delete should report cleanup progress when store delete fails");
+
+    let error_text = format!("{error:#}");
+    assert!(error_text.contains("store delete failed"));
+    assert!(error_text.contains("Delete cleanup already removed worktrees"));
+    assert!(error_text.contains(managed_worktree.to_string_lossy().as_ref()));
+    assert!(error_text.contains("Delete cleanup already deleted branches"));
+    assert!(error_text.contains("odt/task-1"));
+    assert!(error_text.contains("Retry delete to finish cleanup safely."));
+
+    Ok(())
+}
+
+#[test]
+fn task_delete_skips_detached_managed_worktree() -> Result<()> {
+    let repo_path = unique_temp_path("task-delete-detached-worktree-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+    let worktree_base = repo_path.join("worktrees");
+    let detached_worktree = worktree_base.join("task-1");
+    fs::create_dir_all(&detached_worktree)?;
+
+    let task = make_task("task-1", "task", TaskStatus::Open);
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![task],
+        vec![GitBranch {
+            name: "odt/task-1".to_string(),
+            is_current: false,
+            is_remote: false,
+        }],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        RepoConfig {
+            branch_prefix: "odt".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            ..Default::default()
+        },
+    )?;
+    git_state
+        .lock()
+        .expect("git state lock poisoned")
+        .current_branches_by_path
+        .insert(
+            detached_worktree.to_string_lossy().to_string(),
+            GitCurrentBranch {
+                name: None,
+                detached: true,
+                revision: Some("deadbeef".to_string()),
+            },
+        );
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "build-session".to_string(),
+        external_session_id: None,
+        role: "build".to_string(),
+        scenario: "build_implementation_start".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "opencode".to_string(),
+        working_directory: detached_worktree.to_string_lossy().to_string(),
+        selected_model: None,
+    }];
+
+    service.task_delete(&repo_path.to_string_lossy(), "task-1", false)?;
+
+    let git_calls = &git_state.lock().expect("git state lock poisoned").calls;
+    assert!(!git_calls.iter().any(|call| matches!(
+        call,
+        GitCall::RemoveWorktree { worktree_path, .. }
+            if worktree_path == &detached_worktree.to_string_lossy()
+    )));
+
     Ok(())
 }
 
