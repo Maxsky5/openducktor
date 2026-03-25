@@ -46,7 +46,7 @@ const toTaskQueryUpdate = (params: {
       [AGENT_STUDIO_QUERY_KEYS.task]: sessionForTask.taskId,
       [AGENT_STUDIO_QUERY_KEYS.session]: sessionForTask.sessionId,
       [AGENT_STUDIO_QUERY_KEYS.agent]: sessionForTask.role,
-      [AGENT_STUDIO_QUERY_KEYS.scenario]: sessionForTask.scenario,
+      [AGENT_STUDIO_QUERY_KEYS.scenario]: undefined,
       [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
       [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
     };

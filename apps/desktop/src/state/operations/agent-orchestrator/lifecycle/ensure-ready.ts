@@ -33,7 +33,7 @@ type EnsureSessionReadyDependencies = {
     taskId: string,
     role: AgentSessionState["role"],
     options?: {
-      workingDirectoryOverride?: string | null;
+      targetWorkingDirectory?: string | null;
       runtimeKind?: AgentSessionState["selectedModel"] extends infer T
         ? T extends { runtimeKind?: infer K }
           ? K | null
@@ -217,7 +217,7 @@ export const createEnsureSessionReady = ({
     });
     assertNotStale();
     const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
-      workingDirectoryOverride: session.workingDirectory,
+      targetWorkingDirectory: session.workingDirectory,
       ...(session.selectedModel?.runtimeKind
         ? { runtimeKind: session.selectedModel.runtimeKind }
         : {}),

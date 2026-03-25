@@ -32,7 +32,6 @@ const createRequest = (requestId: string): PendingRebaseConflictResolutionReques
     workingDir: "/repo/worktrees/task-1",
   },
   builderSessions: [builderSession],
-  currentWorktreePath: "/repo/worktrees/task-1",
   currentViewSessionId: null,
   defaultMode: "existing",
   defaultSessionId: "build-1",

@@ -1,4 +1,4 @@
-import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
+import type { AgentStudioTaskTabsModel, SessionStartModalModel } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { RequestNewSessionStart } from "@/features/session-start";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
@@ -39,7 +39,6 @@ type AgentStudioOrchestrationActionsContext = {
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
   bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
   hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
-  loadAgentSessions: AgentStateContextValue["loadAgentSessions"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   replyAgentPermission: AgentStateContextValue["replyAgentPermission"];
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
@@ -59,6 +58,7 @@ type UseAgentStudioOrchestrationControllerResult = {
   chatSettingsLoadError: Error | null;
   retryChatSettingsLoad: () => void;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
+  sessionStartModal: SessionStartModalModel | null;
   activeTabValue: string;
   agentStudioTaskTabsModel: AgentStudioTaskTabsModel;
   agentStudioHeaderModel: ReturnType<typeof useAgentStudioPageModels>["agentStudioHeaderModel"];
@@ -221,7 +221,6 @@ export function useAgentStudioOrchestrationController({
     updateAgentSessionModel,
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
-    loadAgentSessions,
     humanRequestChangesTask,
     replyAgentPermission,
     answerAgentQuestion,
@@ -262,6 +261,7 @@ export function useAgentStudioOrchestrationController({
 
   const {
     isStarting,
+    sessionStartModal,
     humanReviewFeedbackModal,
     isSending,
     isSubmittingQuestionByRequestId,
@@ -287,14 +287,13 @@ export function useAgentStudioOrchestrationController({
     agentStudioReady,
     isActiveTaskHydrated,
     selectionForNewSession,
+    repoSettings,
     input,
     setInput,
     startAgentSession,
     sendAgentMessage,
-    updateAgentSessionModel,
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
-    loadAgentSessions,
     humanRequestChangesTask,
     answerAgentQuestion,
     updateQuery,
@@ -404,6 +403,7 @@ export function useAgentStudioOrchestrationController({
     chatSettingsLoadError,
     retryChatSettingsLoad,
     humanReviewFeedbackModal,
+    sessionStartModal,
     activeTabValue,
     agentStudioTaskTabsModel,
     agentStudioHeaderModel,

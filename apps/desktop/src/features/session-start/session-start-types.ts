@@ -2,7 +2,6 @@ import type {
   AgentModelSelection,
   AgentRole,
   AgentScenario,
-  AgentSessionStartMode,
 } from "@openducktor/core";
 
 export type SessionStartExistingSessionOption = {
@@ -29,11 +28,27 @@ export type NewSessionStartRequest = {
   initialSourceSessionId?: string | null;
 };
 
-export type NewSessionStartDecision = {
-  selectedModel: AgentModelSelection | null;
-  startMode: AgentSessionStartMode;
-  sourceSessionId: string | null;
-} | null;
+export type FreshSessionStartDecision = {
+  startMode: "fresh";
+  selectedModel: AgentModelSelection;
+};
+
+export type ReuseSessionStartDecision = {
+  startMode: "reuse";
+  sourceSessionId: string;
+};
+
+export type ForkSessionStartDecision = {
+  startMode: "fork";
+  selectedModel: AgentModelSelection;
+  sourceSessionId: string;
+};
+
+export type NewSessionStartDecision =
+  | FreshSessionStartDecision
+  | ReuseSessionStartDecision
+  | ForkSessionStartDecision
+  | null;
 
 export type RequestNewSessionStart = (
   request: NewSessionStartRequest,

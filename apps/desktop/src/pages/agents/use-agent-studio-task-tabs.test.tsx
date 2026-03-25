@@ -166,7 +166,7 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-2",
         session: "session-2",
         agent: "spec",
-        scenario: "spec_initial",
+        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -274,7 +274,7 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-1",
         session: "session-1",
         agent: "spec",
-        scenario: "spec_initial",
+        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -329,7 +329,7 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-2",
         session: "session-2",
         agent: "spec",
-        scenario: "spec_initial",
+        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -469,7 +469,7 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-b",
         session: "session-b",
         agent: "spec",
-        scenario: "spec_initial",
+        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -553,7 +553,7 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-1",
         session: "session-1",
         agent: "spec",
-        scenario: "spec_initial",
+        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });

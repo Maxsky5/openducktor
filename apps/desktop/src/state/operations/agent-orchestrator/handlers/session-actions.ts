@@ -273,7 +273,6 @@ export const createAgentSessionActions = ({
       sendAgentMessage,
     },
     model: {
-      loadRepoDefaultModel,
       loadRepoPromptOverrides,
     },
   });

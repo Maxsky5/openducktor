@@ -50,7 +50,6 @@ const createRequest = (
 ): PendingGitConflictResolutionRequest => ({
   requestId: "request-1",
   conflict: conflictFixture,
-  currentWorktreePath: "/tmp/repo/worktree",
   currentViewSessionId: "session-1",
   defaultMode: "existing",
   defaultSessionId: "session-1",

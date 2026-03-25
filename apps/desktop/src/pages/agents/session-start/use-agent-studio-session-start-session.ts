@@ -1,14 +1,14 @@
 import type { AgentRole, AgentScenario } from "@openducktor/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import type {
   NewSessionStartDecision,
   NewSessionStartRequest,
   SessionStartRequestReason,
+  SessionStartPostAction,
+  SessionStartWorkflowResult,
 } from "@/features/session-start";
-import {
-  resolveBuildWorkingDirectoryOverride,
-  resolveQaBuilderSessionContext,
-} from "@/lib/build-worktree-overrides";
+import { startSessionWorkflow } from "@/features/session-start";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import {
@@ -21,6 +21,8 @@ import {
   type QueryUpdate,
 } from "../use-agent-studio-session-action-helpers";
 
+type ResolvedSessionStartDecision = Exclude<NewSessionStartDecision, null>;
+
 type UseAgentStudioSessionStartSessionArgs = {
   activeRepo: string | null;
   taskId: string;
@@ -30,14 +32,17 @@ type UseAgentStudioSessionStartSessionArgs = {
   selectedTask: Parameters<typeof canStartSessionForRole>[0];
   agentStudioReady: boolean;
   isActiveTaskHydrated: boolean;
+  markStartingBeforeDecision?: boolean;
   startAgentSession: AgentStateContextValue["startAgentSession"];
-  updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
+  sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   setStartingActivityCountByContext: Dispatch<SetStateAction<Record<string, number>>>;
   startingSessionByTaskRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
   updateQuery: (updates: QueryUpdate) => void;
-  resolveRequestedDecision: (
+  onPostStartActionError?: (action: SessionStartPostAction, error: Error) => void;
+  executeRequestedSessionStart: <T>(
     request: Omit<NewSessionStartRequest, "selectedModel">,
-  ) => Promise<NewSessionStartDecision | undefined>;
+    executeWithDecision: (decision: ResolvedSessionStartDecision) => Promise<T | undefined>,
+  ) => Promise<T | undefined>;
 };
 
 export function useAgentStudioSessionStartSession({
@@ -48,97 +53,133 @@ export function useAgentStudioSessionStartSession({
   selectedTask,
   agentStudioReady,
   isActiveTaskHydrated,
+  markStartingBeforeDecision = false,
   startAgentSession,
-  updateAgentSessionModel,
+  sendAgentMessage,
   setStartingActivityCountByContext,
   startingSessionByTaskRef,
   updateQuery,
-  resolveRequestedDecision,
+  onPostStartActionError,
+  executeRequestedSessionStart,
 }: UseAgentStudioSessionStartSessionArgs): {
   startSession: (reason: SessionStartRequestReason) => Promise<string | undefined>;
+  runSessionStart: (params: {
+    reason: SessionStartRequestReason;
+    postStartAction: SessionStartPostAction;
+  }) => Promise<SessionStartWorkflowResult | undefined>;
 } {
+  const queryClient = useQueryClient();
   const startRequestedSession = useCallback(
-    async (params: { reason: SessionStartRequestReason }): Promise<string | undefined> => {
+    async (params: {
+      reason: SessionStartRequestReason;
+      postStartAction: SessionStartPostAction;
+    }): Promise<SessionStartWorkflowResult | undefined> => {
       const startContextKey = buildAgentStudioAsyncActivityContextKey({
         activeRepo,
         taskId,
         role,
         sessionId: null,
       });
+      const executeStartedSession = async (
+        decision: ResolvedSessionStartDecision,
+      ): Promise<SessionStartWorkflowResult | undefined> => {
+        setStartingActivityCountByContext((current) =>
+          incrementActivityCountRecord(current, startContextKey),
+        );
+        try {
+          const workflow = await startSessionWorkflow({
+            activeRepo,
+            queryClient,
+            intent: {
+              taskId,
+              role,
+              scenario,
+              startMode: decision.startMode,
+              ...(decision.startMode === "reuse" || decision.startMode === "fork"
+                ? { sourceSessionId: decision.sourceSessionId }
+                : {}),
+              postStartAction: params.postStartAction,
+            },
+            selection: decision.startMode === "reuse" ? null : decision.selectedModel,
+            task: selectedTask,
+            startAgentSession,
+            sendAgentMessage,
+            postStartExecution: params.postStartAction === "none" ? "await" : "detached",
+            onDetachedPostStartError:
+              params.postStartAction === "none" || !onPostStartActionError
+                ? undefined
+                : (error) => onPostStartActionError(params.postStartAction, error),
+          });
+
+          applyAgentStudioSelectionQuery(updateQuery, {
+            taskId,
+            sessionId: workflow.sessionId,
+            role,
+          });
+          return workflow;
+        } finally {
+          setStartingActivityCountByContext((current) =>
+            decrementActivityCountRecord(current, startContextKey),
+          );
+        }
+      };
+
+      if (!markStartingBeforeDecision) {
+        return executeRequestedSessionStart(
+          {
+            taskId,
+            role,
+            scenario,
+            reason: params.reason,
+          },
+          executeStartedSession,
+        );
+      }
+
       setStartingActivityCountByContext((current) =>
         incrementActivityCountRecord(current, startContextKey),
       );
       try {
-        const decision = await resolveRequestedDecision({
-          taskId,
-          role,
-          scenario,
-          reason: params.reason,
-        });
-        if (decision == null) {
-          return undefined;
-        }
-        const selectedModel = decision.selectedModel;
-        if (decision.startMode === "reuse" && decision.sourceSessionId) {
-          applyAgentStudioSelectionQuery(updateQuery, {
-            taskId,
-            sessionId: decision.sourceSessionId,
-            role,
-          });
-          return decision.sourceSessionId;
-        }
-
-        let workingDirectoryOverride: string | null = null;
-        try {
-          workingDirectoryOverride = await resolveBuildWorkingDirectoryOverride({
-            activeRepo,
+        return await executeRequestedSessionStart(
+          {
             taskId,
             role,
             scenario,
-          });
-        } catch (error) {
-          const description = error instanceof Error ? error.message : "Unknown error";
-          throw new Error(
-            `Failed to resolve working directory override for ${role} ${scenario} on ${taskId}: ${description}`,
-          );
-        }
-        let builderContext: { workingDirectory: string } | null = null;
-        if (role === "qa") {
-          try {
-            builderContext = await resolveQaBuilderSessionContext({
+            reason: params.reason,
+          },
+          async (decision) => {
+            const workflow = await startSessionWorkflow({
               activeRepo,
-              taskId,
+              queryClient,
+              intent: {
+                taskId,
+                role,
+                scenario,
+                startMode: decision.startMode,
+                ...(decision.startMode === "reuse" || decision.startMode === "fork"
+                  ? { sourceSessionId: decision.sourceSessionId }
+                  : {}),
+                postStartAction: params.postStartAction,
+              },
+              selection: decision.startMode === "reuse" ? null : decision.selectedModel,
+              task: selectedTask,
+              startAgentSession,
+              sendAgentMessage,
+              postStartExecution: params.postStartAction === "none" ? "await" : "detached",
+              onDetachedPostStartError:
+                params.postStartAction === "none" || !onPostStartActionError
+                  ? undefined
+                  : (error) => onPostStartActionError(params.postStartAction, error),
             });
-          } catch (error) {
-            const description = error instanceof Error ? error.message : "Unknown error";
-            throw new Error(
-              `Failed to resolve QA builder context for ${role} ${scenario} on ${taskId}: ${description}`,
-            );
-          }
-        }
-        const sessionId = await startAgentSession({
-          taskId,
-          role,
-          scenario,
-          selectedModel,
-          sendKickoff: false,
-          startMode: decision.startMode,
-          ...(decision.sourceSessionId ? { sourceSessionId: decision.sourceSessionId } : {}),
-          requireModelReady: true,
-          ...(workingDirectoryOverride ? { workingDirectoryOverride } : {}),
-          ...(builderContext ? { builderContext } : {}),
-        });
 
-        if (selectedModel && decision.startMode !== "reuse") {
-          updateAgentSessionModel(sessionId, selectedModel);
-        }
-
-        applyAgentStudioSelectionQuery(updateQuery, {
-          taskId,
-          sessionId,
-          role,
-        });
-        return sessionId;
+            applyAgentStudioSelectionQuery(updateQuery, {
+              taskId,
+              sessionId: workflow.sessionId,
+              role,
+            });
+            return workflow;
+          },
+        );
       } finally {
         setStartingActivityCountByContext((current) =>
           decrementActivityCountRecord(current, startContextKey),
@@ -147,19 +188,26 @@ export function useAgentStudioSessionStartSession({
     },
     [
       activeRepo,
-      resolveRequestedDecision,
       role,
       scenario,
+      markStartingBeforeDecision,
+      queryClient,
       setStartingActivityCountByContext,
+      sendAgentMessage,
       startAgentSession,
+      selectedTask,
       updateQuery,
+      onPostStartActionError,
       taskId,
-      updateAgentSessionModel,
+      executeRequestedSessionStart,
     ],
   );
 
-  const startSession = useCallback(
-    async (reason: SessionStartRequestReason): Promise<string | undefined> => {
+  const runSessionStart = useCallback(
+    async (params: {
+      reason: SessionStartRequestReason;
+      postStartAction: SessionStartPostAction;
+    }): Promise<SessionStartWorkflowResult | undefined> => {
       if (!taskId || !agentStudioReady || !isActiveTaskHydrated) {
         return undefined;
       }
@@ -174,15 +222,28 @@ export function useAgentStudioSessionStartSession({
       });
       const inFlightSessionStart = startingSessionByTaskRef.current.get(startKey);
       if (inFlightSessionStart) {
-        return inFlightSessionStart;
+        return inFlightSessionStart.then((sessionId) =>
+          sessionId === undefined
+            ? undefined
+            : {
+                sessionId,
+                beforeStartActionError: null,
+                postStartActionError: null,
+              },
+        );
       }
 
-      const startPromise = startRequestedSession({ reason });
+      const startPromise = startRequestedSession(params);
+      const sessionIdPromise = startPromise.then((workflow) => workflow?.sessionId);
 
-      startingSessionByTaskRef.current.set(startKey, startPromise);
+      startingSessionByTaskRef.current.set(startKey, sessionIdPromise);
       void startPromise
         .finally(() => {
-          if (startingSessionByTaskRef.current.get(startKey) === startPromise) {
+          const currentStartPromise = startingSessionByTaskRef.current.get(startKey);
+          if (currentStartPromise === undefined) {
+            return;
+          }
+          if (currentStartPromise === sessionIdPromise) {
             startingSessionByTaskRef.current.delete(startKey);
           }
         })
@@ -202,7 +263,19 @@ export function useAgentStudioSessionStartSession({
     ],
   );
 
+  const startSession = useCallback(
+    async (reason: SessionStartRequestReason): Promise<string | undefined> => {
+      const workflow = await runSessionStart({
+        reason,
+        postStartAction: "none",
+      });
+      return workflow?.sessionId;
+    },
+    [runSessionStart],
+  );
+
   return {
     startSession,
+    runSessionStart,
   };
 }

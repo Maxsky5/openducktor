@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentModelCatalog } from "@openducktor/core";
 import {
+  coerceSessionSelectionToCatalog,
   normalizePersistedSelection,
-  normalizeSelectionForCatalog,
-  pickDefaultModel,
+  pickDefaultSessionSelectionForCatalog,
 } from "./models";
 
 const catalogFixture: AgentModelCatalog = {
@@ -24,8 +24,8 @@ const catalogFixture: AgentModelCatalog = {
 };
 
 describe("agent-orchestrator/support/models", () => {
-  test("picks and normalizes model selections", () => {
-    expect(pickDefaultModel(catalogFixture)).toEqual({
+  test("picks and coerces session selections against the catalog", () => {
+    expect(pickDefaultSessionSelectionForCatalog(catalogFixture)).toEqual({
       runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
@@ -33,7 +33,7 @@ describe("agent-orchestrator/support/models", () => {
     });
 
     expect(
-      normalizeSelectionForCatalog(catalogFixture, {
+      coerceSessionSelectionToCatalog(catalogFixture, {
         runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
@@ -49,7 +49,7 @@ describe("agent-orchestrator/support/models", () => {
     });
   });
 
-  test("normalizes persisted selection", () => {
+  test("maps a persisted selection into a runtime session selection", () => {
     expect(
       normalizePersistedSelection({
         runtimeKind: "opencode",

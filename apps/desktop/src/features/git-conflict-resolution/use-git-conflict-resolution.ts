@@ -1,7 +1,10 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GitConflict } from "@/features/agent-studio-git";
-import { buildGitConflictResolutionPrompt } from "@/features/session-start";
+import {
+  buildGitConflictResolutionPrompt,
+  executeSessionStart,
+} from "@/features/session-start";
 import { errorMessage } from "@/lib/errors";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -23,7 +26,6 @@ export type PendingGitConflictResolutionRequest = {
   requestId: string;
   conflict: GitConflict;
   builderSessions: AgentSessionState[];
-  currentWorktreePath: string;
   currentViewSessionId: string | null;
   defaultMode: "existing" | "new";
   defaultSessionId: string | null;
@@ -54,9 +56,6 @@ type UseGitConflictResolutionResult = {
     taskContext: GitConflictTaskContext,
   ) => Promise<boolean>;
 };
-
-const normalizePath = (path: string | null | undefined): string =>
-  (path ?? "").trim().replace(/\/+$/, "");
 
 export function useGitConflictResolution({
   activeRepo,
@@ -122,28 +121,17 @@ export function useGitConflictResolution({
       if (!activeRepo) {
         throw new Error("Cannot resolve a git conflict because no repository is selected.");
       }
-
-      if (conflict.workingDir == null) {
-        throw new Error("Missing paused worktree: conflict.workingDir is required.");
-      }
-
-      const currentWorktreePath = normalizePath(conflict.workingDir);
-      if (!currentWorktreePath) {
-        throw new Error(
-          "Cannot resolve a git conflict because the paused worktree is unavailable.",
-        );
-      }
-
-      const matchingBuilderSessions = taskContext.builderSessions.filter(
-        (session) => normalizePath(session.workingDirectory) === currentWorktreePath,
-      );
-      const defaultBuilderSession = matchingBuilderSessions[0] ?? null;
+      const defaultBuilderSession =
+        taskContext.builderSessions.find(
+          (session) => session.sessionId === taskContext.currentViewSessionId,
+        ) ??
+        taskContext.builderSessions[0] ??
+        null;
       const decision = await requestGitConflictResolutionChoice({
         conflict,
-        builderSessions: matchingBuilderSessions,
-        currentWorktreePath,
+        builderSessions: taskContext.builderSessions,
         currentViewSessionId: taskContext.currentViewSessionId,
-        defaultMode: defaultBuilderSession ? "existing" : "new",
+        defaultMode: taskContext.builderSessions.length > 0 ? "existing" : "new",
         defaultSessionId: defaultBuilderSession?.sessionId ?? null,
       });
       if (!decision) {
@@ -174,11 +162,11 @@ export function useGitConflictResolution({
       });
 
       if (decision.mode === "existing") {
-        const builderSession = matchingBuilderSessions.find(
+        const builderSession = taskContext.builderSessions.find(
           (session) => session.sessionId === decision.sessionId,
         );
         if (!builderSession) {
-          throw new Error("Selected Builder session is no longer available for this worktree.");
+          throw new Error("Selected Builder session is no longer available for this task.");
         }
 
         taskContext.onOpenSession(builderSession.sessionId);
@@ -186,15 +174,20 @@ export function useGitConflictResolution({
         return true;
       }
 
-      const sessionId = await startAgentSession({
+      const selectedModel = defaultBuilderSession?.selectedModel;
+      if (!selectedModel) {
+        throw new Error(
+          "Cannot start a new Builder conflict-resolution session because no builder model is available.",
+        );
+      }
+
+      const sessionId = await executeSessionStart({
         taskId: taskContext.taskId,
         role: "build",
         scenario: BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO,
-        selectedModel: defaultBuilderSession?.selectedModel ?? null,
-        sendKickoff: false,
         startMode: "fresh",
-        requireModelReady: true,
-        workingDirectoryOverride: currentWorktreePath,
+        selectedModel,
+        startAgentSession,
       });
 
       taskContext.onOpenSession(sessionId);

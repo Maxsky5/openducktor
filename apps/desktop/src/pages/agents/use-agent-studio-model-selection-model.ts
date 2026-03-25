@@ -3,8 +3,8 @@ import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentChatMessage, AgentSessionContextUsage } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
-  normalizeSelectionForCatalog,
-  pickDefaultSelectionForCatalog,
+  coerceVisibleSelectionToCatalog,
+  pickDefaultVisibleSelectionForCatalog,
 } from "./agents-page-selection";
 
 export type AgentStudioContextUsage = {
@@ -40,9 +40,10 @@ const resolvePreferredSelectionForCatalog = ({
   secondarySelection: AgentModelSelection | null;
 }): AgentModelSelection | null => {
   const preferredBase =
-    primarySelection ?? secondarySelection ?? pickDefaultSelectionForCatalog(catalog);
+    primarySelection ?? secondarySelection ?? pickDefaultVisibleSelectionForCatalog(catalog);
   return (
-    normalizeSelectionForCatalog(catalog, preferredBase) ?? pickDefaultSelectionForCatalog(catalog)
+    coerceVisibleSelectionToCatalog(catalog, preferredBase) ??
+    pickDefaultVisibleSelectionForCatalog(catalog)
   );
 };
 

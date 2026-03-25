@@ -1,9 +1,9 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
-import { assertAgentKickoffScenario, getAgentScenarioDefinition } from "@openducktor/core";
-import { useQueryClient } from "@tanstack/react-query";
+import { getAgentScenarioDefinition } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { SessionStartModalModel } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type {
   NewSessionStartDecision,
@@ -11,12 +11,13 @@ import type {
   RequestNewSessionStart,
   SessionStartRequestReason,
 } from "@/features/session-start";
-import { buildReusableSessionOptions, resolveScenarioStartMode } from "@/features/session-start";
-import { errorMessage } from "@/lib/errors";
+import {
+  buildReusableSessionOptions,
+  toSessionStartPostAction,
+  useSessionStartModalRunner,
+} from "@/features/session-start";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentStateContextValue } from "@/types/state-slices";
-import { loadEffectivePromptOverrides } from "../../../state/operations/shared/prompt-overrides";
-import { kickoffPromptForScenario } from "../agents-page-constants";
+import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
 import { useAgentStudioFreshSessionCreation } from "../use-agent-studio-fresh-session-creation";
 import { useAgentStudioHumanReviewFeedbackFlow } from "../use-agent-studio-human-review-feedback-flow";
@@ -26,6 +27,8 @@ import {
   type QueryUpdate,
 } from "../use-agent-studio-session-action-helpers";
 import { useAgentStudioSessionStartSession } from "./use-agent-studio-session-start-session";
+
+type ResolvedSessionStartDecision = Exclude<NewSessionStartDecision, null>;
 
 type UseAgentStudioSessionStartFlowArgs = {
   activeRepo: string | null;
@@ -39,12 +42,11 @@ type UseAgentStudioSessionStartFlowArgs = {
   isActiveTaskHydrated: boolean;
   isSessionWorking: boolean;
   selectionForNewSession: AgentModelSelection | null;
+  repoSettings: RepoSettingsInput | null;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
-  updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
   bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
   hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
-  loadAgentSessions: AgentStateContextValue["loadAgentSessions"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent?: () => void;
@@ -63,24 +65,23 @@ export function useAgentStudioSessionStartFlow({
   isActiveTaskHydrated,
   isSessionWorking,
   selectionForNewSession,
+  repoSettings,
   startAgentSession,
   sendAgentMessage,
-  updateAgentSessionModel,
   bootstrapTaskSessions,
   hydrateRequestedTaskSessionHistory,
-  loadAgentSessions: _loadAgentSessions,
   humanRequestChangesTask,
   updateQuery,
   onContextSwitchIntent,
   requestNewSessionStart,
 }: UseAgentStudioSessionStartFlowArgs): {
   isStarting: boolean;
+  sessionStartModal: SessionStartModalModel | null;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   startSession: (reason: SessionStartRequestReason) => Promise<string | undefined>;
   startScenarioKickoff: () => Promise<void>;
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
-  const queryClient = useQueryClient();
   const [startingActivityCountByContext, setStartingActivityCountByContext] = useState<
     Record<string, number>
   >({});
@@ -96,6 +97,13 @@ export function useAgentStudioSessionStartFlow({
 
   const previousRepoForSessionRefs = useRef<string | null>(activeRepo);
   const startingSessionByTaskRef = useRef(new Map<string, Promise<string | undefined>>());
+  const {
+    sessionStartModal,
+    runSessionStartRequest: runInternalSessionStartRequest,
+  } = useSessionStartModalRunner({
+    activeRepo,
+    repoSettings,
+  });
 
   useEffect(() => {
     if (previousRepoForSessionRefs.current === activeRepo) {
@@ -106,10 +114,11 @@ export function useAgentStudioSessionStartFlow({
     startingSessionByTaskRef.current.clear();
   }, [activeRepo]);
 
-  const resolveRequestedDecision = useCallback(
-    async (
+  const executeRequestedSessionStart = useCallback(
+    async <T,>(
       request: Omit<NewSessionStartRequest, "selectedModel">,
-    ): Promise<NewSessionStartDecision | undefined> => {
+      executeWithDecision: (decision: ResolvedSessionStartDecision) => Promise<T | undefined>,
+    ): Promise<T | undefined> => {
       const requestedSelection =
         request.role === role && request.taskId === taskId
           ? (selectionForNewSession ?? null)
@@ -133,34 +142,45 @@ export function useAgentStudioSessionStartFlow({
           ? activeSession.sessionId
           : (existingSessionOptions[0]?.value ?? null));
 
-      if (!requestNewSessionStart) {
-        const startMode = resolveScenarioStartMode({
-          scenario: request.scenario,
-          existingSessionOptions,
-        });
-        return {
+      if (requestNewSessionStart) {
+        const decision = await requestNewSessionStart({
+          ...request,
           selectedModel: requestedSelection,
-          startMode,
-          sourceSessionId:
-            startMode === "reuse" || startMode === "fork" ? initialSourceSessionId : null,
-        };
+          ...(existingSessionOptions.length > 0 ? { existingSessionOptions } : {}),
+          ...(initialSourceSessionId ? { initialSourceSessionId } : {}),
+        });
+        if (!decision) {
+          return undefined;
+        }
+        return executeWithDecision(decision);
       }
 
-      const decision = await requestNewSessionStart({
-        ...request,
-        selectedModel: requestedSelection,
-        ...(existingSessionOptions.length > 0 ? { existingSessionOptions } : {}),
-        ...(initialSourceSessionId ? { initialSourceSessionId } : {}),
-      });
-      if (!decision) {
-        return undefined;
-      }
-      return decision;
+      return runInternalSessionStartRequest(
+        {
+          source: "agent_studio",
+          taskId: request.taskId,
+          role: request.role,
+          scenario: request.scenario,
+          selectedModel: requestedSelection,
+          ...(existingSessionOptions.length > 0 ? { existingSessionOptions } : {}),
+          ...(initialSourceSessionId ? { initialSourceSessionId } : {}),
+          postStartAction: toSessionStartPostAction(request.reason),
+        },
+        async ({ decision }) => executeWithDecision(decision),
+      );
     },
-    [activeSession, requestNewSessionStart, role, selectionForNewSession, sessionsForTask, taskId],
+    [
+      activeSession,
+      requestNewSessionStart,
+      role,
+      runInternalSessionStartRequest,
+      selectionForNewSession,
+      sessionsForTask,
+      taskId,
+    ],
   );
 
-  const { startSession } = useAgentStudioSessionStartSession({
+  const { startSession, runSessionStart } = useAgentStudioSessionStartSession({
     activeRepo,
     taskId,
     role,
@@ -169,12 +189,22 @@ export function useAgentStudioSessionStartFlow({
     selectedTask,
     agentStudioReady,
     isActiveTaskHydrated,
+    markStartingBeforeDecision: Boolean(requestNewSessionStart),
     startAgentSession,
-    updateAgentSessionModel,
+    sendAgentMessage,
     setStartingActivityCountByContext,
     startingSessionByTaskRef,
     updateQuery,
-    resolveRequestedDecision,
+    onPostStartActionError: (action, error) => {
+      const message =
+        action === "kickoff"
+          ? "Session started, but the kickoff prompt failed to send."
+          : "Session started, but feedback message failed.";
+      toast.error(message, {
+        description: error.message,
+      });
+    },
+    executeRequestedSessionStart,
   });
 
   const { humanReviewFeedbackModal, shouldInterceptCreateSession, openHumanReviewFeedback } =
@@ -187,13 +217,12 @@ export function useAgentStudioSessionStartFlow({
       selectedTask,
       startAgentSession,
       sendAgentMessage,
-      updateAgentSessionModel,
       bootstrapTaskSessions,
       hydrateRequestedTaskSessionHistory,
       humanRequestChangesTask,
       updateQuery,
       ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
-      resolveRequestedDecision,
+      executeRequestedSessionStart,
     });
 
   const startScenarioKickoff = useCallback(async (): Promise<void> => {
@@ -208,49 +237,20 @@ export function useAgentStudioSessionStartFlow({
       return;
     }
 
-    const kickoffScenario = assertAgentKickoffScenario(scenario);
-    const sessionId = await startSession("scenario_kickoff");
-    if (!sessionId) {
+    const workflow = await runSessionStart({
+      reason: "scenario_kickoff",
+      postStartAction: "kickoff",
+    });
+    if (!workflow) {
       return;
     }
 
-    const promptOverrides = activeRepo
-      ? await loadEffectivePromptOverrides(activeRepo, queryClient)
-      : undefined;
-    try {
-      await sendAgentMessage(
-        sessionId,
-        kickoffPromptForScenario(role, kickoffScenario, taskId, {
-          overrides: promptOverrides ?? {},
-          task: {
-            ...(selectedTask
-              ? {
-                  title: selectedTask.title,
-                  issueType: selectedTask.issueType,
-                  status: selectedTask.status,
-                  qaRequired: selectedTask.aiReviewEnabled,
-                  description: selectedTask.description,
-                }
-              : {}),
-          },
-        }),
-      );
-    } catch (error) {
-      toast.error("Session started, but the kickoff prompt failed to send.", {
-        description: errorMessage(error),
-      });
-    }
   }, [
-    activeRepo,
     agentStudioReady,
-    queryClient,
     role,
     scenario,
-    selectedTask,
-    sendAgentMessage,
     openHumanReviewFeedback,
-    startSession,
-    taskId,
+    runSessionStart,
   ]);
 
   const { handleCreateSession } = useAgentStudioFreshSessionCreation({
@@ -263,13 +263,14 @@ export function useAgentStudioSessionStartFlow({
     agentStudioReady,
     isActiveTaskHydrated,
     isSessionWorking,
+    markStartingBeforeDecision: Boolean(requestNewSessionStart),
     startAgentSession,
     sendAgentMessage,
     updateQuery,
     ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
     setStartingActivityCountByContext,
     startingSessionByTaskRef,
-    resolveRequestedDecision,
+    executeRequestedSessionStart,
   });
 
   const handleCreateSessionWithHumanFeedback = useCallback(
@@ -285,6 +286,7 @@ export function useAgentStudioSessionStartFlow({
 
   return {
     isStarting,
+    sessionStartModal,
     humanReviewFeedbackModal,
     startSession,
     startScenarioKickoff,

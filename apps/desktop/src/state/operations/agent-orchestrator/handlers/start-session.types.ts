@@ -9,20 +9,33 @@ import type {
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 
-export type StartAgentSessionInput = {
-  taskId: string;
-  role: AgentRole;
-  scenario?: AgentScenario;
-  selectedModel?: AgentModelSelection | null;
-  sendKickoff?: boolean;
-  startMode?: AgentSessionStartMode;
-  sourceSessionId?: string | null;
-  requireModelReady?: boolean;
-  workingDirectoryOverride?: string | null;
-  builderContext?: {
-    workingDirectory: string;
-  } | null;
-};
+export type StartAgentSessionInput =
+  | {
+      taskId: string;
+      role: AgentRole;
+      scenario?: AgentScenario;
+      selectedModel?: never;
+      sendKickoff?: boolean;
+      startMode: "reuse";
+      sourceSessionId: string;
+    }
+  | {
+      taskId: string;
+      role: AgentRole;
+      scenario?: AgentScenario;
+      selectedModel: AgentModelSelection;
+      sendKickoff?: boolean;
+      startMode: "fresh";
+    }
+  | {
+      taskId: string;
+      role: AgentRole;
+      scenario?: AgentScenario;
+      selectedModel: AgentModelSelection;
+      sendKickoff?: boolean;
+      startMode: "fork";
+      sourceSessionId: string;
+    };
 
 export type SessionStateById = Record<string, AgentSessionState>;
 export type SessionStateUpdater =
@@ -46,7 +59,7 @@ export type RuntimeDependencies = {
     taskId: string,
     role: AgentRole,
     options?: {
-      workingDirectoryOverride?: string | null;
+      targetWorkingDirectory?: string | null;
       runtimeKind?: AgentModelSelection["runtimeKind"] | null;
     },
   ) => Promise<RuntimeInfo>;
@@ -60,7 +73,6 @@ export type TaskDependencies = {
 };
 
 export type ModelDependencies = {
-  loadRepoDefaultModel: (repoPath: string, role: AgentRole) => Promise<AgentModelSelection | null>;
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
 };
 
@@ -109,15 +121,22 @@ export type StartSessionExecutionDependencies = Pick<
 
 export type StartSessionCreationInput = {
   scenario: AgentScenario | undefined;
-  selectedModel: AgentModelSelection | null;
-  startMode: AgentSessionStartMode;
-  sourceSessionId?: string | null;
-  requireModelReady: boolean;
-  workingDirectoryOverride?: string | null;
-  builderContext?: {
-    workingDirectory: string;
-  } | null;
-};
+} & (
+  | {
+      startMode: "reuse";
+      selectedModel?: never;
+      sourceSessionId: string;
+    }
+  | {
+      startMode: "fresh";
+      selectedModel: AgentModelSelection;
+    }
+  | {
+      startMode: "fork";
+      selectedModel: AgentModelSelection;
+      sourceSessionId: string;
+    }
+);
 
 export type ResolvedRuntimeAndModel = {
   taskCard: TaskCard;
@@ -125,7 +144,6 @@ export type ResolvedRuntimeAndModel = {
   resolvedScenario: AgentScenario;
   systemPrompt: string;
   promptOverrides: RepoPromptOverrides;
-  resolvedDefaultModelSelection: AgentModelSelection | null;
 };
 
 export type StartOrReuseResult =
@@ -139,5 +157,4 @@ export type StartOrReuseResult =
       taskCard: TaskCard;
       ctx: StartedSessionContext;
       promptOverrides: RepoPromptOverrides;
-      resolvedDefaultModelSelection: AgentModelSelection | null;
     };

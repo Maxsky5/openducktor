@@ -1,39 +1,31 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
-import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
+import {
+  findCatalogModel,
+  normalizeCatalogVariant,
+  normalizeKnownCatalogProfileId,
+  pickCatalogDefaultModel,
+  runtimeKindForCatalog,
+} from "@/lib/model-catalog-selection";
 
-export const pickDefaultModel = (catalog: AgentModelCatalog): AgentModelSelection | null => {
-  const runtimeKind = catalog.runtime?.kind ?? DEFAULT_RUNTIME_KIND;
-  if (catalog.models.length === 0) {
+export const pickDefaultSessionSelectionForCatalog = (
+  catalog: AgentModelCatalog,
+): AgentModelSelection | null => {
+  const model = pickCatalogDefaultModel(catalog);
+  if (!model) {
     return null;
   }
-
-  for (const model of catalog.models) {
-    const providerDefault = catalog.defaultModelsByProvider[model.providerId];
-    if (providerDefault && providerDefault === model.modelId) {
-      return {
-        runtimeKind,
-        providerId: model.providerId,
-        modelId: model.modelId,
-        ...(model.variants[0] ? { variant: model.variants[0] } : {}),
-      };
-    }
-  }
-
-  const first = catalog.models[0];
-  if (!first) {
-    return null;
-  }
+  const variant = normalizeCatalogVariant(model, undefined);
 
   return {
-    runtimeKind,
-    providerId: first.providerId,
-    modelId: first.modelId,
-    ...(first.variants[0] ? { variant: first.variants[0] } : {}),
+    runtimeKind: runtimeKindForCatalog(catalog),
+    providerId: model.providerId,
+    modelId: model.modelId,
+    ...(variant ? { variant } : {}),
   };
 };
 
-export const normalizeSelectionForCatalog = (
+export const coerceSessionSelectionToCatalog = (
   catalog: AgentModelCatalog,
   selection: AgentModelSelection | null,
 ): AgentModelSelection | null => {
@@ -41,32 +33,20 @@ export const normalizeSelectionForCatalog = (
     return null;
   }
 
-  const model = catalog.models.find(
-    (entry) => entry.providerId === selection.providerId && entry.modelId === selection.modelId,
-  );
+  const model = findCatalogModel(catalog, selection);
   if (!model) {
     return null;
   }
 
-  const hasVariant = Boolean(selection.variant && model.variants.includes(selection.variant));
-  const catalogProfiles = catalog.profiles ?? catalog.agents ?? [];
-  const preserveAgentSelection = catalogProfiles.length === 0;
-  const hasAgent = Boolean(
-    selection.profileId &&
-      (preserveAgentSelection ||
-        catalogProfiles.some((agent) => (agent.id ?? agent.name) === selection.profileId)),
-  );
+  const variant = normalizeCatalogVariant(model, selection.variant);
+  const profileId = normalizeKnownCatalogProfileId(catalog, selection.profileId);
 
   return {
-    runtimeKind: selection.runtimeKind ?? catalog.runtime?.kind ?? DEFAULT_RUNTIME_KIND,
+    runtimeKind: selection.runtimeKind ?? runtimeKindForCatalog(catalog),
     providerId: model.providerId,
     modelId: model.modelId,
-    ...(hasVariant
-      ? { variant: selection.variant }
-      : model.variants[0]
-        ? { variant: model.variants[0] }
-        : {}),
-    ...(hasAgent ? { profileId: selection.profileId } : {}),
+    ...(variant ? { variant } : {}),
+    ...(profileId ? { profileId } : {}),
   };
 };
 

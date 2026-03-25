@@ -1,6 +1,5 @@
 import {
   type ReactElement,
-  startTransition,
   useCallback,
   useEffect,
   useRef,
@@ -8,6 +7,7 @@ import {
 } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import { MergedPullRequestConfirmDialog } from "@/components/features/pull-requests/merged-pull-request-confirm-dialog";
+import { SessionStartModal } from "@/components/features/agents";
 import {
   TaskDetailsSheetController,
   type TaskDetailsSheetControllerHandle,
@@ -21,13 +21,11 @@ import {
 } from "@/state/app-state-contexts";
 import type { AgentStudioQueryUpdate } from "../agent-studio-navigation";
 import { RebaseConflictResolutionModal } from "../agents-page-rebase-conflict-modal";
-import { AgentStudioSessionStartModalBridge } from "../agents-page-session-start-modal-bridge";
 import { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import { useAgentStudioQuerySessionSync } from "../use-agent-studio-query-session-sync";
 import { useAgentStudioQuerySync } from "../use-agent-studio-query-sync";
 import { useAgentStudioRebaseConflictResolution } from "../use-agent-studio-rebase-conflict-resolution";
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
-import { useAgentStudioSessionStartRequest } from "../use-agent-studio-session-start-request";
 import {
   useAgentStudioReadiness,
   useRunCompletionRecoverySignal,
@@ -87,7 +85,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     sessions,
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
-    loadAgentSessions,
     readSessionModelCatalog,
     readSessionTodos,
     startAgentSession,
@@ -104,8 +101,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
   const { runCompletionSignal } = useDelegationEventsContext();
-  const { pendingSessionStartRequest, requestNewSessionStart, resolvePendingSessionStart } =
-    useAgentStudioSessionStartRequest();
 
   const {
     taskIdParam,
@@ -125,9 +120,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
 
   const scheduleQueryUpdate = useCallback(
     (updates: AgentStudioQueryUpdate): void => {
-      startTransition(() => {
-        updateQuery(updates);
-      });
+      updateQuery(updates);
     },
     [updateQuery],
   );
@@ -251,11 +244,9 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       updateAgentSessionModel,
       bootstrapTaskSessions,
       hydrateRequestedTaskSessionHistory,
-      loadAgentSessions,
       humanRequestChangesTask,
       replyAgentPermission,
       answerAgentQuestion,
-      requestNewSessionStart,
     },
   });
 
@@ -306,14 +297,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     />
   ) : null;
 
-  const sessionStartModal = pendingSessionStartRequest ? (
-    <AgentStudioSessionStartModalBridge
-      key={pendingSessionStartRequest.requestId}
-      request={pendingSessionStartRequest}
-      activeRepo={activeRepo}
-      repoSettings={orchestration.repoSettings}
-      onResolve={resolvePendingSessionStart}
-    />
+  const sessionStartModal = orchestration.sessionStartModal ? (
+    <SessionStartModal model={orchestration.sessionStartModal} />
   ) : null;
 
   const humanReviewFeedbackModal = (

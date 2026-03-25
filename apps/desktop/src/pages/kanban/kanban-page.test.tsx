@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import type { AgentModelCatalog } from "@openducktor/core";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoConfig,
@@ -56,6 +57,37 @@ const workspaceGetSettingsSnapshotMock = mock(async () => ({
 const buildContinuationTargetGetMock = mock(async () => ({
   workingDirectory: "/repo/worktrees/task-1",
   source: "builder_session" as const,
+}));
+const loadRepoRuntimeCatalogMock = mock(async (): Promise<AgentModelCatalog> => ({
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+  models: [
+    {
+      id: "openai/gpt-5",
+      providerId: "openai",
+      providerName: "OpenAI",
+      modelId: "gpt-5",
+      modelName: "GPT-5",
+      variants: ["default", "high"],
+      contextWindow: 200_000,
+      outputLimit: 8_192,
+    },
+  ],
+  defaultModelsByProvider: {
+    openai: "gpt-5",
+  },
+  profiles: [
+    {
+      name: "spec-agent",
+      mode: "primary",
+      hidden: false,
+      color: "#f59e0b",
+    },
+    {
+      name: "build-agent",
+      mode: "primary",
+      hidden: false,
+    },
+  ],
 }));
 
 let latestKanbanColumnProps: Record<string, unknown> | null = null;
@@ -244,12 +276,21 @@ describe("KanbanPage session start modal flow", () => {
       },
     }));
 
+    mock.module("@/state/operations/shared/host", () => ({
+      host: {
+        workspaceGetRepoConfig: workspaceGetRepoConfigMock,
+        workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
+        buildContinuationTargetGet: buildContinuationTargetGetMock,
+      },
+    }));
+
     mock.module("@/state/app-state-contexts", () => ({
       useRuntimeDefinitionsContext: () => ({
         runtimeDefinitions: RUNTIME_DEFINITIONS,
         isLoadingRuntimeDefinitions: false,
         runtimeDefinitionsError: null,
         refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
+        loadRepoRuntimeCatalog: loadRepoRuntimeCatalogMock,
       }),
     }));
 
@@ -427,6 +468,7 @@ describe("KanbanPage session start modal flow", () => {
     workspaceGetRepoConfigMock.mockClear();
     workspaceGetSettingsSnapshotMock.mockClear();
     buildContinuationTargetGetMock.mockClear();
+    loadRepoRuntimeCatalogMock.mockClear();
     workspaceGetRepoConfigMock.mockImplementation(async () => createRepoConfigFixture());
     workspaceGetSettingsSnapshotMock.mockImplementation(async () => ({
       theme: "light" as const,
@@ -462,21 +504,17 @@ describe("KanbanPage session start modal flow", () => {
       await Promise.resolve();
     });
 
+    await waitForMockCall(startAgentSessionMock);
+
     expect(startAgentSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         taskId: "TASK-123",
         role: "build",
         scenario: "build_implementation_start",
-        requireModelReady: true,
+        startMode: "fresh",
       }),
     );
-    expect(updateAgentSessionModelMock).toHaveBeenCalledWith("session-1", {
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-      profileId: "build-agent",
-    });
+    expect(updateAgentSessionModelMock).not.toHaveBeenCalled();
     expect(latestLocation).toContain("/agents?task=TASK-123");
 
     await act(async () => {
@@ -499,7 +537,7 @@ describe("KanbanPage session start modal flow", () => {
     await waitForMockCall(sendAgentMessageMock);
 
     expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
-    expect(updateAgentSessionModelMock).toHaveBeenCalledTimes(1);
+    expect(updateAgentSessionModelMock).not.toHaveBeenCalled();
     expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
     expect(latestLocation).toBe("/");
     expect(toastSuccessMock).toHaveBeenCalledWith(
@@ -565,7 +603,6 @@ describe("KanbanPage session start modal flow", () => {
         scenario: "build_implementation_start",
         startMode: "reuse",
         sourceSessionId: "session-existing",
-        selectedModel: null,
       }),
     );
     expect(updateAgentSessionModelMock).not.toHaveBeenCalled();
@@ -746,11 +783,32 @@ describe("KanbanPage session start modal flow", () => {
     });
 
     expect(latestSessionStartModalModel?.open).toBe(true);
+    expect(latestSessionStartModalModel?.title).toBe("Start Planner Session");
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      if (latestSessionStartModalModel?.isSelectionCatalogLoading === false) {
+        break;
+      }
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    }
+
+    expect(latestSessionStartModalModel?.selectedModelSelection).toEqual(
+      expect.objectContaining({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      }),
+    );
 
     await act(async () => {
       (latestSessionStartModalModel?.onConfirm as () => void)();
       await Promise.resolve();
     });
+
+    await waitForMockCall(startAgentSessionMock);
 
     expect(startAgentSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -877,48 +935,6 @@ describe("KanbanPage session start modal flow", () => {
     expect(latestLocation).toContain("session=session-build-older");
     expect(latestLocation).toContain("agent=build");
     expect(latestSessionStartModalModel).toBeNull();
-
-    await act(async () => {
-      renderer.unmount();
-    });
-  });
-
-  test("human request changes can start a fresh builder session after feedback review", async () => {
-    currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
-    const renderer = await renderPage();
-
-    await act(async () => {
-      await (latestKanbanColumnProps?.onHumanRequestChanges as (taskId: string) => Promise<void>)(
-        "TASK-123",
-      );
-    });
-
-    await act(async () => {
-      (latestHumanReviewFeedbackModalModel?.onTargetChange as (value: string) => void)(
-        "new_session",
-      );
-      (latestHumanReviewFeedbackModalModel?.onMessageChange as (message: string) => void)(
-        "Use a fresh builder session for these changes.",
-      );
-    });
-
-    await act(async () => {
-      (latestHumanReviewFeedbackModalModel?.onConfirm as () => void)();
-    });
-
-    expect(latestSessionStartModalModel?.open).toBe(true);
-    expect(humanRequestChangesTaskMock).not.toHaveBeenCalled();
-
-    expect(latestSessionStartModalModel).toEqual(
-      expect.objectContaining({
-        open: true,
-        selectedStartMode: "fresh",
-        availableStartModes: ["fresh", "reuse"],
-      }),
-    );
-    expect(humanRequestChangesTaskMock).not.toHaveBeenCalled();
-    expect(startAgentSessionMock).not.toHaveBeenCalled();
-    expect(sendAgentMessageMock).not.toHaveBeenCalled();
 
     await act(async () => {
       renderer.unmount();
@@ -1132,45 +1148,6 @@ describe("KanbanPage session start modal flow", () => {
       description: "Task MISSING-1 was not found. Refresh tasks and try again.",
     });
     expect(latestResetImplementationModalModel).toBeNull();
-
-    await act(async () => {
-      renderer.unmount();
-    });
-  });
-
-  test("ai review request changes starts a fresh builder session with the QA follow-up scenario", async () => {
-    currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "ai_review" });
-    const renderer = await renderPage();
-
-    await act(async () => {
-      await (latestKanbanColumnProps?.onHumanRequestChanges as (taskId: string) => Promise<void>)(
-        "TASK-123",
-      );
-    });
-
-    await act(async () => {
-      (latestHumanReviewFeedbackModalModel?.onTargetChange as (value: string) => void)(
-        "new_session",
-      );
-      (latestHumanReviewFeedbackModalModel?.onMessageChange as (message: string) => void)(
-        "Please address the AI review feedback in a fresh session.",
-      );
-    });
-
-    await act(async () => {
-      (latestHumanReviewFeedbackModalModel?.onConfirm as () => void)();
-    });
-
-    expect(latestSessionStartModalModel?.open).toBe(true);
-
-    expect(latestSessionStartModalModel).toEqual(
-      expect.objectContaining({
-        open: true,
-        selectedStartMode: "fresh",
-        availableStartModes: ["fresh", "reuse"],
-      }),
-    );
-    expect(humanRequestChangesTaskMock).not.toHaveBeenCalled();
 
     await act(async () => {
       renderer.unmount();

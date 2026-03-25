@@ -42,19 +42,12 @@ type SessionIdleEmitter = {
 export const emitIdleForSession = (
   session: SessionRecord | undefined,
   emitter: SessionIdleEmitter,
-  messageId?: string,
 ): boolean => {
-  if (messageId && session?.emittedIdleMessageIds.has(messageId)) {
-    return false;
-  }
   if (session?.hasIdleSinceActivity) {
     return false;
   }
   if (session) {
     session.hasIdleSinceActivity = true;
-    if (messageId) {
-      session.emittedIdleMessageIds.add(messageId);
-    }
   }
   emitter.emit(emitter.sessionId, {
     type: "session_idle",
@@ -78,9 +71,8 @@ export const markSessionActive = (
 
 export const emitSessionIdle = (
   context: Pick<EventStreamContext, "sessionId" | "getSession" | "emit" | "now">,
-  messageId?: string,
 ): boolean => {
-  return emitIdleForSession(getSessionRecord(context), context, messageId);
+  return emitIdleForSession(getSessionRecord(context), context);
 };
 
 export const isReasoningDeltaField = (field: string): boolean => {

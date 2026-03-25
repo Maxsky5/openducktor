@@ -21,6 +21,7 @@ export type KanbanSessionStartIntent = {
   taskId: string;
   role: AgentRole;
   scenario: AgentScenario;
+  initialStartMode?: AgentSessionStartMode;
   sourceSessionId?: string | null;
   existingSessionOptions?: Array<{
     value: string;

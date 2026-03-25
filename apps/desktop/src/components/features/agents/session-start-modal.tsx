@@ -1,7 +1,7 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import { LoaderCircle } from "lucide-react";
-import type { ReactElement } from "react";
+import type { FormEvent, ReactElement } from "react";
 import { AgentRuntimeCombobox } from "@/components/features/agents/agent-runtime-combobox";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxGroup, type ComboboxOption } from "@/components/ui/combobox";
@@ -126,6 +126,11 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     });
   };
 
+  const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    handleConfirm();
+  };
+
   let agentHelperText: string | null = null;
   if (isReuseMode) {
     agentHelperText = "Reuse mode keeps the previous session agent/model/variant.";
@@ -153,7 +158,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <form className="flex min-h-0 flex-1 flex-col" action={handleConfirm}>
+        <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
           <DialogBody className="pt-2 pb-4">
             <fieldset className="space-y-5" disabled={isStarting}>
               {availableStartModes.length > 1 ? (

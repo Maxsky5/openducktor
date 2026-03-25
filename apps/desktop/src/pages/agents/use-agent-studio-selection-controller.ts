@@ -324,7 +324,7 @@ export function useAgentStudioSelectionController({
   } = useAgentStudioTaskHydration({
     activeRepo,
     activeTaskId: viewTaskId,
-    activeSessionId: hydratedViewActiveSession?.sessionId ?? null,
+    activeSession: hydratedViewActiveSession,
     hydrateRequestedTaskSessionHistory,
   });
 

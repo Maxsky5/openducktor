@@ -129,8 +129,8 @@ export function GitConflictResolutionModal({
         <DialogHeader className="space-y-3 px-6 py-6 pr-16 sm:px-7 sm:py-7">
           <DialogTitle>Resolve git conflict with Builder</DialogTitle>
           <DialogDescription className="max-w-[42rem] text-[15px] leading-7">
-            Choose an existing Builder session in the same worktree, or start a new
-            conflict-resolution Builder session attached to the paused worktree.
+            Choose an existing Builder session for this task, or start a new
+            conflict-resolution Builder session.
           </DialogDescription>
         </DialogHeader>
 
@@ -193,11 +193,7 @@ export function GitConflictResolutionModal({
             >
               <div className="space-y-1">
                 <p className="text-sm font-medium text-foreground">
-                  Start a new Builder session in the paused worktree
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  The new session will attach to{" "}
-                  <code className="font-mono">{request.currentWorktreePath}</code>.
+                  Start a new Builder session for this task
                 </p>
               </div>
             </button>

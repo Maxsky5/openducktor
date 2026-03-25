@@ -78,7 +78,6 @@ export type AgentModelCatalog = {
   models: AgentModelDescriptor[];
   defaultModelsByProvider: Record<string, string>;
   profiles?: AgentDescriptor[];
-  agents?: AgentDescriptor[];
 };
 
 export type AgentRuntimeCapabilities = RuntimeCapabilities;

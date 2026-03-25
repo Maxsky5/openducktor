@@ -449,8 +449,6 @@ export class OpencodeSdkAdapter
       session,
       request: input,
       tools,
-      now: this.now,
-      emit: (event) => this.emit(session.summary.sessionId, event),
     });
   }
 

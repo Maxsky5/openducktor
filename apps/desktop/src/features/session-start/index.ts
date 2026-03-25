@@ -9,9 +9,19 @@ export {
 } from "./session-start-prompts";
 export { buildReusableSessionOptions } from "./session-start-reuse-options";
 export {
+  executeSessionStart,
+} from "./session-start-execution";
+export {
+  startSessionWorkflow,
+  type SessionStartBeforeAction,
+  type SessionStartPostAction,
+  type SessionStartWorkflowIntent,
+  type SessionStartWorkflowResult,
+} from "./session-start-workflow";
+export {
+  coerceVisibleSelectionToCatalog,
   isSameSelection,
-  normalizeSelectionForCatalog,
-  pickDefaultSelectionForCatalog,
+  pickDefaultVisibleSelectionForCatalog,
 } from "./session-start-selection";
 export type {
   NewSessionStartDecision,
@@ -26,3 +36,5 @@ export {
   toSessionStartPostAction,
   useSessionStartModalCoordinator,
 } from "./use-session-start-modal-coordinator";
+export { useSessionStartModalRunner } from "./use-session-start-modal-runner";
+export type { SessionStartModalDecision } from "./use-session-start-modal-runner";

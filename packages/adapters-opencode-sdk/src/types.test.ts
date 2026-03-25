@@ -46,7 +46,6 @@ describe("types", () => {
       eventTransportKey: "http://127.0.0.1:12345",
       hasIdleSinceActivity: false,
       emittedAssistantMessageIds: new Set<string>(),
-      emittedIdleMessageIds: new Set<string>(),
       partsById: new Map(),
       messageRoleById: new Map(),
       pendingDeltasByPartId: new Map(),

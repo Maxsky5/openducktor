@@ -53,7 +53,6 @@ const createRequest = (
 ): PendingGitConflictResolutionRequest => ({
   requestId: "request-1",
   conflict: conflictFixture,
-  currentWorktreePath: "/tmp/repo/worktree",
   currentViewSessionId: "session-1",
   defaultMode: "existing",
   defaultSessionId: "session-1",
@@ -108,7 +107,8 @@ describe("GitConflictResolutionModal render behavior", () => {
       .getAllByRole("button")
       .filter(
         (button) =>
-          button.textContent?.includes("idle") && !button.textContent?.includes("paused worktree"),
+          button.textContent?.includes("idle") &&
+          !button.textContent?.includes("Start a new Builder session for this task"),
       );
 
     const sessionButton = existingSessionButtons[1];
@@ -134,7 +134,7 @@ describe("GitConflictResolutionModal render behavior", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: /start a new builder session in the paused worktree/i,
+        name: /start a new builder session for this task/i,
       }),
     );
 

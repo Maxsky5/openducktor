@@ -20,7 +20,6 @@ export type SessionRecord = {
   eventTransportKey: string;
   hasIdleSinceActivity: boolean;
   emittedAssistantMessageIds: Set<string>;
-  emittedIdleMessageIds: Set<string>;
   partsById: Map<string, import("@opencode-ai/sdk/v2/client").Part>;
   messageRoleById: Map<string, string>;
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;

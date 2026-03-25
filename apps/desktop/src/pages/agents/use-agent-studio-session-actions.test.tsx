@@ -26,6 +26,14 @@ const createSession = (overrides = {}) => createAgentSessionFixture(overrides);
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioSessionActions, initialProps);
 
+const PLANNER_SELECTION = {
+  runtimeKind: "opencode" as const,
+  providerId: "anthropic",
+  modelId: "claude-sonnet-4",
+  variant: "thinking",
+  profileId: "planner",
+};
+
 const createBaseArgs = (): HookArgs => {
   return {
     activeRepo: "/repo",
@@ -44,16 +52,25 @@ const createBaseArgs = (): HookArgs => {
       variant: "default",
       profileId: "spec",
     },
+    repoSettings: null,
     input: "  hello world  ",
     setInput: () => {},
     startAgentSession: async () => "session-new",
     sendAgentMessage: async () => {},
-    updateAgentSessionModel: () => {},
     bootstrapTaskSessions: async () => {},
     hydrateRequestedTaskSessionHistory: async () => {},
-    loadAgentSessions: async () => {},
     humanRequestChangesTask: async () => {},
     answerAgentQuestion: async () => {},
+    requestNewSessionStart: async () => ({
+      startMode: "fresh",
+      selectedModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        profileId: "spec",
+      },
+    }),
     updateQuery: () => {},
   };
 };
@@ -88,7 +105,6 @@ describe("useAgentStudioSessionActions", () => {
   test("onSend starts session and sends trimmed message", async () => {
     const startAgentSession = mock(async () => "session-new");
     const sendAgentMessage = mock(async () => {});
-    const updateAgentSessionModel = mock(() => {});
     const setInput = mock(() => {});
     const updateCalls: Array<Record<string, string | undefined>> = [];
 
@@ -96,7 +112,6 @@ describe("useAgentStudioSessionActions", () => {
       ...createBaseArgs(),
       startAgentSession,
       sendAgentMessage,
-      updateAgentSessionModel,
       setInput,
       updateQuery: (updates) => {
         updateCalls.push(updates);
@@ -119,16 +134,7 @@ describe("useAgentStudioSessionActions", () => {
         variant: "default",
         profileId: "spec",
       },
-      sendKickoff: false,
       startMode: "fresh" as const,
-      requireModelReady: true,
-    });
-    expect(updateAgentSessionModel).toHaveBeenCalledWith("session-new", {
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-      profileId: "spec",
     });
     expect(setInput).toHaveBeenCalledWith("");
     expect(sendAgentMessage).toHaveBeenCalledWith("session-new", "hello world");
@@ -478,7 +484,6 @@ describe("useAgentStudioSessionActions", () => {
     } as const;
     const requestNewSessionStart = mock(async () => ({
       startMode: "fresh" as const,
-      sourceSessionId: null,
       selectedModel: requestedSelection,
     }));
     const startAgentSession = mock(async () => "session-new");
@@ -518,9 +523,7 @@ describe("useAgentStudioSessionActions", () => {
       role: "spec",
       scenario: "spec_initial",
       selectedModel: requestedSelection,
-      sendKickoff: false,
       startMode: "fresh" as const,
-      requireModelReady: true,
     });
     expect(sendAgentMessage).toHaveBeenCalledWith("session-new", "hello world");
 
@@ -604,7 +607,7 @@ describe("useAgentStudioSessionActions", () => {
       task: "task-2",
       session: "session-2",
       agent: "spec",
-      scenario: "spec_initial",
+      scenario: undefined,
       autostart: undefined,
       start: undefined,
     });
@@ -661,10 +664,14 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("handleCreateSession updates query immediately, then targets created session", async () => {
+  test("handleCreateSession targets the created session after start succeeds", async () => {
     const deferredStart = createDeferred<string>();
     const startAgentSession = mock(async () => deferredStart.promise);
     const sendAgentMessage = mock(async () => {});
+    const requestNewSessionStart = mock(async () => ({
+      startMode: "fresh" as const,
+      selectedModel: PLANNER_SELECTION,
+    }));
     const updateCalls: Array<Record<string, string | undefined>> = [];
 
     const harness = createHookHarness({
@@ -680,6 +687,7 @@ describe("useAgentStudioSessionActions", () => {
           qa: { required: true, canSkip: false, available: false, completed: false },
         },
       }),
+      requestNewSessionStart,
       startAgentSession,
       sendAgentMessage,
       updateQuery: (updates) => {
@@ -700,21 +708,20 @@ describe("useAgentStudioSessionActions", () => {
         });
       });
 
-      expect(updateCalls[0]).toEqual({
-        task: "task-1",
-        session: undefined,
-        agent: "planner",
-        autostart: undefined,
-        start: undefined,
+      expect(updateCalls).toEqual([]);
+      expect(requestNewSessionStart).toHaveBeenCalledWith({
+        taskId: "task-1",
+        role: "planner",
+        scenario: "planner_initial",
+        reason: "create_session",
+        selectedModel: null,
       });
       expect(startAgentSession).toHaveBeenCalledWith({
         taskId: "task-1",
         role: "planner",
         scenario: "planner_initial",
-        selectedModel: null,
-        sendKickoff: false,
+        selectedModel: PLANNER_SELECTION,
         startMode: "fresh" as const,
-        requireModelReady: true,
       });
 
       await harness.run(async () => {
@@ -726,7 +733,7 @@ describe("useAgentStudioSessionActions", () => {
         task: "task-1",
         session: "session-plan",
         agent: "planner",
-        scenario: "planner_initial",
+        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -740,7 +747,7 @@ describe("useAgentStudioSessionActions", () => {
     }
   });
 
-  test("handleCreateSession sets fresh-start query when creating another session for same role", async () => {
+  test("handleCreateSession does not switch query before creating another session for the same role", async () => {
     const deferredStart = createDeferred<string>();
     const startAgentSession = mock(async () => deferredStart.promise);
     const sendAgentMessage = mock(async () => {});
@@ -772,13 +779,7 @@ describe("useAgentStudioSessionActions", () => {
         });
       });
 
-      expect(updateCalls[0]).toEqual({
-        task: "task-1",
-        session: undefined,
-        agent: "spec",
-        autostart: undefined,
-        start: undefined,
-      });
+      expect(updateCalls).toEqual([]);
     } finally {
       deferredStart.resolve("session-spec-fresh");
       await harness.unmount();
@@ -788,14 +789,7 @@ describe("useAgentStudioSessionActions", () => {
   test("handleCreateSession requests model selection with create_session reason", async () => {
     const requestNewSessionStart = mock(async () => ({
       startMode: "fresh" as const,
-      sourceSessionId: null,
-      selectedModel: {
-        runtimeKind: "opencode",
-        providerId: "anthropic",
-        modelId: "claude-sonnet-4",
-        variant: "thinking",
-        profileId: "planner",
-      },
+      selectedModel: PLANNER_SELECTION,
     }));
     const startAgentSession = mock(async () => "session-plan");
     const sendAgentMessage = mock(async () => {});
@@ -847,13 +841,7 @@ describe("useAgentStudioSessionActions", () => {
       expect.objectContaining({
         role: "planner",
         scenario: "planner_initial",
-        selectedModel: {
-          runtimeKind: "opencode",
-          providerId: "anthropic",
-          modelId: "claude-sonnet-4",
-          variant: "thinking",
-          profileId: "planner",
-        },
+        selectedModel: PLANNER_SELECTION,
       }),
     );
 
@@ -904,10 +892,14 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("handleCreateSession restores previous query selection on start failure", async () => {
+  test("handleCreateSession keeps the current query selection on start failure", async () => {
     const deferredStart = createDeferred<string>();
     const startAgentSession = mock(async () => deferredStart.promise);
     const sendAgentMessage = mock(async () => {});
+    const requestNewSessionStart = mock(async () => ({
+      startMode: "fresh" as const,
+      selectedModel: PLANNER_SELECTION,
+    }));
     const updateCalls: Array<Record<string, string | undefined>> = [];
 
     const harness = createHookHarness({
@@ -923,6 +915,7 @@ describe("useAgentStudioSessionActions", () => {
           qa: { required: true, canSkip: false, available: false, completed: false },
         },
       }),
+      requestNewSessionStart,
       startAgentSession,
       sendAgentMessage,
       updateQuery: (updates) => {
@@ -948,23 +941,7 @@ describe("useAgentStudioSessionActions", () => {
         await Promise.resolve();
       });
 
-      expect(updateCalls[0]).toEqual({
-        task: "task-1",
-        session: undefined,
-        agent: "planner",
-        scenario: undefined,
-        autostart: undefined,
-        start: undefined,
-      });
-      expect(updateCalls).toContainEqual({
-        task: "task-1",
-        session: "session-spec",
-        agent: "spec",
-        scenario: "spec_initial",
-        autostart: undefined,
-        start: undefined,
-      });
-      expect(updateCalls).toHaveLength(2);
+      expect(updateCalls).toEqual([]);
       expect(sendAgentMessage).not.toHaveBeenCalled();
     } finally {
       deferredStart.resolve("session-plan");
@@ -972,11 +949,15 @@ describe("useAgentStudioSessionActions", () => {
     }
   });
 
-  test("handleCreateSession stops loading once session is created even if kickoff is still running", async () => {
+  test("handleCreateSession stops loading once kickoff is dispatched", async () => {
     const deferredStart = createDeferred<string>();
     const deferredKickoff = createDeferred<void>();
     const startAgentSession = mock(async () => deferredStart.promise);
     const sendAgentMessage = mock(async () => deferredKickoff.promise);
+    const requestNewSessionStart = mock(async () => ({
+      startMode: "fresh" as const,
+      selectedModel: PLANNER_SELECTION,
+    }));
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -991,6 +972,7 @@ describe("useAgentStudioSessionActions", () => {
           qa: { required: true, canSkip: false, available: false, completed: false },
         },
       }),
+      requestNewSessionStart,
       startAgentSession,
       sendAgentMessage,
       updateQuery: () => {},
@@ -1054,7 +1036,6 @@ describe("useAgentStudioSessionActions", () => {
   test("startScenarioKickoff requests session selection with kickoff reason", async () => {
     const requestNewSessionStart = mock(async () => ({
       startMode: "fresh" as const,
-      sourceSessionId: null,
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "openai",

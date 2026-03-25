@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createElement, type ReactElement } from "react";
+import type { SessionStartModalModel } from "@/components/features/agents";
 import type { TasksStateContextValue } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
@@ -23,11 +24,6 @@ const retryNavigationPersistence = mock(() => {});
 const updateQuery = mock((_updates?: unknown) => {});
 const handleSelectTab = mock((_value: string) => {});
 const retryChatSettingsLoad = mock(() => {});
-const requestNewSessionStart = mock(async () => ({
-  selectedModel: null,
-  sourceSessionId: null,
-}));
-const resolvePendingSessionStart = mock((_requestId: string, _decision: unknown) => {});
 const resolvePendingRebaseConflictResolution = mock((_requestId: string, _decision: unknown) => {});
 const handleResolveRebaseConflict = mock(async () => {});
 
@@ -76,6 +72,7 @@ type OrchestrationState = {
   chatSettingsLoadError: Error | null;
   retryChatSettingsLoad: typeof retryChatSettingsLoad;
   humanReviewFeedbackModal: { kind: string };
+  sessionStartModal: SessionStartModalModel | null;
   activeTabValue: string;
   agentStudioTaskTabsModel: { tabs: [] };
   agentStudioHeaderModel: { title: string };
@@ -200,6 +197,35 @@ let orchestrationState: OrchestrationState = {
   chatSettingsLoadError: new Error("chat settings failed"),
   retryChatSettingsLoad,
   humanReviewFeedbackModal: { kind: "feedback" },
+  sessionStartModal: {
+    open: true,
+    title: "Start Planner Session",
+    description: "Pick a model and launch a session.",
+    confirmLabel: "Start session",
+    selectedModelSelection: null,
+    selectedRuntimeKind: "opencode",
+    runtimeOptions: [],
+    supportsProfiles: true,
+    supportsVariants: true,
+    isSelectionCatalogLoading: false,
+    agentOptions: [],
+    modelOptions: [],
+    modelGroups: [],
+    variantOptions: [],
+    availableStartModes: ["fresh"],
+    selectedStartMode: "fresh",
+    existingSessionOptions: [],
+    selectedSourceSessionId: "",
+    onSelectStartMode: mock(() => {}),
+    onSelectSourceSession: mock(() => {}),
+    onSelectRuntime: mock(() => {}),
+    onSelectAgent: mock(() => {}),
+    onSelectModel: mock(() => {}),
+    onSelectVariant: mock(() => {}),
+    isStarting: false,
+    onOpenChange: mock(() => {}),
+    onConfirm: mock(() => {}),
+  },
   activeTabValue: "task-1",
   agentStudioTaskTabsModel: { tabs: [] },
   agentStudioHeaderModel: { title: "Task 1" },
@@ -210,13 +236,6 @@ let orchestrationState: OrchestrationState = {
     isPanelOpen: true,
     rightPanelToggleModel,
   },
-};
-let pendingSessionStartRequest: {
-  requestId: string;
-  taskId: string;
-} | null = {
-  requestId: "session-start-1",
-  taskId: "task-1",
 };
 let pendingRebaseConflictResolutionRequest: {
   requestId: string;
@@ -275,14 +294,6 @@ beforeAll(async () => {
     useAgentStudioOrchestrationController: () => orchestrationState,
   }));
 
-  mock.module("../use-agent-studio-session-start-request", () => ({
-    useAgentStudioSessionStartRequest: () => ({
-      pendingSessionStartRequest,
-      requestNewSessionStart,
-      resolvePendingSessionStart,
-    }),
-  }));
-
   mock.module("../use-agent-studio-rebase-conflict-resolution", () => ({
     useAgentStudioRebaseConflictResolution: () => ({
       pendingRebaseConflictResolutionRequest,
@@ -295,14 +306,14 @@ beforeAll(async () => {
     useAgentsPageRightPanelModel: () => rightPanelState,
   }));
 
-  mock.module("../agents-page-session-start-modal-bridge", () => ({
-    AgentStudioSessionStartModalBridge: (props: Record<string, unknown>): ReactElement =>
-      createElement("mock-session-start-modal", props),
-  }));
-
   mock.module("../agents-page-rebase-conflict-modal", () => ({
     RebaseConflictResolutionModal: (props: Record<string, unknown>): ReactElement =>
       createElement("mock-rebase-conflict-modal", props),
+  }));
+
+  mock.module("@/components/features/agents", () => ({
+    SessionStartModal: (props: Record<string, unknown>): ReactElement =>
+      createElement("mock-session-start-modal", props),
   }));
 
   mock.module("@/features/human-review-feedback/human-review-feedback-modal", () => ({
@@ -417,6 +428,9 @@ beforeEach(() => {
     chatSettingsLoadError: new Error("chat settings failed"),
     retryChatSettingsLoad,
     humanReviewFeedbackModal: { kind: "feedback" },
+    sessionStartModal: {
+      ...orchestrationState.sessionStartModal!,
+    },
     activeTabValue: "task-1",
     agentStudioTaskTabsModel: { tabs: [] },
     agentStudioHeaderModel: { title: "Task 1" },
@@ -427,10 +441,6 @@ beforeEach(() => {
       isPanelOpen: true,
       rightPanelToggleModel,
     },
-  };
-  pendingSessionStartRequest = {
-    requestId: "session-start-1",
-    taskId: "task-1",
   };
   pendingRebaseConflictResolutionRequest = {
     requestId: "rebase-1",
@@ -479,8 +489,8 @@ describe("useAgentsPageShellModel", () => {
       expect(state.isRightPanelVisible).toBe(true);
       expect(state.rightPanelModel as unknown).toBe(rightPanelModel);
       expect(
-        (state.sessionStartModal as ReactElement<{ request: unknown }> | null)?.props.request,
-      ).toBe(pendingSessionStartRequest);
+        (state.sessionStartModal as ReactElement<{ model: unknown }> | null)?.props.model,
+      ).toBe(orchestrationState.sessionStartModal);
       expect(
         (state.gitConflictResolutionModal as ReactElement<{ request: unknown }> | null)?.props
           .request,
@@ -501,7 +511,10 @@ describe("useAgentsPageShellModel", () => {
   });
 
   test("omits pending modals when no requests are active and reports no selected task", async () => {
-    pendingSessionStartRequest = null;
+    orchestrationState = {
+      ...orchestrationState,
+      sessionStartModal: null,
+    };
     pendingRebaseConflictResolutionRequest = null;
     selectionState = {
       ...selectionState,

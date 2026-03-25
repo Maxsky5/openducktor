@@ -91,9 +91,7 @@ export function useAgentStudioQuerySessionSync({
     if (roleFromQuery !== activeSession.role) {
       updates[AGENT_STUDIO_QUERY_KEYS.agent] = activeSession.role;
     }
-    if (activeSession.scenario) {
-      updates[AGENT_STUDIO_QUERY_KEYS.scenario] = activeSession.scenario;
-    }
+    updates[AGENT_STUDIO_QUERY_KEYS.scenario] = undefined;
 
     if (Object.keys(updates).length === 0) {
       return;

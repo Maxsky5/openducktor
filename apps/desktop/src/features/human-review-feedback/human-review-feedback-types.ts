@@ -17,7 +17,7 @@ export type HumanReviewFeedbackModalModel = {
   onOpenChange: (open: boolean) => void;
   onTargetChange: (value: string) => void;
   onMessageChange: (message: string) => void;
-  onConfirm: () => void;
+  onConfirm: () => Promise<void>;
 };
 
 export type HumanReviewFeedbackState = {

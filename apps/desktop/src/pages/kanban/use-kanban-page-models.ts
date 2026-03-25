@@ -30,7 +30,6 @@ export function useKanbanPageModels({
     removeAgentSessions,
     startAgentSession,
     sendAgentMessage,
-    updateAgentSessionModel,
   } = useAgentState();
   const {
     tasks,
@@ -66,7 +65,6 @@ export function useKanbanPageModels({
     humanRequestChangesTask,
     startAgentSession,
     sendAgentMessage,
-    updateAgentSessionModel,
   });
   const {
     humanReviewFeedbackModal,

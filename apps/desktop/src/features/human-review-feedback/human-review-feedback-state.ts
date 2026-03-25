@@ -63,7 +63,7 @@ type BuildHumanReviewFeedbackModalModelInput = {
   onDismiss: () => void;
   onTargetChange: (selectedTarget: string) => void;
   onMessageChange: (message: string) => void;
-  onConfirm: () => void;
+  onConfirm: () => Promise<void>;
 };
 
 export const buildHumanReviewFeedbackModalModel = ({

@@ -4,8 +4,8 @@ export {
 } from "./core";
 export { upsertMessage } from "./messages";
 export {
-  normalizeSelectionForCatalog,
-  pickDefaultModel,
+  coerceSessionSelectionToCatalog,
+  pickDefaultSessionSelectionForCatalog,
 } from "./models";
 export { toPersistedSessionRecord } from "./persistence";
 export {

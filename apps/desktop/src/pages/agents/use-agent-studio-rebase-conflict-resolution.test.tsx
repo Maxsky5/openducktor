@@ -1,5 +1,6 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO } from "@/features/git-conflict-resolution";
+import { host } from "@/state/operations/shared/host";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -79,6 +80,19 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
 };
 
 describe("useAgentStudioRebaseConflictResolution", () => {
+  const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
+
+  beforeEach(() => {
+    host.buildContinuationTargetGet = async () => ({
+      workingDirectory: "/repo/worktrees/task-1",
+      source: "builder_session",
+    });
+  });
+
+  afterEach(() => {
+    host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
+  });
+
   test("routes conflict resolution to an existing Builder session", async () => {
     const args = createBaseArgs();
     const harness = createHookHarness(args);
@@ -161,10 +175,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
           providerId: "openai",
           modelId: "gpt-5",
         },
-        sendKickoff: false,
         startMode: "fresh",
-        requireModelReady: true,
-        workingDirectoryOverride: "/repo/worktrees/task-1",
       });
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
         task: "task-1",
@@ -216,25 +227,34 @@ describe("useAgentStudioRebaseConflictResolution", () => {
     }
   });
 
-  test("fails fast when the paused worktree is missing from the conflict payload", async () => {
+  test("does not require a paused worktree to start a new builder conflict session", async () => {
     const args = createBaseArgs();
     const harness = createHookHarness(args);
 
     try {
       await harness.mount();
 
-      await expect(
-        harness.run(async (state) => {
-          await state.handleResolveRebaseConflict(
+      let resolved = false;
+      await harness.run((state) => {
+        void state
+          .handleResolveRebaseConflict(
             createConflict({
               workingDir: undefined,
             }),
-          );
-        }),
-      ).rejects.toThrow("Missing paused worktree: conflict.workingDir is required.");
+          )
+          .then((result) => {
+            resolved = result;
+          });
+      });
 
-      expect(args.startAgentSession).toHaveBeenCalledTimes(0);
-      expect(args.sendAgentMessage).toHaveBeenCalledTimes(0);
+      await harness.waitFor((state) => state.pendingRebaseConflictResolutionRequest !== null);
+      await harness.run((state) => {
+        state.resolvePendingRebaseConflictResolution({ mode: "new" });
+      });
+
+      await harness.waitFor((_state) => resolved === true);
+      expect(args.startAgentSession).toHaveBeenCalledTimes(1);
+      expect(args.sendAgentMessage).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }

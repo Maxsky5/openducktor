@@ -3,6 +3,14 @@ import { toast } from "sonner";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createOrchestratorPublicOperations } from "./public-operations";
 
+const BUILD_SELECTION = {
+  runtimeKind: "opencode" as const,
+  providerId: "openai",
+  modelId: "gpt-5",
+  variant: "default",
+  profileId: "build",
+};
+
 const createSessionState = (
   sessionId: string,
   startedAt: string,
@@ -140,6 +148,8 @@ describe("agent-orchestrator-public-operations", () => {
         operations.startAgentSession({
           taskId: "task-1",
           role: "build",
+          startMode: "fresh",
+          selectedModel: BUILD_SELECTION,
         }),
       ).rejects.toThrow("start failed");
       expect(toastError).toHaveBeenCalledWith("Failed to start agent session", {

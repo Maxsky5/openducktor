@@ -2,11 +2,12 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { isAgentKickoffScenario } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { SessionStartModalModel } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { RequestNewSessionStart } from "@/features/session-start";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentStateContextValue } from "@/types/state-slices";
+import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import { SCENARIO_LABELS } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
@@ -33,14 +34,13 @@ type UseAgentStudioSessionActionsArgs = {
   agentStudioReady: boolean;
   isActiveTaskHydrated: boolean;
   selectionForNewSession: AgentModelSelection | null;
+  repoSettings: RepoSettingsInput | null;
   input: string;
   setInput: (value: string) => void;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
-  updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
   bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
   hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
-  loadAgentSessions: AgentStateContextValue["loadAgentSessions"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
   updateQuery: (updates: QueryUpdate) => void;
@@ -59,14 +59,13 @@ export function useAgentStudioSessionActions({
   agentStudioReady,
   isActiveTaskHydrated,
   selectionForNewSession,
+  repoSettings,
   input,
   setInput,
   startAgentSession,
   sendAgentMessage,
-  updateAgentSessionModel,
   bootstrapTaskSessions,
   hydrateRequestedTaskSessionHistory,
-  loadAgentSessions,
   humanRequestChangesTask,
   answerAgentQuestion,
   updateQuery,
@@ -74,6 +73,7 @@ export function useAgentStudioSessionActions({
   requestNewSessionStart,
 }: UseAgentStudioSessionActionsArgs): {
   isStarting: boolean;
+  sessionStartModal: SessionStartModalModel | null;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   isSending: boolean;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
@@ -114,6 +114,7 @@ export function useAgentStudioSessionActions({
 
   const {
     isStarting,
+    sessionStartModal,
     humanReviewFeedbackModal,
     startSession,
     startScenarioKickoff,
@@ -130,12 +131,11 @@ export function useAgentStudioSessionActions({
     isActiveTaskHydrated,
     isSessionWorking,
     selectionForNewSession,
+    repoSettings,
     startAgentSession,
     sendAgentMessage,
-    updateAgentSessionModel,
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
-    loadAgentSessions,
     humanRequestChangesTask,
     updateQuery,
     ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
@@ -391,6 +391,7 @@ export function useAgentStudioSessionActions({
 
   return {
     isStarting,
+    sessionStartModal,
     humanReviewFeedbackModal,
     isSending,
     isSubmittingQuestionByRequestId,
