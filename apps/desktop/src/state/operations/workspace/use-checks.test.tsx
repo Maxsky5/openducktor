@@ -410,4 +410,49 @@ describe("use-checks", () => {
       await harness.unmount();
     }
   });
+
+  test("prefers runtime health query error state over stale successful data", async () => {
+    let shouldFailRefresh = false;
+    repoHealthHandler = async () => {
+      if (shouldFailRefresh) {
+        throw new Error("runtime health refresh failed");
+      }
+      return makeRepoHealth({ availableToolIds: ["healthy"] });
+    };
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => {
+        return value.activeRepoRuntimeHealthByRuntime.opencode?.runtimeOk === true;
+      });
+
+      shouldFailRefresh = true;
+
+      await harness.run(async (value) => {
+        await expect(value.refreshRepoRuntimeHealthForRepo("/repo-a", true)).rejects.toThrow(
+          "runtime health refresh failed",
+        );
+      });
+
+      await harness.waitFor((value) => {
+        const runtimeHealth = value.activeRepoRuntimeHealthByRuntime.opencode;
+        return runtimeHealth != null && runtimeHealth.runtimeOk === false;
+      });
+
+      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toEqual(
+        expect.objectContaining({
+          runtimeOk: false,
+          mcpOk: false,
+          runtimeError: "runtime health refresh failed",
+        }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

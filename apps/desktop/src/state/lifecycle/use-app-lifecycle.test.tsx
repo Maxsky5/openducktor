@@ -311,6 +311,88 @@ describe("useAppLifecycle", () => {
     }
   });
 
+  test("suppresses late repo-load toasts after the repository is deselected", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const taskDeferred = createDeferred<void>();
+    const runtimeDeferred = createDeferred<unknown>();
+    const branchesDeferred = createDeferred<void>();
+
+    let runtimeCheckCallCount = 0;
+    const refreshRuntimeCheck = mock(() => {
+      runtimeCheckCallCount += 1;
+      return runtimeCheckCallCount === 1
+        ? Promise.resolve({ runtimeOk: true })
+        : runtimeDeferred.promise;
+    });
+
+    const baseArgs: HookArgs = {
+      activeRepo: null,
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => branchesDeferred.promise),
+      refreshRuntimeCheck,
+      refreshBeadsCheckForRepo: mock(async () => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      })),
+      refreshTaskData: mock(async () => taskDeferred.promise),
+      clearBranchData: mock(() => {}),
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
+
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    try {
+      await harness.mount();
+      await harness.update({
+        args: {
+          ...baseArgs,
+          activeRepo: "/repo",
+        },
+      });
+
+      await harness.update({
+        args: {
+          ...baseArgs,
+          activeRepo: null,
+        },
+      });
+
+      await harness.run(async () => {
+        taskDeferred.reject(new Error("tasks failed after deselect"));
+        runtimeDeferred.reject(new Error("runtime failed after deselect"));
+        branchesDeferred.reject(new Error("branches failed after deselect"));
+      });
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(toastError).not.toHaveBeenCalledWith(
+        "Repository tasks unavailable",
+        expect.anything(),
+      );
+      expect(toastError).not.toHaveBeenCalledWith("Runtime checks unavailable", expect.anything());
+      expect(toastError).not.toHaveBeenCalledWith(
+        "Repository branches unavailable",
+        expect.anything(),
+      );
+    } finally {
+      taskDeferred.resolve();
+      runtimeDeferred.resolve({ runtimeOk: true });
+      branchesDeferred.resolve();
+      await harness.unmount();
+    }
+  });
+
   test("shows Beads preparation toasts when repository initialization is slow", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];

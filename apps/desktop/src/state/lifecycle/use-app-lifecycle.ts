@@ -169,8 +169,11 @@ export function useAppLifecycle({
       }
     })();
     const runtimeCheckPromise = refreshRuntimeCheck(false);
+    const isStaleRepoLoad = (): boolean =>
+      repoLoadVersionRef.current !== loadVersion || activeRepoRef.current !== activeRepo;
+
     void refreshBranches(false).catch((error: unknown) => {
-      if (repoLoadVersionRef.current !== loadVersion) {
+      if (isStaleRepoLoad()) {
         return;
       }
       toast.error("Repository branches unavailable", {
@@ -180,7 +183,7 @@ export function useAppLifecycle({
 
     Promise.allSettled([taskLoadPromise, runtimeCheckPromise])
       .then(([tasksResult, runtimeResult]) => {
-        if (repoLoadVersionRef.current !== loadVersion) {
+        if (isStaleRepoLoad()) {
           return;
         }
 

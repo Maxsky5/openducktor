@@ -231,19 +231,32 @@ export function useChecks({
 
   const clearActiveBeadsCheck = useCallback(() => {
     setIsManualLoadingChecks(false);
-  }, []);
+    if (activeRepo === null) {
+      return;
+    }
+    queryClient.removeQueries({
+      queryKey: checksQueryKeys.beads(activeRepo),
+      exact: true,
+    });
+  }, [activeRepo, queryClient]);
 
   const clearActiveRepoRuntimeHealth = useCallback(() => {
     setIsManualLoadingChecks(false);
-  }, []);
+    if (activeRepo === null || runtimeDefinitions.length === 0) {
+      return;
+    }
+    queryClient.removeQueries({
+      queryKey: checksQueryKeys.runtimeHealth(
+        activeRepo,
+        runtimeDefinitions.map((definition) => definition.kind),
+      ),
+      exact: true,
+    });
+  }, [activeRepo, queryClient, runtimeDefinitions]);
 
   const activeRepoRuntimeHealthByRuntime = useMemo((): RepoRuntimeHealthMap => {
     if (activeRepo === null) {
       return {};
-    }
-
-    if (runtimeHealthQuery.data) {
-      return runtimeHealthQuery.data;
     }
 
     if (runtimeHealthQuery.error && runtimeDefinitions.length > 0) {
@@ -253,6 +266,10 @@ export function useChecks({
           ? new Date(runtimeHealthQuery.errorUpdatedAt).toISOString()
           : new Date().toISOString();
       return buildRuntimeHealthErrorMap(runtimeDefinitions, runtimeHealthError, checkedAt);
+    }
+
+    if (runtimeHealthQuery.data) {
+      return runtimeHealthQuery.data;
     }
 
     return {};
