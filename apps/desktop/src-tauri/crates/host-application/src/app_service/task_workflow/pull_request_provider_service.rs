@@ -82,9 +82,9 @@ trait PullRequestProviderPort {
 struct GithubPullRequestProviderPort;
 
 impl GithubPullRequestProviderPort {
-    fn config<'a>(
+    fn config(
         &self,
-        repo_config: &'a host_infra_system::RepoConfig,
+        repo_config: &host_infra_system::RepoConfig,
     ) -> host_infra_system::GitProviderConfig {
         repo_config
             .git
@@ -528,7 +528,7 @@ mod tests {
     use crate::app_service::AppService;
     use anyhow::Result;
     use host_domain::{GitCurrentBranch, PullRequestRecord, TaskStatus};
-    use host_infra_system::{AppConfigStore, GitProviderConfig, GitProviderRepository, RepoConfig};
+    use host_infra_system::{AppConfigStore, RepoConfig};
     use std::fs;
     use std::path::Path;
     use std::sync::{Arc, Mutex};
