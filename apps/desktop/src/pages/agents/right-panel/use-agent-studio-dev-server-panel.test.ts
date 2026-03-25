@@ -33,7 +33,7 @@ const buildState = (overrides: Partial<DevServerGroupState> = {}): DevServerGrou
 });
 
 describe("useAgentStudioDevServerPanel helpers", () => {
-  test("applies log line events and preserves the latest 2000 lines", () => {
+  test("applies log line events without cloning script log buffers into state", () => {
     const initialLogs = Array.from({ length: 2_000 }, (_, index) => ({
       scriptId: "frontend",
       stream: "stdout" as const,
@@ -57,9 +57,9 @@ describe("useAgentStudioDevServerPanel helpers", () => {
 
     const nextState = applyDevServerEventToState(state, event);
 
-    expect(nextState?.scripts[0]?.bufferedLogLines).toHaveLength(2_000);
-    expect(nextState?.scripts[0]?.bufferedLogLines[0]?.text).toBe("line-1");
-    expect(nextState?.scripts[0]?.bufferedLogLines.at(-1)?.text).toBe("latest-line");
+    expect(nextState?.scripts).toBe(state.scripts);
+    expect(nextState?.scripts[0]?.bufferedLogLines).toBe(initialLogs);
+    expect(nextState?.updatedAt).toBe("2026-03-19T15:31:00.000Z");
   });
 
   test("selects the remembered tab when it still exists", () => {
