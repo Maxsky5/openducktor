@@ -75,7 +75,7 @@ Implementation notes:
 
 - Command: `bun run deps:audit:hono`
 - Backed by: `bun audit --json`
-- Scope: blocks GHSA-`xh87-mx6m-69f3` reintroduction (`hono` must resolve to `>=4.12.2`)
+- Scope: blocks GHSA-`xh87-mx6m-69f3` and GHSA-`v8w9-8mx6-g223` reintroduction (`hono` must resolve to `>=4.12.7`)
 
 Implementation notes:
 
