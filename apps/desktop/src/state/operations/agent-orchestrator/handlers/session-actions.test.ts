@@ -60,7 +60,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
     });
 
     expect(typeof actions.ensureSessionReady).toBe("function");
@@ -127,7 +127,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async (session) => {
+      persistSessionRecord: async (_taskId, session) => {
         persistedSessionId = session.sessionId;
       },
     });
@@ -217,7 +217,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {
+      persistSessionRecord: async () => {
         persistCalls += 1;
       },
     });
@@ -304,7 +304,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
     });
 
     try {
@@ -398,7 +398,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         clearCalls += 1;
       },
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       stopBuildRun,
     });
 
@@ -483,7 +483,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         clearCalls += 1;
       },
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       stopBuildRun: async () => {
         callOrder.push("host-stop");
       },
@@ -559,7 +559,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       stopBuildRun: async () => {
         buildStopCalls += 1;
       },
@@ -643,7 +643,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       refreshTaskData: async () => {
         callOrder.push("refresh-task-data");
       },
-      persistSessionSnapshot: async () => {
+      persistSessionRecord: async () => {
         callOrder.push("persist-start");
         await persistDeferred.promise;
         callOrder.push("persist-end");
@@ -737,7 +737,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       refreshTaskData: async () => {
         refreshTaskDataCalls += 1;
       },
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       stopBuildRun: async () => {},
       invalidateSessionStopQueries: async (input) => {
         invalidationCalls.push(input);
@@ -814,7 +814,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
     });
 
     try {
@@ -913,7 +913,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1008,7 +1008,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1123,7 +1123,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1198,7 +1198,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1279,7 +1279,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1355,7 +1355,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1427,7 +1427,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       stopBuildRun: async () => {
         stopCalls += 1;
       },
@@ -1495,7 +1495,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         clearCalls += 1;
       },
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1583,7 +1583,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {
+      persistSessionRecord: async () => {
         persistCalls += 1;
       },
     });

@@ -118,15 +118,14 @@ export function useAgentOrchestratorOperations({
   const { sessionsRef, turnStartedAtBySessionRef, unsubscribersRef } = refBridges;
   const [sessionRetryTick, setSessionRetryTick] = useState(0);
 
-  const persistSessionSnapshot = useCallback(
-    async (session: AgentSessionState): Promise<void> => {
+  const persistSessionRecord = useCallback(
+    async (taskId: string, record: AgentSessionRecord): Promise<void> => {
       if (!activeRepo) {
         return;
       }
-      const persistedRecord = toPersistedSessionRecord(session);
-      await host.agentSessionUpsert(activeRepo, session.taskId, persistedRecord);
-      upsertAgentSessionRecordInQuery(appQueryClient, activeRepo, session.taskId, persistedRecord);
-      upsertAgentSessionInRepoTaskData(appQueryClient, activeRepo, session.taskId, persistedRecord);
+      await host.agentSessionUpsert(activeRepo, taskId, record);
+      upsertAgentSessionRecordInQuery(appQueryClient, activeRepo, taskId, record);
+      upsertAgentSessionInRepoTaskData(appQueryClient, activeRepo, taskId, record);
     },
     [activeRepo],
   );
@@ -168,7 +167,7 @@ export function useAgentOrchestratorOperations({
       if (options?.persist === true) {
         runOrchestratorSideEffect(
           "operations-persist-session-snapshot",
-          persistSessionSnapshot(nextSession),
+          persistSessionRecord(nextSession.taskId, toPersistedSessionRecord(nextSession)),
           {
             tags: {
               repoPath: activeRepo,
@@ -180,7 +179,7 @@ export function useAgentOrchestratorOperations({
         );
       }
     },
-    [activeRepo, commitSessions, persistSessionSnapshot, sessionsRef],
+    [activeRepo, commitSessions, persistSessionRecord, sessionsRef],
   );
 
   const resolveTurnDurationMs = useCallback(
@@ -500,7 +499,7 @@ export function useAgentOrchestratorOperations({
         loadAgentSessions,
         clearTurnDuration,
         refreshTaskData,
-        persistSessionSnapshot,
+        persistSessionRecord,
         stopBuildRun: async (runId) => {
           await host.buildStop(runId);
         },
@@ -515,7 +514,7 @@ export function useAgentOrchestratorOperations({
       ensureRuntime,
       loadAgentSessions,
       invalidateSessionStopQueries,
-      persistSessionSnapshot,
+      persistSessionRecord,
       refBridges,
       refreshTaskData,
       updateSession,

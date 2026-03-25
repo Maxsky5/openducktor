@@ -14,11 +14,15 @@ export const resolveScenarioStartMode = ({
   existingSessionOptions: SessionStartExistingSessionOption[];
 }): AgentSessionStartMode => {
   const preferredStartMode = defaultStartModeForScenario(scenario);
-  const needsExistingSession = preferredStartMode === "reuse" || preferredStartMode === "fork";
-  if (!needsExistingSession || existingSessionOptions.length > 0) {
-    return preferredStartMode;
+  const hasExistingSession = existingSessionOptions.length > 0;
+  const canStartFresh = getAgentScenarioDefinition(scenario).allowedStartModes.includes("fresh");
+
+  switch (preferredStartMode) {
+    case "fresh":
+      return "fresh";
+    case "reuse":
+      return hasExistingSession ? "reuse" : canStartFresh ? "fresh" : "reuse";
+    case "fork":
+      return hasExistingSession ? "fork" : canStartFresh ? "fresh" : "fork";
   }
-  return getAgentScenarioDefinition(scenario).allowedStartModes.includes("fresh")
-    ? "fresh"
-    : preferredStartMode;
 };

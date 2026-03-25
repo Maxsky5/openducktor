@@ -1,7 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
+import { host } from "@/state/operations/shared/host";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
+  createDeferred,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -63,7 +65,6 @@ const createBaseArgs = (): HookArgs => ({
   humanRequestChangesTask: async () => {},
   startAgentSession: async () => "session-new",
   sendAgentMessage: async () => {},
-  updateAgentSessionModel: () => {},
 });
 
 describe("resolveKanbanBuildStartScenario", () => {
@@ -145,6 +146,163 @@ describe("useKanbanSessionStartFlow", () => {
         description: "3/19/2026, 12:00:00 PM · idle · builder-",
       }),
     ]);
+
+    await harness.unmount();
+  });
+
+  test("reuse confirm does not wait for repo settings when the reused session has no saved model", async () => {
+    const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
+    const loadRepoSettings = mock(
+      async () =>
+        ({
+          defaultRuntimeKind: "opencode",
+          worktreeBasePath: ".worktrees",
+          branchPrefix: "odt",
+          defaultTargetBranch: { remote: "origin", branch: "main" },
+          trustedHooks: false,
+          preStartHooks: [],
+          postCompleteHooks: [],
+          devServers: [],
+          worktreeFileCopies: [],
+          agentDefaults: {
+            spec: null,
+            planner: null,
+            build: null,
+            qa: null,
+          },
+        }) satisfies RepoSettingsInput,
+    );
+    const startSessionDeferred = createDeferred<string>();
+    const startAgentSession = mock(() => startSessionDeferred.promise);
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      loadRepoSettings,
+      startAgentSession,
+    });
+
+    const buildContinuationTargetGet = mock(async () => ({
+      workingDirectory: "/repo/worktrees/task-1",
+      source: "builder_session" as const,
+    }));
+    host.buildContinuationTargetGet = buildContinuationTargetGet;
+
+    try {
+      await harness.mount();
+
+      await harness.run((state) => {
+        state.onDelegate("TASK-1");
+      });
+
+      const modal = harness.getLatest().sessionStartModal;
+      expect(modal).not.toBeNull();
+      expect(modal?.selectedStartMode).toBe("reuse");
+      expect(modal?.selectedModelSelection).toBeNull();
+
+      await harness.run(async () => {
+        modal?.onConfirm({
+          runInBackground: false,
+          startMode: "reuse",
+          sourceSessionId: "builder-session-2",
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(loadRepoSettings).not.toHaveBeenCalled();
+      expect(buildContinuationTargetGet).not.toHaveBeenCalled();
+      expect(startAgentSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: "TASK-1",
+          role: "build",
+          scenario: "build_after_human_request_changes",
+          startMode: "reuse",
+          sourceSessionId: "builder-session-2",
+        }),
+      );
+
+      startSessionDeferred.resolve("session-new");
+    } finally {
+      host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
+      await harness.unmount();
+    }
+  });
+
+  test("human review new-session feedback opens the shared start modal in fresh mode", async () => {
+    const bootstrapTaskSessions = mock(async () => {});
+    const humanRequestChangesTask = mock(async () => {});
+    const startAgentSession = mock(async () => "session-new");
+    const sendAgentMessage = mock(async () => {});
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      bootstrapTaskSessions,
+      humanRequestChangesTask,
+      startAgentSession,
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.onHumanRequestChanges("TASK-1");
+    });
+
+    const feedbackModal = harness.getLatest().humanReviewFeedbackModal;
+    expect(feedbackModal).not.toBeNull();
+
+    await harness.run(async () => {
+      feedbackModal?.onTargetChange("new_session");
+      feedbackModal?.onMessageChange("Use a fresh builder session for these changes.");
+    });
+
+    await harness.run(async () => {
+      await harness.getLatest().humanReviewFeedbackModal?.onConfirm();
+    });
+
+    const sessionStartModal = harness.getLatest().sessionStartModal;
+    expect(sessionStartModal).not.toBeNull();
+    expect(sessionStartModal?.open).toBe(true);
+    expect(sessionStartModal?.selectedStartMode).toBe("fresh");
+    expect(sessionStartModal?.availableStartModes).toEqual(["fresh", "reuse"]);
+    expect(sessionStartModal?.existingSessionOptions).toEqual([
+      expect.objectContaining({ value: "builder-session-2" }),
+      expect.objectContaining({ value: "builder-session-1" }),
+    ]);
+    expect(humanRequestChangesTask).not.toHaveBeenCalled();
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("ai review new-session feedback opens the shared start modal in fresh mode", async () => {
+    const bootstrapTaskSessions = mock(async () => {});
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      tasks: [createTaskCardFixture({ id: "TASK-1", status: "ai_review" })],
+      bootstrapTaskSessions,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.onHumanRequestChanges("TASK-1");
+    });
+
+    const feedbackModal = harness.getLatest().humanReviewFeedbackModal;
+    expect(feedbackModal).not.toBeNull();
+
+    await harness.run(async () => {
+      feedbackModal?.onTargetChange("new_session");
+      feedbackModal?.onMessageChange("Please address the AI review feedback in a fresh session.");
+    });
+
+    await harness.run(async () => {
+      await harness.getLatest().humanReviewFeedbackModal?.onConfirm();
+    });
+
+    const sessionStartModal = harness.getLatest().sessionStartModal;
+    expect(sessionStartModal).not.toBeNull();
+    expect(sessionStartModal?.open).toBe(true);
+    expect(sessionStartModal?.selectedStartMode).toBe("fresh");
+    expect(sessionStartModal?.availableStartModes).toEqual(["fresh", "reuse"]);
 
     await harness.unmount();
   });

@@ -39,11 +39,11 @@ const DEFAULT_ODT_RUNTIME_TOOL_IDS = [
 type MockSession = {
   createCalls: unknown[];
   promptCalls: unknown[];
+  promptAsyncCalls: unknown[];
   abortCalls: unknown[];
   getCalls: unknown[];
   messagesCalls: unknown[];
   todoCalls: unknown[];
-  promptQueue: Array<{ info: { id?: string; [key: string]: unknown }; parts: Part[] }>;
   messagesResponse: Array<{
     info: {
       id: string;
@@ -108,10 +108,25 @@ type AgentsMockResult =
       error: Error;
     };
 
+type PromptAsyncMockResult =
+  | {
+      mode: "success";
+      data?: unknown;
+    }
+  | {
+      mode: "api_error";
+      error: unknown;
+      response?: { status?: number; statusText?: string };
+    }
+  | {
+      mode: "throw";
+      error: Error;
+    };
+
 type MakeMockClientInput = {
   sessionId?: string;
+  promptAsyncResult?: PromptAsyncMockResult;
   streamEvents?: Event[];
-  promptQueue?: Array<{ info: { id?: string; [key: string]: unknown }; parts: Part[] }>;
   messagesResponse?: Array<{
     info: {
       id: string;
@@ -132,8 +147,8 @@ type MakeMockClientInput = {
 
 const makeMockClient = ({
   sessionId = "session-opencode-1",
+  promptAsyncResult = { mode: "success" },
   streamEvents = [],
-  promptQueue = [],
   messagesResponse = [],
   todoResult = {
     mode: "success",
@@ -180,11 +195,11 @@ const makeMockClient = ({
   const session: MockSession = {
     createCalls: [],
     promptCalls: [],
+    promptAsyncCalls: [],
     abortCalls: [],
     getCalls: [],
     messagesCalls: [],
     todoCalls: [],
-    promptQueue: [...promptQueue],
     messagesResponse: [...messagesResponse],
     todoResult,
   };
@@ -213,31 +228,22 @@ const makeMockClient = ({
         return { data: { id: sessionId }, error: undefined };
       },
       promptAsync: async (input: unknown) => {
-        session.promptCalls.push(input);
-        const queued = session.promptQueue.shift();
-        return { data: queued ?? undefined, error: undefined };
+        session.promptAsyncCalls.push(input);
+        if (promptAsyncResult.mode === "throw") {
+          throw promptAsyncResult.error;
+        }
+        if (promptAsyncResult.mode === "api_error") {
+          return {
+            data: undefined,
+            error: promptAsyncResult.error,
+            response: promptAsyncResult.response,
+          };
+        }
+        return { data: promptAsyncResult.data, error: undefined };
       },
       prompt: async (input: unknown) => {
         session.promptCalls.push(input);
-        const queued = session.promptQueue.shift();
-        if (!queued) {
-          return {
-            data: {
-              info: { id: "assistant-msg" },
-              parts: [
-                {
-                  type: "text",
-                  text: "No response",
-                  id: "part-1",
-                  sessionID: sessionId,
-                  messageID: "assistant-msg",
-                },
-              ],
-            },
-            error: undefined,
-          };
-        }
-        return { data: queued, error: undefined };
+        return { data: undefined, error: undefined };
       },
       abort: async (input: unknown) => {
         session.abortCalls.push(input);
@@ -613,28 +619,7 @@ describe("OpencodeSdkAdapter", () => {
   });
 
   test("sendUserMessage forwards selected model with openducktor role-scoped tools", async () => {
-    const mock = makeMockClient({
-      promptQueue: [
-        {
-          info: {
-            id: "assistant-1",
-            tokens: {
-              input: 900,
-              output: 200,
-            },
-          },
-          parts: [
-            {
-              id: "text-1",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-1",
-              type: "text",
-              text: "Specification updated.",
-            } as Part,
-          ],
-        },
-      ],
-    });
+    const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-17T12:00:00Z",
@@ -656,8 +641,9 @@ describe("OpencodeSdkAdapter", () => {
       },
     });
 
-    expect(mock.session.promptCalls).toHaveLength(1);
-    expect(mock.session.promptCalls[0]).toMatchObject({
+    expect(mock.session.promptCalls).toHaveLength(0);
+    expect(mock.session.promptAsyncCalls).toHaveLength(1);
+    expect(mock.session.promptAsyncCalls[0]).toMatchObject({
       sessionID: "session-opencode-1",
       directory: "/repo",
       system: "system prompt",
@@ -686,38 +672,12 @@ describe("OpencodeSdkAdapter", () => {
     });
     expect(mock.tool.idsCalls).toEqual([{ directory: "/repo" }]);
     expect(mock.mcp.statusCalls).toEqual([{ directory: "/repo" }]);
-    expect(events.some((event) => event.type === "assistant_message")).toBe(true);
-    const assistantMessage = events.find((event) => event.type === "assistant_message");
-    expect(assistantMessage).toMatchObject({
-      type: "assistant_message",
-      messageId: "assistant-1",
-      totalTokens: 1_100,
-    });
+    expect(events.some((event) => event.type === "assistant_message")).toBe(false);
     expect(events.some((event) => event.type === "session_idle")).toBe(false);
   });
 
-  test("sendUserMessage falls back to part messageID when response info.id is absent", async () => {
-    const mock = makeMockClient({
-      promptQueue: [
-        {
-          info: {
-            tokens: {
-              input: 100,
-              output: 50,
-            },
-          },
-          parts: [
-            {
-              id: "text-1",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-from-part-id",
-              type: "text",
-              text: "Recovered from part id.",
-            } as Part,
-          ],
-        } as { info: { [key: string]: unknown }; parts: Part[] },
-      ],
-    });
+  test("sendUserMessage does not emit assistant output before stream events arrive", async () => {
+    const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-17T12:00:00Z",
@@ -733,13 +693,38 @@ describe("OpencodeSdkAdapter", () => {
       content: "Recover ids",
     });
 
-    const assistantMessage = events.find((event) => event.type === "assistant_message");
-    expect(assistantMessage).toMatchObject({
-      type: "assistant_message",
-      messageId: "assistant-from-part-id",
-      message: "Recovered from part id.",
-      totalTokens: 150,
+    expect(events.some((event) => event.type === "assistant_part")).toBe(false);
+    expect(events.some((event) => event.type === "assistant_message")).toBe(false);
+    expect(events.some((event) => event.type === "session_idle")).toBe(false);
+  });
+
+  test("sendUserMessage resets session activity so the next stream idle can settle the turn", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
     });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+
+    const sessions = (
+      adapter as unknown as {
+        sessions: Map<string, { hasIdleSinceActivity: boolean }>;
+      }
+    ).sessions;
+    const session = sessions.get("session-1");
+    if (!session) {
+      throw new Error("Expected adapter session record");
+    }
+
+    session.hasIdleSinceActivity = true;
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      content: "Second turn",
+    });
+
+    expect(session.hasIdleSinceActivity).toBe(false);
   });
 
   test("updateSessionModel refreshes the adapter session model used for subsequent prompts", async () => {
@@ -765,8 +750,9 @@ describe("OpencodeSdkAdapter", () => {
       content: "Continue",
     });
 
-    expect(mock.session.promptCalls).toHaveLength(1);
-    expect(mock.session.promptCalls[0]).toMatchObject({
+    expect(mock.session.promptCalls).toHaveLength(0);
+    expect(mock.session.promptAsyncCalls).toHaveLength(1);
+    expect(mock.session.promptAsyncCalls[0]).toMatchObject({
       model: {
         providerID: "openai",
         modelID: "gpt-5",
@@ -804,7 +790,8 @@ describe("OpencodeSdkAdapter", () => {
 
     expect(mock.tool.idsCalls).toEqual([{ directory: "/repo" }]);
     expect(mock.mcp.statusCalls).toEqual([{ directory: "/repo" }]);
-    expect(mock.session.promptCalls).toHaveLength(2);
+    expect(mock.session.promptCalls).toHaveLength(0);
+    expect(mock.session.promptAsyncCalls).toHaveLength(2);
   });
 
   test("sendUserMessage falls back to the session model for model-scoped tool discovery", async () => {
@@ -835,7 +822,8 @@ describe("OpencodeSdkAdapter", () => {
         model: "gpt-5",
       },
     ]);
-    expect(mock.session.promptCalls[0]).toMatchObject({
+    expect(mock.session.promptCalls).toHaveLength(0);
+    expect(mock.session.promptAsyncCalls[0]).toMatchObject({
       tools: {
         edit: false,
         write: false,
@@ -846,6 +834,53 @@ describe("OpencodeSdkAdapter", () => {
         openducktor_odt_set_spec: true,
       },
     });
+  });
+
+  test("sendUserMessage wraps promptAsync API errors with response details", async () => {
+    const mock = makeMockClient({
+      promptAsyncResult: {
+        mode: "api_error",
+        error: { message: "quota exceeded" },
+        response: { status: 429, statusText: "Too Many Requests" },
+      },
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+
+    await expect(
+      adapter.sendUserMessage({
+        sessionId: "session-1",
+        content: "Try again",
+      }),
+    ).rejects.toThrow(
+      "OpenCode request failed: prompt session (429 Too Many Requests): quota exceeded",
+    );
+  });
+
+  test("sendUserMessage wraps thrown promptAsync errors", async () => {
+    const mock = makeMockClient({
+      promptAsyncResult: {
+        mode: "throw",
+        error: new Error("socket closed"),
+      },
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+
+    await expect(
+      adapter.sendUserMessage({
+        sessionId: "session-1",
+        content: "Try again",
+      }),
+    ).rejects.toThrow("OpenCode request failed: prompt session: socket closed");
   });
 
   test("loadSessionHistory preserves message model metadata and maps streamed parts", async () => {

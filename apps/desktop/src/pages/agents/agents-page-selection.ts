@@ -1,7 +1,7 @@
 export {
+  coerceVisibleSelectionToCatalog,
   isSameSelection,
-  normalizeSelectionForCatalog,
-  pickDefaultSelectionForCatalog,
+  pickDefaultVisibleSelectionForCatalog,
 } from "@/features/session-start";
 
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";

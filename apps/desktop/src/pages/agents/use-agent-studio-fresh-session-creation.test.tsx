@@ -37,6 +37,14 @@ const createSetStartingActivityCountByContext = (): Dispatch<
   };
 };
 
+const MODEL_SELECTION = {
+  runtimeKind: "opencode" as const,
+  providerId: "openai",
+  modelId: "gpt-5",
+  variant: "default",
+  profileId: "spec",
+};
+
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeRepo: "/repo",
   taskId: "task-1",
@@ -53,11 +61,11 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   startingSessionByTaskRef: {
     current: new Map<string, Promise<string | undefined>>(),
   } satisfies MutableRefObject<Map<string, Promise<string | undefined>>>,
-  resolveRequestedDecision: async () => ({
-    selectedModel: null,
-    startMode: "fresh",
-    sourceSessionId: null,
-  }),
+  executeRequestedSessionStart: async (_request, executeWithDecision) =>
+    executeWithDecision({
+      selectedModel: MODEL_SELECTION,
+      startMode: "fresh",
+    }),
   ...overrides,
 });
 
@@ -178,9 +186,7 @@ describe("useAgentStudioFreshSessionCreation", () => {
       expect.objectContaining({
         role: "qa",
         scenario: "qa_review",
-        builderContext: {
-          workingDirectory: "/repo/worktrees/task-1",
-        },
+        startMode: "fresh",
       }),
     );
 
@@ -188,7 +194,10 @@ describe("useAgentStudioFreshSessionCreation", () => {
   });
 
   test("reuses an existing session without starting a fresh one", async () => {
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(
+      async (input: { startMode: string; sourceSessionId?: string }) =>
+        input.startMode === "reuse" ? (input.sourceSessionId ?? "session-existing") : "session-new",
+    );
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness(
       createBaseArgs({
@@ -201,17 +210,11 @@ describe("useAgentStudioFreshSessionCreation", () => {
         }),
         startAgentSession,
         sendAgentMessage,
-        resolveRequestedDecision: async () => ({
-          selectedModel: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "high",
-            profileId: "Hephaestus",
-          },
-          startMode: "reuse",
-          sourceSessionId: "session-existing",
-        }),
+        executeRequestedSessionStart: async (_request, executeWithDecision) =>
+          executeWithDecision({
+            startMode: "reuse",
+            sourceSessionId: "session-existing",
+          }),
       }),
     );
 
@@ -228,7 +231,15 @@ describe("useAgentStudioFreshSessionCreation", () => {
     });
     await harness.waitFor(() => sendAgentMessage.mock.calls.length > 0);
 
-    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(startAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        startMode: "reuse",
+        sourceSessionId: "session-existing",
+      }),
+    );
     expect(sendAgentMessage).toHaveBeenCalledWith(
       "session-existing",
       expect.stringContaining("task-1"),

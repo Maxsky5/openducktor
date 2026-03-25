@@ -210,7 +210,7 @@ describe("agent-orchestrator-runtime", () => {
     }
   });
 
-  test("reuses the matching running build runtime when a working-directory override is provided", async () => {
+  test("reuses the matching running build runtime when a target working directory is provided", async () => {
     let buildStartCalls = 0;
     let repoRuntimeEnsureCalls = 0;
 
@@ -245,7 +245,7 @@ describe("agent-orchestrator-runtime", () => {
       });
 
       const runtime = await ensureRuntime("/tmp/repo", "task-1", "build", {
-        workingDirectoryOverride: "/tmp/repo/worktree",
+        targetWorkingDirectory: "/tmp/repo/worktree",
       });
       expect(runtime).toEqual({
         runtimeKind: "opencode",
@@ -266,7 +266,7 @@ describe("agent-orchestrator-runtime", () => {
     }
   });
 
-  test("uses the shared repo runtime for build role when a working-directory override is provided without a matching run", async () => {
+  test("uses the shared repo runtime for build role when a target working directory is provided without a matching run", async () => {
     let buildStartCalls = 0;
     let repoRuntimeEnsureCalls = 0;
 
@@ -301,7 +301,7 @@ describe("agent-orchestrator-runtime", () => {
       });
 
       const runtime = await ensureRuntime("/tmp/repo", "task-1", "build", {
-        workingDirectoryOverride: "/tmp/repo/conflict-worktree",
+        targetWorkingDirectory: "/tmp/repo/conflict-worktree",
       });
       expect(runtime).toEqual({
         runtimeKind: "opencode",
@@ -351,7 +351,7 @@ describe("agent-orchestrator-runtime", () => {
       });
 
       const runtime = await ensureRuntime("/tmp/repo", "task-1", "build", {
-        workingDirectoryOverride: "/tmp/repo",
+        targetWorkingDirectory: "/tmp/repo",
       });
       expect(runtime).toEqual({
         runtimeKind: "opencode",

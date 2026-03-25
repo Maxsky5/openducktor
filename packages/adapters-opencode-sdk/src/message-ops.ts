@@ -1,5 +1,4 @@
 import type {
-  AgentEvent,
   AgentPendingPermissionRequest,
   AgentPendingQuestionRequest,
   AgentSessionHistoryMessage,
@@ -18,7 +17,7 @@ import {
   readTextFromParts,
   sanitizeAssistantMessage,
 } from "./message-normalizers";
-import { normalizeModelInput, resolveAssistantResponseMessageId } from "./payload-mappers";
+import { normalizeModelInput } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
@@ -298,13 +297,10 @@ export const sendUserMessage = async (input: {
   session: SessionRecord;
   request: SendAgentUserMessageInput;
   tools: Record<string, boolean>;
-  now: () => string;
-  emit: (event: AgentEvent) => void;
 }): Promise<void> => {
   const model = input.request.model ?? input.session.input.model;
   const modelInput = normalizeModelInput(model);
-
-  const response = await input.session.client.session.prompt({
+  const promptRequest = {
     sessionID: input.session.externalSessionId,
     directory: input.session.input.workingDirectory,
     ...(input.session.input.systemPrompt.trim().length > 0
@@ -314,46 +310,17 @@ export const sendUserMessage = async (input: {
     ...(modelInput.variant ? { variant: modelInput.variant } : {}),
     ...(modelInput.agent ? { agent: modelInput.agent } : {}),
     tools: input.tools,
-    parts: [{ type: "text", text: input.request.content }],
-  });
-  const responseData = unwrapData(response, "prompt session");
+    parts: [{ type: "text" as const, text: input.request.content }],
+  };
 
-  for (const responsePart of responseData.parts) {
-    const mappedPart = mapPartToAgentStreamPart(responsePart);
-    if (!mappedPart) {
-      continue;
+  setSessionActive(input.session);
+  try {
+    const response = await input.session.client.session.promptAsync(promptRequest);
+    if (response.error) {
+      throw toOpenCodeRequestError("prompt session", response.error, response.response);
     }
-    setSessionActive(input.session);
-    input.emit({
-      type: "assistant_part",
-      sessionId: input.session.summary.sessionId,
-      timestamp: input.now(),
-      part: mappedPart,
-    });
-  }
-
-  const assistantMessage = sanitizeAssistantMessage(readTextFromParts(responseData.parts));
-  const totalTokens = extractMessageTotalTokens(
-    (responseData as { info?: unknown }).info,
-    responseData.parts,
-  );
-  const assistantModel = readMessageModelSelection((responseData as { info?: unknown }).info);
-  const responseMessageId = resolveAssistantResponseMessageId(responseData);
-  if (assistantMessage.length > 0) {
-    if (!responseMessageId) {
-      throw new Error("Prompt session returned assistant text without a message id.");
-    }
-    setSessionActive(input.session);
-    input.emit({
-      type: "assistant_message",
-      sessionId: input.session.summary.sessionId,
-      timestamp: input.now(),
-      messageId: responseMessageId,
-      message: assistantMessage,
-      ...(typeof totalTokens === "number" ? { totalTokens } : {}),
-      ...(assistantModel ? { model: assistantModel } : {}),
-    });
-    input.session.emittedAssistantMessageIds.add(responseMessageId);
+  } catch (error) {
+    throw toOpenCodeRequestError("prompt session", error);
   }
 };
 

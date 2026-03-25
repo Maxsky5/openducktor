@@ -78,7 +78,7 @@ export function HumanReviewFeedbackModal({
           >
             Cancel
           </Button>
-          <Button type="button" disabled={confirmDisabled} onClick={model.onConfirm}>
+          <Button type="button" disabled={confirmDisabled} onClick={() => void model.onConfirm()}>
             {model.selectedTarget === "new_session" ? "Continue" : "Send Feedback"}
           </Button>
         </DialogFooter>

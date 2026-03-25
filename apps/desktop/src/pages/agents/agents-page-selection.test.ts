@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createAgentSessionFixture } from "./agent-studio-test-utils";
 import {
+  coerceVisibleSelectionToCatalog,
   emptyDraftSelections,
   extractCompletionTimestamp,
   isSameSelection,
-  normalizeSelectionForCatalog,
-  pickDefaultSelectionForCatalog,
+  pickDefaultVisibleSelectionForCatalog,
   resolveAgentStudioActiveSession,
   resolveAgentStudioBuilderSessionForTask,
   resolveAgentStudioBuilderSessionsForTask,
@@ -61,7 +61,7 @@ describe("agents-page-selection", () => {
   });
 
   test("picks default model + primary agent", () => {
-    expect(pickDefaultSelectionForCatalog(catalogFixture)).toEqual({
+    expect(pickDefaultVisibleSelectionForCatalog(catalogFixture)).toEqual({
       runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
@@ -96,7 +96,7 @@ describe("agents-page-selection", () => {
       profiles: [],
     };
 
-    expect(pickDefaultSelectionForCatalog(providerCollisionCatalog)).toEqual({
+    expect(pickDefaultVisibleSelectionForCatalog(providerCollisionCatalog)).toEqual({
       runtimeKind: "opencode",
       providerId: "anthropic",
       modelId: "shared-model",
@@ -104,9 +104,9 @@ describe("agents-page-selection", () => {
     });
   });
 
-  test("normalizes variant and removes unsupported agent", () => {
+  test("coerces a visible picker selection to the current catalog", () => {
     expect(
-      normalizeSelectionForCatalog(catalogFixture, {
+      coerceVisibleSelectionToCatalog(catalogFixture, {
         runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
@@ -121,7 +121,7 @@ describe("agents-page-selection", () => {
     });
 
     expect(
-      normalizeSelectionForCatalog(catalogFixture, {
+      coerceVisibleSelectionToCatalog(catalogFixture, {
         runtimeKind: "opencode",
         providerId: "unknown",
         modelId: "missing",

@@ -15,10 +15,10 @@ import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog"
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
+  coerceVisibleSelectionToCatalog,
   emptyDraftSelections,
   isSameSelection,
-  normalizeSelectionForCatalog,
-  pickDefaultSelectionForCatalog,
+  pickDefaultVisibleSelectionForCatalog,
 } from "./agents-page-selection";
 import {
   type AgentStudioContextUsage,
@@ -209,14 +209,14 @@ export function useAgentStudioModelSelection({
     if (!composerCatalog) {
       return isAwaitingRepoSettingsForActiveRepo ? null : roleDefaultSelection;
     }
-    return normalizeSelectionForCatalog(composerCatalog, roleDefaultSelection);
+    return coerceVisibleSelectionToCatalog(composerCatalog, roleDefaultSelection);
   }, [activeSession, composerCatalog, isAwaitingRepoSettingsForActiveRepo, roleDefaultSelection]);
   const selectionCatalog = activeSession?.modelCatalog ?? composerCatalog;
   const isSelectionCatalogLoading = activeSession
     ? activeSession.isLoadingModelCatalog && !activeSession.modelCatalog && !composerCatalog
     : isLoadingComposerCatalog;
   const fallbackCatalogSelection = useMemo(
-    () => pickDefaultSelectionForCatalog(selectionCatalog),
+    () => pickDefaultVisibleSelectionForCatalog(selectionCatalog),
     [selectionCatalog],
   );
   const selectedModelSelection = useMemo(
@@ -256,7 +256,7 @@ export function useAgentStudioModelSelection({
     () =>
       draftSelection ??
       roleDefaultSelectionForComposer ??
-      normalizeSelectionForCatalog(selectionCatalog, fallbackCatalogSelection) ??
+      coerceVisibleSelectionToCatalog(selectionCatalog, fallbackCatalogSelection) ??
       fallbackCatalogSelection ??
       null,
     [draftSelection, fallbackCatalogSelection, roleDefaultSelectionForComposer, selectionCatalog],
@@ -339,7 +339,7 @@ export function useAgentStudioModelSelection({
       return {};
     }
     const map: Record<string, string> = {};
-    for (const descriptor of selectionCatalog.profiles ?? selectionCatalog.agents ?? []) {
+    for (const descriptor of selectionCatalog.profiles ?? []) {
       const descriptorId = descriptor.id ?? descriptor.name;
       const descriptorLabel = descriptor.label ?? descriptor.name;
       if (!descriptorId || !descriptorLabel) {

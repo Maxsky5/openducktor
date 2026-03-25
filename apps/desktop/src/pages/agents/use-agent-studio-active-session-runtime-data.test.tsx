@@ -27,6 +27,35 @@ const CATALOG: AgentModelCatalog = {
 };
 
 describe("useAgentStudioActiveSessionRuntimeData", () => {
+  test("does not query runtime data while the session is still starting", async () => {
+    const readSessionModelCatalog = mock(async () => CATALOG);
+    const readSessionTodos = mock(async () => []);
+    const harness = createHookHarness(useAgentStudioActiveSessionRuntimeData, {
+      session: createAgentSessionFixture({
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        runtimeKind: "opencode",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/repo",
+        status: "starting",
+        modelCatalog: null,
+        isLoadingModelCatalog: true,
+      }),
+      readSessionModelCatalog,
+      readSessionTodos,
+    });
+
+    try {
+      await harness.mount();
+
+      expect(readSessionModelCatalog).not.toHaveBeenCalled();
+      expect(readSessionTodos).not.toHaveBeenCalled();
+      expect(harness.getLatest()?.isLoadingModelCatalog).toBe(true);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("clears sticky model-catalog loading once the runtime query resolves", async () => {
     const catalogLoad = createDeferred<AgentModelCatalog>();
     const readSessionModelCatalog = mock(() => catalogLoad.promise);

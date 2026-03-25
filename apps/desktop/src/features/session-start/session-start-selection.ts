@@ -1,4 +1,12 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import {
+  findCatalogModel,
+  normalizeCatalogVariant,
+  normalizeVisibleCatalogProfileId,
+  pickCatalogDefaultModel,
+  pickVisibleCatalogDefaultProfileId,
+  runtimeKindForCatalog,
+} from "@/lib/model-catalog-selection";
 import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
@@ -21,81 +29,51 @@ export const roleDefaultSelectionFor = (
   };
 };
 
-export const pickDefaultSelectionForCatalog = (
+export const pickDefaultVisibleSelectionForCatalog = (
   catalog: AgentModelCatalog | null,
 ): AgentModelSelection | null => {
-  if (!catalog || catalog.models.length === 0) {
+  if (!catalog) {
     return null;
   }
-  const fallbackModel = catalog.models[0];
-  if (!fallbackModel) {
-    return null;
-  }
-  const defaultProvider = Object.entries(catalog.defaultModelsByProvider).find(
-    ([providerId, modelId]) =>
-      catalog.models.some((entry) => entry.providerId === providerId && entry.modelId === modelId),
-  );
-  const selectedModel =
-    defaultProvider === undefined
-      ? fallbackModel
-      : (catalog.models.find(
-          (entry) =>
-            entry.providerId === defaultProvider[0] && entry.modelId === defaultProvider[1],
-        ) ?? fallbackModel);
 
-  const catalogProfiles = catalog.profiles ?? catalog.agents ?? [];
-  const primaryAgent = catalogProfiles.find((entry) => !entry.hidden && entry.mode === "primary");
-  const fallbackAgent = catalogProfiles.find((entry) => !entry.hidden && entry.mode !== "subagent");
-  const selectedAgent =
-    primaryAgent?.id ?? primaryAgent?.name ?? fallbackAgent?.id ?? fallbackAgent?.name ?? undefined;
+  const defaultModel = pickCatalogDefaultModel(catalog);
+  if (!defaultModel) {
+    return null;
+  }
+  const profileId = pickVisibleCatalogDefaultProfileId(catalog);
+  const variant = normalizeCatalogVariant(defaultModel, undefined);
 
   return {
-    runtimeKind: catalog.runtime?.kind ?? DEFAULT_RUNTIME_KIND,
-    providerId: selectedModel.providerId,
-    modelId: selectedModel.modelId,
-    ...(selectedModel.variants[0] ? { variant: selectedModel.variants[0] } : {}),
-    ...(selectedAgent ? { profileId: selectedAgent } : {}),
+    runtimeKind: runtimeKindForCatalog(catalog),
+    providerId: defaultModel.providerId,
+    modelId: defaultModel.modelId,
+    ...(variant ? { variant } : {}),
+    ...(profileId ? { profileId } : {}),
   };
 };
 
-export const normalizeSelectionForCatalog = (
+export const coerceVisibleSelectionToCatalog = (
   catalog: AgentModelCatalog | null,
   selection: AgentModelSelection | null,
 ): AgentModelSelection | null => {
   if (!catalog || !selection) {
     return selection;
   }
-  const model = catalog.models.find(
-    (entry) => entry.providerId === selection.providerId && entry.modelId === selection.modelId,
-  );
+
+  const model = findCatalogModel(catalog, selection);
   if (!model) {
     return null;
   }
 
-  const hasVariant = Boolean(selection.variant && model.variants.includes(selection.variant));
-  const catalogProfiles = catalog.profiles ?? catalog.agents ?? [];
-  const preserveAgentSelection = catalogProfiles.length === 0;
-  const hasAgent = Boolean(
-    selection.profileId &&
-      (preserveAgentSelection ||
-        catalogProfiles.some(
-          (agent) =>
-            (agent.id ?? agent.name) === selection.profileId &&
-            !agent.hidden &&
-            agent.mode !== "subagent",
-        )),
-  );
+  const variant = normalizeCatalogVariant(model, selection.variant);
+  const profileId = normalizeVisibleCatalogProfileId(catalog, selection.profileId);
 
   return {
-    runtimeKind: selection.runtimeKind ?? catalog.runtime?.kind ?? DEFAULT_RUNTIME_KIND,
+    runtimeKind: selection.runtimeKind ?? runtimeKindForCatalog(catalog),
     providerId: model.providerId,
     modelId: model.modelId,
-    ...(hasVariant
-      ? { variant: selection.variant }
-      : model.variants[0]
-        ? { variant: model.variants[0] }
-        : {}),
-    ...(hasAgent ? { profileId: selection.profileId } : {}),
+    ...(variant ? { variant } : {}),
+    ...(profileId ? { profileId } : {}),
   };
 };
 

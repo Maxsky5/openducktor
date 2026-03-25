@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -15,8 +16,36 @@ const createHookHarness = (initialProps: HookArgs) =>
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeRepo: "/repo-a",
   activeTaskId: "task-1",
-  activeSessionId: null,
+  activeSession: null,
   hydrateRequestedTaskSessionHistory: async () => {},
+  ...overrides,
+});
+
+const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
+  sessionId: "session-1",
+  externalSessionId: "external-1",
+  taskId: "task-1",
+  role: "planner",
+  scenario: "planner_initial",
+  status: "idle",
+  startedAt: "2026-02-22T08:00:00.000Z",
+  runtimeKind: "opencode",
+  runtimeId: null,
+  runId: null,
+  runtimeEndpoint: "http://127.0.0.1:4444",
+  workingDirectory: "/tmp/repo",
+  messages: [],
+  draftAssistantText: "",
+  draftAssistantMessageId: null,
+  draftReasoningText: "",
+  draftReasoningMessageId: null,
+  contextUsage: null,
+  pendingPermissions: [],
+  pendingQuestions: [],
+  todos: [],
+  modelCatalog: null,
+  selectedModel: null,
+  isLoadingModelCatalog: false,
   ...overrides,
 });
 
@@ -38,7 +67,7 @@ describe("useAgentStudioTaskHydration", () => {
     const hydrateRequestedTaskSessionHistory = mock(async (): Promise<void> => {});
     const harness = createHookHarness(
       createBaseArgs({
-        activeSessionId: "session-1",
+        activeSession: createSession(),
         hydrateRequestedTaskSessionHistory,
       }),
     );
@@ -55,7 +84,7 @@ describe("useAgentStudioTaskHydration", () => {
 
       await harness.update(
         createBaseArgs({
-          activeSessionId: "session-1",
+          activeSession: createSession(),
           hydrateRequestedTaskSessionHistory,
         }),
       );
@@ -63,7 +92,7 @@ describe("useAgentStudioTaskHydration", () => {
 
       await harness.update(
         createBaseArgs({
-          activeSessionId: "session-2",
+          activeSession: createSession({ sessionId: "session-2", externalSessionId: "external-2" }),
           hydrateRequestedTaskSessionHistory,
         }),
       );
@@ -79,7 +108,7 @@ describe("useAgentStudioTaskHydration", () => {
     });
     const harness = createHookHarness(
       createBaseArgs({
-        activeSessionId: "session-1",
+        activeSession: createSession(),
         hydrateRequestedTaskSessionHistory,
       }),
     );
@@ -92,6 +121,37 @@ describe("useAgentStudioTaskHydration", () => {
       expect(harness.getLatest().isActiveTaskHydrationFailed).toBe(false);
       expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(false);
       expect(harness.getLatest().isActiveSessionHistoryHydrated).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("skips requested history hydration for a live session that already has local messages", async () => {
+    const hydrateRequestedTaskSessionHistory = mock(async (): Promise<void> => {});
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeSession: createSession({
+          status: "running",
+          messages: [
+            {
+              id: "kickoff",
+              role: "user",
+              content: "Kickoff prompt",
+              timestamp: "2026-02-22T08:00:05.000Z",
+            },
+          ],
+        }),
+        hydrateRequestedTaskSessionHistory,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(hydrateRequestedTaskSessionHistory).not.toHaveBeenCalled();
+      expect(harness.getLatest().isActiveSessionHistoryHydrated).toBe(true);
+      expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(false);
+      expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(false);
     } finally {
       await harness.unmount();
     }

@@ -24,6 +24,14 @@ const createSetStartingActivityCountByContext = (): Dispatch<
   };
 };
 
+const MODEL_SELECTION = {
+  runtimeKind: "opencode" as const,
+  providerId: "openai",
+  modelId: "gpt-5",
+  variant: "default",
+  profileId: "spec",
+};
+
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeRepo: "/repo",
   taskId: "task-1",
@@ -34,13 +42,13 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   agentStudioReady: true,
   isActiveTaskHydrated: true,
   startAgentSession: async () => "session-new",
-  updateAgentSessionModel: () => {},
+  sendAgentMessage: async () => {},
   setStartingActivityCountByContext: createSetStartingActivityCountByContext(),
   startingSessionByTaskRef: {
     current: new Map<string, Promise<string | undefined>>(),
   } satisfies MutableRefObject<Map<string, Promise<string | undefined>>>,
   updateQuery: () => {},
-  resolveRequestedDecision: async () => null,
+  executeRequestedSessionStart: async () => undefined,
   ...overrides,
 });
 
@@ -51,17 +59,19 @@ describe("useAgentStudioSessionStartSession", () => {
 
   test("scopes in-flight starts by task, role, and scenario", async () => {
     const specSelection = createDeferred<{
-      selectedModel: null;
+      selectedModel: typeof MODEL_SELECTION;
       startMode: "fresh";
-      sourceSessionId: null;
     } | null>();
     const plannerSelection = createDeferred<{
-      selectedModel: null;
+      selectedModel: typeof MODEL_SELECTION;
       startMode: "fresh";
-      sourceSessionId: null;
     } | null>();
-    const resolveRequestedDecision = mock(async (request: { role: string }) =>
-      request.role === "spec" ? specSelection.promise : plannerSelection.promise,
+    const executeRequestedSessionStart: HookArgs["executeRequestedSessionStart"] = mock(
+      async (request, executeWithDecision) => {
+        const decision =
+          request.role === "spec" ? await specSelection.promise : await plannerSelection.promise;
+        return decision ? executeWithDecision(decision) : undefined;
+      },
     );
     const startAgentSession = mock(async (request: { role: string }) => `${request.role}-session`);
     const startingSessionByTaskRef: MutableRefObject<Map<string, Promise<string | undefined>>> = {
@@ -71,7 +81,7 @@ describe("useAgentStudioSessionStartSession", () => {
     const harness = createHookHarness(
       createBaseArgs({
         startAgentSession,
-        resolveRequestedDecision,
+        executeRequestedSessionStart,
         startingSessionByTaskRef,
       }),
     );
@@ -88,7 +98,7 @@ describe("useAgentStudioSessionStartSession", () => {
         role: "planner",
         scenario: "planner_initial",
         startAgentSession,
-        resolveRequestedDecision,
+        executeRequestedSessionStart,
         startingSessionByTaskRef,
       }),
     );
@@ -98,19 +108,17 @@ describe("useAgentStudioSessionStartSession", () => {
       plannerStartPromise = state.startSession("composer_send");
     });
 
-    expect(resolveRequestedDecision).toHaveBeenCalledTimes(2);
+    expect(executeRequestedSessionStart).toHaveBeenCalledTimes(2);
     expect(startingSessionByTaskRef.current.size).toBe(2);
     expect(specStartPromise).not.toBe(plannerStartPromise);
 
     specSelection.resolve({
-      selectedModel: null,
+      selectedModel: MODEL_SELECTION,
       startMode: "fresh",
-      sourceSessionId: null,
     });
     plannerSelection.resolve({
-      selectedModel: null,
+      selectedModel: MODEL_SELECTION,
       startMode: "fresh",
-      sourceSessionId: null,
     });
 
     await expect(specStartPromise).resolves.toBe("spec-session");
@@ -120,12 +128,14 @@ describe("useAgentStudioSessionStartSession", () => {
     await harness.unmount();
   });
 
-  test("wraps QA builder-context resolution failures with session-start context", async () => {
-    const resolveRequestedDecision = mock(async () => ({
-      selectedModel: null,
-      startMode: "fresh" as const,
-      sourceSessionId: null,
-    }));
+  test("delegates QA starts to the orchestrator without repo preflight in the hook", async () => {
+    const executeRequestedSessionStart: HookArgs["executeRequestedSessionStart"] = mock(
+      async (_request, executeWithDecision) =>
+        executeWithDecision({
+          selectedModel: MODEL_SELECTION,
+          startMode: "fresh" as const,
+        }),
+    );
     const startAgentSession = mock(async () => "session-new");
 
     const harness = createHookHarness(
@@ -141,51 +151,46 @@ describe("useAgentStudioSessionStartSession", () => {
             qa: { required: true, canSkip: false, available: true, completed: false },
           },
         }),
-        resolveRequestedDecision,
+        executeRequestedSessionStart,
         startAgentSession,
       }),
     );
 
     await harness.mount();
 
-    let startError: unknown = null;
+    let sessionId: string | undefined;
     await harness.run(async (state) => {
-      try {
-        await state.startSession("composer_send");
-      } catch (error) {
-        startError = error;
-      }
+      sessionId = await state.startSession("composer_send");
     });
 
-    expect(startError).toBeInstanceOf(Error);
-    expect((startError as Error).message).toBe(
-      "Failed to resolve QA builder context for qa qa_review on task-1: No active repository selected.",
+    expect(sessionId).toBe("session-new");
+    expect(startAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: "qa",
+        scenario: "qa_review",
+        startMode: "fresh",
+        selectedModel: MODEL_SELECTION,
+      }),
     );
-    expect(startAgentSession).not.toHaveBeenCalled();
 
     await harness.unmount();
   });
 
   test("does not overwrite selected model when reusing an existing session", async () => {
-    const updateAgentSessionModel = mock(() => {});
     const updateQuery = mock(() => {});
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(
+      async (input: { startMode: string; sourceSessionId?: string }) =>
+        input.startMode === "reuse" ? (input.sourceSessionId ?? "session-existing") : "session-new",
+    );
     const harness = createHookHarness(
       createBaseArgs({
         startAgentSession,
-        updateAgentSessionModel,
         updateQuery,
-        resolveRequestedDecision: async () => ({
-          selectedModel: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "high",
-            profileId: "Hephaestus",
-          },
-          startMode: "reuse",
-          sourceSessionId: "session-existing",
-        }),
+        executeRequestedSessionStart: async (_request, executeWithDecision) =>
+          executeWithDecision({
+            startMode: "reuse",
+            sourceSessionId: "session-existing",
+          }),
       }),
     );
 
@@ -194,8 +199,15 @@ describe("useAgentStudioSessionStartSession", () => {
       await state.startSession("composer_send");
     });
 
-    expect(startAgentSession).not.toHaveBeenCalled();
-    expect(updateAgentSessionModel).not.toHaveBeenCalled();
+    expect(startAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "task-1",
+        role: "spec",
+        scenario: "spec_initial",
+        startMode: "reuse",
+        sourceSessionId: "session-existing",
+      }),
+    );
     expect(updateQuery).toHaveBeenCalledWith(
       expect.objectContaining({
         task: "task-1",

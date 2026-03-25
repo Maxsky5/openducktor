@@ -23,7 +23,6 @@ export function AgentsPage(): ReactElement {
         chatModel={shell.chatModel}
         isRightPanelVisible={shell.isRightPanelVisible}
         rightPanelModel={shell.rightPanelModel}
-        gitConflictResolutionModal={shell.gitConflictResolutionModal}
         mergedPullRequestModal={shell.mergedPullRequestModal}
         humanReviewFeedbackModal={shell.humanReviewFeedbackModal}
         sessionStartModal={shell.sessionStartModal}

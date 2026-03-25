@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import { NEW_BUILDER_SESSION_TARGET } from "@/features/human-review-feedback/human-review-feedback-state";
 import type { HumanReviewFeedbackState } from "@/features/human-review-feedback/human-review-feedback-types";
+import { buildReusableSessionOptions } from "@/features/session-start";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 
@@ -38,7 +39,14 @@ export const confirmHumanReviewFeedbackFlow = async ({
       taskId: state.taskId,
       role: "build",
       scenario: state.scenario,
-      existingSessionOptions: [],
+      initialStartMode: "fresh",
+      existingSessionOptions: buildReusableSessionOptions({
+        sessions: state.builderSessions,
+        role: "build",
+      }),
+      ...(state.builderSessions[0]?.sessionId
+        ? { sourceSessionId: state.builderSessions[0].sessionId }
+        : {}),
       postStartAction: "send_message",
       message: trimmedMessage,
       beforeStartAction: {

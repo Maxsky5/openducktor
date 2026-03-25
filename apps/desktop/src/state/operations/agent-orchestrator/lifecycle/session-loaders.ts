@@ -7,7 +7,10 @@ import type {
 } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { normalizeWorkingDirectory } from "../support/core";
-import { normalizeSelectionForCatalog, pickDefaultModel } from "../support/models";
+import {
+  coerceSessionSelectionToCatalog,
+  pickDefaultSessionSelectionForCatalog,
+} from "../support/models";
 import { mergeTodoListPreservingOrder } from "../support/todos";
 
 type UpdateSession = (
@@ -164,8 +167,8 @@ export const createLoadSessionModelCatalog = ({
             ? {
                 modelCatalog: catalog,
                 selectedModel:
-                  normalizeSelectionForCatalog(catalog, current.selectedModel) ??
-                  pickDefaultModel(catalog),
+                  coerceSessionSelectionToCatalog(catalog, current.selectedModel) ??
+                  pickDefaultSessionSelectionForCatalog(catalog),
               }
             : {}),
           isLoadingModelCatalog: false,

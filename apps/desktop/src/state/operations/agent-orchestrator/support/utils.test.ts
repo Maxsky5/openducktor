@@ -2,12 +2,12 @@ import { describe, expect, test } from "bun:test";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
+  coerceSessionSelectionToCatalog,
   isDuplicateAssistantMessage,
   mergeTodoListPreservingOrder,
-  normalizeSelectionForCatalog,
   parseTodosFromToolInput,
   parseTodosFromToolOutput,
-  pickDefaultModel,
+  pickDefaultSessionSelectionForCatalog,
   resolveToolMessageId,
   shouldReattachListenerForAttachedSession,
 } from "./utils";
@@ -38,8 +38,8 @@ const catalogFixture: AgentModelCatalog = {
 };
 
 describe("agent-orchestrator-utils", () => {
-  test("picks provider default model selection", () => {
-    const selection = pickDefaultModel(catalogFixture);
+  test("picks the default session selection for a catalog", () => {
+    const selection = pickDefaultSessionSelectionForCatalog(catalogFixture);
     expect(selection).toEqual({
       runtimeKind: "opencode",
       providerId: "openai",
@@ -48,8 +48,8 @@ describe("agent-orchestrator-utils", () => {
     });
   });
 
-  test("normalizes model selection to catalog variants and agents", () => {
-    const selection = normalizeSelectionForCatalog(catalogFixture, {
+  test("coerces a session selection to the current catalog", () => {
+    const selection = coerceSessionSelectionToCatalog(catalogFixture, {
       runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",

@@ -5,6 +5,7 @@ export type FlatStartSessionDependencies = Omit<
   "activeRepoRef"
 > & {
   activeRepoRef?: { current: string | null };
+  loadRepoDefaultModel?: unknown;
 } & StartSessionDependencies["session"] &
   Omit<StartSessionDependencies["runtime"], "resolveBuildContinuationTarget"> &
   Partial<Pick<StartSessionDependencies["runtime"], "resolveBuildContinuationTarget">> &
@@ -26,7 +27,7 @@ export const toStartSessionDependencies = (
       sessionsRef: deps.sessionsRef,
       inFlightStartsByRepoTaskRef: deps.inFlightStartsByRepoTaskRef,
       loadAgentSessions: deps.loadAgentSessions,
-      persistSessionSnapshot: deps.persistSessionSnapshot,
+      persistSessionRecord: deps.persistSessionRecord,
       attachSessionListener: deps.attachSessionListener,
     },
     runtime: {
@@ -42,7 +43,6 @@ export const toStartSessionDependencies = (
       sendAgentMessage: deps.sendAgentMessage,
     },
     model: {
-      loadRepoDefaultModel: deps.loadRepoDefaultModel,
       loadRepoPromptOverrides: deps.loadRepoPromptOverrides,
     },
   };

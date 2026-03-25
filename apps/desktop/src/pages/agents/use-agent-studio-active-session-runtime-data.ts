@@ -48,14 +48,16 @@ export const useAgentStudioActiveSessionRuntimeData = ({
   readSessionTodos,
 }: UseAgentStudioActiveSessionRuntimeDataArgs): AgentSessionState | null => {
   const runtimeQueryInput = toRuntimeQueryInput(session);
+  const shouldHydrateRuntimeData = runtimeQueryInput !== null && session?.status !== "starting";
   const catalogQuery = useQuery({
-    queryKey: runtimeQueryInput
-      ? sessionModelCatalogQueryOptions(
-          runtimeQueryInput.runtimeKind,
-          runtimeQueryInput.runtimeConnection,
-          readSessionModelCatalog,
-        ).queryKey
-      : (["agent-session-runtime", "model-catalog", "", "", ""] as const),
+    queryKey:
+      shouldHydrateRuntimeData && runtimeQueryInput
+        ? sessionModelCatalogQueryOptions(
+            runtimeQueryInput.runtimeKind,
+            runtimeQueryInput.runtimeConnection,
+            readSessionModelCatalog,
+          ).queryKey
+        : (["agent-session-runtime", "model-catalog", "", "", ""] as const),
     queryFn: async (): Promise<AgentModelCatalog> => {
       if (!runtimeQueryInput) {
         throw new Error("Session runtime catalog query is disabled.");
@@ -65,12 +67,12 @@ export const useAgentStudioActiveSessionRuntimeData = ({
         runtimeQueryInput.runtimeConnection,
       );
     },
-    enabled: runtimeQueryInput !== null,
+    enabled: shouldHydrateRuntimeData,
     staleTime: SESSION_MODEL_CATALOG_STALE_TIME_MS,
   });
   const todosQuery = useQuery({
     queryKey:
-      runtimeQueryInput && session
+      shouldHydrateRuntimeData && runtimeQueryInput && session
         ? sessionTodosQueryOptions(
             runtimeQueryInput.runtimeKind,
             runtimeQueryInput.runtimeConnection,
@@ -88,7 +90,7 @@ export const useAgentStudioActiveSessionRuntimeData = ({
         session.externalSessionId,
       );
     },
-    enabled: runtimeQueryInput !== null && session !== null,
+    enabled: shouldHydrateRuntimeData && session !== null,
     staleTime: SESSION_TODOS_STALE_TIME_MS,
   });
 
@@ -99,10 +101,9 @@ export const useAgentStudioActiveSessionRuntimeData = ({
 
     const resolvedCatalog = session.modelCatalog ?? catalogQuery.data ?? null;
     const resolvedTodos = session.todos.length > 0 ? session.todos : (todosQuery.data ?? []);
-    const isLoadingModelCatalog =
-      runtimeQueryInput !== null
-        ? resolvedCatalog === null && catalogQuery.isPending
-        : session.isLoadingModelCatalog && resolvedCatalog === null;
+    const isLoadingModelCatalog = shouldHydrateRuntimeData
+      ? resolvedCatalog === null && catalogQuery.isPending
+      : session.isLoadingModelCatalog && resolvedCatalog === null;
 
     if (
       resolvedCatalog === session.modelCatalog &&
@@ -118,5 +119,11 @@ export const useAgentStudioActiveSessionRuntimeData = ({
       todos: resolvedTodos,
       isLoadingModelCatalog,
     };
-  }, [catalogQuery.data, catalogQuery.isPending, runtimeQueryInput, session, todosQuery.data]);
+  }, [
+    catalogQuery.data,
+    catalogQuery.isPending,
+    session,
+    shouldHydrateRuntimeData,
+    todosQuery.data,
+  ]);
 };

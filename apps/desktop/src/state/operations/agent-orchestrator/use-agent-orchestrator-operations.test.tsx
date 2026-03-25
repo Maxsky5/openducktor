@@ -84,8 +84,18 @@ const taskFixture2: TaskCard = {
   title: "Task 2",
 };
 
+const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
+
 beforeEach(async () => {
   await clearAppQueryClient();
+  host.buildContinuationTargetGet = async () => ({
+    workingDirectory: "/tmp/repo/worktree",
+    source: "builder_session",
+  });
+});
+
+afterEach(() => {
+  host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
 });
 
 const persistedSessionFixture: AgentSessionRecord = {
@@ -135,6 +145,14 @@ const runningRunFixture: RunSummary = {
   state: "running",
   lastMessage: null,
   startedAt: "2026-02-22T08:00:00.000Z",
+};
+
+const BUILD_SELECTION = {
+  runtimeKind: "opencode" as const,
+  providerId: "openai",
+  modelId: "gpt-5",
+  variant: "default",
+  profileId: "build",
 };
 
 const createDeferred = <T,>() => {
@@ -596,7 +614,7 @@ describe("use-agent-orchestrator-operations", () => {
     });
   });
 
-  test("reuses in-memory session for the same task", async () => {
+  test("reuses an in-memory session after it has been started", async () => {
     await withSuppressedRendererWarning(async () => {
       let startCalls = 0;
       let persistedListCalls = 0;
@@ -682,7 +700,8 @@ describe("use-agent-orchestrator-operations", () => {
             taskId: "task-1",
             role: "build",
             scenario: "build_after_human_request_changes",
-            startMode: "reuse",
+            startMode: "fresh",
+            selectedModel: BUILD_SELECTION,
           });
         });
 
@@ -693,13 +712,14 @@ describe("use-agent-orchestrator-operations", () => {
             role: "build",
             scenario: "build_after_human_request_changes",
             startMode: "reuse",
+            sourceSessionId: "session-in-memory",
           });
         });
 
         expect(firstSessionId).toBe("session-in-memory");
         expect(secondSessionId).toBe("session-in-memory");
         expect(startCalls).toBe(1);
-        expect(persistedListCalls).toBe(1);
+        expect(persistedListCalls).toBe(0);
       } finally {
         await harness.unmount();
 
@@ -807,13 +827,15 @@ describe("use-agent-orchestrator-operations", () => {
             taskId: "task-1",
             role: "build",
             scenario: "build_after_human_request_changes",
-            startMode: "reuse",
+            startMode: "fresh",
+            selectedModel: BUILD_SELECTION,
           });
           const secondStart = operations.startAgentSession({
             taskId: "task-1",
             role: "build",
             scenario: "build_after_human_request_changes",
-            startMode: "reuse",
+            startMode: "fresh",
+            selectedModel: BUILD_SELECTION,
           });
 
           startDeferred.resolve({
@@ -832,7 +854,7 @@ describe("use-agent-orchestrator-operations", () => {
         expect(firstSessionId).toBe("session-concurrent");
         expect(secondSessionId).toBe("session-concurrent");
         expect(startCalls).toBe(1);
-        expect(persistedListCalls).toBe(1);
+        expect(persistedListCalls).toBe(0);
       } finally {
         await harness.unmount();
 
@@ -951,6 +973,7 @@ describe("use-agent-orchestrator-operations", () => {
             role: "build",
             scenario: "build_after_human_request_changes",
             startMode: "reuse",
+            sourceSessionId: "session-1",
           });
         });
 
@@ -1044,9 +1067,12 @@ describe("use-agent-orchestrator-operations", () => {
       try {
         await harness.mount();
 
-        const startPromise = harness
-          .getLatest()
-          .startAgentSession({ taskId: "task-1", role: "build" });
+        const startPromise = harness.getLatest().startAgentSession({
+          taskId: "task-1",
+          role: "build",
+          startMode: "fresh",
+          selectedModel: BUILD_SELECTION,
+        });
 
         await harness.updateArgs({ activeRepo: "/tmp/repo-b" });
         specDeferred.resolve({ markdown: "", updatedAt: null });
@@ -1163,9 +1189,13 @@ describe("use-agent-orchestrator-operations", () => {
       try {
         await harness.mount();
 
-        const startPromise = harness
-          .getLatest()
-          .startAgentSession({ taskId: "task-1", role: "build", sendKickoff: true });
+        const startPromise = harness.getLatest().startAgentSession({
+          taskId: "task-1",
+          role: "build",
+          sendKickoff: true,
+          startMode: "fresh",
+          selectedModel: BUILD_SELECTION,
+        });
 
         await harness.waitFor(() => refreshCalls === 1);
         await harness.updateArgs({ activeRepo: "/tmp/repo-b" });
@@ -1450,7 +1480,12 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.updateArgs({ runs: [runningRunFixture] });
 
         await harness.run(async () => {
-          await harness.getLatest().startAgentSession({ taskId: "task-1", role: "build" });
+          await harness.getLatest().startAgentSession({
+            taskId: "task-1",
+            role: "build",
+            startMode: "fresh",
+            selectedModel: BUILD_SELECTION,
+          });
         });
 
         expect(buildStartCalls).toBe(0);
@@ -1650,6 +1685,7 @@ describe("use-agent-orchestrator-operations", () => {
             role: "build",
             scenario: "build_after_human_request_changes",
             startMode: "reuse",
+            sourceSessionId: "session-1",
           });
         });
 

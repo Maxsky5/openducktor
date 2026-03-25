@@ -14,7 +14,7 @@ export const toPrimaryAgentOptions = (catalog: AgentModelCatalog | null): Combob
     return [];
   }
 
-  const catalogProfiles = catalog.profiles ?? catalog.agents ?? [];
+  const catalogProfiles = catalog.profiles ?? [];
   const primaryAgents = catalogProfiles.filter(isPrimaryCatalogAgent);
   const fallbackAgents =
     primaryAgents.length > 0

@@ -25,7 +25,6 @@ import type {
   AgentRole,
   AgentRuntimeConnection,
   AgentScenario,
-  AgentSessionStartMode,
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import type { AgentSessionLoadOptions, AgentSessionState } from "./agent-orchestrator";
@@ -174,21 +173,38 @@ export type AgentStateContextValue = {
     externalSessionId: string,
   ) => Promise<AgentSessionTodoItem[]>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => void;
-  startAgentSession: (input: {
-    taskId: string;
-    role: AgentRole;
-    runtimeKind?: RuntimeKind;
-    scenario?: AgentScenario;
-    selectedModel?: AgentModelSelection | null;
-    sendKickoff?: boolean;
-    startMode?: AgentSessionStartMode;
-    sourceSessionId?: string | null;
-    requireModelReady?: boolean;
-    workingDirectoryOverride?: string | null;
-    builderContext?: {
-      workingDirectory: string;
-    } | null;
-  }) => Promise<string>;
+  startAgentSession: (
+    input:
+      | {
+          taskId: string;
+          role: AgentRole;
+          runtimeKind?: RuntimeKind;
+          scenario?: AgentScenario;
+          sendKickoff?: boolean;
+          startMode: "reuse";
+          sourceSessionId: string;
+        }
+      | {
+          taskId: string;
+          role: AgentRole;
+          runtimeKind?: RuntimeKind;
+          scenario?: AgentScenario;
+          selectedModel: AgentModelSelection;
+          sendKickoff?: boolean;
+          startMode: "fresh";
+          targetWorkingDirectory?: string | null;
+        }
+      | {
+          taskId: string;
+          role: AgentRole;
+          runtimeKind?: RuntimeKind;
+          scenario?: AgentScenario;
+          selectedModel: AgentModelSelection;
+          sendKickoff?: boolean;
+          startMode: "fork";
+          sourceSessionId: string;
+        },
+  ) => Promise<string>;
   forkAgentSession: (input: {
     parentSessionId: string;
     selectedModel?: AgentModelSelection | null;

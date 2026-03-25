@@ -51,11 +51,12 @@ const buildSessionSelectionQueryUpdate = (params: {
   role: AgentRole;
   scenario?: AgentScenario;
 }): QueryUpdate => {
+  const scenario = params.sessionId ? undefined : params.scenario;
   return {
     [AGENT_STUDIO_QUERY_KEYS.task]: params.taskId,
     [AGENT_STUDIO_QUERY_KEYS.session]: params.sessionId,
     [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
-    [AGENT_STUDIO_QUERY_KEYS.scenario]: params.scenario,
+    [AGENT_STUDIO_QUERY_KEYS.scenario]: scenario,
     [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
     [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
   };
@@ -88,7 +89,7 @@ export const buildPreviousSelectionQueryUpdate = (params: {
     [AGENT_STUDIO_QUERY_KEYS.task]: params.activeSession?.taskId ?? params.taskId,
     [AGENT_STUDIO_QUERY_KEYS.session]: params.activeSession?.sessionId,
     [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
-    [AGENT_STUDIO_QUERY_KEYS.scenario]: params.activeSession?.scenario,
+    [AGENT_STUDIO_QUERY_KEYS.scenario]: undefined,
     [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
     [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
   };

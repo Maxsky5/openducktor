@@ -30,7 +30,6 @@ export function useKanbanPageModels({
     removeAgentSessions,
     startAgentSession,
     sendAgentMessage,
-    updateAgentSessionModel,
   } = useAgentState();
   const {
     tasks,
@@ -66,11 +65,11 @@ export function useKanbanPageModels({
     humanRequestChangesTask,
     startAgentSession,
     sendAgentMessage,
-    updateAgentSessionModel,
   });
   const {
     humanReviewFeedbackModal,
     sessionStartModal,
+    startSessionIntent,
     onPullRequestGenerate,
     onDelegate,
     onPlan,
@@ -95,14 +94,20 @@ export function useKanbanPageModels({
     },
     [unlinkPullRequest],
   );
-  const {
-    pendingGitConflictResolutionRequest,
-    resolvePendingGitConflictResolution,
-    handleResolveGitConflict,
-  } = useGitConflictResolution({
+  const { handleResolveGitConflict } = useGitConflictResolution({
     activeRepo,
-    startAgentSession,
-    sendAgentMessage,
+    startConflictResolutionSession: async (request) =>
+      startSessionIntent({
+        taskId: request.taskId,
+        role: request.role,
+        scenario: request.scenario,
+        initialStartMode: request.initialStartMode,
+        targetWorkingDirectory: request.targetWorkingDirectory,
+        sourceSessionId: request.initialSourceSessionId,
+        existingSessionOptions: request.existingSessionOptions,
+        postStartAction: "send_message",
+        message: request.message,
+      }),
   });
   const handleResolveKanbanGitConflict = useCallback(
     (conflict: GitConflict, taskId: string) => {
@@ -219,12 +224,6 @@ export function useKanbanPageModels({
     taskApprovalModal,
     resetImplementationModal,
     taskGitConflictDialog,
-    gitConflictResolutionModal: pendingGitConflictResolutionRequest
-      ? {
-          request: pendingGitConflictResolutionRequest,
-          onResolve: resolvePendingGitConflictResolution,
-        }
-      : null,
     sessionStartModal,
   };
 }

@@ -8,7 +8,6 @@ import {
 import {
   createGitConflictActionsModel,
   GitConflictDialog,
-  GitConflictResolutionModal,
 } from "@/features/git-conflict-resolution";
 import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
 import { KanbanPageContent } from "./kanban-page-content";
@@ -64,12 +63,6 @@ export function KanbanPage(): ReactElement {
           onOpenChange={models.taskGitConflictDialog.onOpenChange}
           actions={taskGitConflictActions}
           testId="kanban-task-git-conflict-modal"
-        />
-      ) : null}
-      {models.gitConflictResolutionModal ? (
-        <GitConflictResolutionModal
-          request={models.gitConflictResolutionModal.request}
-          onResolve={models.gitConflictResolutionModal.onResolve}
         />
       ) : null}
       <KanbanSessionStartModal model={models.sessionStartModal} />

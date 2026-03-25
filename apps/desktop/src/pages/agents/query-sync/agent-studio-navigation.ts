@@ -101,7 +101,7 @@ export const buildSearchParamsFromNavigationState = (
   if (navigation.role) {
     next.set(AGENT_STUDIO_QUERY_KEYS.agent, navigation.role);
   }
-  if (navigation.scenario) {
+  if (navigation.scenario && !navigation.sessionId) {
     next.set(AGENT_STUDIO_QUERY_KEYS.scenario, navigation.scenario);
   }
 

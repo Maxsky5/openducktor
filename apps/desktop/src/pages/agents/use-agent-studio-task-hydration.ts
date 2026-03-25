@@ -1,9 +1,10 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 type UseAgentStudioTaskHydrationParams = {
   activeRepo: string | null;
   activeTaskId: string;
-  activeSessionId: string | null;
+  activeSession: AgentSessionState | null;
   hydrateRequestedTaskSessionHistory: (input: {
     taskId: string;
     sessionId: string;
@@ -42,14 +43,24 @@ const sessionHistoryHydrationQueryOptions = (
 export function useAgentStudioTaskHydration({
   activeRepo,
   activeTaskId,
-  activeSessionId,
+  activeSession,
   hydrateRequestedTaskSessionHistory,
 }: UseAgentStudioTaskHydrationParams): UseAgentStudioTaskHydrationResult {
+  const activeSessionId = activeSession?.sessionId ?? null;
+  const activeRepoPath = activeRepo ?? "";
+  const shouldHydrateSessionHistory =
+    Boolean(activeRepo && activeTaskId && activeSessionId) &&
+    !(
+      activeSession &&
+      activeSession.status !== "stopped" &&
+      activeSession.runtimeEndpoint.trim().length > 0 &&
+      activeSession.messages.length > 0
+    );
   const sessionHistoryHydrationQuery = useQuery({
     queryKey:
-      activeRepo && activeTaskId && activeSessionId
+      shouldHydrateSessionHistory && activeSessionId
         ? sessionHistoryHydrationQueryOptions(
-            activeRepo,
+            activeRepoPath,
             activeTaskId,
             activeSessionId,
             hydrateRequestedTaskSessionHistory,
@@ -65,7 +76,7 @@ export function useAgentStudioTaskHydration({
       });
       return null;
     },
-    enabled: Boolean(activeRepo && activeTaskId && activeSessionId),
+    enabled: shouldHydrateSessionHistory,
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: Number.POSITIVE_INFINITY,
     retry: false,
@@ -75,13 +86,19 @@ export function useAgentStudioTaskHydration({
     isActiveTaskHydrated: Boolean(activeRepo && activeTaskId),
     isActiveTaskHydrationFailed: false,
     isActiveSessionHistoryHydrated: activeSessionId
-      ? sessionHistoryHydrationQuery.isSuccess
+      ? shouldHydrateSessionHistory
+        ? sessionHistoryHydrationQuery.isSuccess
+        : true
       : false,
     isActiveSessionHistoryHydrationFailed: activeSessionId
-      ? sessionHistoryHydrationQuery.isError
+      ? shouldHydrateSessionHistory
+        ? sessionHistoryHydrationQuery.isError
+        : false
       : false,
     isActiveSessionHistoryHydrating: activeSessionId
-      ? sessionHistoryHydrationQuery.isPending
+      ? shouldHydrateSessionHistory
+        ? sessionHistoryHydrationQuery.isPending
+        : false
       : false,
   };
 }

@@ -27,9 +27,9 @@ import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog"
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { resolveScenarioStartMode } from "./session-start-mode";
 import {
+  coerceVisibleSelectionToCatalog,
   isSameSelection,
-  normalizeSelectionForCatalog,
-  pickDefaultSelectionForCatalog,
+  pickDefaultVisibleSelectionForCatalog,
   roleDefaultSelectionFor,
 } from "./session-start-selection";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
@@ -42,8 +42,10 @@ export type SessionStartModalIntent = {
   taskId: string;
   role: AgentRole;
   scenario: AgentScenario;
+  initialStartMode?: AgentSessionStartMode;
   existingSessionOptions?: SessionStartExistingSessionOption[];
   initialSourceSessionId?: string | null;
+  targetWorkingDirectory?: string | null;
   postStartAction: SessionStartPostAction;
   message?: string;
   selectedModel?: AgentModelSelection | null;
@@ -95,17 +97,17 @@ const resolveInitialSelection = (
 ): AgentModelSelection | null => {
   const requestedSelection =
     selectedModel && (selectedModel.runtimeKind ?? DEFAULT_RUNTIME_KIND) === runtimeKind
-      ? normalizeSelectionForCatalog(catalog, selectedModel)
+      ? coerceVisibleSelectionToCatalog(catalog, selectedModel)
       : null;
   const roleDefault = roleDefaultSelectionFor(repoSettings, role);
   const runtimeRoleDefault =
     roleDefault && (roleDefault.runtimeKind ?? DEFAULT_RUNTIME_KIND) === runtimeKind
       ? roleDefault
       : null;
-  const catalogDefault = pickDefaultSelectionForCatalog(catalog);
+  const catalogDefault = pickDefaultVisibleSelectionForCatalog(catalog);
   return (
     requestedSelection ??
-    normalizeSelectionForCatalog(catalog, runtimeRoleDefault) ??
+    coerceVisibleSelectionToCatalog(catalog, runtimeRoleDefault) ??
     (catalogDefault ? { ...catalogDefault, runtimeKind } : null) ??
     selectedModel ??
     runtimeRoleDefault
@@ -151,7 +153,7 @@ const applyReuseSourceSelection = ({
   }
 
   setSelection(
-    normalizeSelectionForCatalog(catalog, {
+    coerceVisibleSelectionToCatalog(catalog, {
       ...sourceSelection,
       runtimeKind: nextRuntimeKind,
     }) ?? {
@@ -226,10 +228,14 @@ export function useSessionStartModalState({
   const openStartModal = useCallback(
     (nextIntent: SessionStartModalIntent) => {
       const existingSessionOptions = nextIntent.existingSessionOptions ?? [];
-      const initialStartMode = resolveScenarioStartMode({
-        scenario: nextIntent.scenario,
-        existingSessionOptions,
-      });
+      const allowedStartModes = getAgentScenarioDefinition(nextIntent.scenario).allowedStartModes;
+      const initialStartMode =
+        nextIntent.initialStartMode && allowedStartModes.includes(nextIntent.initialStartMode)
+          ? nextIntent.initialStartMode
+          : resolveScenarioStartMode({
+              scenario: nextIntent.scenario,
+              existingSessionOptions,
+            });
       const initialSourceSessionId =
         nextIntent.initialSourceSessionId?.trim() || existingSessionOptions[0]?.value || "";
       const initialRuntimeKind = resolveRuntimeKindSelection({
@@ -310,7 +316,7 @@ export function useSessionStartModalState({
     }
 
     setSelection((current) => {
-      const normalizedCurrent = normalizeSelectionForCatalog(catalog, current);
+      const normalizedCurrent = coerceVisibleSelectionToCatalog(catalog, current);
       const fallback = resolveInitialSelection(
         repoSettings,
         activeRole,
@@ -352,7 +358,7 @@ export function useSessionStartModalState({
       setSelection((current) => (current === null ? current : null));
       return;
     }
-    const nextSelection = normalizeSelectionForCatalog(catalog, {
+    const nextSelection = coerceVisibleSelectionToCatalog(catalog, {
       ...sourceSelection,
       runtimeKind: nextRuntimeKind,
     }) ?? {
@@ -487,7 +493,7 @@ export function useSessionStartModalState({
               selectedRuntimeKind,
             )
           : null) ??
-        pickDefaultSelectionForCatalog(catalog);
+        pickDefaultVisibleSelectionForCatalog(catalog);
       if (!baseSelection) {
         return;
       }

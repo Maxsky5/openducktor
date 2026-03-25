@@ -1,10 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import {
-  type AgentModelSelection,
-  type AgentRole,
-  type AgentScenario,
-  defaultStartModeForScenario,
-} from "@openducktor/core";
+import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
@@ -22,9 +17,8 @@ import type {
 import {
   buildReusableSessionOptions,
   firstScenario,
-  useSessionStartModalCoordinator,
+  useSessionStartModalRunner,
 } from "@/features/session-start";
-import { roleDefaultSelectionFor } from "@/features/session-start/session-start-selection";
 import { resolveBuildContinuationScenario } from "@/lib/build-scenarios";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -35,6 +29,8 @@ import type {
   KanbanSessionStartIntent,
 } from "./kanban-page-model-types";
 import { startKanbanSessionFlow } from "./kanban-session-start-actions";
+
+const ROLE_LABELS = AGENT_ROLE_LABELS as Record<AgentRole, string>;
 
 type UseKanbanSessionStartFlowArgs = {
   activeRepo: string | null;
@@ -49,12 +45,12 @@ type UseKanbanSessionStartFlowArgs = {
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
-  updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
 };
 
 type UseKanbanSessionStartFlowResult = {
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   sessionStartModal: SessionStartModalModel | null;
+  startSessionIntent: (intent: KanbanSessionStartIntent) => Promise<string | undefined>;
   onPullRequestGenerate: (taskId: string) => Promise<void>;
   onDelegate: (taskId: string) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
@@ -108,76 +104,30 @@ export function useKanbanSessionStartFlow({
   tasks,
   sessions,
   navigate,
-  loadRepoSettings,
+  loadRepoSettings: _loadRepoSettings,
   bootstrapTaskSessions,
   hydrateRequestedTaskSessionHistory,
   loadAgentSessions: _loadAgentSessions,
   humanRequestChangesTask,
   startAgentSession,
   sendAgentMessage,
-  updateAgentSessionModel,
 }: UseKanbanSessionStartFlowArgs): UseKanbanSessionStartFlowResult {
   const queryClient = useQueryClient();
-  const roleLabels = AGENT_ROLE_LABELS as Record<AgentRole, string>;
   const tasksRef = useRef(tasks);
   const sessionsRef = useRef(sessions);
-  const sessionStartIntentRef = useRef<KanbanSessionStartIntent | null>(null);
-  const sessionStartSelectionRef = useRef<AgentModelSelection | null>(null);
-  const sessionStartBeforeActionRef = useRef<
-    KanbanSessionStartIntent["beforeStartAction"] | undefined
-  >(undefined);
-  const [isStartingSession, setIsStartingSession] = useState(false);
-  const [sessionStartBeforeAction, setSessionStartBeforeAction] =
-    useState<KanbanSessionStartIntent["beforeStartAction"]>();
   const [pendingHumanReviewHydration, setPendingHumanReviewHydration] =
     useState<PendingHumanReviewHydration | null>(null);
   const [humanReviewFeedbackState, setHumanReviewFeedbackState] =
     useState<HumanReviewFeedbackState | null>(null);
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
-  const {
-    intent: sessionStartIntent,
-    isOpen: isSessionStartModalOpen,
-    selection: sessionStartSelection,
-    selectedRuntimeKind,
-    runtimeOptions,
-    supportsProfiles,
-    supportsVariants,
-    isCatalogLoading,
-    agentOptions,
-    modelOptions,
-    modelGroups,
-    variantOptions,
-    availableStartModes,
-    selectedStartMode,
-    existingSessionOptions,
-    selectedSourceSessionId,
-    openStartModal,
-    closeStartModal,
-    handleSelectStartMode,
-    handleSelectSourceSession,
-    handleSelectRuntime,
-    handleSelectAgent,
-    handleSelectModel,
-    handleSelectVariant,
-  } = useSessionStartModalCoordinator({
+  const { sessionStartModal, runSessionStartRequest } = useSessionStartModalRunner({
     activeRepo,
     repoSettings,
   });
 
   tasksRef.current = tasks;
   sessionsRef.current = sessions;
-  sessionStartIntentRef.current = sessionStartIntent
-    ? {
-        taskId: sessionStartIntent.taskId,
-        role: sessionStartIntent.role,
-        scenario: sessionStartIntent.scenario,
-        postStartAction: sessionStartIntent.postStartAction,
-        ...(sessionStartIntent.message ? { message: sessionStartIntent.message } : {}),
-      }
-    : null;
-  sessionStartSelectionRef.current = sessionStartSelection;
-  sessionStartBeforeActionRef.current = sessionStartBeforeAction;
 
   useEffect(() => {
     if (!pendingHumanReviewHydration) {
@@ -214,33 +164,77 @@ export function useKanbanSessionStartFlow({
         task: intent.taskId,
         session: sessionId,
         agent: intent.role,
-        scenario: intent.scenario,
       });
       navigate(`/agents?${params.toString()}`);
     },
     [navigate],
   );
 
-  const openSessionStartModal = useCallback(
-    (intent: KanbanSessionStartIntent): void => {
-      openStartModal({
-        source: "kanban",
-        taskId: intent.taskId,
-        role: intent.role,
-        scenario: intent.scenario,
-        ...(intent.sourceSessionId ? { initialSourceSessionId: intent.sourceSessionId } : {}),
-        existingSessionOptions:
-          intent.existingSessionOptions ??
-          buildReusableSessionOptions({
-            sessions: sessionsRef.current.filter((session) => session.taskId === intent.taskId),
+  const startSessionIntent = useCallback(
+    async (intent: KanbanSessionStartIntent): Promise<string | undefined> => {
+      return runSessionStartRequest(
+        {
+          source: "kanban",
+          taskId: intent.taskId,
+          role: intent.role,
+          scenario: intent.scenario,
+          ...(intent.initialStartMode ? { initialStartMode: intent.initialStartMode } : {}),
+          ...(intent.targetWorkingDirectory !== undefined
+            ? { targetWorkingDirectory: intent.targetWorkingDirectory }
+            : {}),
+          ...(intent.sourceSessionId ? { initialSourceSessionId: intent.sourceSessionId } : {}),
+          existingSessionOptions:
+            intent.existingSessionOptions ??
+            buildReusableSessionOptions({
+              sessions: sessionsRef.current.filter((session) => session.taskId === intent.taskId),
+              role: intent.role,
+            }),
+          postStartAction: intent.postStartAction,
+          ...(intent.message ? { message: intent.message } : {}),
+        },
+        async ({ decision, runInBackground }) => {
+          const resolvedIntent: KanbanResolvedSessionStartIntent = {
+            taskId: intent.taskId,
             role: intent.role,
-          }),
-        postStartAction: intent.postStartAction,
-        ...(intent.message ? { message: intent.message } : {}),
-      });
-      setSessionStartBeforeAction(intent.beforeStartAction);
+            scenario: intent.scenario,
+            startMode: decision.startMode,
+            postStartAction: intent.postStartAction,
+            ...(intent.targetWorkingDirectory !== undefined
+              ? { targetWorkingDirectory: intent.targetWorkingDirectory }
+              : {}),
+            ...(decision.startMode === "reuse" || decision.startMode === "fork"
+              ? { sourceSessionId: decision.sourceSessionId }
+              : {}),
+            ...(intent.message ? { message: intent.message } : {}),
+            ...(intent.beforeStartAction ? { beforeStartAction: intent.beforeStartAction } : {}),
+          };
+
+          const sessionId = await startKanbanSessionFlow({
+            activeRepo,
+            intent: resolvedIntent,
+            selection: decision.startMode === "reuse" ? null : decision.selectedModel,
+            startInBackground: runInBackground,
+            tasks: tasksRef.current,
+            roleLabels: ROLE_LABELS,
+            queryClient,
+            startAgentSession,
+            humanRequestChangesTask,
+            openSessionInAgentStudio,
+            sendAgentMessage,
+          });
+          return sessionId;
+        },
+      );
     },
-    [openStartModal],
+    [
+      activeRepo,
+      humanRequestChangesTask,
+      openSessionInAgentStudio,
+      queryClient,
+      runSessionStartRequest,
+      sendAgentMessage,
+      startAgentSession,
+    ],
   );
 
   const closeHumanReviewFeedbackModal = useCallback((): void => {
@@ -257,101 +251,10 @@ export function useKanbanSessionStartFlow({
         task: taskId,
         session: session.sessionId,
         agent: session.role,
-        scenario: session.scenario,
       });
       navigate(`/agents?${params.toString()}`);
     },
     [navigate],
-  );
-
-  const closeSessionStartModal = useCallback((): void => {
-    if (isStartingSession) {
-      return;
-    }
-    setSessionStartBeforeAction(undefined);
-    closeStartModal();
-  }, [closeStartModal, isStartingSession]);
-
-  const confirmSessionStart = useCallback(
-    (
-      input?:
-        | boolean
-        | {
-            runInBackground?: boolean;
-            startMode?: "fresh" | "reuse" | "fork";
-            sourceSessionId?: string | null;
-          },
-    ): void => {
-      const latestIntent = sessionStartIntentRef.current;
-      if (!latestIntent) {
-        return;
-      }
-      const runInBackground =
-        typeof input === "boolean" ? input : (input?.runInBackground ?? false);
-      const startMode =
-        typeof input === "boolean"
-          ? defaultStartModeForScenario(latestIntent.scenario)
-          : (input?.startMode ?? defaultStartModeForScenario(latestIntent.scenario));
-      const sourceSessionId = typeof input === "boolean" ? null : (input?.sourceSessionId ?? null);
-
-      const intent: KanbanResolvedSessionStartIntent = {
-        taskId: latestIntent.taskId,
-        role: latestIntent.role,
-        scenario: latestIntent.scenario,
-        startMode,
-        postStartAction: latestIntent.postStartAction,
-        ...(sourceSessionId ? { sourceSessionId } : {}),
-        ...(latestIntent.message ? { message: latestIntent.message } : {}),
-        ...(sessionStartBeforeActionRef.current
-          ? { beforeStartAction: sessionStartBeforeActionRef.current }
-          : {}),
-      };
-
-      void (async () => {
-        setIsStartingSession(true);
-        try {
-          const explicitSelection = sessionStartSelectionRef.current;
-          let effectiveRepoSettings = repoSettings;
-          if (!explicitSelection && !effectiveRepoSettings && activeRepo) {
-            effectiveRepoSettings = await loadRepoSettings();
-          }
-          const selection =
-            explicitSelection ?? roleDefaultSelectionFor(effectiveRepoSettings, intent.role);
-          await startKanbanSessionFlow({
-            activeRepo,
-            intent,
-            selection,
-            startInBackground: runInBackground,
-            tasks,
-            roleLabels,
-            queryClient,
-            startAgentSession,
-            updateAgentSessionModel,
-            humanRequestChangesTask,
-            closeStartModal,
-            openSessionInAgentStudio,
-            sendAgentMessage,
-          });
-        } catch {
-          toast.error("Failed to start the session.");
-        } finally {
-          setIsStartingSession(false);
-        }
-      })();
-    },
-    [
-      activeRepo,
-      closeStartModal,
-      openSessionInAgentStudio,
-      sendAgentMessage,
-      startAgentSession,
-      tasks,
-      humanRequestChangesTask,
-      updateAgentSessionModel,
-      repoSettings,
-      loadRepoSettings,
-      queryClient,
-    ],
   );
 
   const onPullRequestGenerate = useCallback(
@@ -361,7 +264,7 @@ export function useKanbanSessionStartFlow({
         throw new Error(`No Builder session is available to fork for task "${taskId}".`);
       }
 
-      openSessionStartModal({
+      void startSessionIntent({
         taskId,
         role: "build",
         scenario: "build_pull_request_generation",
@@ -373,19 +276,19 @@ export function useKanbanSessionStartFlow({
         postStartAction: "kickoff",
       });
     },
-    [openSessionStartModal],
+    [startSessionIntent],
   );
 
   const onDelegate = useCallback(
     (taskId: string): void => {
-      openSessionStartModal({
+      void startSessionIntent({
         taskId,
         role: "build",
         scenario: resolveKanbanBuildStartScenario(tasksRef.current, taskId),
         postStartAction: "kickoff",
       });
     },
-    [openSessionStartModal],
+    [startSessionIntent],
   );
 
   const onPlan = useCallback(
@@ -414,14 +317,14 @@ export function useKanbanSessionStartFlow({
         return;
       }
 
-      openSessionStartModal({
+      void startSessionIntent({
         taskId,
         role,
         scenario: firstScenario(role),
         postStartAction: startPreference === "fresh" ? "kickoff" : "none",
       });
     },
-    [openAgents, openSessionInAgentStudio, openSessionStartModal],
+    [openAgents, openSessionInAgentStudio, startSessionIntent],
   );
 
   const onBuild = useCallback(
@@ -434,14 +337,14 @@ export function useKanbanSessionStartFlow({
 
   const onQaStart = useCallback(
     (taskId: string): void => {
-      openSessionStartModal({
+      void startSessionIntent({
         taskId,
         role: "qa",
         scenario: "qa_review",
         postStartAction: "kickoff",
       });
     },
-    [openSessionStartModal],
+    [startSessionIntent],
   );
 
   const onQaOpen = useCallback(
@@ -496,39 +399,39 @@ export function useKanbanSessionStartFlow({
     [bootstrapTaskSessions],
   );
 
-  const confirmHumanReviewFeedback = useCallback((): void => {
+  const confirmHumanReviewFeedback = useCallback(async (): Promise<void> => {
     if (!humanReviewFeedbackState) {
       return;
     }
 
-    void (async () => {
-      setIsSubmittingHumanReviewFeedback(true);
-      try {
-        await confirmHumanReviewFeedbackFlow({
-          state: humanReviewFeedbackState,
-          humanRequestChangesTask,
-          hydrateRequestedTaskSessionHistory,
-          openSessionStartModal,
-          openAgentStudioSession,
-          sendAgentMessage,
-          onDismiss: () => {
-            setHumanReviewFeedbackState(null);
-          },
-        });
-      } catch (error) {
-        toast.error("Failed to prepare the Builder session.", {
-          description: error instanceof Error ? error.message : "Unknown error",
-        });
-      } finally {
-        setIsSubmittingHumanReviewFeedback(false);
-      }
-    })();
+    setIsSubmittingHumanReviewFeedback(true);
+    try {
+      await confirmHumanReviewFeedbackFlow({
+        state: humanReviewFeedbackState,
+        humanRequestChangesTask,
+        hydrateRequestedTaskSessionHistory,
+        openSessionStartModal: (intent) => {
+          void startSessionIntent(intent);
+        },
+        openAgentStudioSession,
+        sendAgentMessage,
+        onDismiss: () => {
+          setHumanReviewFeedbackState(null);
+        },
+      });
+    } catch (error) {
+      toast.error("Failed to prepare the Builder session.", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    } finally {
+      setIsSubmittingHumanReviewFeedback(false);
+    }
   }, [
     humanRequestChangesTask,
     humanReviewFeedbackState,
     hydrateRequestedTaskSessionHistory,
     openAgentStudioSession,
-    openSessionStartModal,
+    startSessionIntent,
     sendAgentMessage,
   ]);
 
@@ -560,79 +463,10 @@ export function useKanbanSessionStartFlow({
     isSubmittingHumanReviewFeedback,
   ]);
 
-  const sessionStartModal = useMemo<SessionStartModalModel | null>(() => {
-    if (!sessionStartIntent) {
-      return null;
-    }
-
-    return {
-      open: isSessionStartModalOpen,
-      title: sessionStartIntent.title,
-      description:
-        sessionStartIntent.description ??
-        "Choose how to start the session, then pick the agent, model, and variant.",
-      confirmLabel: "Start session",
-      selectedModelSelection: sessionStartSelection,
-      selectedRuntimeKind,
-      runtimeOptions,
-      supportsProfiles,
-      supportsVariants,
-      isSelectionCatalogLoading: isCatalogLoading,
-      agentOptions,
-      modelOptions,
-      modelGroups,
-      variantOptions,
-      availableStartModes,
-      selectedStartMode,
-      existingSessionOptions,
-      selectedSourceSessionId,
-      onSelectStartMode: handleSelectStartMode,
-      onSelectSourceSession: handleSelectSourceSession,
-      onSelectRuntime: handleSelectRuntime,
-      onSelectAgent: handleSelectAgent,
-      onSelectModel: handleSelectModel,
-      onSelectVariant: handleSelectVariant,
-      allowRunInBackground: true,
-      backgroundConfirmLabel: "Run in background",
-      isStarting: isStartingSession,
-      onOpenChange: (nextOpen: boolean) => {
-        if (!nextOpen) {
-          closeSessionStartModal();
-        }
-      },
-      onConfirm: confirmSessionStart,
-    };
-  }, [
-    agentOptions,
-    closeSessionStartModal,
-    confirmSessionStart,
-    handleSelectRuntime,
-    handleSelectAgent,
-    handleSelectModel,
-    handleSelectVariant,
-    handleSelectStartMode,
-    handleSelectSourceSession,
-    isCatalogLoading,
-    isSessionStartModalOpen,
-    isStartingSession,
-    modelGroups,
-    modelOptions,
-    runtimeOptions,
-    availableStartModes,
-    existingSessionOptions,
-    selectedSourceSessionId,
-    selectedStartMode,
-    selectedRuntimeKind,
-    sessionStartIntent,
-    sessionStartSelection,
-    supportsProfiles,
-    supportsVariants,
-    variantOptions,
-  ]);
-
   return {
     humanReviewFeedbackModal,
     sessionStartModal,
+    startSessionIntent,
     onPullRequestGenerate,
     onDelegate,
     onPlan,

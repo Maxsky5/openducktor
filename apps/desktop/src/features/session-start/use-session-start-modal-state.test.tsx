@@ -219,6 +219,28 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
+  test("falls back to a valid start mode when initialStartMode is not allowed", async () => {
+    const harness = createHookHarness(createBaseProps());
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-3",
+        role: "spec",
+        scenario: "spec_initial",
+        initialStartMode: "reuse",
+        postStartAction: "kickoff",
+        title: "Start Spec Session",
+      });
+    });
+
+    expect(harness.getLatest().selectedStartMode).toBe("fresh");
+
+    await harness.unmount();
+  });
+
   test("uses role defaults for modal initialization", async () => {
     const harness = createHookHarness(createBaseProps());
 

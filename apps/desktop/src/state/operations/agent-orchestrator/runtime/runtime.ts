@@ -1,20 +1,16 @@
 import type {
   BuildContinuationTarget,
+  RepoConfig,
   RepoPromptOverrides,
   RunSummary,
   RuntimeKind,
   RuntimeRoute,
 } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentRuntimeConnection } from "@openducktor/core";
+import { mergePromptOverrides } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
-import {
-  loadPlanDocumentFromQuery,
-  loadQaReportDocumentFromQuery,
-  loadSpecDocumentFromQuery,
-} from "../../../queries/documents";
-import { loadRepoConfigFromQuery } from "../../../queries/workspace";
-import { loadEffectivePromptOverrides } from "../../prompt-overrides";
+import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import { host } from "../../shared/host";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { normalizeWorkingDirectory, runningStates, toBaseUrl } from "../support/core";
@@ -78,9 +74,9 @@ export const loadTaskDocuments = async (
   taskId: string,
 ): Promise<TaskDocuments> => {
   const [spec, plan, qa] = await Promise.all([
-    loadSpecDocumentFromQuery(appQueryClient, repoPath, taskId).then((spec) => spec.markdown),
-    loadPlanDocumentFromQuery(appQueryClient, repoPath, taskId).then((plan) => plan.markdown),
-    loadQaReportDocumentFromQuery(appQueryClient, repoPath, taskId).then((qa) => qa.markdown),
+    host.specGet(repoPath, taskId).then((document) => document.markdown),
+    host.planGet(repoPath, taskId).then((document) => document.markdown),
+    host.qaGetReport(repoPath, taskId).then((document) => document.markdown),
   ]);
 
   return {
@@ -90,11 +86,15 @@ export const loadTaskDocuments = async (
   };
 };
 
+const loadRepoConfig = (repoPath: string): Promise<RepoConfig> => {
+  return loadRepoConfigFromQuery(appQueryClient, repoPath);
+};
+
 export const loadRepoDefaultModel = async (
   repoPath: string,
   role: AgentRole,
 ): Promise<AgentModelSelection | null> => {
-  const config = await loadRepoConfigFromQuery(appQueryClient, repoPath);
+  const config = await loadRepoConfig(repoPath);
   const roleDefault = config?.agentDefaults?.[role];
   if (!roleDefault) {
     return null;
@@ -110,7 +110,15 @@ export const loadRepoDefaultModel = async (
 };
 
 export const loadRepoPromptOverrides = async (repoPath: string): Promise<RepoPromptOverrides> => {
-  return loadEffectivePromptOverrides(repoPath);
+  const [repoConfig, snapshot] = await Promise.all([
+    loadRepoConfig(repoPath),
+    loadSettingsSnapshotFromQuery(appQueryClient),
+  ]);
+
+  return mergePromptOverrides({
+    globalOverrides: snapshot.globalPromptOverrides,
+    repoOverrides: repoConfig.promptOverrides,
+  });
 };
 
 export const loadBuildContinuationTarget = async (
@@ -124,7 +132,7 @@ export const loadRepoDefaultRuntimeKind = async (
   repoPath: string,
   role: AgentRole,
 ): Promise<RuntimeKind> => {
-  const config = await loadRepoConfigFromQuery(appQueryClient, repoPath);
+  const config = await loadRepoConfig(repoPath);
   const roleDefault = config?.agentDefaults?.[role];
   return roleDefault?.runtimeKind ?? config?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND;
 };
@@ -135,24 +143,24 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
     taskId: string,
     role: AgentRole,
     options?: {
-      workingDirectoryOverride?: string | null;
+      targetWorkingDirectory?: string | null;
       runtimeKind?: RuntimeKind | null;
     },
   ): Promise<RuntimeInfo> => {
-    const workingDirectoryOverride = options?.workingDirectoryOverride?.trim() ?? "";
-    const normalizedWorkingDirectoryOverride = normalizeWorkingDirectory(workingDirectoryOverride);
+    const targetWorkingDirectory = options?.targetWorkingDirectory?.trim() ?? "";
+    const normalizedTargetWorkingDirectory = normalizeWorkingDirectory(targetWorkingDirectory);
     const runtimeKind = options?.runtimeKind?.trim()
       ? options.runtimeKind
       : await loadRepoDefaultRuntimeKind(repoPath, role);
 
     if (role === "build") {
-      if (workingDirectoryOverride) {
+      if (targetWorkingDirectory) {
         const matchingRun = runsRef.current.find(
           (entry) =>
             entry.repoPath === repoPath &&
             entry.taskId === taskId &&
             runningStates.has(entry.state) &&
-            normalizeWorkingDirectory(entry.worktreePath) === normalizedWorkingDirectoryOverride,
+            normalizeWorkingDirectory(entry.worktreePath) === normalizedTargetWorkingDirectory,
         );
         if (matchingRun) {
           const runtimeEndpoint = toBaseUrl(matchingRun.port);
@@ -172,7 +180,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
             entry.taskId === taskId &&
             runningStates.has(entry.state),
         );
-        if (taskRun && normalizedWorkingDirectoryOverride === normalizeWorkingDirectory(repoPath)) {
+        if (taskRun && normalizedTargetWorkingDirectory === normalizeWorkingDirectory(repoPath)) {
           const runtimeEndpoint = toBaseUrl(taskRun.port);
           return {
             runtimeKind,
@@ -187,7 +195,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
         const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
         const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
           runtime.runtimeRoute,
-          workingDirectoryOverride,
+          targetWorkingDirectory,
         );
         return {
           runtimeKind,
@@ -195,7 +203,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
           runId: null,
           runtimeConnection,
           runtimeEndpoint,
-          workingDirectory: workingDirectoryOverride,
+          workingDirectory: targetWorkingDirectory,
         };
       }
 
@@ -226,7 +234,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
 
     if (role === "qa") {
       const workingDirectory =
-        workingDirectoryOverride ||
+        targetWorkingDirectory ||
         (await host.buildContinuationTargetGet(repoPath, taskId)).workingDirectory;
       const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
       const matchingRun = runsRef.current.find(
@@ -264,7 +272,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
     }
 
     const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
-    const workingDirectory = workingDirectoryOverride || runtime.workingDirectory;
+    const workingDirectory = targetWorkingDirectory || runtime.workingDirectory;
     const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
       runtime.runtimeRoute,
       workingDirectory,

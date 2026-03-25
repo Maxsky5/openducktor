@@ -1,6 +1,8 @@
-import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
+import type {
+  AgentStudioTaskTabsModel,
+  SessionStartModalModel,
+} from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
-import type { RequestNewSessionStart } from "@/features/session-start";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
@@ -39,11 +41,9 @@ type AgentStudioOrchestrationActionsContext = {
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
   bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
   hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
-  loadAgentSessions: AgentStateContextValue["loadAgentSessions"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   replyAgentPermission: AgentStateContextValue["replyAgentPermission"];
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
-  requestNewSessionStart?: RequestNewSessionStart;
 };
 type UseAgentStudioOrchestrationControllerArgs = {
   activeRepo: string | null;
@@ -59,6 +59,7 @@ type UseAgentStudioOrchestrationControllerResult = {
   chatSettingsLoadError: Error | null;
   retryChatSettingsLoad: () => void;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
+  sessionStartModal: SessionStartModalModel | null;
   activeTabValue: string;
   agentStudioTaskTabsModel: AgentStudioTaskTabsModel;
   agentStudioHeaderModel: ReturnType<typeof useAgentStudioPageModels>["agentStudioHeaderModel"];
@@ -67,6 +68,7 @@ type UseAgentStudioOrchestrationControllerResult = {
   >["agentStudioWorkspaceSidebarModel"];
   agentChatModel: ReturnType<typeof useAgentStudioPageModels>["agentChatModel"];
   rightPanel: ReturnType<typeof useAgentStudioRightPanel>;
+  startSessionRequest: ReturnType<typeof useAgentStudioSessionActions>["startSessionRequest"];
 };
 
 type AgentStudioPageModelsViewContext = Pick<
@@ -221,11 +223,9 @@ export function useAgentStudioOrchestrationController({
     updateAgentSessionModel,
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
-    loadAgentSessions,
     humanRequestChangesTask,
     replyAgentPermission,
     answerAgentQuestion,
-    requestNewSessionStart,
   } = actions;
 
   const { repoSettings } = useAgentStudioRepoSettings({ activeRepo });
@@ -262,7 +262,9 @@ export function useAgentStudioOrchestrationController({
 
   const {
     isStarting,
+    sessionStartModal,
     humanReviewFeedbackModal,
+    startSessionRequest,
     isSending,
     isSubmittingQuestionByRequestId,
     isSessionWorking,
@@ -287,19 +289,17 @@ export function useAgentStudioOrchestrationController({
     agentStudioReady,
     isActiveTaskHydrated,
     selectionForNewSession,
+    repoSettings,
     input,
     setInput,
     startAgentSession,
     sendAgentMessage,
-    updateAgentSessionModel,
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
-    loadAgentSessions,
     humanRequestChangesTask,
     answerAgentQuestion,
     updateQuery,
     onContextSwitchIntent,
-    ...(requestNewSessionStart ? { requestNewSessionStart } : {}),
   });
 
   const { isSubmittingPermissionByRequestId, permissionReplyErrorByRequestId, onReplyPermission } =
@@ -404,11 +404,13 @@ export function useAgentStudioOrchestrationController({
     chatSettingsLoadError,
     retryChatSettingsLoad,
     humanReviewFeedbackModal,
+    sessionStartModal,
     activeTabValue,
     agentStudioTaskTabsModel,
     agentStudioHeaderModel,
     agentStudioWorkspaceSidebarModel,
     agentChatModel,
     rightPanel,
+    startSessionRequest,
   };
 }
