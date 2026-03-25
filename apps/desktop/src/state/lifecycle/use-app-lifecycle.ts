@@ -169,10 +169,17 @@ export function useAppLifecycle({
       }
     })();
     const runtimeCheckPromise = refreshRuntimeCheck(false);
-    const branchesPromise = refreshBranches(false);
+    void refreshBranches(false).catch((error: unknown) => {
+      if (repoLoadVersionRef.current !== loadVersion) {
+        return;
+      }
+      toast.error("Repository branches unavailable", {
+        description: errorMessage(error),
+      });
+    });
 
-    Promise.allSettled([taskLoadPromise, runtimeCheckPromise, branchesPromise])
-      .then(([tasksResult, runtimeResult, branchesResult]) => {
+    Promise.allSettled([taskLoadPromise, runtimeCheckPromise])
+      .then(([tasksResult, runtimeResult]) => {
         if (repoLoadVersionRef.current !== loadVersion) {
           return;
         }
@@ -186,12 +193,6 @@ export function useAppLifecycle({
         if (runtimeResult.status === "rejected") {
           toast.error("Runtime checks unavailable", {
             description: errorMessage(runtimeResult.reason),
-          });
-        }
-
-        if (branchesResult.status === "rejected") {
-          toast.error("Repository branches unavailable", {
-            description: errorMessage(branchesResult.reason),
           });
         }
       })

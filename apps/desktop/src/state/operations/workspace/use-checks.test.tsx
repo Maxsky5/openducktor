@@ -259,7 +259,9 @@ describe("use-checks", () => {
       await harness.waitFor((value) => value.hasCachedRepoRuntimeHealth("/repo-b", ["opencode"]));
 
       expect(harness.getLatest().activeBeadsCheck?.beadsPath).toBe("/repo-a/.beads");
-      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toBeNull();
+      expect(
+        harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.availableToolIds,
+      ).toEqual(["/repo-a"]);
       expect(harness.getLatest().hasCachedBeadsCheck("/repo-b")).toBe(true);
       expect(harness.getLatest().hasCachedRepoRuntimeHealth("/repo-b", ["opencode"])).toBe(true);
       expect(beadsCheck).toHaveBeenCalledTimes(1);
@@ -370,6 +372,42 @@ describe("use-checks", () => {
     } finally {
       await harness.unmount();
       host.runtimeCheck = original.runtimeCheck;
+    }
+  });
+
+  test("projects runtime health query failures as unhealthy runtime state", async () => {
+    repoHealthHandler = async () => {
+      throw new Error("runtime health unreachable");
+    };
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+
+    try {
+      await harness.mount();
+
+      await harness.run(async (value) => {
+        await expect(value.refreshRepoRuntimeHealthForRepo("/repo-a", true)).rejects.toThrow(
+          "runtime health unreachable",
+        );
+      });
+
+      await harness.waitFor((value) => {
+        const runtimeHealth = value.activeRepoRuntimeHealthByRuntime.opencode;
+        return runtimeHealth != null && runtimeHealth.runtimeOk === false;
+      });
+
+      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toEqual(
+        expect.objectContaining({
+          runtimeOk: false,
+          mcpOk: false,
+          runtimeError: "runtime health unreachable",
+        }),
+      );
+    } finally {
+      await harness.unmount();
     }
   });
 });

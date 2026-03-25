@@ -6,6 +6,7 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import { runtimeLabelFor } from "@/lib/agent-runtime";
+import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import {
   buildDiagnosticsSummary,
@@ -70,14 +71,14 @@ export const buildDiagnosticsPanelModel = (
   const repoName = activeRepo?.split("/").filter(Boolean).at(-1) ?? "No repository";
   const effectiveWorktreeBasePath = activeWorkspace?.effectiveWorktreeBasePath ?? null;
   const worktreeAvailable = Boolean(effectiveWorktreeBasePath);
-  const hasRuntimeHealthData = runtimeDefinitions.some(
-    (definition) => runtimeHealthByRuntime[definition.kind] !== undefined,
-  );
   const runtimeEntries = runtimeDefinitions.map((definition) => ({
     definition,
     cliHealth: runtimeCheck?.runtimes.find((entry) => entry.kind === definition.kind) ?? null,
-    runtimeHealth: runtimeHealthByRuntime[definition.kind] ?? null,
+    runtimeHealth: runtimeHealthByRuntime[definition.kind],
   }));
+  const isRuntimeHealthPending = runtimeDefinitions.some(
+    (definition) => runtimeHealthByRuntime[definition.kind] === undefined,
+  );
 
   const criticalReasons: string[] = [];
   if (activeRepo) {
@@ -87,14 +88,12 @@ export const buildDiagnosticsPanelModel = (
     if (runtimeCheck && (!runtimeCheck.gitOk || runtimeCheck.runtimes.some((entry) => !entry.ok))) {
       criticalReasons.push("Runtime CLI checks failing");
     }
-    if (hasRuntimeHealthData) {
-      for (const { definition, runtimeHealth } of runtimeEntries) {
-        if (runtimeHealth?.runtimeOk === false) {
-          criticalReasons.push(`${definition.label} runtime unavailable`);
-        }
-        if (definition.capabilities.supportsMcpStatus && runtimeHealth?.mcpOk === false) {
-          criticalReasons.push(`${definition.label} OpenDucktor MCP unavailable`);
-        }
+    for (const { definition, runtimeHealth } of runtimeEntries) {
+      if (runtimeHealth?.runtimeOk === false) {
+        criticalReasons.push(`${definition.label} runtime unavailable`);
+      }
+      if (definition.capabilities.supportsMcpStatus && runtimeHealth?.mcpOk === false) {
+        criticalReasons.push(`${definition.label} OpenDucktor MCP unavailable`);
       }
     }
     if (beadsCheck?.beadsOk === false) {
@@ -112,7 +111,8 @@ export const buildDiagnosticsPanelModel = (
     (isLoadingRuntimeDefinitions ||
       isLoadingChecks ||
       runtimeCheck === null ||
-      beadsCheck === null);
+      beadsCheck === null ||
+      isRuntimeHealthPending);
 
   const repositorySection: DiagnosticsSectionModel = {
     key: "repository",
@@ -188,7 +188,7 @@ export const buildDiagnosticsPanelModel = (
       title: `${definition.label} Runtime`,
       badge: {
         label:
-          runtimeHealth === null ? "Checking" : runtimeHealth.runtimeOk ? "Running" : "Unavailable",
+          runtimeHealth == null ? "Checking" : runtimeHealth.runtimeOk ? "Running" : "Unavailable",
         variant: healthVariant(runtimeHealth?.runtimeOk ?? null),
       },
       rows: runtimeHealth?.runtime
@@ -215,7 +215,7 @@ export const buildDiagnosticsPanelModel = (
         : [],
       errors: runtimeHealth?.runtimeError ? [runtimeHealth.runtimeError] : [],
       ...(activeRepo
-        ? runtimeHealth === null
+        ? runtimeHealth == null
           ? { emptyMessage: "Runtime health is loading..." }
           : {}
         : { emptyMessage: "Select a repository first." }),
@@ -230,14 +230,14 @@ export const buildDiagnosticsPanelModel = (
       title: `${definition.label} MCP`,
       badge: {
         label:
-          runtimeHealth === null ? "Checking" : runtimeHealth.mcpOk ? "Connected" : "Unavailable",
+          runtimeHealth == null ? "Checking" : runtimeHealth.mcpOk ? "Connected" : "Unavailable",
         variant: healthVariant(runtimeHealth?.mcpOk ?? null),
       },
       rows: activeRepo
         ? [
             {
               label: "Server name",
-              value: runtimeHealth?.mcpServerName ?? "openducktor",
+              value: runtimeHealth?.mcpServerName ?? ODT_MCP_SERVER_NAME,
               mono: true,
             },
             {
@@ -260,7 +260,7 @@ export const buildDiagnosticsPanelModel = (
           ? [runtimeHealth.mcpServerError ?? runtimeHealth.mcpError ?? ""]
           : [],
       ...(activeRepo
-        ? runtimeHealth === null
+        ? runtimeHealth == null
           ? { emptyMessage: "MCP health is loading..." }
           : {}
         : { emptyMessage: "Select a repository first." }),

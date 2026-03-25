@@ -5,9 +5,10 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import type { RepoRuntimeHealthCheck, RepoRuntimeHealthMap } from "@/types/diagnostics";
 import {
   beadsCheckQueryOptions,
@@ -49,10 +50,30 @@ type UseChecksResult = {
   clearActiveRepoRuntimeHealth: () => void;
 };
 
-const buildEmptyRuntimeHealthMap = (
+const buildRuntimeHealthErrorMap = (
   runtimeDefinitions: RuntimeDescriptor[],
-): RepoRuntimeHealthMap =>
-  Object.fromEntries(runtimeDefinitions.map((definition) => [definition.kind, null]));
+  runtimeHealthError: string,
+  checkedAt: string,
+): RepoRuntimeHealthMap => {
+  return Object.fromEntries(
+    runtimeDefinitions.map((definition) => [
+      definition.kind,
+      {
+        runtimeOk: false,
+        runtimeError: runtimeHealthError,
+        runtime: null,
+        mcpOk: false,
+        mcpError: runtimeHealthError,
+        mcpServerName: ODT_MCP_SERVER_NAME,
+        mcpServerStatus: null,
+        mcpServerError: runtimeHealthError,
+        availableToolIds: [],
+        checkedAt,
+        errors: [runtimeHealthError],
+      },
+    ]),
+  ) as RepoRuntimeHealthMap;
+};
 
 export function useChecks({
   activeRepo,
@@ -72,7 +93,7 @@ export function useChecks({
       runtimeDefinitions,
       checkRepoRuntimeHealth,
     ),
-    enabled: false,
+    enabled: activeRepo !== null && runtimeDefinitions.length > 0,
   });
 
   const refreshRuntimeCheck = useCallback(
@@ -216,10 +237,32 @@ export function useChecks({
     setIsManualLoadingChecks(false);
   }, []);
 
-  const activeRepoRuntimeHealthByRuntime =
-    activeRepo === null
-      ? {}
-      : (runtimeHealthQuery.data ?? buildEmptyRuntimeHealthMap(runtimeDefinitions));
+  const activeRepoRuntimeHealthByRuntime = useMemo((): RepoRuntimeHealthMap => {
+    if (activeRepo === null) {
+      return {};
+    }
+
+    if (runtimeHealthQuery.data) {
+      return runtimeHealthQuery.data;
+    }
+
+    if (runtimeHealthQuery.error && runtimeDefinitions.length > 0) {
+      const runtimeHealthError = errorMessage(runtimeHealthQuery.error);
+      const checkedAt =
+        runtimeHealthQuery.errorUpdatedAt > 0
+          ? new Date(runtimeHealthQuery.errorUpdatedAt).toISOString()
+          : new Date().toISOString();
+      return buildRuntimeHealthErrorMap(runtimeDefinitions, runtimeHealthError, checkedAt);
+    }
+
+    return {};
+  }, [
+    activeRepo,
+    runtimeDefinitions,
+    runtimeHealthQuery.data,
+    runtimeHealthQuery.error,
+    runtimeHealthQuery.errorUpdatedAt,
+  ]);
   const isLoadingChecks =
     isManualLoadingChecks ||
     runtimeCheckQuery.isFetching ||
