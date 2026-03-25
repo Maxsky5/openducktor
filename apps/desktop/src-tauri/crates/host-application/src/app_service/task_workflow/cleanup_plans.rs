@@ -16,26 +16,25 @@ impl WorktreeCleanupPlan {
     pub(super) fn for_delete_targets(
         service: &AppService,
         repo_path: &str,
+        branch_prefix: &str,
         target_tasks: &[&TaskCard],
     ) -> Result<Self> {
-        let normalized_repo = normalize_path_for_comparison(repo_path);
         let mut paths = Vec::new();
         let mut seen_worktree_keys = HashSet::new();
-
         for target_task in target_tasks {
             let sessions = service.agent_sessions_list(repo_path, target_task.id.as_str())?;
-            for session in sessions {
-                let worktree_path = session.working_directory.trim();
-                if !is_managed_worktree_session(&session, &normalized_repo, worktree_path) {
-                    continue;
-                }
-                let worktree_key = normalize_path_key(worktree_path);
-                if !seen_worktree_keys.insert(worktree_key) {
-                    continue;
-                }
-
-                if Path::new(worktree_path).exists() {
-                    paths.push(worktree_path.to_string());
+            let task_worktree_plan = Self::for_task_sessions(
+                service,
+                repo_path,
+                target_task.id.as_str(),
+                branch_prefix,
+                &sessions,
+                true,
+            )?;
+            for worktree_path in task_worktree_plan.paths {
+                let worktree_key = normalize_path_key(worktree_path.as_str());
+                if seen_worktree_keys.insert(worktree_key) {
+                    paths.push(worktree_path);
                 }
             }
         }
@@ -206,16 +205,46 @@ pub(super) fn with_reset_cleanup_progress(
     removed_worktrees: &[String],
     deleted_branches: &[String],
 ) -> anyhow::Error {
+    with_cleanup_progress(
+        error,
+        removed_worktrees,
+        deleted_branches,
+        "Reset cleanup",
+        "Retry reset to finish cleanup safely.",
+    )
+}
+
+pub(super) fn with_delete_cleanup_progress(
+    error: anyhow::Error,
+    removed_worktrees: &[String],
+    deleted_branches: &[String],
+) -> anyhow::Error {
+    with_cleanup_progress(
+        error,
+        removed_worktrees,
+        deleted_branches,
+        "Delete cleanup",
+        "Retry delete to finish cleanup safely.",
+    )
+}
+
+fn with_cleanup_progress(
+    error: anyhow::Error,
+    removed_worktrees: &[String],
+    deleted_branches: &[String],
+    cleanup_label: &str,
+    retry_instruction: &str,
+) -> anyhow::Error {
     let mut progress = Vec::new();
     if !removed_worktrees.is_empty() {
         progress.push(format!(
-            "Reset cleanup already removed worktrees: {}.",
+            "{cleanup_label} already removed worktrees: {}.",
             removed_worktrees.join(", ")
         ));
     }
     if !deleted_branches.is_empty() {
         progress.push(format!(
-            "Reset cleanup already deleted branches: {}.",
+            "{cleanup_label} already deleted branches: {}.",
             deleted_branches.join(", ")
         ));
     }
@@ -223,7 +252,7 @@ pub(super) fn with_reset_cleanup_progress(
         return error;
     }
 
-    progress.push("Retry reset to finish cleanup safely.".to_string());
+    progress.push(retry_instruction.to_string());
     error.context(progress.join("\n"))
 }
 
@@ -255,16 +284,6 @@ struct ManagedTaskWorktreeScope<'a> {
     normalized_repo: &'a Path,
     managed_worktree_base: &'a Path,
     require_existing_path: bool,
-}
-
-fn is_managed_worktree_session(
-    session: &AgentSessionDocument,
-    normalized_repo: &Path,
-    working_directory: &str,
-) -> bool {
-    matches!(session.role.as_str(), "build" | "qa")
-        && !working_directory.is_empty()
-        && normalize_path_for_comparison(working_directory) != normalized_repo
 }
 
 fn is_managed_task_worktree_session(

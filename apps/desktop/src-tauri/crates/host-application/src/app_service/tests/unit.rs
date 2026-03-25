@@ -85,6 +85,7 @@ fn app_service_new_constructor_is_callable() -> Result<()> {
             tasks: Vec::new(),
             list_error: None,
             delete_calls: Vec::new(),
+            delete_error: None,
             created_inputs: Vec::new(),
             updated_patches: Vec::new(),
             spec_get_calls: Vec::new(),
