@@ -9,6 +9,8 @@ import type {
 import type { AgentModelSelection, AgentRole, AgentRuntimeConnection } from "@openducktor/core";
 import { mergePromptOverrides } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
+import { appQueryClient } from "@/lib/query-client";
+import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import { host } from "../../shared/host";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { normalizeWorkingDirectory, runningStates, toBaseUrl } from "../support/core";
@@ -85,7 +87,7 @@ export const loadTaskDocuments = async (
 };
 
 const loadRepoConfig = (repoPath: string): Promise<RepoConfig> => {
-  return host.workspaceGetRepoConfig(repoPath);
+  return loadRepoConfigFromQuery(appQueryClient, repoPath);
 };
 
 export const loadRepoDefaultModel = async (
@@ -110,7 +112,7 @@ export const loadRepoDefaultModel = async (
 export const loadRepoPromptOverrides = async (repoPath: string): Promise<RepoPromptOverrides> => {
   const [repoConfig, snapshot] = await Promise.all([
     loadRepoConfig(repoPath),
-    host.workspaceGetSettingsSnapshot(),
+    loadSettingsSnapshotFromQuery(appQueryClient),
   ]);
 
   return mergePromptOverrides({

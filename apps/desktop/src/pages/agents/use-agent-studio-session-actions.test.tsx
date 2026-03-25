@@ -126,7 +126,7 @@ const confirmSessionStartModal = async (
       (selection.variant ?? "") === "default"
     );
   });
-  await harness.run((state) => {
+  await harness.run(async (state) => {
     state.sessionStartModal?.onConfirm({
       runInBackground: false,
       startMode: "fresh",

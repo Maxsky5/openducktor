@@ -1,6 +1,8 @@
 import type { AgentRole } from "@openducktor/core";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 
+export { normalizeWorkingDirectory } from "@/lib/working-directory";
+
 export const toBaseUrl = (port: number): string => `http://127.0.0.1:${port}`;
 
 export const runningStates = new Set([
@@ -44,14 +46,6 @@ export const throwIfRepoStale = (isStaleRepoOperation: () => boolean, message: s
   if (isStaleRepoOperation()) {
     throw new Error(message);
   }
-};
-
-export const normalizeWorkingDirectory = (workingDirectory: string | null | undefined): string => {
-  let normalized = workingDirectory?.trim() ?? "";
-  while (normalized.length > 1 && /[\\/]/.test(normalized.at(-1) ?? "")) {
-    normalized = normalized.slice(0, -1);
-  }
-  return normalized;
 };
 
 export const isDuplicateAssistantMessage = (

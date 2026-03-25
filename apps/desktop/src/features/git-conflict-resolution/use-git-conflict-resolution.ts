@@ -5,6 +5,7 @@ import {
   buildGitConflictResolutionPrompt,
   buildReusableSessionOptions,
 } from "@/features/session-start";
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { getGitConflictCopy } from "./conflict-copy";
@@ -42,10 +43,6 @@ type UseGitConflictResolutionResult = {
     conflict: GitConflict,
     taskContext: GitConflictTaskContext,
   ) => Promise<boolean>;
-};
-
-const normalizeWorkingDirectory = (workingDirectory: string | null | undefined): string => {
-  return workingDirectory?.trim() ?? "";
 };
 
 const filterConflictBuilderSessions = (

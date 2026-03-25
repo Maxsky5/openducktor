@@ -129,7 +129,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("reuses an existing in-flight start promise", async () => {
     const inFlight = Promise.resolve("session-in-flight");
     const inFlightMap = new Map<string, Promise<string>>([
-      ["/tmp/repo::task-1::build::reuse::session-in-flight::", inFlight],
+      [
+        "/tmp/repo::task-1::build::reuse::session-in-flight::::::build_after_human_request_changes::no-kickoff",
+        inFlight,
+      ],
     ]);
     const sessionsRef = { current: {} };
     const start = createStartAgentSessionWithFlatDeps({
@@ -242,7 +245,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       await buildStarted.promise;
       const plannerStartResult = await withTimeout(plannerStarted.promise, 50);
 
-      expect(startedRoles).toEqual(["build", "planner"]);
+      expect(new Set(startedRoles)).toEqual(new Set(["build", "planner"]));
       expect(plannerStartResult).toBeUndefined();
 
       startBuildDeferred.resolve();
@@ -253,6 +256,71 @@ describe("agent-orchestrator/handlers/start-session", () => {
       adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
     }
+  });
+
+  test("does not dedupe fresh starts with different scenarios, models, or kickoff flags", async () => {
+    const scenarioA = Promise.resolve("session-a");
+    const scenarioB = Promise.resolve("session-b");
+    const inFlightMap = new Map<string, Promise<string>>([
+      [
+        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::build::build_after_human_request_changes::no-kickoff",
+        scenarioA,
+      ],
+      [
+        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::planner::build_after_human_request_changes::no-kickoff",
+        scenarioB,
+      ],
+    ]);
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter: new OpencodeSdkAdapter(),
+      setSessionsById: () => {},
+      sessionsRef: { current: {} },
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: inFlightMap },
+      attachSessionListener: () => {},
+      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        startMode: "fresh",
+        selectedModel: BUILD_SELECTION,
+      }),
+    ).resolves.toBe("session-a");
+
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        startMode: "fresh",
+        selectedModel: {
+          ...BUILD_SELECTION,
+          profileId: "planner",
+        },
+      }),
+    ).resolves.toBe("session-b");
   });
 
   test("waits for the initial session snapshot to persist before resolving", async () => {
@@ -394,6 +462,77 @@ describe("agent-orchestrator/handlers/start-session", () => {
     expect(persistedSessionRecord.sessionId).toBe("session-1");
     expect("status" in persistedSessionRecord).toBe(false);
     expect("taskId" in persistedSessionRecord).toBe(false);
+    expect("runtimeEndpoint" in persistedSessionRecord).toBe(false);
+    expect("baseUrl" in persistedSessionRecord).toBe(false);
+    expect("runtimeTransport" in persistedSessionRecord).toBe(false);
+  });
+
+  test("stops and removes the started session when initial persistence fails", async () => {
+    const stoppedSessionIds: string[] = [];
+    const attachedSessionIds: string[] = [];
+    const sessionsRef = { current: {} as Record<string, AgentSessionState> };
+    const adapter = new OpencodeSdkAdapter();
+    adapter.startSession = async () => ({
+      runtimeKind: "opencode",
+      sessionId: "session-persist-fail",
+      externalSessionId: "external-session-persist-fail",
+      role: "planner",
+      scenario: "planner_initial",
+      status: "running",
+      startedAt: "2026-02-22T08:00:00.000Z",
+    });
+    adapter.stopSession = async (sessionId) => {
+      stoppedSessionIds.push(sessionId);
+    };
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: (updater) => {
+        sessionsRef.current =
+          typeof updater === "function" ? updater(sessionsRef.current) : updater;
+      },
+      sessionsRef,
+      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: (_repoPath, sessionId) => {
+        attachedSessionIds.push(sessionId);
+      },
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {
+        throw new Error("persist failed");
+      },
+      sendAgentMessage: async () => {},
+    });
+
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "planner",
+        scenario: "planner_initial",
+        startMode: "fresh",
+        selectedModel: PLANNER_SELECTION,
+      }),
+    ).rejects.toThrow(
+      'Failed to persist started session "session-persist-fail": persist failed. The started session was stopped and removed locally.',
+    );
+
+    expect(stoppedSessionIds).toEqual(["session-persist-fail"]);
+    expect(attachedSessionIds).toEqual([]);
+    expect(sessionsRef.current["session-persist-fail"]).toBeUndefined();
   });
 
   test("reuses most recent in-memory session for same task and role", async () => {

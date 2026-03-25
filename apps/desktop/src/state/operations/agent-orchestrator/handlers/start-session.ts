@@ -221,6 +221,46 @@ const persistInitialSession = async ({
   );
 };
 
+const rollbackStartedSessionAfterPersistenceFailure = async ({
+  error,
+  startedCtx,
+  session,
+  runtime,
+}: {
+  error: unknown;
+  startedCtx: StartedSessionContext;
+  session: SessionDependencies;
+  runtime: RuntimeDependencies;
+}): Promise<never> => {
+  const sessionId = startedCtx.summary.sessionId;
+  session.setSessionsById((current) => {
+    if (!(sessionId in current)) {
+      return current;
+    }
+    const next = { ...current };
+    delete next[sessionId];
+    return next;
+  });
+
+  try {
+    await runOrchestratorTask(
+      "start-session-stop-after-persist-failure",
+      async () => runtime.adapter.stopSession(sessionId),
+      { tags: createSessionStartTags(startedCtx) },
+    );
+  } catch (stopError) {
+    throw new Error(
+      `Failed to persist started session "${sessionId}": ${errorMessage(error)}. Failed to stop the started session during rollback: ${errorMessage(stopError)}`,
+      { cause: stopError },
+    );
+  }
+
+  throw new Error(
+    `Failed to persist started session "${sessionId}": ${errorMessage(error)}. The started session was stopped and removed locally.`,
+    error instanceof Error ? { cause: error } : undefined,
+  );
+};
+
 const resolveReuseValidationError = ({
   matchesQaTarget,
   matchesBuildTarget,
@@ -260,6 +300,48 @@ const resolveFreshStartTargetWorkingDirectory = async ({
     }
     throw error;
   }
+};
+
+const resolveFreshStartTargetWorkingDirectoryForStart = async ({
+  ctx,
+  runtime,
+  targetWorkingDirectory,
+}: {
+  ctx: StartSessionContext;
+  runtime: RuntimeDependencies;
+  targetWorkingDirectory?: string | null;
+}): Promise<{
+  targetWorkingDirectory: string | null | undefined;
+  normalizedTargetWorkingDirectory: string;
+}> => {
+  if (targetWorkingDirectory !== undefined) {
+    return {
+      targetWorkingDirectory,
+      normalizedTargetWorkingDirectory: normalizeWorkingDirectory(targetWorkingDirectory),
+    };
+  }
+
+  const targetWorkingDirectoryForStart = await resolveFreshStartTargetWorkingDirectory({
+    ctx,
+    runtime,
+  });
+  return {
+    targetWorkingDirectory: targetWorkingDirectoryForStart,
+    normalizedTargetWorkingDirectory: normalizeWorkingDirectory(targetWorkingDirectoryForStart),
+  };
+};
+
+const serializeSelectedModelKey = (selectedModel: AgentModelSelection | undefined): string => {
+  if (!selectedModel) {
+    return "";
+  }
+  return [
+    selectedModel.runtimeKind ?? "",
+    selectedModel.providerId,
+    selectedModel.modelId,
+    selectedModel.variant ?? "",
+    selectedModel.profileId ?? "",
+  ].join("::");
 };
 
 const createOrReuseSession = async ({
@@ -537,11 +619,20 @@ const createOrReuseSession = async ({
     });
     throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
-    await persistInitialSession({
-      initialSession,
-      session: deps.session,
-      tags: createSessionStartTags(startedCtx),
-    });
+    try {
+      await persistInitialSession({
+        initialSession,
+        session: deps.session,
+        tags: createSessionStartTags(startedCtx),
+      });
+    } catch (error) {
+      await rollbackStartedSessionAfterPersistenceFailure({
+        error,
+        startedCtx,
+        session: deps.session,
+        runtime: deps.runtime,
+      });
+    }
 
     return {
       kind: "started",
@@ -621,11 +712,20 @@ const createOrReuseSession = async ({
   });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
-  await persistInitialSession({
-    initialSession,
-    session: deps.session,
-    tags: createSessionStartTags(startedCtx),
-  });
+  try {
+    await persistInitialSession({
+      initialSession,
+      session: deps.session,
+      tags: createSessionStartTags(startedCtx),
+    });
+  } catch (error) {
+    await rollbackStartedSessionAfterPersistenceFailure({
+      error,
+      startedCtx,
+      session: deps.session,
+      runtime: deps.runtime,
+    });
+  }
 
   return {
     kind: "started",
@@ -728,36 +828,67 @@ export const createStartAgentSession = ({
     const { taskId, role, scenario, sendKickoff = false, startMode } = input;
     const effectiveScenario = scenario ?? defaultAgentScenarioForRole(role);
     const repoPath = requireActiveRepo(repo.activeRepo);
+    const isStaleRepoOperation = createRepoStaleGuard({
+      repoPath,
+      repoEpochRef: repo.repoEpochRef,
+      activeRepoRef: repo.activeRepoRef,
+      previousRepoRef: repo.previousRepoRef,
+    });
+    throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
+
+    const startCtx: StartSessionContext = {
+      repoPath,
+      taskId,
+      role,
+      isStaleRepoOperation,
+    };
+    if (input.startMode === "fresh" && role === "qa") {
+      resolveStartTask({ ctx: startCtx, task });
+    }
     const normalizedSourceSessionId =
       input.startMode === "fresh" ? "" : input.sourceSessionId.trim();
+    const freshStartTarget =
+      input.startMode === "fresh"
+        ? await resolveFreshStartTargetWorkingDirectoryForStart({
+            ctx: startCtx,
+            runtime,
+            ...(input.targetWorkingDirectory !== undefined
+              ? { targetWorkingDirectory: input.targetWorkingDirectory }
+              : {}),
+          })
+        : null;
     const normalizedTargetWorkingDirectory =
-      input.startMode === "fresh" ? normalizeWorkingDirectory(input.targetWorkingDirectory) : "";
-    const inFlightKey = `${repoPath}::${taskId}::${role}::${startMode}::${normalizedSourceSessionId}::${normalizedTargetWorkingDirectory}`;
+      freshStartTarget?.normalizedTargetWorkingDirectory ?? "";
+    const selectedModelKey =
+      input.startMode === "reuse" ? "" : serializeSelectedModelKey(input.selectedModel);
+    const inFlightKey = [
+      repoPath,
+      taskId,
+      role,
+      startMode,
+      normalizedSourceSessionId,
+      normalizedTargetWorkingDirectory,
+      selectedModelKey,
+      effectiveScenario,
+      sendKickoff ? "kickoff" : "no-kickoff",
+    ].join("::");
     const existingInFlight = session.inFlightStartsByRepoTaskRef.current.get(inFlightKey);
     if (existingInFlight) {
       return existingInFlight;
     }
 
     const startPromise = Promise.resolve().then(async (): Promise<string> => {
-      const isStaleRepoOperation = createRepoStaleGuard({
-        repoPath,
-        repoEpochRef: repo.repoEpochRef,
-        activeRepoRef: repo.activeRepoRef,
-        previousRepoRef: repo.previousRepoRef,
-      });
-      throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
-
-      const startCtx: StartSessionContext = {
-        repoPath,
-        taskId,
-        role,
-        isStaleRepoOperation,
-      };
-
       const startResult = await createOrReuseSession({
         ctx: startCtx,
         input: {
-          ...input,
+          ...(input.startMode === "fresh"
+            ? {
+                ...input,
+                ...(freshStartTarget?.targetWorkingDirectory !== undefined
+                  ? { targetWorkingDirectory: freshStartTarget.targetWorkingDirectory }
+                  : {}),
+              }
+            : input),
           scenario: effectiveScenario,
         },
         deps: {

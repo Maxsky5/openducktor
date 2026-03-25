@@ -28,7 +28,7 @@ const createTask = (overrides = {}) => createTaskCardFixture(overrides);
 
 const createSession = (overrides = {}) => createAgentSessionFixture(overrides);
 
-const MODAL_CATALOG: AgentModelCatalog = {
+const createModalCatalog = (): AgentModelCatalog => ({
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
   models: [
     {
@@ -78,7 +78,7 @@ const MODAL_CATALOG: AgentModelCatalog = {
       hidden: false,
     },
   ],
-};
+});
 
 const createInternalModalHookHarness = (initialProps: HookArgs) => {
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
@@ -120,7 +120,7 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
             isLoadingRuntimeDefinitions: false,
             runtimeDefinitionsError: null,
             refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-            loadRepoRuntimeCatalog: async () => MODAL_CATALOG,
+            loadRepoRuntimeCatalog: async () => createModalCatalog(),
           },
           children,
         }),
@@ -224,7 +224,7 @@ const confirmSessionStartModal = async ({
     );
   });
 
-  await harness.run((state) => {
+  await harness.run(async (state) => {
     state.sessionStartModal?.onConfirm({
       runInBackground: false,
       startMode,
@@ -508,7 +508,14 @@ describe("useAgentStudioSessionStartFlow", () => {
         disabled: false,
       });
     });
+    await confirmSessionStartModal({
+      harness,
+      agent: "planner",
+      modelId: "openai/gpt-5",
+      variant: "default",
+    });
 
+    expect(startAgentSession).toHaveBeenCalledTimes(1);
     await harness.waitFor((state) => state.isStarting === false);
 
     expect(updateCalls).toEqual([]);

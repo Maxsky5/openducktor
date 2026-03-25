@@ -103,26 +103,35 @@ export function useAgentStudioFreshSessionCreation({
         );
         try {
           if (decision.startMode === "reuse") {
-            const workflow = await startSessionWorkflow({
-              activeRepo,
-              queryClient,
-              intent: {
-                taskId,
-                role: params.nextRole,
-                scenario: params.nextScenario,
-                startMode: "reuse",
-                sourceSessionId: decision.sourceSessionId,
-                postStartAction: "kickoff",
-              },
-              selection: null,
-              task: selectedTask,
-              startAgentSession,
-              sendAgentMessage,
-              postStartExecution: "detached",
-              onDetachedPostStartError: onPostStartActionError
-                ? (error) => onPostStartActionError("kickoff", error)
-                : undefined,
-            });
+            let workflow: SessionStartWorkflowResult;
+            try {
+              workflow = await startSessionWorkflow({
+                activeRepo,
+                queryClient,
+                intent: {
+                  taskId,
+                  role: params.nextRole,
+                  scenario: params.nextScenario,
+                  startMode: "reuse",
+                  sourceSessionId: decision.sourceSessionId,
+                  postStartAction: "kickoff",
+                },
+                selection: null,
+                task: selectedTask,
+                startAgentSession,
+                sendAgentMessage,
+                postStartExecution: "detached",
+                onDetachedPostStartError: onPostStartActionError
+                  ? (error) => onPostStartActionError("kickoff", error)
+                  : undefined,
+              });
+            } catch (error) {
+              const roleLabel = AGENT_ROLE_LABELS[params.nextRole] ?? params.nextRole.toUpperCase();
+              toast.error(`Failed to start ${roleLabel} session`, {
+                description: errorMessage(error),
+              });
+              return undefined;
+            }
             if (
               shouldTriggerContextSwitchIntent({
                 currentSessionId: activeSession?.sessionId ?? null,

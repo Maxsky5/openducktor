@@ -228,12 +228,14 @@ export function useSessionStartModalState({
   const openStartModal = useCallback(
     (nextIntent: SessionStartModalIntent) => {
       const existingSessionOptions = nextIntent.existingSessionOptions ?? [];
+      const allowedStartModes = getAgentScenarioDefinition(nextIntent.scenario).allowedStartModes;
       const initialStartMode =
-        nextIntent.initialStartMode ??
-        resolveScenarioStartMode({
-          scenario: nextIntent.scenario,
-          existingSessionOptions,
-        });
+        nextIntent.initialStartMode && allowedStartModes.includes(nextIntent.initialStartMode)
+          ? nextIntent.initialStartMode
+          : resolveScenarioStartMode({
+              scenario: nextIntent.scenario,
+              existingSessionOptions,
+            });
       const initialSourceSessionId =
         nextIntent.initialSourceSessionId?.trim() || existingSessionOptions[0]?.value || "";
       const initialRuntimeKind = resolveRuntimeKindSelection({

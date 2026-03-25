@@ -108,8 +108,24 @@ type AgentsMockResult =
       error: Error;
     };
 
+type PromptAsyncMockResult =
+  | {
+      mode: "success";
+      data?: unknown;
+    }
+  | {
+      mode: "api_error";
+      error: unknown;
+      response?: { status?: number; statusText?: string };
+    }
+  | {
+      mode: "throw";
+      error: Error;
+    };
+
 type MakeMockClientInput = {
   sessionId?: string;
+  promptAsyncResult?: PromptAsyncMockResult;
   streamEvents?: Event[];
   messagesResponse?: Array<{
     info: {
@@ -131,6 +147,7 @@ type MakeMockClientInput = {
 
 const makeMockClient = ({
   sessionId = "session-opencode-1",
+  promptAsyncResult = { mode: "success" },
   streamEvents = [],
   messagesResponse = [],
   todoResult = {
@@ -212,7 +229,17 @@ const makeMockClient = ({
       },
       promptAsync: async (input: unknown) => {
         session.promptAsyncCalls.push(input);
-        return { data: undefined, error: undefined };
+        if (promptAsyncResult.mode === "throw") {
+          throw promptAsyncResult.error;
+        }
+        if (promptAsyncResult.mode === "api_error") {
+          return {
+            data: undefined,
+            error: promptAsyncResult.error,
+            response: promptAsyncResult.response,
+          };
+        }
+        return { data: promptAsyncResult.data, error: undefined };
       },
       prompt: async (input: unknown) => {
         session.promptCalls.push(input);
@@ -807,6 +834,53 @@ describe("OpencodeSdkAdapter", () => {
         openducktor_odt_set_spec: true,
       },
     });
+  });
+
+  test("sendUserMessage wraps promptAsync API errors with response details", async () => {
+    const mock = makeMockClient({
+      promptAsyncResult: {
+        mode: "api_error",
+        error: { message: "quota exceeded" },
+        response: { status: 429, statusText: "Too Many Requests" },
+      },
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+
+    await expect(
+      adapter.sendUserMessage({
+        sessionId: "session-1",
+        content: "Try again",
+      }),
+    ).rejects.toThrow(
+      "OpenCode request failed: prompt session (429 Too Many Requests): quota exceeded",
+    );
+  });
+
+  test("sendUserMessage wraps thrown promptAsync errors", async () => {
+    const mock = makeMockClient({
+      promptAsyncResult: {
+        mode: "throw",
+        error: new Error("socket closed"),
+      },
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+
+    await expect(
+      adapter.sendUserMessage({
+        sessionId: "session-1",
+        content: "Try again",
+      }),
+    ).rejects.toThrow("OpenCode request failed: prompt session: socket closed");
   });
 
   test("loadSessionHistory preserves message model metadata and maps streamed parts", async () => {
