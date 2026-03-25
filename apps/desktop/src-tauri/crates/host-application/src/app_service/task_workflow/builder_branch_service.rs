@@ -67,7 +67,7 @@ impl<'a> BuilderBranchService<'a> {
         let sessions = self.service.agent_sessions_list(repo_path, task_id)?;
         let mut builder_sessions = sessions
             .into_iter()
-            .filter(|session| session.role == "build")
+            .filter(|session| session.role.trim() == "build")
             .collect::<Vec<_>>();
         builder_sessions.sort_by(|left, right| {
             let left_key = left.started_at.as_str();
@@ -204,6 +204,7 @@ mod tests {
 
         let mut older = make_session("task-1", "session-1");
         older.started_at = "2026-03-11T10:00:00Z".to_string();
+        older.role = " build ".to_string();
         older.working_directory = older_worktree.to_string_lossy().to_string();
         let mut newer = make_session("task-1", "session-2");
         newer.started_at = "2026-03-11T11:00:00Z".to_string();

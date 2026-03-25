@@ -43,15 +43,11 @@ impl<'a> PullRequestWorkflowService<'a> {
             body,
         )?;
 
-        self.service.task_store.set_direct_merge_record(
-            std::path::Path::new(&repo_path),
-            task_id,
-            None,
-        )?;
-        self.service.task_store.set_pull_request(
+        self.service.task_store.set_delivery_metadata(
             std::path::Path::new(&repo_path),
             task_id,
             Some(pull_request.record.clone()),
+            None,
         )?;
 
         Ok(pull_request.record)

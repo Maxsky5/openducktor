@@ -250,6 +250,39 @@ impl BeadsTaskStore {
         Ok(())
     }
 
+    pub(super) fn set_delivery_metadata_impl(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        pull_request: Option<PullRequestRecord>,
+        direct_merge: Option<DirectMergeRecord>,
+    ) -> Result<()> {
+        let (mut root, namespace_key, mut namespace_map) =
+            self.load_namespace(repo_path, task_id)?;
+
+        match pull_request {
+            Some(value) => {
+                namespace_map.insert("pullRequest".to_string(), serde_json::to_value(value)?);
+            }
+            None => {
+                namespace_map.remove("pullRequest");
+            }
+        }
+
+        match direct_merge {
+            Some(value) => {
+                namespace_map.insert("directMerge".to_string(), serde_json::to_value(value)?);
+            }
+            None => {
+                namespace_map.remove("directMerge");
+            }
+        }
+
+        namespace_map.remove("delivery");
+        self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
+        Ok(())
+    }
+
     pub(super) fn set_direct_merge_record_impl(
         &self,
         repo_path: &Path,

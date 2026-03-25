@@ -65,12 +65,10 @@ impl<'a> DirectMergeWorkflowService<'a> {
             }
         };
 
-        self.service
-            .task_store
-            .set_pull_request(Path::new(&repo_path), task_id, None)?;
-        self.service.task_store.set_direct_merge_record(
+        self.service.task_store.set_delivery_metadata(
             Path::new(&repo_path),
             task_id,
+            None,
             Some(direct_merge_record(method, &approval)),
         )?;
 
@@ -140,10 +138,11 @@ impl<'a> DirectMergeWorkflowService<'a> {
                 Some("Human approved via direct merge"),
             )?
         };
-        let force_delete_source_branch = BuilderCleanupService::new(self.service)
-            .should_force_delete_source_branch(repo_path.as_str(), &direct_merge)?;
+        let cleanup = BuilderCleanupService::new(self.service);
+        let force_delete_source_branch =
+            cleanup.should_force_delete_source_branch(repo_path.as_str(), &direct_merge)?;
 
-        BuilderCleanupService::new(self.service).finalize_direct_merge_cleanup(
+        cleanup.finalize_direct_merge_cleanup(
             repo_path.as_str(),
             task_id,
             direct_merge.source_branch.as_str(),

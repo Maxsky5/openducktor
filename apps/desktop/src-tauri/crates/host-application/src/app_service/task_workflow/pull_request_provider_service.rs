@@ -41,7 +41,7 @@ trait PullRequestProviderPort {
         &self,
         repo_path: &Path,
         repo_config: &host_infra_system::RepoConfig,
-    ) -> Result<Option<PullRequestMutationContext>>;
+    ) -> Result<PullRequestMutationContext>;
 
     fn sync_policy(&self, repo_config: &host_infra_system::RepoConfig) -> PullRequestSyncPolicy;
 
@@ -206,7 +206,7 @@ impl PullRequestProviderPort for GithubPullRequestProviderPort {
         &self,
         repo_path: &Path,
         repo_config: &host_infra_system::RepoConfig,
-    ) -> Result<Option<PullRequestMutationContext>> {
+    ) -> Result<PullRequestMutationContext> {
         let provider = self.provider();
         if !provider.is_available() {
             return Err(anyhow!(
@@ -239,21 +239,18 @@ impl PullRequestProviderPort for GithubPullRequestProviderPort {
         }
 
         let remote_name = provider.resolve_remote_name(repo_path, &repository)?;
-        Ok(Some(PullRequestMutationContext {
+        Ok(PullRequestMutationContext {
             provider_id: self.provider_id().to_string(),
             repository,
             remote_name,
-        }))
+        })
     }
 
     fn sync_policy(&self, repo_config: &host_infra_system::RepoConfig) -> PullRequestSyncPolicy {
+        let config = self.config(repo_config);
         let provider = self.provider();
-        let available = provider.is_available();
-        let repository = self
-            .config(repo_config)
-            .repository
-            .as_ref()
-            .map(Self::to_provider_repository);
+        let available = config.enabled && provider.is_available();
+        let repository = config.repository.as_ref().map(Self::to_provider_repository);
 
         PullRequestSyncPolicy {
             provider_id: self.provider_id().to_string(),
@@ -367,11 +364,8 @@ impl<'a> PullRequestProviderService<'a> {
         body: &str,
     ) -> Result<ResolvedPullRequest> {
         let repo_config = self.service.workspace_get_repo_config(repo_path)?;
-        let context = GithubPullRequestProviderPort
-            .mutation_context(Path::new(repo_path), &repo_config)?
-            .ok_or_else(|| {
-                anyhow!("GitHub pull request support requires repository coordinates.")
-            })?;
+        let context =
+            GithubPullRequestProviderPort.mutation_context(Path::new(repo_path), &repo_config)?;
         match self.service.git_push_branch(
             repo_path,
             approval.working_directory.as_deref(),
@@ -403,11 +397,8 @@ impl<'a> PullRequestProviderService<'a> {
         source_branch: &str,
     ) -> Result<Option<ResolvedPullRequest>> {
         let repo_config = self.service.workspace_get_repo_config(repo_path)?;
-        let context = GithubPullRequestProviderPort
-            .mutation_context(Path::new(repo_path), &repo_config)?
-            .ok_or_else(|| {
-                anyhow!("GitHub pull request support requires repository coordinates.")
-            })?;
+        let context =
+            GithubPullRequestProviderPort.mutation_context(Path::new(repo_path), &repo_config)?;
         GithubPullRequestProviderPort.find_open_pull_request_for_branch(
             Path::new(repo_path),
             &context,
@@ -421,11 +412,8 @@ impl<'a> PullRequestProviderService<'a> {
         source_branch: &str,
     ) -> Result<Option<ResolvedPullRequest>> {
         let repo_config = self.service.workspace_get_repo_config(repo_path)?;
-        let context = GithubPullRequestProviderPort
-            .mutation_context(Path::new(repo_path), &repo_config)?
-            .ok_or_else(|| {
-                anyhow!("GitHub pull request support requires repository coordinates.")
-            })?;
+        let context =
+            GithubPullRequestProviderPort.mutation_context(Path::new(repo_path), &repo_config)?;
         GithubPullRequestProviderPort.find_pull_request_for_branch(
             Path::new(repo_path),
             &context,
@@ -457,13 +445,11 @@ impl<'a> PullRequestProviderService<'a> {
         task_id: &str,
         pull_request: ResolvedPullRequest,
     ) -> Result<PullRequestRecord> {
-        self.service
-            .task_store
-            .set_direct_merge_record(Path::new(repo_path), task_id, None)?;
-        self.service.task_store.set_pull_request(
+        self.service.task_store.set_delivery_metadata(
             Path::new(repo_path),
             task_id,
             Some(pull_request.record.clone()),
+            None,
         )?;
 
         Ok(pull_request.record)
@@ -555,14 +541,22 @@ mod tests {
 
     #[test]
     fn provider_status_reports_missing_repository_coordinates() {
-        let status =
-            GithubPullRequestProviderPort.ui_status(Path::new("/tmp/repo"), &RepoConfig::default());
+        let mut repo_config = RepoConfig::default();
+        repo_config.git.providers.insert(
+            "github".to_string(),
+            host_infra_system::GitProviderConfig {
+                enabled: true,
+                repository: None,
+                auto_detected: false,
+            },
+        );
+        let status = GithubPullRequestProviderPort.ui_status(Path::new("/tmp/repo"), &repo_config);
 
         assert!(!status.available);
         assert_eq!(status.provider_id, "github");
         assert_eq!(
             status.reason.as_deref(),
-            Some("GitHub provider is not enabled for this repository.")
+            Some("GitHub repository coordinates are missing.")
         );
     }
 
@@ -586,6 +580,7 @@ mod tests {
 
         let policy = PullRequestProviderService::new(&service).sync_policy(repo_path.as_str())?;
         assert_eq!(policy.provider_id, "github");
+        assert!(!policy.available);
         assert!(policy.context.is_none());
 
         let _ = fs::remove_dir_all(root);
@@ -647,6 +642,62 @@ mod tests {
                 .map(|pull_request| pull_request.number),
             Some(17)
         );
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn store_linked_pull_request_metadata_is_atomic_in_fake_store() -> Result<()> {
+        let root = unique_temp_path("provider-store-link-atomic");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let (service, task_state) = build_service(&root)?;
+        let repo_path = repo.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
+
+        {
+            let mut state = task_state.lock().expect("task state lock poisoned");
+            state.set_delivery_metadata_error = Some("boom".to_string());
+            state.direct_merge_records.insert(
+                "task-1".to_string(),
+                host_domain::DirectMergeRecord {
+                    method: host_domain::GitMergeMethod::MergeCommit,
+                    source_branch: "odt/task-1".to_string(),
+                    target_branch: host_domain::GitTargetBranch {
+                        remote: Some("origin".to_string()),
+                        branch: "main".to_string(),
+                    },
+                    merged_at: "2026-03-11T10:00:00Z".to_string(),
+                },
+            );
+        }
+
+        let error = PullRequestProviderService::new(&service)
+            .store_linked_pull_request_metadata(
+                repo_path.as_str(),
+                "task-1",
+                ResolvedPullRequest {
+                    record: PullRequestRecord {
+                        provider_id: "github".to_string(),
+                        number: 17,
+                        url: "https://github.com/openai/openducktor/pull/17".to_string(),
+                        state: "open".to_string(),
+                        created_at: "2026-03-11T10:00:00Z".to_string(),
+                        updated_at: "2026-03-11T10:10:00Z".to_string(),
+                        last_synced_at: None,
+                        merged_at: None,
+                        closed_at: None,
+                    },
+                    source_branch: "odt/task-1".to_string(),
+                },
+            )
+            .expect_err("metadata update should fail");
+        assert_eq!(error.to_string(), "boom");
+
+        let state = task_state.lock().expect("task state lock poisoned");
+        assert!(!state.pull_requests.contains_key("task-1"));
+        assert!(state.direct_merge_records.contains_key("task-1"));
 
         let _ = fs::remove_dir_all(root);
         Ok(())

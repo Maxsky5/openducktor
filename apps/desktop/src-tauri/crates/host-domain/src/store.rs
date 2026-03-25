@@ -60,6 +60,14 @@ pub trait TaskStore: Send + Sync {
         roles: &[&str],
     ) -> Result<()>;
     fn clear_qa_reports(&self, repo_path: &Path, task_id: &str) -> Result<()>;
+    /// Persist pull request and direct merge metadata together in one store update.
+    fn set_delivery_metadata(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        pull_request: Option<PullRequestRecord>,
+        direct_merge: Option<DirectMergeRecord>,
+    ) -> Result<()>;
     fn set_pull_request(
         &self,
         repo_path: &Path,

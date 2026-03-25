@@ -50,7 +50,7 @@ impl<'a> PullRequestSyncService<'a> {
             )?;
 
             if updated.record.state == "merged" && task.status != TaskStatus::Closed {
-                let _ = self.service.task_transition(
+                self.service.task_transition(
                     repo_path.as_str(),
                     task.id.as_str(),
                     TaskStatus::Closed,

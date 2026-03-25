@@ -36,7 +36,7 @@ pub(super) fn is_syncable_pull_request_state(state: &str) -> bool {
 }
 
 pub(super) fn is_editable_pull_request_state(state: &str) -> bool {
-    matches!(state, "open" | "draft")
+    is_syncable_pull_request_state(state)
 }
 
 pub(super) fn ensure_clean_builder_worktree(approval: &TaskApprovalContext) -> Result<()> {
@@ -44,17 +44,17 @@ pub(super) fn ensure_clean_builder_worktree(approval: &TaskApprovalContext) -> R
         return Ok(());
     }
 
-    let file_label = if approval.uncommitted_file_count == 1 {
-        "1 uncommitted file"
+    let (file_label, pronoun) = if approval.uncommitted_file_count == 1 {
+        ("1 uncommitted file".to_string(), "it")
     } else {
-        return Err(anyhow!(
-            "Human approval is blocked because the builder worktree has {} uncommitted files. Commit or discard them before merging or opening a pull request.",
-            approval.uncommitted_file_count
-        ));
+        (
+            format!("{} uncommitted files", approval.uncommitted_file_count),
+            "them",
+        )
     };
 
     Err(anyhow!(
-        "Human approval is blocked because the builder worktree has {file_label}. Commit or discard it before merging or opening a pull request."
+        "Human approval is blocked because the builder worktree has {file_label}. Commit or discard {pronoun} before merging or opening a pull request."
     ))
 }
 
@@ -165,5 +165,118 @@ pub(super) fn direct_merge_record(
         source_branch: approval.source_branch.clone(),
         target_branch: approval.target_branch.clone(),
         merged_at: now_rfc3339(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ensure_clean_builder_worktree, ensure_human_approval_status,
+        ensure_pull_request_management_status, normalize_approval_target_branch,
+        normalize_recorded_target_branch,
+    };
+    use host_domain::{GitTargetBranch, TaskApprovalContext, TaskStatus};
+
+    fn approval_context() -> TaskApprovalContext {
+        TaskApprovalContext {
+            task_id: "task-1".to_string(),
+            task_status: "human_review".to_string(),
+            source_branch: "odt/task-1".to_string(),
+            target_branch: GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            publish_target: None,
+            default_merge_method: host_domain::GitMergeMethod::MergeCommit,
+            has_uncommitted_changes: false,
+            uncommitted_file_count: 0,
+            suggested_squash_commit_message: None,
+            pull_request: None,
+            direct_merge: None,
+            working_directory: Some("/repo/worktree".to_string()),
+            providers: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn human_approval_status_requires_review_state() {
+        assert!(ensure_human_approval_status(&TaskStatus::AiReview).is_ok());
+        assert!(ensure_human_approval_status(&TaskStatus::HumanReview).is_ok());
+        assert!(ensure_human_approval_status(&TaskStatus::InProgress).is_err());
+    }
+
+    #[test]
+    fn pull_request_management_status_requires_active_review_state() {
+        assert!(ensure_pull_request_management_status(&TaskStatus::InProgress).is_ok());
+        assert!(ensure_pull_request_management_status(&TaskStatus::AiReview).is_ok());
+        assert!(ensure_pull_request_management_status(&TaskStatus::HumanReview).is_ok());
+        assert!(ensure_pull_request_management_status(&TaskStatus::Closed).is_err());
+    }
+
+    #[test]
+    fn normalize_target_branch_rejects_empty_branch_names() {
+        let error = normalize_approval_target_branch(&host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "   ".to_string(),
+        })
+        .expect_err("empty branch should be rejected");
+        assert_eq!(
+            error.to_string(),
+            "Human approval requires a target branch."
+        );
+    }
+
+    #[test]
+    fn normalize_target_branch_rejects_upstream_placeholder() {
+        let error = normalize_recorded_target_branch(&GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "@{upstream}".to_string(),
+        })
+        .expect_err("upstream placeholder should be rejected");
+        assert!(error.to_string().contains("explicit target branch"));
+    }
+
+    #[test]
+    fn normalize_target_branch_preserves_remote_and_trimmed_branch() {
+        let normalized = normalize_approval_target_branch(&host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: " main ".to_string(),
+        })
+        .expect("branch should normalize");
+        assert_eq!(
+            normalized,
+            GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn clean_builder_worktree_allows_clean_state() {
+        assert!(ensure_clean_builder_worktree(&approval_context()).is_ok());
+    }
+
+    #[test]
+    fn clean_builder_worktree_reports_single_file_changes() {
+        let mut approval = approval_context();
+        approval.has_uncommitted_changes = true;
+        approval.uncommitted_file_count = 1;
+
+        let error = ensure_clean_builder_worktree(&approval).expect_err("single uncommitted file");
+        assert!(error.to_string().contains("1 uncommitted file"));
+        assert!(error.to_string().contains("discard it"));
+    }
+
+    #[test]
+    fn clean_builder_worktree_reports_multiple_file_changes() {
+        let mut approval = approval_context();
+        approval.has_uncommitted_changes = true;
+        approval.uncommitted_file_count = 3;
+
+        let error =
+            ensure_clean_builder_worktree(&approval).expect_err("multiple uncommitted files");
+        assert!(error.to_string().contains("3 uncommitted files"));
+        assert!(error.to_string().contains("discard them"));
     }
 }

@@ -186,19 +186,8 @@ impl<'a> ImplementationResetService<'a> {
             })?;
         self.service
             .task_store
-            .set_pull_request(repo_dir, task_id, None)
-            .with_context(|| format!("Failed to clear linked pull request for {task_id}"))
-            .map_err(|error| {
-                with_reset_cleanup_progress(
-                    error,
-                    &cleanup_progress.removed_worktrees,
-                    &cleanup_progress.deleted_branches,
-                )
-            })?;
-        self.service
-            .task_store
-            .set_direct_merge_record(repo_dir, task_id, None)
-            .with_context(|| format!("Failed to clear direct merge metadata for {task_id}"))
+            .set_delivery_metadata(repo_dir, task_id, None, None)
+            .with_context(|| format!("Failed to clear delivery metadata for {task_id}"))
             .map_err(|error| {
                 with_reset_cleanup_progress(
                     error,
