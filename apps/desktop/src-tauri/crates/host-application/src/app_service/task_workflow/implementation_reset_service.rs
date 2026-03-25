@@ -83,7 +83,8 @@ impl<'a> ImplementationResetService<'a> {
             task_id,
             branch_prefix.as_str(),
             &sessions,
-            true,
+            "reset implementation",
+            false,
         )?;
 
         Ok(ImplementationResetPlan {

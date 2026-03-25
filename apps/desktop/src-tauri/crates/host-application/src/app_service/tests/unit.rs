@@ -1003,6 +1003,59 @@ fn task_delete_rejects_live_build_session_status_with_repo_runtime_without_run()
 }
 
 #[test]
+fn task_delete_rejects_live_qa_session_status_with_qa_specific_message() -> Result<()> {
+    let repo_path = unique_temp_path("task-delete-live-qa-shared-runtime-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let task = make_task("task-1", "task", TaskStatus::Open);
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            ..Default::default()
+        },
+    )?;
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "qa-session".to_string(),
+        external_session_id: Some("external-qa-session".to_string()),
+        role: "qa".to_string(),
+        scenario: "qa_review".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "opencode".to_string(),
+        working_directory: repo_path.to_string_lossy().to_string(),
+        selected_model: None,
+    }];
+    let (port, server_handle) =
+        spawn_opencode_session_status_server(r#"{"external-qa-session":{"type":"busy"}}"#)?;
+    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
+
+    let error = service
+        .task_delete(&repo_path.to_string_lossy(), "task-1", false)
+        .expect_err("live QA session should block delete");
+    let error_text = error.to_string();
+    assert!(error_text.contains("Cannot delete tasks with active QA work in progress"));
+    assert!(error_text.contains("task-1 (qa session)"));
+    server_handle
+        .join()
+        .expect("status server thread should finish");
+    Ok(())
+}
+
+#[test]
 fn task_delete_rejects_live_build_session_status_with_stale_run_route_and_repo_runtime_fallback(
 ) -> Result<()> {
     let repo_path = unique_temp_path("delete-task-live-shared-runtime-fallback-repo");

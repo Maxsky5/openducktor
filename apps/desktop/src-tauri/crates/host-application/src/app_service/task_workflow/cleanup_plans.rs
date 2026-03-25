@@ -5,7 +5,7 @@ use host_domain::{
 };
 use std::collections::HashSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct WorktreeCleanupPlan {
@@ -29,6 +29,7 @@ impl WorktreeCleanupPlan {
                 target_task.id.as_str(),
                 branch_prefix,
                 &sessions,
+                "delete",
                 true,
             )?;
             for worktree_path in task_worktree_plan.paths {
@@ -48,7 +49,8 @@ impl WorktreeCleanupPlan {
         task_id: &str,
         branch_prefix: &str,
         sessions: &[AgentSessionDocument],
-        require_existing_path: bool,
+        operation_label: &'static str,
+        skip_detached_head: bool,
     ) -> Result<Self> {
         let mut paths = Vec::new();
         let mut seen_worktree_keys = HashSet::new();
@@ -64,7 +66,8 @@ impl WorktreeCleanupPlan {
             branch_prefix,
             normalized_repo: normalized_repo.as_path(),
             managed_worktree_base: managed_worktree_base.as_path(),
-            require_existing_path,
+            operation_label,
+            skip_detached_head,
         };
 
         for session in sessions {
@@ -100,7 +103,7 @@ impl BranchCleanupPlan {
         branch_prefix: &str,
         task_ids: &[String],
     ) -> Result<Self> {
-        let names = service
+        let mut names = service
             .git_port
             .get_branches(repo_path)?
             .into_iter()
@@ -114,6 +117,7 @@ impl BranchCleanupPlan {
             .collect::<HashSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
+        names.sort_unstable();
         Ok(Self { names })
     }
 
@@ -123,9 +127,10 @@ impl BranchCleanupPlan {
         branch_prefix: &str,
         task_id: &str,
     ) -> Result<Self> {
-        let names = collect_related_task_branches(service, repo_path, branch_prefix, task_id)?
+        let mut names = collect_related_task_branches(service, repo_path, branch_prefix, task_id)?
             .into_iter()
             .collect::<Vec<_>>();
+        names.sort_unstable();
         Ok(Self { names })
     }
 
@@ -262,14 +267,7 @@ pub(crate) fn normalize_path_for_comparison(path: &str) -> PathBuf {
         return PathBuf::new();
     }
 
-    fs::canonicalize(trimmed).unwrap_or_else(|_| {
-        let without_trailing_separators = trimmed.trim_end_matches(['/', '\\']);
-        if without_trailing_separators.is_empty() {
-            PathBuf::from(trimmed)
-        } else {
-            PathBuf::from(without_trailing_separators)
-        }
-    })
+    fs::canonicalize(trimmed).unwrap_or_else(|_| lexical_normalize_path(trimmed))
 }
 
 pub(crate) fn normalize_path_key(path: &str) -> String {
@@ -283,7 +281,8 @@ struct ManagedTaskWorktreeScope<'a> {
     branch_prefix: &'a str,
     normalized_repo: &'a Path,
     managed_worktree_base: &'a Path,
-    require_existing_path: bool,
+    operation_label: &'static str,
+    skip_detached_head: bool,
 }
 
 fn is_managed_task_worktree_session(
@@ -303,7 +302,7 @@ fn is_managed_task_worktree_session(
         return Ok(false);
     }
 
-    if scope.require_existing_path && !Path::new(working_directory).exists() {
+    if !Path::new(working_directory).exists() {
         return Ok(false);
     }
 
@@ -317,19 +316,42 @@ fn is_managed_task_worktree_session(
         .name
         .as_deref()
         .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            anyhow!(
-                "Cannot reset implementation for task {} because worktree {working_directory} is detached or has no active branch.",
-                scope.task_id
-            )
-        })?;
+        .filter(|value| !value.is_empty());
+    let Some(branch_name) = branch_name else {
+        if scope.skip_detached_head {
+            return Ok(false);
+        }
+        return Err(anyhow!(
+            "Cannot {} task {} because worktree {working_directory} is detached or has no active branch.",
+            scope.operation_label,
+            scope.task_id
+        ));
+    };
 
     Ok(is_related_task_branch(
         branch_name,
         scope.branch_prefix,
         scope.task_id,
     ))
+}
+
+fn lexical_normalize_path(path: &str) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in PathBuf::from(path).components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+
+    if normalized.as_os_str().is_empty() {
+        PathBuf::from(path)
+    } else {
+        normalized
+    }
 }
 
 fn is_related_task_branch(branch_name: &str, branch_prefix: &str, task_id: &str) -> bool {
@@ -407,4 +429,16 @@ fn to_active_related_worktree(
     }
 
     Some(format!("{branch_name} ({worktree_path})"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_path_for_comparison;
+    use std::path::PathBuf;
+
+    #[test]
+    fn normalize_path_for_comparison_lexically_collapses_parent_dirs_when_missing() {
+        let normalized = normalize_path_for_comparison("/tmp/openducktor-base/../outside");
+        assert_eq!(normalized, PathBuf::from("/tmp/outside"));
+    }
 }

@@ -1015,6 +1015,76 @@ fn task_delete_reports_partial_cleanup_progress_when_store_delete_fails() -> Res
 }
 
 #[test]
+fn task_delete_skips_detached_managed_worktree() -> Result<()> {
+    let repo_path = unique_temp_path("task-delete-detached-worktree-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+    let worktree_base = repo_path.join("worktrees");
+    let detached_worktree = worktree_base.join("task-1");
+    fs::create_dir_all(&detached_worktree)?;
+
+    let task = make_task("task-1", "task", TaskStatus::Open);
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![task],
+        vec![GitBranch {
+            name: "odt/task-1".to_string(),
+            is_current: false,
+            is_remote: false,
+        }],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        RepoConfig {
+            branch_prefix: "odt".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            ..Default::default()
+        },
+    )?;
+    git_state
+        .lock()
+        .expect("git state lock poisoned")
+        .current_branches_by_path
+        .insert(
+            detached_worktree.to_string_lossy().to_string(),
+            GitCurrentBranch {
+                name: None,
+                detached: true,
+                revision: Some("deadbeef".to_string()),
+            },
+        );
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "build-session".to_string(),
+        external_session_id: None,
+        role: "build".to_string(),
+        scenario: "build_implementation_start".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "opencode".to_string(),
+        working_directory: detached_worktree.to_string_lossy().to_string(),
+        selected_model: None,
+    }];
+
+    service.task_delete(&repo_path.to_string_lossy(), "task-1", false)?;
+
+    let git_calls = &git_state.lock().expect("git state lock poisoned").calls;
+    assert!(!git_calls.iter().any(|call| matches!(
+        call,
+        GitCall::RemoveWorktree { worktree_path, .. }
+            if worktree_path == &detached_worktree.to_string_lossy()
+    )));
+
+    Ok(())
+}
+
+#[test]
 fn build_blocked_requires_non_empty_reason() {
     let repo_path = "/tmp/odt-repo-build";
     let (service, _task_state, _git_state) = build_service_with_git_state(

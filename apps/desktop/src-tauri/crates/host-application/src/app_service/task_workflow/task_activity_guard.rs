@@ -21,7 +21,7 @@ impl<'a> TaskActivityGuard<'a> {
         repo_path: &str,
         task_ids: &[&str],
     ) -> Result<()> {
-        let mut active_task_ids = HashSet::new();
+        let mut active_tasks = Vec::new();
         for task_id in task_ids {
             let sessions = self.service.agent_sessions_list(repo_path, task_id)?;
             let evidence = self
@@ -30,17 +30,35 @@ impl<'a> TaskActivityGuard<'a> {
                     format!("Failed checking active task work before deleting {task_id}")
                 })?;
             if evidence.has_any_activity() {
-                active_task_ids.insert((*task_id).to_string());
+                active_tasks.push(((*task_id).to_string(), evidence));
             }
         }
 
-        if active_task_ids.is_empty() {
+        if active_tasks.is_empty() {
             return Ok(());
         }
 
-        let active_summary = active_task_ids.into_iter().collect::<Vec<_>>().join(", ");
+        active_tasks.sort_by(|left, right| left.0.cmp(&right.0));
+        let qa_only = active_tasks.iter().all(|(_, evidence)| {
+            !evidence.has_active_run
+                && evidence
+                    .active_session_roles
+                    .iter()
+                    .all(|role| role == "qa")
+        });
+        let active_summary = active_tasks
+            .iter()
+            .map(|(task_id, evidence)| format!("{task_id} ({})", evidence.delete_blocker_summary()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        if qa_only {
+            return Err(anyhow!(
+                "Cannot delete tasks with active QA work in progress. Stop the active QA session(s) first: {active_summary}"
+            ));
+        }
+
         Err(anyhow!(
-            "Cannot delete tasks with active builder work in progress. Stop the active run(s) first: {active_summary}"
+            "Cannot delete tasks with active builder work in progress. Stop the active run(s) or session(s) first: {active_summary}"
         ))
     }
 
@@ -79,41 +97,49 @@ impl<'a> TaskActivityGuard<'a> {
         sessions: &[AgentSessionDocument],
     ) -> Result<TaskActiveWorkEvidence> {
         let normalized_repo = normalize_path_for_comparison(repo_path);
-        let runs = self
+        let candidate_runs = self
             .service
             .runs
             .lock()
-            .map_err(|_| anyhow!("Run state lock poisoned"))?;
+            .map_err(|_| anyhow!("Run state lock poisoned"))?
+            .values()
+            .filter(|run| {
+                normalize_path_for_comparison(run.repo_path.as_str()) == normalized_repo
+                    && run.task_id == task_id
+                    && matches!(
+                        run.summary.state,
+                        RunState::Starting
+                            | RunState::Running
+                            | RunState::Blocked
+                            | RunState::AwaitingDoneConfirmation
+                    )
+            })
+            .map(|run| RunProbeCandidate {
+                runtime_kind: run.summary.runtime_kind,
+                runtime_route: run.summary.runtime_route.clone(),
+                worktree_path: run.worktree_path.clone(),
+            })
+            .collect::<Vec<_>>();
         let mut runtime_statuses_by_directory = HashMap::<String, OpencodeSessionStatusMap>::new();
         let mut runtime_routes_by_worktree = HashMap::new();
         let mut has_active_run = false;
-        for run in runs.values() {
-            if normalize_path_for_comparison(run.repo_path.as_str()) != normalized_repo
-                || run.task_id != task_id
-                || !matches!(
-                    run.summary.state,
-                    RunState::Starting
-                        | RunState::Running
-                        | RunState::Blocked
-                        | RunState::AwaitingDoneConfirmation
-                )
-            {
-                continue;
-            }
-
+        for run_candidate in &candidate_runs {
             runtime_routes_by_worktree.insert(
-                normalize_path_key(run.worktree_path.as_str()),
-                run.summary.runtime_route.clone(),
+                normalize_path_key(run_candidate.worktree_path.as_str()),
+                run_candidate.runtime_route.clone(),
             );
 
-            if !is_live_build_run_for_task(run, sessions, &mut runtime_statuses_by_directory)? {
+            if !is_live_build_run_for_task(
+                run_candidate,
+                sessions,
+                &mut runtime_statuses_by_directory,
+            )? {
                 continue;
             }
 
             has_active_run = true;
             break;
         }
-        drop(runs);
         let repo_runtime_routes_by_kind = self.collect_repo_runtime_routes_by_kind(repo_path)?;
 
         let mut active_roles = HashSet::new();
@@ -229,6 +255,19 @@ impl TaskActiveWorkEvidence {
     fn has_any_activity(&self) -> bool {
         self.has_active_run || !self.active_session_roles.is_empty()
     }
+
+    fn delete_blocker_summary(&self) -> String {
+        let mut blockers = Vec::new();
+        if self.has_active_run {
+            blockers.push("builder run".to_string());
+        }
+
+        for role in &self.active_session_roles {
+            blockers.push(format!("{role} session"));
+        }
+
+        blockers.join(", ")
+    }
 }
 
 fn parse_runtime_kind(value: &str) -> Option<AgentRuntimeKind> {
@@ -258,15 +297,15 @@ fn load_session_statuses(
 }
 
 fn is_live_build_run_for_task(
-    run: &crate::app_service::RunProcess,
+    run_summary: &RunProbeCandidate,
     sessions: &[AgentSessionDocument],
     runtime_statuses_by_directory: &mut HashMap<String, OpencodeSessionStatusMap>,
 ) -> Result<bool> {
-    let normalized_worktree = normalize_path_for_comparison(run.worktree_path.as_str());
+    let normalized_worktree = normalize_path_for_comparison(run_summary.worktree_path.as_str());
     let external_session_ids = sessions
         .iter()
         .filter(|session| session.role.trim() == "build")
-        .filter(|session| session.runtime_kind.trim() == run.summary.runtime_kind.as_str())
+        .filter(|session| session.runtime_kind.trim() == run_summary.runtime_kind.as_str())
         .filter(|session| {
             normalize_path_for_comparison(session.working_directory.as_str()) == normalized_worktree
         })
@@ -284,10 +323,12 @@ fn is_live_build_run_for_task(
         return Ok(true);
     }
 
-    let directory_key = normalize_path_key(run.worktree_path.as_str());
+    let directory_key = normalize_path_key(run_summary.worktree_path.as_str());
     if !runtime_statuses_by_directory.contains_key(directory_key.as_str()) {
-        let statuses =
-            load_session_statuses(&run.summary.runtime_route, run.worktree_path.as_str())?;
+        let statuses = load_session_statuses(
+            &run_summary.runtime_route,
+            run_summary.worktree_path.as_str(),
+        )?;
         if statuses.is_empty() {
             return Ok(false);
         }
@@ -299,10 +340,17 @@ fn is_live_build_run_for_task(
         .ok_or_else(|| {
             anyhow!(
                 "Missing cached OpenCode session statuses for {}",
-                run.worktree_path
+                run_summary.worktree_path
             )
         })?;
     Ok(external_session_ids
         .iter()
         .any(|external_session_id| has_live_opencode_session_status(statuses, external_session_id)))
+}
+
+#[derive(Clone)]
+struct RunProbeCandidate {
+    runtime_kind: AgentRuntimeKind,
+    runtime_route: RuntimeRoute,
+    worktree_path: String,
 }
