@@ -153,6 +153,18 @@ impl TaskStore for CommandTaskStore {
         ))
     }
 
+    fn set_delivery_metadata(
+        &self,
+        _repo_path: &Path,
+        _task_id: &str,
+        _pull_request: Option<PullRequestRecord>,
+        _direct_merge: Option<DirectMergeRecord>,
+    ) -> anyhow::Result<()> {
+        Err(anyhow!(
+            "unexpected task store set_delivery_metadata call in git command tests"
+        ))
+    }
+
     fn set_pull_request(
         &self,
         _repo_path: &Path,

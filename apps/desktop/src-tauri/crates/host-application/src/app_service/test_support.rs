@@ -104,6 +104,7 @@ pub(crate) struct TaskStoreState {
     pub(crate) cleared_session_roles: Vec<(String, Vec<String>)>,
     pub(crate) clear_agent_sessions_error: Option<String>,
     pub(crate) cleared_qa_reports: Vec<String>,
+    pub(crate) set_delivery_metadata_error: Option<String>,
     pub(crate) pull_requests: HashMap<String, PullRequestRecord>,
     pub(crate) direct_merge_records: HashMap<String, DirectMergeRecord>,
 }
@@ -376,6 +377,43 @@ impl TaskStore for FakeTaskStore {
         state.latest_qa_report = None;
         if let Some(task) = state.tasks.iter_mut().find(|task| task.id == task_id) {
             task.document_summary.qa_report = TaskDocumentSummary::default().qa_report;
+        }
+        Ok(())
+    }
+
+    fn set_delivery_metadata(
+        &self,
+        _repo_path: &Path,
+        task_id: &str,
+        pull_request: Option<PullRequestRecord>,
+        direct_merge: Option<DirectMergeRecord>,
+    ) -> Result<()> {
+        let mut state = self.state.lock().expect("task store lock poisoned");
+        if let Some(message) = state.set_delivery_metadata_error.as_ref() {
+            return Err(anyhow!(message.clone()));
+        }
+        match pull_request.clone() {
+            Some(pull_request) => {
+                state
+                    .pull_requests
+                    .insert(task_id.to_string(), pull_request);
+            }
+            None => {
+                state.pull_requests.remove(task_id);
+            }
+        }
+        match direct_merge {
+            Some(direct_merge) => {
+                state
+                    .direct_merge_records
+                    .insert(task_id.to_string(), direct_merge);
+            }
+            None => {
+                state.direct_merge_records.remove(task_id);
+            }
+        }
+        if let Some(task) = state.tasks.iter_mut().find(|task| task.id == task_id) {
+            task.pull_request = pull_request;
         }
         Ok(())
     }
@@ -1002,6 +1040,7 @@ pub(crate) fn build_service_with_git_state_enforced(
         cleared_session_roles: Vec::new(),
         clear_agent_sessions_error: None,
         cleared_qa_reports: Vec::new(),
+        set_delivery_metadata_error: None,
         pull_requests: HashMap::new(),
         direct_merge_records: HashMap::new(),
     }));
@@ -1087,6 +1126,7 @@ pub(crate) fn build_service_with_git_state(
         cleared_session_roles: Vec::new(),
         clear_agent_sessions_error: None,
         cleared_qa_reports: Vec::new(),
+        set_delivery_metadata_error: None,
         pull_requests: HashMap::new(),
         direct_merge_records: HashMap::new(),
     }));
@@ -1559,6 +1599,7 @@ pub(crate) fn build_service_with_store(
         cleared_session_roles: Vec::new(),
         clear_agent_sessions_error: None,
         cleared_qa_reports: Vec::new(),
+        set_delivery_metadata_error: None,
         pull_requests: HashMap::new(),
         direct_merge_records: HashMap::new(),
     }));

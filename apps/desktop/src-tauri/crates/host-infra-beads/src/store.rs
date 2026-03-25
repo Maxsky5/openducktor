@@ -186,6 +186,16 @@ impl TaskStore for BeadsTaskStore {
         self.clear_qa_reports_impl(repo_path, task_id)
     }
 
+    fn set_delivery_metadata(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        pull_request: Option<PullRequestRecord>,
+        direct_merge: Option<DirectMergeRecord>,
+    ) -> Result<()> {
+        self.set_delivery_metadata_impl(repo_path, task_id, pull_request, direct_merge)
+    }
+
     fn set_pull_request(
         &self,
         repo_path: &Path,
