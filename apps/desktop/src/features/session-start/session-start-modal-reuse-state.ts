@@ -15,10 +15,10 @@ import {
   useState,
 } from "react";
 import { DEFAULT_RUNTIME_KIND, resolveRuntimeKindSelection } from "@/lib/agent-runtime";
-import type { SessionStartExistingSessionOption } from "./session-start-types";
+import type { SessionStartModalIntent } from "./session-start-modal-types";
 import { resolveScenarioStartMode } from "./session-start-mode";
 import { coerceVisibleSelectionToCatalog, isSameSelection } from "./session-start-selection";
-import type { SessionStartModalIntent } from "./use-session-start-modal-state";
+import type { SessionStartExistingSessionOption } from "./session-start-types";
 
 const resolveSourceSelection = (
   options: SessionStartExistingSessionOption[],
@@ -91,14 +91,13 @@ const buildReuseSelectionDraft = ({
 
   return {
     runtimeKind,
-    selection:
-      coerceVisibleSelectionToCatalog(catalog, {
-        ...sourceSelection,
-        runtimeKind,
-      }) ?? {
-        ...sourceSelection,
-        runtimeKind,
-      },
+    selection: coerceVisibleSelectionToCatalog(catalog, {
+      ...sourceSelection,
+      runtimeKind,
+    }) ?? {
+      ...sourceSelection,
+      runtimeKind,
+    },
   };
 };
 
