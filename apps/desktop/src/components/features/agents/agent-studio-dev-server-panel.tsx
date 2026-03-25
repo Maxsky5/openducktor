@@ -14,21 +14,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type {
+  AgentStudioDevServerLogBuffer,
+  AgentStudioDevServerLogEntry,
+} from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import { getDevServerLogEntryAt } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import { cn } from "@/lib/utils";
 
 export type AgentStudioDevServerPanelMode = "loading" | "empty" | "disabled" | "stopped" | "active";
-export type AgentStudioDevServerLogEntry = {
-  id: string;
-  timestamp: string;
-  stream: DevServerScriptState["bufferedLogLines"][number]["stream"];
-  text: string;
-};
-
-export type AgentStudioDevServerLogBuffer = {
-  entries: readonly AgentStudioDevServerLogEntry[];
-  head: number;
-  size: number;
-};
 
 export type AgentStudioDevServerPanelModel = {
   mode: AgentStudioDevServerPanelMode;
@@ -129,6 +122,11 @@ const getEmptyLogMessage = (script: DevServerScriptState): string => {
 
   return "Logs will appear here once this dev server writes output.";
 };
+
+const buildRenderedLogLine = (
+  buffer: AgentStudioDevServerLogBuffer,
+  offset: number,
+): AgentStudioDevServerLogEntry | null => getDevServerLogEntryAt(buffer, offset);
 
 export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel({
   model,
@@ -418,11 +416,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
                     {selectedScriptLogCount > 0 && selectedScriptLogBuffer ? (
                       <div className="space-y-1 px-4 py-4 font-mono text-[11px] leading-5">
                         {Array.from({ length: selectedScriptLogBuffer.size }, (_, offset) => {
-                          const logLine =
-                            selectedScriptLogBuffer.entries[
-                              (selectedScriptLogBuffer.head + offset) %
-                                selectedScriptLogBuffer.entries.length
-                            ];
+                          const logLine = buildRenderedLogLine(selectedScriptLogBuffer, offset);
 
                           if (!logLine) {
                             return null;

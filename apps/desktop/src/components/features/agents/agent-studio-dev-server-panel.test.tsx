@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import type { DevServerScriptState } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { AgentStudioDevServerLogBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import {
   AgentStudioDevServerPanel,
-  type AgentStudioDevServerLogBuffer,
   type AgentStudioDevServerPanelModel,
 } from "./agent-studio-dev-server-panel";
 

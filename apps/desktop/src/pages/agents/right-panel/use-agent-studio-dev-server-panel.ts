@@ -1,15 +1,21 @@
 import type {
   DevServerEvent,
   DevServerGroupState,
-  DevServerLogLine,
   DevServerScriptState,
 } from "@openducktor/contracts";
 import { devServerEventSchema } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { DevServerLogBufferStore } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import {
+  appendDevServerLogLine,
+  createDevServerLogBufferStore,
+  getDevServerLogBuffer,
+  replaceDevServerLogBuffer,
+  syncDevServerLogBufferStore,
+  trimDevServerLogLines,
+} from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import type {
-  AgentStudioDevServerLogBuffer,
-  AgentStudioDevServerLogEntry,
   AgentStudioDevServerPanelMode,
   AgentStudioDevServerPanelModel,
 } from "@/components/features/agents/agent-studio-dev-server-panel";
@@ -17,8 +23,6 @@ import { errorMessage } from "@/lib/errors";
 import { hostClient, subscribeDevServerEvents } from "@/lib/host-client";
 import { devServerGroupStateQueryOptions, devServerQueryKeys } from "@/state/queries/dev-servers";
 import type { RepoSettingsInput } from "@/types/state-slices";
-
-const MAX_BUFFERED_LOG_LINES = 2_000;
 
 type UseAgentStudioDevServerPanelArgs = {
   repoPath: string | null;
@@ -28,127 +32,8 @@ type UseAgentStudioDevServerPanelArgs = {
 };
 
 type SelectedScriptMemory = Map<string, string>;
-type ScriptLogBuffer = {
-  entries: AgentStudioDevServerLogEntry[];
-  head: number;
-  size: number;
-  nextSequence: number;
-};
-type ScriptLogBufferStore = Map<string, ScriptLogBuffer>;
 
 const buildTaskMemoryKey = (repoPath: string, taskId: string): string => `${repoPath}::${taskId}`;
-const ESC = String.fromCharCode(27);
-const CSI = String.fromCharCode(155);
-const ANSI_ESCAPE_SEQUENCE = new RegExp(
-  `(?:${ESC}\\[[0-?]*[ -/]*[@-~])|(?:${CSI}[0-?]*[ -/]*[@-~])|(?:\\uFFFD\\[[0-9;]*[A-Za-z])`,
-  "g",
-);
-
-const trimDevServerLogLines = (lines: DevServerLogLine[]): DevServerLogLine[] => {
-  if (lines.length <= MAX_BUFFERED_LOG_LINES) {
-    return lines;
-  }
-  return lines.slice(-MAX_BUFFERED_LOG_LINES);
-};
-
-const sanitizeLogText = (text: string): string => text.replace(ANSI_ESCAPE_SEQUENCE, "");
-
-const createScriptLogBuffer = (): ScriptLogBuffer => ({
-  entries: [],
-  head: 0,
-  size: 0,
-  nextSequence: 0,
-});
-
-const getOrCreateScriptLogBuffer = (
-  buffers: ScriptLogBufferStore,
-  scriptId: string,
-): ScriptLogBuffer => {
-  const existingBuffer = buffers.get(scriptId);
-  if (existingBuffer) {
-    return existingBuffer;
-  }
-
-  const nextBuffer = createScriptLogBuffer();
-  buffers.set(scriptId, nextBuffer);
-  return nextBuffer;
-};
-
-const appendScriptLogLine = (
-  buffers: ScriptLogBufferStore,
-  logLine: DevServerLogLine,
-): ScriptLogBuffer => {
-  const buffer = getOrCreateScriptLogBuffer(buffers, logLine.scriptId);
-  const entry: AgentStudioDevServerLogEntry = {
-    id: `${logLine.scriptId}:${buffer.nextSequence}`,
-    timestamp: logLine.timestamp,
-    stream: logLine.stream,
-    text: sanitizeLogText(logLine.text),
-  };
-  buffer.nextSequence += 1;
-
-  if (buffer.size < MAX_BUFFERED_LOG_LINES) {
-    const insertionIndex = (buffer.head + buffer.size) % MAX_BUFFERED_LOG_LINES;
-    buffer.entries[insertionIndex] = entry;
-    buffer.size += 1;
-    return buffer;
-  }
-
-  buffer.entries[buffer.head] = entry;
-  buffer.head = (buffer.head + 1) % MAX_BUFFERED_LOG_LINES;
-  return buffer;
-};
-
-const resetScriptLogBuffer = (
-  buffers: ScriptLogBufferStore,
-  scriptId: string,
-  logLines: DevServerLogLine[],
-): ScriptLogBuffer => {
-  const buffer = getOrCreateScriptLogBuffer(buffers, scriptId);
-  buffer.entries.length = 0;
-  buffer.head = 0;
-  buffer.size = 0;
-  buffer.nextSequence = 0;
-
-  for (const logLine of trimDevServerLogLines(logLines)) {
-    appendScriptLogLine(buffers, logLine);
-  }
-
-  return buffer;
-};
-
-const syncScriptLogBuffers = (
-  buffers: ScriptLogBufferStore,
-  state: DevServerGroupState | null,
-): void => {
-  if (!state) {
-    buffers.clear();
-    return;
-  }
-
-  const nextScriptIds = new Set(state.scripts.map((script) => script.scriptId));
-  for (const scriptId of buffers.keys()) {
-    if (!nextScriptIds.has(scriptId)) {
-      buffers.delete(scriptId);
-    }
-  }
-
-  for (const script of state.scripts) {
-    resetScriptLogBuffer(buffers, script.scriptId, script.bufferedLogLines);
-  }
-};
-
-const toLogBufferView = (buffer: ScriptLogBuffer | null): AgentStudioDevServerLogBuffer | null => {
-  if (!buffer) {
-    return null;
-  }
-
-  return {
-    entries: buffer.entries,
-    head: buffer.head,
-    size: buffer.size,
-  };
-};
 
 const replaceScript = (
   scripts: DevServerScriptState[],
@@ -250,7 +135,7 @@ export function useAgentStudioDevServerPanel({
 }: UseAgentStudioDevServerPanelArgs): AgentStudioDevServerPanelModel {
   const queryClient = useQueryClient();
   const selectionMemoryRef = useRef<SelectedScriptMemory>(new Map());
-  const logBuffersRef = useRef<ScriptLogBufferStore>(new Map());
+  const logBuffersRef = useRef<DevServerLogBufferStore>(createDevServerLogBufferStore());
   const previousTaskMemoryKeyRef = useRef<string | null | undefined>(undefined);
   const selectedScriptIdRef = useRef<string | null>(null);
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
@@ -320,15 +205,15 @@ export function useAgentStudioDevServerPanel({
       }
 
       if (event.type === "snapshot") {
-        syncScriptLogBuffers(logBuffersRef.current, event.state);
+        syncDevServerLogBufferStore(logBuffersRef.current, event.state);
       } else if (event.type === "script_status_changed") {
-        resetScriptLogBuffer(
+        replaceDevServerLogBuffer(
           logBuffersRef.current,
           event.script.scriptId,
           event.script.bufferedLogLines,
         );
       } else {
-        appendScriptLogLine(logBuffersRef.current, event.logLine);
+        appendDevServerLogLine(logBuffersRef.current, event.logLine);
       }
 
       if (event.type !== "log_line") {
@@ -387,7 +272,7 @@ export function useAgentStudioDevServerPanel({
       stateQuery.data &&
       stateQuery.dataUpdatedAt >= queryActivationState.since
     ) {
-      syncScriptLogBuffers(logBuffersRef.current, stateQuery.data);
+      syncDevServerLogBufferStore(logBuffersRef.current, stateQuery.data);
       setLiveState(stateQuery.data);
       setSelectedScriptLogRevision((revision) => revision + 1);
     }
@@ -406,7 +291,7 @@ export function useAgentStudioDevServerPanel({
         return;
       }
 
-      syncScriptLogBuffers(logBuffersRef.current, nextState);
+      syncDevServerLogBufferStore(logBuffersRef.current, nextState);
       queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), nextState);
       setLiveState(nextState);
       setSelectedScriptLogRevision((revision) => revision + 1);
@@ -608,10 +493,7 @@ export function useAgentStudioDevServerPanel({
   const selectedScript =
     effectiveState?.scripts.find((script) => script.scriptId === effectiveSelectedScriptId) ?? null;
   const selectedScriptLogBuffer = useMemo(
-    () =>
-      effectiveSelectedScriptId
-        ? toLogBufferView(logBuffersRef.current.get(effectiveSelectedScriptId) ?? null)
-        : null,
+    () => getDevServerLogBuffer(logBuffersRef.current, effectiveSelectedScriptId),
     [effectiveSelectedScriptId, selectedScriptLogRevision],
   );
   const isExpanded = isDevServerPanelExpanded(
