@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::process::Child;
 use std::process::{Command, Output, Stdio};
-#[cfg(all(unix, not(test)))]
+#[cfg(unix)]
 use std::sync::Mutex;
 
 #[cfg(windows)]
@@ -16,11 +16,9 @@ const DEFAULT_WINDOWS_EXECUTABLE_EXTENSIONS: [&str; 4] = [".exe", ".cmd", ".bat"
 #[cfg(unix)]
 const LOGIN_SHELL_ENV_MARKER: &[u8] = b"__OPENDUCKTOR_ENV_START__\0";
 
-#[cfg(not(test))]
 #[cfg(unix)]
 static LOGIN_SHELL_PATH_CACHE: Mutex<Option<LoginShellPathCacheEntry>> = Mutex::new(None);
 
-#[cfg(not(test))]
 #[cfg(unix)]
 #[derive(Clone, Eq, PartialEq)]
 struct LoginShellPathCacheKey {
@@ -30,7 +28,6 @@ struct LoginShellPathCacheKey {
     logname: Option<OsString>,
 }
 
-#[cfg(not(test))]
 #[cfg(unix)]
 #[derive(Clone)]
 struct LoginShellPathCacheEntry {
@@ -38,7 +35,6 @@ struct LoginShellPathCacheEntry {
     path: Option<OsString>,
 }
 
-#[cfg(not(test))]
 #[cfg(unix)]
 fn login_shell_path_cache_key() -> LoginShellPathCacheKey {
     LoginShellPathCacheKey {
@@ -404,34 +400,26 @@ fn read_login_shell_path() -> Option<OsString> {
 
 #[cfg(unix)]
 fn login_shell_path() -> Option<OsString> {
-    #[cfg(test)]
-    {
-        read_login_shell_path()
-    }
+    let key = login_shell_path_cache_key();
 
-    #[cfg(not(test))]
-    {
-        let key = login_shell_path_cache_key();
-
-        if let Ok(cache) = LOGIN_SHELL_PATH_CACHE.lock() {
-            if let Some(entry) = cache.as_ref() {
-                if entry.key == key {
-                    return entry.path.clone();
-                }
+    if let Ok(cache) = LOGIN_SHELL_PATH_CACHE.lock() {
+        if let Some(entry) = cache.as_ref() {
+            if entry.key == key {
+                return entry.path.clone();
             }
         }
-
-        let path = read_login_shell_path();
-
-        if let Ok(mut cache) = LOGIN_SHELL_PATH_CACHE.lock() {
-            *cache = Some(LoginShellPathCacheEntry {
-                key,
-                path: path.clone(),
-            });
-        }
-
-        path
     }
+
+    let path = read_login_shell_path();
+
+    if let Ok(mut cache) = LOGIN_SHELL_PATH_CACHE.lock() {
+        *cache = Some(LoginShellPathCacheEntry {
+            key,
+            path: path.clone(),
+        });
+    }
+
+    path
 }
 
 #[cfg(not(unix))]
@@ -875,6 +863,12 @@ mod tests {
             run_command(program, &[], None).expect("login shell path should resolve command");
 
         assert_eq!(output, "login-shell-ok");
+
+        fs::remove_file(&shell).expect("fake shell should be removable after first lookup");
+        let cached_output =
+            run_command(program, &[], None).expect("cached login shell path should be reused");
+
+        assert_eq!(cached_output, "login-shell-ok");
         let _ = fs::remove_dir_all(root);
     }
 

@@ -1,4 +1,4 @@
-import type { BuildContinuationTarget, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentScenario } from "@openducktor/core";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
 import { inferScenario } from "../support/scenario";
@@ -9,16 +9,7 @@ import type {
   StartSessionContext,
   StartSessionExecutionDependencies,
 } from "./start-session.types";
-import { MISSING_BUILD_TARGET_ERROR, STALE_START_ERROR } from "./start-session-constants";
-
-const requireBuildContinuationTarget = (
-  continuationTarget: BuildContinuationTarget | null,
-): BuildContinuationTarget => {
-  if (!continuationTarget) {
-    throw new Error(MISSING_BUILD_TARGET_ERROR);
-  }
-  return continuationTarget;
-};
+import { requireBuildContinuationTarget, STALE_START_ERROR } from "./start-session-constants";
 
 export const resolveRuntimeAndModel = async ({
   ctx,

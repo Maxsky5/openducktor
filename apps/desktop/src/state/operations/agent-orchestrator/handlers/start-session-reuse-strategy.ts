@@ -1,4 +1,4 @@
-import type { AgentSessionRecord, BuildContinuationTarget } from "@openducktor/contracts";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import { appQueryClient } from "@/lib/query-client";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -8,22 +8,17 @@ import type {
   StartSessionCreationInput,
   StartSessionExecutionDependencies,
 } from "./start-session.types";
-import { MISSING_BUILD_TARGET_ERROR, STALE_START_ERROR } from "./start-session-constants";
-import { assertScenarioStartPolicy, resolveReuseValidationError } from "./start-session-policies";
+import { requireBuildContinuationTarget, STALE_START_ERROR } from "./start-session-constants";
+import {
+  assertScenarioStartPolicy,
+  resolveReuseValidationError,
+  resolveStartTask,
+} from "./start-session-policies";
 
 type ReuseStrategyInput = {
   ctx: StartSessionContext;
   input: Extract<StartSessionCreationInput, { startMode: "reuse" }>;
   deps: StartSessionExecutionDependencies;
-};
-
-const requireBuildContinuationTarget = (
-  continuationTarget: BuildContinuationTarget | null,
-): BuildContinuationTarget => {
-  if (!continuationTarget) {
-    throw new Error(MISSING_BUILD_TARGET_ERROR);
-  }
-  return continuationTarget;
 };
 
 const loadPersistedSessionsForRole = async ({
@@ -69,33 +64,19 @@ const createWorkingDirectoryMatchers = ({
   ctx,
   deps,
 }: Pick<ReuseStrategyInput, "ctx" | "deps">) => {
-  let resolvedQaWorkingDirectory: string | null = null;
-  let resolvedBuildWorkingDirectory: string | null = null;
+  let resolvedExpectedWorkingDirectory: string | null = null;
 
-  const resolveExpectedQaWorkingDirectory = async (): Promise<string> => {
-    if (resolvedQaWorkingDirectory !== null) {
-      return resolvedQaWorkingDirectory;
+  const resolveExpectedWorkingDirectory = async (): Promise<string> => {
+    if (resolvedExpectedWorkingDirectory !== null) {
+      return resolvedExpectedWorkingDirectory;
     }
 
-    resolvedQaWorkingDirectory = normalizeWorkingDirectory(
+    resolvedExpectedWorkingDirectory = normalizeWorkingDirectory(
       requireBuildContinuationTarget(
         await deps.runtime.resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId),
       ).workingDirectory,
     );
-    return resolvedQaWorkingDirectory;
-  };
-
-  const resolveExpectedBuildWorkingDirectory = async (): Promise<string> => {
-    if (resolvedBuildWorkingDirectory !== null) {
-      return resolvedBuildWorkingDirectory;
-    }
-
-    resolvedBuildWorkingDirectory = normalizeWorkingDirectory(
-      requireBuildContinuationTarget(
-        await deps.runtime.resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId),
-      ).workingDirectory,
-    );
-    return resolvedBuildWorkingDirectory;
+    return resolvedExpectedWorkingDirectory;
   };
 
   const matchesQaTarget = async (workingDirectory: string): Promise<boolean> => {
@@ -103,7 +84,7 @@ const createWorkingDirectoryMatchers = ({
       return true;
     }
     return (
-      normalizeWorkingDirectory(workingDirectory) === (await resolveExpectedQaWorkingDirectory())
+      normalizeWorkingDirectory(workingDirectory) === (await resolveExpectedWorkingDirectory())
     );
   };
 
@@ -113,8 +94,7 @@ const createWorkingDirectoryMatchers = ({
     }
     try {
       return (
-        normalizeWorkingDirectory(workingDirectory) ===
-        (await resolveExpectedBuildWorkingDirectory())
+        normalizeWorkingDirectory(workingDirectory) === (await resolveExpectedWorkingDirectory())
       );
     } catch {
       return false;
@@ -199,6 +179,9 @@ export const executeReuseStart = async ({
   input,
   deps,
 }: ReuseStrategyInput): Promise<{ kind: "reused"; sessionId: string }> => {
+  if (ctx.role === "qa") {
+    resolveStartTask({ ctx, task: deps.task });
+  }
   const { matchesQaTarget, matchesBuildTarget } = createWorkingDirectoryMatchers({ ctx, deps });
 
   const existingSession = Object.values(deps.session.sessionsRef.current).find(

@@ -12,11 +12,9 @@ import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import { host } from "../../shared/host";
+import { MISSING_BUILD_TARGET_ERROR } from "../handlers/start-session-constants";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { normalizeWorkingDirectory, runningStates, toBaseUrl } from "../support/core";
-
-const MISSING_BUILD_CONTINUATION_TARGET_ERROR =
-  "Builder continuation cannot start until a builder worktree exists";
 
 export type RuntimeInfo = {
   runtimeKind?: RuntimeKind;
@@ -242,7 +240,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
           : null;
       const workingDirectory = targetWorkingDirectory || continuationTarget?.workingDirectory;
       if (!workingDirectory) {
-        throw new Error(MISSING_BUILD_CONTINUATION_TARGET_ERROR);
+        throw new Error(MISSING_BUILD_TARGET_ERROR);
       }
       const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
       const matchingRun = runsRef.current.find(

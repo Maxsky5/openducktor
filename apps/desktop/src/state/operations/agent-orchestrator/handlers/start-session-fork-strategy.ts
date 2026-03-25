@@ -55,13 +55,15 @@ export const executeForkStart = async ({
     startMode: input.startMode,
   });
 
+  const runtimeKind =
+    sourceSession.runtimeKind ??
+    resolved.runtime.runtimeKind ??
+    selectedModel?.runtimeKind ??
+    DEFAULT_RUNTIME_KIND;
+
   const summary = await deps.runtime.adapter.forkSession({
     repoPath: ctx.repoPath,
-    runtimeKind:
-      sourceSession.runtimeKind ??
-      resolved.runtime.runtimeKind ??
-      selectedModel?.runtimeKind ??
-      DEFAULT_RUNTIME_KIND,
+    runtimeKind,
     runtimeConnection: {
       endpoint: sourceSession.runtimeEndpoint || resolved.runtime.runtimeEndpoint,
       workingDirectory: sourceSession.workingDirectory,
@@ -91,11 +93,7 @@ export const executeForkStart = async ({
   }
 
   const forkedRuntime: RuntimeInfo = {
-    runtimeKind:
-      sourceSession.runtimeKind ??
-      resolved.runtime.runtimeKind ??
-      selectedModel?.runtimeKind ??
-      DEFAULT_RUNTIME_KIND,
+    runtimeKind,
     runtimeId: sourceSession.runtimeId ?? resolved.runtime.runtimeId,
     runId: sourceSession.runId ?? resolved.runtime.runId,
     runtimeEndpoint: sourceSession.runtimeEndpoint || resolved.runtime.runtimeEndpoint,

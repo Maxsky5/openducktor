@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { clearAppQueryClient } from "@/lib/query-client";
+import { unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
 import { executeReuseStart } from "./start-session-reuse-strategy";
@@ -158,12 +160,81 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
           runtime: createRuntimeDependenciesFixture({
             resolveBuildContinuationTarget: async () => null,
           }),
-          task: createTaskDependenciesFixture(),
+          task: createTaskDependenciesFixture({
+            taskRef: {
+              current: [
+                createTaskCardFixture(
+                  {
+                    status: "ai_review",
+                    agentWorkflows: {
+                      spec: { required: false, canSkip: true, available: true, completed: false },
+                      planner: {
+                        required: false,
+                        canSkip: true,
+                        available: true,
+                        completed: false,
+                      },
+                      builder: { required: true, canSkip: false, available: true, completed: true },
+                      qa: { required: false, canSkip: true, available: true, completed: false },
+                    },
+                  },
+                  {},
+                ),
+              ],
+            },
+          }),
           model: {
             loadRepoPromptOverrides: async () => ({}),
           },
         },
       }),
     ).rejects.toThrow("Builder continuation cannot start until a builder worktree exists");
+  });
+
+  test("rejects qa reuse when the task workflow does not allow qa", async () => {
+    const sessionDependencies = createSessionDependenciesFixture({
+      sessionsRef: {
+        current: {
+          "existing-qa": createBuildSessionFixture({
+            sessionId: "existing-qa",
+            externalSessionId: "ext-qa",
+            role: "qa",
+          }),
+        },
+      },
+    });
+    const taskCard = createTaskCardFixture(
+      {
+        status: "open",
+        agentWorkflows: {
+          spec: { required: false, canSkip: true, available: true, completed: false },
+          planner: { required: false, canSkip: true, available: true, completed: false },
+          builder: { required: true, canSkip: false, available: true, completed: false },
+          qa: { required: false, canSkip: true, available: false, completed: false },
+        },
+      },
+      {},
+    );
+
+    await expect(
+      executeReuseStart({
+        ctx: createStartSessionContextFixture({ role: "qa" }),
+        input: {
+          startMode: "reuse",
+          sourceSessionId: "existing-qa",
+          scenario: "qa_review",
+        },
+        deps: {
+          session: sessionDependencies,
+          runtime: createRuntimeDependenciesFixture(),
+          task: createTaskDependenciesFixture({
+            taskRef: { current: [taskCard] },
+          }),
+          model: {
+            loadRepoPromptOverrides: async () => ({}),
+          },
+        },
+      }),
+    ).rejects.toThrow(unavailableRoleErrorMessage(taskCard, "qa"));
   });
 });
