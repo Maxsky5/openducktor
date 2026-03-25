@@ -94,9 +94,7 @@ export function useKanbanPageModels({
     },
     [unlinkPullRequest],
   );
-  const {
-    handleResolveGitConflict,
-  } = useGitConflictResolution({
+  const { handleResolveGitConflict } = useGitConflictResolution({
     activeRepo,
     startConflictResolutionSession: async (request) =>
       startSessionIntent({

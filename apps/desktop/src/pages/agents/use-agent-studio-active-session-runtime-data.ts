@@ -50,13 +50,14 @@ export const useAgentStudioActiveSessionRuntimeData = ({
   const runtimeQueryInput = toRuntimeQueryInput(session);
   const shouldHydrateRuntimeData = runtimeQueryInput !== null && session?.status !== "starting";
   const catalogQuery = useQuery({
-    queryKey: shouldHydrateRuntimeData && runtimeQueryInput
-      ? sessionModelCatalogQueryOptions(
-          runtimeQueryInput.runtimeKind,
-          runtimeQueryInput.runtimeConnection,
-          readSessionModelCatalog,
-        ).queryKey
-      : (["agent-session-runtime", "model-catalog", "", "", ""] as const),
+    queryKey:
+      shouldHydrateRuntimeData && runtimeQueryInput
+        ? sessionModelCatalogQueryOptions(
+            runtimeQueryInput.runtimeKind,
+            runtimeQueryInput.runtimeConnection,
+            readSessionModelCatalog,
+          ).queryKey
+        : (["agent-session-runtime", "model-catalog", "", "", ""] as const),
     queryFn: async (): Promise<AgentModelCatalog> => {
       if (!runtimeQueryInput) {
         throw new Error("Session runtime catalog query is disabled.");
@@ -100,10 +101,9 @@ export const useAgentStudioActiveSessionRuntimeData = ({
 
     const resolvedCatalog = session.modelCatalog ?? catalogQuery.data ?? null;
     const resolvedTodos = session.todos.length > 0 ? session.todos : (todosQuery.data ?? []);
-    const isLoadingModelCatalog =
-      shouldHydrateRuntimeData
-        ? resolvedCatalog === null && catalogQuery.isPending
-        : session.isLoadingModelCatalog && resolvedCatalog === null;
+    const isLoadingModelCatalog = shouldHydrateRuntimeData
+      ? resolvedCatalog === null && catalogQuery.isPending
+      : session.isLoadingModelCatalog && resolvedCatalog === null;
 
     if (
       resolvedCatalog === session.modelCatalog &&
@@ -122,7 +122,6 @@ export const useAgentStudioActiveSessionRuntimeData = ({
   }, [
     catalogQuery.data,
     catalogQuery.isPending,
-    runtimeQueryInput,
     session,
     shouldHydrateRuntimeData,
     todosQuery.data,

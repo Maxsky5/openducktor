@@ -16,9 +16,7 @@ const findCatalogProfile = (
   catalog: AgentModelCatalog,
   profileId: string,
 ): CatalogProfile | null => {
-  return (
-    catalogProfilesFor(catalog).find((profile) => profileIdFor(profile) === profileId) ?? null
-  );
+  return catalogProfilesFor(catalog).find((profile) => profileIdFor(profile) === profileId) ?? null;
 };
 
 export const findCatalogModel = (
@@ -27,8 +25,7 @@ export const findCatalogModel = (
 ): CatalogModel | null => {
   return (
     catalog.models.find(
-      (model) =>
-        model.providerId === selection.providerId && model.modelId === selection.modelId,
+      (model) => model.providerId === selection.providerId && model.modelId === selection.modelId,
     ) ?? null
   );
 };

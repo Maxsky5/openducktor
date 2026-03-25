@@ -1,8 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import {
-  type AgentRole,
-  type AgentScenario,
-} from "@openducktor/core";
+import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
@@ -32,6 +29,8 @@ import type {
   KanbanSessionStartIntent,
 } from "./kanban-page-model-types";
 import { startKanbanSessionFlow } from "./kanban-session-start-actions";
+
+const ROLE_LABELS = AGENT_ROLE_LABELS as Record<AgentRole, string>;
 
 type UseKanbanSessionStartFlowArgs = {
   activeRepo: string | null;
@@ -114,7 +113,6 @@ export function useKanbanSessionStartFlow({
   sendAgentMessage,
 }: UseKanbanSessionStartFlowArgs): UseKanbanSessionStartFlowResult {
   const queryClient = useQueryClient();
-  const roleLabels = AGENT_ROLE_LABELS as Record<AgentRole, string>;
   const tasksRef = useRef(tasks);
   const sessionsRef = useRef(sessions);
   const [pendingHumanReviewHydration, setPendingHumanReviewHydration] =
@@ -123,10 +121,7 @@ export function useKanbanSessionStartFlow({
     useState<HumanReviewFeedbackState | null>(null);
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
-  const {
-    sessionStartModal,
-    runSessionStartRequest,
-  } = useSessionStartModalRunner({
+  const { sessionStartModal, runSessionStartRequest } = useSessionStartModalRunner({
     activeRepo,
     repoSettings,
   });
@@ -214,7 +209,7 @@ export function useKanbanSessionStartFlow({
             selection: decision.startMode === "reuse" ? null : decision.selectedModel,
             startInBackground: runInBackground,
             tasks: tasksRef.current,
-            roleLabels,
+            roleLabels: ROLE_LABELS,
             queryClient,
             startAgentSession,
             humanRequestChangesTask,
@@ -230,7 +225,6 @@ export function useKanbanSessionStartFlow({
       humanRequestChangesTask,
       openSessionInAgentStudio,
       queryClient,
-      roleLabels,
       runSessionStartRequest,
       sendAgentMessage,
       startAgentSession,

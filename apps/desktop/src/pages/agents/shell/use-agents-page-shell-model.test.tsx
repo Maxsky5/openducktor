@@ -329,6 +329,10 @@ afterAll(() => {
 });
 
 beforeEach(() => {
+  const sessionStartModal = orchestrationState.sessionStartModal;
+  if (!sessionStartModal) {
+    throw new Error("Expected base session start modal fixture.");
+  }
   workspaceState = {
     activeRepo: "/repo",
     activeBranch: "main",
@@ -419,7 +423,7 @@ beforeEach(() => {
     retryChatSettingsLoad,
     humanReviewFeedbackModal: { kind: "feedback" },
     sessionStartModal: {
-      ...orchestrationState.sessionStartModal!,
+      ...sessionStartModal,
     },
     startSessionRequest: async () => undefined,
     activeTabValue: "task-1",

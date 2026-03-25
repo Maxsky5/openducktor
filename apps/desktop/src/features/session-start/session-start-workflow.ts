@@ -56,7 +56,9 @@ const requireSelectedModel = (
   if (selection) {
     return selection;
   }
-  throw new Error(`${startMode === "fork" ? "Fork" : "Fresh"} session start requires a selected model.`);
+  throw new Error(
+    `${startMode === "fork" ? "Fork" : "Fresh"} session start requires a selected model.`,
+  );
 };
 
 const requireSourceSessionId = (
@@ -66,7 +68,9 @@ const requireSourceSessionId = (
   if (sourceSessionId) {
     return sourceSessionId;
   }
-  throw new Error(`${startMode === "fork" ? "Fork" : "Reuse"} session start requires a source session.`);
+  throw new Error(
+    `${startMode === "fork" ? "Fork" : "Reuse"} session start requires a source session.`,
+  );
 };
 
 const toError = (error: unknown): Error => {

@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
+import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
-import { clearAppQueryClient } from "@/lib/query-client";
 import { host } from "@/state/operations/host";
+import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture,
   createDeferred,
@@ -173,7 +173,10 @@ const waitForSessionStartModal = async (
   );
   const modal = harness.getLatest().sessionStartModal;
   expect(modal).not.toBeNull();
-  return modal!;
+  if (!modal) {
+    throw new Error("Expected session start modal to be available.");
+  }
+  return modal;
 };
 
 const confirmSessionStartModal = async ({
@@ -801,5 +804,4 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     await harness.unmount();
   });
-
 });

@@ -86,7 +86,11 @@ export const startKanbanSessionFlow = async ({
     const roleLabel = roleLabels[intent.role] ?? intent.role.toUpperCase();
     toast.success(`Started ${roleLabel} session in background for ${intent.taskId}.`, {
       duration: 10000,
-      description: renderSessionStartedToastAction(intent, workflow.sessionId, openSessionInAgentStudio),
+      description: renderSessionStartedToastAction(
+        intent,
+        workflow.sessionId,
+        openSessionInAgentStudio,
+      ),
     });
   } else {
     openSessionInAgentStudio(intent, workflow.sessionId);

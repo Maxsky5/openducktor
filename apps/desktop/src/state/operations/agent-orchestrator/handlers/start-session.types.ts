@@ -4,7 +4,6 @@ import type {
   AgentModelSelection,
   AgentRole,
   AgentScenario,
-  AgentSessionStartMode,
 } from "@openducktor/core";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";

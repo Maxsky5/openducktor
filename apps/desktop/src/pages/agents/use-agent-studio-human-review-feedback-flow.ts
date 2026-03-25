@@ -49,7 +49,9 @@ type UseAgentStudioHumanReviewFeedbackFlowArgs = {
   onContextSwitchIntent?: () => void;
   executeRequestedSessionStart: <T>(
     request: Omit<NewSessionStartRequest, "selectedModel">,
-    executeWithDecision: (decision: Exclude<NewSessionStartDecision, null>) => Promise<T | undefined>,
+    executeWithDecision: (
+      decision: Exclude<NewSessionStartDecision, null>,
+    ) => Promise<T | undefined>,
   ) => Promise<T | undefined>;
 };
 
@@ -187,15 +189,15 @@ export function useAgentStudioHumanReviewFeedbackFlow({
       if (humanReviewFeedbackState.selectedTarget === NEW_BUILDER_SESSION_TARGET) {
         const workflow = await executeRequestedSessionStart(
           {
-          taskId: humanReviewFeedbackState.taskId,
-          role: "build",
-          scenario: humanReviewFeedbackState.scenario,
-          reason: "create_session",
-          existingSessionOptions: buildReusableSessionOptions({
-            sessions: humanReviewFeedbackState.builderSessions,
+            taskId: humanReviewFeedbackState.taskId,
             role: "build",
-          }),
-          initialSourceSessionId: humanReviewFeedbackState.builderSessions[0]?.sessionId ?? null,
+            scenario: humanReviewFeedbackState.scenario,
+            reason: "create_session",
+            existingSessionOptions: buildReusableSessionOptions({
+              sessions: humanReviewFeedbackState.builderSessions,
+              role: "build",
+            }),
+            initialSourceSessionId: humanReviewFeedbackState.builderSessions[0]?.sessionId ?? null,
           },
           async (decision) =>
             startSessionWorkflow({
@@ -293,11 +295,12 @@ export function useAgentStudioHumanReviewFeedbackFlow({
       setIsSubmittingHumanReviewFeedback(false);
     }
   }, [
-    humanReviewFeedbackState,
-    humanRequestChangesTask,
     activeRepo,
-    hydrateRequestedTaskSessionHistory,
     executeRequestedSessionStart,
+    humanRequestChangesTask,
+    humanReviewFeedbackState,
+    hydrateRequestedTaskSessionHistory,
+    queryClient,
     selectSessionInAgentStudio,
     sendAgentMessage,
     startAgentSession,

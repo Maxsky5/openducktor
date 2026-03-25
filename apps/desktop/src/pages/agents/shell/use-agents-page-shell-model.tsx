@@ -1,13 +1,7 @@
-import {
-  type ReactElement,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
-import { MergedPullRequestConfirmDialog } from "@/components/features/pull-requests/merged-pull-request-confirm-dialog";
 import { SessionStartModal } from "@/components/features/agents";
+import { MergedPullRequestConfirmDialog } from "@/components/features/pull-requests/merged-pull-request-confirm-dialog";
 import {
   TaskDetailsSheetController,
   type TaskDetailsSheetControllerHandle,

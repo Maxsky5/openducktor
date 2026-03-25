@@ -152,24 +152,25 @@ describe("useKanbanSessionStartFlow", () => {
 
   test("reuse confirm does not wait for repo settings when the reused session has no saved model", async () => {
     const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
-    const loadRepoSettings = mock(async () =>
-      ({
-        defaultRuntimeKind: "opencode",
-        worktreeBasePath: ".worktrees",
-        branchPrefix: "odt",
-        defaultTargetBranch: { remote: "origin", branch: "main" },
-        trustedHooks: false,
-        preStartHooks: [],
-        postCompleteHooks: [],
-        devServers: [],
-        worktreeFileCopies: [],
-        agentDefaults: {
-          spec: null,
-          planner: null,
-          build: null,
-          qa: null,
-        },
-      }) satisfies RepoSettingsInput,
+    const loadRepoSettings = mock(
+      async () =>
+        ({
+          defaultRuntimeKind: "opencode",
+          worktreeBasePath: ".worktrees",
+          branchPrefix: "odt",
+          defaultTargetBranch: { remote: "origin", branch: "main" },
+          trustedHooks: false,
+          preStartHooks: [],
+          postCompleteHooks: [],
+          devServers: [],
+          worktreeFileCopies: [],
+          agentDefaults: {
+            spec: null,
+            planner: null,
+            build: null,
+            qa: null,
+          },
+        }) satisfies RepoSettingsInput,
     );
     const startSessionDeferred = createDeferred<string>();
     const startAgentSession = mock(() => startSessionDeferred.promise);

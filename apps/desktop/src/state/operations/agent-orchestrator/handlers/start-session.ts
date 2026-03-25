@@ -312,7 +312,9 @@ const createOrReuseSession = async ({
     }
   };
 
-  const resolveLoadedSourceSession = async (sourceSessionId: string): Promise<AgentSessionState> => {
+  const resolveLoadedSourceSession = async (
+    sourceSessionId: string,
+  ): Promise<AgentSessionState> => {
     const existingSessionsForRole = Object.values(deps.session.sessionsRef.current).filter(
       (entry) => entry.taskId === ctx.taskId && entry.role === ctx.role,
     );
@@ -720,13 +722,7 @@ export const createStartAgentSession = ({
   model,
 }: StartSessionDependencies) => {
   return async (input: StartAgentSessionInput): Promise<string> => {
-    const {
-      taskId,
-      role,
-      scenario,
-      sendKickoff = false,
-      startMode,
-    } = input;
+    const { taskId, role, scenario, sendKickoff = false, startMode } = input;
     const effectiveScenario = scenario ?? defaultAgentScenarioForRole(role);
     const repoPath = requireActiveRepo(repo.activeRepo);
     const normalizedSourceSessionId =

@@ -113,19 +113,22 @@ export function useSessionStartModalRunner({
 
   selectionRef.current = selection;
 
-  const resolvePendingRun = useCallback((value: unknown): void => {
-    const pendingRun = pendingRunRef.current;
-    if (!pendingRun) {
-      return;
-    }
+  const resolvePendingRun = useCallback(
+    (value: unknown): void => {
+      const pendingRun = pendingRunRef.current;
+      if (!pendingRun) {
+        return;
+      }
 
-    pendingRunRef.current = null;
-    closeStartModal();
-    pendingRun.resolve(value);
-  }, [closeStartModal]);
+      pendingRunRef.current = null;
+      closeStartModal();
+      pendingRun.resolve(value);
+    },
+    [closeStartModal],
+  );
 
   const runSessionStartRequest = useCallback(
-    <T,>(
+    <T>(
       request: SessionStartModalRunRequest,
       execute: (result: SessionStartModalRunResult) => Promise<T>,
     ): Promise<T | undefined> => {

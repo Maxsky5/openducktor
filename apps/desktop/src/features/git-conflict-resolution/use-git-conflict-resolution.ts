@@ -57,8 +57,7 @@ const filterConflictBuilderSessions = (
   }
 
   return builderSessions.filter(
-    (session) =>
-      normalizeWorkingDirectory(session.workingDirectory) === conflictWorkingDirectory,
+    (session) => normalizeWorkingDirectory(session.workingDirectory) === conflictWorkingDirectory,
   );
 };
 
@@ -87,7 +86,10 @@ export function useGitConflictResolution({
         throw new Error("Cannot resolve a git conflict because no repository is selected.");
       }
 
-      const validBuilderSessions = filterConflictBuilderSessions(conflict, taskContext.builderSessions);
+      const validBuilderSessions = filterConflictBuilderSessions(
+        conflict,
+        taskContext.builderSessions,
+      );
       const defaultBuilderSession = pickDefaultBuilderSession({
         builderSessions: validBuilderSessions,
         currentViewSessionId: taskContext.currentViewSessionId,

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   type NewSessionStartDecision,
   type NewSessionStartRequest,
+  type SessionStartWorkflowResult,
   startSessionWorkflow,
 } from "@/features/session-start";
 import { errorMessage } from "@/lib/errors";
@@ -151,7 +152,7 @@ export function useAgentStudioFreshSessionCreation({
             onContextSwitchIntent?.();
           }
 
-          let workflow;
+          let workflow: SessionStartWorkflowResult | undefined;
           try {
             workflow = await startSessionWorkflow({
               activeRepo,
@@ -182,6 +183,9 @@ export function useAgentStudioFreshSessionCreation({
             });
             return undefined;
           }
+          if (!workflow) {
+            return undefined;
+          }
           const sessionId = workflow.sessionId;
           if (!sessionId) {
             return undefined;
@@ -210,16 +214,16 @@ export function useAgentStudioFreshSessionCreation({
       activeSession,
       activeRepo,
       applyFreshSessionSelectionQuery,
-      setStartingActivityCountByContext,
-      taskId,
       onContextSwitchIntent,
       onPostStartActionError,
-      role,
       executeRequestedSessionStart,
       queryClient,
+      role,
       selectedTask,
       sendAgentMessage,
+      setStartingActivityCountByContext,
       startAgentSession,
+      taskId,
     ],
   );
 
@@ -264,7 +268,6 @@ export function useAgentStudioFreshSessionCreation({
       agentStudioReady,
       isActiveTaskHydrated,
       isSessionWorking,
-      role,
       runFreshSessionCreation,
       selectedTask,
       startingSessionByTaskRef,

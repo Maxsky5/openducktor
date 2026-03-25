@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { AgentModelSelection } from "@openducktor/core";
-import type { AgentEnginePort } from "@openducktor/core";
+import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
 import { clearAppQueryClient } from "@/lib/query-client";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
@@ -677,13 +676,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
   });
 
   test("keeps existing selected model when reusing an in-memory session", async () => {
-    const selectedModel: AgentModelSelection = {
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "Hephaestus",
-    };
     let persistedSessions = 0;
     const existingSelectedModel: AgentModelSelection = {
       runtimeKind: "opencode",
@@ -1725,9 +1717,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "fresh",
           selectedModel: BUILD_SELECTION,
         }),
-      ).rejects.toThrow(
-        "Task not found: task-1",
-      );
+      ).rejects.toThrow("Task not found: task-1");
       expect(startCalls).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
@@ -1791,9 +1781,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "fresh",
           selectedModel: BUILD_SELECTION,
         }),
-      ).rejects.toThrow(
-        "Role 'build' is unavailable for task 'task-1' in status 'open'.",
-      );
+      ).rejects.toThrow("Role 'build' is unavailable for task 'task-1' in status 'open'.");
       expect(runtimeCalls).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
@@ -1857,9 +1845,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "fresh",
           selectedModel: QA_SELECTION,
         }),
-      ).rejects.toThrow(
-        "Role 'qa' is unavailable for task 'task-1' in status 'open'.",
-      );
+      ).rejects.toThrow("Role 'qa' is unavailable for task 'task-1' in status 'open'.");
       expect(qaTargetCalls).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
@@ -1986,9 +1972,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "fresh",
           selectedModel: BUILD_SELECTION,
         }),
-      ).rejects.toThrow(
-        "Workspace changed while starting session.",
-      );
+      ).rejects.toThrow("Workspace changed while starting session.");
       expect(persistedListCalls).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
@@ -2057,9 +2041,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "fresh",
           selectedModel: BUILD_SELECTION,
         }),
-      ).rejects.toThrow(
-        "Workspace changed while starting session.",
-      );
+      ).rejects.toThrow("Workspace changed while starting session.");
       expect(sessionsRef.current).toEqual({});
       expect(sessionsState).toEqual({});
     } finally {
@@ -2128,9 +2110,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "fresh",
           selectedModel: BUILD_SELECTION,
         }),
-      ).rejects.toThrow(
-        "Workspace changed while starting session.",
-      );
+      ).rejects.toThrow("Workspace changed while starting session.");
       expect(stopCalls).toBe(1);
     } finally {
       adapter.startSession = originalStartSession;
@@ -2200,9 +2180,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "fresh",
           selectedModel: BUILD_SELECTION,
         }),
-      ).rejects.toThrow(
-        "Workspace changed while starting session.",
-      );
+      ).rejects.toThrow("Workspace changed while starting session.");
       expect(stopCalls).toBe(1);
     } finally {
       adapter.startSession = originalStartSession;
@@ -2574,5 +2552,4 @@ describe("agent-orchestrator/handlers/start-session", () => {
       host.agentSessionsList = originalAgentSessionsList;
     }
   });
-
 });

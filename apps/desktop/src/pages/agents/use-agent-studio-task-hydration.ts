@@ -1,5 +1,5 @@
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { queryOptions, useQuery } from "@tanstack/react-query";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 type UseAgentStudioTaskHydrationParams = {
   activeRepo: string | null;
@@ -86,13 +86,19 @@ export function useAgentStudioTaskHydration({
     isActiveTaskHydrated: Boolean(activeRepo && activeTaskId),
     isActiveTaskHydrationFailed: false,
     isActiveSessionHistoryHydrated: activeSessionId
-      ? (shouldHydrateSessionHistory ? sessionHistoryHydrationQuery.isSuccess : true)
+      ? shouldHydrateSessionHistory
+        ? sessionHistoryHydrationQuery.isSuccess
+        : true
       : false,
     isActiveSessionHistoryHydrationFailed: activeSessionId
-      ? (shouldHydrateSessionHistory ? sessionHistoryHydrationQuery.isError : false)
+      ? shouldHydrateSessionHistory
+        ? sessionHistoryHydrationQuery.isError
+        : false
       : false,
     isActiveSessionHistoryHydrating: activeSessionId
-      ? (shouldHydrateSessionHistory ? sessionHistoryHydrationQuery.isPending : false)
+      ? shouldHydrateSessionHistory
+        ? sessionHistoryHydrationQuery.isPending
+        : false
       : false,
   };
 }

@@ -1,8 +1,4 @@
-import type {
-  AgentModelSelection,
-  AgentRole,
-  AgentScenario,
-} from "@openducktor/core";
+import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 
 export type SessionStartExistingSessionOption = {
   value: string;

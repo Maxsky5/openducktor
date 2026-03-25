@@ -13,8 +13,8 @@ import type {
 } from "@/features/session-start";
 import {
   buildReusableSessionOptions,
-  startSessionWorkflow,
   type SessionStartPostAction,
+  startSessionWorkflow,
   toSessionStartPostAction,
   useSessionStartModalRunner,
 } from "@/features/session-start";
@@ -93,9 +93,7 @@ export function useAgentStudioSessionStartFlow({
   isStarting: boolean;
   sessionStartModal: SessionStartModalModel | null;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
-  startSessionRequest: (
-    request: AgentStudioSessionStartRequest,
-  ) => Promise<string | undefined>;
+  startSessionRequest: (request: AgentStudioSessionStartRequest) => Promise<string | undefined>;
   startSession: (reason: SessionStartRequestReason) => Promise<string | undefined>;
   startScenarioKickoff: () => Promise<void>;
   handleCreateSession: (option: SessionCreateOption) => void;
@@ -116,13 +114,11 @@ export function useAgentStudioSessionStartFlow({
 
   const previousRepoForSessionRefs = useRef<string | null>(activeRepo);
   const startingSessionByTaskRef = useRef(new Map<string, Promise<string | undefined>>());
-  const {
-    sessionStartModal,
-    runSessionStartRequest: runInternalSessionStartRequest,
-  } = useSessionStartModalRunner({
-    activeRepo,
-    repoSettings,
-  });
+  const { sessionStartModal, runSessionStartRequest: runInternalSessionStartRequest } =
+    useSessionStartModalRunner({
+      activeRepo,
+      repoSettings,
+    });
 
   useEffect(() => {
     if (previousRepoForSessionRefs.current === activeRepo) {
@@ -134,7 +130,7 @@ export function useAgentStudioSessionStartFlow({
   }, [activeRepo]);
 
   const executeRequestedSessionStart = useCallback(
-    async <T,>(
+    async <T>(
       request: SessionStartRequestInput,
       executeWithDecision: (decision: ResolvedSessionStartDecision) => Promise<T | undefined>,
     ): Promise<T | undefined> => {
@@ -306,13 +302,14 @@ export function useAgentStudioSessionStartFlow({
     if (!workflow) {
       return;
     }
-
   }, [
     agentStudioReady,
-    role,
-    scenario,
     openHumanReviewFeedback,
+    role,
     runSessionStart,
+    scenario,
+    selectedTask,
+    taskId,
   ]);
 
   const { handleCreateSession } = useAgentStudioFreshSessionCreation({

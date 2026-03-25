@@ -1,9 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { useAgentStudioTaskHydration } from "./use-agent-studio-task-hydration";
 
 enableReactActEnvironment();

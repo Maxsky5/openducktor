@@ -25,7 +25,6 @@ import type {
   AgentRole,
   AgentRuntimeConnection,
   AgentScenario,
-  AgentSessionStartMode,
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import type { AgentSessionLoadOptions, AgentSessionState } from "./agent-orchestrator";

@@ -5,14 +5,13 @@ import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
+import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture,
   createDeferred,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { kickoffPromptForScenario } from "./agents-page-constants";
-import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
 
 enableReactActEnvironment();
@@ -124,14 +123,6 @@ const confirmSessionStartModal = async (
       sourceSessionId: null,
     });
   });
-};
-
-const PLANNER_SELECTION = {
-  runtimeKind: "opencode" as const,
-  providerId: "anthropic",
-  modelId: "claude-sonnet-4",
-  variant: "thinking",
-  profileId: "planner",
 };
 
 const createBaseArgs = (): HookArgs => {

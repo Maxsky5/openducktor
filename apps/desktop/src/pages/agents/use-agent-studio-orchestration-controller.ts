@@ -1,4 +1,7 @@
-import type { AgentStudioTaskTabsModel, SessionStartModalModel } from "@/components/features/agents";
+import type {
+  AgentStudioTaskTabsModel,
+  SessionStartModalModel,
+} from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
@@ -65,9 +68,7 @@ type UseAgentStudioOrchestrationControllerResult = {
   >["agentStudioWorkspaceSidebarModel"];
   agentChatModel: ReturnType<typeof useAgentStudioPageModels>["agentChatModel"];
   rightPanel: ReturnType<typeof useAgentStudioRightPanel>;
-  startSessionRequest: ReturnType<
-    typeof useAgentStudioSessionActions
-  >["startSessionRequest"];
+  startSessionRequest: ReturnType<typeof useAgentStudioSessionActions>["startSessionRequest"];
 };
 
 type AgentStudioPageModelsViewContext = Pick<

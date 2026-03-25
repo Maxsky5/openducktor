@@ -4,10 +4,7 @@ import { createElement, type PropsWithChildren, type ReactElement } from "react"
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
-import {
-  createTaskCardFixture,
-  enableReactActEnvironment,
-} from "./agent-studio-test-utils";
+import { createTaskCardFixture, enableReactActEnvironment } from "./agent-studio-test-utils";
 
 enableReactActEnvironment();
 

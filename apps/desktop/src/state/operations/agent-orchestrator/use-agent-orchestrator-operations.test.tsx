@@ -1067,14 +1067,12 @@ describe("use-agent-orchestrator-operations", () => {
       try {
         await harness.mount();
 
-        const startPromise = harness
-          .getLatest()
-          .startAgentSession({
-            taskId: "task-1",
-            role: "build",
-            startMode: "fresh",
-            selectedModel: BUILD_SELECTION,
-          });
+        const startPromise = harness.getLatest().startAgentSession({
+          taskId: "task-1",
+          role: "build",
+          startMode: "fresh",
+          selectedModel: BUILD_SELECTION,
+        });
 
         await harness.updateArgs({ activeRepo: "/tmp/repo-b" });
         specDeferred.resolve({ markdown: "", updatedAt: null });
@@ -1191,15 +1189,13 @@ describe("use-agent-orchestrator-operations", () => {
       try {
         await harness.mount();
 
-        const startPromise = harness
-          .getLatest()
-          .startAgentSession({
-            taskId: "task-1",
-            role: "build",
-            sendKickoff: true,
-            startMode: "fresh",
-            selectedModel: BUILD_SELECTION,
-          });
+        const startPromise = harness.getLatest().startAgentSession({
+          taskId: "task-1",
+          role: "build",
+          sendKickoff: true,
+          startMode: "fresh",
+          selectedModel: BUILD_SELECTION,
+        });
 
         await harness.waitFor(() => refreshCalls === 1);
         await harness.updateArgs({ activeRepo: "/tmp/repo-b" });

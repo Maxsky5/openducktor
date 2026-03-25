@@ -1,9 +1,7 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import { useCallback } from "react";
 import type { GitConflict } from "@/features/agent-studio-git";
-import {
-  useGitConflictResolution,
-} from "@/features/git-conflict-resolution";
+import { useGitConflictResolution } from "@/features/git-conflict-resolution";
 import type { SessionStartExistingSessionOption } from "@/features/session-start";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";

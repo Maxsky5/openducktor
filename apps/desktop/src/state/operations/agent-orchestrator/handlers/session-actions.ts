@@ -1,4 +1,9 @@
-import type { AgentSessionRecord, RepoPromptOverrides, RuntimeKind, TaskCard } from "@openducktor/contracts";
+import type {
+  AgentSessionRecord,
+  RepoPromptOverrides,
+  RuntimeKind,
+  TaskCard,
+} from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { errorMessage } from "@/lib/errors";
@@ -255,7 +260,7 @@ export const createAgentSessionActions = ({
       sessionsRef,
       inFlightStartsByRepoTaskRef,
       loadAgentSessions,
-        persistSessionRecord,
+      persistSessionRecord,
       attachSessionListener,
     },
     runtime: {

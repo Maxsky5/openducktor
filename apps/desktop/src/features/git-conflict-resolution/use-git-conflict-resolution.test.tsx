@@ -10,31 +10,31 @@ const buildSession = (
 ): AgentSessionState => {
   const { sessionId, workingDirectory, ...rest } = overrides;
   return {
-  ...rest,
-  sessionId,
-  externalSessionId: `external-${sessionId}`,
-  taskId: "task-1",
-  runtimeKind: "opencode",
-  role: "build",
-  scenario: "build_implementation_start",
-  status: "idle",
-  startedAt: "2026-03-18T10:00:00.000Z",
-  runtimeId: null,
-  runId: null,
-  runtimeEndpoint: "http://127.0.0.1:4444",
-  workingDirectory,
-  messages: [],
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
-  contextUsage: null,
-  pendingPermissions: [],
-  pendingQuestions: [],
-  todos: [],
-  modelCatalog: null,
-  selectedModel: rest.selectedModel ?? null,
-  isLoadingModelCatalog: false,
+    ...rest,
+    sessionId,
+    externalSessionId: `external-${sessionId}`,
+    taskId: "task-1",
+    runtimeKind: "opencode",
+    role: "build",
+    scenario: "build_implementation_start",
+    status: "idle",
+    startedAt: "2026-03-18T10:00:00.000Z",
+    runtimeId: null,
+    runId: null,
+    runtimeEndpoint: "http://127.0.0.1:4444",
+    workingDirectory,
+    messages: [],
+    draftAssistantText: "",
+    draftAssistantMessageId: null,
+    draftReasoningText: "",
+    draftReasoningMessageId: null,
+    contextUsage: null,
+    pendingPermissions: [],
+    pendingQuestions: [],
+    todos: [],
+    modelCatalog: null,
+    selectedModel: rest.selectedModel ?? null,
+    isLoadingModelCatalog: false,
   };
 };
 
@@ -70,17 +70,15 @@ describe("useGitConflictResolution", () => {
       });
       const openedSessions: string[] = [];
 
-      const resolved = await harness
-        .getLatest()
-        .handleResolveGitConflict(createConflict(), {
-          taskId: "task-1",
-          task: createTaskCardFixture({ id: "task-1", title: "Resolve rebase conflict" }),
-          builderSessions: [wrongWorktreeSession, matchingWorktreeSession],
-          currentViewSessionId: "build-other",
-          onOpenSession: (sessionId) => {
-            openedSessions.push(sessionId);
-          },
-        });
+      const resolved = await harness.getLatest().handleResolveGitConflict(createConflict(), {
+        taskId: "task-1",
+        task: createTaskCardFixture({ id: "task-1", title: "Resolve rebase conflict" }),
+        builderSessions: [wrongWorktreeSession, matchingWorktreeSession],
+        currentViewSessionId: "build-other",
+        onOpenSession: (sessionId) => {
+          openedSessions.push(sessionId);
+        },
+      });
 
       expect(resolved).toBe(true);
       expect(startConflictResolutionSession).toHaveBeenCalledWith(
