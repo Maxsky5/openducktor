@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
+import type { AgentEnginePort } from "@openducktor/core";
 import { clearAppQueryClient } from "@/lib/query-client";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
@@ -112,7 +113,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -154,7 +155,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -221,7 +222,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -296,7 +297,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {
+      persistSessionRecord: async () => {
         await persistDeferred.promise;
       },
       sendAgentMessage: async () => {},
@@ -329,6 +330,71 @@ describe("agent-orchestrator/handlers/start-session", () => {
       persistDeferred.resolve();
       adapter.startSession = originalStartSession;
     }
+  });
+
+  test("persists only durable session record fields during start", async () => {
+    let persistedTaskId: string | null = null;
+    let persistedRecord: AgentSessionRecord | null = null;
+    const start = createStartAgentSession(
+      toStartSessionDependencies({
+        activeRepo: "/tmp/repo",
+        repoEpochRef: { current: 1 },
+        previousRepoRef: { current: "/tmp/repo" },
+        setSessionsById: () => {},
+        sessionsRef: { current: {} },
+        inFlightStartsByRepoTaskRef: { current: new Map() },
+        loadAgentSessions: async () => {},
+        attachSessionListener: () => {},
+        taskRef: { current: [createTaskCardFixture({ id: "task-1", status: "open" })] },
+        adapter: {
+          ...new OpencodeSdkAdapter(),
+          startSession: async () => ({
+            sessionId: "session-1",
+            externalSessionId: "external-1",
+            role: "planner",
+            scenario: "planner_initial",
+            startedAt: "2026-03-21T10:00:00.000Z",
+            status: "running",
+          }),
+        } as unknown as AgentEnginePort,
+        resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
+        ensureRuntime: async () => ({
+          kind: "opencode",
+          runtimeId: "runtime-1",
+          runId: null,
+          runtimeEndpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo",
+        }),
+        loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+        loadRepoDefaultModel: async () => null,
+        loadRepoPromptOverrides: async () => ({}),
+        refreshTaskData: async () => {},
+        persistSessionRecord: async (taskId, record) => {
+          persistedTaskId = taskId;
+          persistedRecord = record;
+        },
+        sendAgentMessage: async () => {},
+      }),
+    );
+
+    await start({
+      taskId: "task-1",
+      role: "planner",
+      startMode: "fresh",
+      selectedModel: PLANNER_SELECTION,
+    });
+
+    if (persistedTaskId !== "task-1") {
+      throw new Error(`Expected persisted task id task-1, received ${String(persistedTaskId)}`);
+    }
+    if (!persistedRecord) {
+      throw new Error("Expected persisted record to be captured.");
+    }
+    const persistedSessionRecord = persistedRecord as AgentSessionRecord;
+
+    expect(persistedSessionRecord.sessionId).toBe("session-1");
+    expect("status" in persistedSessionRecord).toBe(false);
+    expect("taskId" in persistedSessionRecord).toBe(false);
   });
 
   test("reuses most recent in-memory session for same task and role", async () => {
@@ -390,7 +456,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -494,7 +560,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -589,7 +655,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -689,7 +755,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {
+      persistSessionRecord: async () => {
         persistedSessions += 1;
       },
       sendAgentMessage: async () => {},
@@ -796,7 +862,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -903,7 +969,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -1015,7 +1081,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -1109,7 +1175,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -1233,7 +1299,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         };
       },
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -1255,7 +1321,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("forks from the selected source session for pull request generation", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
-    const persistedSnapshots: AgentSessionState[] = [];
+    const persistedSnapshots: AgentSessionRecord[] = [];
     let sessionsById: Record<string, AgentSessionState> = {
       "source-build": {
         runtimeKind: "opencode",
@@ -1333,8 +1399,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async (session) => {
-        persistedSnapshots.push(session);
+      persistSessionRecord: async (_taskId, record) => {
+        persistedSnapshots.push(record);
       },
       sendAgentMessage: async () => {},
     });
@@ -1468,7 +1534,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         };
       },
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -1592,7 +1658,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         };
       },
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -1647,7 +1713,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -1713,7 +1779,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -1779,7 +1845,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -1857,7 +1923,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -1908,7 +1974,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -1979,7 +2045,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -2050,7 +2116,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -2122,7 +2188,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -2192,7 +2258,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -2279,7 +2345,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       refreshTaskData: async () => {
         refreshCalls += 1;
       },
-      persistSessionSnapshot: async () => {
+      persistSessionRecord: async () => {
         persistCalls += 1;
       },
       sendAgentMessage: async () => {
@@ -2347,7 +2413,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -2411,7 +2477,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         refreshCalls += 1;
         return refreshDeferred.promise;
       },
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 
@@ -2486,7 +2552,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionRecord: async () => {},
       sendAgentMessage: async () => {},
     });
 

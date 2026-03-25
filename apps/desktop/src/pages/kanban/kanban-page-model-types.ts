@@ -11,10 +11,6 @@ import type {
   KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
 import type { GitConflict, GitConflictAction } from "@/features/agent-studio-git";
-import type {
-  GitConflictResolutionDecision,
-  PendingGitConflictResolutionRequest,
-} from "@/features/git-conflict-resolution";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 
 export type KanbanSessionStartIntent = {
@@ -167,10 +163,6 @@ export type KanbanPageModels = {
     onOpenChange: (open: boolean) => void;
     onAbort: () => void;
     onAskBuilder: () => void;
-  } | null;
-  gitConflictResolutionModal: {
-    request: PendingGitConflictResolutionRequest;
-    onResolve: (decision: GitConflictResolutionDecision) => void;
   } | null;
   sessionStartModal: SessionStartModalModel | null;
 };

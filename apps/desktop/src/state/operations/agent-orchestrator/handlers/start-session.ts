@@ -16,6 +16,7 @@ import { requireActiveRepo } from "../../tasks/task-operations-model";
 import { type RuntimeInfo, resolveRuntimeConnection } from "../runtime/runtime";
 import { runOrchestratorSideEffect, runOrchestratorTask } from "../support/async-side-effects";
 import { createRepoStaleGuard, normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
+import { toPersistedSessionRecord } from "../support/persistence";
 import { inferScenario, kickoffPromptWithTaskContext } from "../support/scenario";
 import {
   buildSessionPreludeMessages,
@@ -211,7 +212,10 @@ const persistInitialSession = async ({
   await runOrchestratorTask(
     "start-session-persist-initial-session",
     async () => {
-      await session.persistSessionSnapshot(initialSession);
+      await session.persistSessionRecord(
+        initialSession.taskId,
+        toPersistedSessionRecord(initialSession),
+      );
     },
     { tags },
   );

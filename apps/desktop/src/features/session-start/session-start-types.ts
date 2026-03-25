@@ -49,7 +49,3 @@ export type NewSessionStartDecision =
   | ReuseSessionStartDecision
   | ForkSessionStartDecision
   | null;
-
-export type RequestNewSessionStart = (
-  request: NewSessionStartRequest,
-) => Promise<NewSessionStartDecision>;

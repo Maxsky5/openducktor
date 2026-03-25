@@ -1,6 +1,5 @@
 import type { AgentStudioTaskTabsModel, SessionStartModalModel } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
-import type { RequestNewSessionStart } from "@/features/session-start";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
@@ -42,7 +41,6 @@ type AgentStudioOrchestrationActionsContext = {
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   replyAgentPermission: AgentStateContextValue["replyAgentPermission"];
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
-  requestNewSessionStart?: RequestNewSessionStart;
 };
 type UseAgentStudioOrchestrationControllerArgs = {
   activeRepo: string | null;
@@ -67,6 +65,9 @@ type UseAgentStudioOrchestrationControllerResult = {
   >["agentStudioWorkspaceSidebarModel"];
   agentChatModel: ReturnType<typeof useAgentStudioPageModels>["agentChatModel"];
   rightPanel: ReturnType<typeof useAgentStudioRightPanel>;
+  startSessionRequest: ReturnType<
+    typeof useAgentStudioSessionActions
+  >["startSessionRequest"];
 };
 
 type AgentStudioPageModelsViewContext = Pick<
@@ -224,7 +225,6 @@ export function useAgentStudioOrchestrationController({
     humanRequestChangesTask,
     replyAgentPermission,
     answerAgentQuestion,
-    requestNewSessionStart,
   } = actions;
 
   const { repoSettings } = useAgentStudioRepoSettings({ activeRepo });
@@ -263,6 +263,7 @@ export function useAgentStudioOrchestrationController({
     isStarting,
     sessionStartModal,
     humanReviewFeedbackModal,
+    startSessionRequest,
     isSending,
     isSubmittingQuestionByRequestId,
     isSessionWorking,
@@ -298,7 +299,6 @@ export function useAgentStudioOrchestrationController({
     answerAgentQuestion,
     updateQuery,
     onContextSwitchIntent,
-    ...(requestNewSessionStart ? { requestNewSessionStart } : {}),
   });
 
   const { isSubmittingPermissionByRequestId, permissionReplyErrorByRequestId, onReplyPermission } =
@@ -410,5 +410,6 @@ export function useAgentStudioOrchestrationController({
     agentStudioWorkspaceSidebarModel,
     agentChatModel,
     rightPanel,
+    startSessionRequest,
   };
 }

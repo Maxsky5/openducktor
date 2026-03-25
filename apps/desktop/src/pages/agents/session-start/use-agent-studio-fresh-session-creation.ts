@@ -35,7 +35,6 @@ type UseAgentStudioFreshSessionCreationArgs = {
   agentStudioReady: boolean;
   isActiveTaskHydrated: boolean;
   isSessionWorking: boolean;
-  markStartingBeforeDecision?: boolean;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   updateQuery: (updates: QueryUpdate) => void;
@@ -58,7 +57,6 @@ export function useAgentStudioFreshSessionCreation({
   agentStudioReady,
   isActiveTaskHydrated,
   isSessionWorking,
-  markStartingBeforeDecision = false,
   startAgentSession,
   sendAgentMessage,
   updateQuery,
@@ -198,131 +196,20 @@ export function useAgentStudioFreshSessionCreation({
         }
       };
 
-      if (!markStartingBeforeDecision) {
-        return executeRequestedSessionStart(
-          {
-            taskId,
-            role: params.nextRole,
-            scenario: params.nextScenario,
-            reason: "create_session",
-          },
-          executeStartedSession,
-        );
-      }
-
-      setStartingActivityCountByContext((current) =>
-        incrementActivityCountRecord(current, startContextKey),
+      return executeRequestedSessionStart(
+        {
+          taskId,
+          role: params.nextRole,
+          scenario: params.nextScenario,
+          reason: "create_session",
+        },
+        executeStartedSession,
       );
-      try {
-        return await executeRequestedSessionStart(
-          {
-            taskId,
-            role: params.nextRole,
-            scenario: params.nextScenario,
-            reason: "create_session",
-          },
-          async (decision) => {
-            if (decision.startMode === "reuse") {
-              const workflow = await startSessionWorkflow({
-                activeRepo,
-                queryClient,
-                intent: {
-                  taskId,
-                  role: params.nextRole,
-                  scenario: params.nextScenario,
-                  startMode: "reuse",
-                  sourceSessionId: decision.sourceSessionId,
-                  postStartAction: "kickoff",
-                },
-                selection: null,
-                task: selectedTask,
-                startAgentSession,
-                sendAgentMessage,
-                postStartExecution: "detached",
-                onDetachedPostStartError: onPostStartActionError
-                  ? (error) => onPostStartActionError("kickoff", error)
-                  : undefined,
-              });
-              if (
-                shouldTriggerContextSwitchIntent({
-                  currentSessionId: activeSession?.sessionId ?? null,
-                  currentRole: activeSession?.role ?? role,
-                  nextSessionId: decision.sourceSessionId,
-                  nextRole: params.nextRole,
-                })
-              ) {
-                onContextSwitchIntent?.();
-              }
-              applyFreshSessionSelectionQuery(
-                workflow.sessionId,
-                params.nextRole,
-                params.nextScenario,
-              );
-              return workflow.sessionId;
-            }
-
-            if (
-              shouldTriggerContextSwitchIntent({
-                currentSessionId: activeSession?.sessionId ?? null,
-                currentRole: activeSession?.role ?? role,
-                nextSessionId: null,
-                nextRole: params.nextRole,
-              })
-            ) {
-              onContextSwitchIntent?.();
-            }
-
-            let workflow;
-            try {
-              workflow = await startSessionWorkflow({
-                activeRepo,
-                queryClient,
-                intent: {
-                  taskId,
-                  role: params.nextRole,
-                  scenario: params.nextScenario,
-                  startMode: decision.startMode,
-                  ...(decision.startMode === "fork"
-                    ? { sourceSessionId: decision.sourceSessionId }
-                    : {}),
-                  postStartAction: "kickoff",
-                },
-                selection: decision.selectedModel,
-                task: selectedTask,
-                startAgentSession,
-                sendAgentMessage,
-                postStartExecution: "detached",
-                onDetachedPostStartError: onPostStartActionError
-                  ? (error) => onPostStartActionError("kickoff", error)
-                  : undefined,
-              });
-            } catch (error) {
-              const roleLabel = AGENT_ROLE_LABELS[params.nextRole] ?? params.nextRole.toUpperCase();
-              toast.error(`Failed to start ${roleLabel} session`, {
-                description: errorMessage(error),
-              });
-              return undefined;
-            }
-            const sessionId = workflow.sessionId;
-            if (!sessionId) {
-              return undefined;
-            }
-
-            applyFreshSessionSelectionQuery(sessionId, params.nextRole, params.nextScenario);
-            return sessionId;
-          },
-        );
-      } finally {
-        setStartingActivityCountByContext((current) =>
-          decrementActivityCountRecord(current, startContextKey),
-        );
-      }
     },
     [
       activeSession,
       activeRepo,
       applyFreshSessionSelectionQuery,
-      markStartingBeforeDecision,
       setStartingActivityCountByContext,
       taskId,
       onContextSwitchIntent,

@@ -1,4 +1,4 @@
-import type { RepoPromptOverrides, RuntimeKind, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, RepoPromptOverrides, RuntimeKind, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { errorMessage } from "@/lib/errors";
@@ -7,6 +7,7 @@ import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-o
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import { createRepoStaleGuard, now, throwIfRepoStale } from "../support/core";
+import { toPersistedSessionRecord } from "../support/persistence";
 import { annotateQuestionToolMessage } from "../support/question-messages";
 import { buildSessionPreludeMessages, loadSessionPromptContext } from "../support/session-prompt";
 import { createStartAgentSession } from "./start-session";
@@ -42,7 +43,7 @@ type SessionActionsDependencies = {
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   clearTurnDuration: (sessionId: string) => void;
   refreshTaskData: (repoPath: string) => Promise<void>;
-  persistSessionSnapshot: (session: AgentSessionState) => Promise<void>;
+  persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
   stopBuildRun?: (runId: string) => Promise<void>;
   invalidateSessionStopQueries?: (input: {
     repoPath: string;
@@ -129,7 +130,7 @@ export const createAgentSessionActions = ({
   loadAgentSessions,
   clearTurnDuration,
   refreshTaskData,
-  persistSessionSnapshot,
+  persistSessionRecord,
   stopBuildRun = async () => {
     throw new Error("Build stop operation is unavailable.");
   },
@@ -254,7 +255,7 @@ export const createAgentSessionActions = ({
       sessionsRef,
       inFlightStartsByRepoTaskRef,
       loadAgentSessions,
-      persistSessionSnapshot,
+        persistSessionRecord,
       attachSessionListener,
     },
     runtime: {
@@ -384,7 +385,7 @@ export const createAgentSessionActions = ({
       [summary.sessionId]: nextSession,
     }));
     attachSessionListener(repoPath, summary.sessionId);
-    void persistSessionSnapshot(nextSession);
+    void persistSessionRecord(nextSession.taskId, toPersistedSessionRecord(nextSession));
     return summary.sessionId;
   };
 
@@ -443,8 +444,12 @@ export const createAgentSessionActions = ({
       return nextSession;
     });
 
-    if (stoppedSessionSnapshot) {
-      await persistSessionSnapshot(stoppedSessionSnapshot);
+    const nextStoppedSession = stoppedSessionSnapshot as AgentSessionState | null;
+    if (nextStoppedSession) {
+      await persistSessionRecord(
+        nextStoppedSession.taskId,
+        toPersistedSessionRecord(nextStoppedSession),
+      );
     }
 
     if (activeRepo) {

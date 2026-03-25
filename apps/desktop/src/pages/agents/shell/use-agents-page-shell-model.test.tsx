@@ -24,7 +24,6 @@ const retryNavigationPersistence = mock(() => {});
 const updateQuery = mock((_updates?: unknown) => {});
 const handleSelectTab = mock((_value: string) => {});
 const retryChatSettingsLoad = mock(() => {});
-const resolvePendingRebaseConflictResolution = mock((_requestId: string, _decision: unknown) => {});
 const handleResolveRebaseConflict = mock(async () => {});
 
 type QuerySyncState = {
@@ -73,6 +72,7 @@ type OrchestrationState = {
   retryChatSettingsLoad: typeof retryChatSettingsLoad;
   humanReviewFeedbackModal: { kind: string };
   sessionStartModal: SessionStartModalModel | null;
+  startSessionRequest: (request: unknown) => Promise<string | undefined>;
   activeTabValue: string;
   agentStudioTaskTabsModel: { tabs: [] };
   agentStudioHeaderModel: { title: string };
@@ -100,7 +100,6 @@ type AgentsPageShellModelState = {
   isRightPanelVisible: boolean;
   rightPanelModel: RightPanelState["rightPanelModel"] | null;
   sessionStartModal: ReactElement | null;
-  gitConflictResolutionModal: ReactElement | null;
   mergedPullRequestModal: ReactElement | null;
   humanReviewFeedbackModal: ReactElement;
   taskDetailsSheet: ReactElement;
@@ -226,6 +225,7 @@ let orchestrationState: OrchestrationState = {
     onOpenChange: mock(() => {}),
     onConfirm: mock(() => {}),
   },
+  startSessionRequest: async () => undefined,
   activeTabValue: "task-1",
   agentStudioTaskTabsModel: { tabs: [] },
   agentStudioHeaderModel: { title: "Task 1" },
@@ -236,13 +236,6 @@ let orchestrationState: OrchestrationState = {
     isPanelOpen: true,
     rightPanelToggleModel,
   },
-};
-let pendingRebaseConflictResolutionRequest: {
-  requestId: string;
-  taskId: string;
-} | null = {
-  requestId: "rebase-1",
-  taskId: "task-1",
 };
 let rightPanelState: RightPanelState = {
   isRightPanelVisible: true,
@@ -271,6 +264,10 @@ beforeAll(async () => {
   mock.module("@/state/app-state-contexts", () => ({
     useDelegationEventsContext: () => ({ runCompletionSignal: null }),
     useRuntimeDefinitionsContext: () => runtimeDefinitionsContext,
+    useChecksOperationsContext: () => ({
+      refreshRepoRuntimeHealthForRepo: mock(async () => undefined),
+      hasCachedRepoRuntimeHealth: mock(() => false),
+    }),
   }));
 
   mock.module("../use-agent-studio-query-sync", () => ({
@@ -296,19 +293,12 @@ beforeAll(async () => {
 
   mock.module("../use-agent-studio-rebase-conflict-resolution", () => ({
     useAgentStudioRebaseConflictResolution: () => ({
-      pendingRebaseConflictResolutionRequest,
-      resolvePendingRebaseConflictResolution,
       handleResolveRebaseConflict,
     }),
   }));
 
   mock.module("../use-agents-page-right-panel-model", () => ({
     useAgentsPageRightPanelModel: () => rightPanelState,
-  }));
-
-  mock.module("../agents-page-rebase-conflict-modal", () => ({
-    RebaseConflictResolutionModal: (props: Record<string, unknown>): ReactElement =>
-      createElement("mock-rebase-conflict-modal", props),
   }));
 
   mock.module("@/components/features/agents", () => ({
@@ -431,6 +421,7 @@ beforeEach(() => {
     sessionStartModal: {
       ...orchestrationState.sessionStartModal!,
     },
+    startSessionRequest: async () => undefined,
     activeTabValue: "task-1",
     agentStudioTaskTabsModel: { tabs: [] },
     agentStudioHeaderModel: { title: "Task 1" },
@@ -441,10 +432,6 @@ beforeEach(() => {
       isPanelOpen: true,
       rightPanelToggleModel,
     },
-  };
-  pendingRebaseConflictResolutionRequest = {
-    requestId: "rebase-1",
-    taskId: "task-1",
   };
   rightPanelState = {
     isRightPanelVisible: true,
@@ -491,10 +478,6 @@ describe("useAgentsPageShellModel", () => {
       expect(
         (state.sessionStartModal as ReactElement<{ model: unknown }> | null)?.props.model,
       ).toBe(orchestrationState.sessionStartModal);
-      expect(
-        (state.gitConflictResolutionModal as ReactElement<{ request: unknown }> | null)?.props
-          .request,
-      ).toBe(pendingRebaseConflictResolutionRequest);
       expect((state.taskDetailsSheet as ReactElement<{ allTasks: unknown }>).props.allTasks).toBe(
         tasksState.tasks,
       );
@@ -515,7 +498,6 @@ describe("useAgentsPageShellModel", () => {
       ...orchestrationState,
       sessionStartModal: null,
     };
-    pendingRebaseConflictResolutionRequest = null;
     selectionState = {
       ...selectionState,
       viewTaskId: "",
@@ -530,7 +512,6 @@ describe("useAgentsPageShellModel", () => {
       const state = harness.getLatest();
       expect(state.hasSelectedTask).toBe(false);
       expect(state.sessionStartModal).toBeNull();
-      expect(state.gitConflictResolutionModal).toBeNull();
       expect(state.mergedPullRequestModal).toBeNull();
     } finally {
       await harness.unmount();

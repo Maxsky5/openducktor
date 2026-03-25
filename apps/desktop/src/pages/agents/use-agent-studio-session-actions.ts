@@ -4,7 +4,7 @@ import { isAgentKickoffScenario } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
-import type { RequestNewSessionStart } from "@/features/session-start";
+import type { SessionStartRequestReason } from "@/features/session-start";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
@@ -45,7 +45,6 @@ type UseAgentStudioSessionActionsArgs = {
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent?: () => void;
-  requestNewSessionStart?: RequestNewSessionStart;
 };
 
 export function useAgentStudioSessionActions({
@@ -70,11 +69,27 @@ export function useAgentStudioSessionActions({
   answerAgentQuestion,
   updateQuery,
   onContextSwitchIntent,
-  requestNewSessionStart,
 }: UseAgentStudioSessionActionsArgs): {
   isStarting: boolean;
   sessionStartModal: SessionStartModalModel | null;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
+  startSessionRequest: (request: {
+    taskId: string;
+    role: AgentRole;
+    scenario: AgentScenario;
+    reason: SessionStartRequestReason;
+    postStartAction: "none" | "kickoff" | "send_message";
+    message?: string;
+    initialStartMode?: "fresh" | "reuse" | "fork";
+    existingSessionOptions?: Array<{
+      value: string;
+      label: string;
+      description: string;
+      secondaryLabel?: string;
+      selectedModel?: AgentModelSelection | null;
+    }>;
+    initialSourceSessionId?: string | null;
+  }) => Promise<string | undefined>;
   isSending: boolean;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   isSessionWorking: boolean;
@@ -116,6 +131,7 @@ export function useAgentStudioSessionActions({
     isStarting,
     sessionStartModal,
     humanReviewFeedbackModal,
+    startSessionRequest,
     startSession,
     startScenarioKickoff,
     handleCreateSession,
@@ -139,7 +155,6 @@ export function useAgentStudioSessionActions({
     humanRequestChangesTask,
     updateQuery,
     ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
-    ...(requestNewSessionStart ? { requestNewSessionStart } : {}),
   });
 
   useEffect(() => {
@@ -393,6 +408,7 @@ export function useAgentStudioSessionActions({
     isStarting,
     sessionStartModal,
     humanReviewFeedbackModal,
+    startSessionRequest,
     isSending,
     isSubmittingQuestionByRequestId,
     isSessionWorking,

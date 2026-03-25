@@ -32,7 +32,6 @@ type UseAgentStudioSessionStartSessionArgs = {
   selectedTask: Parameters<typeof canStartSessionForRole>[0];
   agentStudioReady: boolean;
   isActiveTaskHydrated: boolean;
-  markStartingBeforeDecision?: boolean;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   setStartingActivityCountByContext: Dispatch<SetStateAction<Record<string, number>>>;
@@ -53,7 +52,6 @@ export function useAgentStudioSessionStartSession({
   selectedTask,
   agentStudioReady,
   isActiveTaskHydrated,
-  markStartingBeforeDecision = false,
   startAgentSession,
   sendAgentMessage,
   setStartingActivityCountByContext,
@@ -124,73 +122,20 @@ export function useAgentStudioSessionStartSession({
         }
       };
 
-      if (!markStartingBeforeDecision) {
-        return executeRequestedSessionStart(
-          {
-            taskId,
-            role,
-            scenario,
-            reason: params.reason,
-          },
-          executeStartedSession,
-        );
-      }
-
-      setStartingActivityCountByContext((current) =>
-        incrementActivityCountRecord(current, startContextKey),
+      return executeRequestedSessionStart(
+        {
+          taskId,
+          role,
+          scenario,
+          reason: params.reason,
+        },
+        executeStartedSession,
       );
-      try {
-        return await executeRequestedSessionStart(
-          {
-            taskId,
-            role,
-            scenario,
-            reason: params.reason,
-          },
-          async (decision) => {
-            const workflow = await startSessionWorkflow({
-              activeRepo,
-              queryClient,
-              intent: {
-                taskId,
-                role,
-                scenario,
-                startMode: decision.startMode,
-                ...(decision.startMode === "reuse" || decision.startMode === "fork"
-                  ? { sourceSessionId: decision.sourceSessionId }
-                  : {}),
-                postStartAction: params.postStartAction,
-              },
-              selection: decision.startMode === "reuse" ? null : decision.selectedModel,
-              task: selectedTask,
-              startAgentSession,
-              sendAgentMessage,
-              postStartExecution: params.postStartAction === "none" ? "await" : "detached",
-              onDetachedPostStartError:
-                params.postStartAction === "none" || !onPostStartActionError
-                  ? undefined
-                  : (error) => onPostStartActionError(params.postStartAction, error),
-            });
-
-            applyAgentStudioSelectionQuery(updateQuery, {
-              taskId,
-              sessionId: workflow.sessionId,
-              role,
-            });
-            return workflow;
-          },
-        );
-      } finally {
-        setStartingActivityCountByContext((current) =>
-          decrementActivityCountRecord(current, startContextKey),
-        );
-      }
     },
     [
       activeRepo,
       role,
       scenario,
-      markStartingBeforeDecision,
       queryClient,
       setStartingActivityCountByContext,
       sendAgentMessage,

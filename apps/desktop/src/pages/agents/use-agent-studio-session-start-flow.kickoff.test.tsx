@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { createElement, type PropsWithChildren, type ReactElement } from "react";
+import { QueryProvider } from "@/lib/query-provider";
+import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
-  createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
@@ -22,8 +26,79 @@ let useAgentStudioSessionStartFlow: UseAgentStudioSessionStartFlowHook;
 
 type HookArgs = Parameters<UseAgentStudioSessionStartFlowHook>[0];
 
-const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useAgentStudioSessionStartFlow, initialProps);
+const createHookHarness = (initialProps: HookArgs) => {
+  const wrapper = ({ children }: PropsWithChildren): ReactElement =>
+    createElement(
+      ChecksOperationsContext.Provider,
+      {
+        value: {
+          refreshRuntimeCheck: async () => ({
+            gitOk: true,
+            gitVersion: null,
+            ghOk: true,
+            ghVersion: null,
+            ghAuthOk: true,
+            ghAuthLogin: null,
+            ghAuthError: null,
+            runtimes: [],
+            errors: [],
+          }),
+          refreshBeadsCheckForRepo: async () => ({
+            beadsOk: true,
+            beadsPath: "/repo/.beads",
+            beadsError: null,
+          }),
+          refreshRepoRuntimeHealthForRepo: async () => ({}),
+          clearActiveBeadsCheck: () => {},
+          clearActiveRepoRuntimeHealth: () => {},
+          setIsLoadingChecks: () => {},
+          hasRuntimeCheck: () => false,
+          hasCachedBeadsCheck: () => false,
+          hasCachedRepoRuntimeHealth: () => false,
+        },
+      },
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(RuntimeDefinitionsContext.Provider, {
+          value: {
+            runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+            isLoadingRuntimeDefinitions: false,
+            runtimeDefinitionsError: null,
+            refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+            loadRepoRuntimeCatalog: async () => ({
+              runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+              models: [
+                {
+                  id: "openai/gpt-5",
+                  providerId: "openai",
+                  providerName: "OpenAI",
+                  modelId: "gpt-5",
+                  modelName: "GPT-5",
+                  variants: ["default"],
+                  contextWindow: 200_000,
+                  outputLimit: 8_192,
+                },
+              ],
+              defaultModelsByProvider: {
+                openai: "gpt-5",
+              },
+              profiles: [
+                {
+                  name: "spec",
+                  mode: "primary" as const,
+                  hidden: false,
+                },
+              ],
+            }),
+          },
+          children,
+        }),
+      ),
+    );
+
+  return createCoreHookHarness(useAgentStudioSessionStartFlow, initialProps, { wrapper });
+};
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeRepo: null,
@@ -49,16 +124,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   bootstrapTaskSessions: async () => {},
   hydrateRequestedTaskSessionHistory: async () => {},
   humanRequestChangesTask: async () => {},
-  requestNewSessionStart: async () => ({
-    startMode: "fresh",
-    selectedModel: {
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-      profileId: "spec",
-    },
-  }),
   updateQuery: () => {},
   ...overrides,
 });
@@ -90,7 +155,22 @@ describe("useAgentStudioSessionStartFlow kickoff failures", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await state.startScenarioKickoff();
+      void state.startScenarioKickoff();
+    });
+    await harness.waitFor(
+      (state) =>
+        state.sessionStartModal !== null &&
+        state.sessionStartModal.isSelectionCatalogLoading === false,
+    );
+    await harness.run((state) => {
+      state.sessionStartModal?.onSelectModel("openai/gpt-5");
+      state.sessionStartModal?.onSelectAgent("spec");
+      state.sessionStartModal?.onSelectVariant("default");
+      state.sessionStartModal?.onConfirm({
+        runInBackground: false,
+        startMode: "fresh",
+        sourceSessionId: null,
+      });
     });
 
     expect(startAgentSession).toHaveBeenCalledTimes(1);

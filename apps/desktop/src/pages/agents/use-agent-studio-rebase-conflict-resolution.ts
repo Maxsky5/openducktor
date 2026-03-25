@@ -2,21 +2,16 @@ import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import { useCallback } from "react";
 import type { GitConflict } from "@/features/agent-studio-git";
 import {
-  type GitConflictResolutionDecision,
-  type PendingGitConflictResolutionRequest,
   useGitConflictResolution,
 } from "@/features/git-conflict-resolution";
+import type { SessionStartExistingSessionOption } from "@/features/session-start";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentStateContextValue } from "@/types/state-slices";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import type { AgentStudioQueryUpdate } from "./agent-studio-navigation";
 import {
   resolveAgentStudioBuilderSessionForTask,
   resolveAgentStudioBuilderSessionsForTask,
 } from "./agents-page-selection";
-
-export type RebaseConflictResolutionDecision = GitConflictResolutionDecision;
-export type PendingRebaseConflictResolutionRequest = PendingGitConflictResolutionRequest;
 
 type AgentStudioRebaseConflictResolutionSelectionContext = {
   viewTaskId: string;
@@ -33,14 +28,21 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
   selection: AgentStudioRebaseConflictResolutionSelectionContext;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
   onContextSwitchIntent: () => void;
-  startAgentSession: AgentStateContextValue["startAgentSession"];
-  sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
+  startSessionRequest: (request: {
+    taskId: string;
+    role: "build";
+    scenario: "build_rebase_conflict_resolution";
+    reason: "rebase_conflict_resolution";
+    postStartAction: "send_message";
+    message: string;
+    initialStartMode?: "fresh" | "reuse" | "fork";
+    existingSessionOptions?: SessionStartExistingSessionOption[];
+    initialSourceSessionId?: string | null;
+  }) => Promise<string | undefined>;
   loadPromptOverrides?: (repoPath: string) => Promise<RepoPromptOverrides>;
 };
 
 type UseAgentStudioRebaseConflictResolutionResult = {
-  pendingRebaseConflictResolutionRequest: PendingRebaseConflictResolutionRequest | null;
-  resolvePendingRebaseConflictResolution: (decision: RebaseConflictResolutionDecision) => void;
   handleResolveRebaseConflict: (conflict: GitConflict) => Promise<boolean>;
 };
 
@@ -49,18 +51,27 @@ export function useAgentStudioRebaseConflictResolution({
   selection,
   scheduleQueryUpdate,
   onContextSwitchIntent,
-  startAgentSession,
-  sendAgentMessage,
+  startSessionRequest,
   loadPromptOverrides = loadEffectivePromptOverrides,
 }: UseAgentStudioRebaseConflictResolutionArgs): UseAgentStudioRebaseConflictResolutionResult {
-  const {
-    pendingGitConflictResolutionRequest,
-    resolvePendingGitConflictResolution,
-    handleResolveGitConflict,
-  } = useGitConflictResolution({
+  const { handleResolveGitConflict } = useGitConflictResolution({
     activeRepo,
-    startAgentSession,
-    sendAgentMessage,
+    startConflictResolutionSession: async (request) =>
+      startSessionRequest({
+        taskId: request.taskId,
+        role: request.role,
+        scenario: request.scenario,
+        reason: "rebase_conflict_resolution",
+        postStartAction: "send_message",
+        message: request.message,
+        initialStartMode: request.initialStartMode,
+        ...(request.existingSessionOptions.length > 0
+          ? { existingSessionOptions: request.existingSessionOptions }
+          : {}),
+        ...(request.initialSourceSessionId
+          ? { initialSourceSessionId: request.initialSourceSessionId }
+          : {}),
+      }),
     loadPromptOverrides,
   });
 
@@ -115,8 +126,6 @@ export function useAgentStudioRebaseConflictResolution({
   );
 
   return {
-    pendingRebaseConflictResolutionRequest: pendingGitConflictResolutionRequest,
-    resolvePendingRebaseConflictResolution: resolvePendingGitConflictResolution,
     handleResolveRebaseConflict,
   };
 }

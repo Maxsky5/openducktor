@@ -51,6 +51,7 @@ type UseKanbanSessionStartFlowArgs = {
 type UseKanbanSessionStartFlowResult = {
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   sessionStartModal: SessionStartModalModel | null;
+  startSessionIntent: (intent: KanbanSessionStartIntent) => Promise<string | undefined>;
   onPullRequestGenerate: (taskId: string) => Promise<void>;
   onDelegate: (taskId: string) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
@@ -174,9 +175,9 @@ export function useKanbanSessionStartFlow({
     [navigate],
   );
 
-  const openSessionStartModal = useCallback(
-    (intent: KanbanSessionStartIntent): void => {
-      void runSessionStartRequest(
+  const startSessionIntent = useCallback(
+    async (intent: KanbanSessionStartIntent): Promise<string | undefined> => {
+      return runSessionStartRequest(
         {
           source: "kanban",
           taskId: intent.taskId,
@@ -207,7 +208,7 @@ export function useKanbanSessionStartFlow({
             ...(intent.beforeStartAction ? { beforeStartAction: intent.beforeStartAction } : {}),
           };
 
-          await startKanbanSessionFlow({
+          const sessionId = await startKanbanSessionFlow({
             activeRepo,
             intent: resolvedIntent,
             selection: decision.startMode === "reuse" ? null : decision.selectedModel,
@@ -220,10 +221,9 @@ export function useKanbanSessionStartFlow({
             openSessionInAgentStudio,
             sendAgentMessage,
           });
+          return sessionId;
         },
-      ).catch(() => {
-        toast.error("Failed to start the session.");
-      });
+      );
     },
     [
       activeRepo,
@@ -264,7 +264,7 @@ export function useKanbanSessionStartFlow({
         throw new Error(`No Builder session is available to fork for task "${taskId}".`);
       }
 
-      openSessionStartModal({
+      void startSessionIntent({
         taskId,
         role: "build",
         scenario: "build_pull_request_generation",
@@ -276,19 +276,19 @@ export function useKanbanSessionStartFlow({
         postStartAction: "kickoff",
       });
     },
-    [openSessionStartModal],
+    [startSessionIntent],
   );
 
   const onDelegate = useCallback(
     (taskId: string): void => {
-      openSessionStartModal({
+      void startSessionIntent({
         taskId,
         role: "build",
         scenario: resolveKanbanBuildStartScenario(tasksRef.current, taskId),
         postStartAction: "kickoff",
       });
     },
-    [openSessionStartModal],
+    [startSessionIntent],
   );
 
   const onPlan = useCallback(
@@ -317,14 +317,14 @@ export function useKanbanSessionStartFlow({
         return;
       }
 
-      openSessionStartModal({
+      void startSessionIntent({
         taskId,
         role,
         scenario: firstScenario(role),
         postStartAction: startPreference === "fresh" ? "kickoff" : "none",
       });
     },
-    [openAgents, openSessionInAgentStudio, openSessionStartModal],
+    [openAgents, openSessionInAgentStudio, startSessionIntent],
   );
 
   const onBuild = useCallback(
@@ -337,14 +337,14 @@ export function useKanbanSessionStartFlow({
 
   const onQaStart = useCallback(
     (taskId: string): void => {
-      openSessionStartModal({
+      void startSessionIntent({
         taskId,
         role: "qa",
         scenario: "qa_review",
         postStartAction: "kickoff",
       });
     },
-    [openSessionStartModal],
+    [startSessionIntent],
   );
 
   const onQaOpen = useCallback(
@@ -410,7 +410,9 @@ export function useKanbanSessionStartFlow({
         state: humanReviewFeedbackState,
         humanRequestChangesTask,
         hydrateRequestedTaskSessionHistory,
-        openSessionStartModal,
+        openSessionStartModal: (intent) => {
+          void startSessionIntent(intent);
+        },
         openAgentStudioSession,
         sendAgentMessage,
         onDismiss: () => {
@@ -429,7 +431,7 @@ export function useKanbanSessionStartFlow({
     humanReviewFeedbackState,
     hydrateRequestedTaskSessionHistory,
     openAgentStudioSession,
-    openSessionStartModal,
+    startSessionIntent,
     sendAgentMessage,
   ]);
 
@@ -464,6 +466,7 @@ export function useKanbanSessionStartFlow({
   return {
     humanReviewFeedbackModal,
     sessionStartModal,
+    startSessionIntent,
     onPullRequestGenerate,
     onDelegate,
     onPlan,

@@ -36,7 +36,7 @@ export const startKanbanSessionFlow = async ({
   humanRequestChangesTask,
   openSessionInAgentStudio,
   sendAgentMessage,
-}: StartKanbanSessionFlowInput): Promise<void> => {
+}: StartKanbanSessionFlowInput): Promise<string> => {
   const effectivePostStartAction =
     startInBackground && intent.postStartAction === "none" ? "kickoff" : intent.postStartAction;
   const task = tasks.find((entry) => entry.id === intent.taskId) ?? null;
@@ -79,7 +79,7 @@ export const startKanbanSessionFlow = async ({
       openSessionInAgentStudio(intent, workflow.sessionId);
       toast.error("Session started, but requesting changes failed.");
     }
-    return;
+    return workflow.sessionId;
   }
 
   if (startInBackground) {
@@ -93,7 +93,7 @@ export const startKanbanSessionFlow = async ({
   }
 
   if (effectivePostStartAction === "none") {
-    return;
+    return workflow.sessionId;
   }
 
   if (workflow.postStartActionError) {
@@ -105,4 +105,6 @@ export const startKanbanSessionFlow = async ({
       description: workflow.postStartActionError.message,
     });
   }
+
+  return workflow.sessionId;
 };

@@ -1,4 +1,4 @@
-import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type {
   AgentEnginePort,
   AgentModelSelection,
@@ -47,7 +47,7 @@ export type SessionDependencies = {
   sessionsRef: { current: SessionStateById };
   inFlightStartsByRepoTaskRef: { current: Map<string, Promise<string>> };
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
-  persistSessionSnapshot: (session: AgentSessionState) => Promise<void>;
+  persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
   attachSessionListener: (repoPath: string, sessionId: string) => void;
 };
 

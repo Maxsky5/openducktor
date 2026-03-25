@@ -20,7 +20,6 @@ import {
   useRuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import type { AgentStudioQueryUpdate } from "../agent-studio-navigation";
-import { RebaseConflictResolutionModal } from "../agents-page-rebase-conflict-modal";
 import { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import { useAgentStudioQuerySessionSync } from "../use-agent-studio-query-session-sync";
 import { useAgentStudioQuerySync } from "../use-agent-studio-query-sync";
@@ -53,7 +52,6 @@ type AgentsPageShellModel = {
   chatModel: ReturnType<typeof useAgentStudioOrchestrationController>["agentChatModel"];
   isRightPanelVisible: boolean;
   rightPanelModel: ReturnType<typeof useAgentsPageRightPanelModel>["rightPanelModel"];
-  gitConflictResolutionModal: ReactElement | null;
   mergedPullRequestModal: ReactElement | null;
   humanReviewFeedbackModal: ReactElement;
   sessionStartModal: ReactElement | null;
@@ -250,11 +248,9 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     },
   });
 
-  const {
-    pendingRebaseConflictResolutionRequest,
-    resolvePendingRebaseConflictResolution,
-    handleResolveRebaseConflict,
-  } = useAgentStudioRebaseConflictResolution({
+  const { startSessionRequest } = orchestration;
+
+  const { handleResolveRebaseConflict } = useAgentStudioRebaseConflictResolution({
     activeRepo,
     selection: {
       viewTaskId: selection.viewTaskId,
@@ -267,8 +263,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     },
     scheduleQueryUpdate,
     onContextSwitchIntent: signalContextSwitchIntent,
-    startAgentSession,
-    sendAgentMessage,
+    startSessionRequest,
   });
 
   const { isRightPanelVisible, rightPanelModel } = useAgentsPageRightPanelModel({
@@ -288,14 +283,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     onDetectPullRequest: handleDetectPullRequest,
     onResolveGitConflict: handleResolveRebaseConflict,
   });
-
-  const gitConflictResolutionModal = pendingRebaseConflictResolutionRequest ? (
-    <RebaseConflictResolutionModal
-      key={pendingRebaseConflictResolutionRequest.requestId}
-      request={pendingRebaseConflictResolutionRequest}
-      onResolve={resolvePendingRebaseConflictResolution}
-    />
-  ) : null;
 
   const sessionStartModal = orchestration.sessionStartModal ? (
     <SessionStartModal model={orchestration.sessionStartModal} />
@@ -342,7 +329,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     chatModel: orchestration.agentChatModel,
     isRightPanelVisible,
     rightPanelModel,
-    gitConflictResolutionModal,
     mergedPullRequestModal,
     humanReviewFeedbackModal,
     sessionStartModal,

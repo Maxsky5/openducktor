@@ -1,6 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO } from "@/features/git-conflict-resolution";
-import { host } from "@/state/operations/shared/host";
+import { describe, expect, mock, test } from "bun:test";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -72,226 +70,145 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
     },
     scheduleQueryUpdate: mock(() => {}),
     onContextSwitchIntent: mock(() => {}),
-    startAgentSession: mock(async () => "build-new-1"),
-    sendAgentMessage: mock(async () => {}),
+    startSessionRequest: mock(async () => "build-new-1"),
     loadPromptOverrides: mock(async () => ({})),
     ...overrides,
   };
 };
 
 describe("useAgentStudioRebaseConflictResolution", () => {
-  const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
-
-  beforeEach(() => {
-    host.buildContinuationTargetGet = async () => ({
-      workingDirectory: "/repo/worktrees/task-1",
-      source: "builder_session",
+  test("routes conflict resolution through the shared session-start request", async () => {
+    const args = createBaseArgs({
+      startSessionRequest: mock(async () => "build-1"),
     });
-  });
-
-  afterEach(() => {
-    host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
-  });
-
-  test("routes conflict resolution to an existing Builder session", async () => {
-    const args = createBaseArgs();
     const harness = createHookHarness(args);
 
     try {
       await harness.mount();
 
-      let resolved = false;
-      await harness.run((state) => {
-        void state.handleResolveRebaseConflict(createConflict()).then((result) => {
-          resolved = result;
-        });
-      });
+      const resolved = await harness.getLatest().handleResolveRebaseConflict(createConflict());
 
-      await harness.waitFor((state) => state.pendingRebaseConflictResolutionRequest !== null);
-      expect(harness.getLatest().pendingRebaseConflictResolutionRequest?.defaultSessionId).toBe(
-        "build-1",
+      expect(resolved).toBe(true);
+      expect(args.startSessionRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_rebase_conflict_resolution",
+          reason: "rebase_conflict_resolution",
+          postStartAction: "send_message",
+          initialStartMode: "reuse",
+          initialSourceSessionId: "build-1",
+        }),
       );
-      expect(harness.getLatest().pendingRebaseConflictResolutionRequest?.requestId).toBe(
-        "git-conflict-0",
-      );
-
-      await harness.run((state) => {
-        state.resolvePendingRebaseConflictResolution({
-          mode: "existing",
-          sessionId: "build-1",
-        });
-      });
-
-      await harness.waitFor((_state) => resolved === true);
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
         task: "task-1",
         session: "build-1",
         agent: "build",
       });
       expect(args.onContextSwitchIntent).toHaveBeenCalledTimes(1);
-      expect(args.startAgentSession).toHaveBeenCalledTimes(0);
-      expect(args.sendAgentMessage).toHaveBeenCalledTimes(1);
-      expect(args.sendAgentMessage).toHaveBeenCalledWith(
-        "build-1",
-        expect.stringContaining("task-1"),
-      );
     } finally {
       await harness.unmount();
     }
   });
 
-  test("starts a new Builder session when the user selects a new conflict workflow", async () => {
+  test("filters reusable Builder sessions to the conflicted worktree", async () => {
+    const matchingBuilderSession = buildSession({
+      sessionId: "build-1",
+      workingDirectory: "/repo/worktrees/task-1",
+    });
+    const otherBuilderSession = buildSession({
+      sessionId: "build-other",
+      workingDirectory: "/repo/worktrees/other",
+    });
     const args = createBaseArgs({
-      startAgentSession: mock(async () => "build-new-9"),
+      selection: {
+        ...createBaseArgs().selection,
+        viewSessionsForTask: [matchingBuilderSession, otherBuilderSession],
+        sessionsForTask: [matchingBuilderSession, otherBuilderSession],
+      },
+      startSessionRequest: mock(async () => "build-1"),
     });
     const harness = createHookHarness(args);
 
     try {
       await harness.mount();
 
-      let resolved = false;
-      await harness.run((state) => {
-        void state.handleResolveRebaseConflict(createConflict()).then((result) => {
-          resolved = result;
-        });
-      });
+      const resolved = await harness.getLatest().handleResolveRebaseConflict(createConflict());
 
-      await harness.waitFor((state) => state.pendingRebaseConflictResolutionRequest !== null);
-      expect(harness.getLatest().pendingRebaseConflictResolutionRequest?.requestId).toBe(
-        "git-conflict-0",
+      expect(resolved).toBe(true);
+      expect(args.startSessionRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          existingSessionOptions: [expect.objectContaining({ value: "build-1" })],
+          initialSourceSessionId: "build-1",
+        }),
       );
+    } finally {
+      await harness.unmount();
+    }
+  });
 
-      await harness.run((state) => {
-        state.resolvePendingRebaseConflictResolution({ mode: "new" });
-      });
+  test("does not require an existing selected model to request a new conflict session", async () => {
+    const args = createBaseArgs({
+      selection: {
+        ...createBaseArgs().selection,
+        viewSessionsForTask: [
+          buildSession({
+            sessionId: "build-1",
+            workingDirectory: "/repo/worktrees/task-1",
+            selectedModel: null,
+          }),
+        ],
+        sessionsForTask: [
+          buildSession({
+            sessionId: "build-1",
+            workingDirectory: "/repo/worktrees/task-1",
+            selectedModel: null,
+          }),
+        ],
+      },
+      startSessionRequest: mock(async () => "build-new-9"),
+    });
+    const harness = createHookHarness(args);
 
-      await harness.waitFor((_state) => resolved === true);
-      expect(args.startAgentSession).toHaveBeenCalledWith({
-        taskId: "task-1",
-        role: "build",
-        scenario: BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO,
-        selectedModel: {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5",
-        },
-        startMode: "fresh",
-      });
+    try {
+      await harness.mount();
+
+      const resolved = await harness
+        .getLatest()
+        .handleResolveRebaseConflict(createConflict({ workingDir: undefined }));
+
+      expect(resolved).toBe(true);
+      expect(args.startSessionRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scenario: "build_rebase_conflict_resolution",
+          initialStartMode: "reuse",
+          initialSourceSessionId: "build-1",
+        }),
+      );
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
         task: "task-1",
         session: "build-new-9",
         agent: "build",
       });
-      expect(args.onContextSwitchIntent).toHaveBeenCalledTimes(1);
-      expect(args.sendAgentMessage).toHaveBeenCalledWith(
-        "build-new-9",
-        expect.stringContaining("task-1"),
-      );
     } finally {
       await harness.unmount();
     }
   });
 
-  test("returns false without starting work when the conflict dialog is cancelled", async () => {
-    const args = createBaseArgs();
-    const harness = createHookHarness(args);
-
-    try {
-      await harness.mount();
-
-      let resolution: boolean | null = null;
-      await harness.run((state) => {
-        void state.handleResolveRebaseConflict(createConflict()).then((result) => {
-          resolution = result;
-        });
-      });
-
-      await harness.waitFor((state) => state.pendingRebaseConflictResolutionRequest !== null);
-      expect(harness.getLatest().pendingRebaseConflictResolutionRequest?.requestId).toBe(
-        "git-conflict-0",
-      );
-      await harness.run((state) => {
-        state.resolvePendingRebaseConflictResolution(null);
-      });
-
-      await harness.waitFor((_state) => resolution !== null);
-      if (resolution === null) {
-        throw new Error("Expected cancellation resolution");
-      }
-      expect(resolution === false).toBe(true);
-      expect(args.startAgentSession).toHaveBeenCalledTimes(0);
-      expect(args.sendAgentMessage).toHaveBeenCalledTimes(0);
-      expect(args.scheduleQueryUpdate).toHaveBeenCalledTimes(0);
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("does not require a paused worktree to start a new builder conflict session", async () => {
-    const args = createBaseArgs();
-    const harness = createHookHarness(args);
-
-    try {
-      await harness.mount();
-
-      let resolved = false;
-      await harness.run((state) => {
-        void state
-          .handleResolveRebaseConflict(
-            createConflict({
-              workingDir: undefined,
-            }),
-          )
-          .then((result) => {
-            resolved = result;
-          });
-      });
-
-      await harness.waitFor((state) => state.pendingRebaseConflictResolutionRequest !== null);
-      await harness.run((state) => {
-        state.resolvePendingRebaseConflictResolution({ mode: "new" });
-      });
-
-      await harness.waitFor((_state) => resolved === true);
-      expect(args.startAgentSession).toHaveBeenCalledTimes(1);
-      expect(args.sendAgentMessage).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("propagates Builder message delivery failures", async () => {
+  test("returns false when the shared session-start flow is cancelled", async () => {
     const args = createBaseArgs({
-      sendAgentMessage: mock(async () => {
-        throw new Error("message delivery failed");
-      }),
+      startSessionRequest: mock(async () => undefined),
     });
     const harness = createHookHarness(args);
 
     try {
       await harness.mount();
 
-      let rejectionMessage: string | null = null;
-      await harness.run((state) => {
-        void state.handleResolveRebaseConflict(createConflict()).catch((error) => {
-          rejectionMessage = (error as Error).message;
-        });
-      });
+      const resolved = await harness.getLatest().handleResolveRebaseConflict(createConflict());
 
-      await harness.waitFor((state) => state.pendingRebaseConflictResolutionRequest !== null);
-      await harness.run((state) => {
-        state.resolvePendingRebaseConflictResolution({
-          mode: "existing",
-          sessionId: "build-1",
-        });
-      });
-
-      await harness.waitFor((_state) => rejectionMessage !== null);
-      if (rejectionMessage === null) {
-        throw new Error("Expected conflict-resolution message delivery failure");
-      }
-      const message = String(rejectionMessage);
-      expect(message.includes("Failed to send Builder conflict resolution request")).toBe(true);
+      expect(resolved).toBe(false);
+      expect(args.scheduleQueryUpdate).toHaveBeenCalledTimes(0);
+      expect(args.onContextSwitchIntent).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
     }

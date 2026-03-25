@@ -27,7 +27,7 @@ export const toStartSessionDependencies = (
       sessionsRef: deps.sessionsRef,
       inFlightStartsByRepoTaskRef: deps.inFlightStartsByRepoTaskRef,
       loadAgentSessions: deps.loadAgentSessions,
-      persistSessionSnapshot: deps.persistSessionSnapshot,
+      persistSessionRecord: deps.persistSessionRecord,
       attachSessionListener: deps.attachSessionListener,
     },
     runtime: {
