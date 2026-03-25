@@ -32,6 +32,20 @@ const resolveSourceSelection = (
   return selectedOption?.selectedModel ?? null;
 };
 
+const resolveValidSourceSessionId = (
+  options: SessionStartExistingSessionOption[],
+  sourceSessionId: string | null | undefined,
+): string => {
+  const normalizedSourceSessionId = sourceSessionId?.trim() ?? "";
+  if (!normalizedSourceSessionId) {
+    return options[0]?.value ?? "";
+  }
+
+  return options.some((option) => option.value === normalizedSourceSessionId)
+    ? normalizedSourceSessionId
+    : (options[0]?.value ?? "");
+};
+
 const resolveInitialStartState = ({
   existingSessionOptions,
   initialSourceSessionId,
@@ -57,8 +71,10 @@ const resolveInitialStartState = ({
 
   return {
     selectedStartMode,
-    selectedSourceSessionId:
-      initialSourceSessionId?.trim() || existingSessionOptions[0]?.value || "",
+    selectedSourceSessionId: resolveValidSourceSessionId(
+      existingSessionOptions,
+      initialSourceSessionId,
+    ),
   };
 };
 
@@ -183,7 +199,10 @@ export function useSessionStartModalReuseState({
         return;
       }
 
-      const nextSourceSessionId = selectedSourceSessionId || existingSessionOptions[0]?.value || "";
+      const nextSourceSessionId = resolveValidSourceSessionId(
+        existingSessionOptions,
+        selectedSourceSessionId,
+      );
       if (!nextSourceSessionId) {
         return;
       }
@@ -196,24 +215,40 @@ export function useSessionStartModalReuseState({
 
   const handleSelectSourceSession = useCallback(
     (sessionId: string): void => {
-      setSelectedSourceSessionId(sessionId);
+      const nextSourceSessionId = resolveValidSourceSessionId(existingSessionOptions, sessionId);
+      setSelectedSourceSessionId(nextSourceSessionId);
       if (selectedStartMode !== "reuse") {
         return;
       }
-      applyReuseSourceSelection(sessionId);
+      if (!nextSourceSessionId) {
+        return;
+      }
+      applyReuseSourceSelection(nextSourceSessionId);
     },
-    [applyReuseSourceSelection, selectedStartMode],
+    [applyReuseSourceSelection, existingSessionOptions, selectedStartMode],
   );
 
   useEffect(() => {
     if (selectedStartMode !== "reuse") {
       return;
     }
-    if (!selectedSourceSessionId) {
+    const nextSourceSessionId = resolveValidSourceSessionId(
+      existingSessionOptions,
+      selectedSourceSessionId,
+    );
+    if (!nextSourceSessionId) {
       return;
     }
-    applyReuseSourceSelection(selectedSourceSessionId);
-  }, [applyReuseSourceSelection, selectedSourceSessionId, selectedStartMode]);
+    if (nextSourceSessionId !== selectedSourceSessionId) {
+      setSelectedSourceSessionId(nextSourceSessionId);
+    }
+    applyReuseSourceSelection(nextSourceSessionId);
+  }, [
+    applyReuseSourceSelection,
+    existingSessionOptions,
+    selectedSourceSessionId,
+    selectedStartMode,
+  ]);
 
   useEffect(() => {
     if (selectedStartMode !== "reuse" && selectedStartMode !== "fork") {
