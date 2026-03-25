@@ -1,7 +1,6 @@
 use super::{
-    lifecycle_support::{
-        collect_task_delete_targets, BranchCleanupPlan, TaskActivityGuard, WorktreeCleanupPlan,
-    },
+    cleanup_plans::{collect_task_delete_targets, BranchCleanupPlan, WorktreeCleanupPlan},
+    task_activity_guard::TaskActivityGuard,
     task_context::LoadedTaskContext,
 };
 use crate::app_service::service_core::AppService;
