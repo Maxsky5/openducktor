@@ -17,6 +17,7 @@ export type ReuseSessionStartExecutionRequest = SessionStartExecutionRequestBase
 export type FreshSessionStartExecutionRequest = SessionStartExecutionRequestBase & {
   startMode: "fresh";
   selectedModel: AgentModelSelection;
+  targetWorkingDirectory?: string | null;
 };
 
 export type ForkSessionStartExecutionRequest = SessionStartExecutionRequestBase & {
@@ -39,12 +40,14 @@ const prepareFreshSessionStartInput = ({
   role,
   scenario,
   selectedModel,
+  targetWorkingDirectory,
 }: FreshSessionStartExecutionRequest): StartAgentSessionInput => ({
   taskId,
   role,
   scenario,
   selectedModel,
   startMode: "fresh",
+  ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
 });
 
 const prepareReuseSessionStartInput = ({

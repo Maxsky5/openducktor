@@ -179,6 +179,9 @@ export function useKanbanSessionStartFlow({
           role: intent.role,
           scenario: intent.scenario,
           ...(intent.initialStartMode ? { initialStartMode: intent.initialStartMode } : {}),
+          ...(intent.targetWorkingDirectory !== undefined
+            ? { targetWorkingDirectory: intent.targetWorkingDirectory }
+            : {}),
           ...(intent.sourceSessionId ? { initialSourceSessionId: intent.sourceSessionId } : {}),
           existingSessionOptions:
             intent.existingSessionOptions ??
@@ -196,6 +199,9 @@ export function useKanbanSessionStartFlow({
             scenario: intent.scenario,
             startMode: decision.startMode,
             postStartAction: intent.postStartAction,
+            ...(intent.targetWorkingDirectory !== undefined
+              ? { targetWorkingDirectory: intent.targetWorkingDirectory }
+              : {}),
             ...(decision.startMode === "reuse" || decision.startMode === "fork"
               ? { sourceSessionId: decision.sourceSessionId }
               : {}),

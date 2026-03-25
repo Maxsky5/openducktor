@@ -25,6 +25,7 @@ export type StartAgentSessionInput =
       selectedModel: AgentModelSelection;
       sendKickoff?: boolean;
       startMode: "fresh";
+      targetWorkingDirectory?: string | null;
     }
   | {
       taskId: string;
@@ -129,6 +130,7 @@ export type StartSessionCreationInput = {
   | {
       startMode: "fresh";
       selectedModel: AgentModelSelection;
+      targetWorkingDirectory?: string | null;
     }
   | {
       startMode: "fork";

@@ -26,7 +26,7 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
   selection: AgentStudioRebaseConflictResolutionSelectionContext;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
   onContextSwitchIntent: () => void;
-  startSessionRequest: (request: {
+    startSessionRequest: (request: {
     taskId: string;
     role: "build";
     scenario: "build_rebase_conflict_resolution";
@@ -34,6 +34,7 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
     postStartAction: "send_message";
     message: string;
     initialStartMode?: "fresh" | "reuse" | "fork";
+    targetWorkingDirectory?: string | null;
     existingSessionOptions?: SessionStartExistingSessionOption[];
     initialSourceSessionId?: string | null;
   }) => Promise<string | undefined>;
@@ -63,6 +64,7 @@ export function useAgentStudioRebaseConflictResolution({
         postStartAction: "send_message",
         message: request.message,
         initialStartMode: request.initialStartMode,
+        targetWorkingDirectory: request.targetWorkingDirectory,
         ...(request.existingSessionOptions.length > 0
           ? { existingSessionOptions: request.existingSessionOptions }
           : {}),

@@ -192,6 +192,7 @@ export type AgentStateContextValue = {
           selectedModel: AgentModelSelection;
           sendKickoff?: boolean;
           startMode: "fresh";
+          targetWorkingDirectory?: string | null;
         }
       | {
           taskId: string;

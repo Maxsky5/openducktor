@@ -64,24 +64,6 @@ export const startKanbanSessionFlow = async ({
     },
   });
 
-  if (workflow.beforeStartActionError) {
-    if (startInBackground) {
-      const roleLabel = roleLabels[intent.role] ?? intent.role.toUpperCase();
-      toast.error(`Started ${roleLabel} session, but requesting changes failed.`, {
-        duration: 10000,
-        description: renderSessionStartedToastAction(
-          intent,
-          workflow.sessionId,
-          openSessionInAgentStudio,
-        ),
-      });
-    } else {
-      openSessionInAgentStudio(intent, workflow.sessionId);
-      toast.error("Session started, but requesting changes failed.");
-    }
-    return workflow.sessionId;
-  }
-
   if (startInBackground) {
     const roleLabel = roleLabels[intent.role] ?? intent.role.toUpperCase();
     toast.success(`Started ${roleLabel} session in background for ${intent.taskId}.`, {

@@ -238,11 +238,6 @@ export function useAgentStudioHumanReviewFeedbackFlow({
         setHumanReviewFeedbackState(null);
         selectSessionInAgentStudio(workflow.sessionId, "build");
 
-        if (workflow.beforeStartActionError) {
-          toast.error("Session started, but requesting changes failed.");
-          return;
-        }
-
         try {
           await hydrateRequestedTaskSessionHistory({
             taskId: humanReviewFeedbackState.taskId,

@@ -45,6 +45,7 @@ export type SessionStartModalIntent = {
   initialStartMode?: AgentSessionStartMode;
   existingSessionOptions?: SessionStartExistingSessionOption[];
   initialSourceSessionId?: string | null;
+  targetWorkingDirectory?: string | null;
   postStartAction: SessionStartPostAction;
   message?: string;
   selectedModel?: AgentModelSelection | null;

@@ -164,6 +164,9 @@ export function useAgentStudioSessionStartFlow({
           role: request.role,
           scenario: request.scenario,
           selectedModel: requestedSelection,
+          ...(request.targetWorkingDirectory !== undefined
+            ? { targetWorkingDirectory: request.targetWorkingDirectory }
+            : {}),
           ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
           ...(existingSessionOptions.length > 0 ? { existingSessionOptions } : {}),
           ...(initialSourceSessionId ? { initialSourceSessionId } : {}),
@@ -220,6 +223,9 @@ export function useAgentStudioSessionStartFlow({
             scenario: request.scenario,
             startMode: decision.startMode,
             postStartAction: request.postStartAction,
+            ...(request.targetWorkingDirectory !== undefined
+              ? { targetWorkingDirectory: request.targetWorkingDirectory }
+              : {}),
             ...(request.message ? { message: request.message } : {}),
             ...(request.beforeStartAction ? { beforeStartAction: request.beforeStartAction } : {}),
             ...(decision.startMode === "reuse" || decision.startMode === "fork"

@@ -115,7 +115,7 @@ describe("useGitConflictResolution", () => {
 
       const resolved = await harness
         .getLatest()
-        .handleResolveGitConflict(createConflict({ workingDir: undefined }), {
+        .handleResolveGitConflict(createConflict(), {
           taskId: "task-1",
           task: createTaskCardFixture({ id: "task-1", title: "Resolve rebase conflict" }),
           builderSessions: [
@@ -134,9 +134,71 @@ describe("useGitConflictResolution", () => {
         expect.objectContaining({
           initialStartMode: "reuse",
           initialSourceSessionId: "build-1",
+          targetWorkingDirectory: "/repo/worktrees/task-1",
           scenario: BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO,
         }),
       );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("passes the conflicted worktree when starting a fresh conflict-resolution session", async () => {
+    const startConflictResolutionSession = mock(async () => "build-new");
+    const harness = createHookHarness(useGitConflictResolution, {
+      activeRepo: "/repo",
+      startConflictResolutionSession,
+      loadPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await harness.mount();
+
+      const resolved = await harness.getLatest().handleResolveGitConflict(createConflict(), {
+        taskId: "task-1",
+        task: createTaskCardFixture({ id: "task-1", title: "Resolve rebase conflict" }),
+        builderSessions: [],
+        currentViewSessionId: null,
+        onOpenSession: () => undefined,
+      });
+
+      expect(resolved).toBe(true);
+      expect(startConflictResolutionSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          initialStartMode: "fresh",
+          targetWorkingDirectory: "/repo/worktrees/task-1",
+          scenario: BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO,
+        }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("fails fast when the conflicted working directory is missing", async () => {
+    const startConflictResolutionSession = mock(async () => "build-new");
+    const harness = createHookHarness(useGitConflictResolution, {
+      activeRepo: "/repo",
+      startConflictResolutionSession,
+      loadPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await harness.mount();
+
+      await expect(
+        harness.getLatest().handleResolveGitConflict(createConflict({ workingDir: undefined }), {
+          taskId: "task-1",
+          task: createTaskCardFixture({ id: "task-1", title: "Resolve rebase conflict" }),
+          builderSessions: [],
+          currentViewSessionId: null,
+          onOpenSession: () => undefined,
+        }),
+      ).rejects.toThrow(
+        'Cannot resolve a git conflict for task "task-1" because the conflicted working directory is missing.',
+      );
+
+      expect(startConflictResolutionSession).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }

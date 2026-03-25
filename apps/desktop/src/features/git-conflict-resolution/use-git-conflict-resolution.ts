@@ -18,6 +18,7 @@ export type StartGitConflictResolutionSessionInput = {
   existingSessionOptions: ReturnType<typeof buildReusableSessionOptions>;
   initialStartMode: "fresh" | "reuse";
   initialSourceSessionId: string | null;
+  targetWorkingDirectory: string;
 };
 
 type GitConflictTaskContext = {
@@ -52,9 +53,6 @@ const filterConflictBuilderSessions = (
   builderSessions: AgentSessionState[],
 ): AgentSessionState[] => {
   const conflictWorkingDirectory = normalizeWorkingDirectory(conflict.workingDir);
-  if (!conflictWorkingDirectory) {
-    return builderSessions;
-  }
 
   return builderSessions.filter(
     (session) => normalizeWorkingDirectory(session.workingDirectory) === conflictWorkingDirectory,
@@ -84,6 +82,12 @@ export function useGitConflictResolution({
     async (conflict: GitConflict, taskContext: GitConflictTaskContext): Promise<boolean> => {
       if (!activeRepo) {
         throw new Error("Cannot resolve a git conflict because no repository is selected.");
+      }
+      const conflictWorkingDirectory = normalizeWorkingDirectory(conflict.workingDir);
+      if (!conflictWorkingDirectory) {
+        throw new Error(
+          `Cannot resolve a git conflict for task "${taskContext.taskId}" because the conflicted working directory is missing.`,
+        );
       }
 
       const validBuilderSessions = filterConflictBuilderSessions(
@@ -129,6 +133,7 @@ export function useGitConflictResolution({
         }),
         initialStartMode: defaultBuilderSession ? "reuse" : "fresh",
         initialSourceSessionId: defaultBuilderSession?.sessionId ?? null,
+        targetWorkingDirectory: conflictWorkingDirectory,
       });
 
       if (!sessionId) {

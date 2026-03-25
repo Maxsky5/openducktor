@@ -129,7 +129,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("reuses an existing in-flight start promise", async () => {
     const inFlight = Promise.resolve("session-in-flight");
     const inFlightMap = new Map<string, Promise<string>>([
-      ["/tmp/repo::task-1::build::reuse::session-in-flight", inFlight],
+      ["/tmp/repo::task-1::build::reuse::session-in-flight::", inFlight],
     ]);
     const sessionsRef = { current: {} };
     const start = createStartAgentSessionWithFlatDeps({

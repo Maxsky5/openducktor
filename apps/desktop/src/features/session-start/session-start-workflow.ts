@@ -25,6 +25,7 @@ export type SessionStartWorkflowIntent = {
   scenario: AgentScenario;
   startMode: AgentSessionStartMode;
   sourceSessionId?: string | null;
+  targetWorkingDirectory?: string | null;
   postStartAction: SessionStartPostAction;
   message?: string;
   beforeStartAction?: SessionStartBeforeAction;
@@ -32,7 +33,6 @@ export type SessionStartWorkflowIntent = {
 
 export type SessionStartWorkflowResult = {
   sessionId: string;
-  beforeStartActionError: Error | null;
   postStartActionError: Error | null;
 };
 
@@ -118,21 +118,16 @@ const runBeforeStartAction = async ({
   humanRequestChangesTask,
 }: Pick<StartSessionWorkflowArgs, "humanRequestChangesTask"> & {
   intent: SessionStartWorkflowIntent;
-}): Promise<Error | null> => {
+}): Promise<void> => {
   const beforeStartAction = intent.beforeStartAction;
   if (!beforeStartAction) {
-    return null;
+    return;
   }
   if (!humanRequestChangesTask) {
     throw new Error("Human request changes action is unavailable.");
   }
 
-  try {
-    await humanRequestChangesTask(intent.taskId, beforeStartAction.note);
-    return null;
-  } catch (error) {
-    return toError(error);
-  }
+  await humanRequestChangesTask(intent.taskId, beforeStartAction.note);
 };
 
 export const startSessionWorkflow = async ({
@@ -147,6 +142,11 @@ export const startSessionWorkflow = async ({
   postStartExecution = "await",
   onDetachedPostStartError,
 }: StartSessionWorkflowArgs): Promise<SessionStartWorkflowResult> => {
+  await runBeforeStartAction({
+    intent,
+    ...(humanRequestChangesTask ? { humanRequestChangesTask } : {}),
+  });
+
   const sessionId =
     intent.startMode === "reuse"
       ? await executeSessionStart({
@@ -173,18 +173,15 @@ export const startSessionWorkflow = async ({
             scenario: intent.scenario,
             startMode: "fresh",
             selectedModel: requireSelectedModel(selection, "fresh"),
+            ...(intent.targetWorkingDirectory !== undefined
+              ? { targetWorkingDirectory: intent.targetWorkingDirectory }
+              : {}),
             startAgentSession,
           });
 
-  const beforeStartActionError = await runBeforeStartAction({
-    intent,
-    ...(humanRequestChangesTask ? { humanRequestChangesTask } : {}),
-  });
-
-  if (beforeStartActionError || intent.postStartAction === "none") {
+  if (intent.postStartAction === "none") {
     return {
       sessionId,
-      beforeStartActionError,
       postStartActionError: null,
     };
   }
@@ -217,14 +214,12 @@ export const startSessionWorkflow = async ({
     });
     return {
       sessionId,
-      beforeStartActionError: null,
       postStartActionError: null,
     };
   }
 
   return {
     sessionId,
-    beforeStartActionError: null,
     postStartActionError: await runPostStartAction(),
   };
 };

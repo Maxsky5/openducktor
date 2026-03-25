@@ -173,9 +173,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
     try {
       await harness.mount();
 
-      const resolved = await harness
-        .getLatest()
-        .handleResolveRebaseConflict(createConflict({ workingDir: undefined }));
+      const resolved = await harness.getLatest().handleResolveRebaseConflict(createConflict());
 
       expect(resolved).toBe(true);
       expect(args.startSessionRequest).toHaveBeenCalledWith(
@@ -183,6 +181,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
           scenario: "build_rebase_conflict_resolution",
           initialStartMode: "reuse",
           initialSourceSessionId: "build-1",
+          targetWorkingDirectory: "/repo/worktrees/task-1",
         }),
       );
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
@@ -190,6 +189,60 @@ describe("useAgentStudioRebaseConflictResolution", () => {
         session: "build-new-9",
         agent: "build",
       });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("passes the conflicted worktree when requesting a fresh conflict session", async () => {
+    const args = createBaseArgs({
+      selection: {
+        ...createBaseArgs().selection,
+        viewSessionsForTask: [],
+        sessionsForTask: [],
+      },
+      startSessionRequest: mock(async () => "build-new-9"),
+    });
+    const harness = createHookHarness(args);
+
+    try {
+      await harness.mount();
+
+      const resolved = await harness.getLatest().handleResolveRebaseConflict(createConflict());
+
+      expect(resolved).toBe(true);
+      expect(args.startSessionRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scenario: "build_rebase_conflict_resolution",
+          initialStartMode: "fresh",
+          targetWorkingDirectory: "/repo/worktrees/task-1",
+        }),
+      );
+      expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
+        task: "task-1",
+        session: "build-new-9",
+        agent: "build",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("fails when the conflicted working directory is missing", async () => {
+    const args = createBaseArgs();
+    const harness = createHookHarness(args);
+
+    try {
+      await harness.mount();
+
+      await expect(
+        harness.getLatest().handleResolveRebaseConflict(createConflict({ workingDir: undefined })),
+      ).rejects.toThrow(
+        'Cannot resolve a git conflict for task "task-1" because the conflicted working directory is missing.',
+      );
+
+      expect(args.startSessionRequest).not.toHaveBeenCalled();
+      expect(args.scheduleQueryUpdate).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }

@@ -554,10 +554,13 @@ const createOrReuseSession = async ({
 
   const taskCard = validatedTaskCard ?? resolveStartTask({ ctx, task: deps.task });
   const selectedModel = input.selectedModel;
-  const targetWorkingDirectory = await resolveFreshStartTargetWorkingDirectory({
-    ctx,
-    runtime: deps.runtime,
-  });
+  const targetWorkingDirectory =
+    input.targetWorkingDirectory !== undefined
+      ? input.targetWorkingDirectory
+      : await resolveFreshStartTargetWorkingDirectory({
+          ctx,
+          runtime: deps.runtime,
+        });
   const resolved = await resolveRuntimeAndModel({
     ctx,
     scenario: input.scenario,
@@ -727,7 +730,11 @@ export const createStartAgentSession = ({
     const repoPath = requireActiveRepo(repo.activeRepo);
     const normalizedSourceSessionId =
       input.startMode === "fresh" ? "" : input.sourceSessionId.trim();
-    const inFlightKey = `${repoPath}::${taskId}::${role}::${startMode}::${normalizedSourceSessionId}`;
+    const normalizedTargetWorkingDirectory =
+      input.startMode === "fresh"
+        ? normalizeWorkingDirectory(input.targetWorkingDirectory)
+        : "";
+    const inFlightKey = `${repoPath}::${taskId}::${role}::${startMode}::${normalizedSourceSessionId}::${normalizedTargetWorkingDirectory}`;
     const existingInFlight = session.inFlightStartsByRepoTaskRef.current.get(inFlightKey);
     if (existingInFlight) {
       return existingInFlight;

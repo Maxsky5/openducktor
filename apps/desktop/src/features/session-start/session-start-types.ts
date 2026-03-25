@@ -20,6 +20,7 @@ export type NewSessionStartRequest = {
   scenario: AgentScenario;
   reason: SessionStartRequestReason;
   selectedModel: AgentModelSelection | null;
+  targetWorkingDirectory?: string | null;
   existingSessionOptions?: SessionStartExistingSessionOption[];
   initialSourceSessionId?: string | null;
 };

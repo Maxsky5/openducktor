@@ -172,7 +172,6 @@ export function useAgentStudioSessionStartSession({
             ? undefined
             : {
                 sessionId,
-                beforeStartActionError: null,
                 postStartActionError: null,
               },
         );
