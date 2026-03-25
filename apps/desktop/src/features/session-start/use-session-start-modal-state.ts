@@ -6,8 +6,6 @@ import type {
   AgentScenario,
   AgentSessionStartMode,
 } from "@openducktor/core";
-import { getAgentScenarioDefinition } from "@openducktor/core";
-import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
 import {
@@ -18,14 +16,12 @@ import {
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import {
   DEFAULT_RUNTIME_KIND,
-  findRuntimeDefinition,
   resolveRuntimeKindSelection,
-  toAgentRuntimeOptions,
 } from "@/lib/agent-runtime";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import { resolveScenarioStartMode } from "./session-start-mode";
+import { useSessionStartModalReuseState } from "./session-start-modal-reuse-state";
+import { useSessionStartModalRuntimeState } from "./session-start-modal-runtime-state";
 import {
   coerceVisibleSelectionToCatalog,
   isSameSelection,
@@ -114,55 +110,6 @@ const resolveInitialSelection = (
   );
 };
 
-const resolveSourceSelection = (
-  options: SessionStartExistingSessionOption[],
-  sourceSessionId: string,
-): AgentModelSelection | null => {
-  if (!sourceSessionId) {
-    return null;
-  }
-  const selectedOption = options.find((option) => option.value === sourceSessionId);
-  return selectedOption?.selectedModel ?? null;
-};
-
-const applyReuseSourceSelection = ({
-  catalog,
-  options,
-  runtimeDefinitions,
-  sourceSessionId,
-  setRequestedRuntimeKind,
-  setSelection,
-}: {
-  catalog: AgentModelCatalog | null;
-  options: SessionStartExistingSessionOption[];
-  runtimeDefinitions: RuntimeDescriptor[];
-  sourceSessionId: string;
-  setRequestedRuntimeKind: (runtimeKind: RuntimeKind) => void;
-  setSelection: (selection: AgentModelSelection | null) => void;
-}): void => {
-  const sourceSelection = resolveSourceSelection(options, sourceSessionId);
-  const nextRuntimeKind = resolveRuntimeKindSelection({
-    runtimeDefinitions,
-    requestedRuntimeKind: sourceSelection?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
-  });
-  setRequestedRuntimeKind(nextRuntimeKind);
-
-  if (!sourceSelection) {
-    setSelection(null);
-    return;
-  }
-
-  setSelection(
-    coerceVisibleSelectionToCatalog(catalog, {
-      ...sourceSelection,
-      runtimeKind: nextRuntimeKind,
-    }) ?? {
-      ...sourceSelection,
-      runtimeKind: nextRuntimeKind,
-    },
-  );
-};
-
 export function useSessionStartModalState({
   activeRepo,
   repoSettings,
@@ -174,70 +121,46 @@ export function useSessionStartModalState({
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
   const [selection, setSelection] = useState<AgentModelSelection | null>(null);
-  const [selectedStartMode, setSelectedStartMode] = useState<AgentSessionStartMode>("fresh");
-  const [selectedSourceSessionId, setSelectedSourceSessionId] = useState("");
-  const [requestedRuntimeKind, setRequestedRuntimeKind] =
-    useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
   const activeRole = intent?.role ?? null;
-  const availableStartModes = useMemo<AgentSessionStartMode[]>(
-    () => (intent ? getAgentScenarioDefinition(intent.scenario).allowedStartModes : ["fresh"]),
-    [intent],
-  );
-  const existingSessionOptions = intent?.existingSessionOptions ?? [];
-  const runtimeOptions = useMemo(
-    () => toAgentRuntimeOptions(runtimeDefinitions),
-    [runtimeDefinitions],
-  );
-  const selectedRuntimeKind = useMemo(
-    () =>
-      resolveRuntimeKindSelection({
-        runtimeDefinitions,
-        requestedRuntimeKind,
-      }),
-    [requestedRuntimeKind, runtimeDefinitions],
-  );
-  const selectedRuntimeDescriptor = useMemo(
-    () => findRuntimeDefinition(runtimeDefinitions, selectedRuntimeKind),
-    [runtimeDefinitions, selectedRuntimeKind],
-  );
-
-  const catalogQuery = useQuery({
-    ...repoRuntimeCatalogQueryOptions(activeRepo ?? "", selectedRuntimeKind, loadCatalogForRepo),
-    enabled: initialCatalog === undefined && Boolean(activeRepo) && intent !== null,
-    queryFn: async (): Promise<AgentModelCatalog> => {
-      if (!activeRepo) {
-        throw new Error("No repository selected.");
-      }
-      return loadCatalogForRepo(activeRepo, selectedRuntimeKind);
-    },
+  const {
+    catalog,
+    isCatalogLoading,
+    selectedRuntimeDescriptor,
+    selectedRuntimeKind,
+    runtimeOptions,
+    setRequestedRuntimeKind,
+  } = useSessionStartModalRuntimeState({
+    activeRepo,
+    initialCatalog,
+    isOpen: intent !== null,
+    loadCatalog: loadCatalogForRepo,
+    runtimeDefinitions,
   });
-
-  const catalog = initialCatalog ?? catalogQuery.data ?? null;
-  const isCatalogLoading =
-    initialCatalog === undefined && intent !== null && activeRepo !== null
-      ? catalogQuery.isLoading
-      : false;
+  const {
+    availableStartModes,
+    existingSessionOptions,
+    initializeStartState,
+    resetStartState,
+    selectedSourceSessionId,
+    selectedStartMode,
+    handleSelectSourceSession,
+    handleSelectStartMode,
+  } = useSessionStartModalReuseState({
+    catalog,
+    intent,
+    runtimeDefinitions,
+    setRequestedRuntimeKind,
+    setSelection,
+  });
 
   const closeStartModal = useCallback(() => {
     setIntent(null);
     setSelection(null);
-    setSelectedStartMode("fresh");
-    setSelectedSourceSessionId("");
-  }, []);
+    resetStartState();
+  }, [resetStartState]);
 
   const openStartModal = useCallback(
     (nextIntent: SessionStartModalIntent) => {
-      const existingSessionOptions = nextIntent.existingSessionOptions ?? [];
-      const allowedStartModes = getAgentScenarioDefinition(nextIntent.scenario).allowedStartModes;
-      const initialStartMode =
-        nextIntent.initialStartMode && allowedStartModes.includes(nextIntent.initialStartMode)
-          ? nextIntent.initialStartMode
-          : resolveScenarioStartMode({
-              scenario: nextIntent.scenario,
-              existingSessionOptions,
-            });
-      const initialSourceSessionId =
-        nextIntent.initialSourceSessionId?.trim() || existingSessionOptions[0]?.value || "";
       const initialRuntimeKind = resolveRuntimeKindSelection({
         runtimeDefinitions,
         requestedRuntimeKind:
@@ -248,8 +171,7 @@ export function useSessionStartModalState({
       });
       setRequestedRuntimeKind(initialRuntimeKind);
       setIntent(nextIntent);
-      setSelectedStartMode(initialStartMode);
-      setSelectedSourceSessionId(initialSourceSessionId);
+      initializeStartState(nextIntent);
       setSelection(
         resolveInitialSelection(
           repoSettings,
@@ -260,51 +182,7 @@ export function useSessionStartModalState({
         ),
       );
     },
-    [catalog, repoSettings, runtimeDefinitions],
-  );
-
-  const handleSelectStartMode = useCallback(
-    (startMode: AgentSessionStartMode): void => {
-      if ((startMode === "reuse" || startMode === "fork") && existingSessionOptions.length === 0) {
-        return;
-      }
-      setSelectedStartMode(startMode);
-      if (startMode !== "reuse") {
-        return;
-      }
-      const nextSourceSessionId = selectedSourceSessionId || existingSessionOptions[0]?.value || "";
-      if (!nextSourceSessionId) {
-        return;
-      }
-      setSelectedSourceSessionId(nextSourceSessionId);
-      applyReuseSourceSelection({
-        catalog,
-        options: existingSessionOptions,
-        runtimeDefinitions,
-        sourceSessionId: nextSourceSessionId,
-        setRequestedRuntimeKind,
-        setSelection,
-      });
-    },
-    [catalog, existingSessionOptions, runtimeDefinitions, selectedSourceSessionId],
-  );
-
-  const handleSelectSourceSession = useCallback(
-    (sessionId: string): void => {
-      setSelectedSourceSessionId(sessionId);
-      if (selectedStartMode !== "reuse") {
-        return;
-      }
-      applyReuseSourceSelection({
-        catalog,
-        options: existingSessionOptions,
-        runtimeDefinitions,
-        sourceSessionId: sessionId,
-        setRequestedRuntimeKind,
-        setSelection,
-      });
-    },
-    [catalog, existingSessionOptions, runtimeDefinitions, selectedStartMode],
+    [catalog, initializeStartState, repoSettings, runtimeDefinitions, setRequestedRuntimeKind],
   );
 
   useEffect(() => {
@@ -335,57 +213,6 @@ export function useSessionStartModalState({
     selectedRuntimeKind,
     selectedStartMode,
   ]);
-
-  useEffect(() => {
-    if (selectedStartMode !== "reuse") {
-      return;
-    }
-    if (!selectedSourceSessionId) {
-      return;
-    }
-    const sourceSelection = resolveSourceSelection(existingSessionOptions, selectedSourceSessionId);
-    const nextRuntimeKind = resolveRuntimeKindSelection({
-      runtimeDefinitions,
-      requestedRuntimeKind: sourceSelection?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
-    });
-    setRequestedRuntimeKind((current) => {
-      if (current === nextRuntimeKind) {
-        return current;
-      }
-      return nextRuntimeKind;
-    });
-    if (!sourceSelection) {
-      setSelection((current) => (current === null ? current : null));
-      return;
-    }
-    const nextSelection = coerceVisibleSelectionToCatalog(catalog, {
-      ...sourceSelection,
-      runtimeKind: nextRuntimeKind,
-    }) ?? {
-      ...sourceSelection,
-      runtimeKind: nextRuntimeKind,
-    };
-    setSelection((current) => (isSameSelection(current, nextSelection) ? current : nextSelection));
-  }, [
-    catalog,
-    existingSessionOptions,
-    runtimeDefinitions,
-    selectedSourceSessionId,
-    selectedStartMode,
-  ]);
-
-  useEffect(() => {
-    if (selectedStartMode !== "reuse" && selectedStartMode !== "fork") {
-      return;
-    }
-    if (existingSessionOptions.length > 0) {
-      return;
-    }
-    if (!availableStartModes.includes("fresh")) {
-      return;
-    }
-    setSelectedStartMode("fresh");
-  }, [availableStartModes, existingSessionOptions, selectedStartMode]);
 
   const handleSelectRuntime = useCallback(
     (runtimeKindValue: RuntimeKind): void => {
@@ -564,6 +391,6 @@ export function useSessionStartModalState({
     handleSelectRuntime,
     handleSelectAgent,
     handleSelectModel,
-    handleSelectVariant,
+      handleSelectVariant,
   };
 }
