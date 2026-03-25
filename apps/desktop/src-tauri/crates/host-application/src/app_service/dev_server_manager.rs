@@ -69,6 +69,11 @@ impl AppService {
         validate_hook_trust(repo_path.as_str(), &repo_config)?;
         let worktree_path = self
             .build_continuation_target_get(repo_path.as_str(), task_id)?
+            .ok_or_else(|| {
+                anyhow!(
+                    "Builder continuation cannot start until a builder worktree exists for task {task_id}. Start Builder first."
+                )
+            })?
             .working_directory;
         let key = dev_server_group_key(repo_path.as_str(), task_id);
 
@@ -611,7 +616,7 @@ impl AppService {
     fn resolve_dev_server_worktree_path(&self, repo_path: &str, task_id: &str) -> Option<String> {
         self.build_continuation_target_get(repo_path, task_id)
             .ok()
-            .map(|target| target.working_directory)
+            .and_then(|target| target.map(|entry| entry.working_directory))
     }
 
     fn append_log(

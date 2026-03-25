@@ -6,8 +6,9 @@ import type {
   StartSessionCreationInput,
   StartSessionExecutionDependencies,
 } from "./start-session.types";
-import { registerStartedSession, stopSessionOnStaleAndThrow } from "./start-session-persistence";
+import { registerStartedSession } from "./start-session-persistence";
 import { assertScenarioStartPolicy, resolveStartTask } from "./start-session-policies";
+import { stopSessionOnStaleAndThrow } from "./start-session-rollback";
 import {
   resolveFreshStartTargetWorkingDirectory,
   resolveRuntimeAndModel,
@@ -31,7 +32,7 @@ export const executeFreshStart = async ({
       ? input.targetWorkingDirectory
       : await resolveFreshStartTargetWorkingDirectory({
           ctx,
-          runtime: deps.runtime,
+          resolveBuildContinuationTarget: deps.runtime.resolveBuildContinuationTarget,
         });
 
   const resolved = await resolveRuntimeAndModel({

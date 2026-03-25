@@ -6,9 +6,10 @@ import type {
   StartSessionCreationInput,
   StartSessionExecutionDependencies,
 } from "./start-session.types";
-import { registerStartedSession, stopSessionOnStaleAndThrow } from "./start-session-persistence";
+import { registerStartedSession } from "./start-session-persistence";
 import { assertScenarioStartPolicy, resolveStartTask } from "./start-session-policies";
 import { resolveLoadedSourceSession } from "./start-session-reuse-strategy";
+import { stopSessionOnStaleAndThrow } from "./start-session-rollback";
 import { resolveRuntimeAndModel } from "./start-session-runtime";
 
 type ForkStrategyInput = {

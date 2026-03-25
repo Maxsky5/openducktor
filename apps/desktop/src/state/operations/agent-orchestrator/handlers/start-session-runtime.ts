@@ -1,6 +1,5 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { BuildContinuationTarget, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentScenario } from "@openducktor/core";
-import { errorMessage } from "@/lib/errors";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
 import { inferScenario } from "../support/scenario";
 import { createSessionPromptContext, loadSessionPromptInputs } from "../support/session-prompt";
@@ -11,6 +10,15 @@ import type {
   StartSessionExecutionDependencies,
 } from "./start-session.types";
 import { MISSING_BUILD_TARGET_ERROR, STALE_START_ERROR } from "./start-session-constants";
+
+const requireBuildContinuationTarget = (
+  continuationTarget: BuildContinuationTarget | null,
+): BuildContinuationTarget => {
+  if (!continuationTarget) {
+    throw new Error(MISSING_BUILD_TARGET_ERROR);
+  }
+  return continuationTarget;
+};
 
 export const resolveRuntimeAndModel = async ({
   ctx,
@@ -63,27 +71,22 @@ export const resolveRuntimeAndModel = async ({
 
 export const resolveFreshStartTargetWorkingDirectory = async ({
   ctx,
-  runtime,
+  resolveBuildContinuationTarget,
 }: {
   ctx: StartSessionContext;
-  runtime: RuntimeDependencies;
+  resolveBuildContinuationTarget: StartSessionExecutionDependencies["runtime"]["resolveBuildContinuationTarget"];
 }): Promise<string | null | undefined> => {
   if (ctx.role === "qa") {
-    return runtime.resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId);
+    return requireBuildContinuationTarget(
+      await resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId),
+    ).workingDirectory;
   }
 
   if (ctx.role !== "build") {
     return undefined;
   }
 
-  try {
-    return await runtime.resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId);
-  } catch (error) {
-    if (errorMessage(error).includes(MISSING_BUILD_TARGET_ERROR)) {
-      return null;
-    }
-    throw error;
-  }
+  return (await resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId))?.workingDirectory ?? null;
 };
 
 export const resolveFreshStartTargetWorkingDirectoryForStart = async ({
@@ -107,7 +110,7 @@ export const resolveFreshStartTargetWorkingDirectoryForStart = async ({
 
   const targetWorkingDirectoryForStart = await resolveFreshStartTargetWorkingDirectory({
     ctx,
-    runtime,
+    resolveBuildContinuationTarget: runtime.resolveBuildContinuationTarget,
   });
   return {
     targetWorkingDirectory: targetWorkingDirectoryForStart,

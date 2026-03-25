@@ -19,9 +19,9 @@ import type {
 import { STALE_START_ERROR } from "./start-session-constants";
 import { executeForkStart } from "./start-session-fork-strategy";
 import { executeFreshStart } from "./start-session-fresh-strategy";
-import { stopSessionOnStaleAndThrow } from "./start-session-persistence";
 import { resolveStartTask } from "./start-session-policies";
 import { executeReuseStart } from "./start-session-reuse-strategy";
+import { stopSessionOnStaleAndThrow } from "./start-session-rollback";
 import {
   resolveFreshStartTargetWorkingDirectoryForStart,
   serializeSelectedModelKey,

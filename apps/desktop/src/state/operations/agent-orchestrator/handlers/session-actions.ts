@@ -1,5 +1,6 @@
 import type {
   AgentSessionRecord,
+  BuildContinuationTarget,
   RepoPromptOverrides,
   RuntimeKind,
   TaskCard,
@@ -40,7 +41,10 @@ type SessionActionsDependencies = {
     options?: { persist?: boolean },
   ) => void;
   attachSessionListener: (repoPath: string, sessionId: string) => void;
-  resolveBuildContinuationTarget?: (repoPath: string, taskId: string) => Promise<string>;
+  resolveBuildContinuationTarget?: (
+    repoPath: string,
+    taskId: string,
+  ) => Promise<BuildContinuationTarget | null>;
   ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoDefaultModel: (repoPath: string, role: AgentRole) => Promise<AgentModelSelection | null>;

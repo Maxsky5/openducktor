@@ -491,7 +491,7 @@ export function useAgentOrchestratorOperations({
         updateSession,
         attachSessionListener,
         resolveBuildContinuationTarget: async (repoPath, taskId) =>
-          (await loadBuildContinuationTarget(repoPath, taskId)).workingDirectory,
+          loadBuildContinuationTarget(repoPath, taskId),
         ensureRuntime,
         loadTaskDocuments,
         loadRepoDefaultModel,

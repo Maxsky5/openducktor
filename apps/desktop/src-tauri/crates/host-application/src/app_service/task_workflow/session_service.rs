@@ -64,7 +64,7 @@ impl AppService {
         &self,
         repo_path: &str,
         task_id: &str,
-    ) -> Result<BuildContinuationTarget> {
+    ) -> Result<Option<BuildContinuationTarget>> {
         let repo_path = self.resolve_task_repo_path(repo_path)?;
         let normalized_repo_path = normalize_path_for_comparison(repo_path.as_str());
 
@@ -95,32 +95,32 @@ impl AppService {
                 task_id,
                 &worktree_path,
             )?;
-            return Ok(BuildContinuationTarget {
+            return Ok(Some(BuildContinuationTarget {
                 working_directory,
                 source: BuildContinuationTargetSource::ActiveBuildRun,
-            });
+            }));
         }
 
         let sessions = self.agent_sessions_list(repo_path.as_str(), task_id)?;
         let latest_builder_session = sessions
             .into_iter()
-            .filter(|session| TaskAgentRole::parse(session.role.trim()) == Some(TaskAgentRole::Build))
-            .max_by(|left, right| session_sort_key(left).cmp(&session_sort_key(right)))
-            .ok_or_else(|| {
-                anyhow!(
-                    "Builder continuation cannot start until a builder worktree exists for task {task_id}. Start Builder first."
-                )
-            })?;
+            .filter(|session| {
+                TaskAgentRole::parse(session.role.trim()) == Some(TaskAgentRole::Build)
+            })
+            .max_by(|left, right| session_sort_key(left).cmp(&session_sort_key(right)));
+        let Some(latest_builder_session) = latest_builder_session else {
+            return Ok(None);
+        };
 
         let working_directory = validate_build_continuation_working_directory(
             repo_path.as_str(),
             task_id,
             &latest_builder_session.working_directory,
         )?;
-        Ok(BuildContinuationTarget {
+        Ok(Some(BuildContinuationTarget {
             working_directory,
             source: BuildContinuationTargetSource::BuilderSession,
-        })
+        }))
     }
 }
 

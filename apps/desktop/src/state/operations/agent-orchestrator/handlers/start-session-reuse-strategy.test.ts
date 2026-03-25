@@ -1,8 +1,17 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { clearAppQueryClient } from "@/lib/query-client";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
 import { executeReuseStart } from "./start-session-reuse-strategy";
+import {
+  createBuildContinuationTargetFixture,
+  createBuildSessionFixture,
+  createRuntimeDependenciesFixture,
+  createSessionDependenciesFixture,
+  createStartSessionContextFixture,
+  createTaskDependenciesFixture,
+} from "./start-session-strategy-test-fixtures";
 
 const persistedSessionRecord = (
   input: {
@@ -33,7 +42,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
 
   test("hydrates and returns a persisted reusable session", async () => {
     const originalAgentSessionsList = host.agentSessionsList;
-    const sessionsRef = { current: {} as Record<string, unknown> };
+    const sessionsRef = { current: {} as Record<string, AgentSessionState> };
     let loadCalls = 0;
     host.agentSessionsList = async () => [
       persistedSessionRecord({
@@ -47,76 +56,33 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
     ];
 
     try {
+      const sessionDependencies = createSessionDependenciesFixture({
+        sessionsRef,
+        loadAgentSessions: async () => {
+          loadCalls += 1;
+          sessionsRef.current = {
+            "persisted-build": createBuildSessionFixture({
+              sessionId: "persisted-build",
+              externalSessionId: "ext-build",
+            }),
+          };
+        },
+      });
       await expect(
         executeReuseStart({
-          ctx: {
-            repoPath: "/tmp/repo",
-            taskId: "task-1",
-            role: "build",
-            isStaleRepoOperation: () => false,
-          },
+          ctx: createStartSessionContextFixture(),
           input: {
             startMode: "reuse",
             sourceSessionId: "persisted-build",
             scenario: "build_after_human_request_changes",
           },
           deps: {
-            session: {
-              setSessionsById: () => {},
-              sessionsRef: sessionsRef as never,
-              inFlightStartsByRepoTaskRef: { current: new Map() },
-              loadAgentSessions: async () => {
-                loadCalls += 1;
-                sessionsRef.current = {
-                  "persisted-build": {
-                    sessionId: "persisted-build",
-                    externalSessionId: "ext-build",
-                    taskId: "task-1",
-                    role: "build",
-                    scenario: "build_after_human_request_changes",
-                    status: "idle",
-                    startedAt: "2026-02-22T08:20:00.000Z",
-                    runtimeKind: "opencode",
-                    runtimeId: null,
-                    runId: null,
-                    runtimeEndpoint: "http://127.0.0.1:4444",
-                    workingDirectory: "/tmp/repo/worktree",
-                    messages: [],
-                    draftAssistantText: "",
-                    draftAssistantMessageId: null,
-                    draftReasoningText: "",
-                    draftReasoningMessageId: null,
-                    contextUsage: null,
-                    pendingPermissions: [],
-                    pendingQuestions: [],
-                    todos: [],
-                    modelCatalog: null,
-                    selectedModel: null,
-                    isLoadingModelCatalog: false,
-                    promptOverrides: {},
-                  },
-                };
-              },
-              persistSessionRecord: async () => {},
-              attachSessionListener: () => {},
-            },
-            runtime: {
-              adapter: {} as never,
-              ensureRuntime: async () => {
-                throw new Error("should not resolve runtime");
-              },
-              resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
-            },
-            task: {
-              taskRef: { current: [] },
-              loadTaskDocuments: async () => ({
-                specMarkdown: "",
-                planMarkdown: "",
-                qaMarkdown: "",
-              }),
-              refreshTaskData: async () => {},
-              sendAgentMessage: async () => {},
-            },
+            session: sessionDependencies,
+            runtime: createRuntimeDependenciesFixture({
+              resolveBuildContinuationTarget: async () =>
+                createBuildContinuationTargetFixture("/tmp/repo/worktree"),
+            }),
+            task: createTaskDependenciesFixture(),
             model: {
               loadRepoPromptOverrides: async () => ({}),
             },
@@ -133,76 +99,71 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
   });
 
   test("rejects reuse when the build continuation target no longer matches", async () => {
+    const sessionDependencies = createSessionDependenciesFixture({
+      sessionsRef: {
+        current: {
+          "existing-build": createBuildSessionFixture({
+            workingDirectory: "/tmp/repo/old-worktree",
+          }),
+        },
+      },
+    });
+
     await expect(
       executeReuseStart({
-        ctx: {
-          repoPath: "/tmp/repo",
-          taskId: "task-1",
-          role: "build",
-          isStaleRepoOperation: () => false,
-        },
+        ctx: createStartSessionContextFixture(),
         input: {
           startMode: "reuse",
           sourceSessionId: "existing-build",
           scenario: "build_after_human_request_changes",
         },
         deps: {
-          session: {
-            setSessionsById: () => {},
-            sessionsRef: {
-              current: {
-                "existing-build": {
-                  sessionId: "existing-build",
-                  externalSessionId: "ext-build",
-                  taskId: "task-1",
-                  role: "build",
-                  scenario: "build_after_human_request_changes",
-                  status: "idle",
-                  startedAt: "2026-02-22T08:20:00.000Z",
-                  runtimeKind: "opencode",
-                  runtimeId: null,
-                  runId: null,
-                  runtimeEndpoint: "http://127.0.0.1:4444",
-                  workingDirectory: "/tmp/repo/old-worktree",
-                  messages: [],
-                  draftAssistantText: "",
-                  draftAssistantMessageId: null,
-                  draftReasoningText: "",
-                  draftReasoningMessageId: null,
-                  contextUsage: null,
-                  pendingPermissions: [],
-                  pendingQuestions: [],
-                  todos: [],
-                  modelCatalog: null,
-                  selectedModel: null,
-                  isLoadingModelCatalog: false,
-                  promptOverrides: {},
-                },
-              },
-            },
-            inFlightStartsByRepoTaskRef: { current: new Map() },
-            loadAgentSessions: async () => {},
-            persistSessionRecord: async () => {},
-            attachSessionListener: () => {},
-          },
-          runtime: {
-            adapter: {} as never,
-            ensureRuntime: async () => {
-              throw new Error("should not resolve runtime");
-            },
-            resolveBuildContinuationTarget: async () => "/tmp/repo/new-worktree",
-          },
-          task: {
-            taskRef: { current: [] },
-            loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-            refreshTaskData: async () => {},
-            sendAgentMessage: async () => {},
-          },
+          session: sessionDependencies,
+          runtime: createRuntimeDependenciesFixture({
+            resolveBuildContinuationTarget: async () =>
+              createBuildContinuationTargetFixture("/tmp/repo/new-worktree"),
+          }),
+          task: createTaskDependenciesFixture(),
           model: {
             loadRepoPromptOverrides: async () => ({}),
           },
         },
       }),
     ).rejects.toThrow("it does not match the current builder continuation target");
+  });
+
+  test("fails fast for qa reuse when no builder continuation target exists", async () => {
+    const sessionDependencies = createSessionDependenciesFixture({
+      sessionsRef: {
+        current: {
+          "existing-qa": createBuildSessionFixture({
+            sessionId: "existing-qa",
+            externalSessionId: "ext-qa",
+            role: "qa",
+          }),
+        },
+      },
+    });
+
+    await expect(
+      executeReuseStart({
+        ctx: createStartSessionContextFixture({ role: "qa" }),
+        input: {
+          startMode: "reuse",
+          sourceSessionId: "existing-qa",
+          scenario: "qa_review",
+        },
+        deps: {
+          session: sessionDependencies,
+          runtime: createRuntimeDependenciesFixture({
+            resolveBuildContinuationTarget: async () => null,
+          }),
+          task: createTaskDependenciesFixture(),
+          model: {
+            loadRepoPromptOverrides: async () => ({}),
+          },
+        },
+      }),
+    ).rejects.toThrow("Builder continuation cannot start until a builder worktree exists");
   });
 });

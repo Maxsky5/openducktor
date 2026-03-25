@@ -33,7 +33,11 @@ export const toStartSessionDependencies = (
     runtime: {
       adapter: deps.adapter,
       resolveBuildContinuationTarget:
-        deps.resolveBuildContinuationTarget ?? (async () => "/tmp/repo/worktree"),
+        deps.resolveBuildContinuationTarget ??
+        (async () => ({
+          workingDirectory: "/tmp/repo/worktree",
+          source: "active_build_run",
+        })),
       ensureRuntime: deps.ensureRuntime,
     },
     task: {

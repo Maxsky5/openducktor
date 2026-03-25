@@ -15,6 +15,9 @@ import { host } from "../../shared/host";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { normalizeWorkingDirectory, runningStates, toBaseUrl } from "../support/core";
 
+const MISSING_BUILD_CONTINUATION_TARGET_ERROR =
+  "Builder continuation cannot start until a builder worktree exists";
+
 export type RuntimeInfo = {
   runtimeKind?: RuntimeKind;
   kind?: string;
@@ -124,7 +127,7 @@ export const loadRepoPromptOverrides = async (repoPath: string): Promise<RepoPro
 export const loadBuildContinuationTarget = async (
   repoPath: string,
   taskId: string,
-): Promise<BuildContinuationTarget> => {
+): Promise<BuildContinuationTarget | null> => {
   return host.buildContinuationTargetGet(repoPath, taskId);
 };
 
@@ -233,9 +236,14 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
     }
 
     if (role === "qa") {
-      const workingDirectory =
-        targetWorkingDirectory ||
-        (await host.buildContinuationTargetGet(repoPath, taskId)).workingDirectory;
+      const continuationTarget =
+        targetWorkingDirectory.length === 0
+          ? await host.buildContinuationTargetGet(repoPath, taskId)
+          : null;
+      const workingDirectory = targetWorkingDirectory || continuationTarget?.workingDirectory;
+      if (!workingDirectory) {
+        throw new Error(MISSING_BUILD_CONTINUATION_TARGET_ERROR);
+      }
       const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
       const matchingRun = runsRef.current.find(
         (entry) =>

@@ -38,6 +38,14 @@ const persistedSessionRecord = (
   selectedModel: input.selectedModel ?? null,
 });
 
+const continuationTarget = (
+  workingDirectory: string,
+  source: "active_build_run" | "builder_session" = "active_build_run",
+) => ({
+  workingDirectory,
+  source,
+});
+
 const withCapturedConsoleError = async (
   run: (calls: unknown[][]) => Promise<void>,
 ): Promise<void> => {
@@ -291,7 +299,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: inFlightMap },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
+      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
@@ -454,7 +462,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
             status: "running",
           }),
         } as unknown as AgentEnginePort,
-        resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
+        resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
         ensureRuntime: async () => ({
           kind: "opencode",
           runtimeId: "runtime-1",
@@ -611,7 +619,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
+      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
@@ -715,7 +723,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
+      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
@@ -810,7 +818,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => "/tmp/repo/new-worktree",
+      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/new-worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
@@ -890,7 +898,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree/",
+      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree/"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
@@ -982,7 +990,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
+      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
@@ -1089,7 +1097,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
+      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "claude-code",
         runtimeId: "runtime-claude",
@@ -1196,7 +1204,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
+      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
@@ -1497,7 +1505,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
+      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
@@ -1721,7 +1729,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
+      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "claude-code",
         runtimeId: "runtime-2",
@@ -1825,7 +1833,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
+      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "claude-code",
         runtimeId: "runtime-claude",
@@ -1949,7 +1957,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       previousRepoRef: { current: "/tmp/repo" },
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
+      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "claude-code",
         runtimeId: "runtime-claude",
@@ -2165,7 +2173,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       attachSessionListener: () => {},
       resolveBuildContinuationTarget: async () => {
         qaTargetCalls += 1;
-        return "/tmp/repo/worktree";
+        return continuationTarget("/tmp/repo/worktree");
       },
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -2238,7 +2246,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       attachSessionListener: () => {},
       resolveBuildContinuationTarget: async () => {
         qaTargetCalls += 1;
-        return "/tmp/repo/worktree";
+        return continuationTarget("/tmp/repo/worktree");
       },
       ensureRuntime: async (_repoPath, _taskId, _role, options) => {
         ensuredWorkingDirectories.push(options?.targetWorkingDirectory);

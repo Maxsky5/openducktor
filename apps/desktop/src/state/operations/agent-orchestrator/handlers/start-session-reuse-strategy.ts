@@ -1,4 +1,4 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionRecord, BuildContinuationTarget } from "@openducktor/contracts";
 import { appQueryClient } from "@/lib/query-client";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -8,13 +8,22 @@ import type {
   StartSessionCreationInput,
   StartSessionExecutionDependencies,
 } from "./start-session.types";
-import { STALE_START_ERROR } from "./start-session-constants";
+import { MISSING_BUILD_TARGET_ERROR, STALE_START_ERROR } from "./start-session-constants";
 import { assertScenarioStartPolicy, resolveReuseValidationError } from "./start-session-policies";
 
 type ReuseStrategyInput = {
   ctx: StartSessionContext;
   input: Extract<StartSessionCreationInput, { startMode: "reuse" }>;
   deps: StartSessionExecutionDependencies;
+};
+
+const requireBuildContinuationTarget = (
+  continuationTarget: BuildContinuationTarget | null,
+): BuildContinuationTarget => {
+  if (!continuationTarget) {
+    throw new Error(MISSING_BUILD_TARGET_ERROR);
+  }
+  return continuationTarget;
 };
 
 const loadPersistedSessionsForRole = async ({
@@ -69,7 +78,9 @@ const createWorkingDirectoryMatchers = ({
     }
 
     resolvedQaWorkingDirectory = normalizeWorkingDirectory(
-      await deps.runtime.resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId),
+      requireBuildContinuationTarget(
+        await deps.runtime.resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId),
+      ).workingDirectory,
     );
     return resolvedQaWorkingDirectory;
   };
@@ -80,7 +91,9 @@ const createWorkingDirectoryMatchers = ({
     }
 
     resolvedBuildWorkingDirectory = normalizeWorkingDirectory(
-      await deps.runtime.resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId),
+      requireBuildContinuationTarget(
+        await deps.runtime.resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId),
+      ).workingDirectory,
     );
     return resolvedBuildWorkingDirectory;
   };

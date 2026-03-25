@@ -1,4 +1,9 @@
-import type { AgentSessionRecord, RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type {
+  AgentSessionRecord,
+  BuildContinuationTarget,
+  RepoPromptOverrides,
+  TaskCard,
+} from "@openducktor/contracts";
 import type {
   AgentEnginePort,
   AgentModelSelection,
@@ -52,7 +57,10 @@ export type SessionDependencies = {
 };
 
 export type RuntimeDependencies = {
-  resolveBuildContinuationTarget: (repoPath: string, taskId: string) => Promise<string>;
+  resolveBuildContinuationTarget: (
+    repoPath: string,
+    taskId: string,
+  ) => Promise<BuildContinuationTarget | null>;
   adapter: AgentEnginePort;
   ensureRuntime: (
     repoPath: string,

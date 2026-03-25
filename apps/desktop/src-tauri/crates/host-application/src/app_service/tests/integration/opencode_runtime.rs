@@ -386,7 +386,8 @@ fn build_continuation_target_get_prefers_active_build_run() -> Result<()> {
 
     let repo_path_with_trailing_separator = format!("{repo_path}/");
     let target = service
-        .build_continuation_target_get(repo_path_with_trailing_separator.as_str(), "task-1")?;
+        .build_continuation_target_get(repo_path_with_trailing_separator.as_str(), "task-1")?
+        .expect("active build run should produce a continuation target");
     assert_eq!(target.source, BuildContinuationTargetSource::ActiveBuildRun);
     assert_eq!(
         target.working_directory,
@@ -434,7 +435,9 @@ fn build_continuation_target_get_falls_back_to_latest_builder_session_worktree()
         .expect("task lock poisoned")
         .agent_sessions = vec![older, latest];
 
-    let target = service.build_continuation_target_get(repo_path.as_str(), "task-1")?;
+    let target = service
+        .build_continuation_target_get(repo_path.as_str(), "task-1")?
+        .expect("latest builder session should produce a continuation target");
     assert_eq!(target.source, BuildContinuationTargetSource::BuilderSession);
     assert_eq!(
         target.working_directory,
@@ -444,7 +447,7 @@ fn build_continuation_target_get_falls_back_to_latest_builder_session_worktree()
 }
 
 #[test]
-fn build_continuation_target_get_rejects_missing_builder_worktree() -> Result<()> {
+fn build_continuation_target_get_returns_none_when_builder_worktree_is_missing() -> Result<()> {
     let repo_root = unique_temp_path("qa-review-target-missing");
     let repo = repo_root.join("repo");
     init_git_repo(&repo)?;
@@ -467,12 +470,10 @@ fn build_continuation_target_get_rejects_missing_builder_worktree() -> Result<()
     );
     service.workspace_add(repo_path.as_str())?;
 
-    let error = service
+    let target = service
         .build_continuation_target_get(repo_path.as_str(), "task-1")
-        .expect_err("missing builder target should fail fast");
-    assert!(error
-        .to_string()
-        .contains("Builder continuation cannot start until a builder worktree exists"));
+        .expect("missing builder target should be represented explicitly");
+    assert!(target.is_none());
     Ok(())
 }
 

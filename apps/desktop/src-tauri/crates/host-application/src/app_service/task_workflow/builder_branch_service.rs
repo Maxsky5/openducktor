@@ -33,6 +33,11 @@ impl<'a> BuilderBranchService<'a> {
         let working_directory = self
             .service
             .build_continuation_target_get(repo_path, task_id)?
+            .ok_or_else(|| {
+                anyhow!(
+                    "Builder continuation cannot start until a builder worktree exists for task {task_id}. Start Builder first."
+                )
+            })?
             .working_directory;
         let current_branch = self
             .service
@@ -64,7 +69,7 @@ impl<'a> BuilderBranchService<'a> {
         task_id: &str,
         preferred_source_branch: Option<&str>,
     ) -> Result<Option<BuilderCleanupTarget>> {
-        if let Ok(target) = self
+        if let Ok(Some(target)) = self
             .service
             .build_continuation_target_get(repo_path, task_id)
         {

@@ -66,7 +66,7 @@ pub async fn build_continuation_target_get(
     state: State<'_, AppState>,
     repo_path: String,
     task_id: String,
-) -> Result<BuildContinuationTarget, String> {
+) -> Result<Option<BuildContinuationTarget>, String> {
     let service = state.service.clone();
     let result = run_service_blocking("build_continuation_target_get", move || {
         service.build_continuation_target_get(&repo_path, &task_id)
