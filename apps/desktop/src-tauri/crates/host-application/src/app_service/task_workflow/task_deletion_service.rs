@@ -26,6 +26,17 @@ impl<'a> TaskDeletionService<'a> {
     }
 
     fn delete_loaded(&self, context: LoadedTaskContext, delete_subtasks: bool) -> Result<()> {
+        let deletion_plan = self.build_deletion_plan(&context, delete_subtasks)?;
+
+        self.execute_cleanup(&context, &deletion_plan)?;
+        self.delete_tasks_and_clear_runs(&context, &deletion_plan)
+    }
+
+    fn build_deletion_plan(
+        &self,
+        context: &LoadedTaskContext,
+        delete_subtasks: bool,
+    ) -> Result<TaskDeletionPlan> {
         let task_id = context.task.id.as_str();
         let direct_subtask_ids = context
             .repo
@@ -56,7 +67,6 @@ impl<'a> TaskDeletionService<'a> {
             context.repo.repo_path.as_str(),
             &target_task_id_refs,
         )?;
-
         let branch_prefix = self
             .service
             .config_store
@@ -74,20 +84,35 @@ impl<'a> TaskDeletionService<'a> {
             &target_task_ids,
         )?;
 
-        for target_task_id in &target_task_ids {
+        Ok(TaskDeletionPlan {
+            target_task_ids,
+            delete_subtasks,
+            worktree_plan,
+            branch_plan,
+        })
+    }
+
+    fn execute_cleanup(
+        &self,
+        context: &LoadedTaskContext,
+        deletion_plan: &TaskDeletionPlan,
+    ) -> Result<()> {
+        for target_task_id in &deletion_plan.target_task_ids {
             self.service
                 .stop_dev_servers_for_task(context.repo.repo_path.as_str(), target_task_id)?;
         }
 
-        for worktree_path in worktree_plan.paths() {
+        for worktree_path in deletion_plan.worktree_plan.paths() {
             self.service
                 .git_remove_worktree(context.repo.repo_path.as_str(), worktree_path, true)
                 .with_context(|| format!("Failed to remove task worktree {worktree_path}"))?;
         }
 
-        branch_plan.ensure_unused_by_worktrees(self.service, context.repo_dir())?;
+        deletion_plan
+            .branch_plan
+            .ensure_unused_by_worktrees(self.service, context.repo_dir())?;
 
-        for branch_name in branch_plan.names() {
+        for branch_name in deletion_plan.branch_plan.names() {
             self.service
                 .git_delete_local_branch(
                     context.repo.repo_path.as_str(),
@@ -97,11 +122,20 @@ impl<'a> TaskDeletionService<'a> {
                 .with_context(|| format!("Failed to delete related local branch {branch_name}"))?;
         }
 
+        Ok(())
+    }
+
+    fn delete_tasks_and_clear_runs(
+        &self,
+        context: &LoadedTaskContext,
+        deletion_plan: &TaskDeletionPlan,
+    ) -> Result<()> {
+        let task_id = context.task.id.as_str();
         self.service
             .task_store
-            .delete_task(context.repo_dir(), task_id, delete_subtasks)
+            .delete_task(context.repo_dir(), task_id, deletion_plan.delete_subtasks)
             .with_context(|| format!("Failed to delete task {task_id}"))?;
-        for target_task_id in &target_task_ids {
+        for target_task_id in &deletion_plan.target_task_ids {
             self.service
                 .clear_task_runs(context.repo.repo_path.as_str(), target_task_id)
                 .with_context(|| {
@@ -110,4 +144,11 @@ impl<'a> TaskDeletionService<'a> {
         }
         Ok(())
     }
+}
+
+struct TaskDeletionPlan {
+    target_task_ids: Vec<String>,
+    delete_subtasks: bool,
+    worktree_plan: WorktreeCleanupPlan,
+    branch_plan: BranchCleanupPlan,
 }
