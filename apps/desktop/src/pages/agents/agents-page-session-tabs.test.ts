@@ -493,6 +493,108 @@ describe("agents-page-session-tabs", () => {
     });
   });
 
+  test("keeps qa step rejected in ai_review when no new qa review session has started", () => {
+    const task = buildTask({
+      issueType: "feature",
+      status: "ai_review",
+      documentSummary: {
+        spec: { has: true, updatedAt: "2026-02-22T08:00:00.000Z" },
+        plan: { has: true, updatedAt: "2026-02-22T08:10:00.000Z" },
+        qaReport: { has: true, updatedAt: "2026-02-22T08:20:00.000Z", verdict: "rejected" },
+      },
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: true },
+        qa: { required: true, canSkip: false, available: true, completed: false },
+      },
+    });
+
+    const states = buildWorkflowStateByRole({
+      task,
+      roleWorkflowsByTask: {
+        spec: task.agentWorkflows.spec,
+        planner: task.agentWorkflows.planner,
+        build: task.agentWorkflows.builder,
+        qa: task.agentWorkflows.qa,
+      },
+      roleSessionByRole: buildRoleSessionSummaryMap([
+        buildSession({ role: "build", status: "stopped", scenario: "build_after_qa_rejected" }),
+        buildSession({ role: "qa", status: "idle", scenario: "qa_review" }),
+      ]),
+    });
+
+    expect(states.qa).toEqual({
+      tone: "rejected",
+      availability: "available",
+      completion: "rejected",
+      liveSession: "idle",
+    });
+  });
+
+  test.each([
+    {
+      name: "running",
+      session: buildSession({ role: "qa", status: "running", scenario: "qa_review" }),
+      expected: { tone: "in_progress" as const, liveSession: "running" as const },
+    },
+    {
+      name: "waiting_input",
+      session: buildSession({
+        role: "qa",
+        status: "running",
+        scenario: "qa_review",
+        pendingQuestions: [{ requestId: "q-1", questions: [] }],
+      }),
+      expected: { tone: "waiting_input" as const, liveSession: "waiting_input" as const },
+    },
+    {
+      name: "error",
+      session: buildSession({ role: "qa", status: "error", scenario: "qa_review" }),
+      expected: { tone: "failed" as const, liveSession: "error" as const },
+    },
+  ])("shows qa step as active in ai_review when a new qa review session is $name", ({
+    session,
+    expected,
+  }) => {
+    const task = buildTask({
+      issueType: "feature",
+      status: "ai_review",
+      documentSummary: {
+        spec: { has: true, updatedAt: "2026-02-22T08:00:00.000Z" },
+        plan: { has: true, updatedAt: "2026-02-22T08:10:00.000Z" },
+        qaReport: { has: true, updatedAt: "2026-02-22T08:20:00.000Z", verdict: "rejected" },
+      },
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: true },
+        qa: { required: true, canSkip: false, available: true, completed: false },
+      },
+    });
+
+    const states = buildWorkflowStateByRole({
+      task,
+      roleWorkflowsByTask: {
+        spec: task.agentWorkflows.spec,
+        planner: task.agentWorkflows.planner,
+        build: task.agentWorkflows.builder,
+        qa: task.agentWorkflows.qa,
+      },
+      roleSessionByRole: buildRoleSessionSummaryMap([
+        buildSession({ role: "build", status: "stopped", scenario: "build_after_qa_rejected" }),
+        session,
+      ]),
+    });
+
+    expect(states.qa).toEqual({
+      tone: expected.tone,
+      availability: "available",
+      completion: "in_progress",
+      liveSession: expected.liveSession,
+    });
+  });
+
   test("keeps builder done after completed qa-rework session even before task status catches up", () => {
     const task = buildTask({
       status: "in_progress",
