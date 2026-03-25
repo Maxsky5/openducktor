@@ -205,6 +205,26 @@ const confirmSessionStartModal = async ({
     if (startMode !== "fresh" && sourceSessionId) {
       state.sessionStartModal?.onSelectSourceSession(sourceSessionId);
     }
+  });
+
+  await harness.waitFor((state) => {
+    const modal = state.sessionStartModal;
+    if (!modal) {
+      return false;
+    }
+    if (startMode === "reuse") {
+      return sourceSessionId ? modal.selectedSourceSessionId === sourceSessionId : true;
+    }
+
+    const selection = modal.selectedModelSelection;
+    return (
+      selection?.profileId === agent &&
+      selection.modelId === modelId.split("/")[1] &&
+      (selection.variant ?? "") === variant
+    );
+  });
+
+  await harness.run((state) => {
     state.sessionStartModal?.onConfirm({
       runInBackground: false,
       startMode,
@@ -612,7 +632,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       scenario: "build_after_qa_rejected",
       selectedModel: {
         ...MODEL_SELECTION,
-        profileId: "planner",
+        profileId: "builder",
       },
       startMode: "fresh" as const,
     });

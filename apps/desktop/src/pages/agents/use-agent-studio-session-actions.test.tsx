@@ -117,6 +117,16 @@ const confirmSessionStartModal = async (
     state.sessionStartModal?.onSelectModel("openai/gpt-5");
     state.sessionStartModal?.onSelectAgent("spec");
     state.sessionStartModal?.onSelectVariant("default");
+  });
+  await harness.waitFor((state) => {
+    const selection = state.sessionStartModal?.selectedModelSelection;
+    return (
+      selection?.profileId === "spec" &&
+      selection.modelId === "gpt-5" &&
+      (selection.variant ?? "") === "default"
+    );
+  });
+  await harness.run((state) => {
     state.sessionStartModal?.onConfirm({
       runInBackground: false,
       startMode: "fresh",
