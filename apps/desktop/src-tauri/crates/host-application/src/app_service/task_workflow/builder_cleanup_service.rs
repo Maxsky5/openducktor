@@ -1,7 +1,6 @@
 use super::builder_branch_service::BuilderBranchService;
 use crate::app_service::service_core::AppService;
 use anyhow::Result;
-use host_domain::{DirectMergeRecord, GitMergeMethod};
 use std::path::Path;
 
 pub(super) struct BuilderCleanupService<'a> {
@@ -16,27 +15,23 @@ impl<'a> BuilderCleanupService<'a> {
     pub(super) fn should_force_delete_source_branch(
         &self,
         repo_path: &str,
-        direct_merge: &DirectMergeRecord,
+        source_branch: &str,
+        target_branch: &str,
     ) -> Result<bool> {
-        if !matches!(direct_merge.method, GitMergeMethod::Squash) {
-            return Ok(false);
-        }
-
         let source_branch_exists = self
             .service
             .git_port
             .get_branches(Path::new(repo_path))?
             .into_iter()
-            .any(|branch| !branch.is_remote && branch.name == direct_merge.source_branch);
+            .any(|branch| !branch.is_remote && branch.name == source_branch);
         if !source_branch_exists {
             return Ok(false);
         }
 
-        let target_branch = direct_merge.target_branch.checkout_branch();
         Ok(!self.service.git_port.is_ancestor(
             Path::new(repo_path),
-            direct_merge.source_branch.as_str(),
-            target_branch.as_str(),
+            source_branch,
+            target_branch,
         )?)
     }
 
@@ -45,7 +40,7 @@ impl<'a> BuilderCleanupService<'a> {
         repo_path: &str,
         task_id: &str,
         source_branch: &str,
-        force_delete_source_branch: bool,
+        target_branch: &str,
     ) -> Result<()> {
         self.service.stop_dev_servers_for_task(repo_path, task_id)?;
 
@@ -68,6 +63,9 @@ impl<'a> BuilderCleanupService<'a> {
                 )?;
             }
         }
+
+        let force_delete_source_branch =
+            self.should_force_delete_source_branch(repo_path, source_branch, target_branch)?;
 
         self.cleanup_builder_branch(repo_path, source_branch, force_delete_source_branch)
     }

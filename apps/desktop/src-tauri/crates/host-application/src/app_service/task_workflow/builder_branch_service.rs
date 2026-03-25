@@ -1,7 +1,7 @@
 use super::approval_support::normalize_approval_target_branch;
 use crate::app_service::service_core::AppService;
 use anyhow::{anyhow, Result};
-use host_domain::GitTargetBranch;
+use host_domain::{BuildContinuationTargetSource, GitTargetBranch};
 use std::path::Path;
 
 #[derive(Debug)]
@@ -64,6 +64,20 @@ impl<'a> BuilderBranchService<'a> {
         task_id: &str,
         preferred_source_branch: Option<&str>,
     ) -> Result<Option<BuilderCleanupTarget>> {
+        if let Ok(target) = self
+            .service
+            .build_continuation_target_get(repo_path, task_id)
+        {
+            if matches!(target.source, BuildContinuationTargetSource::ActiveBuildRun) {
+                if let Some(cleanup_target) = self.cleanup_target_for_working_directory(
+                    target.working_directory,
+                    preferred_source_branch,
+                )? {
+                    return Ok(Some(cleanup_target));
+                }
+            }
+        }
+
         let sessions = self.service.agent_sessions_list(repo_path, task_id)?;
         let mut builder_sessions = sessions
             .into_iter()
@@ -79,38 +93,51 @@ impl<'a> BuilderBranchService<'a> {
         builder_sessions.reverse();
 
         for session in builder_sessions {
-            let working_directory = session.working_directory.trim().to_string();
-            if working_directory.is_empty() {
-                continue;
+            if let Some(cleanup_target) = self.cleanup_target_for_working_directory(
+                session.working_directory,
+                preferred_source_branch,
+            )? {
+                return Ok(Some(cleanup_target));
             }
-            if !Path::new(working_directory.as_str()).exists() {
-                continue;
-            }
-            let current_branch = self
-                .service
-                .git_port
-                .get_current_branch(Path::new(working_directory.as_str()))?;
-            let current_branch_name = match current_branch.name {
-                Some(name) => {
-                    let trimmed = name.trim().to_string();
-                    if trimmed.is_empty() {
-                        continue;
-                    }
-                    trimmed
-                }
-                None => continue,
-            };
-            if preferred_source_branch
-                .map(str::trim)
-                .is_some_and(|expected| current_branch_name != expected)
-            {
-                continue;
-            }
-
-            return Ok(Some(BuilderCleanupTarget { working_directory }));
         }
 
         Ok(None)
+    }
+
+    fn cleanup_target_for_working_directory(
+        &self,
+        working_directory: String,
+        preferred_source_branch: Option<&str>,
+    ) -> Result<Option<BuilderCleanupTarget>> {
+        let working_directory = working_directory.trim().to_string();
+        if working_directory.is_empty() {
+            return Ok(None);
+        }
+        if !Path::new(working_directory.as_str()).exists() {
+            return Ok(None);
+        }
+        let current_branch = self
+            .service
+            .git_port
+            .get_current_branch(Path::new(working_directory.as_str()))?;
+        let current_branch_name = match current_branch.name {
+            Some(name) => {
+                let trimmed = name.trim().to_string();
+                if trimmed.is_empty() {
+                    return Ok(None);
+                }
+                trimmed
+            }
+            None => return Ok(None),
+        };
+        if preferred_source_branch
+            .map(str::trim)
+            .is_some_and(|expected| current_branch_name != expected)
+        {
+            return Ok(None);
+        }
+
+        Ok(Some(BuilderCleanupTarget { working_directory }))
     }
 }
 
@@ -121,7 +148,7 @@ mod tests {
         build_service_with_store, init_git_repo, make_session, make_task, unique_temp_path,
     };
     use anyhow::Result;
-    use host_domain::{GitCurrentBranch, TaskStatus};
+    use host_domain::{AgentRuntimeKind, GitCurrentBranch, RunState, RunSummary, TaskStatus};
     use host_infra_system::AppConfigStore;
     use std::fs;
 
@@ -239,6 +266,94 @@ mod tests {
             .expect("expected a matching cleanup target");
 
         assert_eq!(target.working_directory, older_worktree.to_string_lossy());
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn latest_cleanup_target_prefers_active_build_run_over_sessions() -> Result<()> {
+        let root = unique_temp_path("builder-branch-active-run");
+        let repo = root.join("repo");
+        let active_worktree = root.join("active");
+        let older_worktree = root.join("older");
+        init_git_repo(&repo)?;
+        fs::create_dir_all(&active_worktree)?;
+        fs::create_dir_all(&older_worktree)?;
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, task_state, git_state) = build_service_with_store(
+            vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+                revision: None,
+            },
+            config_store,
+        );
+        let repo_path = repo.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
+
+        let mut older = make_session("task-1", "session-1");
+        older.started_at = "2026-03-11T10:00:00Z".to_string();
+        older.working_directory = older_worktree.to_string_lossy().to_string();
+        task_state
+            .lock()
+            .expect("task state lock poisoned")
+            .agent_sessions
+            .push(older);
+
+        let active_repo_path = repo.to_string_lossy().to_string();
+        service.runs.lock().expect("run lock poisoned").insert(
+            "run-1".to_string(),
+            crate::app_service::RunProcess {
+                summary: RunSummary {
+                    run_id: "run-1".to_string(),
+                    runtime_kind: AgentRuntimeKind::Opencode,
+                    runtime_route: AgentRuntimeKind::Opencode.route_for_port(4444),
+                    repo_path: active_repo_path.clone(),
+                    task_id: "task-1".to_string(),
+                    branch: "odt/task-1".to_string(),
+                    worktree_path: active_worktree.to_string_lossy().to_string(),
+                    port: 4444,
+                    state: RunState::Running,
+                    last_message: None,
+                    started_at: "2026-03-11T11:00:00Z".to_string(),
+                },
+                child: None,
+                _opencode_process_guard: None,
+                repo_path: active_repo_path,
+                task_id: "task-1".to_string(),
+                worktree_path: active_worktree.to_string_lossy().to_string(),
+                repo_config: host_infra_system::RepoConfig::default(),
+            },
+        );
+
+        let mut git = git_state.lock().expect("git state lock poisoned");
+        git.current_branches_by_path.insert(
+            older_worktree.to_string_lossy().to_string(),
+            GitCurrentBranch {
+                name: Some("odt/task-1-old".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
+        git.current_branches_by_path.insert(
+            active_worktree.to_string_lossy().to_string(),
+            GitCurrentBranch {
+                name: Some("odt/task-1".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
+        drop(git);
+
+        let target = BuilderBranchService::new(&service)
+            .latest_cleanup_target(repo_path.as_str(), "task-1", Some("odt/task-1"))?
+            .expect("expected active run cleanup target");
+
+        assert_eq!(target.working_directory, active_worktree.to_string_lossy());
 
         let _ = fs::remove_dir_all(root);
         Ok(())

@@ -50,17 +50,17 @@ impl<'a> PullRequestSyncService<'a> {
             )?;
 
             if updated.record.state == "merged" && task.status != TaskStatus::Closed {
+                BuilderCleanupService::new(self.service).finalize_direct_merge_cleanup(
+                    repo_path.as_str(),
+                    task.id.as_str(),
+                    updated.source_branch.as_str(),
+                    updated.target_branch.as_str(),
+                )?;
                 self.service.task_transition(
                     repo_path.as_str(),
                     task.id.as_str(),
                     TaskStatus::Closed,
                     Some("Linked pull request merged"),
-                )?;
-                BuilderCleanupService::new(self.service).finalize_direct_merge_cleanup(
-                    repo_path.as_str(),
-                    task.id.as_str(),
-                    updated.source_branch.as_str(),
-                    false,
                 )?;
             }
         }

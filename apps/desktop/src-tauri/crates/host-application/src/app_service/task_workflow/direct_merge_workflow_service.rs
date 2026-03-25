@@ -37,7 +37,7 @@ impl<'a> DirectMergeWorkflowService<'a> {
             .load_open_task_approval_context(repo_path, task_id)?;
         ensure_clean_builder_worktree(&approval)?;
         let repo_path = self.service.resolve_task_repo_path(repo_path)?;
-        let squash_created_commit = match self.service.git_port.merge_branch(
+        match self.service.git_port.merge_branch(
             Path::new(&repo_path),
             GitMergeBranchRequest {
                 source_branch: approval.source_branch.clone(),
@@ -47,8 +47,8 @@ impl<'a> DirectMergeWorkflowService<'a> {
                 squash_commit_message,
             },
         )? {
-            GitMergeBranchResult::Merged { .. } => matches!(method, GitMergeMethod::Squash),
-            GitMergeBranchResult::UpToDate { .. } => false,
+            GitMergeBranchResult::Merged { .. } => {}
+            GitMergeBranchResult::UpToDate { .. } => {}
             GitMergeBranchResult::Conflicts {
                 conflicted_files,
                 output,
@@ -63,7 +63,7 @@ impl<'a> DirectMergeWorkflowService<'a> {
                     ),
                 });
             }
-        };
+        }
 
         self.service.task_store.set_delivery_metadata(
             Path::new(&repo_path),
@@ -105,7 +105,7 @@ impl<'a> DirectMergeWorkflowService<'a> {
             repo_path.as_str(),
             task_id,
             approval.source_branch.as_str(),
-            squash_created_commit,
+            approval.target_branch.checkout_branch().as_str(),
         )?;
         Ok(TaskDirectMergeResult::Completed {
             task: Box::new(task),
@@ -139,14 +139,11 @@ impl<'a> DirectMergeWorkflowService<'a> {
             )?
         };
         let cleanup = BuilderCleanupService::new(self.service);
-        let force_delete_source_branch =
-            cleanup.should_force_delete_source_branch(repo_path.as_str(), &direct_merge)?;
-
         cleanup.finalize_direct_merge_cleanup(
             repo_path.as_str(),
             task_id,
             direct_merge.source_branch.as_str(),
-            force_delete_source_branch,
+            direct_merge.target_branch.checkout_branch().as_str(),
         )?;
         Ok(task)
     }

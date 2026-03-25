@@ -2234,11 +2234,11 @@ fn repo_pull_request_sync_propagates_close_transition_failures() -> Result<()> {
     drop(state);
 
     let git = git_state.lock().expect("git state lock poisoned");
-    assert!(!git
+    assert!(git
         .calls
         .iter()
         .any(|call| matches!(call, GitCall::RemoveWorktree { .. })));
-    assert!(!git.calls.iter().any(
+    assert!(git.calls.iter().any(
         |call| matches!(call, GitCall::DeleteLocalBranch { branch, .. } if branch == "odt/task-1")
     ));
 

@@ -629,6 +629,7 @@ mod tests {
                     closed_at: None,
                 },
                 source_branch: "odt/task-1".to_string(),
+                target_branch: "main".to_string(),
             },
         )?;
 
@@ -690,6 +691,7 @@ mod tests {
                         closed_at: None,
                     },
                     source_branch: "odt/task-1".to_string(),
+                    target_branch: "main".to_string(),
                 },
             )
             .expect_err("metadata update should fail");

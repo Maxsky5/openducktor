@@ -134,6 +134,10 @@ pub(super) fn publish_recorded_target_branch(
 }
 
 fn normalize_target_branch(remote: Option<&str>, branch: &str) -> Result<GitTargetBranch> {
+    let remote = remote.and_then(|remote| {
+        let remote = remote.trim();
+        (!remote.is_empty()).then_some(remote.to_string())
+    });
     let branch = branch.trim();
     if branch.is_empty() {
         return Err(anyhow!("Human approval requires a target branch."));
@@ -144,7 +148,7 @@ fn normalize_target_branch(remote: Option<&str>, branch: &str) -> Result<GitTarg
         ));
     }
     Ok(GitTargetBranch {
-        remote: remote.map(ToOwned::to_owned),
+        remote,
         branch: branch.to_string(),
     })
 }
@@ -239,7 +243,7 @@ mod tests {
     #[test]
     fn normalize_target_branch_preserves_remote_and_trimmed_branch() {
         let normalized = normalize_approval_target_branch(&host_infra_system::GitTargetBranch {
-            remote: Some("origin".to_string()),
+            remote: Some(" origin ".to_string()),
             branch: " main ".to_string(),
         })
         .expect("branch should normalize");
@@ -250,6 +254,16 @@ mod tests {
                 branch: "main".to_string(),
             }
         );
+    }
+
+    #[test]
+    fn normalize_target_branch_drops_blank_remote() {
+        let normalized = normalize_approval_target_branch(&host_infra_system::GitTargetBranch {
+            remote: Some("   ".to_string()),
+            branch: "main".to_string(),
+        })
+        .expect("branch should normalize");
+        assert_eq!(normalized.remote, None);
     }
 
     #[test]

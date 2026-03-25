@@ -159,6 +159,9 @@ impl<'a> PullRequestWorkflowService<'a> {
                 && existing.number == pull_request.number
                 && existing.state == "merged"
         });
+        if context.task.status == TaskStatus::Closed && same_existing_pull_request {
+            return Ok(context.task);
+        }
         if context.task.status != TaskStatus::Closed || !same_existing_pull_request {
             ensure_pull_request_management_status(&context.task.status)?;
         }
@@ -182,6 +185,9 @@ impl<'a> PullRequestWorkflowService<'a> {
             task_id,
             "Pull request linking",
         )?;
+        let target_branch = BuilderBranchService::new(self.service)
+            .target_branch_for_repo(context.repo.repo_path.as_str())?
+            .checkout_branch();
 
         if metadata.pull_request.is_none() {
             PullRequestProviderService::new(self.service).store_linked_pull_request_metadata(
@@ -190,24 +196,21 @@ impl<'a> PullRequestWorkflowService<'a> {
                 ResolvedPullRequest {
                     record: pull_request,
                     source_branch: builder_context.source_branch.clone(),
+                    target_branch: target_branch.clone(),
                 },
             )?;
         }
-        let task = if context.task.status == TaskStatus::Closed {
-            context.task
-        } else {
-            self.service.task_transition(
-                repo_path.as_str(),
-                task_id,
-                TaskStatus::Closed,
-                Some("Linked pull request merged"),
-            )?
-        };
         BuilderCleanupService::new(self.service).finalize_direct_merge_cleanup(
             repo_path.as_str(),
             task_id,
             builder_context.source_branch.as_str(),
-            false,
+            target_branch.as_str(),
+        )?;
+        let task = self.service.task_transition(
+            repo_path.as_str(),
+            task_id,
+            TaskStatus::Closed,
+            Some("Linked pull request merged"),
         )?;
         Ok(task)
     }

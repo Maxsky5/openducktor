@@ -77,12 +77,14 @@ struct GithubPullResponse {
     merged_at: Option<String>,
     closed_at: Option<String>,
     head: GithubPullBranchRef,
+    base: GithubPullBranchRef,
 }
 
 #[derive(Debug, Clone)]
 pub(super) struct ResolvedPullRequest {
     pub record: PullRequestRecord,
     pub source_branch: String,
+    pub target_branch: String,
 }
 
 impl GithubGhCliProvider {
@@ -301,6 +303,7 @@ impl GithubGhCliProvider {
                 closed_at: response.closed_at,
             },
             source_branch: response.head.name,
+            target_branch: response.base.name,
         }
     }
 
