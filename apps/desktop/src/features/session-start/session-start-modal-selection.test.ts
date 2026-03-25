@@ -154,6 +154,44 @@ describe("session-start-modal-selection", () => {
     });
   });
 
+  test("resolveSelectionForRuntimeChange preserves the draft when role is provided", () => {
+    expect(
+      resolveSelectionForRuntimeChange({
+        activeRole: "spec",
+        currentSelection: {
+          runtimeKind: "opencode",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+        },
+        intentSelectedModel: null,
+        repoSettings: REPO_SETTINGS,
+        runtimeKind: "opencode",
+      }),
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    });
+  });
+
+  test("resolveSelectionForRuntimeChange falls back to role defaults when no draft exists", () => {
+    expect(
+      resolveSelectionForRuntimeChange({
+        activeRole: "spec",
+        currentSelection: null,
+        intentSelectedModel: null,
+        repoSettings: REPO_SETTINGS,
+        runtimeKind: "opencode",
+      }),
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "spec-agent",
+    });
+  });
+
   test("resolveSelectionForAgentChange derives a base selection when no draft exists", () => {
     expect(
       resolveSelectionForAgentChange({

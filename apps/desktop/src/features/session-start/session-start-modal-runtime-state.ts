@@ -57,27 +57,13 @@ export function useSessionStartModalRuntimeState({
     [runtimeDefinitions, selectedRuntimeKind],
   );
 
-  const setRequestedRuntimeKind = useCallback(
-    (runtimeKind: RuntimeKind): void => {
-      setRequestedRuntimeKindState(
-        resolveRuntimeKindSelection({
-          runtimeDefinitions,
-          requestedRuntimeKind: runtimeKind,
-        }),
-      );
-    },
-    [runtimeDefinitions],
-  );
+  const setRequestedRuntimeKind = useCallback((runtimeKind: RuntimeKind): void => {
+    setRequestedRuntimeKindState(runtimeKind);
+  }, []);
 
   const catalogQuery = useQuery({
     ...repoRuntimeCatalogQueryOptions(activeRepo ?? "", selectedRuntimeKind, loadCatalog),
     enabled: initialCatalog === undefined && Boolean(activeRepo) && isOpen,
-    queryFn: async (): Promise<AgentModelCatalog> => {
-      if (!activeRepo) {
-        throw new Error("No repository selected.");
-      }
-      return loadCatalog(activeRepo, selectedRuntimeKind);
-    },
   });
 
   const catalog = initialCatalog ?? catalogQuery.data ?? null;

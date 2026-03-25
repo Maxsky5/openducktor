@@ -158,7 +158,7 @@ export function useSessionStartModalState({
         runtimeDefinitions,
         requestedRuntimeKind: runtimeKindValue,
       });
-      setRequestedRuntimeKind(runtimeKind);
+      setRequestedRuntimeKind(runtimeKindValue);
       handleSelectionRuntimeChange(runtimeKind);
     },
     [handleSelectionRuntimeChange, runtimeDefinitions, setRequestedRuntimeKind],

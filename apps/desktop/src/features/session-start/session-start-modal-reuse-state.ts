@@ -135,7 +135,10 @@ export function useSessionStartModalReuseState({
     [intent],
   );
 
-  const existingSessionOptions = intent?.existingSessionOptions ?? [];
+  const existingSessionOptions = useMemo(
+    () => intent?.existingSessionOptions ?? [],
+    [intent?.existingSessionOptions],
+  );
 
   const resetStartState = useCallback((): void => {
     setSelectedStartMode("fresh");
