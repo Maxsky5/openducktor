@@ -361,9 +361,8 @@ const createOrReuseSession = async ({
       return resolvedQaWorkingDirectory;
     }
 
-    resolvedQaWorkingDirectory = await deps.runtime.resolveBuildContinuationTarget(
-      ctx.repoPath,
-      ctx.taskId,
+    resolvedQaWorkingDirectory = normalizeWorkingDirectory(
+      await deps.runtime.resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId),
     );
     return resolvedQaWorkingDirectory;
   };
@@ -372,9 +371,8 @@ const createOrReuseSession = async ({
       return resolvedBuildWorkingDirectory;
     }
 
-    resolvedBuildWorkingDirectory = await deps.runtime.resolveBuildContinuationTarget(
-      ctx.repoPath,
-      ctx.taskId,
+    resolvedBuildWorkingDirectory = normalizeWorkingDirectory(
+      await deps.runtime.resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId),
     );
     return resolvedBuildWorkingDirectory;
   };

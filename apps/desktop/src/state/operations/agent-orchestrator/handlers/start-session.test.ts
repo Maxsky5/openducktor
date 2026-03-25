@@ -814,6 +814,85 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
+  test("reuses an in-memory build session when the continuation target only differs by trailing slash", async () => {
+    let persistedListCalls = 0;
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => {
+      persistedListCalls += 1;
+      return [];
+    };
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter: new OpencodeSdkAdapter(),
+      setSessionsById: () => {},
+      sessionsRef: {
+        current: {
+          chosen: {
+            runtimeKind: "opencode",
+            sessionId: "chosen",
+            externalSessionId: "external-chosen",
+            taskId: "task-1",
+            role: "build",
+            scenario: "build_after_human_request_changes",
+            status: "idle",
+            startedAt: "2026-02-22T08:10:00.000Z",
+            runtimeId: null,
+            runId: "run-2",
+            runtimeEndpoint: "http://127.0.0.1:4444",
+            workingDirectory: "/tmp/repo/worktree",
+            messages: [],
+            draftAssistantText: "",
+            draftAssistantMessageId: null,
+            draftReasoningText: "",
+            draftReasoningMessageId: null,
+            pendingPermissions: [],
+            pendingQuestions: [],
+            todos: [],
+            modelCatalog: null,
+            selectedModel: BUILD_SELECTION,
+            isLoadingModelCatalog: false,
+          },
+        },
+      },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree/",
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_after_human_request_changes",
+          startMode: "reuse",
+          sourceSessionId: "chosen",
+        }),
+      ).resolves.toBe("chosen");
+      expect(persistedListCalls).toBe(0);
+    } finally {
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
   test("keeps existing selected model when reusing an in-memory session", async () => {
     let persistedSessions = 0;
     const existingSelectedModel: AgentModelSelection = {

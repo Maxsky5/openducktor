@@ -94,6 +94,16 @@ const createHookHarness = (initialProps: HookArgs) => {
                   mode: "primary" as const,
                   hidden: false,
                 },
+                {
+                  name: "build",
+                  mode: "primary" as const,
+                  hidden: false,
+                },
+                {
+                  name: "qa",
+                  mode: "primary" as const,
+                  hidden: false,
+                },
               ],
             }),
           },
