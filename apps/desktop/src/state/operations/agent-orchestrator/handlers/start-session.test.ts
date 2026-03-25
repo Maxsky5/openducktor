@@ -259,16 +259,25 @@ describe("agent-orchestrator/handlers/start-session", () => {
   });
 
   test("does not dedupe fresh starts with different scenarios, models, or kickoff flags", async () => {
-    const scenarioA = Promise.resolve("session-a");
-    const scenarioB = Promise.resolve("session-b");
+    const modelSession = Promise.resolve("session-model");
+    const scenarioSession = Promise.resolve("session-scenario");
+    const kickoffSession = Promise.resolve("session-kickoff");
     const inFlightMap = new Map<string, Promise<string>>([
       [
         "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::build::build_after_human_request_changes::no-kickoff",
-        scenarioA,
+        modelSession,
+      ],
+      [
+        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::build::build_pull_request_generation::no-kickoff",
+        scenarioSession,
+      ],
+      [
+        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::build::build_after_human_request_changes::kickoff",
+        kickoffSession,
       ],
       [
         "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::planner::build_after_human_request_changes::no-kickoff",
-        scenarioB,
+        Promise.resolve("session-profile"),
       ],
     ]);
 
@@ -307,7 +316,28 @@ describe("agent-orchestrator/handlers/start-session", () => {
         startMode: "fresh",
         selectedModel: BUILD_SELECTION,
       }),
-    ).resolves.toBe("session-a");
+    ).resolves.toBe("session-model");
+
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_pull_request_generation",
+        startMode: "fresh",
+        selectedModel: BUILD_SELECTION,
+      }),
+    ).resolves.toBe("session-scenario");
+
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        startMode: "fresh",
+        selectedModel: BUILD_SELECTION,
+        sendKickoff: true,
+      }),
+    ).resolves.toBe("session-kickoff");
 
     await expect(
       start({
@@ -320,7 +350,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           profileId: "planner",
         },
       }),
-    ).resolves.toBe("session-b");
+    ).resolves.toBe("session-profile");
   });
 
   test("waits for the initial session snapshot to persist before resolving", async () => {
@@ -1630,6 +1660,104 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(sessionsById["forked-pr-session"]?.workingDirectory).toBe("/tmp/repo/worktree");
       expect(persistedSnapshots).toHaveLength(1);
       expect(persistedSnapshots[0]?.sessionId).toBe("forked-pr-session");
+    } finally {
+      adapter.forkSession = originalForkSession;
+    }
+  });
+
+  test("rejects cross-runtime fork requests before calling the adapter", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalForkSession = adapter.forkSession;
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "source-build": {
+          runtimeKind: "opencode",
+          sessionId: "source-build",
+          externalSessionId: "external-source-build",
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_implementation_start",
+          status: "idle",
+          startedAt: "2026-02-22T08:10:00.000Z",
+          runtimeId: "runtime-1",
+          runId: "run-2",
+          runtimeEndpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          pendingPermissions: [],
+          pendingQuestions: [],
+          todos: [],
+          modelCatalog: null,
+          selectedModel: BUILD_SELECTION,
+          isLoadingModelCatalog: false,
+        },
+      },
+    };
+    const forkCalls: unknown[] = [];
+    adapter.forkSession = async (input) => {
+      forkCalls.push(input);
+      return {
+        runtimeKind: "opencode",
+        sessionId: "unexpected-fork",
+        externalSessionId: "unexpected-external-fork",
+        startedAt: "2026-02-22T08:20:00.000Z",
+        role: "build",
+        scenario: "build_pull_request_generation",
+        status: "idle",
+      };
+    };
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      resolveBuildContinuationTarget: async () => "/tmp/repo/worktree",
+      ensureRuntime: async () => ({
+        kind: "claude-code",
+        runtimeId: "runtime-2",
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:5555",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_pull_request_generation",
+          startMode: "fork",
+          sourceSessionId: "source-build",
+          selectedModel: {
+            runtimeKind: "claude-code",
+            providerId: "anthropic",
+            modelId: "claude-sonnet-4",
+            variant: "default",
+            profileId: "build",
+          },
+        }),
+      ).rejects.toThrow(
+        'Session "source-build" cannot be forked with runtime "claude-code" because it belongs to runtime "opencode".',
+      );
+      expect(forkCalls).toHaveLength(0);
     } finally {
       adapter.forkSession = originalForkSession;
     }

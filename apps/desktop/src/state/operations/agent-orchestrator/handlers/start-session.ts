@@ -544,6 +544,15 @@ const createOrReuseSession = async ({
       deps,
     });
     const selectedModel = input.selectedModel;
+    if (
+      sourceSession.runtimeKind &&
+      selectedModel.runtimeKind &&
+      sourceSession.runtimeKind !== selectedModel.runtimeKind
+    ) {
+      throw new Error(
+        `Session "${input.sourceSessionId}" cannot be forked with runtime "${selectedModel.runtimeKind}" because it belongs to runtime "${sourceSession.runtimeKind}".`,
+      );
+    }
     assertScenarioStartPolicy({
       role: ctx.role,
       scenario: resolved.resolvedScenario,
