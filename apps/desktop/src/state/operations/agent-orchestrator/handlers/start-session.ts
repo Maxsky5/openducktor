@@ -731,9 +731,7 @@ export const createStartAgentSession = ({
     const normalizedSourceSessionId =
       input.startMode === "fresh" ? "" : input.sourceSessionId.trim();
     const normalizedTargetWorkingDirectory =
-      input.startMode === "fresh"
-        ? normalizeWorkingDirectory(input.targetWorkingDirectory)
-        : "";
+      input.startMode === "fresh" ? normalizeWorkingDirectory(input.targetWorkingDirectory) : "";
     const inFlightKey = `${repoPath}::${taskId}::${role}::${startMode}::${normalizedSourceSessionId}::${normalizedTargetWorkingDirectory}`;
     const existingInFlight = session.inFlightStartsByRepoTaskRef.current.get(inFlightKey);
     if (existingInFlight) {

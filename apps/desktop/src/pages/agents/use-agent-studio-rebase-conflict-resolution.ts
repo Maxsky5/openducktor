@@ -26,7 +26,7 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
   selection: AgentStudioRebaseConflictResolutionSelectionContext;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
   onContextSwitchIntent: () => void;
-    startSessionRequest: (request: {
+  startSessionRequest: (request: {
     taskId: string;
     role: "build";
     scenario: "build_rebase_conflict_resolution";

@@ -113,21 +113,19 @@ describe("useGitConflictResolution", () => {
     try {
       await harness.mount();
 
-      const resolved = await harness
-        .getLatest()
-        .handleResolveGitConflict(createConflict(), {
-          taskId: "task-1",
-          task: createTaskCardFixture({ id: "task-1", title: "Resolve rebase conflict" }),
-          builderSessions: [
-            buildSession({
-              sessionId: "build-1",
-              workingDirectory: "/repo/worktrees/task-1",
-              selectedModel: null,
-            }),
-          ],
-          currentViewSessionId: null,
-          onOpenSession: () => undefined,
-        });
+      const resolved = await harness.getLatest().handleResolveGitConflict(createConflict(), {
+        taskId: "task-1",
+        task: createTaskCardFixture({ id: "task-1", title: "Resolve rebase conflict" }),
+        builderSessions: [
+          buildSession({
+            sessionId: "build-1",
+            workingDirectory: "/repo/worktrees/task-1",
+            selectedModel: null,
+          }),
+        ],
+        currentViewSessionId: null,
+        onOpenSession: () => undefined,
+      });
 
       expect(resolved).toBe(true);
       expect(startConflictResolutionSession).toHaveBeenCalledWith(
