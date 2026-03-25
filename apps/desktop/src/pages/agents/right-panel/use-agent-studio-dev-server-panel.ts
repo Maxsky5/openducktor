@@ -8,6 +8,8 @@ import { devServerEventSchema } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  AgentStudioDevServerLogBuffer,
+  AgentStudioDevServerLogEntry,
   AgentStudioDevServerPanelMode,
   AgentStudioDevServerPanelModel,
 } from "@/components/features/agents/agent-studio-dev-server-panel";
@@ -26,14 +28,126 @@ type UseAgentStudioDevServerPanelArgs = {
 };
 
 type SelectedScriptMemory = Map<string, string>;
+type ScriptLogBuffer = {
+  entries: AgentStudioDevServerLogEntry[];
+  head: number;
+  size: number;
+  nextSequence: number;
+};
+type ScriptLogBufferStore = Map<string, ScriptLogBuffer>;
 
 const buildTaskMemoryKey = (repoPath: string, taskId: string): string => `${repoPath}::${taskId}`;
+const ESC = String.fromCharCode(27);
+const CSI = String.fromCharCode(155);
+const ANSI_ESCAPE_SEQUENCE = new RegExp(
+  `(?:${ESC}\\[[0-?]*[ -/]*[@-~])|(?:${CSI}[0-?]*[ -/]*[@-~])|(?:\\uFFFD\\[[0-9;]*[A-Za-z])`,
+  "g",
+);
 
 const trimDevServerLogLines = (lines: DevServerLogLine[]): DevServerLogLine[] => {
   if (lines.length <= MAX_BUFFERED_LOG_LINES) {
     return lines;
   }
   return lines.slice(-MAX_BUFFERED_LOG_LINES);
+};
+
+const sanitizeLogText = (text: string): string => text.replace(ANSI_ESCAPE_SEQUENCE, "");
+
+const createScriptLogBuffer = (): ScriptLogBuffer => ({
+  entries: [],
+  head: 0,
+  size: 0,
+  nextSequence: 0,
+});
+
+const getOrCreateScriptLogBuffer = (
+  buffers: ScriptLogBufferStore,
+  scriptId: string,
+): ScriptLogBuffer => {
+  const existingBuffer = buffers.get(scriptId);
+  if (existingBuffer) {
+    return existingBuffer;
+  }
+
+  const nextBuffer = createScriptLogBuffer();
+  buffers.set(scriptId, nextBuffer);
+  return nextBuffer;
+};
+
+const appendScriptLogLine = (
+  buffers: ScriptLogBufferStore,
+  logLine: DevServerLogLine,
+): ScriptLogBuffer => {
+  const buffer = getOrCreateScriptLogBuffer(buffers, logLine.scriptId);
+  const entry: AgentStudioDevServerLogEntry = {
+    id: `${logLine.scriptId}:${buffer.nextSequence}`,
+    timestamp: logLine.timestamp,
+    stream: logLine.stream,
+    text: sanitizeLogText(logLine.text),
+  };
+  buffer.nextSequence += 1;
+
+  if (buffer.size < MAX_BUFFERED_LOG_LINES) {
+    const insertionIndex = (buffer.head + buffer.size) % MAX_BUFFERED_LOG_LINES;
+    buffer.entries[insertionIndex] = entry;
+    buffer.size += 1;
+    return buffer;
+  }
+
+  buffer.entries[buffer.head] = entry;
+  buffer.head = (buffer.head + 1) % MAX_BUFFERED_LOG_LINES;
+  return buffer;
+};
+
+const resetScriptLogBuffer = (
+  buffers: ScriptLogBufferStore,
+  scriptId: string,
+  logLines: DevServerLogLine[],
+): ScriptLogBuffer => {
+  const buffer = getOrCreateScriptLogBuffer(buffers, scriptId);
+  buffer.entries.length = 0;
+  buffer.head = 0;
+  buffer.size = 0;
+  buffer.nextSequence = 0;
+
+  for (const logLine of trimDevServerLogLines(logLines)) {
+    appendScriptLogLine(buffers, logLine);
+  }
+
+  return buffer;
+};
+
+const syncScriptLogBuffers = (
+  buffers: ScriptLogBufferStore,
+  state: DevServerGroupState | null,
+): void => {
+  if (!state) {
+    buffers.clear();
+    return;
+  }
+
+  const nextScriptIds = new Set(state.scripts.map((script) => script.scriptId));
+  for (const scriptId of buffers.keys()) {
+    if (!nextScriptIds.has(scriptId)) {
+      buffers.delete(scriptId);
+    }
+  }
+
+  for (const script of state.scripts) {
+    resetScriptLogBuffer(buffers, script.scriptId, script.bufferedLogLines);
+  }
+};
+
+const toLogBufferView = (buffer: ScriptLogBuffer | null): AgentStudioDevServerLogBuffer | null => {
+  if (!buffer) {
+    return null;
+  }
+
+  return {
+    entries: buffer.entries,
+    head: buffer.head,
+    size: buffer.size,
+  };
 };
 
 const replaceScript = (
@@ -74,16 +188,7 @@ export const applyDevServerEventToState = (
   return {
     ...state,
     updatedAt: event.logLine.timestamp,
-    scripts: state.scripts.map((script) => {
-      if (script.scriptId !== event.logLine.scriptId) {
-        return script;
-      }
-
-      return {
-        ...script,
-        bufferedLogLines: trimDevServerLogLines([...script.bufferedLogLines, event.logLine]),
-      };
-    }),
+    scripts: state.scripts,
   };
 };
 
@@ -145,9 +250,12 @@ export function useAgentStudioDevServerPanel({
 }: UseAgentStudioDevServerPanelArgs): AgentStudioDevServerPanelModel {
   const queryClient = useQueryClient();
   const selectionMemoryRef = useRef<SelectedScriptMemory>(new Map());
+  const logBuffersRef = useRef<ScriptLogBufferStore>(new Map());
   const previousTaskMemoryKeyRef = useRef<string | null | undefined>(undefined);
+  const selectedScriptIdRef = useRef<string | null>(null);
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
   const [liveState, setLiveState] = useState<DevServerGroupState | null>(null);
+  const [selectedScriptLogRevision, setSelectedScriptLogRevision] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
 
@@ -211,17 +319,42 @@ export function useAgentStudioDevServerPanel({
         return;
       }
 
-      const queryKey = devServerQueryKeys.state(repoPath, taskId);
-      const cachedState = queryClient.getQueryData<DevServerGroupState>(queryKey) ?? null;
-      setLiveState((current) => {
-        const scopedCurrent =
-          current && current.repoPath === repoPath && current.taskId === taskId ? current : null;
-        const nextState = applyDevServerEventToState(cachedState ?? scopedCurrent, event);
-        if (nextState) {
-          queryClient.setQueryData(queryKey, nextState);
-        }
-        return nextState;
-      });
+      if (event.type === "snapshot") {
+        syncScriptLogBuffers(logBuffersRef.current, event.state);
+      } else if (event.type === "script_status_changed") {
+        resetScriptLogBuffer(
+          logBuffersRef.current,
+          event.script.scriptId,
+          event.script.bufferedLogLines,
+        );
+      } else {
+        appendScriptLogLine(logBuffersRef.current, event.logLine);
+      }
+
+      if (event.type !== "log_line") {
+        const queryKey = devServerQueryKeys.state(repoPath, taskId);
+        const cachedState = queryClient.getQueryData<DevServerGroupState>(queryKey) ?? null;
+        setLiveState((current) => {
+          const scopedCurrent =
+            current && current.repoPath === repoPath && current.taskId === taskId ? current : null;
+          const nextState = applyDevServerEventToState(cachedState ?? scopedCurrent, event);
+          if (nextState) {
+            queryClient.setQueryData(queryKey, nextState);
+          }
+          return nextState;
+        });
+      }
+
+      const selectedId = selectedScriptIdRef.current;
+      const touchedScriptId =
+        event.type === "snapshot"
+          ? selectedId
+          : event.type === "script_status_changed"
+            ? event.script.scriptId
+            : event.logLine.scriptId;
+      if (selectedId && touchedScriptId === selectedId) {
+        setSelectedScriptLogRevision((revision) => revision + 1);
+      }
     },
     [queryClient, repoPath, taskId],
   );
@@ -231,17 +364,21 @@ export function useAgentStudioDevServerPanel({
     previousTaskMemoryKeyRef.current = taskMemoryKey;
 
     if (scopeChanged) {
+      logBuffersRef.current.clear();
       setLiveState(null);
       setSelectedScriptId(null);
+      setSelectedScriptLogRevision(0);
       setActionError(null);
       setSubscriptionError(null);
     }
 
     if (!queryEnabled) {
+      logBuffersRef.current.clear();
       setLiveState(null);
       setActionError(null);
       setSubscriptionError(null);
       setSelectedScriptId(null);
+      setSelectedScriptLogRevision(0);
       return;
     }
 
@@ -250,7 +387,9 @@ export function useAgentStudioDevServerPanel({
       stateQuery.data &&
       stateQuery.dataUpdatedAt >= queryActivationState.since
     ) {
+      syncScriptLogBuffers(logBuffersRef.current, stateQuery.data);
       setLiveState(stateQuery.data);
+      setSelectedScriptLogRevision((revision) => revision + 1);
     }
   }, [
     queryActivationState.enabled,
@@ -267,8 +406,10 @@ export function useAgentStudioDevServerPanel({
         return;
       }
 
+      syncScriptLogBuffers(logBuffersRef.current, nextState);
       queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), nextState);
       setLiveState(nextState);
+      setSelectedScriptLogRevision((revision) => revision + 1);
     },
     [queryClient, repoPath, taskId],
   );
@@ -382,6 +523,10 @@ export function useAgentStudioDevServerPanel({
   );
 
   useEffect(() => {
+    selectedScriptIdRef.current = effectiveSelectedScriptId;
+  }, [effectiveSelectedScriptId]);
+
+  useEffect(() => {
     if (!shouldSubscribeToEvents || repoPath === null || taskId === null) {
       return;
     }
@@ -462,6 +607,13 @@ export function useAgentStudioDevServerPanel({
 
   const selectedScript =
     effectiveState?.scripts.find((script) => script.scriptId === effectiveSelectedScriptId) ?? null;
+  const selectedScriptLogBuffer = useMemo(
+    () =>
+      effectiveSelectedScriptId
+        ? toLogBufferView(logBuffersRef.current.get(effectiveSelectedScriptId) ?? null)
+        : null,
+    [effectiveSelectedScriptId, selectedScriptLogRevision],
+  );
   const isExpanded = isDevServerPanelExpanded(
     effectiveState?.scripts ?? [],
     startMutation.isPending || restartMutation.isPending,
@@ -513,6 +665,7 @@ export function useAgentStudioDevServerPanel({
     scripts: effectiveState?.scripts ?? [],
     selectedScriptId: effectiveSelectedScriptId,
     selectedScript,
+    selectedScriptLogBuffer,
     error,
     isStartPending: startMutation.isPending,
     isStopPending: stopMutation.isPending,

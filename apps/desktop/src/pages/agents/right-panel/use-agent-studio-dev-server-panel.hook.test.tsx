@@ -260,6 +260,77 @@ describe("useAgentStudioDevServerPanel", () => {
     }
   });
 
+  test("stores sanitized log lines in the selected script buffer without rewriting script state", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    devServerGetState = async () =>
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 4242,
+            startedAt: "2026-03-19T15:30:00.000Z",
+          }),
+        ],
+      });
+
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (latest === null) {
+        throw new Error("Hook result not ready");
+      }
+      return latest;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useAgentStudioDevServerPanel(args);
+      return null;
+    };
+
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness
+          args={{
+            repoPath: "/repo",
+            taskId: "task-7",
+            repoSettings,
+            enabled: true,
+          }}
+        />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().mode).toBe("active");
+      });
+
+      await act(async () => {
+        devServerEventListener?.({
+          type: "log_line",
+          repoPath: "/repo",
+          taskId: "task-7",
+          logLine: {
+            scriptId: "frontend",
+            stream: "stdout",
+            text: "\u001b[32mready\u001b[0m",
+            timestamp: "2026-03-19T15:30:01.000Z",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(getLatest().selectedScriptLogBuffer?.size).toBe(1);
+      });
+      expect(getLatest().selectedScript?.bufferedLogLines).toHaveLength(0);
+      expect(getLatest().selectedScriptLogBuffer?.entries[0]?.text).toBe("ready");
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("reopens in loading mode until a fresh dev-server refetch completes", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];

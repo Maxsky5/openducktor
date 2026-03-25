@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import type { DevServerScriptState } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
+import type {
+  AgentStudioDevServerLogBuffer,
+  AgentStudioDevServerPanelModel,
+} from "./agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import {
   AgentStudioRightPanel,
@@ -78,6 +81,16 @@ const devServerModel: AgentStudioDevServerPanelModel = {
   scripts: [selectedScript],
   selectedScriptId: selectedScript.scriptId,
   selectedScript,
+  selectedScriptLogBuffer: {
+    entries: selectedScript.bufferedLogLines.map((logLine, index) => ({
+      id: `${selectedScript.scriptId}:${index}`,
+      timestamp: logLine.timestamp,
+      stream: logLine.stream,
+      text: logLine.text,
+    })),
+    head: 0,
+    size: selectedScript.bufferedLogLines.length,
+  } satisfies AgentStudioDevServerLogBuffer,
   error: null,
   isStartPending: false,
   isStopPending: false,

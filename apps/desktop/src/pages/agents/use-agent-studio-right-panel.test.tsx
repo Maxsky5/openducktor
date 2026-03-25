@@ -104,6 +104,7 @@ const devServerModel: AgentStudioDevServerPanelModel = {
   scripts: [],
   selectedScriptId: null,
   selectedScript: null,
+  selectedScriptLogBuffer: null,
   error: null,
   isStartPending: false,
   isStopPending: false,

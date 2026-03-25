@@ -4,8 +4,20 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   AgentStudioDevServerPanel,
+  type AgentStudioDevServerLogBuffer,
   type AgentStudioDevServerPanelModel,
 } from "./agent-studio-dev-server-panel";
+
+const buildLogBuffer = (script: DevServerScriptState): AgentStudioDevServerLogBuffer => ({
+  entries: script.bufferedLogLines.map((logLine, index) => ({
+    id: `${script.scriptId}:${index}`,
+    timestamp: logLine.timestamp,
+    stream: logLine.stream,
+    text: logLine.text,
+  })),
+  head: 0,
+  size: script.bufferedLogLines.length,
+});
 
 const baseModel = (
   overrides: Partial<AgentStudioDevServerPanelModel> = {},
@@ -19,6 +31,7 @@ const baseModel = (
   scripts: [],
   selectedScriptId: null,
   selectedScript: null,
+  selectedScriptLogBuffer: null,
   error: null,
   isStartPending: false,
   isStopPending: false,
@@ -129,6 +142,7 @@ describe("AgentStudioDevServerPanel", () => {
           scripts: [runningScript],
           selectedScriptId: runningScript.scriptId,
           selectedScript: runningScript,
+          selectedScriptLogBuffer: buildLogBuffer(runningScript),
         }),
       }),
     );
@@ -155,6 +169,7 @@ describe("AgentStudioDevServerPanel", () => {
           scripts: [runningScript, backendScript],
           selectedScriptId: backendScript.scriptId,
           selectedScript: backendScript,
+          selectedScriptLogBuffer: buildLogBuffer(backendScript),
         }),
       }),
     );
@@ -173,6 +188,7 @@ describe("AgentStudioDevServerPanel", () => {
           scripts: [failedScript],
           selectedScriptId: failedScript.scriptId,
           selectedScript: failedScript,
+          selectedScriptLogBuffer: buildLogBuffer(failedScript),
         }),
       }),
     );

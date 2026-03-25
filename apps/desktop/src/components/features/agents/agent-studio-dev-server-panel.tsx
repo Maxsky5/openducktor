@@ -17,6 +17,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 export type AgentStudioDevServerPanelMode = "loading" | "empty" | "disabled" | "stopped" | "active";
+export type AgentStudioDevServerLogEntry = {
+  id: string;
+  timestamp: string;
+  stream: DevServerScriptState["bufferedLogLines"][number]["stream"];
+  text: string;
+};
+
+export type AgentStudioDevServerLogBuffer = {
+  entries: readonly AgentStudioDevServerLogEntry[];
+  head: number;
+  size: number;
+};
 
 export type AgentStudioDevServerPanelModel = {
   mode: AgentStudioDevServerPanelMode;
@@ -28,6 +40,7 @@ export type AgentStudioDevServerPanelModel = {
   scripts: DevServerScriptState[];
   selectedScriptId: string | null;
   selectedScript: DevServerScriptState | null;
+  selectedScriptLogBuffer: AgentStudioDevServerLogBuffer | null;
   error: string | null;
   isStartPending: boolean;
   isStopPending: boolean;
@@ -39,12 +52,6 @@ export type AgentStudioDevServerPanelModel = {
 };
 
 const AUTO_SCROLL_THRESHOLD_PX = 48;
-const ESC = String.fromCharCode(27);
-const CSI = String.fromCharCode(155);
-const ANSI_ESCAPE_SEQUENCE = new RegExp(
-  `(?:${ESC}\\[[0-?]*[ -/]*[@-~])|(?:${CSI}[0-?]*[ -/]*[@-~])|(?:\\uFFFD\\[[0-9;]*[A-Za-z])`,
-  "g",
-);
 
 const formatLogTimestamp = (timestamp: string): string => {
   if (timestamp.length >= 19) {
@@ -65,8 +72,6 @@ const streamClassName = (stream: "stdout" | "stderr" | "system"): string => {
 
   return "text-[var(--dev-server-terminal-foreground)]";
 };
-
-const sanitizeLogText = (text: string): string => text.replace(ANSI_ESCAPE_SEQUENCE, "");
 
 const getClipboardErrorMessage = (error: unknown): string => {
   if (!(error instanceof DOMException)) {
@@ -139,24 +144,8 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
   const hasExpandedActions = model.mode === "active";
   const selectedTabsValue = model.selectedScriptId ?? model.scripts[0]?.scriptId ?? "__none__";
   const selectedScriptContent = selectedScript ?? model.scripts[0] ?? null;
-  const selectedScriptLogCount = selectedScriptContent?.bufferedLogLines.length ?? 0;
-  const renderedLogLines = useMemo(() => {
-    if (!selectedScriptContent) {
-      return [];
-    }
-
-    const keyOccurrences = new Map<string, number>();
-    return selectedScriptContent.bufferedLogLines.map((logLine) => {
-      const baseKey = `${logLine.timestamp}:${logLine.stream}:${logLine.text}`;
-      const occurrence = (keyOccurrences.get(baseKey) ?? 0) + 1;
-      keyOccurrences.set(baseKey, occurrence);
-      return {
-        key: `${baseKey}:${occurrence}`,
-        logLine,
-        displayText: sanitizeLogText(logLine.text),
-      };
-    });
-  }, [selectedScriptContent]);
+  const selectedScriptLogBuffer = model.selectedScriptLogBuffer;
+  const selectedScriptLogCount = selectedScriptLogBuffer?.size ?? 0;
 
   useEffect(() => {
     if (!copiedWorktreePath) {
@@ -426,30 +415,42 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
 
                 <div ref={logViewportContainerRef} className="min-h-0 flex-1 overflow-hidden">
                   <ScrollArea className="h-full min-h-0 bg-[var(--dev-server-terminal-panel)]">
-                    {selectedScriptContent.bufferedLogLines.length > 0 ? (
+                    {selectedScriptLogCount > 0 && selectedScriptLogBuffer ? (
                       <div className="space-y-1 px-4 py-4 font-mono text-[11px] leading-5">
-                        {renderedLogLines.map(({ key, logLine, displayText }) => (
-                          <div
-                            key={key}
-                            className="flex gap-3"
-                            data-testid="agent-studio-dev-server-log-line"
-                          >
-                            <span className="shrink-0 text-[var(--dev-server-terminal-subtle)]">
-                              {formatLogTimestamp(logLine.timestamp)}
-                            </span>
-                            <span className="shrink-0 text-[var(--dev-server-terminal-muted)]">
-                              [{logLine.stream}]
-                            </span>
-                            <span
-                              className={cn(
-                                "min-w-0 whitespace-pre-wrap break-words",
-                                streamClassName(logLine.stream),
-                              )}
+                        {Array.from({ length: selectedScriptLogBuffer.size }, (_, offset) => {
+                          const logLine =
+                            selectedScriptLogBuffer.entries[
+                              (selectedScriptLogBuffer.head + offset) %
+                                selectedScriptLogBuffer.entries.length
+                            ];
+
+                          if (!logLine) {
+                            return null;
+                          }
+
+                          return (
+                            <div
+                              key={logLine.id}
+                              className="flex gap-3 [content-visibility:auto] [contain-intrinsic-size:20px]"
+                              data-testid="agent-studio-dev-server-log-line"
                             >
-                              {displayText}
-                            </span>
-                          </div>
-                        ))}
+                              <span className="shrink-0 text-[var(--dev-server-terminal-subtle)]">
+                                {formatLogTimestamp(logLine.timestamp)}
+                              </span>
+                              <span className="shrink-0 text-[var(--dev-server-terminal-muted)]">
+                                [{logLine.stream}]
+                              </span>
+                              <span
+                                className={cn(
+                                  "min-w-0 whitespace-pre-wrap break-words",
+                                  streamClassName(logLine.stream),
+                                )}
+                              >
+                                {logLine.text}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : (
                       <div
