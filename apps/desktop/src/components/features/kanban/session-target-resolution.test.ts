@@ -73,6 +73,31 @@ describe("session-target-resolution", () => {
     expect(resolvePreferredActiveSession(sessions, "build")?.sessionId).toBe("build-newer");
   });
 
+  test("prefers waiting-input session over running/starting sessions", () => {
+    const sessions: KanbanTaskSession[] = [
+      {
+        runtimeKind: "opencode",
+        sessionId: "build-running",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "running",
+        startedAt: "2026-03-21T10:00:00.000Z",
+        presentationState: "active",
+      },
+      {
+        runtimeKind: "opencode",
+        sessionId: "build-waiting",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+        startedAt: "2026-03-20T10:00:00.000Z",
+        presentationState: "waiting_input",
+      },
+    ];
+
+    expect(resolvePreferredActiveSession(sessions, "build")?.sessionId).toBe("build-waiting");
+  });
+
   test("resolves parity options used by card and details actions", () => {
     const task = createTaskCardFixture({
       id: "TASK-2",

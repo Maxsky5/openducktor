@@ -9,6 +9,7 @@ import {
   toKanbanSessionPresentationState,
   toKanbanTaskActivityState,
 } from "@/components/features/kanban/kanban-task-activity";
+import { compareActiveSessionForPrimary } from "@/components/features/kanban/session-target-resolution";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
@@ -68,33 +69,21 @@ const compareTaskSessionOrder = (left: AgentSessionState, right: AgentSessionSta
   return left.sessionId > right.sessionId ? -1 : 1;
 };
 
-const rankActiveSessionForPrimary = (session: AgentSessionState): number => {
-  const presentationState = toKanbanSessionPresentationState(session);
-  if (presentationState === "waiting_input") {
-    return 2;
-  }
-  if (session.status === "running") {
-    return 0;
-  }
-  if (session.status === "starting") {
-    return 1;
-  }
-  return 2;
-};
-
 const comparePrimaryTaskSession = (left: AgentSessionState, right: AgentSessionState): number => {
-  const leftRank = rankActiveSessionForPrimary(left);
-  const rightRank = rankActiveSessionForPrimary(right);
-  if (leftRank !== rightRank) {
-    return leftRank - rightRank;
-  }
-  if (left.startedAt !== right.startedAt) {
-    return left.startedAt > right.startedAt ? -1 : 1;
-  }
-  if (left.sessionId === right.sessionId) {
-    return 0;
-  }
-  return left.sessionId > right.sessionId ? -1 : 1;
+  return compareActiveSessionForPrimary(
+    {
+      sessionId: left.sessionId,
+      status: left.status,
+      presentationState: toKanbanSessionPresentationState(left),
+      startedAt: left.startedAt,
+    },
+    {
+      sessionId: right.sessionId,
+      status: right.status,
+      presentationState: toKanbanSessionPresentationState(right),
+      startedAt: right.startedAt,
+    },
+  );
 };
 
 export const buildActiveTaskSessionContextByTaskId = (

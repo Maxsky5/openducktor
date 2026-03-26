@@ -1,36 +1,15 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { render } from "@testing-library/react";
-import type { ReactElement } from "react";
+import { describe, expect, test } from "bun:test";
+import { render, screen } from "@testing-library/react";
 import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { TaskDetailsSheetFooter } from "./task-details-sheet-footer";
 
 enableReactActEnvironment();
 
-const workflowActionGroupRenderMock = mock((_: unknown) => {});
-
 describe("TaskDetailsSheetFooter", () => {
-  beforeAll(() => {
-    mock.module("@/components/features/kanban/task-workflow-action-group", () => ({
-      TaskWorkflowActionGroup: (props: unknown): ReactElement => {
-        workflowActionGroupRenderMock(props);
-        return <div data-testid="workflow-actions" />;
-      },
-    }));
-  });
-
-  beforeEach(() => {
-    workflowActionGroupRenderMock.mockClear();
-  });
-
-  afterAll(() => {
-    mock.restore();
-  });
-
-  test("omits workflow action placeholder when no workflow actions are available", async () => {
-    const { TaskDetailsSheetFooter } = await import("./task-details-sheet-footer");
-
+  test("omits workflow actions when no workflow actions are available", () => {
     const { unmount } = render(
       <TaskDetailsSheetFooter
         task={createTaskCardFixture({ status: "closed", availableActions: [] })}
@@ -40,14 +19,13 @@ describe("TaskDetailsSheetFooter", () => {
       />,
     );
 
-    expect(workflowActionGroupRenderMock).not.toHaveBeenCalled();
+    expect(screen.queryByText("More")).toBeNull();
+    expect(screen.queryByText("No available workflow action")).toBeNull();
 
     unmount();
   });
 
-  test("keeps footer action menu when delete is available without workflow actions", async () => {
-    const { TaskDetailsSheetFooter } = await import("./task-details-sheet-footer");
-
+  test("keeps footer action menu when delete is available without workflow actions", () => {
     const { unmount } = render(
       <TaskDetailsSheetFooter
         task={createTaskCardFixture({ status: "closed", availableActions: [] })}
@@ -58,19 +36,12 @@ describe("TaskDetailsSheetFooter", () => {
       />,
     );
 
-    expect(workflowActionGroupRenderMock).toHaveBeenCalledTimes(1);
-    expect(workflowActionGroupRenderMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        hideWhenEmpty: true,
-      }),
-    );
+    expect(screen.getByText("More")).toBeDefined();
 
     unmount();
   });
 
-  test("forwards active and historical session context to workflow action group", async () => {
-    const { TaskDetailsSheetFooter } = await import("./task-details-sheet-footer");
-
+  test("renders active-session view action when active and historical context is provided", () => {
     const { unmount } = render(
       <TaskDetailsSheetFooter
         task={createTaskCardFixture({ status: "in_progress", availableActions: ["open_builder"] })}
@@ -83,13 +54,9 @@ describe("TaskDetailsSheetFooter", () => {
       />,
     );
 
-    expect(workflowActionGroupRenderMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        hasActiveSession: true,
-        activeSessionRole: "build",
-        historicalSessionRoles: ["spec", "planner"],
-      }),
-    );
+    expect(screen.getByText("Open Builder")).toBeDefined();
+    expect(screen.getByText("More")).toBeDefined();
+    expect(screen.queryByText("Start Builder")).toBeNull();
 
     unmount();
   });

@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { KanbanColumn } from "@/components/features/kanban";
+import { KanbanColumn } from "@/components/features/kanban/kanban-column";
 import { cn } from "@/lib/utils";
 import { KanbanBoardLoadingShell } from "./kanban-board-loading-shell";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";

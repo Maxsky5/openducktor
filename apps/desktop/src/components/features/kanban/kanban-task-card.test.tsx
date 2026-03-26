@@ -64,8 +64,11 @@ describe("KanbanTaskCard active sessions", () => {
 
     expect(html).toContain("kanban-active-session-card");
     expect(html).toContain("kanban-active-session-ray");
-    expect(html).toContain("View Builder");
+    expect(html).toContain("Builder");
+    expect(html).toContain("Running");
+    expect(html).toContain("lucide-circle-play");
     expect(html).toContain('data-slot="popover-trigger"');
+    expect(html.split("kanban-active-session-ray")).toHaveLength(2);
     expect(html).not.toContain("Start Builder");
     expect(html).not.toContain("Start Spec");
     expect(html).not.toContain("Start Planner");
@@ -164,7 +167,9 @@ describe("KanbanTaskCard active sessions", () => {
 
     expect(html).toContain("kanban-waiting-input-card");
     expect(html).not.toContain("kanban-active-session-ray");
-    expect(html).toContain("View Builder");
+    expect(html).toContain("Builder");
+    expect(html).toContain("Waiting input");
+    expect(html).toContain("lucide-circle-play");
     expect(html).toContain("border-warning-border");
     expect(html).toContain("bg-warning-surface");
     expect(html).not.toContain("Sessions");

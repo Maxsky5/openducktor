@@ -1,28 +1,38 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
-import type { KanbanTaskSession } from "@/components/features/kanban/kanban-task-activity";
+import type {
+  KanbanSessionPresentationState,
+  KanbanTaskSession,
+} from "@/components/features/kanban/kanban-task-activity";
 
 export type SessionTargetOptions = {
   sessionId?: string | null;
   scenario?: AgentScenario | null;
 };
 
-const rankActiveSessionForPrimary = (session: KanbanTaskSession): number => {
-  if (session.presentationState === "waiting_input") {
-    return 2;
-  }
-  if (session.status === "running") {
-    return 0;
-  }
-  if (session.status === "starting") {
-    return 1;
-  }
-  return 2;
+type PrimarySessionOrderingCandidate = {
+  sessionId: string;
+  status: KanbanTaskSession["status"];
+  presentationState: KanbanSessionPresentationState;
+  startedAt?: string;
 };
 
-const compareActiveSessionForPrimary = (
-  left: KanbanTaskSession,
-  right: KanbanTaskSession,
+const rankActiveSessionForPrimary = (session: PrimarySessionOrderingCandidate): number => {
+  if (session.presentationState === "waiting_input") {
+    return 0;
+  }
+  if (session.status === "running") {
+    return 1;
+  }
+  if (session.status === "starting") {
+    return 2;
+  }
+  return 3;
+};
+
+export const compareActiveSessionForPrimary = (
+  left: PrimarySessionOrderingCandidate,
+  right: PrimarySessionOrderingCandidate,
 ): number => {
   const leftRank = rankActiveSessionForPrimary(left);
   const rightRank = rankActiveSessionForPrimary(right);

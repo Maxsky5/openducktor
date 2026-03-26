@@ -330,13 +330,11 @@ describe("KanbanPage session start modal flow", () => {
       }),
     }));
 
-    mock.module("@/components/features/kanban", () => ({
+    mock.module("@/components/features/kanban/kanban-column", () => ({
       KanbanColumn: (props: Record<string, unknown>): ReactElement | null => {
         latestKanbanColumnProps = props;
         return null;
       },
-      TaskComposerDialog: (): ReactElement | null => null,
-      TaskDetailsSheet: (): ReactElement | null => null,
     }));
 
     mock.module("./kanban-session-start-modal", () => ({

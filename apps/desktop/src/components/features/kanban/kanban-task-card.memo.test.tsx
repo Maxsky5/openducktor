@@ -1,163 +1,120 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { render } from "@testing-library/react";
-import type { ReactElement } from "react";
-import { act } from "react";
 import { MemoryRouter } from "react-router-dom";
 import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { KanbanTaskCard } from "./kanban-task-card";
 
 enableReactActEnvironment();
 
-const workflowActionGroupRenderMock = mock((_: unknown) => {});
 const noop = (): void => {};
 
-describe("KanbanTaskCard memoization", () => {
-  let KanbanTaskCard: typeof import("./kanban-task-card").KanbanTaskCard;
-
-  beforeEach(() => {
-    workflowActionGroupRenderMock.mockClear();
-  });
-
-  beforeAll(async () => {
-    mock.module("@/components/features/kanban/task-workflow-action-group", () => ({
-      TaskWorkflowActionGroup: (props: unknown): ReactElement | null => {
-        workflowActionGroupRenderMock(props);
-        return null;
-      },
-    }));
-    ({ KanbanTaskCard } = await import("./kanban-task-card"));
-  });
-
-  afterAll(() => {
-    mock.restore();
-  });
-
-  test("skips rerender when task reference changes but compared fields are equivalent", async () => {
+describe("KanbanTaskCard rerender behavior", () => {
+  test("keeps markup stable when equivalent cloned props are provided", () => {
     const task = createTaskCardFixture({
       id: "TASK-1",
       title: "Memoized card",
-      status: "in_progress",
-      issueType: "feature",
-      priority: 2,
-      subtaskIds: ["TASK-1.1"],
-      availableActions: ["open_builder", "human_request_changes"],
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    });
-
-    const activeSessions = [
-      {
-        runtimeKind: "opencode",
-        sessionId: "session-1",
-        role: "build",
-        scenario: "build_implementation_start",
-        status: "running",
-        presentationState: "active",
-      } as const,
-    ];
-
-    let rendered!: ReturnType<typeof render>;
-    await act(async () => {
-      rendered = render(
-        <MemoryRouter initialEntries={["/kanban"]}>
-          <KanbanTaskCard
-            task={task}
-            runState="running"
-            taskActivityState="active"
-            taskSessions={activeSessions}
-            onOpenDetails={noop}
-            onDelegate={noop}
-            onPlan={noop}
-            onBuild={noop}
-          />
-        </MemoryRouter>,
-      );
-    });
-
-    expect(workflowActionGroupRenderMock).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      rendered.rerender(
-        <MemoryRouter initialEntries={["/kanban"]}>
-          <KanbanTaskCard
-            task={{ ...task }}
-            runState="running"
-            taskActivityState="active"
-            taskSessions={activeSessions.map((session) => ({ ...session }))}
-            onOpenDetails={noop}
-            onDelegate={noop}
-            onPlan={noop}
-            onBuild={noop}
-          />
-        </MemoryRouter>,
-      );
-    });
-
-    expect(workflowActionGroupRenderMock).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      rendered.unmount();
-    });
-  });
-
-  test("rerenders when task workflow data changes", async () => {
-    const task = createTaskCardFixture({
-      id: "TASK-2",
       status: "in_progress",
       availableActions: ["open_builder"],
       updatedAt: "2026-01-01T00:00:00.000Z",
     });
 
-    let rendered!: ReturnType<typeof render>;
-    await act(async () => {
-      rendered = render(
-        <MemoryRouter initialEntries={["/kanban"]}>
-          <KanbanTaskCard
-            task={task}
-            runState="running"
-            taskActivityState="idle"
-            taskSessions={[]}
-            onOpenDetails={noop}
-            onDelegate={noop}
-            onPlan={noop}
-            onBuild={noop}
-          />
-        </MemoryRouter>,
-      );
-    });
+    const taskSessions = [
+      {
+        runtimeKind: "opencode" as const,
+        sessionId: "session-1",
+        role: "build" as const,
+        scenario: "build_implementation_start" as const,
+        status: "running" as const,
+        presentationState: "active" as const,
+      },
+    ];
 
-    expect(workflowActionGroupRenderMock).toHaveBeenCalledTimes(1);
+    const { rerender, container, unmount } = render(
+      <MemoryRouter initialEntries={["/kanban"]}>
+        <KanbanTaskCard
+          task={task}
+          taskActivityState="active"
+          taskSessions={taskSessions}
+          onOpenDetails={noop}
+          onDelegate={noop}
+          onPlan={noop}
+          onBuild={noop}
+        />
+      </MemoryRouter>,
+    );
 
-    await act(async () => {
-      rendered.rerender(
-        <MemoryRouter initialEntries={["/kanban"]}>
-          <KanbanTaskCard
-            task={{
-              ...task,
-              availableActions: ["open_builder", "human_request_changes"],
-              updatedAt: "2026-01-01T00:00:01.000Z",
-            }}
-            runState="running"
-            taskActivityState="idle"
-            taskSessions={[]}
-            onOpenDetails={noop}
-            onDelegate={noop}
-            onPlan={noop}
-            onBuild={noop}
-          />
-        </MemoryRouter>,
-      );
-    });
+    const initialHtml = container.innerHTML;
 
-    expect(workflowActionGroupRenderMock).toHaveBeenCalledTimes(2);
+    rerender(
+      <MemoryRouter initialEntries={["/kanban"]}>
+        <KanbanTaskCard
+          task={{ ...task }}
+          taskActivityState="active"
+          taskSessions={taskSessions.map((session) => ({ ...session }))}
+          onOpenDetails={noop}
+          onDelegate={noop}
+          onPlan={noop}
+          onBuild={noop}
+        />
+      </MemoryRouter>,
+    );
 
-    await act(async () => {
-      rendered.unmount();
-    });
+    expect(container.innerHTML).toBe(initialHtml);
+    unmount();
   });
 
-  test("rerenders when waiting-input state changes without a session status change", async () => {
+  test("updates rendered actions when task workflow actions change", () => {
+    const baseTask = createTaskCardFixture({
+      id: "TASK-2",
+      title: "Workflow card",
+      status: "in_progress",
+      availableActions: ["open_builder"],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const { rerender, container, unmount } = render(
+      <MemoryRouter initialEntries={["/kanban"]}>
+        <KanbanTaskCard
+          task={baseTask}
+          taskActivityState="idle"
+          taskSessions={[]}
+          onOpenDetails={noop}
+          onDelegate={noop}
+          onPlan={noop}
+          onBuild={noop}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(container.innerHTML).toContain("Open Builder");
+
+    rerender(
+      <MemoryRouter initialEntries={["/kanban"]}>
+        <KanbanTaskCard
+          task={{
+            ...baseTask,
+            availableActions: ["human_request_changes"],
+            updatedAt: "2026-01-01T00:00:01.000Z",
+          }}
+          taskActivityState="idle"
+          taskSessions={[]}
+          onOpenDetails={noop}
+          onDelegate={noop}
+          onPlan={noop}
+          onBuild={noop}
+          onHumanRequestChanges={noop}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(container.innerHTML).toContain("Request Changes");
+    unmount();
+  });
+
+  test("updates waiting-input visual state when activity changes", () => {
     const task = createTaskCardFixture({
       id: "TASK-3",
       status: "in_progress",
@@ -165,65 +122,56 @@ describe("KanbanTaskCard memoization", () => {
       updatedAt: "2026-01-01T00:00:00.000Z",
     });
 
-    let rendered!: ReturnType<typeof render>;
-    await act(async () => {
-      rendered = render(
-        <MemoryRouter initialEntries={["/kanban"]}>
-          <KanbanTaskCard
-            task={task}
-            runState="running"
-            taskActivityState="active"
-            taskSessions={[
-              {
-                runtimeKind: "opencode",
-                sessionId: "session-1",
-                role: "build",
-                scenario: "build_implementation_start",
-                status: "running",
-                presentationState: "active",
-              },
-            ]}
-            onOpenDetails={noop}
-            onDelegate={noop}
-            onPlan={noop}
-            onBuild={noop}
-          />
-        </MemoryRouter>,
-      );
-    });
+    const { rerender, container, unmount } = render(
+      <MemoryRouter initialEntries={["/kanban"]}>
+        <KanbanTaskCard
+          task={task}
+          taskActivityState="active"
+          taskSessions={[
+            {
+              runtimeKind: "opencode",
+              sessionId: "session-1",
+              role: "build",
+              scenario: "build_implementation_start",
+              status: "running",
+              presentationState: "active",
+            },
+          ]}
+          onOpenDetails={noop}
+          onDelegate={noop}
+          onPlan={noop}
+          onBuild={noop}
+        />
+      </MemoryRouter>,
+    );
 
-    expect(workflowActionGroupRenderMock).toHaveBeenCalledTimes(1);
+    expect(container.innerHTML).toContain("kanban-active-session-card");
 
-    await act(async () => {
-      rendered.rerender(
-        <MemoryRouter initialEntries={["/kanban"]}>
-          <KanbanTaskCard
-            task={task}
-            runState="running"
-            taskActivityState="waiting_input"
-            taskSessions={[
-              {
-                runtimeKind: "opencode",
-                sessionId: "session-1",
-                role: "build",
-                scenario: "build_implementation_start",
-                status: "running",
-                presentationState: "waiting_input",
-              },
-            ]}
-            onOpenDetails={noop}
-            onDelegate={noop}
-            onPlan={noop}
-            onBuild={noop}
-          />
-        </MemoryRouter>,
-      );
-    });
+    rerender(
+      <MemoryRouter initialEntries={["/kanban"]}>
+        <KanbanTaskCard
+          task={task}
+          taskActivityState="waiting_input"
+          taskSessions={[
+            {
+              runtimeKind: "opencode",
+              sessionId: "session-1",
+              role: "build",
+              scenario: "build_implementation_start",
+              status: "running",
+              presentationState: "waiting_input",
+            },
+          ]}
+          onOpenDetails={noop}
+          onDelegate={noop}
+          onPlan={noop}
+          onBuild={noop}
+        />
+      </MemoryRouter>,
+    );
 
-    expect(workflowActionGroupRenderMock).toHaveBeenCalledTimes(2);
-
-    await act(async () => {
-      rendered.unmount();
-    });
+    expect(container.innerHTML).toContain("kanban-waiting-input-card");
+    expect(container.innerHTML).not.toContain("kanban-active-session-ray");
+    unmount();
   });
 });

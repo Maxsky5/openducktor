@@ -74,6 +74,10 @@ const filterEnabledActions = (
     return enabled.filter((action) => action !== "build_start");
   }
 
+  if (task.status === "spec_ready" && enabled.includes("open_spec")) {
+    return enabled.filter((action) => action !== "set_spec");
+  }
+
   return enabled;
 };
 

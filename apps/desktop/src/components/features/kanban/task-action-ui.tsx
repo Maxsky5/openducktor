@@ -23,16 +23,16 @@ export const taskActionLabel = (action: TaskWorkflowAction, task: TaskCard): str
     return "Start Planner";
   }
   if (action === "open_spec") {
-    return "View Spec";
+    return "Open Spec";
   }
   if (action === "open_planner") {
-    return "View Planner";
+    return "Open Planner";
   }
   if (action === "open_builder") {
-    return "View Builder";
+    return "Open Builder";
   }
   if (action === "open_qa") {
-    return "View QA";
+    return "Open QA";
   }
   if (action === "reset_implementation") {
     return "Reset Implementation";

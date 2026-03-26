@@ -1,7 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { ChevronDown, MoreHorizontal } from "lucide-react";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -37,6 +37,7 @@ type TaskWorkflowActionGroupProps = {
   menuAlign?: "start" | "center" | "end";
   className?: string;
   primaryClassName?: string;
+  primaryContent?: ReactNode;
   size?: "default" | "sm";
   expandPrimary?: boolean;
   compactMenuTrigger?: boolean;
@@ -55,6 +56,7 @@ export function TaskWorkflowActionGroup({
   menuAlign = "end",
   className,
   primaryClassName,
+  primaryContent,
   size = "default",
   expandPrimary = false,
   compactMenuTrigger = false,
@@ -106,8 +108,12 @@ export function TaskWorkflowActionGroup({
           className={cn(expandPrimary ? "min-w-0 flex-1" : "", primaryClassName)}
           onClick={() => onAction(primary)}
         >
-          {TASK_ACTION_ICON[primary]}
-          {taskActionLabel(primary, task)}
+          {primaryContent ?? (
+            <>
+              {TASK_ACTION_ICON[primary]}
+              {taskActionLabel(primary, task)}
+            </>
+          )}
         </Button>
       ) : null}
 

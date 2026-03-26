@@ -1,6 +1,6 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, PlayCircle } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import type {
   KanbanTaskActivityState,
@@ -28,6 +28,7 @@ import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
 import { BorderRay } from "@/components/ui/border-ray";
 import { cn } from "@/lib/utils";
+import { AGENT_ROLE_LABELS } from "@/types";
 
 const toVisibleKanbanRunState = (
   runState: RunSummary["state"] | undefined,
@@ -190,6 +191,32 @@ const getSessionChipClassName = (isWaitingInput: boolean): string => {
   }
 
   return "border-info-border bg-info-surface text-info-muted hover:border-info-border hover:bg-info-surface";
+};
+
+const getSessionStatusLabel = ({
+  session,
+  isWaitingInput,
+}: {
+  session: KanbanTaskSession;
+  isWaitingInput: boolean;
+}): string => {
+  if (isWaitingInput) {
+    return "Waiting input";
+  }
+
+  if (session.status === "starting") {
+    return "Starting";
+  }
+
+  return "Running";
+};
+
+const getSessionStatusTextClassName = (isWaitingInput: boolean): string => {
+  if (isWaitingInput) {
+    return "text-warning-surface-foreground";
+  }
+
+  return "text-primary/90";
 };
 
 const getCardActivityClassName = ({
@@ -366,35 +393,44 @@ function TaskActions({
 
   return (
     <div className="mt-3 cursor-default border-t border-border pt-2.5">
-      <div className={cn(hasActiveSession ? "relative overflow-hidden rounded-lg" : "")}>
-        {hasActiveSession && !primarySessionIsWaitingInput ? (
-          <BorderRay
-            turnDurationMs={2500}
-            strokeWidth={4.4}
-            className="kanban-active-session-ray"
-          />
-        ) : null}
-        <TaskWorkflowActionGroup
-          task={task}
-          includeActions={includeActions}
-          hasActiveSession={hasActiveSession}
-          {...(resolvedActiveSessionRole ? { activeSessionRole: resolvedActiveSessionRole } : {})}
-          historicalSessionRoles={historicalSessionRoles}
-          onAction={runAction}
-          size="sm"
-          expandPrimary
-          compactMenuTrigger
-          primaryClassName={cn(
-            "h-9 rounded-lg font-semibold shadow-sm",
-            hasActiveSession
-              ? [
-                  "kanban-active-session-content",
-                  getSessionChipClassName(primarySessionIsWaitingInput),
-                ]
-              : [],
-          )}
-        />
-      </div>
+      <TaskWorkflowActionGroup
+        task={task}
+        includeActions={includeActions}
+        hasActiveSession={hasActiveSession}
+        {...(resolvedActiveSessionRole ? { activeSessionRole: resolvedActiveSessionRole } : {})}
+        historicalSessionRoles={historicalSessionRoles}
+        onAction={runAction}
+        size="sm"
+        expandPrimary
+        compactMenuTrigger
+        primaryClassName={cn(
+          hasActiveSession
+            ? [
+                "h-9 rounded-lg px-2 py-1 text-[11px] font-semibold shadow-none",
+                getSessionChipClassName(primarySessionIsWaitingInput),
+              ]
+            : "h-9 rounded-lg font-semibold shadow-sm",
+        )}
+        primaryContent={
+          hasActiveSession && primaryActiveSession ? (
+            <>
+              <PlayCircle className="size-3" />
+              {AGENT_ROLE_LABELS[primaryActiveSession.role] ?? primaryActiveSession.role}
+              <span
+                className={cn(
+                  "text-[10px] font-medium",
+                  getSessionStatusTextClassName(primarySessionIsWaitingInput),
+                )}
+              >
+                {getSessionStatusLabel({
+                  session: primaryActiveSession,
+                  isWaitingInput: primarySessionIsWaitingInput,
+                })}
+              </span>
+            </>
+          ) : undefined
+        }
+      />
     </div>
   );
 }

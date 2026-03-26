@@ -532,6 +532,25 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.unmount();
   });
 
+  test("onOpenSession uses explicit session id even when it is not currently hydrated", async () => {
+    const args = createBaseArgs();
+    const harness = createHookHarness(args);
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.onOpenSession("TASK-1", "build", {
+        sessionId: "builder-session-archived",
+        scenario: "build_after_qa_rejected",
+      });
+    });
+
+    expect(args.navigate).toHaveBeenCalledWith(
+      "/agents?task=TASK-1&session=builder-session-archived&agent=build",
+    );
+
+    await harness.unmount();
+  });
+
   test("onOpenSession uses latest role session when explicit id is absent", async () => {
     const args = createBaseArgs();
     const harness = createHookHarness(args);

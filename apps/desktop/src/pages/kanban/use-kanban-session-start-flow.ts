@@ -302,24 +302,22 @@ export function useKanbanSessionStartFlow({
       role: AgentRole,
       options?: { sessionId?: string | null; scenario?: AgentScenario | null },
     ): void => {
-      const explicitSession = options?.sessionId
-        ? sessionsRef.current.find(
-            (session) =>
-              session.taskId === taskId &&
-              session.role === role &&
-              session.sessionId === options.sessionId,
-          )
-        : null;
+      if (options?.sessionId) {
+        const explicitSession = sessionsRef.current.find(
+          (session) =>
+            session.taskId === taskId &&
+            session.role === role &&
+            session.sessionId === options.sessionId,
+        );
 
-      if (explicitSession) {
         openSessionInAgentStudio(
           {
             taskId,
             role,
-            scenario: explicitSession.scenario,
+            scenario: explicitSession?.scenario ?? options.scenario ?? firstScenario(role),
             postStartAction: "none",
           },
-          explicitSession.sessionId,
+          options.sessionId,
         );
         return;
       }

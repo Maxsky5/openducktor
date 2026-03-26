@@ -222,4 +222,19 @@ describe("resolveTaskCardActions", () => {
       expect.arrayContaining(["open_spec", "open_planner", "qa_start"]),
     );
   });
+
+  test("removes set_spec when open_spec is also available in spec_ready status", () => {
+    const task = createTaskCardFixture({
+      status: "spec_ready",
+      issueType: "feature",
+      availableActions: ["set_spec", "set_plan"],
+    });
+
+    const result = resolveTaskCardActions(task, {
+      historicalSessionRoles: ["spec"],
+    });
+
+    expect(result.allActions).toContain("open_spec");
+    expect(result.allActions).not.toContain("set_spec");
+  });
 });
