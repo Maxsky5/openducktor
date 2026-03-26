@@ -12,6 +12,7 @@ enableReactActEnvironment();
 
 const taskDetailsSheetRenderMock = mock(
   (_props: {
+    activeRepo?: string | null;
     task: TaskCard | null;
     allTasks: TaskCard[];
     runs: unknown[];
@@ -46,6 +47,7 @@ describe("TaskDetailsSheetController", () => {
       parentRenderCount += 1;
       return createElement(TaskDetailsSheetController, {
         ref: controllerRef,
+        activeRepo: "/repo-a",
         allTasks: [task],
         runs: [],
         workflowActionsEnabled: false,
@@ -58,6 +60,7 @@ describe("TaskDetailsSheetController", () => {
     expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         task: null,
+        activeRepo: "/repo-a",
         allTasks: [task],
         runs: [],
         open: false,
@@ -73,6 +76,7 @@ describe("TaskDetailsSheetController", () => {
     expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         task,
+        activeRepo: "/repo-a",
         allTasks: [task],
         runs: [],
         open: true,
@@ -96,6 +100,7 @@ describe("TaskDetailsSheetController", () => {
     const rendered = render(
       createElement(TaskDetailsSheetController, {
         ref: controllerRef,
+        activeRepo: "/repo-a",
         allTasks: [task],
         runs: [],
         workflowActionsEnabled: false,
@@ -113,6 +118,7 @@ describe("TaskDetailsSheetController", () => {
     expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         task,
+        activeRepo: "/repo-a",
         open: true,
         runs: [],
         onDetectPullRequest,

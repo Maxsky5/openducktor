@@ -187,6 +187,7 @@ export function useKanbanPageModels({
     content,
     taskComposer: taskDialogs.taskComposer,
     taskDetailsController: {
+      activeRepo,
       allTasks: tasks,
       runs,
       onPlan,
