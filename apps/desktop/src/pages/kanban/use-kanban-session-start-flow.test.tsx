@@ -113,7 +113,7 @@ const createHookHarness = (initialProps: HookArgs) => {
   return createCoreHookHarness(useKanbanSessionStartFlow, initialProps, { wrapper });
 };
 
-const DEFAULT_REPO_SETTINGS = {
+const createDefaultRepoSettings = (): RepoSettingsInput => ({
   defaultRuntimeKind: "opencode",
   worktreeBasePath: ".worktrees",
   branchPrefix: "odt",
@@ -129,7 +129,7 @@ const DEFAULT_REPO_SETTINGS = {
     build: null,
     qa: null,
   },
-} satisfies RepoSettingsInput;
+});
 
 const createBaseArgs = (): HookArgs => ({
   activeRepo: "/repo",
@@ -168,7 +168,7 @@ const createBaseArgs = (): HookArgs => ({
     }),
   ],
   navigate: mock(() => {}),
-  loadRepoSettings: async () => DEFAULT_REPO_SETTINGS,
+  loadRepoSettings: async () => createDefaultRepoSettings(),
   bootstrapTaskSessions: async () => {},
   hydrateRequestedTaskSessionHistory: async () => {},
   loadAgentSessions: async () => {},
@@ -269,7 +269,7 @@ describe("useKanbanSessionStartFlow", () => {
   test("pull request generation resolves with the started builder session id", async () => {
     const startAgentSession = mock(async () => "builder-session-pr");
     const args = createBaseArgs();
-    args.repoSettings = DEFAULT_REPO_SETTINGS;
+    args.repoSettings = createDefaultRepoSettings();
     args.startAgentSession = startAgentSession;
 
     const harness = createHookHarness(args);
@@ -309,7 +309,7 @@ describe("useKanbanSessionStartFlow", () => {
 
   test("pull request generation resolves with undefined when the shared start modal is cancelled", async () => {
     const args = createBaseArgs();
-    args.repoSettings = DEFAULT_REPO_SETTINGS;
+    args.repoSettings = createDefaultRepoSettings();
 
     const harness = createHookHarness(args);
 
