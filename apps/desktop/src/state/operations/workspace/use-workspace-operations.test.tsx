@@ -1,11 +1,11 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { RenderResult } from "@testing-library/react";
 import { render, waitFor } from "@testing-library/react";
-import { act, createElement, useEffect, useRef, useState } from "react";
+import { act, createElement, type PropsWithChildren, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
+import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { useWorkspaceOperations } from "./use-workspace-operations";
 
@@ -48,6 +48,10 @@ const createWorkspaceHostClient = (): WorkspaceHostClient =>
   }) as WorkspaceHostClient;
 
 let workspaceHost = createWorkspaceHostClient();
+
+const IsolatedQueryWrapper = ({ children }: PropsWithChildren) => (
+  <QueryProvider useIsolatedClient>{children}</QueryProvider>
+);
 
 const flush = async (): Promise<void> => {
   await Promise.resolve();
@@ -190,7 +194,11 @@ const createHookHarness = (initialArgs: HookArgs) => {
     return null;
   };
 
-  const sharedHarness = createSharedHookHarness(Harness, { args: currentArgs });
+  const sharedHarness = createSharedHookHarness(
+    Harness,
+    { args: currentArgs },
+    { wrapper: IsolatedQueryWrapper },
+  );
 
   return {
     mount: async () => {
@@ -292,11 +300,16 @@ describe("use-workspace-operations", () => {
       });
     };
 
-    let rendered: RenderResult | null = null;
+    let rerender: (ui: Parameters<typeof render>[0]) => void = () => {};
+    let unmount = () => {};
 
     try {
       await act(async () => {
-        rendered = render(createElement(Harness, { args: currentArgs }));
+        const rendered = render(createElement(Harness, { args: currentArgs }), {
+          wrapper: IsolatedQueryWrapper,
+        });
+        rerender = rendered.rerender;
+        unmount = rendered.unmount;
       });
       await flush();
 
@@ -306,7 +319,7 @@ describe("use-workspace-operations", () => {
       };
 
       await act(async () => {
-        rendered?.rerender(createElement(Harness, { args: currentArgs }));
+        rerender(createElement(Harness, { args: currentArgs }));
       });
       await flush();
       await waitFor(() => {
@@ -340,7 +353,7 @@ describe("use-workspace-operations", () => {
       ]);
       expect(latestValue.isLoadingBranches).toBe(false);
     } finally {
-      (rendered as RenderResult | null)?.unmount();
+      unmount();
       workspaceHost.gitGetCurrentBranch = originalGitGetCurrentBranch;
       workspaceHost.gitGetBranches = originalGitGetBranches;
     }
@@ -621,11 +634,14 @@ describe("use-workspace-operations", () => {
       return null;
     };
 
-    let rendered: RenderResult | null = null;
+    let unmount = () => {};
 
     try {
       await act(async () => {
-        rendered = render(createElement(Harness));
+        const rendered = render(createElement(Harness), {
+          wrapper: IsolatedQueryWrapper,
+        });
+        unmount = rendered.unmount;
       });
       await flush();
 
@@ -686,7 +702,7 @@ describe("use-workspace-operations", () => {
       ]);
     } finally {
       workspaceSelectDeferred.resolve(workspace("/repo-a", true));
-      (rendered as RenderResult | null)?.unmount();
+      unmount();
       workspaceHost.workspaceSelect = originalWorkspaceSelect;
       workspaceHost.workspaceList = originalWorkspaceList;
       workspaceHost.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
@@ -906,11 +922,14 @@ describe("use-workspace-operations", () => {
       return null;
     };
 
-    let rendered: RenderResult | null = null;
+    let unmount = () => {};
 
     try {
       await act(async () => {
-        rendered = render(createElement(Harness));
+        const rendered = render(createElement(Harness), {
+          wrapper: IsolatedQueryWrapper,
+        });
+        unmount = rendered.unmount;
       });
       await flush();
 
@@ -957,7 +976,7 @@ describe("use-workspace-operations", () => {
         workspace("/repo-a", true),
       ]);
     } finally {
-      (rendered as RenderResult | null)?.unmount();
+      unmount();
       workspaceHost.workspaceSelect = originalWorkspaceSelect;
       workspaceHost.workspaceList = originalWorkspaceList;
       workspaceHost.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
@@ -1082,8 +1101,12 @@ describe("use-workspace-operations", () => {
 
     try {
       await harness.mount();
-      expect(addWindowEventListener).toHaveBeenCalledTimes(1);
-      expect(addDocumentEventListener).toHaveBeenCalledTimes(1);
+      expect(addWindowEventListener.mock.calls.filter(([event]) => event === "focus")).toHaveLength(
+        1,
+      );
+      expect(
+        addDocumentEventListener.mock.calls.filter(([event]) => event === "visibilitychange"),
+      ).toHaveLength(1);
 
       await harness.run(async (value) => {
         await value.refreshBranches();
@@ -1092,14 +1115,24 @@ describe("use-workspace-operations", () => {
         await value.switchBranch("feature");
       });
 
-      expect(addWindowEventListener).toHaveBeenCalledTimes(1);
-      expect(addDocumentEventListener).toHaveBeenCalledTimes(1);
+      expect(addWindowEventListener.mock.calls.filter(([event]) => event === "focus")).toHaveLength(
+        1,
+      );
+      expect(
+        addDocumentEventListener.mock.calls.filter(([event]) => event === "visibilitychange"),
+      ).toHaveLength(1);
       expect(removeWindowEventListener).not.toHaveBeenCalled();
       expect(removeDocumentEventListener).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
-      expect(removeWindowEventListener).toHaveBeenCalledTimes(1);
-      expect(removeDocumentEventListener).toHaveBeenCalledTimes(1);
+      await waitFor(() => {
+        expect(
+          removeWindowEventListener.mock.calls.filter(([event]) => event === "focus"),
+        ).toHaveLength(1);
+        expect(
+          removeDocumentEventListener.mock.calls.filter(([event]) => event === "visibilitychange"),
+        ).toHaveLength(1);
+      });
 
       workspaceHost.gitGetCurrentBranch = original.gitGetCurrentBranch;
       workspaceHost.gitGetBranches = original.gitGetBranches;

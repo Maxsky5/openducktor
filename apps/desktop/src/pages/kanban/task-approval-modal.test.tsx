@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { render } from "@testing-library/react";
+import { render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TaskApprovalModalModel } from "./kanban-page-model-types";
@@ -44,16 +44,18 @@ const createModel = (overrides: Partial<TaskApprovalModalModel> = {}): TaskAppro
 });
 
 describe("TaskApprovalModal", () => {
-  test("renders the wrapper dialog title and description", () => {
+  test("renders the wrapper dialog title and description", async () => {
     const { baseElement, unmount } = render(
       createElement(TaskApprovalModal, { model: createModel() }),
     );
 
     try {
-      expect(baseElement.textContent).toContain("Publish And Mark Done");
-      expect(baseElement.textContent).toContain(
-        "The local merge is already applied. Push origin/beta to publish it, then move the task to Done.",
-      );
+      await waitFor(() => {
+        expect(baseElement.textContent).toContain("Publish And Mark Done");
+        expect(baseElement.textContent).toContain(
+          "The local merge is already applied. Push origin/beta to publish it, then move the task to Done.",
+        );
+      });
     } finally {
       unmount();
     }

@@ -1,8 +1,8 @@
 import type { GitBranch, GitCurrentBranch, WorkspaceRecord } from "@openducktor/contracts";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import { appQueryClient } from "@/lib/query-client";
 import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 import {
   gitQueryKeys,
@@ -75,6 +75,7 @@ export function useWorkspaceOperations({
   clearActiveBeadsCheck,
   hostClient = host,
 }: UseWorkspaceOperationsArgs): UseWorkspaceOperationsResult {
+  const queryClient = useQueryClient();
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
   const [branches, setBranches] = useState<GitBranch[]>([]);
   const [activeBranch, setActiveBranch] = useState<GitCurrentBranch | null>(null);
@@ -205,16 +206,16 @@ export function useWorkspaceOperations({
 
       try {
         await Promise.all([
-          appQueryClient.invalidateQueries({
+          queryClient.invalidateQueries({
             queryKey: gitQueryKeys.currentBranch(repoPath),
           }),
-          appQueryClient.invalidateQueries({
+          queryClient.invalidateQueries({
             queryKey: gitQueryKeys.branches(repoPath),
           }),
         ]);
         const [current, allBranches] = await Promise.all([
-          loadCurrentBranchFromQuery(appQueryClient, repoPath, hostClient),
-          loadRepoBranchesFromQuery(appQueryClient, repoPath, hostClient),
+          loadCurrentBranchFromQuery(queryClient, repoPath, hostClient),
+          loadRepoBranchesFromQuery(queryClient, repoPath, hostClient),
         ]);
 
         if (
@@ -234,7 +235,7 @@ export function useWorkspaceOperations({
         }
       }
     },
-    [applyBranchState, hostClient],
+    [applyBranchState, hostClient, queryClient],
   );
 
   const refreshBranches = useCallback(
@@ -275,8 +276,8 @@ export function useWorkspaceOperations({
       try {
         const current = await hostClient.gitSwitchBranch(activeRepo, branchName);
         const allBranches = await hostClient.gitGetBranches(activeRepo);
-        appQueryClient.setQueryData(gitQueryKeys.currentBranch(activeRepo), current);
-        appQueryClient.setQueryData(gitQueryKeys.branches(activeRepo), allBranches);
+        queryClient.setQueryData(gitQueryKeys.currentBranch(activeRepo), current);
+        queryClient.setQueryData(gitQueryKeys.branches(activeRepo), allBranches);
 
         if (branchRequestVersionRef.current !== requestVersion) {
           return;
@@ -303,7 +304,7 @@ export function useWorkspaceOperations({
         }
       }
     },
-    [activeBranch, activeRepo, applyBranchState, hostClient],
+    [activeBranch, activeRepo, applyBranchState, hostClient, queryClient],
   );
 
   const reportBranchProbeError = useCallback((error: BranchProbeError): void => {
@@ -439,9 +440,9 @@ export function useWorkspaceOperations({
   }, [activeRepo, syncExternalBranchChange]);
 
   const refreshWorkspaces = useCallback(async (): Promise<void> => {
-    const data = await loadWorkspaceListFromQuery(appQueryClient, hostClient);
+    const data = await loadWorkspaceListFromQuery(queryClient, hostClient);
     applyWorkspaceRecords(data);
-  }, [applyWorkspaceRecords, hostClient]);
+  }, [applyWorkspaceRecords, hostClient, queryClient]);
 
   const addWorkspace = useCallback(
     async (repoPath: string): Promise<void> => {
@@ -451,7 +452,7 @@ export function useWorkspaceOperations({
       }
 
       const workspace = await hostClient.workspaceAdd(normalizedRepoPath);
-      await appQueryClient.invalidateQueries({
+      await queryClient.invalidateQueries({
         queryKey: workspaceQueryKeys.list(),
       });
       await refreshWorkspaces();
@@ -459,7 +460,7 @@ export function useWorkspaceOperations({
         description: workspace.path,
       });
     },
-    [hostClient, refreshWorkspaces],
+    [hostClient, queryClient, refreshWorkspaces],
   );
 
   const selectWorkspace = useCallback(
@@ -471,7 +472,7 @@ export function useWorkspaceOperations({
 
       try {
         await hostClient.workspaceSelect(repoPath);
-        await appQueryClient.invalidateQueries({
+        await queryClient.invalidateQueries({
           queryKey: workspaceQueryKeys.list(),
         });
         if (workspaceSwitchVersionRef.current !== switchVersion) {
@@ -487,7 +488,7 @@ export function useWorkspaceOperations({
         };
         setActiveRepo(repoPath);
 
-        void loadRepoConfigFromQuery(appQueryClient, repoPath, hostClient)
+        void loadRepoConfigFromQuery(queryClient, repoPath, hostClient)
           .then((repoConfig) =>
             hostClient.runtimeEnsure(
               repoPath,
@@ -539,6 +540,7 @@ export function useWorkspaceOperations({
       clearActiveBeadsCheck,
       hostClient,
       markWorkspaceActiveLocally,
+      queryClient,
       refreshWorkspaces,
       setActiveRepo,
     ],
