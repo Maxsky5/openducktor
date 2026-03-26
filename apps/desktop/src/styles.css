@@ -107,10 +107,8 @@
   --studio-chrome: oklch(0.446 0.043 257.281); /* ~slate-600 */
   --studio-chrome-foreground: oklch(0.968 0.007 247.896); /* ~slate-50 */
 
-  --icon-agent-plan-base: #a753ae;
-  --icon-agent-docs-base: #fcb239;
-  --icon-agent-ask-base: #2090f5;
-  --icon-agent-build-base: #034cff;
+  --icon-agent-plan-base: #f5a742;
+  --icon-agent-build-base: #5c9cf5;
 
   /* dev server terminal */
   --dev-server-terminal-surface: oklch(0.2 0.02 260);
@@ -215,10 +213,8 @@
   --studio-chrome: oklch(0.332 0.038 260.912); /* ~slate-700 */
   --studio-chrome-foreground: oklch(0.968 0.007 247.896); /* ~slate-50 */
 
-  --icon-agent-plan-base: #edb2f1;
-  --icon-agent-docs-base: #fbb73c;
-  --icon-agent-ask-base: #2090f5;
-  --icon-agent-build-base: #9dbefe;
+  --icon-agent-plan-base: #f5a742;
+  --icon-agent-build-base: #5c9cf5;
 
   --dev-server-terminal-surface: oklch(0.17 0.018 260);
   --dev-server-terminal-chrome: oklch(0.145 0.016 260);

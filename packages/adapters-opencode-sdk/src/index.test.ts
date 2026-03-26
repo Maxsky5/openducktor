@@ -1691,9 +1691,7 @@ describe("OpencodeSdkAdapter", () => {
 
   test("listAvailableModels applies OpenCode default colors for native agents without explicit color", async () => {
     const expectedNativeDefaultColors = [
-      { id: "ask", color: "var(--icon-agent-ask-base)" },
       { id: "build", color: "var(--icon-agent-build-base)" },
-      { id: "docs", color: "var(--icon-agent-docs-base)" },
       { id: "plan", color: "var(--icon-agent-plan-base)" },
     ] as const;
 
@@ -1727,6 +1725,50 @@ describe("OpencodeSdkAdapter", () => {
         ),
       ),
     );
+  });
+
+  test("listAvailableModels does not synthesize colors for unsupported native names", async () => {
+    const mock = makeMockClient({
+      agentsResponse: [
+        {
+          name: "ask",
+          description: "Native ask agent",
+          mode: "subagent",
+          hidden: true,
+          native: true,
+        },
+        {
+          name: "docs",
+          description: "Native docs agent",
+          mode: "subagent",
+          hidden: true,
+          native: true,
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const catalog = await adapter.listAvailableModels({
+      runtimeKind: "opencode",
+      runtimeConnection: defaultRuntimeConnection,
+    });
+
+    expect(catalog.profiles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "ask", label: "ask" }),
+        expect.objectContaining({ id: "docs", label: "docs" }),
+      ]),
+    );
+
+    const ask = catalog.profiles?.find((entry) => entry.id === "ask");
+    const docs = catalog.profiles?.find((entry) => entry.id === "docs");
+    expect(ask).toBeDefined();
+    expect(docs).toBeDefined();
+    expect(ask).not.toHaveProperty("color");
+    expect(docs).not.toHaveProperty("color");
   });
 
   test("listAvailableModels keeps explicit native color and skips fallback for non-native reserved names", async () => {

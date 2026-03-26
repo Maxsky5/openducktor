@@ -5,9 +5,7 @@ import { mapProviderListToCatalog, toToolIdList } from "./payload-mappers";
 import type { ClientFactory, McpServerStatus } from "./types";
 
 const OPENCODE_DEFAULT_AGENT_COLORS: Record<string, string> = {
-  ask: "var(--icon-agent-ask-base)",
   build: "var(--icon-agent-build-base)",
-  docs: "var(--icon-agent-docs-base)",
   plan: "var(--icon-agent-plan-base)",
 };
 
