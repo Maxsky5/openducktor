@@ -193,6 +193,15 @@ Keep this contract stable. If you change any item below, update all related laye
 - Always run relevant checks before finishing — see Commands section above.
 - In Bun tests, NEVER mock shared re-export barrels such as `@/state`, `@/components`, or other `index.ts` aggregator modules. Mock the source module that owns the export instead (for example `@/state/app-state-provider`), otherwise Bun can bind an incomplete export surface and leak that mock across files.
 - In Bun tests, register `mock.module(...)` in scoped setup (`beforeAll`/`beforeEach`) and restore it explicitly (`afterAll`/`afterEach`). Do not leave module mocks active across unrelated tests.
+- In Bun tests, the mocked module id MUST exactly match the import string used by the code under test. If production code imports `@/foo/bar`, do not mock `./bar` and assume Bun will unify them.
+- Do not mutate shared singletons in tests when a local seam is possible. Avoid patching process-wide objects such as `host`, shared query clients, exported adapters, or other module-level state unless there is no narrower option and the test restores the mutation in `finally`/`afterEach`.
+- Prefer dependency injection or hook parameters over module mocks when testing logic that depends on host adapters, TanStack Query hooks, or app-state hooks. Small explicit seams are more stable than process-wide module replacement.
+- Any test that exercises code using TanStack Query MUST provide its own isolated query client. Use `QueryProvider` with `useIsolatedClient` in tests; never rely on the app-global query client or on cache state left by previous tests.
+- Any test that renders a hook/component using app-state hooks such as `useWorkspaceState` MUST provide the minimal required context providers explicitly. Do not rely on ambient providers from unrelated test setup.
+- Render-only tests using `renderToStaticMarkup` still need the same required providers as client-rendered tests if the component calls hooks that depend on Query/context state.
+- When a test only needs to verify that one dependency receives the right inputs, prefer a focused hook test with injected fakes over a component-level module mock. This avoids coupling the assertion to Bun’s module cache behavior.
+- Treat default short polling windows as suspicious in CI. If a test waits for async query work or portal/render scheduling, use an explicit timeout with `waitFor(...)` or the harness wait helper instead of assuming `200ms` is enough.
+- When chasing flakes, run verification commands sequentially, not in parallel. Parallel local verification can create false negatives by contending for the same Bun test process resources and obscuring the real leak.
 - Prefer focused hook/module tests over broad page-level integration tests when asserting orchestration or routing behavior. Broad page tests with React Query, routers, and heavy module mocking are much more likely to leak handles and hang the Bun runner.
 - Test fixtures must return isolated nested data. Never share mutable nested objects or arrays between tests through top-level fixture constants.
 

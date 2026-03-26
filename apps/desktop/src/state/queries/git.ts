@@ -7,6 +7,11 @@ import type {
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
 
+type GitQueryHost = Pick<
+  typeof host,
+  "gitGetBranches" | "gitGetCurrentBranch" | "gitGetWorktreeStatus" | "gitGetWorktreeStatusSummary"
+>;
+
 const BRANCH_DATA_STALE_TIME_MS = 60_000;
 const WORKTREE_STATUS_STALE_TIME_MS = 5_000;
 
@@ -44,17 +49,17 @@ export const gitQueryKeys = {
     ] as const,
 };
 
-export const repoBranchesQueryOptions = (repoPath: string) =>
+export const repoBranchesQueryOptions = (repoPath: string, hostClient: GitQueryHost = host) =>
   queryOptions({
     queryKey: gitQueryKeys.branches(repoPath),
-    queryFn: (): Promise<GitBranch[]> => host.gitGetBranches(repoPath),
+    queryFn: (): Promise<GitBranch[]> => hostClient.gitGetBranches(repoPath),
     staleTime: BRANCH_DATA_STALE_TIME_MS,
   });
 
-const currentBranchQueryOptions = (repoPath: string) =>
+const currentBranchQueryOptions = (repoPath: string, hostClient: GitQueryHost = host) =>
   queryOptions({
     queryKey: gitQueryKeys.currentBranch(repoPath),
-    queryFn: (): Promise<GitCurrentBranch> => host.gitGetCurrentBranch(repoPath),
+    queryFn: (): Promise<GitCurrentBranch> => hostClient.gitGetCurrentBranch(repoPath),
     staleTime: BRANCH_DATA_STALE_TIME_MS,
   });
 
@@ -63,11 +68,12 @@ const worktreeStatusQueryOptions = (
   targetBranch: string,
   diffScope: "target" | "uncommitted",
   workingDir: string | null,
+  hostClient: GitQueryHost = host,
 ) =>
   queryOptions({
     queryKey: gitQueryKeys.worktreeStatus(repoPath, targetBranch, diffScope, workingDir),
     queryFn: (): Promise<GitWorktreeStatus> =>
-      host.gitGetWorktreeStatus(repoPath, targetBranch, diffScope, workingDir ?? undefined),
+      hostClient.gitGetWorktreeStatus(repoPath, targetBranch, diffScope, workingDir ?? undefined),
     staleTime: WORKTREE_STATUS_STALE_TIME_MS,
   });
 
@@ -76,23 +82,32 @@ const worktreeStatusSummaryQueryOptions = (
   targetBranch: string,
   diffScope: "target" | "uncommitted",
   workingDir: string | null,
+  hostClient: GitQueryHost = host,
 ) =>
   queryOptions({
     queryKey: gitQueryKeys.worktreeStatusSummary(repoPath, targetBranch, diffScope, workingDir),
     queryFn: (): Promise<GitWorktreeStatusSummary> =>
-      host.gitGetWorktreeStatusSummary(repoPath, targetBranch, diffScope, workingDir ?? undefined),
+      hostClient.gitGetWorktreeStatusSummary(
+        repoPath,
+        targetBranch,
+        diffScope,
+        workingDir ?? undefined,
+      ),
     staleTime: WORKTREE_STATUS_STALE_TIME_MS,
   });
 
 export const loadRepoBranchesFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
-): Promise<GitBranch[]> => queryClient.fetchQuery(repoBranchesQueryOptions(repoPath));
+  hostClient?: GitQueryHost,
+): Promise<GitBranch[]> => queryClient.fetchQuery(repoBranchesQueryOptions(repoPath, hostClient));
 
 export const loadCurrentBranchFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
-): Promise<GitCurrentBranch> => queryClient.fetchQuery(currentBranchQueryOptions(repoPath));
+  hostClient?: GitQueryHost,
+): Promise<GitCurrentBranch> =>
+  queryClient.fetchQuery(currentBranchQueryOptions(repoPath, hostClient));
 
 export const loadWorktreeStatusFromQuery = (
   queryClient: QueryClient,
@@ -103,6 +118,7 @@ export const loadWorktreeStatusFromQuery = (
   options?: {
     force?: boolean;
   },
+  hostClient?: GitQueryHost,
 ): Promise<GitWorktreeStatus> => {
   const queryKey = gitQueryKeys.worktreeStatus(repoPath, targetBranch, diffScope, workingDir);
 
@@ -111,7 +127,7 @@ export const loadWorktreeStatusFromQuery = (
   }
 
   return queryClient.fetchQuery({
-    ...worktreeStatusQueryOptions(repoPath, targetBranch, diffScope, workingDir),
+    ...worktreeStatusQueryOptions(repoPath, targetBranch, diffScope, workingDir, hostClient),
     staleTime: options?.force === true ? 0 : WORKTREE_STATUS_STALE_TIME_MS,
   });
 };
@@ -125,6 +141,7 @@ export const loadWorktreeStatusSummaryFromQuery = (
   options?: {
     force?: boolean;
   },
+  hostClient?: GitQueryHost,
 ): Promise<GitWorktreeStatusSummary> => {
   const queryKey = gitQueryKeys.worktreeStatusSummary(
     repoPath,
@@ -138,7 +155,7 @@ export const loadWorktreeStatusSummaryFromQuery = (
   }
 
   return queryClient.fetchQuery({
-    ...worktreeStatusSummaryQueryOptions(repoPath, targetBranch, diffScope, workingDir),
+    ...worktreeStatusSummaryQueryOptions(repoPath, targetBranch, diffScope, workingDir, hostClient),
     staleTime: options?.force === true ? 0 : WORKTREE_STATUS_STALE_TIME_MS,
   });
 };

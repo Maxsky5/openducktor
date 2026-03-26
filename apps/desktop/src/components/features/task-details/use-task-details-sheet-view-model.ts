@@ -65,6 +65,8 @@ type UseTaskDetailsSheetViewModelOptions = {
   onHumanRequestChanges: TaskDetailsSheetProps["onHumanRequestChanges"] | undefined;
   onResetImplementation: TaskDetailsSheetProps["onResetImplementation"] | undefined;
   onDelete: TaskDetailsSheetProps["onDelete"] | undefined;
+  taskDocumentsHook?: typeof useTaskDocuments;
+  taskDeleteImpactHook?: typeof useTaskDeleteImpact;
 };
 
 export function useTaskDetailsSheetViewModel({
@@ -84,9 +86,11 @@ export function useTaskDetailsSheetViewModel({
   onHumanRequestChanges,
   onResetImplementation,
   onDelete,
+  taskDocumentsHook = useTaskDocuments,
+  taskDeleteImpactHook = useTaskDeleteImpact,
 }: UseTaskDetailsSheetViewModelOptions): TaskDetailsSheetViewModel {
   const taskId = task?.id ?? null;
-  const { specDoc, planDoc, qaDoc, ensureDocumentLoaded } = useTaskDocuments(
+  const { specDoc, planDoc, qaDoc, ensureDocumentLoaded } = taskDocumentsHook(
     taskId,
     open,
     activeRepo ?? "",
@@ -98,7 +102,7 @@ export function useTaskDetailsSheetViewModel({
     [task, taskById],
   );
   const { hasManagedSessionCleanup, managedWorktreeCount, impactError, isLoadingImpact } =
-    useTaskDeleteImpact(deleteImpactTaskIds, open);
+    taskDeleteImpactHook(deleteImpactTaskIds, open);
   const subtasks = useMemo(() => toSubtasks(task, taskById), [task, taskById]);
   const hasSubtasks = subtasks.length > 0;
   const shouldRenderSubtasks = task?.issueType === "epic";

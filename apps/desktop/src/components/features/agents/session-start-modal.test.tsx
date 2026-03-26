@@ -18,32 +18,6 @@ const reactActEnvironment = globalThis as {
 };
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
-mock.module("@/components/features/agents/agent-runtime-combobox", () => ({
-  AgentRuntimeCombobox: (props: Record<string, unknown>) =>
-    createElement("agent-runtime-combobox", props),
-}));
-
-mock.module("@/components/ui/combobox", () => ({
-  Combobox: (props: Record<string, unknown>) => createElement("mock-combobox", props),
-}));
-
-mock.module("@/components/ui/dialog", () => ({
-  Dialog: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("mock-dialog", omitDialogDomProps(props), children),
-  DialogBody: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", omitDialogDomProps(props), children),
-  DialogContent: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", omitDialogDomProps(props), children),
-  DialogDescription: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("p", omitDialogDomProps(props), children),
-  DialogFooter: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", omitDialogDomProps(props), children),
-  DialogHeader: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("div", omitDialogDomProps(props), children),
-  DialogTitle: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-    createElement("h2", omitDialogDomProps(props), children),
-}));
-
 const noop = () => {};
 
 const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionStartModalModel => ({
@@ -88,6 +62,34 @@ describe("SessionStartModal", () => {
   let SessionStartModal: typeof import("./session-start-modal").SessionStartModal;
 
   beforeAll(async () => {
+    mock.module("@/components/features/agents/agent-runtime-combobox", () => ({
+      AgentRuntimeCombobox: (props: Record<string, unknown>) =>
+        createElement("agent-runtime-combobox", props),
+    }));
+    mock.module("@/components/ui/combobox", () => ({
+      Combobox: (props: Record<string, unknown>) => createElement("mock-combobox", props),
+    }));
+    mock.module("@/components/ui/dialog", () => ({
+      Dialog: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("mock-dialog", omitDialogDomProps(props), children),
+      DialogBody: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", omitDialogDomProps(props), children),
+      DialogContent: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", omitDialogDomProps(props), children),
+      DialogDescription: ({
+        children,
+        ...props
+      }: {
+        children: ReactNode;
+        [key: string]: unknown;
+      }) => createElement("p", omitDialogDomProps(props), children),
+      DialogFooter: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", omitDialogDomProps(props), children),
+      DialogHeader: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("div", omitDialogDomProps(props), children),
+      DialogTitle: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+        createElement("h2", omitDialogDomProps(props), children),
+    }));
     ({ SessionStartModal } = await import("./session-start-modal"));
   });
 

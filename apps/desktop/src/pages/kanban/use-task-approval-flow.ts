@@ -224,10 +224,10 @@ export function useTaskApprovalFlow({
           const mergedTask = directMergeResult.task;
           await refreshTasks();
           if (mergedTask.status === "closed") {
+            reset();
             toast.success("Task approved", {
               description: canonicalTargetBranch(approvalContext.targetBranch),
             });
-            reset();
             return;
           }
 
@@ -407,12 +407,12 @@ export function useTaskApprovalFlow({
         }
         await host.taskDirectMergeComplete(activeRepo, state.taskId);
         await refreshTasks();
+        reset();
         toast.success("Task moved to Done", {
           description: publishTarget
             ? canonicalTargetBranch(publishTarget)
             : canonicalTargetBranch(approvalContext.targetBranch),
         });
-        reset();
       } catch (error) {
         const description = errorMessage(error);
         setState((current) =>

@@ -1,19 +1,57 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { RenderResult } from "@testing-library/react";
 import { render, waitFor } from "@testing-library/react";
-import { act, createElement, useEffect, useRef, useState } from "react";
+import { act, createElement, type PropsWithChildren, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
+import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { host } from "../shared/host";
 import { useWorkspaceOperations } from "./use-workspace-operations";
 
 const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+
+type WorkspaceHostClient = NonNullable<Parameters<typeof useWorkspaceOperations>[0]["hostClient"]>;
+
+const createWorkspaceHostClient = (): WorkspaceHostClient =>
+  ({
+    workspaceList: async () => [],
+    workspaceAdd: async (repoPath: string) => workspace(repoPath),
+    workspaceSelect: async (repoPath: string) => workspace(repoPath, true),
+    workspaceGetRepoConfig: async () => {
+      throw new Error("workspaceGetRepoConfig not configured");
+    },
+    workspaceGetSettingsSnapshot: async () => {
+      throw new Error("workspaceGetSettingsSnapshot not configured");
+    },
+    runtimeEnsure: async () => {
+      throw new Error("runtimeEnsure not configured");
+    },
+    gitGetCurrentBranch: async () => {
+      throw new Error("gitGetCurrentBranch not configured");
+    },
+    gitGetBranches: async () => {
+      throw new Error("gitGetBranches not configured");
+    },
+    gitGetWorktreeStatus: async () => {
+      throw new Error("gitGetWorktreeStatus not configured");
+    },
+    gitGetWorktreeStatusSummary: async () => {
+      throw new Error("gitGetWorktreeStatusSummary not configured");
+    },
+    gitSwitchBranch: async () => {
+      throw new Error("gitSwitchBranch not configured");
+    },
+  }) as WorkspaceHostClient;
+
+let workspaceHost = createWorkspaceHostClient();
+
+const IsolatedQueryWrapper = ({ children }: PropsWithChildren) => (
+  <QueryProvider useIsolatedClient>{children}</QueryProvider>
+);
 
 const flush = async (): Promise<void> => {
   await Promise.resolve();
@@ -134,7 +172,12 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<
 };
 
 beforeEach(async () => {
+  workspaceHost = createWorkspaceHostClient();
   await clearAppQueryClient();
+});
+
+afterAll(() => {
+  mock.restore();
 });
 
 type HookArgs = Parameters<typeof useWorkspaceOperations>[0];
@@ -144,11 +187,18 @@ const createHookHarness = (initialArgs: HookArgs) => {
   let currentArgs = initialArgs;
 
   const Harness = ({ args }: { args: HookArgs }) => {
-    latest = useWorkspaceOperations(args);
+    latest = useWorkspaceOperations({
+      ...args,
+      hostClient: args.hostClient ?? workspaceHost,
+    });
     return null;
   };
 
-  const sharedHarness = createSharedHookHarness(Harness, { args: currentArgs });
+  const sharedHarness = createSharedHookHarness(
+    Harness,
+    { args: currentArgs },
+    { wrapper: IsolatedQueryWrapper },
+  );
 
   return {
     mount: async () => {
@@ -207,10 +257,10 @@ describe("use-workspace-operations", () => {
       },
     ]);
 
-    const originalGitGetCurrentBranch = host.gitGetCurrentBranch;
-    const originalGitGetBranches = host.gitGetBranches;
-    host.gitGetCurrentBranch = gitGetCurrentBranch;
-    host.gitGetBranches = gitGetBranches;
+    const originalGitGetCurrentBranch = workspaceHost.gitGetCurrentBranch;
+    const originalGitGetBranches = workspaceHost.gitGetBranches;
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetBranches = gitGetBranches;
 
     type LifecycleHarnessArgs = HookArgs;
 
@@ -240,18 +290,26 @@ describe("use-workspace-operations", () => {
     };
 
     const Harness = ({ args }: { args: LifecycleHarnessArgs }) => {
-      latest = useWorkspaceOperations(args);
+      latest = useWorkspaceOperations({
+        ...args,
+        hostClient: workspaceHost,
+      });
       return createElement(StartupBranchLoader, {
         activeRepo: args.activeRepo,
         value: latest,
       });
     };
 
-    let rendered: RenderResult | null = null;
+    let rerender: (ui: Parameters<typeof render>[0]) => void = () => {};
+    let unmount = () => {};
 
     try {
       await act(async () => {
-        rendered = render(createElement(Harness, { args: currentArgs }));
+        const rendered = render(createElement(Harness, { args: currentArgs }), {
+          wrapper: IsolatedQueryWrapper,
+        });
+        rerender = rendered.rerender;
+        unmount = rendered.unmount;
       });
       await flush();
 
@@ -261,7 +319,7 @@ describe("use-workspace-operations", () => {
       };
 
       await act(async () => {
-        rendered?.rerender(createElement(Harness, { args: currentArgs }));
+        rerender(createElement(Harness, { args: currentArgs }));
       });
       await flush();
       await waitFor(() => {
@@ -295,9 +353,9 @@ describe("use-workspace-operations", () => {
       ]);
       expect(latestValue.isLoadingBranches).toBe(false);
     } finally {
-      (rendered as RenderResult | null)?.unmount();
-      host.gitGetCurrentBranch = originalGitGetCurrentBranch;
-      host.gitGetBranches = originalGitGetBranches;
+      unmount();
+      workspaceHost.gitGetCurrentBranch = originalGitGetCurrentBranch;
+      workspaceHost.gitGetBranches = originalGitGetBranches;
     }
   });
 
@@ -307,8 +365,8 @@ describe("use-workspace-operations", () => {
       async (): Promise<WorkspaceRecord[]> => [workspace("/repo-a"), workspace("/repo-b", true)],
     );
 
-    const original = { workspaceList: host.workspaceList };
-    host.workspaceList = workspaceList;
+    const original = { workspaceList: workspaceHost.workspaceList };
+    workspaceHost.workspaceList = workspaceList;
 
     const harness = createHookHarness({
       activeRepo: null,
@@ -327,7 +385,7 @@ describe("use-workspace-operations", () => {
       expect(setActiveRepo).toHaveBeenCalledWith("/repo-b");
     } finally {
       await harness.unmount();
-      host.workspaceList = original.workspaceList;
+      workspaceHost.workspaceList = original.workspaceList;
     }
   });
 
@@ -337,19 +395,16 @@ describe("use-workspace-operations", () => {
     const workspaceList = mock(
       async (): Promise<WorkspaceRecord[]> => [workspace("/repo-new", true)],
     );
-
-    const original = {
-      workspaceAdd: host.workspaceAdd,
-      workspaceList: host.workspaceList,
-    };
-    host.workspaceAdd = workspaceAdd;
-    host.workspaceList = workspaceList;
+    const hostClient = createWorkspaceHostClient();
+    hostClient.workspaceAdd = workspaceAdd;
+    hostClient.workspaceList = workspaceList;
 
     const harness = createHookHarness({
       activeRepo: null,
       setActiveRepo,
       clearTaskData: () => {},
       clearActiveBeadsCheck: () => {},
+      hostClient,
     });
 
     try {
@@ -362,8 +417,6 @@ describe("use-workspace-operations", () => {
       expect(workspaceList).toHaveBeenCalled();
     } finally {
       await harness.unmount();
-      host.workspaceAdd = original.workspaceAdd;
-      host.workspaceList = original.workspaceList;
     }
   });
 
@@ -423,15 +476,15 @@ describe("use-workspace-operations", () => {
     );
 
     const original = {
-      workspaceSelect: host.workspaceSelect,
-      runtimeEnsure: host.runtimeEnsure,
-      workspaceGetRepoConfig: host.workspaceGetRepoConfig,
-      workspaceList: host.workspaceList,
+      workspaceSelect: workspaceHost.workspaceSelect,
+      runtimeEnsure: workspaceHost.runtimeEnsure,
+      workspaceGetRepoConfig: workspaceHost.workspaceGetRepoConfig,
+      workspaceList: workspaceHost.workspaceList,
     };
-    host.workspaceSelect = workspaceSelect;
-    host.runtimeEnsure = runtimeEnsure;
-    host.workspaceGetRepoConfig = workspaceGetRepoConfig;
-    host.workspaceList = workspaceList;
+    workspaceHost.workspaceSelect = workspaceSelect;
+    workspaceHost.runtimeEnsure = runtimeEnsure;
+    workspaceHost.workspaceGetRepoConfig = workspaceGetRepoConfig;
+    workspaceHost.workspaceList = workspaceList;
 
     const harness = createHookHarness({
       activeRepo: null,
@@ -466,10 +519,10 @@ describe("use-workspace-operations", () => {
     } finally {
       runtimeDeferred.resolve(runtimeValue);
       await harness.unmount();
-      host.workspaceSelect = original.workspaceSelect;
-      host.runtimeEnsure = original.runtimeEnsure;
-      host.workspaceGetRepoConfig = original.workspaceGetRepoConfig;
-      host.workspaceList = original.workspaceList;
+      workspaceHost.workspaceSelect = original.workspaceSelect;
+      workspaceHost.runtimeEnsure = original.runtimeEnsure;
+      workspaceHost.workspaceGetRepoConfig = original.workspaceGetRepoConfig;
+      workspaceHost.workspaceList = original.workspaceList;
     }
   });
 
@@ -529,18 +582,18 @@ describe("use-workspace-operations", () => {
       },
     ]);
 
-    const originalWorkspaceSelect = host.workspaceSelect;
-    const originalWorkspaceList = host.workspaceList;
-    const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
-    const originalRuntimeEnsure = host.runtimeEnsure;
-    const originalGitGetCurrentBranch = host.gitGetCurrentBranch;
-    const originalGitGetBranches = host.gitGetBranches;
-    host.workspaceSelect = workspaceSelect;
-    host.workspaceList = workspaceList;
-    host.workspaceGetRepoConfig = workspaceGetRepoConfig;
-    host.runtimeEnsure = runtimeEnsure;
-    host.gitGetCurrentBranch = gitGetCurrentBranch;
-    host.gitGetBranches = gitGetBranches;
+    const originalWorkspaceSelect = workspaceHost.workspaceSelect;
+    const originalWorkspaceList = workspaceHost.workspaceList;
+    const originalWorkspaceGetRepoConfig = workspaceHost.workspaceGetRepoConfig;
+    const originalRuntimeEnsure = workspaceHost.runtimeEnsure;
+    const originalGitGetCurrentBranch = workspaceHost.gitGetCurrentBranch;
+    const originalGitGetBranches = workspaceHost.gitGetBranches;
+    workspaceHost.workspaceSelect = workspaceSelect;
+    workspaceHost.workspaceList = workspaceList;
+    workspaceHost.workspaceGetRepoConfig = workspaceGetRepoConfig;
+    workspaceHost.runtimeEnsure = runtimeEnsure;
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetBranches = gitGetBranches;
 
     let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
     let latestActiveRepo: string | null = null;
@@ -552,6 +605,7 @@ describe("use-workspace-operations", () => {
         setActiveRepo,
         clearTaskData: () => {},
         clearActiveBeadsCheck: () => {},
+        hostClient: workspaceHost,
       });
       const previousRepoRef = useRef(activeRepo);
 
@@ -575,11 +629,14 @@ describe("use-workspace-operations", () => {
       return null;
     };
 
-    let rendered: RenderResult | null = null;
+    let unmount = () => {};
 
     try {
       await act(async () => {
-        rendered = render(createElement(Harness));
+        const rendered = render(createElement(Harness), {
+          wrapper: IsolatedQueryWrapper,
+        });
+        unmount = rendered.unmount;
       });
       await flush();
 
@@ -640,13 +697,13 @@ describe("use-workspace-operations", () => {
       ]);
     } finally {
       workspaceSelectDeferred.resolve(workspace("/repo-a", true));
-      (rendered as RenderResult | null)?.unmount();
-      host.workspaceSelect = originalWorkspaceSelect;
-      host.workspaceList = originalWorkspaceList;
-      host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
-      host.runtimeEnsure = originalRuntimeEnsure;
-      host.gitGetCurrentBranch = originalGitGetCurrentBranch;
-      host.gitGetBranches = originalGitGetBranches;
+      unmount();
+      workspaceHost.workspaceSelect = originalWorkspaceSelect;
+      workspaceHost.workspaceList = originalWorkspaceList;
+      workspaceHost.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+      workspaceHost.runtimeEnsure = originalRuntimeEnsure;
+      workspaceHost.gitGetCurrentBranch = originalGitGetCurrentBranch;
+      workspaceHost.gitGetBranches = originalGitGetBranches;
     }
   });
 
@@ -674,12 +731,12 @@ describe("use-workspace-operations", () => {
       },
     ]);
 
-    const originalWorkspaceSelect = host.workspaceSelect;
-    const originalGitGetCurrentBranch = host.gitGetCurrentBranch;
-    const originalGitGetBranches = host.gitGetBranches;
-    host.workspaceSelect = workspaceSelect;
-    host.gitGetCurrentBranch = gitGetCurrentBranch;
-    host.gitGetBranches = gitGetBranches;
+    const originalWorkspaceSelect = workspaceHost.workspaceSelect;
+    const originalGitGetCurrentBranch = workspaceHost.gitGetCurrentBranch;
+    const originalGitGetBranches = workspaceHost.gitGetBranches;
+    workspaceHost.workspaceSelect = workspaceSelect;
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetBranches = gitGetBranches;
 
     const originalToastError = toast.error;
     const toastError = mock((_message: string, _options?: { description?: string }) => "");
@@ -739,9 +796,9 @@ describe("use-workspace-operations", () => {
       });
     } finally {
       await harness.unmount();
-      host.workspaceSelect = originalWorkspaceSelect;
-      host.gitGetCurrentBranch = originalGitGetCurrentBranch;
-      host.gitGetBranches = originalGitGetBranches;
+      workspaceHost.workspaceSelect = originalWorkspaceSelect;
+      workspaceHost.gitGetCurrentBranch = originalGitGetCurrentBranch;
+      workspaceHost.gitGetBranches = originalGitGetBranches;
       (toast as { error: typeof toast.error }).error = originalToastError;
     }
   });
@@ -799,18 +856,18 @@ describe("use-workspace-operations", () => {
       },
     ]);
 
-    const originalWorkspaceSelect = host.workspaceSelect;
-    const originalWorkspaceList = host.workspaceList;
-    const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
-    const originalRuntimeEnsure = host.runtimeEnsure;
-    const originalGitGetCurrentBranch = host.gitGetCurrentBranch;
-    const originalGitGetBranches = host.gitGetBranches;
-    host.workspaceSelect = workspaceSelect;
-    host.workspaceList = workspaceList;
-    host.workspaceGetRepoConfig = workspaceGetRepoConfig;
-    host.runtimeEnsure = runtimeEnsure;
-    host.gitGetCurrentBranch = gitGetCurrentBranch;
-    host.gitGetBranches = gitGetBranches;
+    const originalWorkspaceSelect = workspaceHost.workspaceSelect;
+    const originalWorkspaceList = workspaceHost.workspaceList;
+    const originalWorkspaceGetRepoConfig = workspaceHost.workspaceGetRepoConfig;
+    const originalRuntimeEnsure = workspaceHost.runtimeEnsure;
+    const originalGitGetCurrentBranch = workspaceHost.gitGetCurrentBranch;
+    const originalGitGetBranches = workspaceHost.gitGetBranches;
+    workspaceHost.workspaceSelect = workspaceSelect;
+    workspaceHost.workspaceList = workspaceList;
+    workspaceHost.workspaceGetRepoConfig = workspaceGetRepoConfig;
+    workspaceHost.runtimeEnsure = runtimeEnsure;
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetBranches = gitGetBranches;
 
     const originalToastError = toast.error;
     const toastError = mock((_message: string, _options?: { description?: string }) => "");
@@ -826,6 +883,7 @@ describe("use-workspace-operations", () => {
         setActiveRepo,
         clearTaskData: () => {},
         clearActiveBeadsCheck: () => {},
+        hostClient: workspaceHost,
       });
       const previousRepoRef = useRef(activeRepo);
       const hasSeededWorkspacesRef = useRef(false);
@@ -859,11 +917,14 @@ describe("use-workspace-operations", () => {
       return null;
     };
 
-    let rendered: RenderResult | null = null;
+    let unmount = () => {};
 
     try {
       await act(async () => {
-        rendered = render(createElement(Harness));
+        const rendered = render(createElement(Harness), {
+          wrapper: IsolatedQueryWrapper,
+        });
+        unmount = rendered.unmount;
       });
       await flush();
 
@@ -910,13 +971,13 @@ describe("use-workspace-operations", () => {
         workspace("/repo-a", true),
       ]);
     } finally {
-      (rendered as RenderResult | null)?.unmount();
-      host.workspaceSelect = originalWorkspaceSelect;
-      host.workspaceList = originalWorkspaceList;
-      host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
-      host.runtimeEnsure = originalRuntimeEnsure;
-      host.gitGetCurrentBranch = originalGitGetCurrentBranch;
-      host.gitGetBranches = originalGitGetBranches;
+      unmount();
+      workspaceHost.workspaceSelect = originalWorkspaceSelect;
+      workspaceHost.workspaceList = originalWorkspaceList;
+      workspaceHost.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+      workspaceHost.runtimeEnsure = originalRuntimeEnsure;
+      workspaceHost.gitGetCurrentBranch = originalGitGetCurrentBranch;
+      workspaceHost.gitGetBranches = originalGitGetBranches;
       (toast as { error: typeof toast.error }).error = originalToastError;
     }
   });
@@ -934,11 +995,11 @@ describe("use-workspace-operations", () => {
     ]);
 
     const original = {
-      gitGetCurrentBranch: host.gitGetCurrentBranch,
-      gitGetBranches: host.gitGetBranches,
+      gitGetCurrentBranch: workspaceHost.gitGetCurrentBranch,
+      gitGetBranches: workspaceHost.gitGetBranches,
     };
-    host.gitGetCurrentBranch = gitGetCurrentBranch;
-    host.gitGetBranches = gitGetBranches;
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetBranches = gitGetBranches;
 
     const baseArgs = {
       setActiveRepo,
@@ -980,8 +1041,8 @@ describe("use-workspace-operations", () => {
     } finally {
       currentBranchDeferred.resolve({ name: undefined, detached: false });
       await harness.unmount();
-      host.gitGetCurrentBranch = original.gitGetCurrentBranch;
-      host.gitGetBranches = original.gitGetBranches;
+      workspaceHost.gitGetCurrentBranch = original.gitGetCurrentBranch;
+      workspaceHost.gitGetBranches = original.gitGetBranches;
     }
   });
 
@@ -1017,14 +1078,14 @@ describe("use-workspace-operations", () => {
     }));
 
     const original = {
-      gitGetCurrentBranch: host.gitGetCurrentBranch,
-      gitGetBranches: host.gitGetBranches,
-      gitSwitchBranch: host.gitSwitchBranch,
+      gitGetCurrentBranch: workspaceHost.gitGetCurrentBranch,
+      gitGetBranches: workspaceHost.gitGetBranches,
+      gitSwitchBranch: workspaceHost.gitSwitchBranch,
     };
 
-    host.gitGetCurrentBranch = gitGetCurrentBranch;
-    host.gitGetBranches = gitGetBranches;
-    host.gitSwitchBranch = gitSwitchBranch;
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetBranches = gitGetBranches;
+    workspaceHost.gitSwitchBranch = gitSwitchBranch;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -1035,8 +1096,12 @@ describe("use-workspace-operations", () => {
 
     try {
       await harness.mount();
-      expect(addWindowEventListener).toHaveBeenCalledTimes(1);
-      expect(addDocumentEventListener).toHaveBeenCalledTimes(1);
+      expect(addWindowEventListener.mock.calls.filter(([event]) => event === "focus")).toHaveLength(
+        1,
+      );
+      expect(
+        addDocumentEventListener.mock.calls.filter(([event]) => event === "visibilitychange"),
+      ).toHaveLength(1);
 
       await harness.run(async (value) => {
         await value.refreshBranches();
@@ -1045,18 +1110,28 @@ describe("use-workspace-operations", () => {
         await value.switchBranch("feature");
       });
 
-      expect(addWindowEventListener).toHaveBeenCalledTimes(1);
-      expect(addDocumentEventListener).toHaveBeenCalledTimes(1);
+      expect(addWindowEventListener.mock.calls.filter(([event]) => event === "focus")).toHaveLength(
+        1,
+      );
+      expect(
+        addDocumentEventListener.mock.calls.filter(([event]) => event === "visibilitychange"),
+      ).toHaveLength(1);
       expect(removeWindowEventListener).not.toHaveBeenCalled();
       expect(removeDocumentEventListener).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
-      expect(removeWindowEventListener).toHaveBeenCalledTimes(1);
-      expect(removeDocumentEventListener).toHaveBeenCalledTimes(1);
+      await waitFor(() => {
+        expect(
+          removeWindowEventListener.mock.calls.filter(([event]) => event === "focus"),
+        ).toHaveLength(1);
+        expect(
+          removeDocumentEventListener.mock.calls.filter(([event]) => event === "visibilitychange"),
+        ).toHaveLength(1);
+      });
 
-      host.gitGetCurrentBranch = original.gitGetCurrentBranch;
-      host.gitGetBranches = original.gitGetBranches;
-      host.gitSwitchBranch = original.gitSwitchBranch;
+      workspaceHost.gitGetCurrentBranch = original.gitGetCurrentBranch;
+      workspaceHost.gitGetBranches = original.gitGetBranches;
+      workspaceHost.gitSwitchBranch = original.gitSwitchBranch;
       restoreBrowserGlobals();
     }
   });
@@ -1072,9 +1147,9 @@ describe("use-workspace-operations", () => {
     });
 
     const original = {
-      gitGetCurrentBranch: host.gitGetCurrentBranch,
+      gitGetCurrentBranch: workspaceHost.gitGetCurrentBranch,
     };
-    host.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
 
     const originalToastError = toast.error;
     const toastError = mock((_message: string, _options?: { description?: string }) => "");
@@ -1103,7 +1178,7 @@ describe("use-workspace-operations", () => {
       expect(toastError).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
-      host.gitGetCurrentBranch = original.gitGetCurrentBranch;
+      workspaceHost.gitGetCurrentBranch = original.gitGetCurrentBranch;
       (toast as { error: typeof toast.error }).error = originalToastError;
       restoreBrowserGlobals();
     }
@@ -1117,9 +1192,9 @@ describe("use-workspace-operations", () => {
     const gitGetCurrentBranch = mock(async () => branchProbeDeferred.promise);
 
     const original = {
-      gitGetCurrentBranch: host.gitGetCurrentBranch,
+      gitGetCurrentBranch: workspaceHost.gitGetCurrentBranch,
     };
-    host.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
 
     const originalToastError = toast.error;
     const toastError = mock((_message: string, _options?: { description?: string }) => "");
@@ -1152,7 +1227,7 @@ describe("use-workspace-operations", () => {
       expect(toastError).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
-      host.gitGetCurrentBranch = original.gitGetCurrentBranch;
+      workspaceHost.gitGetCurrentBranch = original.gitGetCurrentBranch;
       (toast as { error: typeof toast.error }).error = originalToastError;
       restoreBrowserGlobals();
     }
@@ -1181,11 +1256,11 @@ describe("use-workspace-operations", () => {
     ]);
 
     const original = {
-      gitGetCurrentBranch: host.gitGetCurrentBranch,
-      gitGetBranches: host.gitGetBranches,
+      gitGetCurrentBranch: workspaceHost.gitGetCurrentBranch,
+      gitGetBranches: workspaceHost.gitGetBranches,
     };
-    host.gitGetCurrentBranch = gitGetCurrentBranch;
-    host.gitGetBranches = gitGetBranches;
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetBranches = gitGetBranches;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -1206,8 +1281,8 @@ describe("use-workspace-operations", () => {
       expect(harness.getLatest().branchSyncDegraded).toBe(false);
     } finally {
       await harness.unmount();
-      host.gitGetCurrentBranch = original.gitGetCurrentBranch;
-      host.gitGetBranches = original.gitGetBranches;
+      workspaceHost.gitGetCurrentBranch = original.gitGetCurrentBranch;
+      workspaceHost.gitGetBranches = original.gitGetBranches;
       restoreBrowserGlobals();
     }
   });
@@ -1246,11 +1321,11 @@ describe("use-workspace-operations", () => {
     });
 
     const original = {
-      gitGetCurrentBranch: host.gitGetCurrentBranch,
-      gitGetBranches: host.gitGetBranches,
+      gitGetCurrentBranch: workspaceHost.gitGetCurrentBranch,
+      gitGetBranches: workspaceHost.gitGetBranches,
     };
-    host.gitGetCurrentBranch = gitGetCurrentBranch;
-    host.gitGetBranches = gitGetBranches;
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetBranches = gitGetBranches;
 
     const originalToastError = toast.error;
     const toastError = mock((_message: string, _options?: { description?: string }) => "");
@@ -1276,8 +1351,8 @@ describe("use-workspace-operations", () => {
       });
     } finally {
       await harness.unmount();
-      host.gitGetCurrentBranch = original.gitGetCurrentBranch;
-      host.gitGetBranches = original.gitGetBranches;
+      workspaceHost.gitGetCurrentBranch = original.gitGetCurrentBranch;
+      workspaceHost.gitGetBranches = original.gitGetBranches;
       (toast as { error: typeof toast.error }).error = originalToastError;
       restoreBrowserGlobals();
     }
@@ -1292,9 +1367,9 @@ describe("use-workspace-operations", () => {
     });
 
     const original = {
-      gitGetCurrentBranch: host.gitGetCurrentBranch,
+      gitGetCurrentBranch: workspaceHost.gitGetCurrentBranch,
     };
-    host.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -1321,7 +1396,7 @@ describe("use-workspace-operations", () => {
       expect(harness.getLatest().branches).toHaveLength(0);
     } finally {
       await harness.unmount();
-      host.gitGetCurrentBranch = original.gitGetCurrentBranch;
+      workspaceHost.gitGetCurrentBranch = original.gitGetCurrentBranch;
       restoreBrowserGlobals();
     }
   });

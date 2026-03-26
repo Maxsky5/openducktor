@@ -1,8 +1,10 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createTauriHostClient } from "@openducktor/adapters-tauri-host";
 import type { TaskApprovalContext } from "@openducktor/contracts";
+import { waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { act } from "react";
+import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
@@ -11,20 +13,20 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agents/agent-studio-test-utils";
+import { useTaskApprovalFlow } from "./use-task-approval-flow";
 
 enableReactActEnvironment();
 
-const taskApprovalContextGetMock = mock(async (_repoPath: string, _taskId: string) => {
+const defaultTaskApprovalContextGet = async (_repoPath: string, _taskId: string) => {
   throw new Error("not configured");
-});
-const taskDirectMergeMock = mock(async () => ({
+};
+const defaultTaskDirectMerge = async () => ({
   outcome: "completed" as const,
   task: createTaskCardFixture({ id: "TASK-1", status: "closed" }),
-}));
-const taskDirectMergeCompleteMock = mock(async () =>
-  createTaskCardFixture({ id: "TASK-1", status: "closed" }),
-);
-const taskPullRequestUpsertMock = mock(async () => ({
+});
+const defaultTaskDirectMergeComplete = async () =>
+  createTaskCardFixture({ id: "TASK-1", status: "closed" });
+const defaultTaskPullRequestUpsert = async () => ({
   providerId: "github" as const,
   number: 17,
   url: "https://github.com/openai/openducktor/pull/17",
@@ -34,28 +36,25 @@ const taskPullRequestUpsertMock = mock(async () => ({
   lastSyncedAt: undefined,
   mergedAt: undefined,
   closedAt: undefined,
-}));
-const gitPushBranchMock = mock(async () => ({
+});
+const defaultGitPushBranch = async () => ({
   outcome: "pushed" as const,
   remote: "origin",
   branch: "main",
   output: "",
-}));
+});
+
+const taskApprovalContextGetMock = mock(defaultTaskApprovalContextGet);
+const taskDirectMergeMock = mock(defaultTaskDirectMerge);
+const taskDirectMergeCompleteMock = mock(defaultTaskDirectMergeComplete);
+const taskPullRequestUpsertMock = mock(defaultTaskPullRequestUpsert);
+const gitPushBranchMock = mock(defaultGitPushBranch);
 const toastLoadingMock = mock(() => "toast-id");
 const toastSuccessMock = mock(() => {});
 const toastErrorMock = mock(() => {});
-
-mock.module("sonner", () => ({
-  toast: {
-    loading: toastLoadingMock,
-    success: toastSuccessMock,
-    error: toastErrorMock,
-  },
-}));
-
-mock.module("@/lib/open-external-url", () => ({
-  openExternalUrl: async () => {},
-}));
+const originalToastLoading = toast.loading;
+const originalToastSuccess = toast.success;
+const originalToastError = toast.error;
 
 const createUnavailableHostClient = () =>
   createTauriHostClient(async () => {
@@ -195,24 +194,56 @@ const mountApprovalHarness = async (Harness: () => ReactElement | null) => {
   return harness;
 };
 
+const waitForTaskApprovalModalLoaded = async (timeoutMs = 1000): Promise<void> => {
+  await waitFor(
+    () => {
+      expect(latestHarnessValue?.taskApprovalModal).toBeTruthy();
+      expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(false);
+    },
+    { timeout: timeoutMs },
+  );
+};
+
+const waitForTaskApprovalModalClosed = async (timeoutMs = 1000): Promise<void> => {
+  await waitFor(
+    () => {
+      expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+    },
+    { timeout: timeoutMs },
+  );
+};
+
 describe("useTaskApprovalFlow", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
     await applyHostMocks();
     latestHarnessValue = null;
-    taskApprovalContextGetMock.mockClear();
-    taskDirectMergeMock.mockClear();
-    taskDirectMergeCompleteMock.mockClear();
-    taskPullRequestUpsertMock.mockClear();
-    gitPushBranchMock.mockClear();
+    (toast as { loading: typeof toast.loading }).loading =
+      toastLoadingMock as unknown as typeof toast.loading;
+    (toast as { success: typeof toast.success }).success =
+      toastSuccessMock as unknown as typeof toast.success;
+    (toast as { error: typeof toast.error }).error =
+      toastErrorMock as unknown as typeof toast.error;
     toastLoadingMock.mockClear();
     toastSuccessMock.mockClear();
     toastErrorMock.mockClear();
+    taskApprovalContextGetMock.mockClear();
+    taskApprovalContextGetMock.mockImplementation(defaultTaskApprovalContextGet);
+    taskDirectMergeMock.mockClear();
+    taskDirectMergeMock.mockImplementation(defaultTaskDirectMerge);
+    taskDirectMergeCompleteMock.mockClear();
+    taskDirectMergeCompleteMock.mockImplementation(defaultTaskDirectMergeComplete);
+    taskPullRequestUpsertMock.mockClear();
+    taskPullRequestUpsertMock.mockImplementation(defaultTaskPullRequestUpsert);
+    gitPushBranchMock.mockClear();
+    gitPushBranchMock.mockImplementation(defaultGitPushBranch);
   });
 
   afterAll(async () => {
     await restoreHostMocks();
-    mock.restore();
+    (toast as { loading: typeof toast.loading }).loading = originalToastLoading;
+    (toast as { success: typeof toast.success }).success = originalToastSuccess;
+    (toast as { error: typeof toast.error }).error = originalToastError;
   });
 
   test("opens immediately in loading state and does not fetch the settings snapshot", async () => {
@@ -220,8 +251,6 @@ describe("useTaskApprovalFlow", () => {
     taskApprovalContextGetMock.mockImplementationOnce(
       (async () => pendingApprovalContext.promise) as unknown as never,
     );
-
-    const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow({
@@ -286,8 +315,6 @@ describe("useTaskApprovalFlow", () => {
     taskApprovalContextGetMock.mockImplementationOnce(
       (async () => pendingApprovalContext.promise) as unknown as never,
     );
-
-    const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow({
@@ -356,8 +383,6 @@ describe("useTaskApprovalFlow", () => {
     taskApprovalContextGetMock.mockImplementationOnce(
       (async () => pendingApprovalContext.promise) as unknown as never,
     );
-
-    const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow({
@@ -435,8 +460,6 @@ describe("useTaskApprovalFlow", () => {
       providers: [],
     } satisfies TaskApprovalContext as unknown as never);
 
-    const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
-
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow({
         activeRepo: "/repo",
@@ -490,8 +513,6 @@ describe("useTaskApprovalFlow", () => {
       directMerge: undefined,
       providers: [],
     } satisfies TaskApprovalContext as unknown as never);
-
-    const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow({
@@ -570,8 +591,6 @@ describe("useTaskApprovalFlow", () => {
       providers: [],
     } satisfies TaskApprovalContext as unknown as never);
 
-    const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
-
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow({
         activeRepo: "/repo",
@@ -588,6 +607,7 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
       await Promise.resolve();
     });
+    await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
       latestHarnessValue?.taskApprovalModal?.onMergeMethodChange("squash");
@@ -637,8 +657,6 @@ describe("useTaskApprovalFlow", () => {
       providers: [],
     } satisfies TaskApprovalContext as unknown as never);
 
-    const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
-
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow({
         activeRepo: "/repo",
@@ -655,6 +673,7 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
       await Promise.resolve();
     });
+    await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
       latestHarnessValue?.taskApprovalModal?.onConfirm();
@@ -667,6 +686,8 @@ describe("useTaskApprovalFlow", () => {
     });
     expect(gitPushBranchMock).not.toHaveBeenCalled();
     expect(refreshTasksMock).toHaveBeenCalledTimes(1);
+    expect(taskDirectMergeCompleteMock).not.toHaveBeenCalled();
+    await waitForTaskApprovalModalClosed();
     expect(latestHarnessValue?.taskApprovalModal).toBeNull();
 
     await act(async () => {
@@ -701,8 +722,6 @@ describe("useTaskApprovalFlow", () => {
       ],
     } satisfies TaskApprovalContext as unknown as never);
 
-    const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
-
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow({
         activeRepo: "/repo",
@@ -719,6 +738,7 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
       await Promise.resolve();
     });
+    await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
       latestHarnessValue?.taskApprovalModal?.onModeChange("pull_request");
@@ -744,7 +764,6 @@ describe("useTaskApprovalFlow", () => {
       await requestPullRequestGenerationDeferred.promise;
       await Promise.resolve();
     });
-
     expect(latestHarnessValue?.taskApprovalModal).toBeNull();
 
     await act(async () => {
@@ -793,6 +812,7 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
       await Promise.resolve();
     });
+    await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
       latestHarnessValue?.taskApprovalModal?.onModeChange("pull_request");
@@ -843,8 +863,6 @@ describe("useTaskApprovalFlow", () => {
       throw new Error("Generation crashed");
     });
 
-    const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
-
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow({
         activeRepo: "/repo",
@@ -861,6 +879,7 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
       await Promise.resolve();
     });
+    await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
       latestHarnessValue?.taskApprovalModal?.onModeChange("pull_request");
@@ -878,7 +897,6 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(false);
     expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("pull_request");
     expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBeNull();
-
     expect(toastErrorMock).toHaveBeenCalledWith(
       "Approval failed",
       expect.objectContaining({ description: "Generation crashed" }),

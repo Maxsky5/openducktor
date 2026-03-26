@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   createDeferred,
   createHookHarness as createSharedHookHarness,
@@ -20,25 +20,6 @@ const gitRebaseAbortMock = mock(async () => ({ outcome: "aborted" }));
 const gitResetWorktreeSelectionMock = mock(async () => ({ affectedPaths: ["src/main.ts"] }));
 const toastSuccessMock = mock(() => {});
 const toastErrorMock = mock(() => {});
-
-mock.module("@/state/operations/shared/host", () => ({
-  host: {
-    gitCommitAll: gitCommitAllMock,
-    gitPushBranch: gitPushBranchMock,
-    gitPullBranch: gitPullBranchMock,
-    gitRebaseBranch: gitRebaseBranchMock,
-    gitAbortConflict: gitAbortConflictMock,
-    gitRebaseAbort: gitRebaseAbortMock,
-    gitResetWorktreeSelection: gitResetWorktreeSelectionMock,
-  },
-}));
-
-mock.module("sonner", () => ({
-  toast: {
-    success: toastSuccessMock,
-    error: toastErrorMock,
-  },
-}));
 
 type UseAgentStudioGitActionsHook =
   typeof import("./use-agent-studio-git-actions")["useAgentStudioGitActions"];
@@ -63,7 +44,28 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 beforeAll(async () => {
+  mock.module("@/state/operations/shared/host", () => ({
+    host: {
+      gitCommitAll: gitCommitAllMock,
+      gitPushBranch: gitPushBranchMock,
+      gitPullBranch: gitPullBranchMock,
+      gitRebaseBranch: gitRebaseBranchMock,
+      gitAbortConflict: gitAbortConflictMock,
+      gitRebaseAbort: gitRebaseAbortMock,
+      gitResetWorktreeSelection: gitResetWorktreeSelectionMock,
+    },
+  }));
+  mock.module("sonner", () => ({
+    toast: {
+      success: toastSuccessMock,
+      error: toastErrorMock,
+    },
+  }));
   ({ useAgentStudioGitActions } = await import("./use-agent-studio-git-actions"));
+});
+
+afterAll(() => {
+  mock.restore();
 });
 
 beforeEach(() => {

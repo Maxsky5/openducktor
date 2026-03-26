@@ -12,12 +12,6 @@ enableReactActEnvironment();
 
 const toastErrorMock = mock(() => {});
 
-mock.module("sonner", () => ({
-  toast: {
-    error: toastErrorMock,
-  },
-}));
-
 type UseAgentStudioFreshSessionCreationHook =
   typeof import("./use-agent-studio-fresh-session-creation")["useAgentStudioFreshSessionCreation"];
 
@@ -70,6 +64,11 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 beforeAll(async () => {
+  mock.module("sonner", () => ({
+    toast: {
+      error: toastErrorMock,
+    },
+  }));
   ({ useAgentStudioFreshSessionCreation } = await import(
     "./use-agent-studio-fresh-session-creation"
   ));

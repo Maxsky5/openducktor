@@ -10,12 +10,6 @@ enableReactActEnvironment();
 
 const toastErrorMock = mock(() => {});
 
-mock.module("sonner", () => ({
-  toast: {
-    error: toastErrorMock,
-  },
-}));
-
 type UseAgentStudioSessionStartFlowHook =
   typeof import("./use-agent-studio-session-start-flow")["useAgentStudioSessionStartFlow"];
 
@@ -126,6 +120,11 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 beforeAll(async () => {
+  mock.module("sonner", () => ({
+    toast: {
+      error: toastErrorMock,
+    },
+  }));
   ({ useAgentStudioSessionStartFlow } = await import("./use-agent-studio-session-start-flow"));
 });
 
