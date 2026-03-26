@@ -25,6 +25,33 @@ export const normalizeOptionalInput = (value: string | undefined): string | unde
   return trimmed;
 };
 
+const stripMatchingQuotes = (value: string): string => {
+  if (value.length >= 2) {
+    const first = value[0];
+    const last = value[value.length - 1];
+    if ((first === '"' || first === "'") && first === last) {
+      return value.slice(1, -1).trim();
+    }
+  }
+  return value;
+};
+
+const normalizeOptionalPathInput = (value: string | undefined): string | undefined => {
+  const normalized = normalizeOptionalInput(value);
+  if (!normalized) {
+    return undefined;
+  }
+
+  const unquoted = stripMatchingQuotes(normalized);
+  if (unquoted === "~") {
+    return homedir();
+  }
+  if (unquoted.startsWith("~/") || unquoted.startsWith("~\\")) {
+    return resolve(homedir(), unquoted.slice(2));
+  }
+  return unquoted;
+};
+
 export const sanitizeSlug = (input: string): string => {
   let slug = "";
   let lastDash = false;
@@ -120,7 +147,7 @@ export const resolveCommandExecutable = (command: string): string => {
   }
 
   const overrideName = commandEnvOverrideName(command);
-  const explicit = normalizeOptionalInput(process.env[overrideName]);
+  const explicit = normalizeOptionalPathInput(process.env[overrideName]);
   if (explicit) {
     if (!existsSync(explicit) || !statSync(explicit).isFile()) {
       throw new Error(

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   bundledCommandCandidates,
@@ -12,6 +12,8 @@ import {
 } from "./beads-runtime";
 
 const originalExecPath = process.execPath;
+const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 const tempDirs: string[] = [];
 
 const setExecPath = (value: string): void => {
@@ -24,6 +26,16 @@ const setExecPath = (value: string): void => {
 
 afterEach(() => {
   setExecPath(originalExecPath);
+  if (typeof originalHome === "string") {
+    process.env.HOME = originalHome;
+  } else {
+    delete process.env.HOME;
+  }
+  if (typeof originalUserProfile === "string") {
+    process.env.USERPROFILE = originalUserProfile;
+  } else {
+    delete process.env.USERPROFILE;
+  }
   delete process.env[commandEnvOverrideName("bd")];
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
@@ -70,6 +82,19 @@ describe("beads runtime command resolution", () => {
     writeFileSync(binaryPath, "#!/bin/sh\nexit 0\n");
     chmodSync(binaryPath, 0o755);
     process.env[commandEnvOverrideName("bd")] = binaryPath;
+
+    expect(resolveCommandExecutable("bd")).toBe(binaryPath);
+  });
+
+  test("resolveCommandExecutable expands home shorthand in explicit override", () => {
+    const subdirName = `.odt-mcp-home-override-${Date.now()}`;
+    const root = join(homedir(), subdirName);
+    tempDirs.push(root);
+    mkdirSync(root, { recursive: true });
+    const binaryPath = join(root, "bd-override");
+    writeFileSync(binaryPath, "#!/bin/sh\nexit 0\n");
+    chmodSync(binaryPath, 0o755);
+    process.env[commandEnvOverrideName("bd")] = `~/${subdirName}/bd-override`;
 
     expect(resolveCommandExecutable("bd")).toBe(binaryPath);
   });
