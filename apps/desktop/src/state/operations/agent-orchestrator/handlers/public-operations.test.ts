@@ -45,7 +45,6 @@ type SessionActions = Parameters<typeof createOrchestratorPublicOperations>[0]["
 const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionActions => {
   return {
     startAgentSession: async () => "session-started",
-    forkAgentSession: async () => "session-forked",
     sendAgentMessage: async () => {},
     stopAgentSession: async () => {},
     updateAgentSessionModel: () => {},
@@ -154,47 +153,6 @@ describe("agent-orchestrator-public-operations", () => {
       ).rejects.toThrow("start failed");
       expect(toastError).toHaveBeenCalledWith("Failed to start agent session", {
         description: "start failed",
-      });
-    } finally {
-      toast.error = originalToastError;
-    }
-  });
-
-  test("shows toast and rethrows fork errors", async () => {
-    const originalToastError = toast.error;
-    const toastError = mock(() => "");
-    toast.error = toastError;
-
-    const operations = createOrchestratorPublicOperations({
-      sessionsById: {},
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
-      reconcileLiveTaskSessions: async () => {},
-      loadAgentSessions: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionTodos: async () => [],
-      removeAgentSessions: () => {},
-      sessionActions: createSessionActions({
-        forkAgentSession: async () => {
-          throw new Error("fork failed");
-        },
-      }),
-    });
-
-    try {
-      await expect(
-        operations.forkAgentSession({
-          parentSessionId: "session-1",
-        }),
-      ).rejects.toThrow("fork failed");
-      expect(toastError).toHaveBeenCalledWith("Failed to fork agent session", {
-        description: "fork failed",
       });
     } finally {
       toast.error = originalToastError;
