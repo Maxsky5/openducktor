@@ -87,10 +87,6 @@ type UseAgentOrchestratorOperationsResult = {
   ) => Promise<AgentSessionTodoItem[]>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
   startAgentSession: (input: StartAgentSessionInput) => Promise<string>;
-  forkAgentSession: (input: {
-    parentSessionId: string;
-    selectedModel?: AgentModelSelection | null;
-  }) => Promise<string>;
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
   stopAgentSession: (sessionId: string) => Promise<void>;
   updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
