@@ -311,14 +311,6 @@ impl BeadsTaskStore {
         repo_path: &Path,
         task_id: &str,
     ) -> Result<TaskMetadata> {
-        let metadata_namespace = self.current_metadata_namespace();
-        let repo_key = Self::repo_key(repo_path);
-        if let Some(metadata) =
-            self.cached_task_metadata(&repo_key, &metadata_namespace, task_id)?
-        {
-            return Ok(metadata);
-        }
-
         let issue = self.show_raw_issue(repo_path, task_id)?;
         Ok(self.parse_task_metadata_from_issue(&issue))
     }
