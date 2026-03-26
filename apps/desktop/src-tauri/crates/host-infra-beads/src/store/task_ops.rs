@@ -9,7 +9,6 @@ impl BeadsTaskStore {
         metadata_namespace: &str,
         seen_task_ids: &mut HashSet<String>,
         tasks: &mut Vec<TaskCard>,
-        metadata_by_task_id: &mut HashMap<String, TaskMetadata>,
     ) -> Result<()> {
         for entry in value
             .as_array()
@@ -21,14 +20,11 @@ impl BeadsTaskStore {
                 continue;
             }
 
-            let task_id = issue.id.clone();
-            if !seen_task_ids.insert(task_id.clone()) {
+            if !seen_task_ids.insert(issue.id.clone()) {
                 continue;
             }
 
-            let metadata = self.parse_task_metadata_from_issue(&issue);
             tasks.push(self.parse_task_card(issue, metadata_namespace)?);
-            metadata_by_task_id.insert(task_id, metadata);
         }
 
         Ok(())
@@ -175,14 +171,7 @@ impl BeadsTaskStore {
 
         let mut tasks = Vec::new();
         let mut seen_task_ids = HashSet::new();
-        let mut metadata_by_task_id = HashMap::new();
-        self.append_raw_issue_list(
-            value,
-            &metadata_namespace,
-            &mut seen_task_ids,
-            &mut tasks,
-            &mut metadata_by_task_id,
-        )?;
+        self.append_raw_issue_list(value, &metadata_namespace, &mut seen_task_ids, &mut tasks)?;
         Self::finalize_task_cards(&mut tasks);
 
         self.cache_task_list_if_generation(
@@ -218,14 +207,12 @@ impl BeadsTaskStore {
 
         let mut tasks = Vec::new();
         let mut seen_task_ids = HashSet::new();
-        let mut metadata_by_task_id = HashMap::new();
 
         self.append_raw_issue_list(
             self.run_bd_json(repo_path, &["list", "--limit", "0"])?,
             &metadata_namespace,
             &mut seen_task_ids,
             &mut tasks,
-            &mut metadata_by_task_id,
         )?;
 
         if done_visible_days > 0 {
@@ -248,7 +235,6 @@ impl BeadsTaskStore {
                 &metadata_namespace,
                 &mut seen_task_ids,
                 &mut tasks,
-                &mut metadata_by_task_id,
             )?;
         }
 
@@ -259,7 +245,6 @@ impl BeadsTaskStore {
             done_visible_days,
             cache_generation,
             &tasks,
-            &metadata_by_task_id,
         )?;
         Ok(tasks)
     }

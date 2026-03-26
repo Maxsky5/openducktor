@@ -1,4 +1,8 @@
-import { defaultSpecTemplateMarkdown, validateSpecMarkdown } from "@openducktor/contracts";
+import {
+  DEFAULT_KANBAN_SETTINGS,
+  defaultSpecTemplateMarkdown,
+  validateSpecMarkdown,
+} from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import type { TaskDocumentPayload } from "../../../types/task-documents";
@@ -91,7 +95,7 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
         queryKey: documentQueryKeys.all,
       });
       await queryClient.invalidateQueries({
-        queryKey: taskQueryKeys.repoData(repo),
+        queryKey: taskQueryKeys.repoData(repo, DEFAULT_KANBAN_SETTINGS.doneVisibleDays),
         exact: true,
       });
       return saved;
@@ -115,7 +119,7 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
         queryKey: documentQueryKeys.all,
       });
       await queryClient.invalidateQueries({
-        queryKey: taskQueryKeys.repoData(repo),
+        queryKey: taskQueryKeys.repoData(repo, DEFAULT_KANBAN_SETTINGS.doneVisibleDays),
         exact: true,
       });
       return saved;
@@ -139,7 +143,7 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
         queryKey: documentQueryKeys.all,
       });
       await queryClient.invalidateQueries({
-        queryKey: taskQueryKeys.repoData(repo),
+        queryKey: taskQueryKeys.repoData(repo, DEFAULT_KANBAN_SETTINGS.doneVisibleDays),
         exact: true,
       });
       return saved;

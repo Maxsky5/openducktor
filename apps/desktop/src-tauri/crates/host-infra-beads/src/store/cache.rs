@@ -16,7 +16,6 @@ pub(super) struct TaskListCacheState {
 #[derive(Clone)]
 pub(super) struct KanbanTaskListCacheEntry {
     pub(super) tasks: Vec<TaskCard>,
-    pub(super) metadata_by_task_id: HashMap<String, TaskMetadata>,
     pub(super) cached_at: Instant,
     pub(super) metadata_namespace: String,
     pub(super) done_visible_days: i32,
@@ -114,7 +113,6 @@ impl BeadsTaskStore {
         done_visible_days: i32,
         generation: u64,
         tasks: &[TaskCard],
-        metadata_by_task_id: &HashMap<String, TaskMetadata>,
     ) -> Result<()> {
         let mut cache = self
             .kanban_task_list_cache
@@ -127,56 +125,11 @@ impl BeadsTaskStore {
 
         state.entry = Some(KanbanTaskListCacheEntry {
             tasks: tasks.to_vec(),
-            metadata_by_task_id: metadata_by_task_id.clone(),
             cached_at: Instant::now(),
             metadata_namespace: metadata_namespace.to_string(),
             done_visible_days,
         });
         Ok(())
-    }
-
-    pub(super) fn cached_task_metadata(
-        &self,
-        repo_key: &str,
-        metadata_namespace: &str,
-        task_id: &str,
-    ) -> Result<Option<TaskMetadata>> {
-        {
-            let mut cache = self
-                .task_list_cache
-                .lock()
-                .map_err(|_| anyhow!("Beads task-list cache lock poisoned"))?;
-            let state = cache.entry(repo_key.to_string()).or_default();
-
-            if let Some(entry) = state.entry.as_ref() {
-                let is_fresh = entry.cached_at.elapsed() <= Self::task_list_cache_ttl();
-                let namespace_matches = entry.metadata_namespace == metadata_namespace;
-                if is_fresh && namespace_matches {
-                    if let Some(metadata) = entry.metadata_by_task_id.get(task_id) {
-                        return Ok(Some(metadata.clone()));
-                    }
-                } else {
-                    state.entry = None;
-                }
-            }
-        }
-
-        let mut kanban_cache = self
-            .kanban_task_list_cache
-            .lock()
-            .map_err(|_| anyhow!("Beads kanban task-list cache lock poisoned"))?;
-        let state = kanban_cache.entry(repo_key.to_string()).or_default();
-        let Some(entry) = state.entry.as_ref() else {
-            return Ok(None);
-        };
-        let is_fresh = entry.cached_at.elapsed() <= Self::task_list_cache_ttl();
-        let namespace_matches = entry.metadata_namespace == metadata_namespace;
-        if !is_fresh || !namespace_matches {
-            state.entry = None;
-            return Ok(None);
-        }
-
-        Ok(entry.metadata_by_task_id.get(task_id).cloned())
     }
     pub(crate) fn invalidate_task_list_cache(&self, repo_path: &Path) -> Result<()> {
         let repo_key = Self::repo_key(repo_path);
