@@ -154,6 +154,7 @@ let latestHarnessValue: {
     pullRequestDraftMode: "manual" | "generate_ai";
     pullRequestAvailable: boolean;
     pullRequestUnavailableReason: string | null;
+    isSubmitting: boolean;
     squashCommitMessage: string;
     squashCommitMessageTouched: boolean;
     hasSuggestedSquashCommitMessage: boolean;
@@ -232,7 +233,7 @@ describe("useTaskApprovalFlow", () => {
             description: "Task description",
           }),
         ],
-        requestPullRequestGeneration: async () => {},
+        requestPullRequestGeneration: async () => undefined,
         refreshTasks: async () => {},
       });
       return null;
@@ -298,7 +299,7 @@ describe("useTaskApprovalFlow", () => {
             description: "Task description",
           }),
         ],
-        requestPullRequestGeneration: async () => {},
+        requestPullRequestGeneration: async () => undefined,
         refreshTasks: async () => {},
       });
       return null;
@@ -368,7 +369,7 @@ describe("useTaskApprovalFlow", () => {
             description: "Task description",
           }),
         ],
-        requestPullRequestGeneration: async () => {},
+        requestPullRequestGeneration: async () => undefined,
         refreshTasks: async () => {},
       });
       return null;
@@ -440,7 +441,7 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue = useTaskApprovalFlow({
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => {},
+        requestPullRequestGeneration: async () => undefined,
         refreshTasks: async () => {},
       });
       return null;
@@ -496,7 +497,7 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue = useTaskApprovalFlow({
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => {},
+        requestPullRequestGeneration: async () => undefined,
         refreshTasks: async () => {},
       });
       return null;
@@ -575,7 +576,7 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue = useTaskApprovalFlow({
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => {},
+        requestPullRequestGeneration: async () => undefined,
         refreshTasks: async () => {},
       });
       return null;
@@ -642,7 +643,7 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue = useTaskApprovalFlow({
         activeRepo: "/repo",
         tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => {},
+        requestPullRequestGeneration: async () => undefined,
         refreshTasks: refreshTasksMock,
       });
       return null;
@@ -673,9 +674,12 @@ describe("useTaskApprovalFlow", () => {
     });
   });
 
-  test("starts pull request generation with a forked builder session", async () => {
+  test("closes the approval modal only after AI pull request generation starts a builder session", async () => {
     const refreshTasksMock = mock(async () => {});
-    const requestPullRequestGenerationMock = mock(async () => {});
+    const requestPullRequestGenerationDeferred = createDeferred<string | undefined>();
+    const requestPullRequestGenerationMock = mock(
+      async () => requestPullRequestGenerationDeferred.promise,
+    );
     taskApprovalContextGetMock.mockResolvedValue({
       taskId: "TASK-1",
       taskStatus: "human_review",
@@ -727,11 +731,87 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
+    expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
+    expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(true);
     expect(requestPullRequestGenerationMock).toHaveBeenCalledWith("TASK-1");
     expect(taskPullRequestUpsertMock).not.toHaveBeenCalled();
     expect(refreshTasksMock).not.toHaveBeenCalled();
     expect(toastSuccessMock).not.toHaveBeenCalled();
+
+    requestPullRequestGenerationDeferred.resolve("builder-session-pr");
+
+    await act(async () => {
+      await requestPullRequestGenerationDeferred.promise;
+      await Promise.resolve();
+    });
+
     expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("keeps the approval modal open when AI pull request generation is cancelled", async () => {
+    const requestPullRequestGenerationMock = mock(async () => undefined);
+    taskApprovalContextGetMock.mockResolvedValue({
+      taskId: "TASK-1",
+      taskStatus: "human_review",
+      workingDirectory: "/repo/.worktrees/task-1",
+      sourceBranch: "odt/TASK-1",
+      targetBranch: { remote: "origin", branch: "main" },
+      publishTarget: { remote: "origin", branch: "main" },
+      defaultMergeMethod: "merge_commit",
+      hasUncommittedChanges: false,
+      uncommittedFileCount: 0,
+      pullRequest: undefined,
+      providers: [
+        {
+          providerId: "github",
+          enabled: true,
+          available: true,
+          reason: undefined,
+        },
+      ],
+    } satisfies TaskApprovalContext as unknown as never);
+
+    const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow({
+        activeRepo: "/repo",
+        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+        requestPullRequestGeneration: requestPullRequestGenerationMock,
+        refreshTasks: async () => {},
+      });
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      latestHarnessValue?.taskApprovalModal?.onModeChange("pull_request");
+      latestHarnessValue?.taskApprovalModal?.onPullRequestDraftModeChange("generate_ai");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      await Promise.resolve();
+    });
+
+    expect(requestPullRequestGenerationMock).toHaveBeenCalledWith("TASK-1");
+    expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
+    expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(false);
+    expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("pull_request");
+    expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBeNull();
+    expect(toastErrorMock).not.toHaveBeenCalled();
+    expect(taskPullRequestUpsertMock).not.toHaveBeenCalled();
 
     await act(async () => {
       await harness.unmount();
@@ -795,6 +875,7 @@ describe("useTaskApprovalFlow", () => {
 
     expect(requestPullRequestGenerationMock).toHaveBeenCalledTimes(1);
     expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
+    expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(false);
     expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("pull_request");
     expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBeNull();
 
