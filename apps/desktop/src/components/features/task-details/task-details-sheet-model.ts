@@ -1,4 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
+import type { AgentRole, AgentScenario } from "@openducktor/core";
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
 
 type TaskWorkflowCallbacks = {
@@ -6,6 +7,13 @@ type TaskWorkflowCallbacks = {
   onQaStart: ((taskId: string) => void) | undefined;
   onQaOpen: ((taskId: string) => void) | undefined;
   onBuild: ((taskId: string) => void) | undefined;
+  onOpenSession?:
+    | ((
+        taskId: string,
+        role: AgentRole,
+        options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+      ) => void)
+    | undefined;
   onDelegate: ((taskId: string) => void) | undefined;
   onDefer: ((taskId: string) => void) | undefined;
   onResumeDeferred: ((taskId: string) => void) | undefined;
@@ -13,6 +21,14 @@ type TaskWorkflowCallbacks = {
   onHumanRequestChanges: ((taskId: string) => void) | undefined;
   onResetImplementation:
     | ((taskId: string, options?: { closeDetailsAfterReset?: boolean }) => void)
+    | undefined;
+};
+
+type TaskWorkflowActionContext = {
+  resolveSessionOptions?:
+    | ((
+        role: AgentRole,
+      ) => { sessionId?: string | null; scenario?: AgentScenario | null } | undefined)
     | undefined;
 };
 
@@ -69,6 +85,7 @@ export const runTaskWorkflowAction = (
   action: TaskWorkflowAction,
   taskId: string | null,
   callbacks: TaskWorkflowCallbacks,
+  context?: TaskWorkflowActionContext,
 ): void => {
   if (!taskId) {
     return;
@@ -84,11 +101,25 @@ export const runTaskWorkflowAction = (
     case "qa_start":
       callbacks.onQaStart?.(taskId);
       return;
+    case "open_spec":
+      callbacks.onOpenSession?.(taskId, "spec", context?.resolveSessionOptions?.("spec"));
+      return;
+    case "open_planner":
+      callbacks.onOpenSession?.(taskId, "planner", context?.resolveSessionOptions?.("planner"));
+      return;
     case "open_qa":
-      callbacks.onQaOpen?.(taskId);
+      if (callbacks.onOpenSession) {
+        callbacks.onOpenSession(taskId, "qa", context?.resolveSessionOptions?.("qa"));
+      } else {
+        callbacks.onQaOpen?.(taskId);
+      }
       return;
     case "open_builder":
-      callbacks.onBuild?.(taskId);
+      if (callbacks.onOpenSession) {
+        callbacks.onOpenSession(taskId, "build", context?.resolveSessionOptions?.("build"));
+      } else {
+        callbacks.onBuild?.(taskId);
+      }
       return;
     case "build_start":
       callbacks.onDelegate?.(taskId);

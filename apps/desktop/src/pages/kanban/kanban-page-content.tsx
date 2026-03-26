@@ -28,9 +28,11 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
               column={column}
               runStateByTaskId={model.runStateByTaskId}
               taskSessionsByTaskId={model.taskSessionsByTaskId}
+              activeTaskSessionContextByTaskId={model.activeTaskSessionContextByTaskId}
               taskActivityStateByTaskId={model.taskActivityStateByTaskId}
               onOpenDetails={model.onOpenDetails}
               onDelegate={model.onDelegate}
+              onOpenSession={model.onOpenSession}
               onPlan={model.onPlan}
               onQaStart={model.onQaStart}
               onQaOpen={model.onQaOpen}

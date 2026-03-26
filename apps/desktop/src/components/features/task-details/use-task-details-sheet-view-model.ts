@@ -1,4 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
+import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
 import {
@@ -58,6 +59,12 @@ type UseTaskDetailsSheetViewModelOptions = {
   onQaStart: TaskDetailsSheetProps["onQaStart"] | undefined;
   onQaOpen: TaskDetailsSheetProps["onQaOpen"] | undefined;
   onBuild: TaskDetailsSheetProps["onBuild"] | undefined;
+  onOpenSession: TaskDetailsSheetProps["onOpenSession"] | undefined;
+  resolveSessionOptionsByRole?:
+    | ((
+        role: AgentRole,
+      ) => { sessionId?: string | null; scenario?: AgentScenario | null } | undefined)
+    | undefined;
   onDelegate: TaskDetailsSheetProps["onDelegate"] | undefined;
   onDefer: TaskDetailsSheetProps["onDefer"] | undefined;
   onResumeDeferred: TaskDetailsSheetProps["onResumeDeferred"] | undefined;
@@ -79,6 +86,8 @@ export function useTaskDetailsSheetViewModel({
   onQaStart,
   onQaOpen,
   onBuild,
+  onOpenSession,
+  resolveSessionOptionsByRole,
   onDelegate,
   onDefer,
   onResumeDeferred,
@@ -126,23 +135,33 @@ export function useTaskDetailsSheetViewModel({
 
   const runWorkflowAction = useCallback(
     (action: TaskWorkflowAction): void => {
-      runTaskWorkflowAction(action, taskId, {
-        onPlan,
-        onQaStart,
-        onQaOpen,
-        onBuild,
-        onDelegate,
-        onDefer,
-        onResumeDeferred,
-        onHumanApprove,
-        onHumanRequestChanges,
-        onResetImplementation,
-      });
+      runTaskWorkflowAction(
+        action,
+        taskId,
+        {
+          onPlan,
+          onQaStart,
+          onQaOpen,
+          onBuild,
+          onOpenSession,
+          onDelegate,
+          onDefer,
+          onResumeDeferred,
+          onHumanApprove,
+          onHumanRequestChanges,
+          onResetImplementation,
+        },
+        {
+          resolveSessionOptions: resolveSessionOptionsByRole,
+        },
+      );
     },
     [
       onBuild,
       onDefer,
       onDelegate,
+      onOpenSession,
+      resolveSessionOptionsByRole,
       onHumanApprove,
       onHumanRequestChanges,
       onPlan,

@@ -19,7 +19,9 @@ describe("taskActionLabel", () => {
 
     expect(taskActionLabel("build_start", task)).toBe("Start Builder");
     expect(taskActionLabel("qa_start", task)).toBe("Request QA Review");
-    expect(taskActionLabel("open_builder", task)).toBe("Open Builder");
+    expect(taskActionLabel("open_builder", task)).toBe("View Builder");
+    expect(taskActionLabel("open_spec", task)).toBe("View Spec");
+    expect(taskActionLabel("open_planner", task)).toBe("View Planner");
     expect(taskActionLabel("defer_issue", task)).toBe("Defer Task");
     expect(taskActionLabel("resume_deferred", task)).toBe("Resume Task");
     expect(taskActionLabel("human_approve", task)).toBe("Approve Task");
@@ -50,7 +52,7 @@ describe("taskActionLabel", () => {
     });
 
     expect(taskActionLabel("build_start", task)).toBe("Address QA Feedbacks");
-    expect(taskActionLabel("open_qa", task)).toBe("Open QA");
+    expect(taskActionLabel("open_qa", task)).toBe("View QA");
   });
 
   test("uses request wording for qa action during human review", () => {

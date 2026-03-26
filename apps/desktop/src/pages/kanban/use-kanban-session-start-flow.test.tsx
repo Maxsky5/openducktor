@@ -512,4 +512,54 @@ describe("useKanbanSessionStartFlow", () => {
 
     await harness.unmount();
   });
+
+  test("onOpenSession uses explicit session id when provided", async () => {
+    const args = createBaseArgs();
+    const harness = createHookHarness(args);
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.onOpenSession("TASK-1", "build", {
+        sessionId: "builder-session-1",
+        scenario: "build_implementation_start",
+      });
+    });
+
+    expect(args.navigate).toHaveBeenCalledWith(
+      "/agents?task=TASK-1&session=builder-session-1&agent=build",
+    );
+
+    await harness.unmount();
+  });
+
+  test("onOpenSession uses latest role session when explicit id is absent", async () => {
+    const args = createBaseArgs();
+    const harness = createHookHarness(args);
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.onOpenSession("TASK-1", "build", { scenario: "build_implementation_start" });
+    });
+
+    expect(args.navigate).toHaveBeenCalledWith(
+      "/agents?task=TASK-1&session=builder-session-2&agent=build",
+    );
+
+    await harness.unmount();
+  });
+
+  test("onOpenSession falls back to agent+scenario when no matching session exists", async () => {
+    const args = createBaseArgs();
+    args.sessions = [];
+    const harness = createHookHarness(args);
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.onOpenSession("TASK-404", "qa", { scenario: "qa_review" });
+    });
+
+    expect(args.navigate).toHaveBeenCalledWith("/agents?task=TASK-404&agent=qa&scenario=qa_review");
+
+    await harness.unmount();
+  });
 });

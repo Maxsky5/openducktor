@@ -1,8 +1,14 @@
 import type { RunSummary } from "@openducktor/contracts";
-import type { KanbanColumn as KanbanColumnData, KanbanColumnId } from "@openducktor/core";
+import type {
+  AgentRole,
+  AgentScenario,
+  KanbanColumn as KanbanColumnData,
+  KanbanColumnId,
+} from "@openducktor/core";
 import { Inbox } from "lucide-react";
 import { type ComponentProps, memo, type ReactElement, useEffect, useRef } from "react";
 import type {
+  ActiveTaskSessionContextByTaskId,
   KanbanTaskActivityState,
   KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
@@ -19,9 +25,15 @@ type KanbanColumnProps = {
   column: KanbanColumnData;
   runStateByTaskId: Map<string, RunSummary["state"]>;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
+  activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
   taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
+  onOpenSession: (
+    taskId: string,
+    role: AgentRole,
+    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+  ) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart?: (taskId: string) => void;
   onQaOpen?: (taskId: string) => void;
@@ -49,6 +61,7 @@ type TaskCardHandlers = Pick<
   KanbanColumnProps,
   | "onOpenDetails"
   | "onDelegate"
+  | "onOpenSession"
   | "onPlan"
   | "onQaStart"
   | "onQaOpen"
@@ -62,11 +75,15 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   task,
   runState,
   taskSessions,
+  hasActiveSession,
+  activeSessionRole,
+  activeSessionPresentationState,
   taskActivityState,
   measurementVersion,
   onMeasuredHeight,
   onOpenDetails,
   onDelegate,
+  onOpenSession,
   onPlan,
   onQaStart,
   onQaOpen,
@@ -78,6 +95,9 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   task: KanbanColumnData["tasks"][number];
   runState: RunSummary["state"] | undefined;
   taskSessions: TaskSessions | undefined;
+  hasActiveSession: boolean;
+  activeSessionRole: AgentRole | undefined;
+  activeSessionPresentationState: KanbanTaskSession["presentationState"] | undefined;
   taskActivityState: KanbanTaskActivityState;
   measurementVersion: number;
   onMeasuredHeight: (taskId: string, height: number) => void;
@@ -108,6 +128,9 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
     taskActivityState,
     taskMeasurementKey,
     taskSessionsMeasurementKey,
+    hasActiveSession ? "active" : "idle",
+    activeSessionRole ?? "",
+    activeSessionPresentationState ?? "",
   ].join("::");
 
   useEffect(() => {
@@ -147,9 +170,12 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
         task={task}
         runState={runState}
         taskSessions={taskSessions}
+        hasActiveSession={hasActiveSession}
+        {...(activeSessionRole ? { activeSessionRole } : {})}
         taskActivityState={taskActivityState}
         onOpenDetails={onOpenDetails}
         onDelegate={onDelegate}
+        onOpenSession={onOpenSession}
         onPlan={onPlan}
         onBuild={onBuild}
         {...(onQaStart ? { onQaStart } : {})}
@@ -209,9 +235,11 @@ export function KanbanColumn({
   column,
   runStateByTaskId,
   taskSessionsByTaskId,
+  activeTaskSessionContextByTaskId,
   taskActivityStateByTaskId,
   onOpenDetails,
   onDelegate,
+  onOpenSession,
   onPlan,
   onQaStart,
   onQaOpen,
@@ -248,29 +276,38 @@ export function KanbanColumn({
               <div style={{ height: renderModel.topSpacerHeight }} />
             ) : null}
             <div className="space-y-3">
-              {renderModel.visibleTasks.map((task) => (
-                <MeasuredTaskCard
-                  key={task.id}
-                  task={task}
-                  runState={runStateByTaskId.get(task.id)}
-                  taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
-                  taskActivityState={getRequiredTaskActivityState(
-                    taskActivityStateByTaskId,
-                    task.id,
-                  )}
-                  measurementVersion={measurementVersion}
-                  onMeasuredHeight={handleMeasuredHeight}
-                  onOpenDetails={onOpenDetails}
-                  onDelegate={onDelegate}
-                  onPlan={onPlan}
-                  onBuild={onBuild}
-                  {...(onQaStart ? { onQaStart } : {})}
-                  {...(onQaOpen ? { onQaOpen } : {})}
-                  {...(onHumanApprove ? { onHumanApprove } : {})}
-                  {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
-                  {...(onResetImplementation ? { onResetImplementation } : {})}
-                />
-              ))}
+              {renderModel.visibleTasks.map((task) =>
+                (() => {
+                  const activeSessionContext = activeTaskSessionContextByTaskId.get(task.id);
+                  return (
+                    <MeasuredTaskCard
+                      key={task.id}
+                      task={task}
+                      runState={runStateByTaskId.get(task.id)}
+                      taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
+                      hasActiveSession={Boolean(activeSessionContext)}
+                      activeSessionRole={activeSessionContext?.role}
+                      activeSessionPresentationState={activeSessionContext?.presentationState}
+                      taskActivityState={getRequiredTaskActivityState(
+                        taskActivityStateByTaskId,
+                        task.id,
+                      )}
+                      measurementVersion={measurementVersion}
+                      onMeasuredHeight={handleMeasuredHeight}
+                      onOpenDetails={onOpenDetails}
+                      onDelegate={onDelegate}
+                      onOpenSession={onOpenSession}
+                      onPlan={onPlan}
+                      onBuild={onBuild}
+                      {...(onQaStart ? { onQaStart } : {})}
+                      {...(onQaOpen ? { onQaOpen } : {})}
+                      {...(onHumanApprove ? { onHumanApprove } : {})}
+                      {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
+                      {...(onResetImplementation ? { onResetImplementation } : {})}
+                    />
+                  );
+                })(),
+              )}
             </div>
             {renderModel.bottomSpacerHeight > 0 ? (
               <div style={{ height: renderModel.bottomSpacerHeight }} />
@@ -280,24 +317,37 @@ export function KanbanColumn({
 
         {column.tasks.length > 0 && !isVirtualized ? (
           <div className="space-y-3">
-            {renderModel.visibleTasks.map((task) => (
-              <KanbanTaskCard
-                key={task.id}
-                task={task}
-                runState={runStateByTaskId.get(task.id)}
-                taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
-                taskActivityState={getRequiredTaskActivityState(taskActivityStateByTaskId, task.id)}
-                onOpenDetails={onOpenDetails}
-                onDelegate={onDelegate}
-                onPlan={onPlan}
-                onBuild={onBuild}
-                {...(onQaStart ? { onQaStart } : {})}
-                {...(onQaOpen ? { onQaOpen } : {})}
-                {...(onHumanApprove ? { onHumanApprove } : {})}
-                {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
-                {...(onResetImplementation ? { onResetImplementation } : {})}
-              />
-            ))}
+            {renderModel.visibleTasks.map((task) =>
+              (() => {
+                const activeSessionContext = activeTaskSessionContextByTaskId.get(task.id);
+                return (
+                  <KanbanTaskCard
+                    key={task.id}
+                    task={task}
+                    runState={runStateByTaskId.get(task.id)}
+                    taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
+                    hasActiveSession={Boolean(activeSessionContext)}
+                    {...(activeSessionContext?.role
+                      ? { activeSessionRole: activeSessionContext.role }
+                      : {})}
+                    taskActivityState={getRequiredTaskActivityState(
+                      taskActivityStateByTaskId,
+                      task.id,
+                    )}
+                    onOpenDetails={onOpenDetails}
+                    onDelegate={onDelegate}
+                    onOpenSession={onOpenSession}
+                    onPlan={onPlan}
+                    onBuild={onBuild}
+                    {...(onQaStart ? { onQaStart } : {})}
+                    {...(onQaOpen ? { onQaOpen } : {})}
+                    {...(onHumanApprove ? { onHumanApprove } : {})}
+                    {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
+                    {...(onResetImplementation ? { onResetImplementation } : {})}
+                  />
+                );
+              })(),
+            )}
           </div>
         ) : null}
       </div>

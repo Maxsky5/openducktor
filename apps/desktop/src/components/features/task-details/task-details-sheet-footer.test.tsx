@@ -67,4 +67,30 @@ describe("TaskDetailsSheetFooter", () => {
 
     unmount();
   });
+
+  test("forwards active and historical session context to workflow action group", async () => {
+    const { TaskDetailsSheetFooter } = await import("./task-details-sheet-footer");
+
+    const { unmount } = render(
+      <TaskDetailsSheetFooter
+        task={createTaskCardFixture({ status: "in_progress", availableActions: ["open_builder"] })}
+        onOpenChange={() => {}}
+        includeActions={["open_builder", "open_spec", "open_planner"]}
+        hasActiveSession
+        activeSessionRole="build"
+        historicalSessionRoles={["spec", "planner"]}
+        onWorkflowAction={() => {}}
+      />,
+    );
+
+    expect(workflowActionGroupRenderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hasActiveSession: true,
+        activeSessionRole: "build",
+        historicalSessionRoles: ["spec", "planner"],
+      }),
+    );
+
+    unmount();
+  });
 });

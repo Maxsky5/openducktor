@@ -699,8 +699,8 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
-  test("kickoff config load failure still reports kickoff error after session start", async () => {
-    workspaceGetSettingsSnapshotMock.mockImplementationOnce(async () => {
+  test("kickoff send failure still reports kickoff error after session start", async () => {
+    sendAgentMessageMock.mockImplementationOnce(async () => {
       throw new Error("config unavailable");
     });
 
@@ -717,7 +717,7 @@ describe("KanbanPage session start modal flow", () => {
     });
 
     expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
-    expect(sendAgentMessageMock).not.toHaveBeenCalled();
+    expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
     expect(latestLocation).toContain("/agents?task=TASK-123");
     await waitForMockCall(toastErrorMock);
     expect(toastErrorMock).toHaveBeenCalledWith("Session started, but kickoff message failed.", {
@@ -1143,7 +1143,8 @@ describe("KanbanPage session start modal flow", () => {
     expect(latestSessionStartModalModel).toBeNull();
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(latestLocation).toContain("/agents?task=TASK-123");
-    expect(latestLocation).toContain("scenario=build_implementation_start");
+    expect(latestLocation).toContain("agent=build");
+    expect(latestLocation).toContain("session=session-build-latest");
 
     await act(async () => {
       renderer.unmount();
@@ -1167,7 +1168,7 @@ describe("KanbanPage session start modal flow", () => {
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(latestLocation).toContain("/agents?task=TASK-123");
     expect(latestLocation).toContain("agent=build");
-    expect(latestLocation).toContain("scenario=build_after_qa_rejected");
+    expect(latestLocation).toContain("session=session-build-latest");
 
     await act(async () => {
       renderer.unmount();
@@ -1186,7 +1187,7 @@ describe("KanbanPage session start modal flow", () => {
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(latestLocation).toContain("/agents?task=TASK-123");
     expect(latestLocation).toContain("agent=build");
-    expect(latestLocation).toContain("scenario=build_after_human_request_changes");
+    expect(latestLocation).toContain("session=session-build-latest");
 
     await act(async () => {
       renderer.unmount();
@@ -1280,7 +1281,8 @@ describe("KanbanPage session start modal flow", () => {
     expect(latestSessionStartModalModel).toBeNull();
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(latestLocation).toContain("/agents?task=TASK-123");
-    expect(latestLocation).toContain("scenario=build_after_human_request_changes");
+    expect(latestLocation).toContain("agent=build");
+    expect(latestLocation).toContain("session=session-build-latest");
 
     await act(async () => {
       renderer.unmount();

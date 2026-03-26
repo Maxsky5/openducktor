@@ -13,6 +13,7 @@
     "preview": "vite preview",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
     "test": "bun test --pass-with-no-tests",
+    "test:kanban-page:isolated": "bun test src/pages/kanban/kanban-page.test.tsx",
     "lint": "biome check src"
   },
   "dependencies": {

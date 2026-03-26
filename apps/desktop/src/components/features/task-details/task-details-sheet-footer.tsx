@@ -1,4 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
+import type { AgentRole } from "@openducktor/core";
 import { PencilLine, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
 import {
@@ -13,6 +14,9 @@ type TaskDetailsSheetFooterProps = {
   onOpenChange: (open: boolean) => void;
   onEdit?: (taskId: string) => void;
   includeActions?: readonly TaskWorkflowAction[];
+  hasActiveSession?: boolean;
+  activeSessionRole?: AgentRole;
+  historicalSessionRoles?: readonly AgentRole[];
   onWorkflowAction?: (action: TaskWorkflowAction) => void;
   onDeleteSelect?: () => void;
 };
@@ -22,12 +26,20 @@ export function TaskDetailsSheetFooter({
   onOpenChange,
   onEdit,
   includeActions,
+  hasActiveSession = false,
+  activeSessionRole,
+  historicalSessionRoles,
   onWorkflowAction,
   onDeleteSelect,
 }: TaskDetailsSheetFooterProps): ReactElement {
   const hasWorkflowAction = Boolean(
     includeActions && onWorkflowAction
-      ? resolveTaskCardActions(task, { include: includeActions }).allActions.length > 0
+      ? resolveTaskCardActions(task, {
+          include: includeActions,
+          hasActiveSession,
+          ...(activeSessionRole ? { activeSessionRole } : {}),
+          ...(historicalSessionRoles ? { historicalSessionRoles } : {}),
+        }).allActions.length > 0
       : false,
   );
 
@@ -49,6 +61,9 @@ export function TaskDetailsSheetFooter({
         <TaskWorkflowActionGroup
           task={task}
           includeActions={includeActions}
+          hasActiveSession={hasActiveSession}
+          {...(activeSessionRole ? { activeSessionRole } : {})}
+          {...(historicalSessionRoles ? { historicalSessionRoles } : {})}
           onAction={onWorkflowAction}
           menuAlign="end"
           className="min-w-[240px] justify-end"

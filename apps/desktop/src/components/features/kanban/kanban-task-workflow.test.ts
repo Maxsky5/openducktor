@@ -175,4 +175,51 @@ describe("resolveTaskCardActions", () => {
 
     expect(result.primaryAction).toBe("resume_deferred");
   });
+
+  test("uses active session role as primary and hides session-creating actions", () => {
+    const task = createTaskCardFixture({
+      status: "in_progress",
+      issueType: "task",
+      availableActions: [
+        "build_start",
+        "set_spec",
+        "set_plan",
+        "qa_start",
+        "open_builder",
+        "open_qa",
+      ],
+    });
+
+    const result = resolveTaskCardActions(task, {
+      hasActiveSession: true,
+      activeSessionRole: "planner",
+      historicalSessionRoles: ["spec", "qa"],
+    });
+
+    expect(result.primaryAction).toBe("open_planner");
+    expect(result.allActions).not.toContain("build_start");
+    expect(result.allActions).not.toContain("set_spec");
+    expect(result.allActions).not.toContain("set_plan");
+    expect(result.allActions).not.toContain("qa_start");
+    expect(result.secondaryActions).toEqual(
+      expect.arrayContaining(["open_spec", "open_qa", "open_builder"]),
+    );
+  });
+
+  test("adds historical role view actions as secondary when there is no active session", () => {
+    const task = createTaskCardFixture({
+      status: "ready_for_dev",
+      issueType: "feature",
+      availableActions: ["build_start", "qa_start"],
+    });
+
+    const result = resolveTaskCardActions(task, {
+      historicalSessionRoles: ["spec", "planner"],
+    });
+
+    expect(result.primaryAction).toBe("build_start");
+    expect(result.secondaryActions).toEqual(
+      expect.arrayContaining(["open_spec", "open_planner", "qa_start"]),
+    );
+  });
 });

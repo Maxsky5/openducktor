@@ -1,7 +1,9 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
+import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { mapToKanbanColumns } from "@openducktor/core";
 import { useMemo } from "react";
 import {
+  type ActiveTaskSessionContext,
   type KanbanTaskActivityState,
   type KanbanTaskSession,
   toKanbanSessionPresentationState,
@@ -64,6 +66,62 @@ const compareTaskSessionOrder = (left: AgentSessionState, right: AgentSessionSta
     return 0;
   }
   return left.sessionId > right.sessionId ? -1 : 1;
+};
+
+const rankActiveSessionForPrimary = (session: AgentSessionState): number => {
+  const presentationState = toKanbanSessionPresentationState(session);
+  if (presentationState === "waiting_input") {
+    return 2;
+  }
+  if (session.status === "running") {
+    return 0;
+  }
+  if (session.status === "starting") {
+    return 1;
+  }
+  return 2;
+};
+
+const comparePrimaryTaskSession = (left: AgentSessionState, right: AgentSessionState): number => {
+  const leftRank = rankActiveSessionForPrimary(left);
+  const rightRank = rankActiveSessionForPrimary(right);
+  if (leftRank !== rightRank) {
+    return leftRank - rightRank;
+  }
+  if (left.startedAt !== right.startedAt) {
+    return left.startedAt > right.startedAt ? -1 : 1;
+  }
+  if (left.sessionId === right.sessionId) {
+    return 0;
+  }
+  return left.sessionId > right.sessionId ? -1 : 1;
+};
+
+export const buildActiveTaskSessionContextByTaskId = (
+  sessions: AgentSessionState[],
+): Map<string, ActiveTaskSessionContext> => {
+  const activeTaskSessionContextByTaskId = new Map<string, AgentSessionState>();
+
+  for (const session of sessions) {
+    if (!shouldDisplayKanbanTaskSession(session)) {
+      continue;
+    }
+
+    const current = activeTaskSessionContextByTaskId.get(session.taskId);
+    if (!current || comparePrimaryTaskSession(session, current) < 0) {
+      activeTaskSessionContextByTaskId.set(session.taskId, session);
+    }
+  }
+
+  return new Map(
+    Array.from(activeTaskSessionContextByTaskId.entries()).map(([taskId, session]) => [
+      taskId,
+      {
+        role: session.role,
+        presentationState: toKanbanSessionPresentationState(session),
+      },
+    ]),
+  );
 };
 
 export const buildRunStateByTaskId = (runs: RunSummary[]): Map<string, RunSummary["state"]> => {
@@ -161,6 +219,7 @@ export const buildTaskSessionsByTaskId = (
         role: session.role,
         scenario: session.scenario,
         status: session.status,
+        startedAt: session.startedAt,
         presentationState: toKanbanSessionPresentationState(session),
       })),
     ]),
@@ -175,6 +234,11 @@ type UseKanbanBoardModelArgs = {
   sessions: AgentSessionState[];
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
+  onOpenSession: (
+    taskId: string,
+    role: AgentRole,
+    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+  ) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
   onQaOpen: (taskId: string) => void;
@@ -192,6 +256,7 @@ export function useKanbanBoardModel({
   sessions,
   onOpenDetails,
   onDelegate,
+  onOpenSession,
   onPlan,
   onQaStart,
   onQaOpen,
@@ -205,6 +270,11 @@ export function useKanbanBoardModel({
   const runStateByTaskId = useMemo(() => buildRunStateByTaskId(runs), [runs]);
 
   const taskSessionsByTaskId = useMemo(() => buildTaskSessionsByTaskId(sessions), [sessions]);
+
+  const activeTaskSessionContextByTaskId = useMemo(
+    () => buildActiveTaskSessionContextByTaskId(sessions),
+    [sessions],
+  );
 
   const taskActivityStateByTaskId = useMemo(
     () => buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId),
@@ -226,9 +296,11 @@ export function useKanbanBoardModel({
     columns: columnsWithSortedTasks,
     runStateByTaskId,
     taskSessionsByTaskId,
+    activeTaskSessionContextByTaskId,
     taskActivityStateByTaskId,
     onOpenDetails,
     onDelegate,
+    onOpenSession,
     onPlan,
     onQaStart,
     onQaOpen,

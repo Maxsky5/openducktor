@@ -1,4 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
+import type { AgentRole, AgentScenario } from "@openducktor/core";
 import {
   forwardRef,
   type ReactElement,
@@ -7,6 +8,10 @@ import {
   useMemo,
   useState,
 } from "react";
+import type {
+  ActiveTaskSessionContextByTaskId,
+  KanbanTaskSession,
+} from "@/components/features/kanban/kanban-task-activity";
 import { TaskDetailsSheet } from "./task-details-sheet";
 import type { TaskDetailsSheetProps } from "./task-details-sheet-types";
 
@@ -20,6 +25,13 @@ type TaskDetailsSheetControllerProps = Omit<
   "task" | "open" | "onOpenChange"
 > & {
   allTasks: TaskCard[];
+  taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
+  activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
+  onOpenSession: (
+    taskId: string,
+    role: AgentRole,
+    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+  ) => void;
 };
 
 export const TaskDetailsSheetController = forwardRef<
@@ -30,7 +42,10 @@ export const TaskDetailsSheetController = forwardRef<
     activeRepo = null,
     allTasks,
     runs,
+    taskSessionsByTaskId,
+    activeTaskSessionContextByTaskId,
     workflowActionsEnabled,
+    onOpenSession,
     onPlan,
     onQaStart,
     onQaOpen,
@@ -77,12 +92,25 @@ export const TaskDetailsSheetController = forwardRef<
     }
   }, [task, taskId]);
 
+  const selectedTaskSessions = taskId ? (taskSessionsByTaskId.get(taskId) ?? []) : [];
+  const selectedActiveSessionContext = taskId
+    ? activeTaskSessionContextByTaskId.get(taskId)
+    : undefined;
+
   return (
     <TaskDetailsSheet
       activeRepo={activeRepo}
       task={task}
       allTasks={allTasks}
       runs={runs}
+      taskSessions={selectedTaskSessions}
+      hasActiveSession={Boolean(selectedActiveSessionContext)}
+      {...(selectedActiveSessionContext?.role
+        ? { activeSessionRole: selectedActiveSessionContext.role }
+        : {})}
+      {...(selectedActiveSessionContext?.presentationState
+        ? { activeSessionPresentationState: selectedActiveSessionContext.presentationState }
+        : {})}
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
@@ -94,6 +122,7 @@ export const TaskDetailsSheetController = forwardRef<
       {...(onQaStart ? { onQaStart } : {})}
       {...(onQaOpen ? { onQaOpen } : {})}
       {...(onBuild ? { onBuild } : {})}
+      onOpenSession={onOpenSession}
       {...(onDelegate ? { onDelegate } : {})}
       {...(onEdit ? { onEdit } : {})}
       {...(onDefer ? { onDefer } : {})}

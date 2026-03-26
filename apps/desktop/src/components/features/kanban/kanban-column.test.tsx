@@ -63,10 +63,12 @@ describe("KanbanColumn", () => {
           runStateByTaskId: new Map(),
           taskSessionsByTaskId,
           taskActivityStateByTaskId,
+          activeTaskSessionContextByTaskId: new Map(),
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
           onBuild: noop,
+          onOpenSession: noop,
         }),
       ),
     );
