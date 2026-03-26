@@ -148,7 +148,7 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
-  test("uses detached tab context instead of query role selection", async () => {
+  test("uses detached tab workflow default role instead of query role selection", async () => {
     const updateQuery = mock(() => {});
     const clearComposerInput = mock(() => {});
     const harness = createHookHarness(
@@ -170,10 +170,17 @@ describe("useAgentStudioSelectionController", () => {
 
       const latest = harness.getLatest();
       expect(latest.viewTaskId).toBe("task-2");
-      expect(latest.viewRole).toBe("spec");
-      expect(latest.viewScenario).toBe("spec_initial");
+      expect(latest.viewRole).toBe("build");
+      expect(latest.viewScenario).toBe("build_implementation_start");
       expect(clearComposerInput).toHaveBeenCalledTimes(1);
       expect(updateQuery).toHaveBeenCalledTimes(1);
+      expect(updateQuery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          task: "task-2",
+          session: undefined,
+          agent: undefined,
+        }),
+      );
     } finally {
       await harness.unmount();
     }
@@ -274,6 +281,155 @@ describe("useAgentStudioSelectionController", () => {
       const latest = harness.getLatest();
       const task1Tab = latest.taskTabs.find((tab) => tab.taskId === "task-1");
       expect(task1Tab?.status).toBe("idle");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("defaults to build role for open task even when only optional-role session exists", async () => {
+    const specSession = createSession("task-1", "session-spec", {
+      role: "spec",
+      scenario: "spec_initial",
+      startedAt: "2026-02-22T11:00:00.000Z",
+      status: "idle",
+    });
+
+    const openTask = createTaskCardFixture({
+      id: "task-1",
+      title: "task-1",
+      status: "open",
+      issueType: "task",
+      agentWorkflows: {
+        spec: { required: false, canSkip: true, available: true, completed: false },
+        planner: { required: false, canSkip: true, available: true, completed: false },
+        builder: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: false, canSkip: true, available: false, completed: false },
+      },
+    });
+
+    const harness = createHookHarness(
+      createBaseArgs({
+        tasks: [openTask, createTask("task-2")],
+        sessions: [specSession],
+        taskIdParam: "task-1",
+        hasExplicitRoleParam: false,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      const latest = harness.getLatest();
+
+      expect(latest.viewActiveSession).toBeNull();
+      expect(latest.viewRole).toBe("build");
+      expect(latest.viewScenario).toBe("build_implementation_start");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps human_review task pinned to build session when newer qa session appears", async () => {
+    const humanReviewTask = createTaskCardFixture({
+      id: "task-1",
+      title: "task-1",
+      status: "human_review",
+    });
+    const initialBuildSession = createSession("task-1", "session-build", {
+      role: "build",
+      scenario: "build_implementation_start",
+      startedAt: "2026-02-22T10:00:00.000Z",
+      status: "idle",
+    });
+    const newerQaSession = createSession("task-1", "session-qa", {
+      role: "qa",
+      scenario: "qa_review",
+      startedAt: "2026-02-22T11:00:00.000Z",
+      status: "idle",
+    });
+
+    const harness = createHookHarness(
+      createBaseArgs({
+        tasks: [humanReviewTask, createTask("task-2")],
+        sessions: [initialBuildSession],
+        taskIdParam: "task-1",
+        sessionParam: null,
+        hasExplicitRoleParam: false,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().viewActiveSession?.sessionId).toBe("session-build");
+      expect(harness.getLatest().viewRole).toBe("build");
+
+      await harness.update(
+        createBaseArgs({
+          tasks: [humanReviewTask, createTask("task-2")],
+          sessions: [newerQaSession, initialBuildSession],
+          taskIdParam: "task-1",
+          sessionParam: null,
+          hasExplicitRoleParam: false,
+        }),
+      );
+
+      expect(harness.getLatest().viewActiveSession?.sessionId).toBe("session-build");
+      expect(harness.getLatest().viewRole).toBe("build");
+      expect(harness.getLatest().viewScenario).toBe("build_implementation_start");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps human_review view stable on query role changes when session is not explicit", async () => {
+    const humanReviewTask = createTaskCardFixture({
+      id: "task-1",
+      title: "task-1",
+      status: "human_review",
+    });
+    const buildSession = createSession("task-1", "session-build", {
+      role: "build",
+      scenario: "build_implementation_start",
+      startedAt: "2026-02-22T10:00:00.000Z",
+      status: "idle",
+    });
+    const qaSession = createSession("task-1", "session-qa", {
+      role: "qa",
+      scenario: "qa_review",
+      startedAt: "2026-02-22T11:00:00.000Z",
+      status: "idle",
+    });
+
+    const harness = createHookHarness(
+      createBaseArgs({
+        tasks: [humanReviewTask, createTask("task-2")],
+        sessions: [qaSession, buildSession],
+        taskIdParam: "task-1",
+        sessionParam: null,
+        hasExplicitRoleParam: false,
+        roleFromQuery: "build",
+      }),
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().viewActiveSession?.sessionId).toBe("session-build");
+      expect(harness.getLatest().viewRole).toBe("build");
+
+      await harness.update(
+        createBaseArgs({
+          tasks: [humanReviewTask, createTask("task-2")],
+          sessions: [qaSession, buildSession],
+          taskIdParam: "task-1",
+          sessionParam: null,
+          hasExplicitRoleParam: false,
+          roleFromQuery: "qa",
+        }),
+      );
+
+      expect(harness.getLatest().viewActiveSession?.sessionId).toBe("session-build");
+      expect(harness.getLatest().viewRole).toBe("build");
+      expect(harness.getLatest().viewScenario).toBe("build_implementation_start");
     } finally {
       await harness.unmount();
     }

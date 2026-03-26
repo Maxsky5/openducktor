@@ -1,5 +1,4 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import { startTransition, useCallback, useMemo, useState } from "react";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -7,57 +6,16 @@ import {
   AGENT_STUDIO_QUERY_KEYS,
   type AgentStudioQueryUpdate as QueryUpdate,
 } from "./agent-studio-navigation";
-import {
-  buildRoleEnabledMapForTask,
-  buildTaskTabs,
-  getAvailableTabTasks,
-} from "./agents-page-session-tabs";
+import { buildTaskTabs, getAvailableTabTasks } from "./agents-page-session-tabs";
 import { useTaskTabActions } from "./use-agent-studio-task-tabs-actions";
 import { useTaskTabPersistence } from "./use-agent-studio-task-tabs-persistence";
 import { useTaskTabSelection } from "./use-agent-studio-task-tabs-selection";
 
-type TaskByIdMap = ReadonlyMap<string, TaskCard>;
-
-const resolveDefaultRoleForTask = (task: TaskCard | null): AgentRole => {
-  const roleEnabledByTask = buildRoleEnabledMapForTask(task);
-  if (roleEnabledByTask.spec) {
-    return "spec";
-  }
-  if (roleEnabledByTask.planner) {
-    return "planner";
-  }
-  if (roleEnabledByTask.build) {
-    return "build";
-  }
-  if (roleEnabledByTask.qa) {
-    return "qa";
-  }
-  return "spec";
-};
-
-const toTaskQueryUpdate = (params: {
-  taskId: string;
-  latestSessionByTaskId: ReadonlyMap<string, AgentSessionState>;
-  taskById: TaskByIdMap;
-}): QueryUpdate => {
-  const sessionForTask = params.latestSessionByTaskId.get(params.taskId);
-  if (sessionForTask) {
-    return {
-      [AGENT_STUDIO_QUERY_KEYS.task]: sessionForTask.taskId,
-      [AGENT_STUDIO_QUERY_KEYS.session]: sessionForTask.sessionId,
-      [AGENT_STUDIO_QUERY_KEYS.agent]: sessionForTask.role,
-      [AGENT_STUDIO_QUERY_KEYS.scenario]: undefined,
-      [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
-      [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
-    };
-  }
-
-  const nextTask = params.taskById.get(params.taskId) ?? null;
-  const nextRole = resolveDefaultRoleForTask(nextTask);
+const toTaskQueryUpdate = (taskId: string): QueryUpdate => {
   return {
-    [AGENT_STUDIO_QUERY_KEYS.task]: params.taskId,
+    [AGENT_STUDIO_QUERY_KEYS.task]: taskId,
     [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
-    [AGENT_STUDIO_QUERY_KEYS.agent]: nextRole,
+    [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
     [AGENT_STUDIO_QUERY_KEYS.scenario]: undefined,
     [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
     [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
@@ -121,10 +79,6 @@ export function useAgentStudioTaskTabs(args: {
     [updateQuery],
   );
 
-  const taskById = useMemo<TaskByIdMap>(
-    () => new Map(tasks.map((task): [string, TaskCard] => [task.id, task])),
-    [tasks],
-  );
   const selectableTaskIds = useMemo(
     () => new Set(tasks.filter((task) => task.status !== "closed").map((task) => task.id)),
     [tasks],
@@ -136,15 +90,9 @@ export function useAgentStudioTaskTabs(args: {
 
   const navigateToTask = useCallback(
     (nextTaskId: string) => {
-      deferQueryUpdate(
-        toTaskQueryUpdate({
-          taskId: nextTaskId,
-          latestSessionByTaskId,
-          taskById,
-        }),
-      );
+      deferQueryUpdate(toTaskQueryUpdate(nextTaskId));
     },
-    [deferQueryUpdate, latestSessionByTaskId, taskById],
+    [deferQueryUpdate],
   );
 
   const clearTaskSelection = useCallback((): void => {

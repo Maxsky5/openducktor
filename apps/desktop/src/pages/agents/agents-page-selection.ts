@@ -5,10 +5,11 @@ export {
 } from "@/features/session-start";
 
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { compareAgentSessionRecency } from "@/lib/agent-session-options";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { firstScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
 
 export {
   toContextStorageKey,
@@ -64,19 +65,62 @@ export const resolveAgentStudioTaskId = ({
   return taskIdParam || selectedSessionById?.taskId || "";
 };
 
-export const resolveAgentStudioActiveSession = ({
+export const resolveAgentStudioDefaultRoleForTask = (task: TaskCard | null): AgentRole | null => {
+  if (!task) {
+    return null;
+  }
+
+  if (task.status === "open") {
+    const roleWorkflowMap = buildRoleWorkflowMapForTask(task);
+    const orderedRoles: AgentRole[] = ["spec", "planner", "build", "qa"];
+    for (const role of orderedRoles) {
+      const workflow = roleWorkflowMap[role];
+      if (workflow.required && workflow.available) {
+        return role;
+      }
+    }
+    return null;
+  }
+
+  if (task.status === "spec_ready") {
+    return "spec";
+  }
+
+  if (task.status === "ready_for_dev") {
+    return "planner";
+  }
+
+  if (
+    task.status === "in_progress" ||
+    task.status === "ai_review" ||
+    task.status === "human_review" ||
+    task.status === "blocked" ||
+    task.status === "deferred" ||
+    task.status === "closed"
+  ) {
+    return "build";
+  }
+
+  return null;
+};
+
+export const resolveAgentStudioSessionSelection = ({
   sessionsForTask,
   sessionParam,
   hasExplicitRoleParam,
   roleFromQuery,
   selectedTask,
+  fallbackRole,
+  scenarioFromQuery,
 }: {
   sessionsForTask: AgentSessionState[];
   sessionParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   selectedTask: TaskCard | null;
-}): AgentSessionState | null => {
+  fallbackRole: AgentRole;
+  scenarioFromQuery?: AgentScenario | null;
+}): { activeSession: AgentSessionState | null; role: AgentRole; scenario: AgentScenario } => {
   const activeSession = sessionsForTask.find(
     (session) => session.status === "running" || session.status === "starting",
   );
@@ -88,53 +132,69 @@ export const resolveAgentStudioActiveSession = ({
     return roleSessions[0] ?? null;
   };
 
-  const resolveDefaultRoleForOpenTask = (task: TaskCard): AgentRole | null => {
-    const roleWorkflowMap = buildRoleWorkflowMapForTask(task);
-    const orderedRoles: AgentRole[] = ["spec", "planner", "build", "qa"];
-    for (const role of orderedRoles) {
-      const workflow = roleWorkflowMap[role];
-      if (workflow.required && workflow.available) {
-        return role;
-      }
-    }
-    return null;
+  const toSelection = (role: AgentRole, session: AgentSessionState | null) => {
+    const roleScenarios = SCENARIOS_BY_ROLE[role];
+    const explicitScenarioForRole =
+      hasExplicitRoleParam && scenarioFromQuery && roleScenarios.includes(scenarioFromQuery)
+        ? scenarioFromQuery
+        : null;
+
+    const scenario =
+      session?.scenario && roleScenarios.includes(session.scenario)
+        ? session.scenario
+        : (explicitScenarioForRole ?? firstScenario(role));
+
+    return {
+      activeSession: session,
+      role,
+      scenario,
+    };
   };
 
   if (sessionParam) {
-    return sessionsForTask.find((entry) => entry.sessionId === sessionParam) ?? null;
+    const explicitSession =
+      sessionsForTask.find((entry) => entry.sessionId === sessionParam) ?? null;
+    if (explicitSession) {
+      return toSelection(explicitSession.role, explicitSession);
+    }
+    return toSelection(fallbackRole, null);
   }
 
   if (hasExplicitRoleParam) {
-    return sessionsForTask.find((entry) => entry.role === roleFromQuery) ?? null;
+    return toSelection(roleFromQuery, latestSessionByRole(roleFromQuery));
   }
 
   if (activeSession) {
-    return activeSession;
+    return toSelection(activeSession.role, activeSession);
   }
 
   if (!selectedTask) {
-    return null;
+    return toSelection(fallbackRole, null);
   }
+
+  const defaultRole = resolveAgentStudioDefaultRoleForTask(selectedTask);
+
+  const withRoleFallback = (session: AgentSessionState | null) =>
+    toSelection(session?.role ?? defaultRole ?? fallbackRole, session);
 
   switch (selectedTask.status) {
     case "open": {
-      const defaultRole = resolveDefaultRoleForOpenTask(selectedTask);
-      return defaultRole ? latestSessionByRole(defaultRole) : null;
+      return withRoleFallback(defaultRole ? latestSessionByRole(defaultRole) : null);
     }
     case "spec_ready":
-      return latestSessionByRole("spec");
+      return withRoleFallback(latestSessionByRole("spec"));
     case "ready_for_dev":
-      return latestSessionByRole("planner") ?? latestSessionByRole("spec");
+      return withRoleFallback(latestSessionByRole("planner") ?? latestSessionByRole("spec"));
     case "in_progress":
     case "ai_review":
     case "human_review":
-      return latestSessionByRole("build");
+      return withRoleFallback(latestSessionByRole("build"));
     case "blocked":
     case "deferred":
     case "closed":
-      return latestSessionByRole("build") ?? sessionsForTask[0] ?? null;
+      return withRoleFallback(latestSessionByRole("build") ?? sessionsForTask[0] ?? null);
     default:
-      return null;
+      return toSelection(defaultRole ?? fallbackRole, null);
   }
 };
 

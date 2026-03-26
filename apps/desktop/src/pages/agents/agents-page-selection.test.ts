@@ -7,14 +7,29 @@ import {
   extractCompletionTimestamp,
   isSameSelection,
   pickDefaultVisibleSelectionForCatalog,
-  resolveAgentStudioActiveSession,
   resolveAgentStudioBuilderSessionForTask,
   resolveAgentStudioBuilderSessionsForTask,
+  resolveAgentStudioDefaultRoleForTask,
+  resolveAgentStudioSessionSelection,
   resolveAgentStudioTaskId,
   toContextStorageKey,
   toRightPanelStorageKey,
   toTabsStorageKey,
 } from "./agents-page-selection";
+
+const resolveAgentStudioActiveSession = (args: {
+  sessionsForTask: Parameters<typeof resolveAgentStudioSessionSelection>[0]["sessionsForTask"];
+  sessionParam: string | null;
+  hasExplicitRoleParam: boolean;
+  roleFromQuery: Parameters<typeof resolveAgentStudioSessionSelection>[0]["roleFromQuery"];
+  selectedTask: Parameters<typeof resolveAgentStudioSessionSelection>[0]["selectedTask"];
+}) => {
+  return resolveAgentStudioSessionSelection({
+    ...args,
+    fallbackRole: args.roleFromQuery,
+    scenarioFromQuery: null,
+  }).activeSession;
+};
 
 const catalogFixture: AgentModelCatalog = {
   models: [
@@ -164,6 +179,21 @@ describe("agents-page-selection", () => {
         selectedSessionById: session,
       }),
     ).toBe("task-from-session");
+  });
+
+  test("resolves default role for open tasks from first required available workflow", () => {
+    const task = createTaskCardFixture({
+      id: "task-1",
+      status: "open",
+      agentWorkflows: {
+        spec: { required: false, canSkip: true, available: true, completed: false },
+        planner: { required: false, canSkip: true, available: true, completed: false },
+        builder: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: false, canSkip: true, available: false, completed: false },
+      },
+    });
+
+    expect(resolveAgentStudioDefaultRoleForTask(task)).toBe("build");
   });
 
   test("keeps active session unresolved when explicit session param does not belong to active task", () => {
@@ -464,6 +494,45 @@ describe("agents-page-selection", () => {
     });
 
     expect(resolved).toBeNull();
+  });
+
+  test("resolves role from workflow default even when no session exists", () => {
+    const selection = resolveAgentStudioSessionSelection({
+      sessionsForTask: [],
+      sessionParam: null,
+      hasExplicitRoleParam: false,
+      roleFromQuery: "spec",
+      selectedTask: createTaskCardFixture({ id: "task-1", status: "human_review" }),
+      fallbackRole: "spec",
+    });
+
+    expect(selection.activeSession).toBeNull();
+    expect(selection.role).toBe("build");
+    expect(selection.scenario).toBe("build_implementation_start");
+  });
+
+  test("keeps explicit session authority over task-status defaults", () => {
+    const qaSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "qa-1",
+      taskId: "task-1",
+      role: "qa",
+      scenario: "qa_review",
+      startedAt: "2026-02-22T12:00:00.000Z",
+    });
+
+    const selection = resolveAgentStudioSessionSelection({
+      sessionsForTask: [qaSession],
+      sessionParam: "qa-1",
+      hasExplicitRoleParam: false,
+      roleFromQuery: "build",
+      selectedTask: createTaskCardFixture({ id: "task-1", status: "human_review" }),
+      fallbackRole: "build",
+    });
+
+    expect(selection.activeSession?.sessionId).toBe("qa-1");
+    expect(selection.role).toBe("qa");
+    expect(selection.scenario).toBe("qa_review");
   });
 
   test("prefers the current build session when resolving conflict reuse", () => {
