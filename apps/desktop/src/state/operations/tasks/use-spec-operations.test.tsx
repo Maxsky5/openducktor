@@ -1,7 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import { defaultSpecTemplateMarkdown } from "@openducktor/contracts";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
+import { documentQueryKeys } from "@/state/queries/documents";
+import { taskQueryKeys } from "@/state/queries/tasks";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { host } from "../shared/host";
 import { useSpecOperations } from "./use-spec-operations";
@@ -208,6 +211,102 @@ describe("use-spec-operations", () => {
       host.qaGetReport = original.qaGetReport;
       host.saveSpecDocument = original.saveSpecDocument;
       host.savePlanDocument = original.savePlanDocument;
+    }
+  });
+
+  test("invalidates all task-document caches and task list cache after document saves", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+        },
+      },
+    });
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    let latest: HookResult | null = null;
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useSpecOperations(args);
+      return null;
+    };
+
+    const harness = createSharedHookHarness(
+      Harness,
+      { args: { activeRepo: "/repo-a" } },
+      { wrapper },
+    );
+
+    const saveSpecDocument = mock(async () => ({ updatedAt: "2026-02-22T10:03:00.000Z" }));
+    const savePlanDocument = mock(async () => ({ updatedAt: "2026-02-22T10:04:00.000Z" }));
+    const original = {
+      saveSpecDocument: host.saveSpecDocument,
+      savePlanDocument: host.savePlanDocument,
+    };
+    host.saveSpecDocument = saveSpecDocument;
+    host.savePlanDocument = savePlanDocument;
+
+    queryClient.setQueryData(documentQueryKeys.spec("/repo-a", "task-1"), {
+      markdown: "# Old spec",
+      updatedAt: "2026-02-22T10:00:00.000Z",
+    });
+    queryClient.setQueryData(["task-documents", "spec", "", "task-1"], {
+      markdown: "# Old spec (empty scope key)",
+      updatedAt: "2026-02-22T10:00:00.000Z",
+    });
+    queryClient.setQueryData(documentQueryKeys.plan("/repo-a", "task-1"), {
+      markdown: "# Old plan",
+      updatedAt: "2026-02-22T10:00:00.000Z",
+    });
+    queryClient.setQueryData(["task-documents", "plan", "", "task-1"], {
+      markdown: "# Old plan (empty scope key)",
+      updatedAt: "2026-02-22T10:00:00.000Z",
+    });
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), {
+      tasks: [],
+      runs: [],
+    });
+
+    try {
+      await harness.mount();
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+
+      await harness.run(async () => {
+        await latest?.saveSpecDocument("task-1", "# New spec");
+        await latest?.savePlanDocument("task-1", "# New plan");
+      });
+
+      const cachedSpec = queryClient.getQueryData<{
+        markdown: string;
+        updatedAt: string | null;
+      }>(documentQueryKeys.spec("/repo-a", "task-1"));
+      const cachedPlan = queryClient.getQueryData<{
+        markdown: string;
+        updatedAt: string | null;
+      }>(documentQueryKeys.plan("/repo-a", "task-1"));
+
+      expect(cachedSpec?.markdown).toBe("# New spec");
+      expect(cachedSpec?.updatedAt).toBe("2026-02-22T10:03:00.000Z");
+      expect(cachedPlan?.markdown).toBe("# New plan");
+      expect(cachedPlan?.updatedAt).toBe("2026-02-22T10:04:00.000Z");
+
+      expect(
+        queryClient.getQueryState(["task-documents", "spec", "", "task-1"])?.isInvalidated,
+      ).toBe(true);
+      expect(
+        queryClient.getQueryState(["task-documents", "plan", "", "task-1"])?.isInvalidated,
+      ).toBe(true);
+      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a"))?.isInvalidated).toBe(
+        true,
+      );
+    } finally {
+      await harness.unmount();
+      host.saveSpecDocument = original.saveSpecDocument;
+      host.savePlanDocument = original.savePlanDocument;
+      queryClient.clear();
     }
   });
 });

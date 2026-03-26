@@ -7,6 +7,7 @@ import {
   loadQaReportDocumentFromQuery,
   loadSpecDocumentFromQuery,
 } from "../../queries/documents";
+import { taskQueryKeys } from "../../queries/tasks";
 import { host } from "../shared/host";
 import { requireActiveRepo } from "./task-operations-model";
 
@@ -85,8 +86,16 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
         taskId,
         markdown,
       });
+      queryClient.setQueryData(documentQueryKeys.spec(repo, taskId), {
+        markdown,
+        updatedAt: saved.updatedAt,
+      });
       await queryClient.invalidateQueries({
-        queryKey: documentQueryKeys.spec(repo, taskId),
+        queryKey: documentQueryKeys.all,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: taskQueryKeys.repoData(repo),
+        exact: true,
       });
       return saved;
     },
@@ -101,8 +110,16 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
         taskId,
         markdown,
       });
+      queryClient.setQueryData(documentQueryKeys.plan(repo, taskId), {
+        markdown,
+        updatedAt: saved.updatedAt,
+      });
       await queryClient.invalidateQueries({
-        queryKey: documentQueryKeys.plan(repo, taskId),
+        queryKey: documentQueryKeys.all,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: taskQueryKeys.repoData(repo),
+        exact: true,
       });
       return saved;
     },
