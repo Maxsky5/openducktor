@@ -4,7 +4,9 @@ use host_domain::{
     QaReportDocument, QaVerdict, SpecDocument, TaskCard, TaskMetadata, TaskStatus, TaskStore,
     UpdateTaskPatch,
 };
-use host_infra_system::{compute_repo_slug, resolve_central_beads_dir};
+use host_infra_system::{
+    compute_beads_database_name, compute_repo_slug, resolve_central_beads_dir,
+};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fmt;

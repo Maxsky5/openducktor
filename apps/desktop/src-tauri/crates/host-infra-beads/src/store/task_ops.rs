@@ -37,10 +37,19 @@ impl BeadsTaskStore {
         init_failure_reason: &str,
     ) -> Result<()> {
         let slug = compute_repo_slug(repo_path);
+        let database_name = compute_beads_database_name(repo_path, beads_dir)?;
         let beads_dir_env = beads_dir.to_string_lossy().to_string();
         let (ok, _stdout, stderr) = self.command_runner.run_allow_failure_with_env(
             "bd",
-            &["init", "--quiet", "--skip-hooks", "--prefix", slug.as_str()],
+            &[
+                "init",
+                "--quiet",
+                "--skip-hooks",
+                "--prefix",
+                slug.as_str(),
+                "--database",
+                database_name.as_str(),
+            ],
             Some(repo_path),
             &[("BEADS_DIR", beads_dir_env.as_str())],
         )?;

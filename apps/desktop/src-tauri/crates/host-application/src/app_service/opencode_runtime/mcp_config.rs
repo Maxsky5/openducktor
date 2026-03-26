@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use host_infra_system::{resolve_central_beads_dir, resolve_command_path};
+use host_infra_system::{parse_user_path, resolve_central_beads_dir, resolve_command_path};
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
@@ -48,10 +48,10 @@ pub(crate) fn find_openducktor_workspace_root(start: &Path) -> Result<PathBuf> {
 pub(crate) fn default_mcp_workspace_root() -> Result<String> {
     let from_env = std::env::var("OPENDUCKTOR_WORKSPACE_ROOT")
         .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
+        .map(|value| parse_user_path(value.as_str()))
+        .transpose()?;
     if let Some(root) = from_env {
-        return Ok(root);
+        return Ok(root.to_string_lossy().to_string());
     }
 
     let compiled_path = Path::new(env!("CARGO_MANIFEST_DIR"));

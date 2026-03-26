@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   bundledCommandCandidates,
   commandEnvOverrideName,
+  computeBeadsDatabaseName,
   resolveBundledCommandPath,
   resolveCommandExecutable,
 } from "./beads-runtime";
@@ -109,5 +110,21 @@ describe("beads runtime command resolution", () => {
     setExecPath(fakeExecPath);
 
     expect(resolveCommandExecutable("bd")).toBe("bd");
+  });
+
+  test("computeBeadsDatabaseName is stable and scoped to the beads directory", async () => {
+    const first = await computeBeadsDatabaseName(
+      "/repo/fairnest",
+      "/tmp/.openducktor/beads/fairnest/.beads",
+    );
+    const second = await computeBeadsDatabaseName(
+      "/repo/fairnest",
+      "/tmp/.openducktor-local/beads/fairnest/.beads",
+    );
+
+    expect(first).toMatch(/^odt_fairnest_[a-f0-9]{12}$/);
+    expect(second).toMatch(/^odt_fairnest_[a-f0-9]{12}$/);
+    expect(first).not.toBe(second);
+    expect(first.length).toBeLessThanOrEqual(64);
   });
 });

@@ -9,7 +9,9 @@ use host_domain::{
     AgentSessionDocument, CreateTaskInput, IssueType, QaVerdict, TaskStatus, TaskStore,
     UpdateTaskPatch,
 };
-use host_infra_system::{compute_repo_slug, resolve_central_beads_dir};
+use host_infra_system::{
+    compute_beads_database_name, compute_repo_slug, resolve_central_beads_dir,
+};
 use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::fs;
@@ -221,6 +223,24 @@ fn assert_beads_env(call: &RecordedCall) {
     assert!(
         !beads_dir_entry.1.trim().is_empty(),
         "BEADS_DIR must be set"
+    );
+}
+
+fn assert_init_args(call: &RecordedCall, repo_path: &Path, beads_dir: &Path) {
+    let expected_slug = compute_repo_slug(repo_path);
+    let expected_database =
+        compute_beads_database_name(repo_path, beads_dir).expect("expected database name");
+    assert_eq!(
+        call.args,
+        vec![
+            "init".to_string(),
+            "--quiet".to_string(),
+            "--skip-hooks".to_string(),
+            "--prefix".to_string(),
+            expected_slug,
+            "--database".to_string(),
+            expected_database,
+        ]
     );
 }
 
@@ -679,21 +699,9 @@ fn ensure_repo_initialized_runs_init_then_uses_cache_when_store_exists() -> Resu
 
     let calls = runner.take_calls();
     assert_eq!(calls.len(), 3);
-    let expected_slug = compute_repo_slug(repo.path());
     assert_eq!(calls[0].kind, CallKind::AllowFailureWithEnv);
-    assert_eq!(
-        calls[0].args,
-        vec![
-            "init",
-            "--quiet",
-            "--skip-hooks",
-            "--prefix",
-            expected_slug.as_str()
-        ]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>()
-    );
+    let beads_dir = resolve_central_beads_dir(repo.path())?;
+    assert_init_args(&calls[0], repo.path(), &beads_dir);
     assert_beads_env(&calls[0]);
     assert_eq!(calls[1].kind, CallKind::AllowFailureWithEnv);
     assert_eq!(

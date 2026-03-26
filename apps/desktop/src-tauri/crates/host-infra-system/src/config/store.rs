@@ -5,7 +5,7 @@ use super::persistence::{
     should_enforce_private_parent_permissions,
 };
 use super::types::{repo_script_fingerprint, GlobalConfig, HookSet, RepoConfig, RuntimeConfig};
-use crate::resolve_default_worktree_base_dir;
+use crate::{parse_user_path, resolve_default_worktree_base_dir};
 use anyhow::{anyhow, Context, Result};
 use host_domain::WorkspaceRecord;
 use std::path::{Path, PathBuf};
@@ -30,7 +30,10 @@ fn default_worktree_base_path(repo_path: &str) -> Result<String> {
 
 fn effective_worktree_base_path(repo_path: &str, repo: &RepoConfig) -> Result<String> {
     match repo.worktree_base_path.as_ref() {
-        Some(configured_path) => Ok(configured_path.clone()),
+        Some(configured_path) => path_buf_to_utf8(
+            parse_user_path(configured_path)?,
+            &format!("Failed converting configured worktree base path to UTF-8 for {repo_path}"),
+        ),
         None => default_worktree_base_path(repo_path),
     }
 }

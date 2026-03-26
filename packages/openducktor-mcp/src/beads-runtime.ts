@@ -191,6 +191,23 @@ export const computeRepoId = async (repoPath: string): Promise<string> => {
   return `${slug}-${digest}`;
 };
 
+const sanitizeDatabaseIdentifier = (input: string): string => {
+  const sanitized = input.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase();
+  return sanitized.length > 0 ? sanitized : "repo";
+};
+
+export const computeBeadsDatabaseName = async (
+  repoPath: string,
+  beadsDir: string,
+): Promise<string> => {
+  const slug = sanitizeDatabaseIdentifier(sanitizeSlug(basename(repoPath)));
+  const canonicalBeadsDir = await resolveCanonicalPath(beadsDir);
+  const hashSuffix = createHash("sha256").update(canonicalBeadsDir).digest("hex").slice(0, 12);
+  const maxSlugLength = 64 - "odt__".length - hashSuffix.length;
+  const truncatedSlug = slug.slice(0, maxSlugLength);
+  return `odt_${truncatedSlug}_${hashSuffix}`;
+};
+
 export const resolveCentralBeadsDir = async (repoPath: string): Promise<string> => {
   const repoId = await computeRepoId(repoPath);
   const root = resolve(homedir(), ".openducktor", "beads", repoId);
