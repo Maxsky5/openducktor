@@ -12,10 +12,9 @@ import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
-import { createRepoStaleGuard, now, throwIfRepoStale } from "../support/core";
+import { now } from "../support/core";
 import { toPersistedSessionRecord } from "../support/persistence";
 import { annotateQuestionToolMessage } from "../support/question-messages";
-import { buildSessionPreludeMessages, loadSessionPromptContext } from "../support/session-prompt";
 import { createStartAgentSession } from "./start-session";
 
 type SessionActionsDependencies = {
@@ -60,13 +59,6 @@ type SessionActionsDependencies = {
     runtimeKind?: RuntimeKind;
   }) => Promise<void>;
 };
-
-export type ForkAgentSessionActionInput = {
-  parentSessionId: string;
-  selectedModel?: AgentModelSelection | null;
-};
-
-const STALE_FORK_ERROR = "Workspace changed while forking session.";
 
 const markTurnStartedIfMissing = (
   turnStartedAtBySessionRef: { current: Record<string, number> },
@@ -134,7 +126,6 @@ export const createAgentSessionActions = ({
   resolveBuildContinuationTarget,
   ensureRuntime,
   loadTaskDocuments,
-  loadRepoDefaultModel,
   loadRepoPromptOverrides,
   loadAgentSessions,
   clearTurnDuration,
@@ -286,117 +277,6 @@ export const createAgentSessionActions = ({
       loadRepoPromptOverrides,
     },
   });
-
-  const forkAgentSession = async ({
-    parentSessionId,
-    selectedModel,
-  }: ForkAgentSessionActionInput): Promise<string> => {
-    if (!activeRepo) {
-      throw new Error("No active repository selected.");
-    }
-    const repoPath = activeRepo;
-    const isStaleRepoOperation = createRepoStaleGuard({
-      repoPath,
-      repoEpochRef,
-      activeRepoRef,
-      previousRepoRef,
-    });
-    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
-
-    const parentSession = sessionsRef.current[parentSessionId];
-    if (!parentSession) {
-      throw new Error(`Unknown session: ${parentSessionId}`);
-    }
-
-    const task = taskRef.current.find((entry) => entry.id === parentSession.taskId);
-    if (!task) {
-      throw new Error(`Task not found: ${parentSession.taskId}`);
-    }
-    if (!isRoleAvailableForTask(task, parentSession.role)) {
-      throw new Error(unavailableRoleErrorMessage(task, parentSession.role));
-    }
-
-    const promptContext = await loadSessionPromptContext({
-      repoPath,
-      taskId: parentSession.taskId,
-      role: parentSession.role,
-      scenario: parentSession.scenario,
-      task,
-      loadTaskDocuments,
-      loadRepoPromptOverrides,
-    });
-    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
-    const modelSelection =
-      selectedModel ??
-      parentSession.selectedModel ??
-      (await loadRepoDefaultModel(repoPath, parentSession.role));
-    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
-    const runtimeKind = parentSession.runtimeKind ?? modelSelection?.runtimeKind;
-    if (!runtimeKind) {
-      throw new Error(`Runtime kind is required to fork session '${parentSessionId}'.`);
-    }
-    const { promptOverrides, systemPrompt } = promptContext;
-    const summary = await adapter.forkSession({
-      repoPath,
-      runtimeKind,
-      runtimeConnection: {
-        endpoint: parentSession.runtimeEndpoint,
-        workingDirectory: parentSession.workingDirectory,
-      },
-      workingDirectory: parentSession.workingDirectory,
-      taskId: parentSession.taskId,
-      role: parentSession.role,
-      scenario: parentSession.scenario,
-      systemPrompt,
-      ...(parentSession.runtimeId ? { runtimeId: parentSession.runtimeId } : {}),
-      ...(modelSelection ? { model: modelSelection } : {}),
-      parentExternalSessionId: parentSession.externalSessionId,
-    });
-    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
-
-    const nextSession: AgentSessionState = {
-      sessionId: summary.sessionId,
-      externalSessionId: summary.externalSessionId,
-      taskId: parentSession.taskId,
-      runtimeKind,
-      role: parentSession.role,
-      scenario: parentSession.scenario,
-      status: "idle",
-      startedAt: summary.startedAt,
-      runtimeId: parentSession.runtimeId,
-      runId: parentSession.runId,
-      runtimeEndpoint: parentSession.runtimeEndpoint,
-      workingDirectory: parentSession.workingDirectory,
-      messages: buildSessionPreludeMessages({
-        sessionId: summary.sessionId,
-        role: parentSession.role,
-        scenario: parentSession.scenario,
-        systemPrompt,
-        startedAt: summary.startedAt,
-        eventLabel: "forked",
-      }),
-      draftAssistantText: "",
-      draftAssistantMessageId: null,
-      draftReasoningText: "",
-      draftReasoningMessageId: null,
-      pendingPermissions: [],
-      pendingQuestions: [],
-      todos: [],
-      modelCatalog: null,
-      selectedModel: modelSelection ?? null,
-      isLoadingModelCatalog: true,
-      promptOverrides,
-    };
-
-    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
-    setSessionsById((current) => ({
-      ...current,
-      [summary.sessionId]: nextSession,
-    }));
-    attachSessionListener(repoPath, summary.sessionId);
-    void persistSessionRecord(nextSession.taskId, toPersistedSessionRecord(nextSession));
-    return summary.sessionId;
-  };
 
   const stopAgentSession = async (sessionId: string): Promise<void> => {
     const session = sessionsRef.current[sessionId];
@@ -566,7 +446,6 @@ export const createAgentSessionActions = ({
     ensureSessionReady,
     sendAgentMessage,
     startAgentSession,
-    forkAgentSession,
     stopAgentSession,
     updateAgentSessionModel,
     replyAgentPermission,

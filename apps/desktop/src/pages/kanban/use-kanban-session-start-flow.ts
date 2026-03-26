@@ -51,7 +51,7 @@ type UseKanbanSessionStartFlowResult = {
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   sessionStartModal: SessionStartModalModel | null;
   startSessionIntent: (intent: KanbanSessionStartIntent) => Promise<string | undefined>;
-  onPullRequestGenerate: (taskId: string) => Promise<void>;
+  onPullRequestGenerate: (taskId: string) => Promise<string | undefined>;
   onDelegate: (taskId: string) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
@@ -258,13 +258,13 @@ export function useKanbanSessionStartFlow({
   );
 
   const onPullRequestGenerate = useCallback(
-    async (taskId: string): Promise<void> => {
+    async (taskId: string): Promise<string | undefined> => {
       const builderSessions = findSessionsByRoleForTask(sessionsRef.current, taskId, "build");
       if (builderSessions.length === 0) {
         throw new Error(`No Builder session is available to fork for task "${taskId}".`);
       }
 
-      void startSessionIntent({
+      return startSessionIntent({
         taskId,
         role: "build",
         scenario: "build_pull_request_generation",

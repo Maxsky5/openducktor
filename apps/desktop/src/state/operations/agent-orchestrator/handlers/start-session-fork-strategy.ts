@@ -1,16 +1,28 @@
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo } from "../runtime/runtime";
+import { throwIfRepoStale } from "../support/core";
+import { historyToChatMessages } from "../support/persistence";
+import { buildSessionHeaderMessages } from "../support/session-prompt";
 import type {
   StartOrReuseResult,
   StartSessionContext,
   StartSessionCreationInput,
   StartSessionExecutionDependencies,
 } from "./start-session.types";
+import { STALE_START_ERROR } from "./start-session-constants";
 import { registerStartedSession } from "./start-session-persistence";
 import { assertScenarioStartPolicy, resolveStartTask } from "./start-session-policies";
 import { resolveLoadedSourceSession } from "./start-session-reuse-strategy";
-import { stopSessionOnStaleAndThrow } from "./start-session-rollback";
+import {
+  rollbackStartedSessionBeforeRegistration,
+  stopSessionOnStaleAndThrow,
+} from "./start-session-rollback";
 import { resolveRuntimeAndModel } from "./start-session-runtime";
+
+// Match the requested-history hydration cap so newly forked child sessions load
+// enough history to render immediately without pulling an unbounded transcript.
+const FORK_START_HISTORY_LIMIT = 600;
 
 type ForkStrategyInput = {
   ctx: StartSessionContext;
@@ -92,11 +104,56 @@ export const executeForkStart = async ({
     });
   }
 
+  const runtimeConnection = {
+    endpoint: sourceSession.runtimeEndpoint || resolved.runtime.runtimeEndpoint,
+    workingDirectory: sourceSession.workingDirectory,
+  };
+
+  const forkHistory = await deps.runtime.adapter
+    .loadSessionHistory({
+      runtimeKind,
+      runtimeConnection,
+      externalSessionId: summary.externalSessionId,
+      limit: FORK_START_HISTORY_LIMIT,
+    })
+    .catch((error) =>
+      rollbackStartedSessionBeforeRegistration({
+        error,
+        startedCtx,
+        runtime: deps.runtime,
+        reason: "start-session-stop-after-fork-history-load-failure",
+      }),
+    );
+
+  if (ctx.isStaleRepoOperation()) {
+    await stopSessionOnStaleAndThrow({
+      reason: "start-session-stop-on-stale-after-fork-history-load",
+      runtime: deps.runtime,
+      startedCtx,
+    });
+  }
+  throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
+
+  const initialMessages: AgentSessionState["messages"] = [
+    ...buildSessionHeaderMessages({
+      sessionId: summary.sessionId,
+      role: ctx.role,
+      scenario: resolved.resolvedScenario,
+      systemPrompt: resolved.systemPrompt,
+      startedAt: summary.startedAt,
+      eventLabel: "forked",
+    }),
+    ...historyToChatMessages(forkHistory, {
+      role: ctx.role,
+      selectedModel,
+    }),
+  ];
+
   const forkedRuntime: RuntimeInfo = {
     runtimeKind,
     runtimeId: sourceSession.runtimeId ?? resolved.runtime.runtimeId,
     runId: sourceSession.runId ?? resolved.runtime.runId,
-    runtimeEndpoint: sourceSession.runtimeEndpoint || resolved.runtime.runtimeEndpoint,
+    runtimeEndpoint: runtimeConnection.endpoint,
     workingDirectory: sourceSession.workingDirectory,
     ...(resolved.runtime.kind ? { kind: resolved.runtime.kind } : {}),
   };
@@ -108,6 +165,7 @@ export const executeForkStart = async ({
     systemPrompt: resolved.systemPrompt,
     promptOverrides: resolved.promptOverrides,
     selectedModel,
+    initialMessages,
     deps,
     taskCard: resolved.taskCard,
   });

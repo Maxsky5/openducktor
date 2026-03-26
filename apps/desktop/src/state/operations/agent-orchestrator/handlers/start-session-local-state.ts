@@ -3,7 +3,7 @@ import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { runOrchestratorTask } from "../support/async-side-effects";
 import { toPersistedSessionRecord } from "../support/persistence";
-import { buildSessionPreludeMessages } from "../support/session-prompt";
+import { buildSessionHeaderMessages } from "../support/session-prompt";
 import type {
   ResolvedRuntimeAndModel,
   SessionDependencies,
@@ -17,12 +17,14 @@ export const buildInitialSession = ({
   runtime,
   systemPrompt,
   promptOverrides,
+  initialMessages,
 }: {
   startedCtx: StartedSessionContext;
   selectedModel: AgentModelSelection;
   runtime: ResolvedRuntimeAndModel["runtime"];
   systemPrompt: string;
   promptOverrides: ResolvedRuntimeAndModel["promptOverrides"];
+  initialMessages?: AgentSessionState["messages"];
 }): AgentSessionState => ({
   sessionId: startedCtx.summary.sessionId,
   externalSessionId: startedCtx.summary.externalSessionId,
@@ -36,13 +38,15 @@ export const buildInitialSession = ({
   runId: runtime.runId,
   runtimeEndpoint: runtime.runtimeEndpoint,
   workingDirectory: runtime.workingDirectory,
-  messages: buildSessionPreludeMessages({
-    sessionId: startedCtx.summary.sessionId,
-    role: startedCtx.role,
-    scenario: startedCtx.resolvedScenario,
-    systemPrompt,
-    startedAt: startedCtx.summary.startedAt,
-  }),
+  messages:
+    initialMessages ??
+    buildSessionHeaderMessages({
+      sessionId: startedCtx.summary.sessionId,
+      role: startedCtx.role,
+      scenario: startedCtx.resolvedScenario,
+      systemPrompt,
+      startedAt: startedCtx.summary.startedAt,
+    }),
   draftAssistantText: "",
   draftAssistantMessageId: null,
   draftReasoningText: "",

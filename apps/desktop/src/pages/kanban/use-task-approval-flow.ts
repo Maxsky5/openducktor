@@ -35,7 +35,7 @@ type ApprovalState = {
 type UseTaskApprovalFlowArgs = {
   activeRepo: string | null;
   tasks: TaskCard[];
-  requestPullRequestGeneration: (taskId: string) => Promise<void>;
+  requestPullRequestGeneration: (taskId: string) => Promise<string | undefined>;
   refreshTasks: () => Promise<void>;
   onResolveGitConflict?: (conflict: GitConflict, taskId: string) => Promise<boolean>;
 };
@@ -258,8 +258,14 @@ export function useTaskApprovalFlow({
         }
 
         if (state.pullRequestDraftMode === "generate_ai") {
-          await requestPullRequestGeneration(state.taskId);
-          reset();
+          const sessionId = await requestPullRequestGeneration(state.taskId);
+          if (sessionId) {
+            reset();
+          } else {
+            setState((current) =>
+              current ? { ...current, isSubmitting: false, errorMessage: null } : current,
+            );
+          }
           return;
         } else {
           const pullRequest = await host.taskPullRequestUpsert(

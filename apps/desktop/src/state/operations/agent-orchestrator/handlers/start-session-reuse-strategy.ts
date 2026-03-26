@@ -3,6 +3,7 @@ import { appQueryClient } from "@/lib/query-client";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
+import { hasOnlySessionHeaderMessages } from "../support/session-prompt";
 import type {
   StartSessionContext,
   StartSessionCreationInput,
@@ -35,13 +36,15 @@ const ensureSessionHydrated = async ({
   deps,
   sessionId,
   mode,
+  forceReload = false,
 }: {
   ctx: StartSessionContext;
   deps: StartSessionExecutionDependencies;
   sessionId: string;
   mode: "reuse" | "fork";
+  forceReload?: boolean;
 }): Promise<AgentSessionState> => {
-  if (!deps.session.sessionsRef.current[sessionId]) {
+  if (forceReload || !deps.session.sessionsRef.current[sessionId]) {
     await deps.session.loadAgentSessions(ctx.taskId, {
       mode: "requested_history",
       targetSessionId: sessionId,
@@ -152,6 +155,19 @@ export const resolveLoadedSourceSession = async ({
       entry.taskId === ctx.taskId && entry.role === ctx.role && entry.sessionId === sourceSessionId,
   );
   if (existingSourceSession) {
+    if (
+      existingSourceSession.messages.length === 0 ||
+      (existingSourceSession.status === "stopped" &&
+        hasOnlySessionHeaderMessages(existingSourceSession))
+    ) {
+      return ensureSessionHydrated({
+        ctx,
+        deps,
+        sessionId: existingSourceSession.sessionId,
+        mode: "fork",
+        forceReload: true,
+      });
+    }
     return existingSourceSession;
   }
 

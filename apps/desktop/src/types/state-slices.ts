@@ -205,10 +205,6 @@ export type AgentStateContextValue = {
           sourceSessionId: string;
         },
   ) => Promise<string>;
-  forkAgentSession: (input: {
-    parentSessionId: string;
-    selectedModel?: AgentModelSelection | null;
-  }) => Promise<string>;
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
   stopAgentSession: (sessionId: string) => Promise<void>;
   updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;

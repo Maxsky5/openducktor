@@ -19,6 +19,7 @@ export const registerStartedSession = async ({
   systemPrompt,
   promptOverrides,
   selectedModel,
+  initialMessages,
   deps,
   taskCard,
 }: {
@@ -28,6 +29,7 @@ export const registerStartedSession = async ({
   systemPrompt: string;
   promptOverrides: ResolvedRuntimeAndModel["promptOverrides"];
   selectedModel: AgentModelSelection;
+  initialMessages?: import("@/types/agent-orchestrator").AgentSessionState["messages"];
   deps: Pick<StartSessionExecutionDependencies, "session" | "runtime">;
   taskCard: ResolvedRuntimeAndModel["taskCard"];
 }): Promise<Extract<StartOrReuseResult, { kind: "started" }>> => {
@@ -37,6 +39,7 @@ export const registerStartedSession = async ({
     runtime: runtimeInfo,
     systemPrompt,
     promptOverrides,
+    ...(initialMessages ? { initialMessages } : {}),
   });
 
   deps.session.setSessionsById((current) => {
