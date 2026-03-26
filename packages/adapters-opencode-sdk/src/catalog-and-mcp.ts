@@ -11,9 +11,17 @@ const OPENCODE_DEFAULT_AGENT_COLORS: Record<string, string> = {
   plan: "var(--icon-agent-plan-base)",
 };
 
-const resolveAgentColor = (agentName: string, explicitColor: unknown): string | undefined => {
+const resolveAgentColor = (
+  agentName: unknown,
+  explicitColor: unknown,
+  isNative: unknown,
+): string | undefined => {
   if (typeof explicitColor === "string" && explicitColor.trim().length > 0) {
     return explicitColor;
+  }
+
+  if (isNative !== true || typeof agentName !== "string") {
+    return undefined;
   }
 
   const normalizedName = agentName.trim().toLowerCase();
@@ -55,7 +63,11 @@ export const listAvailableModels = async (
   const rawAgents = Array.isArray(agentsData)
     ? agentsData
         .map((entry) => {
-          const resolvedColor = resolveAgentColor(entry.name, entry.color);
+          if (typeof entry.name !== "string") {
+            return undefined;
+          }
+
+          const resolvedColor = resolveAgentColor(entry.name, entry.color, entry.native);
           return {
             id: entry.name,
             label: entry.name,
@@ -66,6 +78,7 @@ export const listAvailableModels = async (
             ...(resolvedColor !== undefined ? { color: resolvedColor } : {}),
           };
         })
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined)
         .sort((a, b) => a.label.localeCompare(b.label))
     : [];
 
