@@ -1689,6 +1689,170 @@ describe("OpencodeSdkAdapter", () => {
     });
   });
 
+  test("listAvailableModels applies OpenCode default colors for native agents without explicit color", async () => {
+    const expectedNativeDefaultColors = [
+      { id: "build", color: "var(--icon-agent-build-base)" },
+      { id: "plan", color: "var(--icon-agent-plan-base)" },
+    ] as const;
+
+    const mock = makeMockClient({
+      agentsResponse: expectedNativeDefaultColors.map((entry) => ({
+        name: entry.id,
+        description: `Native ${entry.id} agent`,
+        mode: entry.id === "plan" ? "primary" : "subagent",
+        hidden: entry.id !== "plan",
+        native: true,
+      })),
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const catalog = await adapter.listAvailableModels({
+      runtimeKind: "opencode",
+      runtimeConnection: defaultRuntimeConnection,
+    });
+
+    expect(catalog.profiles).toEqual(
+      expect.arrayContaining(
+        expectedNativeDefaultColors.map((entry) =>
+          expect.objectContaining({
+            id: entry.id,
+            label: entry.id,
+            color: entry.color,
+          }),
+        ),
+      ),
+    );
+  });
+
+  test("listAvailableModels does not synthesize colors for unsupported native names", async () => {
+    const mock = makeMockClient({
+      agentsResponse: [
+        {
+          name: "ask",
+          description: "Native ask agent",
+          mode: "subagent",
+          hidden: true,
+          native: true,
+        },
+        {
+          name: "docs",
+          description: "Native docs agent",
+          mode: "subagent",
+          hidden: true,
+          native: true,
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const catalog = await adapter.listAvailableModels({
+      runtimeKind: "opencode",
+      runtimeConnection: defaultRuntimeConnection,
+    });
+
+    expect(catalog.profiles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "ask", label: "ask" }),
+        expect.objectContaining({ id: "docs", label: "docs" }),
+      ]),
+    );
+
+    const ask = catalog.profiles?.find((entry) => entry.id === "ask");
+    const docs = catalog.profiles?.find((entry) => entry.id === "docs");
+    expect(ask).toBeDefined();
+    expect(docs).toBeDefined();
+    expect(ask).not.toHaveProperty("color");
+    expect(docs).not.toHaveProperty("color");
+  });
+
+  test("listAvailableModels keeps explicit native color and skips fallback for non-native reserved names", async () => {
+    const mock = makeMockClient({
+      agentsResponse: [
+        {
+          name: "build",
+          description: "Native build agent",
+          mode: "subagent",
+          hidden: true,
+          native: true,
+          color: "#123456",
+        },
+        {
+          name: "plan",
+          description: "Custom plan profile",
+          mode: "primary",
+          hidden: false,
+          native: false,
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const catalog = await adapter.listAvailableModels({
+      runtimeKind: "opencode",
+      runtimeConnection: defaultRuntimeConnection,
+    });
+
+    expect(catalog.profiles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "build",
+          label: "build",
+          color: "#123456",
+        }),
+      ]),
+    );
+
+    const planProfile = catalog.profiles?.find((entry) => entry.id === "plan");
+    expect(planProfile).toBeDefined();
+    expect(planProfile).not.toHaveProperty("color");
+  });
+
+  test("listAvailableModels ignores malformed or blank agent entries", async () => {
+    const mock = makeMockClient({
+      agentsResponse: [
+        null,
+        42,
+        {
+          name: "   ",
+          mode: "primary",
+          native: true,
+        },
+        {
+          name: "valid",
+          mode: "primary",
+          native: false,
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const catalog = await adapter.listAvailableModels({
+      runtimeKind: "opencode",
+      runtimeConnection: defaultRuntimeConnection,
+    });
+
+    expect(catalog.profiles).toEqual([
+      expect.objectContaining({
+        id: "valid",
+        label: "valid",
+        mode: "primary",
+        native: false,
+      }),
+    ]);
+  });
+
   test("listAvailableModels preserves agent names exactly as reported by opencode", async () => {
     const mock = makeMockClient({
       agentsResponse: [
