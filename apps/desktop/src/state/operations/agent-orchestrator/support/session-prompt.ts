@@ -32,7 +32,7 @@ type LoadSessionPromptInputsInput = {
 
 type CreateSessionPromptContextInput = SessionPromptInput;
 
-type SessionPreludeInput = {
+type SessionHeaderInput = {
   sessionId: string;
   role: AgentRole;
   scenario: AgentScenario;
@@ -134,7 +134,7 @@ export const loadSessionPromptContext = async ({
   });
 };
 
-export const buildSessionPreludeMessages = ({
+export const buildSessionHeaderMessages = ({
   sessionId,
   role,
   scenario,
@@ -142,7 +142,7 @@ export const buildSessionPreludeMessages = ({
   startedAt,
   eventLabel = "started",
   includeSystemPrompt = true,
-}: SessionPreludeInput): AgentSessionState["messages"] => {
+}: SessionHeaderInput): AgentSessionState["messages"] => {
   const eventId = eventLabel === "started" ? "start" : eventLabel;
   const messages: AgentSessionState["messages"] = [
     {

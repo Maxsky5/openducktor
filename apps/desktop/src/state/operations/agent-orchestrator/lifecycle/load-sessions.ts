@@ -25,7 +25,7 @@ import {
   fromPersistedSessionRecord,
   historyToChatMessages,
 } from "../support/persistence";
-import { buildSessionPreludeMessages, buildSessionSystemPrompt } from "../support/session-prompt";
+import { buildSessionHeaderMessages, buildSessionSystemPrompt } from "../support/session-prompt";
 import {
   createHydrationRuntimeResolver,
   readPersistedRuntimeKind,
@@ -362,7 +362,7 @@ export const createLoadAgentSessions = ({
     }): Promise<AgentSessionState["messages"]> => {
       const task = taskRef.current.find((entry) => entry.id === taskId);
       if (!task) {
-        return buildSessionPreludeMessages({
+        return buildSessionHeaderMessages({
           sessionId: record.sessionId,
           role: record.role,
           scenario: resolvedScenario,
@@ -384,7 +384,7 @@ export const createLoadAgentSessions = ({
         },
       });
 
-      return buildSessionPreludeMessages({
+      return buildSessionHeaderMessages({
         sessionId: record.sessionId,
         role: record.role,
         scenario: resolvedScenario,
