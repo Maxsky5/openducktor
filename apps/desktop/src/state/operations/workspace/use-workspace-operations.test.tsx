@@ -395,19 +395,16 @@ describe("use-workspace-operations", () => {
     const workspaceList = mock(
       async (): Promise<WorkspaceRecord[]> => [workspace("/repo-new", true)],
     );
-
-    const original = {
-      workspaceAdd: workspaceHost.workspaceAdd,
-      workspaceList: workspaceHost.workspaceList,
-    };
-    workspaceHost.workspaceAdd = workspaceAdd;
-    workspaceHost.workspaceList = workspaceList;
+    const hostClient = createWorkspaceHostClient();
+    hostClient.workspaceAdd = workspaceAdd;
+    hostClient.workspaceList = workspaceList;
 
     const harness = createHookHarness({
       activeRepo: null,
       setActiveRepo,
       clearTaskData: () => {},
       clearActiveBeadsCheck: () => {},
+      hostClient,
     });
 
     try {
@@ -420,8 +417,6 @@ describe("use-workspace-operations", () => {
       expect(workspaceList).toHaveBeenCalled();
     } finally {
       await harness.unmount();
-      workspaceHost.workspaceAdd = original.workspaceAdd;
-      workspaceHost.workspaceList = original.workspaceList;
     }
   });
 

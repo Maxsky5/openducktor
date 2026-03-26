@@ -1,9 +1,8 @@
-import { describe, expect, test } from "bun:test";
-import { render, waitFor } from "@testing-library/react";
-import { createElement } from "react";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { render } from "@testing-library/react";
+import { type ComponentProps, createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TaskApprovalModalModel } from "./kanban-page-model-types";
-import { TaskApprovalModal } from "./task-approval-modal";
 import { TaskApprovalModalPanel } from "./task-approval-modal-panel";
 
 const noop = () => {};
@@ -43,19 +42,55 @@ const createModel = (overrides: Partial<TaskApprovalModalModel> = {}): TaskAppro
   ...overrides,
 });
 
+type TaskApprovalModalComponent = typeof import("./task-approval-modal").TaskApprovalModal;
+
+let TaskApprovalModal: TaskApprovalModalComponent;
+
+beforeAll(async () => {
+  mock.module("@/components/ui/dialog", () => {
+    const Dialog = ({ children }: PropsWithChildren<ComponentProps<"div">>) => (
+      <div data-testid="dialog-root">{children}</div>
+    );
+    const DialogContent = ({ children, ...props }: PropsWithChildren<ComponentProps<"div">>) => (
+      <div {...props}>{children}</div>
+    );
+    const DialogHeader = ({ children, ...props }: PropsWithChildren<ComponentProps<"div">>) => (
+      <div {...props}>{children}</div>
+    );
+    const DialogTitle = ({ children, ...props }: PropsWithChildren<ComponentProps<"h2">>) => (
+      <h2 {...props}>{children}</h2>
+    );
+    const DialogDescription = ({ children, ...props }: PropsWithChildren<ComponentProps<"p">>) => (
+      <p {...props}>{children}</p>
+    );
+
+    return {
+      Dialog,
+      DialogContent,
+      DialogDescription,
+      DialogHeader,
+      DialogTitle,
+    };
+  });
+
+  ({ TaskApprovalModal } = await import("./task-approval-modal"));
+});
+
+afterAll(() => {
+  mock.restore();
+});
+
 describe("TaskApprovalModal", () => {
-  test("renders the wrapper dialog title and description", async () => {
+  test("renders the wrapper dialog title and description", () => {
     const { baseElement, unmount } = render(
       createElement(TaskApprovalModal, { model: createModel() }),
     );
 
     try {
-      await waitFor(() => {
-        expect(baseElement.textContent).toContain("Publish And Mark Done");
-        expect(baseElement.textContent).toContain(
-          "The local merge is already applied. Push origin/beta to publish it, then move the task to Done.",
-        );
-      });
+      expect(baseElement.textContent).toContain("Publish And Mark Done");
+      expect(baseElement.textContent).toContain(
+        "The local merge is already applied. Push origin/beta to publish it, then move the task to Done.",
+      );
     } finally {
       unmount();
     }
