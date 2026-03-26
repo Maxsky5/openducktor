@@ -204,8 +204,9 @@ export function useAgentStudioSelectionController({
       sessionParam,
       hasExplicitRoleParam,
       roleFromQuery,
+      selectedTask,
     });
-  }, [hasExplicitRoleParam, roleFromQuery, sessionParam, sessionsForTask]);
+  }, [hasExplicitRoleParam, roleFromQuery, selectedTask, sessionParam, sessionsForTask]);
   const hydratedActiveSession = useAgentStudioActiveSessionRuntimeData({
     session: activeSession,
     readSessionModelCatalog,
@@ -290,8 +291,15 @@ export function useAgentStudioSelectionController({
       sessionParam: viewSessionParam,
       hasExplicitRoleParam: hasViewRoleSelection,
       roleFromQuery,
+      selectedTask: viewSelectedTask,
     });
-  }, [hasViewRoleSelection, roleFromQuery, viewSessionParam, viewSessionsForTask]);
+  }, [
+    hasViewRoleSelection,
+    roleFromQuery,
+    viewSelectedTask,
+    viewSessionParam,
+    viewSessionsForTask,
+  ]);
   const hydratedViewActiveSession = useAgentStudioActiveSessionRuntimeData({
     session: viewActiveSession,
     readSessionModelCatalog,

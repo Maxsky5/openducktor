@@ -4,7 +4,10 @@ export {
   pickDefaultVisibleSelectionForCatalog,
 } from "@/features/session-start";
 
+import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import { compareAgentSessionRecency } from "@/lib/agent-session-options";
+import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export {
@@ -66,19 +69,73 @@ export const resolveAgentStudioActiveSession = ({
   sessionParam,
   hasExplicitRoleParam,
   roleFromQuery,
+  selectedTask,
 }: {
   sessionsForTask: AgentSessionState[];
   sessionParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
+  selectedTask: TaskCard | null;
 }): AgentSessionState | null => {
+  const activeSession = sessionsForTask.find(
+    (session) => session.status === "running" || session.status === "starting",
+  );
+
+  const latestSessionByRole = (role: AgentRole): AgentSessionState | null => {
+    const roleSessions = sessionsForTask
+      .filter((session) => session.role === role)
+      .sort(compareAgentSessionRecency);
+    return roleSessions[0] ?? null;
+  };
+
+  const resolveDefaultRoleForOpenTask = (task: TaskCard): AgentRole | null => {
+    const roleWorkflowMap = buildRoleWorkflowMapForTask(task);
+    const orderedRoles: AgentRole[] = ["spec", "planner", "build", "qa"];
+    for (const role of orderedRoles) {
+      const workflow = roleWorkflowMap[role];
+      if (workflow.required && workflow.available) {
+        return role;
+      }
+    }
+    return null;
+  };
+
   if (sessionParam) {
     return sessionsForTask.find((entry) => entry.sessionId === sessionParam) ?? null;
   }
+
   if (hasExplicitRoleParam) {
     return sessionsForTask.find((entry) => entry.role === roleFromQuery) ?? null;
   }
-  return sessionsForTask[0] ?? null;
+
+  if (activeSession) {
+    return activeSession;
+  }
+
+  if (!selectedTask) {
+    return null;
+  }
+
+  switch (selectedTask.status) {
+    case "open": {
+      const defaultRole = resolveDefaultRoleForOpenTask(selectedTask);
+      return defaultRole ? latestSessionByRole(defaultRole) : null;
+    }
+    case "spec_ready":
+      return latestSessionByRole("spec");
+    case "ready_for_dev":
+      return latestSessionByRole("planner") ?? latestSessionByRole("spec");
+    case "in_progress":
+    case "ai_review":
+    case "human_review":
+      return latestSessionByRole("build");
+    case "blocked":
+    case "deferred":
+    case "closed":
+      return latestSessionByRole("build") ?? sessionsForTask[0] ?? null;
+    default:
+      return null;
+  }
 };
 
 export const resolveAgentStudioBuilderSessionsForTask = ({

@@ -184,11 +184,13 @@ describe("useAgentStudioSelectionController", () => {
       role: "planner",
       scenario: "planner_initial",
       startedAt: "2026-02-22T12:00:00.000Z",
+      status: "running",
     });
     const sessionTaskTwo = createSession("task-2", "session-2", {
       role: "qa",
       scenario: "qa_review",
       startedAt: "2026-02-22T13:00:00.000Z",
+      status: "running",
     });
 
     const harness = createHookHarness(

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { createAgentSessionFixture } from "./agent-studio-test-utils";
+import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import {
   coerceVisibleSelectionToCatalog,
   emptyDraftSelections,
@@ -185,6 +185,7 @@ describe("agents-page-selection", () => {
       sessionParam: "session-from-other-task",
       hasExplicitRoleParam: true,
       roleFromQuery: "planner",
+      selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
     });
 
     expect(resolved).toBeNull();
@@ -209,9 +210,260 @@ describe("agents-page-selection", () => {
       sessionParam: null,
       hasExplicitRoleParam: true,
       roleFromQuery: "planner",
+      selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
     });
 
     expect(resolved?.sessionId).toBe("planner-1");
+  });
+
+  test("prioritizes active running session over status defaults", () => {
+    const olderBuildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "build-older",
+      taskId: "task-1",
+      role: "build",
+      status: "idle",
+      startedAt: "2026-02-22T10:00:00.000Z",
+    });
+    const runningSpecSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "spec-running",
+      taskId: "task-1",
+      role: "spec",
+      status: "running",
+      startedAt: "2026-02-22T09:00:00.000Z",
+    });
+
+    const resolved = resolveAgentStudioActiveSession({
+      sessionsForTask: [olderBuildSession, runningSpecSession],
+      sessionParam: null,
+      hasExplicitRoleParam: false,
+      roleFromQuery: "build",
+      selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
+    });
+
+    expect(resolved?.sessionId).toBe("spec-running");
+  });
+
+  test("selects required+available role for open tasks", () => {
+    const specSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "spec-1",
+      taskId: "task-1",
+      role: "spec",
+      startedAt: "2026-02-22T11:00:00.000Z",
+    });
+    const buildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "build-1",
+      taskId: "task-1",
+      role: "build",
+      startedAt: "2026-02-22T10:00:00.000Z",
+    });
+
+    const resolved = resolveAgentStudioActiveSession({
+      sessionsForTask: [buildSession, specSession],
+      sessionParam: null,
+      hasExplicitRoleParam: false,
+      roleFromQuery: "spec",
+      selectedTask: createTaskCardFixture({
+        id: "task-1",
+        status: "open",
+        agentWorkflows: {
+          spec: { required: true, canSkip: false, available: true, completed: false },
+          planner: { required: false, canSkip: true, available: true, completed: false },
+          builder: { required: true, canSkip: false, available: true, completed: false },
+          qa: { required: false, canSkip: true, available: false, completed: false },
+        },
+      }),
+    });
+
+    expect(resolved?.sessionId).toBe("spec-1");
+  });
+
+  test("returns null for open tasks when no required+available role exists", () => {
+    const buildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "build-1",
+      taskId: "task-1",
+      role: "build",
+    });
+
+    const resolved = resolveAgentStudioActiveSession({
+      sessionsForTask: [buildSession],
+      sessionParam: null,
+      hasExplicitRoleParam: false,
+      roleFromQuery: "build",
+      selectedTask: createTaskCardFixture({
+        id: "task-1",
+        status: "open",
+        agentWorkflows: {
+          spec: { required: true, canSkip: false, available: false, completed: false },
+          planner: { required: true, canSkip: false, available: false, completed: false },
+          builder: { required: true, canSkip: false, available: false, completed: false },
+          qa: { required: false, canSkip: true, available: false, completed: false },
+        },
+      }),
+    });
+
+    expect(resolved).toBeNull();
+  });
+
+  test("selects latest spec session for spec_ready tasks", () => {
+    const olderSpecSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "spec-older",
+      taskId: "task-1",
+      role: "spec",
+      startedAt: "2026-02-22T09:00:00.000Z",
+    });
+    const latestSpecSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "spec-latest",
+      taskId: "task-1",
+      role: "spec",
+      startedAt: "2026-02-22T11:00:00.000Z",
+    });
+
+    const resolved = resolveAgentStudioActiveSession({
+      sessionsForTask: [olderSpecSession, latestSpecSession],
+      sessionParam: null,
+      hasExplicitRoleParam: false,
+      roleFromQuery: "planner",
+      selectedTask: createTaskCardFixture({ id: "task-1", status: "spec_ready" }),
+    });
+
+    expect(resolved?.sessionId).toBe("spec-latest");
+  });
+
+  test("selects latest planner session for ready_for_dev tasks and falls back to spec", () => {
+    const latestSpecSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "spec-latest",
+      taskId: "task-1",
+      role: "spec",
+      startedAt: "2026-02-22T11:00:00.000Z",
+    });
+    const latestPlannerSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "planner-latest",
+      taskId: "task-1",
+      role: "planner",
+      startedAt: "2026-02-22T12:00:00.000Z",
+    });
+
+    const resolvedWithPlanner = resolveAgentStudioActiveSession({
+      sessionsForTask: [latestSpecSession, latestPlannerSession],
+      sessionParam: null,
+      hasExplicitRoleParam: false,
+      roleFromQuery: "build",
+      selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
+    });
+
+    const resolvedWithFallback = resolveAgentStudioActiveSession({
+      sessionsForTask: [latestSpecSession],
+      sessionParam: null,
+      hasExplicitRoleParam: false,
+      roleFromQuery: "build",
+      selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
+    });
+
+    expect(resolvedWithPlanner?.sessionId).toBe("planner-latest");
+    expect(resolvedWithFallback?.sessionId).toBe("spec-latest");
+  });
+
+  test("selects latest build session for in_progress, ai_review, and human_review tasks", () => {
+    const olderBuildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "build-older",
+      taskId: "task-1",
+      role: "build",
+      startedAt: "2026-02-22T08:00:00.000Z",
+    });
+    const latestBuildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "build-latest",
+      taskId: "task-1",
+      role: "build",
+      startedAt: "2026-02-22T12:00:00.000Z",
+    });
+
+    const statuses: Array<"in_progress" | "ai_review" | "human_review"> = [
+      "in_progress",
+      "ai_review",
+      "human_review",
+    ];
+
+    for (const status of statuses) {
+      const resolved = resolveAgentStudioActiveSession({
+        sessionsForTask: [olderBuildSession, latestBuildSession],
+        sessionParam: null,
+        hasExplicitRoleParam: false,
+        roleFromQuery: "spec",
+        selectedTask: createTaskCardFixture({ id: "task-1", status }),
+      });
+
+      expect(resolved?.sessionId).toBe("build-latest");
+    }
+  });
+
+  test("selects latest build session for blocked/deferred/closed and falls back to latest overall", () => {
+    const latestSpecSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "spec-latest",
+      taskId: "task-1",
+      role: "spec",
+      startedAt: "2026-02-22T13:00:00.000Z",
+    });
+    const latestBuildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "build-latest",
+      taskId: "task-1",
+      role: "build",
+      startedAt: "2026-02-22T12:00:00.000Z",
+    });
+
+    const statuses: Array<"blocked" | "deferred" | "closed"> = ["blocked", "deferred", "closed"];
+
+    for (const status of statuses) {
+      const resolvedWithBuild = resolveAgentStudioActiveSession({
+        sessionsForTask: [latestSpecSession, latestBuildSession],
+        sessionParam: null,
+        hasExplicitRoleParam: false,
+        roleFromQuery: "qa",
+        selectedTask: createTaskCardFixture({ id: "task-1", status }),
+      });
+
+      const resolvedFallback = resolveAgentStudioActiveSession({
+        sessionsForTask: [latestSpecSession],
+        sessionParam: null,
+        hasExplicitRoleParam: false,
+        roleFromQuery: "qa",
+        selectedTask: createTaskCardFixture({ id: "task-1", status }),
+      });
+
+      expect(resolvedWithBuild?.sessionId).toBe("build-latest");
+      expect(resolvedFallback?.sessionId).toBe("spec-latest");
+    }
+  });
+
+  test("returns null when no selected task is available", () => {
+    const buildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "build-1",
+      taskId: "task-1",
+      role: "build",
+    });
+
+    const resolved = resolveAgentStudioActiveSession({
+      sessionsForTask: [buildSession],
+      sessionParam: null,
+      hasExplicitRoleParam: false,
+      roleFromQuery: "build",
+      selectedTask: null,
+    });
+
+    expect(resolved).toBeNull();
   });
 
   test("prefers the current build session when resolving conflict reuse", () => {
