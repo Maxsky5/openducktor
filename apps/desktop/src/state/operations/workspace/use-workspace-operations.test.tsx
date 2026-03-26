@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { RenderResult } from "@testing-library/react";
@@ -14,6 +14,24 @@ const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+
+const HOST_METHOD_NAMES = [
+  "workspaceList",
+  "workspaceAdd",
+  "workspaceSelect",
+  "workspaceGetRepoConfig",
+  "runtimeEnsure",
+  "gitGetCurrentBranch",
+  "gitGetBranches",
+  "gitSwitchBranch",
+] as const;
+
+type HostMethodName = (typeof HOST_METHOD_NAMES)[number];
+type HostMethodMap = Pick<typeof host, HostMethodName>;
+
+const originalHostMethods = Object.fromEntries(
+  HOST_METHOD_NAMES.map((name) => [name, host[name]]),
+) as HostMethodMap;
 
 const flush = async (): Promise<void> => {
   await Promise.resolve();
@@ -134,7 +152,12 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<
 };
 
 beforeEach(async () => {
+  Object.assign(host, originalHostMethods);
   await clearAppQueryClient();
+});
+
+afterAll(() => {
+  Object.assign(host, originalHostMethods);
 });
 
 type HookArgs = Parameters<typeof useWorkspaceOperations>[0];

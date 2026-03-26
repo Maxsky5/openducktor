@@ -12,7 +12,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
-    "test": "bun test --pass-with-no-tests",
+    "test": "bun test --pass-with-no-tests --max-concurrency 1",
     "lint": "biome check src"
   },
   "dependencies": {

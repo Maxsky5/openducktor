@@ -5,7 +5,7 @@ import {
   type RepoPromptOverrides,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { type RenderResult, render } from "@testing-library/react";
+import { type RenderResult, render, waitFor } from "@testing-library/react";
 import { act, isValidElement, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { clearAppQueryClient } from "@/lib/query-client";
@@ -244,43 +244,27 @@ const renderPage = async (): Promise<RenderResult> => {
   );
 };
 
-// Double Promise.resolve() intentionally flushes React's queued microtasks and batched updates.
-// maxAttempts controls how long we poll for the observed mock call.
 const waitForMockCall = async (
   fn: { mock: { calls: unknown[][] } },
   minCalls = 1,
-  maxAttempts = 10,
+  timeoutMs = 1000,
 ): Promise<void> => {
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    if (fn.mock.calls.length >= minCalls) {
-      return;
-    }
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-  }
-  throw new Error(
-    `Timed out waiting for mock calls: expected >= ${minCalls}, received ${fn.mock.calls.length}, attempts=${maxAttempts}`,
+  await waitFor(
+    () => {
+      expect(fn.mock.calls.length).toBeGreaterThanOrEqual(minCalls);
+    },
+    { timeout: timeoutMs },
   );
 };
 
 const waitForSessionStartModalReady = async (): Promise<void> => {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    if (
-      latestSessionStartModalModel &&
-      latestSessionStartModalModel.isSelectionCatalogLoading !== true
-    ) {
-      return;
-    }
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-  }
-
-  throw new Error("Timed out waiting for session start modal catalog to load.");
+  await waitFor(
+    () => {
+      expect(latestSessionStartModalModel).toBeTruthy();
+      expect(latestSessionStartModalModel?.isSelectionCatalogLoading).not.toBe(true);
+    },
+    { timeout: 1000 },
+  );
 };
 
 const confirmSessionStartModal = async (input?: {

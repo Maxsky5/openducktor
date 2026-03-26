@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   type BeadsCheck,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -17,6 +17,13 @@ const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+
+const HOST_METHOD_NAMES = ["runtimeCheck", "beadsCheck"] as const;
+type HostMethodName = (typeof HOST_METHOD_NAMES)[number];
+type HostMethodMap = Pick<typeof host, HostMethodName>;
+const originalHostMethods = Object.fromEntries(
+  HOST_METHOD_NAMES.map((name) => [name, host[name]]),
+) as HostMethodMap;
 
 const makeRuntimeCheck = (overrides: Partial<RuntimeCheck> = {}): RuntimeCheck => ({
   gitOk: true,
@@ -158,11 +165,17 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  Object.assign(host, originalHostMethods);
   await clearAppQueryClient();
   toastError.mockClear();
   toastSuccess.mockClear();
   checkRepoRuntimeHealthMock.mockClear();
   repoHealthHandler = async () => makeRepoHealth();
+});
+
+afterAll(() => {
+  Object.assign(host, originalHostMethods);
+  mock.restore();
 });
 
 describe("use-checks", () => {

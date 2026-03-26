@@ -1,17 +1,8 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
-import { createElement, type ReactNode } from "react";
+import { describe, expect, test } from "bun:test";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TaskApprovalModalModel } from "./kanban-page-model-types";
-
-const omitDialogDomProps = ({
-  onOpenChange: _onOpenChange,
-  open: _open,
-  ...props
-}: {
-  onOpenChange?: unknown;
-  open?: unknown;
-  [key: string]: unknown;
-}) => props;
+import { TaskApprovalModalPanel } from "./task-approval-modal-panel";
 
 const noop = () => {};
 
@@ -51,39 +42,10 @@ const createModel = (overrides: Partial<TaskApprovalModalModel> = {}): TaskAppro
 });
 
 describe("TaskApprovalModal", () => {
-  let TaskApprovalModal: typeof import("./task-approval-modal").TaskApprovalModal;
-
-  beforeAll(async () => {
-    mock.module("@/components/ui/dialog", () => ({
-      Dialog: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogBody: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogContent: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogDescription: ({
-        children,
-        ...props
-      }: {
-        children: ReactNode;
-        [key: string]: unknown;
-      }) => createElement("p", omitDialogDomProps(props), children),
-      DialogFooter: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogHeader: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogTitle: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("h2", omitDialogDomProps(props), children),
-    }));
-    ({ TaskApprovalModal } = await import("./task-approval-modal"));
-  });
-
-  afterAll(() => {
-    mock.restore();
-  });
-
   test("renders explicit completion copy for merged local branches", () => {
-    const html = renderToStaticMarkup(createElement(TaskApprovalModal, { model: createModel() }));
+    const html = renderToStaticMarkup(
+      createElement(TaskApprovalModalPanel, { model: createModel() }),
+    );
 
     expect(html).toContain("Publish And Mark Done");
     expect(html).toContain("Local merge ready");
@@ -93,7 +55,7 @@ describe("TaskApprovalModal", () => {
 
   test("shows a loading label while direct merge completion is pending", () => {
     const html = renderToStaticMarkup(
-      createElement(TaskApprovalModal, {
+      createElement(TaskApprovalModalPanel, {
         model: createModel({ isSubmitting: true }),
       }),
     );
@@ -104,7 +66,7 @@ describe("TaskApprovalModal", () => {
 
   test("shows a loading indicator for approval submission actions", () => {
     const html = renderToStaticMarkup(
-      createElement(TaskApprovalModal, {
+      createElement(TaskApprovalModalPanel, {
         model: createModel({
           stage: "approval",
           isSubmitting: true,
@@ -119,7 +81,7 @@ describe("TaskApprovalModal", () => {
 
   test("renders the squash commit message editor when squash is selected", () => {
     const html = renderToStaticMarkup(
-      createElement(TaskApprovalModal, {
+      createElement(TaskApprovalModalPanel, {
         model: createModel({
           stage: "approval",
           mergeMethod: "squash",
@@ -135,7 +97,7 @@ describe("TaskApprovalModal", () => {
 
   test("disables direct merge confirmation when the squash commit message is empty", () => {
     const html = renderToStaticMarkup(
-      createElement(TaskApprovalModal, {
+      createElement(TaskApprovalModalPanel, {
         model: createModel({
           stage: "approval",
           mergeMethod: "squash",
@@ -151,7 +113,7 @@ describe("TaskApprovalModal", () => {
 
   test("does not show a squash validation error before the user interacts when no suggestion exists", () => {
     const html = renderToStaticMarkup(
-      createElement(TaskApprovalModal, {
+      createElement(TaskApprovalModalPanel, {
         model: createModel({
           stage: "approval",
           mergeMethod: "squash",
@@ -170,7 +132,7 @@ describe("TaskApprovalModal", () => {
 
   test("fails fast when direct-merge completion branch context is missing", () => {
     const html = renderToStaticMarkup(
-      createElement(TaskApprovalModal, {
+      createElement(TaskApprovalModalPanel, {
         model: createModel({
           targetBranch: null,
           publishTarget: null,
@@ -189,7 +151,7 @@ describe("TaskApprovalModal", () => {
 
   test("renders AI pull request copy for the forked builder workflow", () => {
     const html = renderToStaticMarkup(
-      createElement(TaskApprovalModal, {
+      createElement(TaskApprovalModalPanel, {
         model: createModel({
           stage: "approval",
           mode: "pull_request",

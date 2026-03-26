@@ -1,55 +1,18 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { ComponentProps, ReactElement } from "react";
+import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
 import type {
   KanbanTaskActivityState,
   KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
-import type { KanbanTaskCard } from "./kanban-task-card";
-
-const renderedCards: Array<{ taskId: string; taskActivityState: string | undefined }> = [];
-let KanbanColumn: typeof import("./kanban-column").KanbanColumn;
+import { KanbanColumn } from "./kanban-column";
 
 const noop = (): void => {};
 
 describe("KanbanColumn", () => {
-  beforeAll(async () => {
-    mock.module("@/components/features/kanban/kanban-task-card", () => ({
-      KanbanTaskCard: ({
-        task,
-        taskActivityState,
-      }: ComponentProps<typeof KanbanTaskCard>): ReactElement => {
-        renderedCards.push({ taskId: task.id, taskActivityState });
-        return <div data-task-id={task.id} data-activity-state={taskActivityState} />;
-      },
-    }));
-
-    mock.module("@/components/features/kanban/use-kanban-virtualization", () => ({
-      useKanbanVirtualization: ({ tasks }: { tasks: Array<{ id: string }> }) => ({
-        containerRef: () => {},
-        renderModel: {
-          kind: "simple" as const,
-          visibleTasks: tasks,
-        },
-        measurementVersion: 0,
-        onMeasuredHeight: () => {},
-      }),
-    }));
-
-    ({ KanbanColumn } = await import("./kanban-column"));
-  });
-
-  afterAll(() => {
-    mock.restore();
-  });
-
-  beforeEach(() => {
-    renderedCards.length = 0;
-  });
-
-  test("passes waiting-input ordering data through to rendered task cards", () => {
+  test("renders waiting-input tasks before active and idle tasks", () => {
     const waitingTask = createTaskCardFixture({ id: "TASK-WAITING", title: "Need answer" });
     const activeTask = createTaskCardFixture({ id: "TASK-ACTIVE", title: "Still running" });
     const idleTask = createTaskCardFixture({ id: "TASK-IDLE", title: "Queued" });
@@ -88,28 +51,35 @@ describe("KanbanColumn", () => {
     ]);
 
     const html = renderToStaticMarkup(
-      createElement(KanbanColumn, {
-        column: {
-          id: "in_progress",
-          title: "In Progress",
-          tasks: [waitingTask, activeTask, idleTask],
-        },
-        runStateByTaskId: new Map(),
-        taskSessionsByTaskId,
-        taskActivityStateByTaskId,
-        onOpenDetails: noop,
-        onDelegate: noop,
-        onPlan: noop,
-        onBuild: noop,
-      }),
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanColumn, {
+          column: {
+            id: "in_progress",
+            title: "In Progress",
+            tasks: [waitingTask, activeTask, idleTask],
+          },
+          runStateByTaskId: new Map(),
+          taskSessionsByTaskId,
+          taskActivityStateByTaskId,
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onPlan: noop,
+          onBuild: noop,
+        }),
+      ),
     );
 
-    expect(renderedCards).toEqual([
-      { taskId: "TASK-WAITING", taskActivityState: "waiting_input" },
-      { taskId: "TASK-ACTIVE", taskActivityState: "active" },
-      { taskId: "TASK-IDLE", taskActivityState: "idle" },
-    ]);
-    expect(html).toContain('data-task-id="TASK-WAITING"');
-    expect(html).toContain('data-activity-state="waiting_input"');
+    const waitingIndex = html.indexOf("Need answer");
+    const activeIndex = html.indexOf("Still running");
+    const idleIndex = html.indexOf("Queued");
+
+    expect(waitingIndex).toBeGreaterThan(-1);
+    expect(activeIndex).toBeGreaterThan(waitingIndex);
+    expect(idleIndex).toBeGreaterThan(activeIndex);
+    expect(html).toContain("kanban-waiting-input-card");
+    expect(html).toContain("Waiting input");
+    expect(html).toContain("Running");
   });
 });
