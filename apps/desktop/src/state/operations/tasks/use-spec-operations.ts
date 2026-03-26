@@ -25,6 +25,53 @@ type UseSpecOperationsResult = {
   savePlanDocument: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
 };
 
+type TaskDocumentPayload = {
+  markdown: string;
+  updatedAt: string | null;
+};
+
+const toUpdatedAtTimestamp = (updatedAt: string | null): number | null => {
+  if (!updatedAt) {
+    return null;
+  }
+
+  const parsed = Date.parse(updatedAt);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const resolveLatestDocumentPayload = (
+  current: TaskDocumentPayload | undefined,
+  incoming: TaskDocumentPayload,
+): TaskDocumentPayload => {
+  if (!current) {
+    return incoming;
+  }
+
+  const currentTimestamp = toUpdatedAtTimestamp(current.updatedAt);
+  const incomingTimestamp = toUpdatedAtTimestamp(incoming.updatedAt);
+
+  if (currentTimestamp !== null && incomingTimestamp !== null) {
+    return incomingTimestamp >= currentTimestamp ? incoming : current;
+  }
+
+  if (currentTimestamp !== null && incomingTimestamp === null) {
+    return current;
+  }
+
+  return incoming;
+};
+
+const setLatestDocumentPayload = (
+  current: TaskDocumentPayload | undefined,
+  markdown: string,
+  updatedAt: string,
+): TaskDocumentPayload => {
+  return resolveLatestDocumentPayload(current, {
+    markdown,
+    updatedAt,
+  });
+};
+
 export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpecOperationsResult {
   const queryClient = useQueryClient();
 
@@ -70,8 +117,16 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       }
 
       const saved = await host.setSpec({ repoPath: repo, taskId, markdown });
+      queryClient.setQueryData<TaskDocumentPayload>(
+        documentQueryKeys.spec(repo, taskId),
+        (current) => setLatestDocumentPayload(current, markdown, saved.updatedAt),
+      );
       await queryClient.invalidateQueries({
-        queryKey: documentQueryKeys.spec(repo, taskId),
+        queryKey: documentQueryKeys.all,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: taskQueryKeys.repoData(repo),
+        exact: true,
       });
       return saved;
     },
@@ -86,10 +141,10 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
         taskId,
         markdown,
       });
-      queryClient.setQueryData(documentQueryKeys.spec(repo, taskId), {
-        markdown,
-        updatedAt: saved.updatedAt,
-      });
+      queryClient.setQueryData<TaskDocumentPayload>(
+        documentQueryKeys.spec(repo, taskId),
+        (current) => setLatestDocumentPayload(current, markdown, saved.updatedAt),
+      );
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });
@@ -110,10 +165,10 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
         taskId,
         markdown,
       });
-      queryClient.setQueryData(documentQueryKeys.plan(repo, taskId), {
-        markdown,
-        updatedAt: saved.updatedAt,
-      });
+      queryClient.setQueryData<TaskDocumentPayload>(
+        documentQueryKeys.plan(repo, taskId),
+        (current) => setLatestDocumentPayload(current, markdown, saved.updatedAt),
+      );
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });

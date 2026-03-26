@@ -83,7 +83,7 @@ const resolveLatestDocumentPayload = (
   }
 
   if (currentTimestamp !== null && incomingTimestamp === null) {
-    return current;
+    return incoming.markdown !== current.markdown ? incoming : current;
   }
 
   return incoming;
@@ -93,40 +93,52 @@ const createDocumentQueryKey = (cacheScope: string, taskId: string, section: Doc
   ["task-documents", section, cacheScope, taskId] as const;
 
 const createDocumentQueryOptions = ({
+  queryClient,
   cacheScope,
   taskId,
   section,
   loader,
 }: {
+  queryClient: ReturnType<typeof useQueryClient>;
   cacheScope: string;
   taskId: string;
   section: DocumentSectionKey;
   loader: (taskId: string) => Promise<TaskDocumentPayload>;
-}) =>
-  queryOptions({
-    queryKey: createDocumentQueryKey(cacheScope, taskId, section),
-    queryFn: (): Promise<TaskDocumentPayload> => loader(taskId),
+}) => {
+  const queryKey = createDocumentQueryKey(cacheScope, taskId, section);
+  return queryOptions({
+    queryKey,
+    queryFn: async (): Promise<TaskDocumentPayload> => {
+      const incoming = await loader(taskId);
+      const current = queryClient.getQueryData<TaskDocumentPayload>(queryKey);
+      return resolveLatestDocumentPayload(current, incoming);
+    },
     staleTime: TASK_DOCUMENT_STALE_TIME_MS,
   });
+};
 
 const createQueryOptionsBySection = (
+  queryClient: ReturnType<typeof useQueryClient>,
   cacheScope: string,
   taskId: string,
   loaders: SectionLoaders,
 ) => ({
   spec: createDocumentQueryOptions({
+    queryClient,
     cacheScope,
     taskId,
     section: "spec",
     loader: loaders.spec,
   }),
   plan: createDocumentQueryOptions({
+    queryClient,
     cacheScope,
     taskId,
     section: "plan",
     loader: loaders.plan,
   }),
   qa: createDocumentQueryOptions({
+    queryClient,
     cacheScope,
     taskId,
     section: "qa",
@@ -194,8 +206,8 @@ export function useTaskDocuments(
   const enabled = open && taskId !== null;
   const activeTaskId = taskId ?? DISABLED_TASK_ID;
   const queryOptionsBySection = useMemo(
-    () => createQueryOptionsBySection(cacheScope, activeTaskId, sectionLoaders),
-    [activeTaskId, cacheScope, sectionLoaders],
+    () => createQueryOptionsBySection(queryClient, cacheScope, activeTaskId, sectionLoaders),
+    [activeTaskId, cacheScope, queryClient, sectionLoaders],
   );
 
   const specQuery = useQuery({

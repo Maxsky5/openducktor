@@ -1336,7 +1336,10 @@ fn get_task_metadata_ignores_cached_task_list_metadata() -> Result<()> {
     let metadata = store.get_task_metadata(repo.path(), "task-1")?;
 
     assert_eq!(metadata.spec.markdown, "# Fresh spec");
-    assert_eq!(metadata.spec.revision, 2);
+    assert_eq!(
+        metadata.spec.updated_at.as_deref(),
+        Some("2026-02-20T11:00:00Z")
+    );
 
     let calls = runner.take_calls();
     assert_eq!(calls.len(), 2);
