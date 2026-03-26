@@ -3,6 +3,7 @@ use super::security::CONFIG_FILE_MODE;
 use super::security::{enforce_directory_permissions, validate_config_access};
 use anyhow::{anyhow, Context, Result};
 use serde::{de::DeserializeOwned, Serialize};
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 #[cfg(unix)]
@@ -14,9 +15,24 @@ use std::{
 #[cfg(unix)]
 const MAX_TEMP_FILE_ATTEMPTS: u8 = 8;
 
-pub(super) fn resolve_default_path(file_name: &str) -> Result<PathBuf> {
+const OPENDUCKTOR_CONFIG_DIR_ENV: &str = "OPENDUCKTOR_CONFIG_DIR";
+const DEFAULT_CONFIG_DIR_NAME: &str = ".openducktor";
+
+/// Resolves the effective OpenDucktor base directory.
+///
+/// If `OPENDUCKTOR_CONFIG_DIR` is set, returns that path.
+/// Otherwise returns `~/.openducktor`.
+pub fn resolve_openducktor_base_dir() -> Result<PathBuf> {
+    if let Some(env_dir) = env::var_os(OPENDUCKTOR_CONFIG_DIR_ENV) {
+        return Ok(PathBuf::from(env_dir));
+    }
     let home = dirs::home_dir().ok_or_else(|| anyhow!("Unable to resolve user home directory"))?;
-    Ok(home.join(".openducktor").join(file_name))
+    Ok(home.join(DEFAULT_CONFIG_DIR_NAME))
+}
+
+pub(super) fn resolve_default_path(file_name: &str) -> Result<PathBuf> {
+    let base_dir = resolve_openducktor_base_dir()?;
+    Ok(base_dir.join(file_name))
 }
 
 pub(super) fn should_enforce_private_parent_permissions(path: &Path, file_name: &str) -> bool {

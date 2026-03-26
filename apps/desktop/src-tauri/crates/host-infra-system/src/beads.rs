@@ -4,6 +4,8 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::config::resolve_openducktor_base_dir;
+
 pub fn compute_repo_slug(repo_path: &Path) -> String {
     let candidate = repo_path
         .file_name()
@@ -44,9 +46,9 @@ pub fn resolve_effective_worktree_base_dir(
 }
 
 fn resolve_repo_scoped_openducktor_dir(repo_path: &Path, namespace: &str) -> Result<PathBuf> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow!("Unable to resolve user home directory"))?;
+    let base_dir = resolve_openducktor_base_dir()?;
     let repo_id = compute_repo_id(repo_path)?;
-    Ok(home.join(".openducktor").join(namespace).join(repo_id))
+    Ok(base_dir.join(namespace).join(repo_id))
 }
 
 fn canonical_or_absolute(repo_path: &Path) -> Result<PathBuf> {

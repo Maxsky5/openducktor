@@ -4,13 +4,18 @@ const repoRoot = resolve(import.meta.dir, "..");
 const backendPort = process.env.ODT_BROWSER_BACKEND_PORT ?? "14327";
 const backendUrl = `http://127.0.0.1:${backendPort}`;
 
+const backendEnv: Record<string, string> = {
+  ...process.env,
+  ODT_BROWSER_BACKEND_PORT: backendPort,
+};
+if (process.env.OPENDUCKTOR_CONFIG_DIR) {
+  backendEnv.OPENDUCKTOR_CONFIG_DIR = process.env.OPENDUCKTOR_CONFIG_DIR;
+}
+
 const backendProcess = Bun.spawn({
   cmd: ["cargo", "run", "--bin", "browser_backend"],
   cwd: `${repoRoot}/apps/desktop/src-tauri`,
-  env: {
-    ...process.env,
-    ODT_BROWSER_BACKEND_PORT: backendPort,
-  },
+  env: backendEnv,
   stdout: "inherit",
   stderr: "inherit",
 });

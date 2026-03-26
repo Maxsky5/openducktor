@@ -90,13 +90,15 @@ bun run test:rust
 
 ### Local Data And Config
 
-OpenDucktor stores local config at:
+OpenDucktor resolves its base directory to `~/.openducktor` by default. You can override this with the `OPENDUCKTOR_CONFIG_DIR` environment variable.
 
-- `~/.openducktor/config.json`
+Local config is stored at:
+
+- `$OPENDUCKTOR_CONFIG_DIR/config.json` (or `~/.openducktor/config.json`)
 
 Beads storage is managed centrally per repository in:
 
-- `~/.openducktor/beads/`
+- `$OPENDUCKTOR_CONFIG_DIR/beads/` (or `~/.openducktor/beads/`)
 
 The app initializes and uses a central Beads directory for each repository. Existing repo-local `.beads` folders are not the V1 source of truth.
 
