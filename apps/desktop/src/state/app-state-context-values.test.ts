@@ -143,7 +143,6 @@ describe("app-state-context-values", () => {
       readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       startAgentSession: async () => "session",
-      forkAgentSession: async () => "session-forked",
       sendAgentMessage: async () => {},
       stopAgentSession: async () => {},
       updateAgentSessionModel: () => {},

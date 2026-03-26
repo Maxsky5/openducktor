@@ -414,7 +414,6 @@ describe("KanbanPage session start modal flow", () => {
         loadAgentSessions: loadAgentSessionsMock,
         removeAgentSessions: removeAgentSessionsMock,
         startAgentSession: startAgentSessionMock,
-        forkAgentSession: async () => "session-forked",
         sendAgentMessage: sendAgentMessageMock,
         updateAgentSessionModel: updateAgentSessionModelMock,
       }),
