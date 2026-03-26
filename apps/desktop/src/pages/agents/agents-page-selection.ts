@@ -9,7 +9,7 @@ import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor
 import { compareAgentSessionRecency } from "@/lib/agent-session-options";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { firstScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
+import { AGENT_ROLE_ORDER, firstScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
 
 export {
   toContextStorageKey,
@@ -72,8 +72,7 @@ export const resolveAgentStudioDefaultRoleForTask = (task: TaskCard | null): Age
 
   if (task.status === "open") {
     const roleWorkflowMap = buildRoleWorkflowMapForTask(task);
-    const orderedRoles: AgentRole[] = ["spec", "planner", "build", "qa"];
-    for (const role of orderedRoles) {
+    for (const role of AGENT_ROLE_ORDER) {
       const workflow = roleWorkflowMap[role];
       if (workflow.required && workflow.available) {
         return role;
@@ -121,7 +120,7 @@ export const resolveAgentStudioSessionSelection = ({
   fallbackRole: AgentRole;
   scenarioFromQuery?: AgentScenario | null;
 }): { activeSession: AgentSessionState | null; role: AgentRole; scenario: AgentScenario } => {
-  const activeSession = sessionsForTask.find(
+  const runningSession = sessionsForTask.find(
     (session) => session.status === "running" || session.status === "starting",
   );
 
@@ -140,9 +139,10 @@ export const resolveAgentStudioSessionSelection = ({
         : null;
 
     const scenario =
-      session?.scenario && roleScenarios.includes(session.scenario)
+      explicitScenarioForRole ??
+      (session?.scenario && roleScenarios.includes(session.scenario)
         ? session.scenario
-        : (explicitScenarioForRole ?? firstScenario(role));
+        : firstScenario(role));
 
     return {
       activeSession: session,
@@ -164,8 +164,8 @@ export const resolveAgentStudioSessionSelection = ({
     return toSelection(roleFromQuery, latestSessionByRole(roleFromQuery));
   }
 
-  if (activeSession) {
-    return toSelection(activeSession.role, activeSession);
+  if (runningSession) {
+    return toSelection(runningSession.role, runningSession);
   }
 
   if (!selectedTask) {
@@ -173,6 +173,7 @@ export const resolveAgentStudioSessionSelection = ({
   }
 
   const defaultRole = resolveAgentStudioDefaultRoleForTask(selectedTask);
+  const mostRecentSession = [...sessionsForTask].sort(compareAgentSessionRecency)[0] ?? null;
 
   const withRoleFallback = (session: AgentSessionState | null) =>
     toSelection(session?.role ?? defaultRole ?? fallbackRole, session);
@@ -192,7 +193,7 @@ export const resolveAgentStudioSessionSelection = ({
     case "blocked":
     case "deferred":
     case "closed":
-      return withRoleFallback(latestSessionByRole("build") ?? sessionsForTask[0] ?? null);
+      return withRoleFallback(latestSessionByRole("build") ?? mostRecentSession);
     default:
       return toSelection(defaultRole ?? fallbackRole, null);
   }
