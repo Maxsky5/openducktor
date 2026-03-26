@@ -395,6 +395,7 @@ describe("use-workspace-operations", () => {
     const workspaceList = mock(
       async (): Promise<WorkspaceRecord[]> => [workspace("/repo-new", true)],
     );
+    const toastSuccess = mock(() => "toast-success");
     const hostClient = createWorkspaceHostClient();
     hostClient.workspaceAdd = workspaceAdd;
     hostClient.workspaceList = workspaceList;
@@ -405,6 +406,10 @@ describe("use-workspace-operations", () => {
       clearTaskData: () => {},
       clearActiveBeadsCheck: () => {},
       hostClient,
+      toastClient: {
+        success: toastSuccess,
+        error: mock(() => "toast-error"),
+      },
     });
 
     try {
@@ -415,6 +420,9 @@ describe("use-workspace-operations", () => {
 
       expect(workspaceAdd).toHaveBeenCalledWith("/repo-new");
       expect(workspaceList).toHaveBeenCalled();
+      expect(toastSuccess).toHaveBeenCalledWith("Repository added", {
+        description: "/repo-new",
+      });
     } finally {
       await harness.unmount();
     }

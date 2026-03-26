@@ -11,6 +11,24 @@ import { getTaskApprovalModalHeader, TaskApprovalModalPanel } from "./task-appro
 
 export { TaskApprovalModalPanel } from "./task-approval-modal-panel";
 
+export function TaskApprovalModalContent({
+  model,
+}: {
+  model: TaskApprovalModalModel;
+}): ReactElement {
+  const { title, description } = getTaskApprovalModalHeader(model);
+
+  return (
+    <>
+      <div className="space-y-3 border-b border-border/80 px-6 py-6 pr-16 sm:px-8 sm:pr-20">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+      <TaskApprovalModalPanel model={model} showHeader={false} />
+    </>
+  );
+}
+
 export function TaskApprovalModal({
   model,
 }: {
