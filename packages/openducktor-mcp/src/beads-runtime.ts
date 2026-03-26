@@ -25,13 +25,40 @@ export const normalizeOptionalInput = (value: string | undefined): string | unde
   return trimmed;
 };
 
+const stripMatchingQuotes = (value: string): string => {
+  if (value.length >= 2) {
+    const first = value[0];
+    const last = value[value.length - 1];
+    if ((first === '"' || first === "'") && first === last) {
+      return value.slice(1, -1).trim();
+    }
+  }
+  return value;
+};
+
+const normalizeOptionalPathInput = (value: string | undefined): string | undefined => {
+  const normalized = normalizeOptionalInput(value);
+  if (!normalized) {
+    return undefined;
+  }
+
+  const unquoted = stripMatchingQuotes(normalized);
+  if (unquoted === "~") {
+    return homedir();
+  }
+  if (unquoted.startsWith("~/") || unquoted.startsWith("~\\")) {
+    return resolve(homedir(), unquoted.slice(2));
+  }
+  return unquoted;
+};
+
 export const sanitizeSlug = (input: string): string => {
   let slug = "";
   let lastDash = false;
 
   for (const char of input) {
     const lower = char.toLowerCase();
-    if (/^[a-z0-9]$/.test(lower)) {
+    if (/^[\x30-\x39\x61-\x7a]$/.test(lower)) {
       slug += lower;
       lastDash = false;
       continue;
@@ -120,7 +147,7 @@ export const resolveCommandExecutable = (command: string): string => {
   }
 
   const overrideName = commandEnvOverrideName(command);
-  const explicit = normalizeOptionalInput(process.env[overrideName]);
+  const explicit = normalizeOptionalPathInput(process.env[overrideName]);
   if (explicit) {
     if (!existsSync(explicit) || !statSync(explicit).isFile()) {
       throw new Error(
@@ -189,6 +216,34 @@ export const computeRepoId = async (repoPath: string): Promise<string> => {
   const slug = sanitizeSlug(basename(canonical));
   const digest = createHash("sha256").update(canonical).digest("hex").slice(0, 8);
   return `${slug}-${digest}`;
+};
+
+const sanitizeDatabaseIdentifier = (input: string): string => {
+  const sanitized = input
+    .split("")
+    .map((char) => {
+      const lower = char.toLowerCase();
+      if (/^[\x30-\x39\x61-\x7a]$/.test(lower)) {
+        return lower;
+      }
+      return "_";
+    })
+    .join("")
+    .replace(/^_+|_+$/g, "");
+  return sanitized.length > 0 ? sanitized : "repo";
+};
+
+export const computeBeadsDatabaseName = async (
+  repoPath: string,
+  beadsDir: string,
+): Promise<string> => {
+  const slug = sanitizeDatabaseIdentifier(sanitizeSlug(basename(repoPath)));
+  const canonicalRepoPath = await resolveCanonicalPath(repoPath);
+  const canonicalBeadsDir = await resolveCanonicalPath(resolve(canonicalRepoPath, beadsDir));
+  const hashSuffix = createHash("sha256").update(canonicalBeadsDir).digest("hex").slice(0, 12);
+  const maxSlugLength = 64 - "odt__".length - hashSuffix.length;
+  const truncatedSlug = slug.slice(0, maxSlugLength);
+  return `odt_${truncatedSlug}_${hashSuffix}`;
 };
 
 export const resolveCentralBeadsDir = async (repoPath: string): Promise<string> => {

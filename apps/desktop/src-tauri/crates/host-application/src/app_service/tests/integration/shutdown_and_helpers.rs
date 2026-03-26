@@ -601,6 +601,29 @@ fn helper_functions_cover_mcp_and_opencode_resolution_paths() -> Result<()> {
 }
 
 #[test]
+fn resolve_opencode_binary_path_supports_home_shorthand_override() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("opencode-tilde-override");
+    let home = root.join("home");
+    let override_dir = home.join("custom-bin");
+    fs::create_dir_all(&override_dir)?;
+    let override_binary = override_dir.join("opencode");
+    create_fake_opencode(&override_binary)?;
+
+    let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
+    let _override_guard = set_env_var("OPENDUCKTOR_OPENCODE_BINARY", "~/custom-bin/opencode");
+
+    let resolved = resolve_opencode_binary_path();
+    assert_eq!(
+        resolved.as_deref(),
+        Some(override_binary.to_string_lossy().as_ref())
+    );
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
 fn resolve_opencode_binary_path_uses_home_fallback_when_override_and_path_missing() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("opencode-home-fallback");
@@ -830,6 +853,35 @@ fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
     }
 
     let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn default_mcp_workspace_root_supports_home_shorthand_override() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("mcp-workspace-root-tilde");
+    let home = root.join("home");
+    let workspace = home.join("workspace-root");
+    fs::create_dir_all(&workspace)?;
+
+    let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
+    let _workspace_guard = set_env_var("OPENDUCKTOR_WORKSPACE_ROOT", "~/workspace-root");
+
+    assert_eq!(
+        default_mcp_workspace_root()?,
+        workspace.to_string_lossy().to_string()
+    );
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn default_mcp_workspace_root_ignores_empty_override() -> Result<()> {
+    let _env_lock = lock_env();
+    let _workspace_guard = set_env_var("OPENDUCKTOR_WORKSPACE_ROOT", "   ");
+    let resolved = default_mcp_workspace_root()?;
+    assert!(!resolved.trim().is_empty());
     Ok(())
 }
 

@@ -209,3 +209,37 @@ fn explicit_worktree_override_does_not_require_home_for_workspace_records() {
         Some(override_path.as_str())
     );
 }
+
+#[test]
+fn explicit_worktree_override_expands_home_shorthand_for_effective_path() {
+    let _env_lock = lock_env();
+
+    let harness = TestStoreHarness::new("workspace-explicit-override-home-shorthand");
+    let store = harness.store();
+    let root = harness.root();
+    let repo = root.join("repo");
+    fs::create_dir_all(repo.join(".git")).expect("repo");
+    let repo_str = repo.to_string_lossy().to_string();
+
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+    store.add_workspace(&repo_str).expect("add workspace");
+
+    let updated = store
+        .update_repo_config(
+            &repo_str,
+            RepoConfig {
+                worktree_base_path: Some("~/custom-worktrees".to_string()),
+                ..RepoConfig::default()
+            },
+        )
+        .expect("explicit override should resolve");
+
+    assert_eq!(
+        updated.configured_worktree_base_path.as_deref(),
+        Some("~/custom-worktrees")
+    );
+    assert_eq!(
+        updated.effective_worktree_base_path.as_deref(),
+        Some(root.join("custom-worktrees").to_string_lossy().as_ref())
+    );
+}

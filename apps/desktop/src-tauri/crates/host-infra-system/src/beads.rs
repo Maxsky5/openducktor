@@ -4,7 +4,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::config::resolve_openducktor_base_dir;
+use crate::{config::resolve_openducktor_base_dir, parse_user_path};
 
 pub fn compute_repo_slug(repo_path: &Path) -> String {
     let candidate = repo_path
@@ -27,6 +27,23 @@ pub fn compute_repo_id(repo_path: &Path) -> Result<String> {
     Ok(format!("{slug}-{short_hash}"))
 }
 
+pub fn compute_beads_database_name(repo_path: &Path, beads_dir: &Path) -> Result<String> {
+    let slug = sanitize_database_identifier(&compute_repo_slug(repo_path));
+    let resolved_repo_path = canonical_or_absolute(repo_path)?;
+    let resolved_beads_dir = canonical_or_absolute_from(beads_dir, &resolved_repo_path)?;
+    let digest = Sha256::digest(resolved_beads_dir.to_string_lossy().as_bytes());
+    let short_hash = format!("{digest:x}");
+    let hash_suffix = &short_hash[..12];
+    let max_slug_len = 64usize.saturating_sub("odt__".len() + hash_suffix.len());
+    let truncated_slug = if slug.len() > max_slug_len {
+        &slug[..max_slug_len]
+    } else {
+        slug.as_str()
+    };
+
+    Ok(format!("odt_{truncated_slug}_{hash_suffix}"))
+}
+
 pub fn resolve_central_beads_dir(repo_path: &Path) -> Result<PathBuf> {
     Ok(resolve_repo_scoped_openducktor_dir(repo_path, "beads")?.join(".beads"))
 }
@@ -40,7 +57,7 @@ pub fn resolve_effective_worktree_base_dir(
     configured_worktree_base_path: Option<&str>,
 ) -> Result<PathBuf> {
     match configured_worktree_base_path {
-        Some(configured_path) => Ok(PathBuf::from(configured_path)),
+        Some(configured_path) => parse_user_path(configured_path),
         None => resolve_default_worktree_base_dir(repo_path),
     }
 }
@@ -52,12 +69,17 @@ fn resolve_repo_scoped_openducktor_dir(repo_path: &Path, namespace: &str) -> Res
 }
 
 fn canonical_or_absolute(repo_path: &Path) -> Result<PathBuf> {
-    let absolute = if repo_path.is_absolute() {
-        repo_path.to_path_buf()
+    canonical_or_absolute_from(
+        repo_path,
+        &env::current_dir().context("Unable to resolve current working directory")?,
+    )
+}
+
+fn canonical_or_absolute_from(path: &Path, base_dir: &Path) -> Result<PathBuf> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
     } else {
-        env::current_dir()
-            .context("Unable to resolve current working directory")?
-            .join(repo_path)
+        base_dir.join(path)
     };
 
     Ok(fs::canonicalize(&absolute).unwrap_or(absolute))
@@ -95,10 +117,24 @@ fn sanitize_slug(input: &str) -> String {
     }
 }
 
+fn sanitize_database_identifier(input: &str) -> String {
+    let sanitized = input
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    sanitized.trim_matches('_').to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        compute_repo_id, compute_repo_slug, resolve_central_beads_dir,
+        compute_beads_database_name, compute_repo_id, compute_repo_slug, resolve_central_beads_dir,
         resolve_default_worktree_base_dir, resolve_effective_worktree_base_dir,
     };
     use host_test_support::{lock_env, EnvVarGuard};
@@ -130,6 +166,52 @@ mod tests {
         let first = compute_repo_id(Path::new("/tmp/a/project")).expect("first id");
         let second = compute_repo_id(Path::new("/tmp/b/project")).expect("second id");
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn beads_database_name_is_stable_for_same_repo_and_store() {
+        let repo_path = Path::new("/tmp/example-project");
+        let beads_dir = Path::new("/tmp/.openducktor/beads/example-project/.beads");
+
+        let first = compute_beads_database_name(repo_path, beads_dir).expect("first database name");
+        let second =
+            compute_beads_database_name(repo_path, beads_dir).expect("second database name");
+
+        assert_eq!(first, second);
+        assert!(first.starts_with("odt_example_project_"));
+        assert!(first.len() <= 64);
+        assert!(!first.contains('-'));
+    }
+
+    #[test]
+    fn beads_database_name_differs_for_distinct_store_paths() {
+        let repo_path = Path::new("/tmp/example-project");
+        let first = compute_beads_database_name(
+            repo_path,
+            Path::new("/tmp/.openducktor/beads/example-project/.beads"),
+        )
+        .expect("first database name");
+        let second = compute_beads_database_name(
+            repo_path,
+            Path::new("/tmp/.openducktor-local/beads/example-project/.beads"),
+        )
+        .expect("second database name");
+
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn beads_database_name_resolves_relative_store_path_from_repo_path() {
+        let repo_path = Path::new("/tmp/example-project");
+        let relative = compute_beads_database_name(repo_path, Path::new("relative/.beads"))
+            .expect("relative database name");
+        let absolute = compute_beads_database_name(
+            repo_path,
+            Path::new("/tmp/example-project/relative/.beads"),
+        )
+        .expect("absolute database name");
+
+        assert_eq!(relative, absolute);
     }
 
     #[test]
@@ -225,5 +307,20 @@ mod tests {
         let expected = resolve_default_worktree_base_dir(Path::new("/tmp/openducktor-test/repo"))
             .expect("default worktree base dir");
         assert_eq!(resolved, expected);
+    }
+
+    #[test]
+    fn effective_worktree_base_dir_expands_home_shorthand_override() {
+        let _env_lock = lock_env();
+        let home = std::env::temp_dir().join("odt-worktree-home");
+        let _home_guard = EnvVarGuard::set("HOME", home.to_string_lossy().as_ref());
+
+        let resolved = resolve_effective_worktree_base_dir(
+            Path::new("/tmp/openducktor-test/repo"),
+            Some("~/custom-worktrees"),
+        )
+        .expect("effective worktree base dir");
+
+        assert_eq!(resolved, home.join("custom-worktrees"));
     }
 }

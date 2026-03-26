@@ -29,10 +29,16 @@ pub fn resolve_openducktor_base_dir() -> Result<PathBuf> {
                 "OPENDUCKTOR_CONFIG_DIR is set but empty; provide a valid directory path"
             ));
         }
-        return Ok(PathBuf::from(env_dir));
+        return normalize_env_directory_override(&env_dir);
     }
     let home = dirs::home_dir().ok_or_else(|| anyhow!("Unable to resolve user home directory"))?;
     Ok(home.join(DEFAULT_CONFIG_DIR_NAME))
+}
+
+fn normalize_env_directory_override(env_dir: &std::ffi::OsStr) -> Result<PathBuf> {
+    crate::parse_user_path_os(env_dir).map_err(|error| {
+        anyhow!("Invalid OPENDUCKTOR_CONFIG_DIR value: {error}. Provide a valid directory path")
+    })
 }
 
 pub(super) fn resolve_default_path(file_name: &str) -> Result<PathBuf> {
@@ -202,6 +208,7 @@ fn create_temporary_config_path(path: &Path, attempt: u8) -> Result<PathBuf> {
 mod tests {
     use super::resolve_openducktor_base_dir;
     use host_test_support::{lock_env, EnvVarGuard};
+    use std::path::PathBuf;
 
     #[test]
     fn resolve_openducktor_base_dir_rejects_empty_env_override() {
@@ -215,5 +222,54 @@ mod tests {
                 .contains("OPENDUCKTOR_CONFIG_DIR is set but empty"),
             "unexpected error: {error}"
         );
+    }
+
+    #[test]
+    fn resolve_openducktor_base_dir_expands_tilde_prefix() {
+        let _env_lock = lock_env();
+        let home = dirs::home_dir().expect("home directory should resolve");
+        let _override_guard = EnvVarGuard::set("OPENDUCKTOR_CONFIG_DIR", "~/.openducktor-local");
+
+        let resolved =
+            resolve_openducktor_base_dir().expect("tilde-prefixed override should resolve");
+
+        assert_eq!(resolved, home.join(".openducktor-local"));
+    }
+
+    #[test]
+    fn resolve_openducktor_base_dir_preserves_non_tilde_relative_override() {
+        let _env_lock = lock_env();
+        let _override_guard = EnvVarGuard::set("OPENDUCKTOR_CONFIG_DIR", "./.openducktor-local");
+
+        let resolved =
+            resolve_openducktor_base_dir().expect("relative override should resolve as-is");
+
+        assert_eq!(resolved, PathBuf::from("./.openducktor-local"));
+    }
+
+    #[test]
+    fn resolve_openducktor_base_dir_expands_quoted_tilde_prefix() {
+        let _env_lock = lock_env();
+        let home = dirs::home_dir().expect("home directory should resolve");
+        let _override_guard =
+            EnvVarGuard::set("OPENDUCKTOR_CONFIG_DIR", "\"~/.openducktor-local\"");
+
+        let resolved =
+            resolve_openducktor_base_dir().expect("quoted tilde-prefixed override should resolve");
+
+        assert_eq!(resolved, home.join(".openducktor-local"));
+    }
+
+    #[test]
+    fn resolve_openducktor_base_dir_trims_whitespace_around_override() {
+        let _env_lock = lock_env();
+        let home = dirs::home_dir().expect("home directory should resolve");
+        let _override_guard =
+            EnvVarGuard::set("OPENDUCKTOR_CONFIG_DIR", "  ~/.openducktor-local  ");
+
+        let resolved = resolve_openducktor_base_dir()
+            .expect("whitespace-padded tilde-prefixed override should resolve");
+
+        assert_eq!(resolved, home.join(".openducktor-local"));
     }
 }

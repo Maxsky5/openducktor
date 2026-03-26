@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 import {
   type BeadsDirResolver,
   CUSTOM_STATUS_VALUES,
+  computeBeadsDatabaseName,
   type ProcessRunner,
   resolveCentralBeadsDir,
   runProcess,
@@ -100,7 +101,16 @@ export class BeadsRuntimeClient {
       const beadsDir = await this.ensureBeadsDir();
       if (!this.beadsStoreFootprintExists(beadsDir)) {
         const slug = sanitizeSlug(basename(this.repoPath));
-        await this.runBd(["init", "--quiet", "--skip-hooks", "--prefix", slug]);
+        const databaseName = await computeBeadsDatabaseName(this.repoPath, beadsDir);
+        await this.runBd([
+          "init",
+          "--quiet",
+          "--skip-hooks",
+          "--prefix",
+          slug,
+          "--database",
+          databaseName,
+        ]);
       }
 
       await this.runBd(["dolt", "start"]);

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { computeBeadsDatabaseName } from "./beads-runtime";
 import { BeadsRuntimeClient } from "./beads-runtime-client";
 
 type ProcessCall = {
@@ -28,6 +29,7 @@ afterEach(() => {
 describe("BeadsRuntimeClient", () => {
   test("ensureInitialized initializes missing stores and starts dolt", async () => {
     const beadsDir = makeTempBeadsDir();
+    const databaseName = await computeBeadsDatabaseName("/repo/fairnest", beadsDir);
     const calls: ProcessCall[] = [];
     const client = new BeadsRuntimeClient("/repo/fairnest", beadsDir, {
       runProcess: async (command, args, cwd, env) => {
@@ -39,7 +41,7 @@ describe("BeadsRuntimeClient", () => {
     await client.ensureInitialized();
 
     expect(calls.map((call) => call.args)).toEqual([
-      ["init", "--quiet", "--skip-hooks", "--prefix", "fairnest"],
+      ["init", "--quiet", "--skip-hooks", "--prefix", "fairnest", "--database", databaseName],
       ["dolt", "start"],
     ]);
     expect(calls.every((call) => call.command === "bd")).toBe(true);

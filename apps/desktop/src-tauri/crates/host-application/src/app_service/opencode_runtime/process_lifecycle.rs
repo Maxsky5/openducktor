@@ -1,5 +1,7 @@
 use anyhow::{anyhow, Context, Result};
-use host_infra_system::{bundled_command, resolve_command_path, subprocess_path_env};
+use host_infra_system::{
+    bundled_command, parse_user_path, resolve_command_path, subprocess_path_env,
+};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -45,9 +47,8 @@ pub(crate) fn read_opencode_version(binary: &str) -> Option<String> {
 
 pub(crate) fn resolve_opencode_binary_path() -> Option<String> {
     if let Ok(override_binary) = std::env::var("OPENDUCKTOR_OPENCODE_BINARY") {
-        let trimmed = override_binary.trim();
-        if !trimmed.is_empty() {
-            return Some(trimmed.to_string());
+        if let Ok(path) = parse_user_path(override_binary.as_str()) {
+            return Some(path.to_string_lossy().to_string());
         }
     }
 

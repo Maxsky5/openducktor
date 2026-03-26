@@ -2,10 +2,11 @@ mod beads;
 mod config;
 mod git;
 mod process;
+mod user_paths;
 mod worktree;
 
 pub use beads::{
-    compute_repo_id, compute_repo_slug, resolve_central_beads_dir,
+    compute_beads_database_name, compute_repo_id, compute_repo_slug, resolve_central_beads_dir,
     resolve_default_worktree_base_dir, resolve_effective_worktree_base_dir,
 };
 pub use config::{
@@ -22,6 +23,7 @@ pub use process::{
     run_command_allow_failure, run_command_allow_failure_with_env, run_command_with_env,
     subprocess_path_env, version_command,
 };
+pub use user_paths::{normalize_user_path, parse_user_path, parse_user_path_os};
 pub use worktree::{
     build_branch_name, copy_configured_worktree_files, pick_free_port, remove_worktree,
     slugify_title,

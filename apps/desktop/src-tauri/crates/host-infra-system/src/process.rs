@@ -1,3 +1,4 @@
+use crate::parse_user_path_os;
 use anyhow::{anyhow, Context, Result};
 use std::env;
 use std::ffi::OsString;
@@ -61,9 +62,11 @@ fn command_env_override_name(program: &str) -> String {
 
 fn explicit_command_override(program: &str) -> Result<Option<String>> {
     let override_name = command_env_override_name(program);
-    let Some(explicit_path) = env::var_os(&override_name).map(PathBuf::from) else {
+    let Some(raw_path) = env::var_os(&override_name) else {
         return Ok(None);
     };
+    let explicit_path = parse_user_path_os(&raw_path)
+        .with_context(|| format!("Invalid {override_name} path override"))?;
 
     if explicit_path.is_file() {
         return Ok(Some(explicit_path.to_string_lossy().to_string()));
@@ -240,7 +243,7 @@ fn explicit_command_override_directories() -> Vec<PathBuf> {
                 return None;
             }
 
-            let path = PathBuf::from(value);
+            let path = parse_user_path_os(&value).ok()?;
             if !path.is_file() {
                 return None;
             }
@@ -787,10 +790,30 @@ mod tests {
 
         let env_name = command_env_override_name(program.as_str());
         let _override_guard = EnvVarGuard::set(&env_name, script.to_string_lossy().as_ref());
-        let output =
-            run_command(program.as_str(), &[], None).expect("override command should execute");
+        let output = run_command(&program, &[], None).expect("override command should execute");
 
         assert_eq!(output, "override-ok");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_command_prefers_tilde_expanded_env_override_for_command_lookup() {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("odt-command-override-home");
+        let home = root.join("home");
+        let script_dir = home.join("bin");
+        fs::create_dir_all(&script_dir).expect("script dir should be created");
+        let program = "bd-override-home";
+        let script = script_dir.join(format!("fake-{program}"));
+        write_executable(&script, "#!/bin/sh\nprintf 'override-home-ok'");
+
+        let env_name = command_env_override_name(program);
+        let _home_guard = EnvVarGuard::set("HOME", home.to_string_lossy().as_ref());
+        let _override_guard = EnvVarGuard::set(&env_name, format!("~/bin/fake-{program}").as_str());
+        let output = run_command(program, &[], None).expect("override command should execute");
+
+        assert_eq!(output, "override-home-ok");
         let _ = fs::remove_dir_all(root);
     }
 

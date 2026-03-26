@@ -349,3 +349,45 @@ impl AppService {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app_service::test_support::{lock_env, set_env_var, unique_temp_path};
+    use host_infra_system::AppConfigStore;
+    use host_test_support::EnvVarGuard;
+    use std::path::PathBuf;
+
+    #[test]
+    fn opencode_process_registry_path_uses_expanded_config_dir_override() {
+        let _env_lock = lock_env();
+        let home = unique_temp_path("process-registry-home");
+        let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
+        let _config_dir_guard = EnvVarGuard::set("OPENDUCKTOR_CONFIG_DIR", "~/.openducktor-local");
+
+        let config_store = AppConfigStore::new().expect("config store should resolve");
+        let registry_path = AppService::opencode_process_registry_path(&config_store);
+
+        let base_dir = home.join(".openducktor-local");
+        let expected = base_dir.join(PathBuf::from(OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH));
+        assert_eq!(config_store.path(), base_dir.join("config.json"));
+        assert_eq!(registry_path, expected);
+    }
+
+    #[test]
+    fn opencode_process_registry_path_uses_expanded_quoted_config_dir_override() {
+        let _env_lock = lock_env();
+        let home = unique_temp_path("process-registry-quoted-home");
+        let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
+        let _config_dir_guard =
+            EnvVarGuard::set("OPENDUCKTOR_CONFIG_DIR", "\"~/.openducktor-local\"");
+
+        let config_store = AppConfigStore::new().expect("config store should resolve");
+        let registry_path = AppService::opencode_process_registry_path(&config_store);
+
+        let expected = home
+            .join(".openducktor-local")
+            .join(PathBuf::from(OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH));
+        assert_eq!(registry_path, expected);
+    }
+}
