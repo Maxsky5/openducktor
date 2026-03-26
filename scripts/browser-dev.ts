@@ -8,9 +8,6 @@ const backendEnv: Record<string, string> = {
   ...process.env,
   ODT_BROWSER_BACKEND_PORT: backendPort,
 };
-if (process.env.OPENDUCKTOR_CONFIG_DIR) {
-  backendEnv.OPENDUCKTOR_CONFIG_DIR = process.env.OPENDUCKTOR_CONFIG_DIR;
-}
 
 const backendProcess = Bun.spawn({
   cmd: ["cargo", "run", "--bin", "browser_backend"],

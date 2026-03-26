@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 use std::env;
 use std::fs;
@@ -101,7 +101,7 @@ mod tests {
         compute_repo_id, compute_repo_slug, resolve_central_beads_dir,
         resolve_default_worktree_base_dir, resolve_effective_worktree_base_dir,
     };
-    use host_test_support::lock_env;
+    use host_test_support::{lock_env, EnvVarGuard};
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -135,6 +135,7 @@ mod tests {
     #[test]
     fn central_beads_dir_uses_expected_layout_suffix() {
         let _env_lock = lock_env();
+        let _override_guard = EnvVarGuard::remove("OPENDUCKTOR_CONFIG_DIR");
         let resolved =
             resolve_central_beads_dir(Path::new("/tmp/openducktor-test/repo")).expect("beads dir");
         let as_string = resolved.to_string_lossy();
@@ -145,6 +146,7 @@ mod tests {
     #[test]
     fn central_beads_dir_resolution_does_not_create_directories() {
         let _env_lock = lock_env();
+        let _override_guard = EnvVarGuard::remove("OPENDUCKTOR_CONFIG_DIR");
         let home = dirs::home_dir().expect("home directory should resolve");
 
         for attempt in 0..64 {
@@ -178,11 +180,29 @@ mod tests {
     #[test]
     fn default_worktree_base_dir_uses_expected_layout() {
         let _env_lock = lock_env();
+        let _override_guard = EnvVarGuard::remove("OPENDUCKTOR_CONFIG_DIR");
         let resolved = resolve_default_worktree_base_dir(Path::new("/tmp/openducktor-test/repo"))
             .expect("worktree base dir");
         let as_string = resolved.to_string_lossy();
         assert!(as_string.contains(".openducktor/worktrees/"));
         assert!(!as_string.ends_with("/.beads"));
+    }
+
+    #[test]
+    fn central_beads_dir_uses_env_override_when_set() {
+        let _env_lock = lock_env();
+        let override_base = "/tmp/odt-custom-config-dir";
+        let _override_guard = EnvVarGuard::set("OPENDUCKTOR_CONFIG_DIR", override_base);
+
+        let repo_path = Path::new("/tmp/openducktor-test/repo");
+        let repo_id = compute_repo_id(repo_path).expect("repo id should resolve");
+        let resolved = resolve_central_beads_dir(repo_path).expect("beads dir should resolve");
+        let expected = PathBuf::from(override_base)
+            .join("beads")
+            .join(repo_id)
+            .join(".beads");
+
+        assert_eq!(resolved, expected);
     }
 
     #[test]

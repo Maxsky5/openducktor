@@ -24,6 +24,11 @@ const DEFAULT_CONFIG_DIR_NAME: &str = ".openducktor";
 /// Otherwise returns `~/.openducktor`.
 pub fn resolve_openducktor_base_dir() -> Result<PathBuf> {
     if let Some(env_dir) = env::var_os(OPENDUCKTOR_CONFIG_DIR_ENV) {
+        if env_dir.is_empty() {
+            return Err(anyhow!(
+                "OPENDUCKTOR_CONFIG_DIR is set but empty; provide a valid directory path"
+            ));
+        }
         return Ok(PathBuf::from(env_dir));
     }
     let home = dirs::home_dir().ok_or_else(|| anyhow!("Unable to resolve user home directory"))?;
@@ -191,4 +196,24 @@ fn create_temporary_config_path(path: &Path, attempt: u8) -> Result<PathBuf> {
     temp_name.push(file_name);
     temp_name.push(format!(".tmp-{}-{nanos}-{attempt}", std::process::id()));
     Ok(parent.join(temp_name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_openducktor_base_dir;
+    use host_test_support::{lock_env, EnvVarGuard};
+
+    #[test]
+    fn resolve_openducktor_base_dir_rejects_empty_env_override() {
+        let _env_lock = lock_env();
+        let _override_guard = EnvVarGuard::set("OPENDUCKTOR_CONFIG_DIR", "");
+
+        let error = resolve_openducktor_base_dir().expect_err("empty override should be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("OPENDUCKTOR_CONFIG_DIR is set but empty"),
+            "unexpected error: {error}"
+        );
+    }
 }
