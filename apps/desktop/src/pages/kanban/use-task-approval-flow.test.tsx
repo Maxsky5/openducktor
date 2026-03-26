@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createTauriHostClient } from "@openducktor/adapters-tauri-host";
 import type { TaskApprovalContext } from "@openducktor/contracts";
+import { waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { act } from "react";
 import { toast } from "sonner";
@@ -193,51 +194,23 @@ const mountApprovalHarness = async (Harness: () => ReactElement | null) => {
   return harness;
 };
 
-const flushHarnessEffects = async (): Promise<void> => {
-  await act(async () => {
-    await Promise.resolve();
-    await new Promise<void>((resolve) => {
-      if (typeof MessageChannel === "undefined") {
-        setTimeout(resolve, 0);
-        return;
-      }
-
-      const channel = new MessageChannel();
-      channel.port1.onmessage = () => {
-        channel.port1.close();
-        channel.port2.close();
-        resolve();
-      };
-      channel.port2.postMessage(undefined);
-    });
-  });
+const waitForTaskApprovalModalLoaded = async (timeoutMs = 1000): Promise<void> => {
+  await waitFor(
+    () => {
+      expect(latestHarnessValue?.taskApprovalModal).toBeTruthy();
+      expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(false);
+    },
+    { timeout: timeoutMs },
+  );
 };
 
-const waitForTaskApprovalModalLoaded = async (timeoutMs = 200): Promise<void> => {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    if (
-      latestHarnessValue?.taskApprovalModal &&
-      latestHarnessValue.taskApprovalModal.isLoading === false
-    ) {
-      return;
-    }
-    await flushHarnessEffects();
-  }
-
-  throw new Error("Task approval modal did not finish loading.");
-};
-
-const waitForTaskApprovalModalClosed = async (timeoutMs = 200): Promise<void> => {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    if (latestHarnessValue?.taskApprovalModal === null) {
-      return;
-    }
-    await flushHarnessEffects();
-  }
-
-  throw new Error("Task approval modal did not close.");
+const waitForTaskApprovalModalClosed = async (timeoutMs = 1000): Promise<void> => {
+  await waitFor(
+    () => {
+      expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+    },
+    { timeout: timeoutMs },
+  );
 };
 
 describe("useTaskApprovalFlow", () => {
@@ -923,6 +896,10 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(false);
     expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("pull_request");
     expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBeNull();
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Approval failed",
+      expect.objectContaining({ description: "Generation crashed" }),
+    );
     expect(taskPullRequestUpsertMock).not.toHaveBeenCalled();
 
     await act(async () => {

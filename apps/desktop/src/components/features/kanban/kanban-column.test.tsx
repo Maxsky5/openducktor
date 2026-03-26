@@ -76,6 +76,8 @@ describe("KanbanColumn", () => {
     const idleIndex = html.indexOf("Queued");
 
     expect(waitingIndex).toBeGreaterThan(-1);
+    expect(activeIndex).toBeGreaterThan(-1);
+    expect(idleIndex).toBeGreaterThan(-1);
     expect(activeIndex).toBeGreaterThan(waitingIndex);
     expect(idleIndex).toBeGreaterThan(activeIndex);
     expect(html).toContain("kanban-waiting-input-card");

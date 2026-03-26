@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { render } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TaskApprovalModalModel } from "./kanban-page-model-types";
+import { TaskApprovalModal } from "./task-approval-modal";
 import { TaskApprovalModalPanel } from "./task-approval-modal-panel";
 
 const noop = () => {};
@@ -42,6 +44,21 @@ const createModel = (overrides: Partial<TaskApprovalModalModel> = {}): TaskAppro
 });
 
 describe("TaskApprovalModal", () => {
+  test("renders the wrapper dialog title and description", () => {
+    const { baseElement, unmount } = render(
+      createElement(TaskApprovalModal, { model: createModel() }),
+    );
+
+    try {
+      expect(baseElement.textContent).toContain("Publish And Mark Done");
+      expect(baseElement.textContent).toContain(
+        "The local merge is already applied. Push origin/beta to publish it, then move the task to Done.",
+      );
+    } finally {
+      unmount();
+    }
+  });
+
   test("renders explicit completion copy for merged local branches", () => {
     const html = renderToStaticMarkup(
       createElement(TaskApprovalModalPanel, { model: createModel() }),
@@ -170,5 +187,24 @@ describe("TaskApprovalModal", () => {
     );
     expect(html).toContain("Start PR Generation");
     expect(html).not.toContain("generate the pull request title and description");
+  });
+
+  test("disables pull request confirmation when the provider is unavailable", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskApprovalModalPanel, {
+        model: createModel({
+          stage: "approval",
+          mode: "pull_request",
+          publishTarget: null,
+          pullRequestAvailable: false,
+          pullRequestUnavailableReason: "GitHub is not configured for this repository.",
+        }),
+      }),
+    );
+
+    expect(html).toContain(
+      "Pull request unavailable: GitHub is not configured for this repository.",
+    );
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Create Pull Request<\/button>/);
   });
 });

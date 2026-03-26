@@ -194,7 +194,13 @@ export function getTaskApprovalModalHeader(model: TaskApprovalModalModel): {
   };
 }
 
-export function TaskApprovalModalPanel({ model }: { model: TaskApprovalModalModel }): ReactElement {
+export function TaskApprovalModalPanel({
+  model,
+  showHeader = true,
+}: {
+  model: TaskApprovalModalModel;
+  showHeader?: boolean;
+}): ReactElement {
   const { title, description } = getTaskApprovalModalHeader(model);
 
   const hasManualPullRequestValidationError =
@@ -215,6 +221,7 @@ export function TaskApprovalModalPanel({ model }: { model: TaskApprovalModalMode
     model.isLoading ||
     model.isSubmitting ||
     model.hasUncommittedChanges ||
+    (model.mode === "pull_request" && !model.pullRequestAvailable) ||
     hasManualPullRequestValidationError ||
     hasSquashCommitMessageSubmitError;
   const isCompletionStage = model.stage === "complete_direct_merge";
@@ -263,10 +270,12 @@ export function TaskApprovalModalPanel({ model }: { model: TaskApprovalModalMode
 
   return (
     <>
-      <div className="space-y-3 border-b border-border/80 px-6 py-6 pr-16 sm:px-8 sm:pr-20">
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
+      {showHeader ? (
+        <div className="space-y-3 border-b border-border/80 px-6 py-6 pr-16 sm:px-8 sm:pr-20">
+          <h2 className="text-lg font-semibold">{title}</h2>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+      ) : null}
 
       <DialogBody>
         {model.stage === "approval" ? (

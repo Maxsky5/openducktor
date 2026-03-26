@@ -32,11 +32,11 @@ export function TaskApprovalModal({
       }}
     >
       <DialogContent className="max-w-3xl overflow-hidden p-0">
-        <DialogHeader className="sr-only">
+        <DialogHeader className="space-y-3 border-b border-border/80 px-6 py-6 pr-16 sm:px-8 sm:pr-20">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <TaskApprovalModalPanel model={model} />
+        <TaskApprovalModalPanel model={model} showHeader={false} />
       </DialogContent>
     </Dialog>
   );
