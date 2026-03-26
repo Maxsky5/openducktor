@@ -21,6 +21,23 @@ type ReuseStrategyInput = {
   deps: StartSessionExecutionDependencies;
 };
 
+const isSessionPreludeMessage = (messageId: string, sessionId: string): boolean => {
+  return (
+    messageId === `history:session-start:${sessionId}` ||
+    messageId === `history:session-forked:${sessionId}` ||
+    messageId === `history:system-prompt:${sessionId}`
+  );
+};
+
+const hasOnlySessionPreludeMessages = (
+  session: Pick<AgentSessionState, "sessionId" | "messages">,
+): boolean => {
+  return (
+    session.messages.length > 0 &&
+    session.messages.every((message) => isSessionPreludeMessage(message.id, session.sessionId))
+  );
+};
+
 const loadPersistedSessionsForRole = async ({
   ctx,
 }: Pick<ReuseStrategyInput, "ctx">): Promise<AgentSessionRecord[]> => {
@@ -35,13 +52,15 @@ const ensureSessionHydrated = async ({
   deps,
   sessionId,
   mode,
+  forceReload = false,
 }: {
   ctx: StartSessionContext;
   deps: StartSessionExecutionDependencies;
   sessionId: string;
   mode: "reuse" | "fork";
+  forceReload?: boolean;
 }): Promise<AgentSessionState> => {
-  if (!deps.session.sessionsRef.current[sessionId]) {
+  if (forceReload || !deps.session.sessionsRef.current[sessionId]) {
     await deps.session.loadAgentSessions(ctx.taskId, {
       mode: "requested_history",
       targetSessionId: sessionId,
@@ -152,6 +171,19 @@ export const resolveLoadedSourceSession = async ({
       entry.taskId === ctx.taskId && entry.role === ctx.role && entry.sessionId === sourceSessionId,
   );
   if (existingSourceSession) {
+    if (
+      existingSourceSession.messages.length === 0 ||
+      (existingSourceSession.status === "stopped" &&
+        hasOnlySessionPreludeMessages(existingSourceSession))
+    ) {
+      return ensureSessionHydrated({
+        ctx,
+        deps,
+        sessionId: existingSourceSession.sessionId,
+        mode: "fork",
+        forceReload: true,
+      });
+    }
     return existingSourceSession;
   }
 

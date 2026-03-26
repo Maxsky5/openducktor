@@ -70,3 +70,33 @@ export const rollbackStartedSessionAfterPersistenceFailure = async ({
     error instanceof Error ? { cause: error } : undefined,
   );
 };
+
+export const rollbackStartedSessionBeforeRegistration = async ({
+  error,
+  startedCtx,
+  runtime,
+  reason,
+}: {
+  error: unknown;
+  startedCtx: StartedSessionContext;
+  runtime: RuntimeDependencies;
+  reason: string;
+}): Promise<never> => {
+  const sessionId = startedCtx.summary.sessionId;
+
+  try {
+    await runOrchestratorTask(reason, async () => runtime.adapter.stopSession(sessionId), {
+      tags: createSessionStartTags(startedCtx),
+    });
+  } catch (stopError) {
+    throw new Error(
+      `Failed to initialize started session "${sessionId}": ${errorMessage(error)}. Failed to stop the started session during rollback: ${errorMessage(stopError)}`,
+      { cause: stopError },
+    );
+  }
+
+  throw new Error(
+    `Failed to initialize started session "${sessionId}": ${errorMessage(error)}. The started session was stopped before local registration.`,
+    error instanceof Error ? { cause: error } : undefined,
+  );
+};

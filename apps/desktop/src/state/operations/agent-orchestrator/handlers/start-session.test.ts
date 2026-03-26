@@ -1569,6 +1569,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("forks from the selected source session for pull request generation", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
+    const originalLoadSessionHistory = adapter.loadSessionHistory;
     const persistedSnapshots: AgentSessionRecord[] = [];
     let sessionsById: Record<string, AgentSessionState> = {
       "source-build": {
@@ -1622,6 +1623,26 @@ describe("agent-orchestrator/handlers/start-session", () => {
         status: "idle",
       };
     };
+    adapter.loadSessionHistory = async (input) => {
+      expect(input.runtimeKind).toBe("opencode");
+      expect(input.externalSessionId).toBe("external-forked-pr-session");
+      return [
+        {
+          messageId: "fork-user-1",
+          role: "user",
+          timestamp: "2026-02-22T08:21:00.000Z",
+          text: "Generate the PR summary.",
+          parts: [],
+        },
+        {
+          messageId: "fork-assistant-1",
+          role: "assistant",
+          timestamp: "2026-02-22T08:22:00.000Z",
+          text: "I drafted the summary.",
+          parts: [],
+        },
+      ];
+    };
 
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
@@ -1666,10 +1687,292 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(sessionId).toBe("forked-pr-session");
       expect(sessionsById["forked-pr-session"]?.scenario).toBe("build_pull_request_generation");
       expect(sessionsById["forked-pr-session"]?.workingDirectory).toBe("/tmp/repo/worktree");
+      expect(sessionsById["forked-pr-session"]?.messages).toEqual([
+        {
+          id: "history:session-forked:forked-pr-session",
+          role: "system",
+          content: "Session forked (build - build_pull_request_generation)",
+          timestamp: "2026-02-22T08:20:00.000Z",
+        },
+        {
+          id: "history:system-prompt:forked-pr-session",
+          role: "system",
+          content: expect.stringContaining("System prompt:"),
+          timestamp: "2026-02-22T08:20:00.000Z",
+        },
+        {
+          id: "history:text:fork-user-1",
+          role: "user",
+          content: "Generate the PR summary.",
+          timestamp: "2026-02-22T08:21:00.000Z",
+        },
+        {
+          id: "history:text:fork-assistant-1",
+          role: "assistant",
+          content: "I drafted the summary.",
+          timestamp: "2026-02-22T08:22:00.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: false,
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "default",
+            profileId: "build",
+          },
+        },
+      ]);
       expect(persistedSnapshots).toHaveLength(1);
       expect(persistedSnapshots[0]?.sessionId).toBe("forked-pr-session");
     } finally {
       adapter.forkSession = originalForkSession;
+      adapter.loadSessionHistory = originalLoadSessionHistory;
+    }
+  });
+
+  test("hydrates a stopped source session before forking so inherited history is available immediately", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalForkSession = adapter.forkSession;
+    const originalLoadSessionHistory = adapter.loadSessionHistory;
+    const loadAgentSessionsCalls: Array<{ taskId: string; targetSessionId?: string }> = [];
+    let sessionsById: Record<string, AgentSessionState> = {
+      "source-build": {
+        runtimeKind: "opencode",
+        sessionId: "source-build",
+        externalSessionId: "external-source-build",
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "stopped",
+        startedAt: "2026-02-22T08:10:00.000Z",
+        runtimeId: null,
+        runId: null,
+        runtimeEndpoint: "",
+        workingDirectory: "/tmp/repo/worktree",
+        messages: [],
+        draftAssistantText: "",
+        draftAssistantMessageId: null,
+        draftReasoningText: "",
+        draftReasoningMessageId: null,
+        contextUsage: null,
+        pendingPermissions: [],
+        pendingQuestions: [],
+        todos: [],
+        modelCatalog: null,
+        selectedModel: BUILD_SELECTION,
+        isLoadingModelCatalog: false,
+      },
+    };
+
+    adapter.forkSession = async () => ({
+      runtimeKind: "opencode",
+      sessionId: "forked-from-hydrated-source",
+      externalSessionId: "external-forked-from-hydrated-source",
+      startedAt: "2026-02-22T08:20:00.000Z",
+      role: "build",
+      scenario: "build_pull_request_generation",
+      status: "idle",
+    });
+    adapter.loadSessionHistory = async () => [
+      {
+        messageId: "child-user-1",
+        role: "user",
+        timestamp: "2026-02-22T08:21:00.000Z",
+        text: "Hydrated child history",
+        parts: [],
+      },
+    ];
+
+    const sessionsRef = { current: sessionsById };
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: (updater) => {
+        sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
+        sessionsRef.current = sessionsById;
+      },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        runId: "run-2",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async (taskId, options) => {
+        const targetSessionId = options?.targetSessionId ?? undefined;
+        loadAgentSessionsCalls.push(targetSessionId ? { taskId, targetSessionId } : { taskId });
+        const sourceBuild = sessionsById["source-build"];
+        if (!sourceBuild) {
+          throw new Error("Missing source-build session");
+        }
+        sessionsById = {
+          ...sessionsById,
+          "source-build": {
+            ...sourceBuild,
+            status: "idle",
+            runtimeId: "runtime-1",
+            runId: "run-2",
+            runtimeEndpoint: "http://127.0.0.1:4444",
+            messages: [],
+          },
+        };
+        sessionsRef.current = sessionsById;
+      },
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      const sessionId = await start({
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_pull_request_generation",
+        startMode: "fork",
+        selectedModel: BUILD_SELECTION,
+        sourceSessionId: "source-build",
+      });
+
+      expect(sessionId).toBe("forked-from-hydrated-source");
+      expect(loadAgentSessionsCalls).toEqual([
+        {
+          taskId: "task-1",
+          targetSessionId: "source-build",
+        },
+      ]);
+      expect(sessionsById["forked-from-hydrated-source"]?.messages).toEqual([
+        {
+          id: "history:session-forked:forked-from-hydrated-source",
+          role: "system",
+          content: "Session forked (build - build_pull_request_generation)",
+          timestamp: "2026-02-22T08:20:00.000Z",
+        },
+        {
+          id: "history:system-prompt:forked-from-hydrated-source",
+          role: "system",
+          content: expect.stringContaining("System prompt:"),
+          timestamp: "2026-02-22T08:20:00.000Z",
+        },
+        {
+          id: "history:text:child-user-1",
+          role: "user",
+          content: "Hydrated child history",
+          timestamp: "2026-02-22T08:21:00.000Z",
+        },
+      ]);
+    } finally {
+      adapter.forkSession = originalForkSession;
+      adapter.loadSessionHistory = originalLoadSessionHistory;
+    }
+  });
+
+  test("stops the forked session when child history hydration fails", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalForkSession = adapter.forkSession;
+    const originalLoadSessionHistory = adapter.loadSessionHistory;
+    const originalStopSession = adapter.stopSession;
+    const stoppedSessionIds: string[] = [];
+    let sessionsById: Record<string, AgentSessionState> = {
+      "source-build": {
+        runtimeKind: "opencode",
+        sessionId: "source-build",
+        externalSessionId: "external-source-build",
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+        startedAt: "2026-02-22T08:10:00.000Z",
+        runtimeId: "runtime-1",
+        runId: "run-2",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+        messages: [],
+        draftAssistantText: "",
+        draftAssistantMessageId: null,
+        draftReasoningText: "",
+        draftReasoningMessageId: null,
+        contextUsage: null,
+        pendingPermissions: [],
+        pendingQuestions: [],
+        todos: [],
+        modelCatalog: null,
+        selectedModel: BUILD_SELECTION,
+        isLoadingModelCatalog: false,
+      },
+    };
+
+    adapter.forkSession = async () => ({
+      runtimeKind: "opencode",
+      sessionId: "fork-history-failure",
+      externalSessionId: "external-fork-history-failure",
+      startedAt: "2026-02-22T08:20:00.000Z",
+      role: "build",
+      scenario: "build_pull_request_generation",
+      status: "idle",
+    });
+    adapter.loadSessionHistory = async () => {
+      throw new Error("history unavailable");
+    };
+    adapter.stopSession = async (sessionId) => {
+      stoppedSessionIds.push(sessionId);
+    };
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: (updater) => {
+        sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
+      },
+      sessionsRef: { current: sessionsById },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        runId: "run-2",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_pull_request_generation",
+          startMode: "fork",
+          selectedModel: BUILD_SELECTION,
+          sourceSessionId: "source-build",
+        }),
+      ).rejects.toThrow(
+        'Failed to initialize started session "fork-history-failure": history unavailable. The started session was stopped before local registration.',
+      );
+      expect(stoppedSessionIds).toEqual(["fork-history-failure"]);
+      expect(sessionsById["fork-history-failure"]).toBeUndefined();
+    } finally {
+      adapter.forkSession = originalForkSession;
+      adapter.loadSessionHistory = originalLoadSessionHistory;
+      adapter.stopSession = originalStopSession;
     }
   });
 
@@ -2700,6 +3003,12 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(kickoffCalls).toBe(1);
       expect(refreshCalls).toBe(1);
       expect(Object.keys(sessionsState)).toContain("session-created");
+      expect(sessionsState["session-created"]?.messages[0]).toEqual({
+        id: "history:session-start:session-created",
+        role: "system",
+        content: "Session started (build - build_implementation_start)",
+        timestamp: "2026-02-22T08:00:10.000Z",
+      });
     } finally {
       adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
