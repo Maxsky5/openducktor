@@ -355,7 +355,7 @@ describe("useAgentStudioDocuments", () => {
       expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
       expect(applyDocumentUpdateMock).toHaveBeenCalledWith("plan", {
         markdown: "# Saved plan",
-        updatedAt: expect.any(String),
+        updatedAt: null,
       });
       expect(reloadDocumentMock).not.toHaveBeenCalled();
     } finally {

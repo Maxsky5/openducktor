@@ -12,6 +12,47 @@ type UseAgentStudioDocumentsArgs = {
   selectedTask: TaskCard | null;
 };
 
+type WorkflowDocumentTarget = {
+  section: "spec" | "plan" | "qa";
+  state: ReturnType<typeof useTaskDocuments>["specDoc"];
+  inputKey: "markdown" | "reportMarkdown";
+};
+
+const resolveWorkflowDocumentTarget = (
+  normalizedTool: string | null,
+  docs: {
+    specDoc: ReturnType<typeof useTaskDocuments>["specDoc"];
+    planDoc: ReturnType<typeof useTaskDocuments>["planDoc"];
+    qaDoc: ReturnType<typeof useTaskDocuments>["qaDoc"];
+  },
+): WorkflowDocumentTarget | null => {
+  if (normalizedTool === "odt_set_spec") {
+    return {
+      section: "spec",
+      state: docs.specDoc,
+      inputKey: "markdown",
+    };
+  }
+
+  if (normalizedTool === "odt_set_plan") {
+    return {
+      section: "plan",
+      state: docs.planDoc,
+      inputKey: "markdown",
+    };
+  }
+
+  if (normalizedTool === "odt_qa_approved" || normalizedTool === "odt_qa_rejected") {
+    return {
+      section: "qa",
+      state: docs.qaDoc,
+      inputKey: "reportMarkdown",
+    };
+  }
+
+  return null;
+};
+
 export function useAgentStudioDocuments({
   activeRepo = null,
   taskId,
@@ -90,14 +131,11 @@ export function useAgentStudioDocuments({
         continue;
       }
       const normalizedTool = normalizeOdtWorkflowToolName(meta.tool);
-      const target =
-        normalizedTool === "odt_set_spec"
-          ? { section: "spec" as const, state: specDoc, inputKey: "markdown" as const }
-          : normalizedTool === "odt_set_plan"
-            ? { section: "plan" as const, state: planDoc, inputKey: "markdown" as const }
-            : normalizedTool === "odt_qa_approved" || normalizedTool === "odt_qa_rejected"
-              ? { section: "qa" as const, state: qaDoc, inputKey: "reportMarkdown" as const }
-              : null;
+      const target = resolveWorkflowDocumentTarget(normalizedTool, {
+        specDoc,
+        planDoc,
+        qaDoc,
+      });
       if (!target) {
         continue;
       }
@@ -111,7 +149,9 @@ export function useAgentStudioDocuments({
       const inputMarkdown = toolInput?.[target.inputKey];
       const hasInputMarkdown = typeof inputMarkdown === "string" && inputMarkdown.trim().length > 0;
 
-      let effectiveUpdatedAtTimestamp = parseTimestamp(target.state.updatedAt);
+      let effectiveUpdatedAtTimestamp = target.state.updatedAt
+        ? parseTimestamp(target.state.updatedAt)
+        : null;
       if (hasInputMarkdown) {
         const shouldApplyOptimisticDocument =
           target.state.markdown.trim() !== inputMarkdown.trim() ||
@@ -121,7 +161,7 @@ export function useAgentStudioDocuments({
         if (shouldApplyOptimisticDocument) {
           applyDocumentUpdate(target.section, {
             markdown: inputMarkdown,
-            updatedAt: completionInfo?.raw ?? target.state.updatedAt ?? new Date().toISOString(),
+            updatedAt: completionInfo?.raw ?? target.state.updatedAt ?? null,
           });
           effectiveUpdatedAtTimestamp = completionInfo?.timestamp ?? effectiveUpdatedAtTimestamp;
         }

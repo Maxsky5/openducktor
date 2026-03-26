@@ -298,6 +298,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const taskDetailsSheet = (
     <TaskDetailsSheetController
       ref={taskDetailsSheetRef}
+      activeRepo={activeRepo}
       allTasks={tasks}
       runs={runs}
       workflowActionsEnabled={false}

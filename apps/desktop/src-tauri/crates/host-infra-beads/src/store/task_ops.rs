@@ -124,7 +124,6 @@ impl BeadsTaskStore {
         let value = self.run_bd_json(repo_path, &["list", "--all", "--limit", "0"])?;
 
         let mut tasks = Vec::new();
-        let mut metadata_by_task_id = HashMap::new();
         for entry in value
             .as_array()
             .ok_or_else(|| anyhow!("bd list did not return an array"))?
@@ -134,10 +133,7 @@ impl BeadsTaskStore {
             if issue.issue_type == "event" || issue.issue_type == "gate" {
                 continue;
             }
-            let task_id = issue.id.clone();
-            let metadata = self.parse_task_metadata_from_issue(&issue);
             tasks.push(self.parse_task_card(issue, &metadata_namespace)?);
-            metadata_by_task_id.insert(task_id, metadata);
         }
 
         let mut subtasks_by_parent: HashMap<String, Vec<String>> = HashMap::new();
@@ -161,7 +157,6 @@ impl BeadsTaskStore {
             &metadata_namespace,
             cache_generation,
             &tasks,
-            &metadata_by_task_id,
         )?;
         Ok(tasks)
     }

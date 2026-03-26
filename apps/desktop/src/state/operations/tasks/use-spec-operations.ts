@@ -1,12 +1,15 @@
 import { defaultSpecTemplateMarkdown, validateSpecMarkdown } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import type { TaskDocumentPayload } from "../../../types/task-documents";
+import { resolveLatestDocumentPayload } from "../../queries/document-utils";
 import {
   documentQueryKeys,
   loadPlanDocumentFromQuery,
   loadQaReportDocumentFromQuery,
   loadSpecDocumentFromQuery,
 } from "../../queries/documents";
+import { taskQueryKeys } from "../../queries/tasks";
 import { host } from "../shared/host";
 import { requireActiveRepo } from "./task-operations-model";
 
@@ -22,6 +25,17 @@ type UseSpecOperationsResult = {
   saveSpec: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
   saveSpecDocument: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
   savePlanDocument: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
+};
+
+const setLatestDocumentPayload = (
+  current: TaskDocumentPayload | undefined,
+  markdown: string,
+  updatedAt: string,
+): TaskDocumentPayload => {
+  return resolveLatestDocumentPayload(current, {
+    markdown,
+    updatedAt,
+  });
 };
 
 export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpecOperationsResult {
@@ -69,8 +83,16 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       }
 
       const saved = await host.setSpec({ repoPath: repo, taskId, markdown });
+      queryClient.setQueryData<TaskDocumentPayload>(
+        documentQueryKeys.spec(repo, taskId),
+        (current) => setLatestDocumentPayload(current, markdown, saved.updatedAt),
+      );
       await queryClient.invalidateQueries({
-        queryKey: documentQueryKeys.spec(repo, taskId),
+        queryKey: documentQueryKeys.all,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: taskQueryKeys.repoData(repo),
+        exact: true,
       });
       return saved;
     },
@@ -85,8 +107,16 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
         taskId,
         markdown,
       });
+      queryClient.setQueryData<TaskDocumentPayload>(
+        documentQueryKeys.spec(repo, taskId),
+        (current) => setLatestDocumentPayload(current, markdown, saved.updatedAt),
+      );
       await queryClient.invalidateQueries({
-        queryKey: documentQueryKeys.spec(repo, taskId),
+        queryKey: documentQueryKeys.all,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: taskQueryKeys.repoData(repo),
+        exact: true,
       });
       return saved;
     },
@@ -101,8 +131,16 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
         taskId,
         markdown,
       });
+      queryClient.setQueryData<TaskDocumentPayload>(
+        documentQueryKeys.plan(repo, taskId),
+        (current) => setLatestDocumentPayload(current, markdown, saved.updatedAt),
+      );
       await queryClient.invalidateQueries({
-        queryKey: documentQueryKeys.plan(repo, taskId),
+        queryKey: documentQueryKeys.all,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: taskQueryKeys.repoData(repo),
+        exact: true,
       });
       return saved;
     },

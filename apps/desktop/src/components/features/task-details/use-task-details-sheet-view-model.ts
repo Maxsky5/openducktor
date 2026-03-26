@@ -49,6 +49,7 @@ type TaskDetailsSheetViewModel = {
 };
 
 type UseTaskDetailsSheetViewModelOptions = {
+  activeRepo?: string | null;
   task: TaskDetailsSheetProps["task"];
   allTasks: TaskDetailsSheetProps["allTasks"];
   open: TaskDetailsSheetProps["open"];
@@ -67,6 +68,7 @@ type UseTaskDetailsSheetViewModelOptions = {
 };
 
 export function useTaskDetailsSheetViewModel({
+  activeRepo = null,
   task,
   allTasks,
   open,
@@ -84,7 +86,11 @@ export function useTaskDetailsSheetViewModel({
   onDelete,
 }: UseTaskDetailsSheetViewModelOptions): TaskDetailsSheetViewModel {
   const taskId = task?.id ?? null;
-  const { specDoc, planDoc, qaDoc, ensureDocumentLoaded } = useTaskDocuments(taskId, open);
+  const { specDoc, planDoc, qaDoc, ensureDocumentLoaded } = useTaskDocuments(
+    taskId,
+    open,
+    activeRepo ?? "",
+  );
 
   const taskById = useMemo(() => new Map(allTasks.map((entry) => [entry.id, entry])), [allTasks]);
   const deleteImpactTaskIds = useMemo(

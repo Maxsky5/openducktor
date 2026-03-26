@@ -1,6 +1,7 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 
 export type TaskDetailsSheetProps = {
+  activeRepo?: string | null;
   task: TaskCard | null;
   allTasks: TaskCard[];
   runs: RunSummary[];

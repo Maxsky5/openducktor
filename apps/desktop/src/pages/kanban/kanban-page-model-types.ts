@@ -108,6 +108,7 @@ export type KanbanPageTaskComposerModel = {
 };
 
 export type KanbanPageTaskDetailsControllerModel = {
+  activeRepo: string | null;
   allTasks: TaskCard[];
   runs: RunSummary[];
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;

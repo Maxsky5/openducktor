@@ -27,6 +27,7 @@ export const TaskDetailsSheetController = forwardRef<
   TaskDetailsSheetControllerProps
 >(function TaskDetailsSheetController(
   {
+    activeRepo = null,
     allTasks,
     runs,
     workflowActionsEnabled,
@@ -78,6 +79,7 @@ export const TaskDetailsSheetController = forwardRef<
 
   return (
     <TaskDetailsSheet
+      activeRepo={activeRepo}
       task={task}
       allTasks={allTasks}
       runs={runs}

@@ -1280,6 +1280,76 @@ fn stale_generation_cache_writes_are_ignored() -> Result<()> {
 }
 
 #[test]
+fn get_task_metadata_ignores_cached_task_list_metadata() -> Result<()> {
+    let repo = RepoFixture::new("metadata-read-bypasses-task-list-cache");
+    let stale = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "documents": {
+                    "spec": [
+                        {
+                            "markdown": "# Stale spec",
+                            "updatedAt": "2026-02-20T10:00:00Z",
+                            "updatedBy": "planner-agent",
+                            "sourceTool": "set_spec",
+                            "revision": 1
+                        }
+                    ]
+                }
+            }
+        })),
+    );
+    let fresh = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "documents": {
+                    "spec": [
+                        {
+                            "markdown": "# Fresh spec",
+                            "updatedAt": "2026-02-20T11:00:00Z",
+                            "updatedBy": "planner-agent",
+                            "sourceTool": "set_spec",
+                            "revision": 2
+                        }
+                    ]
+                }
+            }
+        })),
+    );
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(json!([stale]).to_string())),
+        MockStep::WithEnv(Ok(json!([fresh]).to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let _ = store.list_tasks(repo.path())?;
+    let metadata = store.get_task_metadata(repo.path(), "task-1")?;
+
+    assert_eq!(metadata.spec.markdown, "# Fresh spec");
+    assert_eq!(
+        metadata.spec.updated_at.as_deref(),
+        Some("2026-02-20T11:00:00Z")
+    );
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 2);
+    assert_eq!(calls[0].args[0], "list");
+    assert_eq!(calls[1].args[0], "show");
+
+    Ok(())
+}
+
+#[test]
 fn create_task_normalizes_payload_and_persists_qa_flag() -> Result<()> {
     let repo = RepoFixture::new("create-task");
     let created = issue_value("task-1", "open", "feature", None, json!([]), None);
