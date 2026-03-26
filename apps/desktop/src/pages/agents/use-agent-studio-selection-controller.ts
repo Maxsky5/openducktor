@@ -9,8 +9,10 @@ import type {
 import { useMemo, useRef } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
-import { firstScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
-import { resolveAgentStudioActiveSession, resolveAgentStudioTaskId } from "./agents-page-selection";
+import {
+  resolveAgentStudioSessionSelection,
+  resolveAgentStudioTaskId,
+} from "./agents-page-selection";
 import { useAgentStudioActiveSessionRuntimeData } from "./use-agent-studio-active-session-runtime-data";
 import { useAgentStudioTaskHydration } from "./use-agent-studio-task-hydration";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
@@ -199,13 +201,23 @@ export function useAgentStudioSelectionController({
   }, [sessionsByTaskId, taskId]);
 
   const activeSession = useMemo(() => {
-    return resolveAgentStudioActiveSession({
+    return resolveAgentStudioSessionSelection({
       sessionsForTask,
       sessionParam,
       hasExplicitRoleParam,
       roleFromQuery,
-    });
-  }, [hasExplicitRoleParam, roleFromQuery, sessionParam, sessionsForTask]);
+      selectedTask,
+      fallbackRole: roleFromQuery,
+      scenarioFromQuery,
+    }).activeSession;
+  }, [
+    hasExplicitRoleParam,
+    roleFromQuery,
+    scenarioFromQuery,
+    selectedTask,
+    sessionParam,
+    sessionsForTask,
+  ]);
   const hydratedActiveSession = useAgentStudioActiveSessionRuntimeData({
     session: activeSession,
     readSessionModelCatalog,
@@ -284,36 +296,33 @@ export function useAgentStudioSelectionController({
   const isViewTaskDetachedFromQuery = Boolean(viewTaskId && taskId && viewTaskId !== taskId);
   const hasViewRoleSelection = hasExplicitRoleParam && !isViewTaskDetachedFromQuery;
 
-  const viewActiveSession = useMemo(() => {
-    return resolveAgentStudioActiveSession({
+  const viewSelection = useMemo(() => {
+    return resolveAgentStudioSessionSelection({
       sessionsForTask: viewSessionsForTask,
       sessionParam: viewSessionParam,
       hasExplicitRoleParam: hasViewRoleSelection,
       roleFromQuery,
+      selectedTask: viewSelectedTask,
+      fallbackRole: isViewTaskDetachedFromQuery ? "spec" : roleFromQuery,
+      scenarioFromQuery,
     });
-  }, [hasViewRoleSelection, roleFromQuery, viewSessionParam, viewSessionsForTask]);
+  }, [
+    hasViewRoleSelection,
+    isViewTaskDetachedFromQuery,
+    roleFromQuery,
+    scenarioFromQuery,
+    viewSelectedTask,
+    viewSessionParam,
+    viewSessionsForTask,
+  ]);
+  const viewActiveSession = viewSelection.activeSession;
   const hydratedViewActiveSession = useAgentStudioActiveSessionRuntimeData({
     session: viewActiveSession,
     readSessionModelCatalog,
     readSessionTodos,
   });
-
-  const viewRole: AgentRole = hasViewRoleSelection
-    ? roleFromQuery
-    : (viewActiveSession?.role ??
-      viewSessionsForTask[0]?.role ??
-      (isViewTaskDetachedFromQuery ? "spec" : roleFromQuery));
-
-  const viewScenarios = SCENARIOS_BY_ROLE[viewRole];
-  const explicitViewScenario =
-    hasViewRoleSelection && scenarioFromQuery && viewScenarios.includes(scenarioFromQuery)
-      ? scenarioFromQuery
-      : null;
-
-  const viewScenario: AgentScenario =
-    viewActiveSession?.scenario && viewScenarios.includes(viewActiveSession.scenario)
-      ? viewActiveSession.scenario
-      : (explicitViewScenario ?? firstScenario(viewRole));
+  const viewRole = viewSelection.role;
+  const viewScenario = viewSelection.scenario;
 
   const {
     isActiveTaskHydrated,

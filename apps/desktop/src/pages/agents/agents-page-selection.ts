@@ -4,8 +4,12 @@ export {
   pickDefaultVisibleSelectionForCatalog,
 } from "@/features/session-start";
 
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { TaskCard } from "@openducktor/contracts";
+import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import { compareAgentSessionRecency } from "@/lib/agent-session-options";
+import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { AGENT_ROLE_ORDER, firstScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
 
 export {
   toContextStorageKey,
@@ -61,24 +65,139 @@ export const resolveAgentStudioTaskId = ({
   return taskIdParam || selectedSessionById?.taskId || "";
 };
 
-export const resolveAgentStudioActiveSession = ({
+export const resolveAgentStudioDefaultRoleForTask = (task: TaskCard | null): AgentRole | null => {
+  if (!task) {
+    return null;
+  }
+
+  if (task.status === "open") {
+    const roleWorkflowMap = buildRoleWorkflowMapForTask(task);
+    for (const role of AGENT_ROLE_ORDER) {
+      const workflow = roleWorkflowMap[role];
+      if (workflow.required && workflow.available) {
+        return role;
+      }
+    }
+    return null;
+  }
+
+  if (task.status === "spec_ready") {
+    return "spec";
+  }
+
+  if (task.status === "ready_for_dev") {
+    return "planner";
+  }
+
+  if (
+    task.status === "in_progress" ||
+    task.status === "ai_review" ||
+    task.status === "human_review" ||
+    task.status === "blocked" ||
+    task.status === "deferred" ||
+    task.status === "closed"
+  ) {
+    return "build";
+  }
+
+  return null;
+};
+
+export const resolveAgentStudioSessionSelection = ({
   sessionsForTask,
   sessionParam,
   hasExplicitRoleParam,
   roleFromQuery,
+  selectedTask,
+  fallbackRole,
+  scenarioFromQuery,
 }: {
   sessionsForTask: AgentSessionState[];
   sessionParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
-}): AgentSessionState | null => {
+  selectedTask: TaskCard | null;
+  fallbackRole: AgentRole;
+  scenarioFromQuery?: AgentScenario | null;
+}): { activeSession: AgentSessionState | null; role: AgentRole; scenario: AgentScenario } => {
+  const runningSession =
+    [...sessionsForTask]
+      .filter((session) => session.status === "running" || session.status === "starting")
+      .sort(compareAgentSessionRecency)[0] ?? null;
+
+  const latestSessionByRole = (role: AgentRole): AgentSessionState | null => {
+    const roleSessions = sessionsForTask
+      .filter((session) => session.role === role)
+      .sort(compareAgentSessionRecency);
+    return roleSessions[0] ?? null;
+  };
+
+  const toSelection = (role: AgentRole, session: AgentSessionState | null) => {
+    const roleScenarios = SCENARIOS_BY_ROLE[role];
+    const explicitScenarioForRole =
+      hasExplicitRoleParam && scenarioFromQuery && roleScenarios.includes(scenarioFromQuery)
+        ? scenarioFromQuery
+        : null;
+
+    const scenario =
+      explicitScenarioForRole ??
+      (session?.scenario && roleScenarios.includes(session.scenario)
+        ? session.scenario
+        : firstScenario(role));
+
+    return {
+      activeSession: session,
+      role,
+      scenario,
+    };
+  };
+
   if (sessionParam) {
-    return sessionsForTask.find((entry) => entry.sessionId === sessionParam) ?? null;
+    const explicitSession =
+      sessionsForTask.find((entry) => entry.sessionId === sessionParam) ?? null;
+    if (explicitSession) {
+      return toSelection(explicitSession.role, explicitSession);
+    }
+    return toSelection(fallbackRole, null);
   }
+
   if (hasExplicitRoleParam) {
-    return sessionsForTask.find((entry) => entry.role === roleFromQuery) ?? null;
+    return toSelection(roleFromQuery, latestSessionByRole(roleFromQuery));
   }
-  return sessionsForTask[0] ?? null;
+
+  if (runningSession) {
+    return toSelection(runningSession.role, runningSession);
+  }
+
+  if (!selectedTask) {
+    return toSelection(fallbackRole, null);
+  }
+
+  const defaultRole = resolveAgentStudioDefaultRoleForTask(selectedTask);
+  const mostRecentSession = [...sessionsForTask].sort(compareAgentSessionRecency)[0] ?? null;
+
+  const withRoleFallback = (session: AgentSessionState | null) =>
+    toSelection(session?.role ?? defaultRole ?? fallbackRole, session);
+
+  switch (selectedTask.status) {
+    case "open": {
+      return withRoleFallback(defaultRole ? latestSessionByRole(defaultRole) : null);
+    }
+    case "spec_ready":
+      return withRoleFallback(latestSessionByRole("spec"));
+    case "ready_for_dev":
+      return withRoleFallback(latestSessionByRole("planner") ?? latestSessionByRole("spec"));
+    case "in_progress":
+    case "ai_review":
+    case "human_review":
+      return withRoleFallback(latestSessionByRole("build"));
+    case "blocked":
+    case "deferred":
+    case "closed":
+      return withRoleFallback(latestSessionByRole("build") ?? mostRecentSession);
+    default:
+      return toSelection(defaultRole ?? fallbackRole, null);
+  }
 };
 
 export const resolveAgentStudioBuilderSessionsForTask = ({

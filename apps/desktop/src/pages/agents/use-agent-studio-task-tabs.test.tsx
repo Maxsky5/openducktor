@@ -127,7 +127,7 @@ describe("useAgentStudioTaskTabs", () => {
     }
   });
 
-  test("selecting a tab routes to latest session when available", async () => {
+  test("selecting a tab routes as task intent and clears explicit session/role", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;
     Object.defineProperty(globalThis, "localStorage", {
@@ -164,8 +164,8 @@ describe("useAgentStudioTaskTabs", () => {
       const lastUpdate = updateCalls[updateCalls.length - 1];
       expect(lastUpdate).toEqual({
         task: "task-2",
-        session: "session-2",
-        agent: "spec",
+        session: undefined,
+        agent: undefined,
         scenario: undefined,
         autostart: undefined,
         start: undefined,
@@ -272,8 +272,8 @@ describe("useAgentStudioTaskTabs", () => {
       const lastUpdate = updateCalls[updateCalls.length - 1];
       expect(lastUpdate).toEqual({
         task: "task-1",
-        session: "session-1",
-        agent: "spec",
+        session: undefined,
+        agent: undefined,
         scenario: undefined,
         autostart: undefined,
         start: undefined,
@@ -327,8 +327,8 @@ describe("useAgentStudioTaskTabs", () => {
       expect(updateCalls).toHaveLength(1);
       expect(updateCalls[0]).toEqual({
         task: "task-2",
-        session: "session-2",
-        agent: "spec",
+        session: undefined,
+        agent: undefined,
         scenario: undefined,
         autostart: undefined,
         start: undefined,
@@ -467,8 +467,8 @@ describe("useAgentStudioTaskTabs", () => {
 
       expect(updateCalls[0]).toEqual({
         task: "task-b",
-        session: "session-b",
-        agent: "spec",
+        session: undefined,
+        agent: undefined,
         scenario: undefined,
         autostart: undefined,
         start: undefined,
@@ -551,8 +551,8 @@ describe("useAgentStudioTaskTabs", () => {
       expect(harness.getLatest().activeTaskTabId).toBe("task-1");
       expect(updateCalls[0]).toEqual({
         task: "task-1",
-        session: "session-1",
-        agent: "spec",
+        session: undefined,
+        agent: undefined,
         scenario: undefined,
         autostart: undefined,
         start: undefined,

@@ -22,6 +22,8 @@ export const ROLE_OPTIONS: Array<{
   { role: "qa", label: AGENT_ROLE_LABELS.qa, icon: ShieldCheck },
 ];
 
+export const AGENT_ROLE_ORDER: AgentRole[] = ROLE_OPTIONS.map((option) => option.role);
+
 const AGENT_ROLE_SET = new Set<string>(agentRoleValues);
 
 export const isRole = (value: string | null): value is AgentRole =>
