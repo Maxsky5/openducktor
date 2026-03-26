@@ -3,6 +3,7 @@ import { appQueryClient } from "@/lib/query-client";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
+import { hasOnlySessionHeaderMessages } from "../support/session-prompt";
 import type {
   StartSessionContext,
   StartSessionCreationInput,
@@ -19,23 +20,6 @@ type ReuseStrategyInput = {
   ctx: StartSessionContext;
   input: Extract<StartSessionCreationInput, { startMode: "reuse" }>;
   deps: StartSessionExecutionDependencies;
-};
-
-const isSessionPreludeMessage = (messageId: string, sessionId: string): boolean => {
-  return (
-    messageId === `history:session-start:${sessionId}` ||
-    messageId === `history:session-forked:${sessionId}` ||
-    messageId === `history:system-prompt:${sessionId}`
-  );
-};
-
-const hasOnlySessionPreludeMessages = (
-  session: Pick<AgentSessionState, "sessionId" | "messages">,
-): boolean => {
-  return (
-    session.messages.length > 0 &&
-    session.messages.every((message) => isSessionPreludeMessage(message.id, session.sessionId))
-  );
 };
 
 const loadPersistedSessionsForRole = async ({
@@ -174,7 +158,7 @@ export const resolveLoadedSourceSession = async ({
     if (
       existingSourceSession.messages.length === 0 ||
       (existingSourceSession.status === "stopped" &&
-        hasOnlySessionPreludeMessages(existingSourceSession))
+        hasOnlySessionHeaderMessages(existingSourceSession))
     ) {
       return ensureSessionHydrated({
         ctx,

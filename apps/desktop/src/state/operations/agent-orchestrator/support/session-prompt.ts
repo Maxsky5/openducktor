@@ -167,3 +167,20 @@ export const buildSessionHeaderMessages = ({
     },
   ];
 };
+
+export const isSessionHeaderMessageId = (messageId: string, sessionId: string): boolean => {
+  return (
+    messageId === `history:session-start:${sessionId}` ||
+    messageId === `history:session-forked:${sessionId}` ||
+    messageId === `history:system-prompt:${sessionId}`
+  );
+};
+
+export const hasOnlySessionHeaderMessages = (
+  session: Pick<AgentSessionState, "sessionId" | "messages">,
+): boolean => {
+  return (
+    session.messages.length > 0 &&
+    session.messages.every((message) => isSessionHeaderMessageId(message.id, session.sessionId))
+  );
+};
