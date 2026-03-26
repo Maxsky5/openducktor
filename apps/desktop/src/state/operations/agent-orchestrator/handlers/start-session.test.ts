@@ -1976,6 +1976,117 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
+  test("stops the forked session when the repo becomes stale after child history hydration", async () => {
+    const previousRepoRef = { current: "/tmp/repo" as string | null };
+    const adapter = new OpencodeSdkAdapter();
+    const originalForkSession = adapter.forkSession;
+    const originalLoadSessionHistory = adapter.loadSessionHistory;
+    const originalStopSession = adapter.stopSession;
+    const stoppedSessionIds: string[] = [];
+    let sessionsById: Record<string, AgentSessionState> = {
+      "source-build": {
+        runtimeKind: "opencode",
+        sessionId: "source-build",
+        externalSessionId: "external-source-build",
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+        startedAt: "2026-02-22T08:10:00.000Z",
+        runtimeId: "runtime-1",
+        runId: "run-2",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+        messages: [],
+        draftAssistantText: "",
+        draftAssistantMessageId: null,
+        draftReasoningText: "",
+        draftReasoningMessageId: null,
+        contextUsage: null,
+        pendingPermissions: [],
+        pendingQuestions: [],
+        todos: [],
+        modelCatalog: null,
+        selectedModel: BUILD_SELECTION,
+        isLoadingModelCatalog: false,
+      },
+    };
+    const sessionsRef = { current: sessionsById };
+
+    adapter.forkSession = async () => ({
+      runtimeKind: "opencode",
+      sessionId: "forked-stale-after-history",
+      externalSessionId: "external-forked-stale-after-history",
+      startedAt: "2026-02-22T08:20:00.000Z",
+      role: "build",
+      scenario: "build_pull_request_generation",
+      status: "idle",
+    });
+    adapter.loadSessionHistory = async () => {
+      previousRepoRef.current = "/tmp/other";
+      return [
+        {
+          messageId: "child-user-1",
+          role: "user",
+          timestamp: "2026-02-22T08:21:00.000Z",
+          text: "Hydrated child history",
+          parts: [],
+        },
+      ];
+    };
+    adapter.stopSession = async (sessionId) => {
+      stoppedSessionIds.push(sessionId);
+    };
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: (updater) => {
+        sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
+        sessionsRef.current = sessionsById;
+      },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef,
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        runId: "run-2",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_pull_request_generation",
+          startMode: "fork",
+          selectedModel: BUILD_SELECTION,
+          sourceSessionId: "source-build",
+        }),
+      ).rejects.toThrow("Workspace changed while starting session.");
+      expect(stoppedSessionIds).toEqual(["forked-stale-after-history"]);
+      expect(sessionsById["forked-stale-after-history"]).toBeUndefined();
+    } finally {
+      adapter.forkSession = originalForkSession;
+      adapter.loadSessionHistory = originalLoadSessionHistory;
+      adapter.stopSession = originalStopSession;
+    }
+  });
+
   test("rejects cross-runtime fork requests before calling the adapter", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
