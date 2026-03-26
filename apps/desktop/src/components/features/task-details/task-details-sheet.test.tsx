@@ -12,7 +12,7 @@ import type { WorkspaceStateContextValue } from "@/types/state-slices";
 
 enableReactActEnvironment();
 
-const workspaceStateValue: WorkspaceStateContextValue = {
+const createWorkspaceStateValue = (): WorkspaceStateContextValue => ({
   isSwitchingWorkspace: false,
   isLoadingBranches: false,
   isSwitchingBranch: false,
@@ -36,11 +36,11 @@ const workspaceStateValue: WorkspaceStateContextValue = {
   detectGithubRepository: async () => null,
   saveGlobalGitConfig: async () => {},
   saveSettingsSnapshot: async () => {},
-};
+});
 
 const IsolatedProviders = ({ children }: PropsWithChildren) => (
   <QueryProvider useIsolatedClient>
-    <WorkspaceStateContext.Provider value={workspaceStateValue}>
+    <WorkspaceStateContext.Provider value={createWorkspaceStateValue()}>
       {children}
     </WorkspaceStateContext.Provider>
   </QueryProvider>
