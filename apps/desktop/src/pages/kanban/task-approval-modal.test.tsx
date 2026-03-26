@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TaskApprovalModalModel } from "./kanban-page-model-types";
-import { TaskApprovalModalContent } from "./task-approval-modal";
+import { TaskApprovalModal } from "./task-approval-modal";
 import { TaskApprovalModalPanel } from "./task-approval-modal-panel";
 
 const noop = () => {};
@@ -44,14 +45,16 @@ const createModel = (overrides: Partial<TaskApprovalModalModel> = {}): TaskAppro
 
 describe("TaskApprovalModal", () => {
   test("renders the wrapper dialog title and description", () => {
-    const html = renderToStaticMarkup(
-      createElement(TaskApprovalModalContent, { model: createModel() }),
-    );
+    const rendered = render(createElement(TaskApprovalModal, { model: createModel() }));
 
-    expect(html).toContain("Publish And Mark Done");
-    expect(html).toContain(
-      "The local merge is already applied. Push origin/beta to publish it, then move the task to Done.",
-    );
+    expect(screen.getByText("Publish And Mark Done")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "The local merge is already applied. Push origin/beta to publish it, then move the task to Done.",
+      ),
+    ).toBeTruthy();
+
+    rendered.unmount();
   });
 
   test("renders explicit completion copy for merged local branches", () => {

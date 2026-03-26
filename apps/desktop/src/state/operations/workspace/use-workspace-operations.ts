@@ -34,7 +34,6 @@ type UseWorkspaceOperationsArgs = {
   setActiveRepo: (repoPath: string | null) => void;
   clearTaskData: () => void;
   clearActiveBeadsCheck: () => void;
-  toastClient?: Pick<typeof toast, "error" | "success">;
   hostClient?: Pick<
     typeof host,
     | "gitGetBranches"
@@ -74,7 +73,6 @@ export function useWorkspaceOperations({
   setActiveRepo,
   clearTaskData,
   clearActiveBeadsCheck,
-  toastClient = toast,
   hostClient = host,
 }: UseWorkspaceOperationsArgs): UseWorkspaceOperationsResult {
   const queryClient = useQueryClient();
@@ -251,14 +249,14 @@ export function useWorkspaceOperations({
         await refreshBranchesForRepo(activeRepo);
       } catch (error) {
         if (force) {
-          toastClient.error("Branch data unavailable", {
+          toast.error("Branch data unavailable", {
             description: errorMessage(error),
           });
         }
         throw error;
       }
     },
-    [activeRepo, clearBranchData, refreshBranchesForRepo, toastClient.error],
+    [activeRepo, clearBranchData, refreshBranchesForRepo],
   );
 
   const switchBranch = useCallback(
@@ -296,7 +294,7 @@ export function useWorkspaceOperations({
         lastKnownDetachedRef.current = previousBranch?.detached ?? null;
         lastKnownRevisionRef.current = previousBranch?.revision ?? null;
 
-        toastClient.error("Failed to switch branch", {
+        toast.error("Failed to switch branch", {
           description: errorMessage(error),
         });
       } finally {
@@ -306,34 +304,31 @@ export function useWorkspaceOperations({
         }
       }
     },
-    [activeBranch, activeRepo, applyBranchState, hostClient, queryClient, toastClient.error],
+    [activeBranch, activeRepo, applyBranchState, hostClient, queryClient],
   );
 
-  const reportBranchProbeError = useCallback(
-    (error: BranchProbeError): void => {
-      const nowMs = Date.now();
-      const errorSignature = branchProbeErrorSignature(error);
-      const shouldReport = shouldReportBranchProbeError({
-        nowMs,
-        throttleMs: BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
-        errorSignature,
-        lastReportedAtMs: lastProbeErrorToastAtRef.current,
-        lastReportedSignature: lastProbeErrorSignatureRef.current,
-      });
+  const reportBranchProbeError = useCallback((error: BranchProbeError): void => {
+    const nowMs = Date.now();
+    const errorSignature = branchProbeErrorSignature(error);
+    const shouldReport = shouldReportBranchProbeError({
+      nowMs,
+      throttleMs: BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
+      errorSignature,
+      lastReportedAtMs: lastProbeErrorToastAtRef.current,
+      lastReportedSignature: lastProbeErrorSignatureRef.current,
+    });
 
-      if (!shouldReport) {
-        return;
-      }
+    if (!shouldReport) {
+      return;
+    }
 
-      lastProbeErrorToastAtRef.current = nowMs;
-      lastProbeErrorSignatureRef.current = errorSignature;
+    lastProbeErrorToastAtRef.current = nowMs;
+    lastProbeErrorSignatureRef.current = errorSignature;
 
-      toastClient.error("Branch sync probe degraded", {
-        description: `[${error.stage}] ${error.message}`,
-      });
-    },
-    [toastClient.error],
-  );
+    toast.error("Branch sync probe degraded", {
+      description: `[${error.stage}] ${error.message}`,
+    });
+  }, []);
 
   const probeExternalBranchChange = useCallback(async (): Promise<BranchProbeOutcome> => {
     const repoPath = activeRepoRef.current;
@@ -461,11 +456,11 @@ export function useWorkspaceOperations({
         queryKey: workspaceQueryKeys.list(),
       });
       await refreshWorkspaces();
-      toastClient.success("Repository added", {
+      toast.success("Repository added", {
         description: workspace.path,
       });
     },
-    [hostClient, queryClient, refreshWorkspaces, toastClient],
+    [hostClient, queryClient, refreshWorkspaces],
   );
 
   const selectWorkspace = useCallback(
@@ -504,7 +499,7 @@ export function useWorkspaceOperations({
             if (workspaceSwitchVersionRef.current !== switchVersion) {
               return;
             }
-            toastClient.error("Runtime unavailable", {
+            toast.error("Runtime unavailable", {
               description: errorMessage(error),
             });
           });
@@ -520,7 +515,7 @@ export function useWorkspaceOperations({
           }
 
           markWorkspaceActiveLocally(repoPath);
-          toastClient.error("Repository switched, but workspace refresh failed", {
+          toast.error("Repository switched, but workspace refresh failed", {
             description: errorMessage(error),
           });
         }
@@ -528,7 +523,7 @@ export function useWorkspaceOperations({
         if (workspaceSwitchVersionRef.current !== switchVersion) {
           return;
         }
-        toastClient.error("Failed to switch repository", {
+        toast.error("Failed to switch repository", {
           description: errorMessage(error),
         });
         setIsSwitchingWorkspace(false);
@@ -548,7 +543,6 @@ export function useWorkspaceOperations({
       queryClient,
       refreshWorkspaces,
       setActiveRepo,
-      toastClient,
     ],
   );
 

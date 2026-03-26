@@ -82,14 +82,6 @@ const checkRepoRuntimeHealthMock = mock((repoPath: string, runtimeKind: RuntimeK
   repoHealthHandler(repoPath, runtimeKind),
 );
 
-mock.module("sonner", () => ({
-  toast: {
-    error: (message: string, options?: { description?: string }) => toastError(message, options),
-    success: (message: string, options?: { description?: string }) =>
-      toastSuccess(message, options),
-  },
-}));
-
 type UseChecksHook = typeof import("./use-checks")["useChecks"];
 type HookArgs = Parameters<UseChecksHook>[0];
 type HookResult = ReturnType<UseChecksHook>;
@@ -161,6 +153,13 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
 };
 
 beforeAll(async () => {
+  mock.module("sonner", () => ({
+    toast: {
+      error: (message: string, options?: { description?: string }) => toastError(message, options),
+      success: (message: string, options?: { description?: string }) =>
+        toastSuccess(message, options),
+    },
+  }));
   ({ useChecks } = await import("./use-checks"));
 });
 
