@@ -275,6 +275,35 @@ describe("agents-page-selection", () => {
     expect(resolved?.sessionId).toBe("spec-running");
   });
 
+  test("chooses the most recent running/starting session when multiple active sessions exist", () => {
+    const olderRunningSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "planner-running-older",
+      taskId: "task-1",
+      role: "planner",
+      status: "running",
+      startedAt: "2026-02-22T09:00:00.000Z",
+    });
+    const newerStartingSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "qa-starting-newer",
+      taskId: "task-1",
+      role: "qa",
+      status: "starting",
+      startedAt: "2026-02-22T12:00:00.000Z",
+    });
+
+    const resolved = resolveAgentStudioActiveSession({
+      sessionsForTask: [olderRunningSession, newerStartingSession],
+      sessionParam: null,
+      hasExplicitRoleParam: false,
+      roleFromQuery: "build",
+      selectedTask: createTaskCardFixture({ id: "task-1", status: "human_review" }),
+    });
+
+    expect(resolved?.sessionId).toBe("qa-starting-newer");
+  });
+
   test("selects required+available role for open tasks", () => {
     const specSession = createAgentSessionFixture({
       runtimeKind: "opencode",

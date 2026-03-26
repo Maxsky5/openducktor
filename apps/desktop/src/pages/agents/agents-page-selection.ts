@@ -120,9 +120,10 @@ export const resolveAgentStudioSessionSelection = ({
   fallbackRole: AgentRole;
   scenarioFromQuery?: AgentScenario | null;
 }): { activeSession: AgentSessionState | null; role: AgentRole; scenario: AgentScenario } => {
-  const runningSession = sessionsForTask.find(
-    (session) => session.status === "running" || session.status === "starting",
-  );
+  const runningSession =
+    [...sessionsForTask]
+      .filter((session) => session.status === "running" || session.status === "starting")
+      .sort(compareAgentSessionRecency)[0] ?? null;
 
   const latestSessionByRole = (role: AgentRole): AgentSessionState | null => {
     const roleSessions = sessionsForTask
