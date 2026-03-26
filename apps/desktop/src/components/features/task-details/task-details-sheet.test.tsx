@@ -34,11 +34,42 @@ const viewModelMock = {
   confirmDelete: () => {},
 };
 
+const useTaskDetailsSheetViewModelMock = mock(() => viewModelMock);
+
 mock.module("./use-task-details-sheet-view-model", () => ({
-  useTaskDetailsSheetViewModel: () => viewModelMock,
+  useTaskDetailsSheetViewModel: useTaskDetailsSheetViewModelMock,
 }));
 
 describe("TaskDetailsSheet", () => {
+  test("passes activeRepo into task details view model", async () => {
+    const { TaskDetailsSheet } = await import("./task-details-sheet");
+
+    const task = createTaskCardFixture({
+      id: "TASK-1",
+      title: "Task 1",
+      documentSummary: {
+        spec: { has: false, updatedAt: undefined },
+        plan: { has: false, updatedAt: undefined },
+        qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
+      },
+    });
+
+    renderToStaticMarkup(
+      createElement(TaskDetailsSheet, {
+        activeRepo: "/repo-a",
+        task,
+        allTasks: [task],
+        runs: [],
+        open: true,
+        onOpenChange: () => {},
+      }),
+    );
+
+    expect(useTaskDetailsSheetViewModelMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ activeRepo: "/repo-a" }),
+    );
+  });
+
   test("renders without the top-right close control", async () => {
     const { TaskDetailsSheet } = await import("./task-details-sheet");
 
@@ -54,6 +85,7 @@ describe("TaskDetailsSheet", () => {
 
     const html = renderToStaticMarkup(
       createElement(TaskDetailsSheet, {
+        activeRepo: "/repo-a",
         task,
         allTasks: [task],
         runs: [],

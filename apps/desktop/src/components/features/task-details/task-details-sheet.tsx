@@ -30,6 +30,7 @@ const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
 ];
 
 export function TaskDetailsSheet({
+  activeRepo = null,
   task,
   allTasks,
   runs,
@@ -54,6 +55,7 @@ export function TaskDetailsSheet({
   onDelete,
 }: TaskDetailsSheetProps): ReactElement {
   const viewModel = useTaskDetailsSheetViewModel({
+    activeRepo,
     task,
     allTasks,
     open,
