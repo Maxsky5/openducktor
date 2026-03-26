@@ -31,7 +31,7 @@ export const sanitizeSlug = (input: string): string => {
 
   for (const char of input) {
     const lower = char.toLowerCase();
-    if (/^[a-z0-9]$/.test(lower)) {
+    if (/^[\x30-\x39\x61-\x7a]$/.test(lower)) {
       slug += lower;
       lastDash = false;
       continue;
@@ -192,7 +192,17 @@ export const computeRepoId = async (repoPath: string): Promise<string> => {
 };
 
 const sanitizeDatabaseIdentifier = (input: string): string => {
-  const sanitized = input.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase();
+  const sanitized = input
+    .split("")
+    .map((char) => {
+      const lower = char.toLowerCase();
+      if (/^[\x30-\x39\x61-\x7a]$/.test(lower)) {
+        return lower;
+      }
+      return "_";
+    })
+    .join("")
+    .replace(/^_+|_+$/g, "");
   return sanitized.length > 0 ? sanitized : "repo";
 };
 
@@ -201,7 +211,8 @@ export const computeBeadsDatabaseName = async (
   beadsDir: string,
 ): Promise<string> => {
   const slug = sanitizeDatabaseIdentifier(sanitizeSlug(basename(repoPath)));
-  const canonicalBeadsDir = await resolveCanonicalPath(beadsDir);
+  const canonicalRepoPath = await resolveCanonicalPath(repoPath);
+  const canonicalBeadsDir = await resolveCanonicalPath(resolve(canonicalRepoPath, beadsDir));
   const hashSuffix = createHash("sha256").update(canonicalBeadsDir).digest("hex").slice(0, 12);
   const maxSlugLength = 64 - "odt__".length - hashSuffix.length;
   const truncatedSlug = slug.slice(0, maxSlugLength);

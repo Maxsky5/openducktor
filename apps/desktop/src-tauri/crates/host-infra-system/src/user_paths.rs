@@ -9,7 +9,7 @@ pub fn normalize_user_path(path: &Path) -> Result<PathBuf> {
     if raw == "~" {
         return dirs::home_dir().ok_or_else(|| anyhow!("Unable to resolve user home directory"));
     }
-    if let Some(suffix) = raw.strip_prefix("~/") {
+    if let Some(suffix) = raw.strip_prefix("~/").or_else(|| raw.strip_prefix("~\\")) {
         let home =
             dirs::home_dir().ok_or_else(|| anyhow!("Unable to resolve user home directory"))?;
         return Ok(home.join(suffix));
@@ -102,5 +102,17 @@ mod tests {
         let resolved = normalize_user_path(Path::new("./relative/path"))
             .expect("relative path should resolve");
         assert_eq!(resolved, PathBuf::from("./relative/path"));
+    }
+
+    #[test]
+    fn normalize_user_path_supports_windows_style_home_shorthand() {
+        let _env_lock = lock_env();
+        let home = std::env::temp_dir().join("odt-user-paths-windows-home");
+        let _home_guard = EnvVarGuard::set("HOME", home.to_string_lossy().as_ref());
+
+        let resolved = normalize_user_path(Path::new("~\\workspace"))
+            .expect("windows-style path should resolve");
+
+        assert_eq!(resolved, home.join("workspace"));
     }
 }

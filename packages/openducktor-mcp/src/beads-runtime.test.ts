@@ -8,6 +8,7 @@ import {
   computeBeadsDatabaseName,
   resolveBundledCommandPath,
   resolveCommandExecutable,
+  sanitizeSlug,
 } from "./beads-runtime";
 
 const originalExecPath = process.execPath;
@@ -112,8 +113,17 @@ describe("beads runtime command resolution", () => {
     expect(resolveCommandExecutable("bd")).toBe("bd");
   });
 
+  test("sanitizeSlug matches the Rust ASCII-only behavior", () => {
+    expect(sanitizeSlug("İstanbul")).toBe("stanbul");
+    expect(sanitizeSlug("___My Repo___")).toBe("my-repo");
+  });
+
   test("computeBeadsDatabaseName is stable and scoped to the beads directory", async () => {
     const first = await computeBeadsDatabaseName(
+      "/repo/fairnest",
+      "/tmp/.openducktor/beads/fairnest/.beads",
+    );
+    const firstAgain = await computeBeadsDatabaseName(
       "/repo/fairnest",
       "/tmp/.openducktor/beads/fairnest/.beads",
     );
@@ -122,9 +132,20 @@ describe("beads runtime command resolution", () => {
       "/tmp/.openducktor-local/beads/fairnest/.beads",
     );
 
+    expect(firstAgain).toBe(first);
     expect(first).toMatch(/^odt_fairnest_[a-f0-9]{12}$/);
     expect(second).toMatch(/^odt_fairnest_[a-f0-9]{12}$/);
     expect(first).not.toBe(second);
     expect(first.length).toBeLessThanOrEqual(64);
+  });
+
+  test("computeBeadsDatabaseName resolves relative store paths from the repo path", async () => {
+    const relative = await computeBeadsDatabaseName("/repo/fairnest", "relative/.beads");
+    const absolute = await computeBeadsDatabaseName(
+      "/repo/fairnest",
+      "/repo/fairnest/relative/.beads",
+    );
+
+    expect(relative).toBe(absolute);
   });
 });

@@ -700,7 +700,6 @@ fn ensure_repo_initialized_runs_init_then_uses_cache_when_store_exists() -> Resu
     let calls = runner.take_calls();
     assert_eq!(calls.len(), 3);
     assert_eq!(calls[0].kind, CallKind::AllowFailureWithEnv);
-    let beads_dir = resolve_central_beads_dir(repo.path())?;
     assert_init_args(&calls[0], repo.path(), &beads_dir);
     assert_beads_env(&calls[0]);
     assert_eq!(calls[1].kind, CallKind::AllowFailureWithEnv);

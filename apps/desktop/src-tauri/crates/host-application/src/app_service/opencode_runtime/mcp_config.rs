@@ -46,12 +46,12 @@ pub(crate) fn find_openducktor_workspace_root(start: &Path) -> Result<PathBuf> {
 }
 
 pub(crate) fn default_mcp_workspace_root() -> Result<String> {
-    let from_env = std::env::var("OPENDUCKTOR_WORKSPACE_ROOT")
-        .ok()
-        .map(|value| parse_user_path(value.as_str()))
-        .transpose()?;
-    if let Some(root) = from_env {
-        return Ok(root.to_string_lossy().to_string());
+    if let Ok(value) = std::env::var("OPENDUCKTOR_WORKSPACE_ROOT") {
+        if !value.trim().is_empty() {
+            let root = parse_user_path(value.as_str())
+                .with_context(|| format!("Invalid OPENDUCKTOR_WORKSPACE_ROOT: {:?}", value))?;
+            return Ok(root.to_string_lossy().to_string());
+        }
     }
 
     let compiled_path = Path::new(env!("CARGO_MANIFEST_DIR"));

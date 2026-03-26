@@ -877,6 +877,15 @@ fn default_mcp_workspace_root_supports_home_shorthand_override() -> Result<()> {
 }
 
 #[test]
+fn default_mcp_workspace_root_ignores_empty_override() -> Result<()> {
+    let _env_lock = lock_env();
+    let _workspace_guard = set_env_var("OPENDUCKTOR_WORKSPACE_ROOT", "   ");
+    let resolved = default_mcp_workspace_root()?;
+    assert!(!resolved.trim().is_empty());
+    Ok(())
+}
+
+#[test]
 fn parse_mcp_command_json_accepts_non_empty_string_array() {
     let parsed = parse_mcp_command_json(r#"["openducktor-mcp","--repo","/tmp/repo"]"#)
         .expect("command should parse");

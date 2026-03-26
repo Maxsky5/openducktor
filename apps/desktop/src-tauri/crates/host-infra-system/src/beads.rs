@@ -29,7 +29,8 @@ pub fn compute_repo_id(repo_path: &Path) -> Result<String> {
 
 pub fn compute_beads_database_name(repo_path: &Path, beads_dir: &Path) -> Result<String> {
     let slug = sanitize_database_identifier(&compute_repo_slug(repo_path));
-    let resolved_beads_dir = canonical_or_absolute(beads_dir)?;
+    let resolved_repo_path = canonical_or_absolute(repo_path)?;
+    let resolved_beads_dir = canonical_or_absolute_from(beads_dir, &resolved_repo_path)?;
     let digest = Sha256::digest(resolved_beads_dir.to_string_lossy().as_bytes());
     let short_hash = format!("{digest:x}");
     let hash_suffix = &short_hash[..12];
@@ -68,12 +69,17 @@ fn resolve_repo_scoped_openducktor_dir(repo_path: &Path, namespace: &str) -> Res
 }
 
 fn canonical_or_absolute(repo_path: &Path) -> Result<PathBuf> {
-    let absolute = if repo_path.is_absolute() {
-        repo_path.to_path_buf()
+    canonical_or_absolute_from(
+        repo_path,
+        &env::current_dir().context("Unable to resolve current working directory")?,
+    )
+}
+
+fn canonical_or_absolute_from(path: &Path, base_dir: &Path) -> Result<PathBuf> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
     } else {
-        env::current_dir()
-            .context("Unable to resolve current working directory")?
-            .join(repo_path)
+        base_dir.join(path)
     };
 
     Ok(fs::canonicalize(&absolute).unwrap_or(absolute))
@@ -192,6 +198,20 @@ mod tests {
         .expect("second database name");
 
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn beads_database_name_resolves_relative_store_path_from_repo_path() {
+        let repo_path = Path::new("/tmp/example-project");
+        let relative = compute_beads_database_name(repo_path, Path::new("relative/.beads"))
+            .expect("relative database name");
+        let absolute = compute_beads_database_name(
+            repo_path,
+            Path::new("/tmp/example-project/relative/.beads"),
+        )
+        .expect("absolute database name");
+
+        assert_eq!(relative, absolute);
     }
 
     #[test]
