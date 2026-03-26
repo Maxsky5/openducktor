@@ -1774,6 +1774,43 @@ describe("OpencodeSdkAdapter", () => {
     expect(planProfile).not.toHaveProperty("color");
   });
 
+  test("listAvailableModels ignores malformed or blank agent entries", async () => {
+    const mock = makeMockClient({
+      agentsResponse: [
+        null,
+        42,
+        {
+          name: "   ",
+          mode: "primary",
+          native: true,
+        },
+        {
+          name: "valid",
+          mode: "primary",
+          native: false,
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const catalog = await adapter.listAvailableModels({
+      runtimeKind: "opencode",
+      runtimeConnection: defaultRuntimeConnection,
+    });
+
+    expect(catalog.profiles).toEqual([
+      expect.objectContaining({
+        id: "valid",
+        label: "valid",
+        mode: "primary",
+        native: false,
+      }),
+    ]);
+  });
+
   test("listAvailableModels preserves agent names exactly as reported by opencode", async () => {
     const mock = makeMockClient({
       agentsResponse: [

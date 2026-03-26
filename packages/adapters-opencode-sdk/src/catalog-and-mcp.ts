@@ -1,4 +1,4 @@
-import type { AgentModelCatalog } from "@openducktor/core";
+import type { AgentDescriptor, AgentModelCatalog } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { asUnknownRecord, readStringProp } from "./guards";
 import { mapProviderListToCatalog, toToolIdList } from "./payload-mappers";
@@ -10,6 +10,9 @@ const OPENCODE_DEFAULT_AGENT_COLORS: Record<string, string> = {
   docs: "var(--icon-agent-docs-base)",
   plan: "var(--icon-agent-plan-base)",
 };
+
+const isAgentMode = (value: string | undefined): value is AgentDescriptor["mode"] =>
+  value === "subagent" || value === "primary" || value === "all";
 
 const resolveAgentColor = (
   agentName: unknown,
@@ -62,19 +65,30 @@ export const listAvailableModels = async (
   const baseCatalog = mapProviderListToCatalog(providerData);
   const rawAgents = Array.isArray(agentsData)
     ? agentsData
-        .map((entry) => {
-          if (typeof entry.name !== "string") {
+        .map((rawEntry) => {
+          const entry = asUnknownRecord(rawEntry);
+          const name = entry ? readStringProp(entry, ["name"]) : undefined;
+          if (!entry || !name || name.trim().length === 0) {
             return undefined;
           }
 
-          const resolvedColor = resolveAgentColor(entry.name, entry.color, entry.native);
+          const mode = readStringProp(entry, ["mode"]);
+          if (!isAgentMode(mode)) {
+            return undefined;
+          }
+
+          const description = readStringProp(entry, ["description"]);
+          const hidden = typeof entry.hidden === "boolean" ? entry.hidden : undefined;
+          const native = typeof entry.native === "boolean" ? entry.native : undefined;
+
+          const resolvedColor = resolveAgentColor(name, entry.color, native);
           return {
-            id: entry.name,
-            label: entry.name,
-            ...(entry.description ? { description: entry.description } : {}),
-            mode: entry.mode,
-            ...(entry.hidden !== undefined ? { hidden: entry.hidden } : {}),
-            ...(entry.native !== undefined ? { native: entry.native } : {}),
+            id: name,
+            label: name,
+            ...(description ? { description } : {}),
+            mode,
+            ...(hidden !== undefined ? { hidden } : {}),
+            ...(native !== undefined ? { native } : {}),
             ...(resolvedColor !== undefined ? { color: resolvedColor } : {}),
           };
         })
