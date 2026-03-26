@@ -5,6 +5,11 @@ import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { host } from "../operations/host";
 
+type WorkspaceQueryHost = Pick<
+  typeof host,
+  "workspaceGetSettingsSnapshot" | "workspaceGetRepoConfig" | "workspaceList"
+>;
+
 const SETTINGS_SNAPSHOT_STALE_TIME_MS = 15 * 60_000;
 const REPO_CONFIG_STALE_TIME_MS = 10 * 60_000;
 const WORKSPACE_LIST_STALE_TIME_MS = 5 * 60_000;
@@ -66,35 +71,40 @@ export const toRepoSettingsInput = (config: RepoConfig): RepoSettingsInput => ({
   },
 });
 
-export const settingsSnapshotQueryOptions = () =>
+export const settingsSnapshotQueryOptions = (hostClient: WorkspaceQueryHost = host) =>
   queryOptions({
     queryKey: workspaceQueryKeys.settingsSnapshot(),
-    queryFn: () => host.workspaceGetSettingsSnapshot(),
+    queryFn: () => hostClient.workspaceGetSettingsSnapshot(),
     staleTime: SETTINGS_SNAPSHOT_STALE_TIME_MS,
   });
 
-export const repoConfigQueryOptions = (repoPath: string) =>
+export const repoConfigQueryOptions = (repoPath: string, hostClient: WorkspaceQueryHost = host) =>
   queryOptions({
     queryKey: workspaceQueryKeys.repoConfig(repoPath),
-    queryFn: () => host.workspaceGetRepoConfig(repoPath),
+    queryFn: () => hostClient.workspaceGetRepoConfig(repoPath),
     staleTime: REPO_CONFIG_STALE_TIME_MS,
   });
 
-const workspaceListQueryOptions = () =>
+const workspaceListQueryOptions = (hostClient: WorkspaceQueryHost = host) =>
   queryOptions({
     queryKey: workspaceQueryKeys.list(),
-    queryFn: (): Promise<WorkspaceRecord[]> => host.workspaceList(),
+    queryFn: (): Promise<WorkspaceRecord[]> => hostClient.workspaceList(),
     staleTime: WORKSPACE_LIST_STALE_TIME_MS,
   });
 
 export const loadSettingsSnapshotFromQuery = (
   queryClient: QueryClient,
-): Promise<SettingsSnapshot> => queryClient.ensureQueryData(settingsSnapshotQueryOptions());
+  hostClient?: WorkspaceQueryHost,
+): Promise<SettingsSnapshot> =>
+  queryClient.ensureQueryData(settingsSnapshotQueryOptions(hostClient));
 
 export const loadRepoConfigFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
-): Promise<RepoConfig> => queryClient.ensureQueryData(repoConfigQueryOptions(repoPath));
+  hostClient?: WorkspaceQueryHost,
+): Promise<RepoConfig> => queryClient.ensureQueryData(repoConfigQueryOptions(repoPath, hostClient));
 
-export const loadWorkspaceListFromQuery = (queryClient: QueryClient): Promise<WorkspaceRecord[]> =>
-  queryClient.fetchQuery(workspaceListQueryOptions());
+export const loadWorkspaceListFromQuery = (
+  queryClient: QueryClient,
+  hostClient?: WorkspaceQueryHost,
+): Promise<WorkspaceRecord[]> => queryClient.fetchQuery(workspaceListQueryOptions(hostClient));
