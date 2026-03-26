@@ -1,11 +1,12 @@
-import type {
-  BeadsCheck,
-  PullRequest,
-  RunSummary,
-  TaskCard,
-  TaskCreateInput,
-  TaskStatus,
-  TaskUpdatePatch,
+import {
+  type BeadsCheck,
+  DEFAULT_KANBAN_SETTINGS,
+  type PullRequest,
+  type RunSummary,
+  type TaskCard,
+  type TaskCreateInput,
+  type TaskStatus,
+  type TaskUpdatePatch,
 } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -19,6 +20,7 @@ import {
   loadRepoTaskDataFromQuery,
   repoTaskDataQueryOptions,
 } from "../../queries/tasks";
+import { settingsSnapshotQueryOptions } from "../../queries/workspace";
 import { host } from "../shared/host";
 import {
   DEFERRED_BY_USER_REASON,
@@ -75,8 +77,11 @@ export function useTaskOperations({
     pullRequest: PullRequest;
   } | null>(null);
   const activeRepoRef = useRef(activeRepo);
+  const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
+  const doneVisibleDays =
+    settingsSnapshotQuery.data?.kanban.doneVisibleDays ?? DEFAULT_KANBAN_SETTINGS.doneVisibleDays;
   const repoTaskDataQuery = useQuery({
-    ...repoTaskDataQueryOptions(activeRepo ?? "__disabled__"),
+    ...repoTaskDataQueryOptions(activeRepo ?? "__disabled__", doneVisibleDays),
     enabled: activeRepo !== null,
   });
 
@@ -95,9 +100,9 @@ export function useTaskOperations({
   const refreshTaskData = useCallback(
     async (repoPath: string): Promise<void> => {
       await invalidateRepoTaskQueries(queryClient, repoPath);
-      await loadRepoTaskDataFromQuery(queryClient, repoPath);
+      await loadRepoTaskDataFromQuery(queryClient, repoPath, doneVisibleDays);
     },
-    [queryClient],
+    [doneVisibleDays, queryClient],
   );
 
   const runTaskMutation = useCallback(

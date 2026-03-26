@@ -11,6 +11,7 @@ describe("settings modal sidebars", () => {
       repositories: 0,
       prompts: 0,
       chat: 0,
+      kanban: 0,
     };
 
     const html = renderToStaticMarkup(
@@ -36,6 +37,7 @@ describe("settings modal sidebars", () => {
       repositories: 0,
       prompts: 0,
       chat: 0,
+      kanban: 0,
     };
 
     const html = renderToStaticMarkup(
@@ -57,6 +59,7 @@ describe("settings modal sidebars", () => {
       repositories: 0,
       prompts: 0,
       chat: 0,
+      kanban: 0,
     };
 
     const html = renderToStaticMarkup(
@@ -78,6 +81,7 @@ describe("settings modal sidebars", () => {
       repositories: 0,
       prompts: 0,
       chat: 2,
+      kanban: 0,
     };
 
     const html = renderToStaticMarkup(

@@ -62,8 +62,11 @@ export class TauriTaskClient {
     return repoPath;
   }
 
-  async tasksList(repoPath: string): Promise<TaskCard[]> {
-    const payload = await this.invokeFn("tasks_list", { repoPath });
+  async tasksList(repoPath: string, doneVisibleDays?: number): Promise<TaskCard[]> {
+    const payload = await this.invokeFn("tasks_list", {
+      repoPath,
+      doneVisibleDays: doneVisibleDays ?? undefined,
+    });
     return parseArray(taskCardSchema, payload, "tasks_list");
   }
 

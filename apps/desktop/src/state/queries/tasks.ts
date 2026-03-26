@@ -13,16 +13,18 @@ type RepoTaskData = {
 
 export const taskQueryKeys = {
   all: ["tasks"] as const,
-  repoData: (repoPath: string) => [...taskQueryKeys.all, "repo-data", repoPath] as const,
+  repoDataPrefix: (repoPath: string) => [...taskQueryKeys.all, "repo-data", repoPath] as const,
+  repoData: (repoPath: string, doneVisibleDays: number) =>
+    [...taskQueryKeys.repoDataPrefix(repoPath), doneVisibleDays] as const,
   runs: (repoPath: string) => [...taskQueryKeys.all, "runs", repoPath] as const,
 };
 
-export const repoTaskDataQueryOptions = (repoPath: string) =>
+export const repoTaskDataQueryOptions = (repoPath: string, doneVisibleDays: number) =>
   queryOptions({
-    queryKey: taskQueryKeys.repoData(repoPath),
+    queryKey: taskQueryKeys.repoData(repoPath, doneVisibleDays),
     queryFn: async (): Promise<RepoTaskData> => {
       const [taskList, runList] = await Promise.all([
-        host.tasksList(repoPath),
+        host.tasksList(repoPath, doneVisibleDays),
         host.runsList(repoPath),
       ]);
 
@@ -44,12 +46,13 @@ const repoRunsQueryOptions = (repoPath: string) =>
 export const loadRepoTaskDataFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
+  doneVisibleDays: number,
 ): Promise<RepoTaskData> =>
   queryClient.fetchQuery({
-    ...repoTaskDataQueryOptions(repoPath),
+    ...repoTaskDataQueryOptions(repoPath, doneVisibleDays),
     queryFn: async (): Promise<RepoTaskData> => {
       const [taskList, runList] = await Promise.all([
-        host.tasksList(repoPath),
+        host.tasksList(repoPath, doneVisibleDays),
         host.runsList(repoPath),
       ]);
       const repoTaskData = {
@@ -72,8 +75,8 @@ export const invalidateRepoTaskQueries = (
 ): Promise<unknown[]> => {
   return Promise.all([
     queryClient.invalidateQueries({
-      queryKey: taskQueryKeys.repoData(repoPath),
-      exact: true,
+      queryKey: taskQueryKeys.repoDataPrefix(repoPath),
+      exact: false,
       refetchType: "none",
     }),
     queryClient.invalidateQueries({
@@ -90,8 +93,11 @@ export const upsertAgentSessionInRepoTaskData = (
   taskId: string,
   session: AgentSessionRecord,
 ): void => {
-  queryClient.setQueryData<RepoTaskData | undefined>(
-    taskQueryKeys.repoData(repoPath),
+  queryClient.setQueriesData<RepoTaskData | undefined>(
+    {
+      queryKey: taskQueryKeys.repoDataPrefix(repoPath),
+      exact: false,
+    },
     (current): RepoTaskData | undefined => {
       if (!current) {
         return current;

@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import { SettingsChatSection } from "./settings-chat-section";
 import { GeneralSettingsSection } from "./settings-general-section";
 import { SettingsGitSection } from "./settings-git-section";
+import { SettingsKanbanSection } from "./settings-kanban-section";
 import type {
   PromptRoleTabId,
   RepositorySectionId,
@@ -70,6 +71,7 @@ export function SettingsModalContent({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
+    updateGlobalKanbanSettings,
     updateGlobalPromptOverrides,
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,
@@ -138,6 +140,16 @@ export function SettingsModalContent({
         chat={snapshotDraft.chat}
         disabled={isInteractionDisabled}
         onUpdateChat={updateGlobalChatSettings}
+      />
+    );
+  }
+
+  if (section === "kanban") {
+    return (
+      <SettingsKanbanSection
+        kanban={snapshotDraft.kanban}
+        disabled={isInteractionDisabled}
+        onUpdateKanban={updateGlobalKanbanSettings}
       />
     );
   }

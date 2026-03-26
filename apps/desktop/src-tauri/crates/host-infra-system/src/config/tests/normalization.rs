@@ -13,6 +13,7 @@ fn load_missing_returns_default_config() {
     let config = store.load().expect("load default");
     assert_eq!(config.version, 1);
     assert!(!config.chat.show_thinking_messages);
+    assert_eq!(config.kanban.done_visible_days, 1);
     assert!(config.repos.is_empty());
 }
 
@@ -261,6 +262,7 @@ fn load_normalizes_legacy_blank_repo_config_values() {
 
     let config = store.load().expect("legacy config should load");
     assert!(!config.chat.show_thinking_messages);
+    assert_eq!(config.kanban.done_visible_days, 1);
 
     let repo_config = store
         .repo_config(workspaces[0].path.as_str())

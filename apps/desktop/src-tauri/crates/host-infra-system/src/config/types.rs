@@ -156,6 +156,25 @@ pub struct ChatSettings {
     pub show_thinking_messages: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct KanbanSettings {
+    #[serde(default = "default_done_visible_days")]
+    pub done_visible_days: i32,
+}
+
+const fn default_done_visible_days() -> i32 {
+    1
+}
+
+impl Default for KanbanSettings {
+    fn default() -> Self {
+        Self {
+            done_visible_days: default_done_visible_days(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct HookSet {
@@ -408,6 +427,8 @@ pub struct GlobalConfig {
     #[serde(default)]
     pub chat: ChatSettings,
     #[serde(default)]
+    pub kanban: KanbanSettings,
+    #[serde(default)]
     pub global_prompt_overrides: PromptOverrides,
     #[serde(default)]
     pub repos: HashMap<String, RepoConfig>,
@@ -423,6 +444,7 @@ impl Default for GlobalConfig {
             theme: default_theme(),
             git: GlobalGitConfig::default(),
             chat: ChatSettings::default(),
+            kanban: KanbanSettings::default(),
             global_prompt_overrides: PromptOverrides::default(),
             repos: HashMap::new(),
             recent_repos: Vec::new(),

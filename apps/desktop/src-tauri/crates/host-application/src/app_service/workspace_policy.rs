@@ -4,8 +4,8 @@ use chrono::{DateTime, Utc};
 use host_domain::WorkspaceRecord;
 use host_infra_system::{
     normalize_hook_set, normalize_repo_dev_servers, repo_script_fingerprint, AgentDefaults,
-    ChatSettings, GitTargetBranch, HookSet, PromptOverrides, RepoConfig, RepoDevServerScript,
-    RepoGitConfig,
+    ChatSettings, GitTargetBranch, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
+    RepoDevServerScript, RepoGitConfig,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -246,6 +246,7 @@ impl AppService {
         theme: String,
         git: host_infra_system::GlobalGitConfig,
         chat: ChatSettings,
+        kanban: KanbanSettings,
         mut repos: HashMap<String, RepoConfig>,
         global_prompt_overrides: PromptOverrides,
         confirmation_port: &P,
@@ -270,7 +271,14 @@ impl AppService {
             repo_config.trusted_hooks_fingerprint = trusted_hooks_fingerprint;
         }
 
-        self.workspace_persist_settings_snapshot(theme, git, chat, repos, global_prompt_overrides)?;
+        self.workspace_persist_settings_snapshot(
+            theme,
+            git,
+            chat,
+            kanban,
+            repos,
+            global_prompt_overrides,
+        )?;
         self.workspace_list()
     }
 
@@ -872,7 +880,7 @@ mod tests {
         );
         let confirmation = RecordingHookTrustConfirmationPort::default();
 
-        let (theme, git, mut chat, mut repos, mut global_prompt_overrides) =
+        let (theme, git, mut chat, kanban, mut repos, mut global_prompt_overrides) =
             fixture.service.workspace_get_settings_snapshot()?;
         chat.show_thinking_messages = true;
         global_prompt_overrides.insert(
@@ -898,6 +906,7 @@ mod tests {
             theme,
             git,
             chat,
+            kanban,
             repos,
             global_prompt_overrides,
             &confirmation,
@@ -926,7 +935,7 @@ mod tests {
         let fixture = setup_fixture("snapshot-chat-roundtrip", HookSet::default());
         let confirmation = RecordingHookTrustConfirmationPort::default();
 
-        let (theme, git, mut chat, repos, global_prompt_overrides) =
+        let (theme, git, mut chat, kanban, repos, global_prompt_overrides) =
             fixture.service.workspace_get_settings_snapshot()?;
         assert_eq!(chat, ChatSettings::default());
         chat.show_thinking_messages = true;
@@ -935,6 +944,7 @@ mod tests {
             theme,
             git,
             chat,
+            kanban,
             repos,
             global_prompt_overrides,
             &confirmation,
@@ -944,6 +954,7 @@ mod tests {
             _persisted_theme,
             _persisted_git,
             persisted_chat,
+            _persisted_kanban,
             _persisted_repos,
             _persisted_global_prompt_overrides,
         ) = fixture.service.workspace_get_settings_snapshot()?;

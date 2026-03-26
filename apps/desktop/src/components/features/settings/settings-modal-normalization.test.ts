@@ -277,6 +277,9 @@ describe("settings-modal-normalization", () => {
       chat: {
         showThinkingMessages: true,
       },
+      kanban: {
+        doneVisibleDays: 1,
+      },
       repos: {
         "/repo-a": createRepoConfig(),
       },
@@ -298,6 +301,7 @@ describe("settings-modal-normalization", () => {
       },
     ]);
     expect(snapshot.chat.showThinkingMessages).toBe(true);
+    expect(snapshot.kanban.doneVisibleDays).toBe(1);
     expect(snapshot.globalPromptOverrides).toEqual({
       "kickoff.spec_initial": {
         template: "global",
@@ -317,6 +321,9 @@ describe("settings-modal-normalization", () => {
       chat: {
         showThinkingMessages: false,
       },
+      kanban: {
+        doneVisibleDays: 1,
+      },
       repos: {
         "/repo-b": createRepoConfig(),
         "/repo-a": createRepoConfig(),
@@ -335,6 +342,9 @@ describe("settings-modal-normalization", () => {
           },
           chat: {
             showThinkingMessages: false,
+          },
+          kanban: {
+            doneVisibleDays: 1,
           },
           repos: {},
           globalPromptOverrides: {},

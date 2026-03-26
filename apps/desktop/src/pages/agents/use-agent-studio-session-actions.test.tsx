@@ -193,6 +193,9 @@ describe("useAgentStudioSessionActions", () => {
       chat: {
         showThinkingMessages: false,
       },
+      kanban: {
+        doneVisibleDays: 1,
+      },
       repos: {},
       globalPromptOverrides: {},
     });

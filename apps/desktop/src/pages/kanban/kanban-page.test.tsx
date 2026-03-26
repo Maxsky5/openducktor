@@ -55,6 +55,9 @@ const workspaceGetSettingsSnapshotMock = mock(async () => ({
   chat: {
     showThinkingMessages: false,
   },
+  kanban: {
+    doneVisibleDays: 1,
+  },
   repos: {},
   globalPromptOverrides: {} as RepoPromptOverrides,
 }));
@@ -511,6 +514,9 @@ describe("KanbanPage session start modal flow", () => {
       },
       chat: {
         showThinkingMessages: false,
+      },
+      kanban: {
+        doneVisibleDays: 1,
       },
       repos: {},
       globalPromptOverrides: {},

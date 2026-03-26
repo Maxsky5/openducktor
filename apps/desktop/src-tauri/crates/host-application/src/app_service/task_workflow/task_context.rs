@@ -54,6 +54,18 @@ impl AppService {
         self.load_task_repo_context_from_resolved(repo_path)
     }
 
+    pub(super) fn load_task_repo_context_for_kanban(
+        &self,
+        repo_path: &str,
+        done_visible_days: i32,
+    ) -> Result<TaskRepoContext> {
+        let repo_path = self.resolve_task_repo_path(repo_path)?;
+        let tasks = self
+            .task_store
+            .list_tasks_for_kanban(Path::new(&repo_path), done_visible_days)?;
+        Ok(TaskRepoContext { repo_path, tasks })
+    }
+
     pub(super) fn load_task_context_from_resolved(
         &self,
         repo_path: String,

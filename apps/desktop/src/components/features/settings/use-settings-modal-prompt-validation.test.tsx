@@ -21,6 +21,9 @@ const createSnapshot = (): SettingsSnapshot => ({
   chat: {
     showThinkingMessages: false,
   },
+  kanban: {
+    doneVisibleDays: 1,
+  },
   globalPromptOverrides: {
     "system.scenario.spec_initial": {
       template: "invalid {{task.bad}}",
@@ -86,6 +89,7 @@ describe("useSettingsModalPromptValidation", () => {
       repositories: 0,
       prompts: 0,
       chat: 0,
+      kanban: 0,
     });
 
     await harness.unmount();
@@ -112,6 +116,7 @@ describe("useSettingsModalPromptValidation", () => {
       repositories: 1,
       prompts: 1,
       chat: 0,
+      kanban: 0,
     });
     expect(latest.selectedRepoPromptValidationErrors["kickoff.build_implementation_start"]).toBe(
       "Unsupported placeholder: {{unknown.value}}.",

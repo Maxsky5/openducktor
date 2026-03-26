@@ -283,6 +283,9 @@ describe("use-agent-orchestrator-operations", () => {
       chat: {
         showThinkingMessages: false,
       },
+      kanban: {
+        doneVisibleDays: 1,
+      },
       repos: {},
       globalPromptOverrides: {},
     });

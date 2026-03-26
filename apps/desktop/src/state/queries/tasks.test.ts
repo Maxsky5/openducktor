@@ -3,6 +3,8 @@ import type { AgentSessionRecord, RunSummary, TaskCard } from "@openducktor/cont
 import { QueryClient } from "@tanstack/react-query";
 import { taskQueryKeys, upsertAgentSessionInRepoTaskData } from "./tasks";
 
+const DONE_VISIBLE_DAYS = 1;
+
 const taskFixture: TaskCard = {
   id: "task-1",
   title: "Task",
@@ -44,7 +46,7 @@ const sessionFixture: AgentSessionRecord = {
 describe("tasks query cache helpers", () => {
   test("upsertAgentSessionInRepoTaskData inserts a persisted session into the repo task cache", () => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS), {
       tasks: [taskFixture],
       runs: [] satisfies RunSummary[],
     });
@@ -54,14 +56,14 @@ describe("tasks query cache helpers", () => {
     const repoTaskData = queryClient.getQueryData<{
       tasks: TaskCard[];
       runs: RunSummary[];
-    }>(taskQueryKeys.repoData("/repo"));
+    }>(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS));
 
     expect(repoTaskData?.tasks[0]?.agentSessions).toEqual([sessionFixture]);
   });
 
   test("upsertAgentSessionInRepoTaskData replaces the existing persisted session for the same id", () => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS), {
       tasks: [
         {
           ...taskFixture,
@@ -81,7 +83,7 @@ describe("tasks query cache helpers", () => {
     const repoTaskData = queryClient.getQueryData<{
       tasks: TaskCard[];
       runs: RunSummary[];
-    }>(taskQueryKeys.repoData("/repo"));
+    }>(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS));
 
     expect(repoTaskData?.tasks[0]?.agentSessions).toEqual([updatedSession]);
   });

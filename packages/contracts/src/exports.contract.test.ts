@@ -46,6 +46,7 @@ import type {
   GitWorktreeSummary,
   GlobalConfig,
   IssueType,
+  KanbanSettings,
   PlanSubtaskInput,
   PlanSubtaskIssueType,
   PlanSubtaskPriority,
@@ -118,6 +119,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "parseAgentSessionTodoPayloadList",
   "beadsCheckSchema",
   "chatSettingsSchema",
+  "DEFAULT_KANBAN_SETTINGS",
   "devServerEventSchema",
   "devServerGroupStateSchema",
   "devServerLogLineSchema",
@@ -165,6 +167,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitWorktreeStatusSummarySchema",
   "gitWorktreeStatusSnapshotSchema",
   "gitWorktreeSummarySchema",
+  "kanbanSettingsSchema",
   "globalConfigSchema",
   "globalGitConfigSchema",
   "issueTypeSchema",
@@ -290,6 +293,7 @@ type ExportedTypeContract = {
   GitWorktreeStatusSnapshot: GitWorktreeStatusSnapshot;
   GitWorktreeSummary: GitWorktreeSummary;
   GlobalConfig: GlobalConfig;
+  KanbanSettings: KanbanSettings;
   IssueType: IssueType;
   PlanSubtaskInput: PlanSubtaskInput;
   PlanSubtaskIssueType: PlanSubtaskIssueType;
@@ -346,6 +350,7 @@ describe("contracts exports contract", () => {
     });
 
     expect(parsedSnapshot.chat.showThinkingMessages).toBe(false);
+    expect(parsedSnapshot.kanban.doneVisibleDays).toBe(1);
   });
 
   test("rejects settings snapshots without a theme", () => {

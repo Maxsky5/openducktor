@@ -11,7 +11,7 @@ use host_domain::{
 use host_infra_system::{
     command_exists, copy_configured_worktree_files, remove_worktree, repo_script_fingerprint,
     resolve_central_beads_dir, run_command, run_command_allow_failure_with_env, version_command,
-    ChatSettings, GlobalGitConfig, HookSet, PromptOverrides, RepoConfig,
+    ChatSettings, GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -25,6 +25,7 @@ type SettingsSnapshotTuple = (
     String,
     GlobalGitConfig,
     ChatSettings,
+    KanbanSettings,
     HashMap<String, RepoConfig>,
     PromptOverrides,
 );
@@ -258,6 +259,7 @@ impl AppService {
             config.theme,
             config.git,
             config.chat,
+            config.kanban,
             config.repos,
             config.global_prompt_overrides,
         ))
@@ -272,6 +274,7 @@ impl AppService {
         theme: String,
         git: GlobalGitConfig,
         chat: ChatSettings,
+        kanban: KanbanSettings,
         repos: HashMap<String, RepoConfig>,
         global_prompt_overrides: PromptOverrides,
     ) -> Result<()> {
@@ -287,6 +290,7 @@ impl AppService {
         config.theme = theme;
         config.git = git;
         config.chat = chat;
+        config.kanban = kanban;
         config.global_prompt_overrides = global_prompt_overrides;
         for (repo_path, repo_config) in repos {
             config.repos.insert(repo_path, repo_config);
@@ -911,12 +915,13 @@ mod tests {
     fn workspace_get_settings_snapshot_returns_defaulted_chat_settings() {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
 
-        let (_theme, _git, chat, repos, global_prompt_overrides) = service
+        let (_theme, _git, chat, kanban, repos, global_prompt_overrides) = service
             .workspace_get_settings_snapshot()
             .expect("settings snapshot should load");
 
         assert_eq!(chat, ChatSettings::default());
         assert!(!chat.show_thinking_messages);
+        assert_eq!(kanban.done_visible_days, 1);
         assert!(repos.is_empty());
         assert!(global_prompt_overrides.is_empty());
     }

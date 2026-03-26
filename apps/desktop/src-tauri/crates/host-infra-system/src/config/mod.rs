@@ -11,8 +11,9 @@ pub use store::{AppConfigStore, RuntimeConfigStore};
 pub use types::{
     hook_set_fingerprint, repo_script_fingerprint, AgentDefaults, AgentModelDefault, ChatSettings,
     GitMergeMethod, GitProviderConfig, GitProviderRepository, GitTargetBranch, GlobalConfig,
-    GlobalGitConfig, HookSet, OpencodeStartupReadinessConfig, PromptOverride, PromptOverrides,
-    RepoConfig, RepoDevServerScript, RepoGitConfig, RuntimeConfig, SchedulerConfig, SoftGuardrails,
+    GlobalGitConfig, HookSet, KanbanSettings, OpencodeStartupReadinessConfig, PromptOverride,
+    PromptOverrides, RepoConfig, RepoDevServerScript, RepoGitConfig, RuntimeConfig,
+    SchedulerConfig, SoftGuardrails,
 };
 
 #[cfg(test)]

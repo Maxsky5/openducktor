@@ -15,6 +15,9 @@ const hostMock = {
       chat: {
         showThinkingMessages: false,
       },
+      kanban: {
+        doneVisibleDays: 1,
+      },
       repos: {},
       globalPromptOverrides: {},
     }),
@@ -39,6 +42,9 @@ const createSettingsSnapshot = (
     theme: "light",
     git: {
       defaultMergeMethod: "merge_commit",
+    },
+    kanban: {
+      doneVisibleDays: 1,
     },
     ...(includeChat ? { chat: { showThinkingMessages } } : {}),
     repos: {},

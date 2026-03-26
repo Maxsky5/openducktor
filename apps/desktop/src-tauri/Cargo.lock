@@ -1326,6 +1326,7 @@ name = "host-infra-beads"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "host-domain",
  "host-infra-system",
  "serde",

@@ -19,6 +19,9 @@ type SettingsModalDraftActions = {
   updateGlobalChatSettings: (
     updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"],
   ) => void;
+  updateGlobalKanbanSettings: (
+    updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"],
+  ) => void;
   updateGlobalPromptOverrides: (
     updater: (current: RepoPromptOverrides) => RepoPromptOverrides,
   ) => void;
@@ -109,6 +112,22 @@ export const useSettingsModalDraftActions = ({
     [setSnapshotDraft],
   );
 
+  const updateGlobalKanbanSettings = useCallback(
+    (updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"]): void => {
+      setSnapshotDraft((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          kanban: updater(current.kanban),
+        };
+      });
+    },
+    [setSnapshotDraft],
+  );
+
   const updateRepoPromptOverrides = useCallback(
     (updater: (current: RepoPromptOverrides) => RepoPromptOverrides): void => {
       updateSelectedRepoConfig((repoConfig) => ({
@@ -156,6 +175,7 @@ export const useSettingsModalDraftActions = ({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
+    updateGlobalKanbanSettings,
     updateGlobalPromptOverrides,
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,

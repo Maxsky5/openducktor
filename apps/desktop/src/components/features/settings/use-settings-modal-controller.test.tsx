@@ -16,6 +16,9 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   chat: {
     showThinkingMessages: false,
   },
+  kanban: {
+    doneVisibleDays: 1,
+  },
   repos: {
     "/repo": {
       defaultRuntimeKind: "opencode",

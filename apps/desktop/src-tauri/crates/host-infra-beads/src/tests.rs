@@ -5,6 +5,7 @@ use super::{
     ProcessCommandRunner, CUSTOM_STATUS_VALUES, TASK_LIST_CACHE_TTL_MS,
 };
 use anyhow::{anyhow, Result};
+use chrono::{Duration as ChronoDuration, Utc};
 use host_domain::{
     AgentSessionDocument, CreateTaskInput, IssueType, QaVerdict, TaskStatus, TaskStore,
     UpdateTaskPatch,
@@ -1345,7 +1346,101 @@ fn get_task_metadata_ignores_cached_task_list_metadata() -> Result<()> {
     assert_eq!(calls.len(), 2);
     assert_eq!(calls[0].args[0], "list");
     assert_eq!(calls[1].args[0], "show");
+    Ok(())
+}
 
+#[test]
+fn list_tasks_for_kanban_requests_recent_closed_tasks() -> Result<()> {
+    let repo = RepoFixture::new("kanban-list-recent-closed");
+    let open_tasks = json!([issue_value("task-1", "open", "task", None, json!([]), None)]);
+    let recent_closed = json!([issue_value(
+        "task-2",
+        "closed",
+        "task",
+        None,
+        json!([]),
+        None
+    )]);
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(open_tasks.to_string())),
+        MockStep::WithEnv(Ok(recent_closed.to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let tasks = store.list_tasks_for_kanban(repo.path(), 1)?;
+    assert_eq!(tasks.len(), 2);
+    assert!(tasks.iter().any(|task| task.id == "task-1"));
+    assert!(tasks.iter().any(|task| task.id == "task-2"));
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 2);
+    assert_eq!(calls[0].args[0], "list");
+    assert_eq!(calls[0].args[1], "--limit");
+    assert_eq!(calls[0].args[2], "0");
+    assert_eq!(calls[1].args[0], "list");
+    assert!(calls[1]
+        .args
+        .windows(2)
+        .any(|pair| pair == ["--status", "closed"]));
+    let expected_cutoff = (Utc::now() - ChronoDuration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    assert!(calls[1]
+        .args
+        .windows(2)
+        .any(|pair| pair[0] == "--closed-after" && pair[1] == expected_cutoff));
+    Ok(())
+}
+
+#[test]
+fn list_tasks_for_kanban_skips_closed_fetch_for_zero_days() -> Result<()> {
+    let repo = RepoFixture::new("kanban-list-zero-days");
+    let open_tasks = json!([issue_value("task-1", "open", "task", None, json!([]), None)]);
+    let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(open_tasks.to_string()))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let tasks = store.list_tasks_for_kanban(repo.path(), 0)?;
+    assert_eq!(tasks.len(), 1);
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].args[0], "list");
+    Ok(())
+}
+
+#[test]
+fn list_tasks_for_kanban_cache_key_includes_done_visible_days() -> Result<()> {
+    let repo = RepoFixture::new("kanban-list-cache-key");
+    let open_tasks = json!([issue_value("task-1", "open", "task", None, json!([]), None)]);
+    let closed_tasks = json!([issue_value(
+        "task-2",
+        "closed",
+        "task",
+        None,
+        json!([]),
+        None
+    )]);
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(open_tasks.to_string())),
+        MockStep::WithEnv(Ok(closed_tasks.to_string())),
+        MockStep::WithEnv(Ok(open_tasks.to_string())),
+        MockStep::WithEnv(Ok(closed_tasks.to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let first = store.list_tasks_for_kanban(repo.path(), 1)?;
+    let second = store.list_tasks_for_kanban(repo.path(), 1)?;
+    let third = store.list_tasks_for_kanban(repo.path(), 7)?;
+    assert_eq!(first.len(), 2);
+    assert_eq!(second.len(), 2);
+    assert_eq!(third.len(), 2);
+
+    let calls = runner.take_calls();
+    let list_calls = calls
+        .iter()
+        .filter(|call| call.args.first().map(String::as_str) == Some("list"))
+        .count();
+    assert_eq!(list_calls, 4);
     Ok(())
 }
 

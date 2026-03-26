@@ -187,7 +187,7 @@ describe("use-task-operations", () => {
 
       expect(harness.getLatest().tasks.map((task) => task.id)).toEqual(["A"]);
       expect(harness.getLatest().runs).toHaveLength(1);
-      expect(tasksList).toHaveBeenCalledWith("/repo");
+      expect(tasksList).toHaveBeenCalledWith("/repo", 1);
       expect(runsList).toHaveBeenCalledWith("/repo");
     } finally {
       await harness.unmount();
@@ -434,7 +434,7 @@ describe("use-task-operations", () => {
       });
 
       expect(repoPullRequestSync).toHaveBeenCalledWith("/repo");
-      expect(tasksList).toHaveBeenCalledWith("/repo");
+      expect(tasksList).toHaveBeenCalledWith("/repo", 1);
       expect(harness.getLatest().tasks.map((task) => task.id)).toEqual(["A"]);
     } finally {
       await harness.unmount();
@@ -509,7 +509,7 @@ describe("use-task-operations", () => {
       });
 
       expect(taskPullRequestDetect).toHaveBeenCalledWith("/repo", "A");
-      expect(tasksList).toHaveBeenCalledWith("/repo");
+      expect(tasksList).toHaveBeenCalledWith("/repo", 1);
       expect(runsList).toHaveBeenCalledWith("/repo");
       expect(harness.getLatest().tasks[0]?.pullRequest?.number).toBe(17);
       expect(toastSuccess).toHaveBeenCalledWith("Pull request linked", {
@@ -749,7 +749,7 @@ describe("use-task-operations", () => {
         mergedAt: "2026-02-20T10:00:00Z",
         closedAt: "2026-02-20T10:00:00Z",
       });
-      expect(tasksList).toHaveBeenCalledWith("/repo");
+      expect(tasksList).toHaveBeenCalledWith("/repo", 1);
       expect(runsList).toHaveBeenCalledWith("/repo");
       expect(harness.getLatest().pendingMergedPullRequest).toBeNull();
       expect(harness.getLatest().linkingMergedPullRequestTaskId).toBeNull();
@@ -1022,7 +1022,7 @@ describe("use-task-operations", () => {
       });
 
       expect(taskPullRequestUnlink).toHaveBeenCalledWith("/repo", "A");
-      expect(tasksList).toHaveBeenCalledWith("/repo");
+      expect(tasksList).toHaveBeenCalledWith("/repo", 1);
       expect(runsList).toHaveBeenCalledWith("/repo");
       expect(harness.getLatest().tasks[0]?.pullRequest).toBeUndefined();
       expect(toastSuccess).toHaveBeenCalledWith("Pull request unlinked", {

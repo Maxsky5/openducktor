@@ -365,6 +365,13 @@ struct TaskCreateArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct TaskListArgs {
+    repo_path: String,
+    done_visible_days: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct TaskUpdateArgs {
     repo_path: String,
     task_id: String,
@@ -895,12 +902,7 @@ async fn dispatch_task_command(
     args: Value,
 ) -> Option<CommandResult> {
     match command {
-        "tasks_list" => Some(
-            handle_repo_path_operation_blocking(state, args, "tasks_list", |service, repo_path| {
-                service.tasks_list(&repo_path)
-            })
-            .await,
-        ),
+        "tasks_list" => Some(handle_tasks_list(state, args).await),
         "task_create" => Some(handle_task_create(state, args).await),
         "task_update" => Some(handle_task_update(state, args).await),
         "task_delete" => Some(handle_task_delete(state, args).await),
@@ -990,6 +992,21 @@ where
     serialize_value(
         run_headless_blocking(operation_name, move || operation(service, repo_path)).await?,
     )
+}
+
+async fn handle_tasks_list(state: &HeadlessState, args: Value) -> CommandResult {
+    let TaskListArgs {
+        repo_path,
+        done_visible_days,
+    } = deserialize_args(args)?;
+    let service = state.service.clone();
+    let tasks = run_service_blocking_tokio("tasks_list", move || match done_visible_days {
+        Some(days) => service.tasks_list_for_kanban(&repo_path, days),
+        None => service.tasks_list(&repo_path),
+    })
+    .await
+    .map_err(service_error)?;
+    serialize_value(tasks)
 }
 
 fn handle_repo_task_operation<T, F>(args: Value, operation: F) -> CommandResult
@@ -1172,7 +1189,7 @@ fn handle_workspace_update_repo_hooks(state: &HeadlessState, args: Value) -> Com
 }
 
 fn handle_workspace_get_settings_snapshot(state: &HeadlessState) -> CommandResult {
-    let (theme, git, chat, repos, global_prompt_overrides) = state
+    let (theme, git, chat, kanban, repos, global_prompt_overrides) = state
         .service
         .workspace_get_settings_snapshot()
         .map_err(service_error)?;
@@ -1180,6 +1197,7 @@ fn handle_workspace_get_settings_snapshot(state: &HeadlessState) -> CommandResul
         theme,
         git,
         chat,
+        kanban,
         repos,
         global_prompt_overrides,
     })
@@ -1210,6 +1228,7 @@ async fn handle_workspace_save_settings_snapshot(
         theme,
         git,
         chat,
+        kanban,
         repos,
         global_prompt_overrides,
     } = snapshot;
@@ -1219,6 +1238,7 @@ async fn handle_workspace_save_settings_snapshot(
                 theme,
                 git,
                 chat,
+                kanban,
                 repos,
                 global_prompt_overrides,
                 &confirmation_port,
