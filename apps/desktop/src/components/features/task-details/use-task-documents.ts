@@ -1,6 +1,7 @@
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { host } from "@/state/operations/host";
+import { resolveLatestDocumentPayload } from "@/state/queries/document-utils";
 import type { TaskDocumentPayload } from "@/types/task-documents";
 
 export type DocumentSectionKey = "spec" | "plan" | "qa";
@@ -56,37 +57,6 @@ const createHostDocumentLoader = <TResult extends { markdown: string; updatedAt:
       updatedAt: document.updatedAt,
     };
   };
-};
-
-const toUpdatedAtTimestamp = (updatedAt: string | null): number | null => {
-  if (!updatedAt) {
-    return null;
-  }
-
-  const timestamp = Date.parse(updatedAt);
-  return Number.isNaN(timestamp) ? null : timestamp;
-};
-
-const resolveLatestDocumentPayload = (
-  current: TaskDocumentPayload | undefined,
-  incoming: TaskDocumentPayload,
-): TaskDocumentPayload => {
-  if (!current) {
-    return incoming;
-  }
-
-  const currentTimestamp = toUpdatedAtTimestamp(current.updatedAt);
-  const incomingTimestamp = toUpdatedAtTimestamp(incoming.updatedAt);
-
-  if (currentTimestamp !== null && incomingTimestamp !== null) {
-    return incomingTimestamp >= currentTimestamp ? incoming : current;
-  }
-
-  if (currentTimestamp !== null && incomingTimestamp === null) {
-    return incoming.markdown !== current.markdown ? incoming : current;
-  }
-
-  return incoming;
 };
 
 const createDocumentQueryKey = (cacheScope: string, taskId: string, section: DocumentSectionKey) =>

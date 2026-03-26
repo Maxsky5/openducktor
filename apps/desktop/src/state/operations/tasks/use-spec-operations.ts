@@ -1,6 +1,8 @@
 import { defaultSpecTemplateMarkdown, validateSpecMarkdown } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import type { TaskDocumentPayload } from "../../../types/task-documents";
+import { resolveLatestDocumentPayload } from "../../queries/document-utils";
 import {
   documentQueryKeys,
   loadPlanDocumentFromQuery,
@@ -23,42 +25,6 @@ type UseSpecOperationsResult = {
   saveSpec: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
   saveSpecDocument: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
   savePlanDocument: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
-};
-
-type TaskDocumentPayload = {
-  markdown: string;
-  updatedAt: string | null;
-};
-
-const toUpdatedAtTimestamp = (updatedAt: string | null): number | null => {
-  if (!updatedAt) {
-    return null;
-  }
-
-  const parsed = Date.parse(updatedAt);
-  return Number.isNaN(parsed) ? null : parsed;
-};
-
-const resolveLatestDocumentPayload = (
-  current: TaskDocumentPayload | undefined,
-  incoming: TaskDocumentPayload,
-): TaskDocumentPayload => {
-  if (!current) {
-    return incoming;
-  }
-
-  const currentTimestamp = toUpdatedAtTimestamp(current.updatedAt);
-  const incomingTimestamp = toUpdatedAtTimestamp(incoming.updatedAt);
-
-  if (currentTimestamp !== null && incomingTimestamp !== null) {
-    return incomingTimestamp >= currentTimestamp ? incoming : current;
-  }
-
-  if (currentTimestamp !== null && incomingTimestamp === null) {
-    return current;
-  }
-
-  return incoming;
 };
 
 const setLatestDocumentPayload = (
