@@ -812,6 +812,7 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
       await Promise.resolve();
     });
+    await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
       latestHarnessValue?.taskApprovalModal?.onModeChange("pull_request");

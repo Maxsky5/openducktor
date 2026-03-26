@@ -136,6 +136,7 @@ function OptionCard<TValue extends string>({
   return (
     <button
       type="button"
+      aria-pressed={isSelected}
       disabled={disabled}
       onClick={() => onSelect(value)}
       className={cn(
