@@ -13,7 +13,7 @@
     },
     "apps/desktop": {
       "name": "@openducktor/desktop",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@openducktor/adapters-opencode-sdk": "workspace:*",
         "@openducktor/adapters-tauri-host": "workspace:*",
@@ -64,7 +64,7 @@
     },
     "packages/adapters-opencode-sdk": {
       "name": "@openducktor/adapters-opencode-sdk",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@opencode-ai/sdk": "^1.3.0",
         "@openducktor/contracts": "workspace:*",
@@ -73,7 +73,7 @@
     },
     "packages/adapters-tauri-host": {
       "name": "@openducktor/adapters-tauri-host",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
@@ -81,21 +81,21 @@
     },
     "packages/contracts": {
       "name": "@openducktor/contracts",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "zod": "^4.3.6",
       },
     },
     "packages/core": {
       "name": "@openducktor/core",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
       },
     },
     "packages/openducktor-mcp": {
       "name": "@openducktor/mcp",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "bin": {
         "openducktor-mcp": "./dist/index.js",
       },
@@ -110,6 +110,7 @@
     "@hono/node-server": "^1.19.11",
     "express-rate-limit": "^8.2.2",
     "hono": "^4.12.7",
+    "path-to-regexp": "^8.4.0",
     "rollup": "^4.59.0",
   },
   "packages": {
@@ -891,7 +892,7 @@
 
     "path-key": ["path-key@3.1.1", "", {}, "sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q=="],
 
-    "path-to-regexp": ["path-to-regexp@8.3.0", "", {}, "sha512-7jdwVIRtsP8MYpdXSwOS0YdD0Du+qOoF/AEPIt88PcCFrZCzx41oxku1jD88hZBwbNUIEfpqvuhjFaMAqMTWnA=="],
+    "path-to-regexp": ["path-to-regexp@8.4.0", "", {}, "sha512-PuseHIvAnz3bjrM2rGJtSgo1zjgxapTLZ7x2pjhzWwlp4SJQgK3f3iZIQwkpEnBaKz6seKBADpM4B4ySkuYypg=="],
 
     "picocolors": ["picocolors@1.1.1", "", {}, "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="],
 

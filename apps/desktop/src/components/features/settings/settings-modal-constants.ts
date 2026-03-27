@@ -83,7 +83,7 @@ export const PROMPT_TEMPLATE_DESCRIPTIONS: Record<AgentPromptTemplateId, string>
   "system.shared.tool_protocol":
     "Added to every system prompt to define the required tool-calling protocol, task lock, question discipline, and evidence hierarchy.",
   "system.shared.task_context":
-    "Added to every system prompt to inject the task snapshot and latest persisted workflow artifacts as canonical context.",
+    "Added to every system prompt to inject the task snapshot and require fetching canonical workflow artifacts through odt_read_task.",
   "system.role.spec.base":
     "Base system instructions used for every Spec run, focused on brownfield-first discovery, clarification discipline, and requirements-quality self-checks.",
   "system.role.planner.base":

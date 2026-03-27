@@ -26,15 +26,13 @@ export const resolveRuntimeAndModel = async ({
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "runtime" | "task" | "model">;
 }): Promise<ResolvedRuntimeAndModel> => {
-  const { documents: docs, promptOverrides } = await loadSessionPromptInputs({
+  const { promptOverrides } = await loadSessionPromptInputs({
     repoPath: ctx.repoPath,
-    taskId: ctx.taskId,
-    loadTaskDocuments: deps.task.loadTaskDocuments,
     loadRepoPromptOverrides: deps.model.loadRepoPromptOverrides,
   });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
-  const resolvedScenario = scenario ?? inferScenario(ctx.role, taskCard, docs);
+  const resolvedScenario = scenario ?? inferScenario(ctx.role, taskCard);
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
   const runtimeInfo = await deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
@@ -48,7 +46,6 @@ export const resolveRuntimeAndModel = async ({
     scenario: resolvedScenario,
     task: taskCard,
     promptOverrides,
-    documents: docs,
   });
 
   return {

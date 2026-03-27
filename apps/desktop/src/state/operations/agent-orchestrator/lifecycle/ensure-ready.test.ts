@@ -103,11 +103,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       }),
-      loadTaskDocuments: async () => ({
-        specMarkdown: "",
-        planMarkdown: "",
-        qaMarkdown: "",
-      }),
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -174,11 +169,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         runId: "run-1",
         runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({
-        specMarkdown: "",
-        planMarkdown: "",
-        qaMarkdown: "",
       }),
       loadRepoPromptOverrides: async () => ({}),
     });
@@ -268,11 +258,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         runId: "run-1",
         runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({
-        specMarkdown: "",
-        planMarkdown: "",
-        qaMarkdown: "",
       }),
       loadRepoPromptOverrides: async () => ({}),
     });
@@ -380,11 +365,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       }),
-      loadTaskDocuments: async () => ({
-        specMarkdown: "",
-        planMarkdown: "",
-        qaMarkdown: "",
-      }),
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -469,11 +449,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       }),
-      loadTaskDocuments: async () => ({
-        specMarkdown: "",
-        planMarkdown: "",
-        qaMarkdown: "",
-      }),
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -549,11 +524,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       }),
-      loadTaskDocuments: async () => ({
-        specMarkdown: "",
-        planMarkdown: "",
-        qaMarkdown: "",
-      }),
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -621,11 +591,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         runId: "run-1",
         runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({
-        specMarkdown: "",
-        planMarkdown: "",
-        qaMarkdown: "",
       }),
       loadRepoPromptOverrides: async () => ({}),
     });
@@ -705,11 +670,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       }),
-      loadTaskDocuments: async () => ({
-        specMarkdown: "",
-        planMarkdown: "",
-        qaMarkdown: "",
-      }),
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -731,7 +691,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     }
   });
 
-  test("does not start a runtime when prompt loading fails during resume", async () => {
+  test("does not start a runtime when prompt override loading fails during resume", async () => {
     let runtimeCalls = 0;
 
     const adapter = createAdapter();
@@ -762,14 +722,13 @@ describe("agent-orchestrator-ensure-ready", () => {
           workingDirectory: "/tmp/repo/worktree",
         };
       },
-      loadTaskDocuments: async () => {
-        throw new Error("prompt load failed");
+      loadRepoPromptOverrides: async () => {
+        throw new Error("prompt override load failed");
       },
-      loadRepoPromptOverrides: async () => ({}),
     });
 
     try {
-      await expect(ensureReady("session-1")).rejects.toThrow("prompt load failed");
+      await expect(ensureReady("session-1")).rejects.toThrow("prompt override load failed");
       expect(runtimeCalls).toBe(0);
     } finally {
       adapter.hasSession = originalHasSession;
@@ -810,7 +769,6 @@ describe("agent-orchestrator-ensure-ready", () => {
           workingDirectory: "/tmp/repo/worktree",
         };
       },
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoPromptOverrides: async () => promptOverridesDeferred.promise,
     });
 

@@ -31,48 +31,22 @@ const taskFixture: TaskCard = {
 
 describe("agent-orchestrator/support/scenario", () => {
   test("infers role-specific scenarios", () => {
-    expect(
-      inferScenario("spec", taskFixture, {
-        specMarkdown: "",
-        planMarkdown: "",
-        qaMarkdown: "",
-      }),
-    ).toBe("spec_initial");
+    expect(inferScenario("spec", taskFixture)).toBe("spec_initial");
 
-    expect(
-      inferScenario("planner", taskFixture, {
-        specMarkdown: "",
-        planMarkdown: "existing",
-        qaMarkdown: "",
-      }),
-    ).toBe("planner_initial");
+    expect(inferScenario("planner", taskFixture)).toBe("planner_initial");
 
-    expect(
-      inferScenario("build", taskFixture, {
-        specMarkdown: "",
-        planMarkdown: "",
-        qaMarkdown: "qa",
-      }),
-    ).toBe("build_implementation_start");
+    expect(inferScenario("build", taskFixture)).toBe("build_implementation_start");
   });
 
   test("infers qa-rework builder scenario from rejected qa verdict", () => {
     expect(
-      inferScenario(
-        "build",
-        {
-          ...taskFixture,
-          documentSummary: {
-            ...taskFixture.documentSummary,
-            qaReport: { has: true, updatedAt: "2026-02-22T09:00:00.000Z", verdict: "rejected" },
-          },
+      inferScenario("build", {
+        ...taskFixture,
+        documentSummary: {
+          ...taskFixture.documentSummary,
+          qaReport: { has: true, updatedAt: "2026-02-22T09:00:00.000Z", verdict: "rejected" },
         },
-        {
-          specMarkdown: "",
-          planMarkdown: "",
-          qaMarkdown: "",
-        },
-      ),
+      }),
     ).toBe("build_after_qa_rejected");
   });
 

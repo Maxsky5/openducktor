@@ -19,9 +19,6 @@ export type AgentPromptTaskContext = {
   status: string;
   qaRequired: boolean;
   description?: string;
-  specMarkdown?: string;
-  planMarkdown?: string;
-  latestQaReportMarkdown?: string;
 };
 
 export type BuildAgentPromptInput = {
@@ -41,9 +38,6 @@ export type BuildAgentKickoffPromptInput = {
     status?: string;
     qaRequired?: boolean;
     description?: string;
-    specMarkdown?: string;
-    planMarkdown?: string;
-    latestQaReportMarkdown?: string;
   };
   overrides?: RepoPromptOverrides;
 };
@@ -68,9 +62,6 @@ export type BuildAgentMessagePromptInput = {
     status?: string;
     qaRequired?: boolean;
     description?: string;
-    specMarkdown?: string;
-    planMarkdown?: string;
-    latestQaReportMarkdown?: string;
   };
   git?: AgentPromptGitContext;
   overrides?: RepoPromptOverrides;
@@ -179,7 +170,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "system.shared.tool_protocol": {
     id: "system.shared.tool_protocol",
     purpose: "system",
-    builtinVersion: 2,
+    builtinVersion: 3,
     template: joinPromptBlocks(
       "OpenDucktor workflow tools are native MCP tools.\nCall them directly as tool invocations; do not emit XML wrappers or pseudo-tool payloads.",
       lineSection("Allowed tools for this role", ["{{role.allowedTools}}"]),
@@ -191,6 +182,8 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
       bulletSection("Tool and communication protocol", [
         "Always include taskId in every odt_* tool call.",
         "Never invent tool names. Never call tools not listed above.",
+        "Start each session by calling odt_read_task with taskId {{task.id}} to load the canonical task documents.",
+        "If odt_read_task fails, surface the blocker or retry with the exact taskId instead of relying on stale summaries or prompt-copied artifacts.",
         "When asked about which ODT tools are enabled or disabled, answer strictly from the allowed-tools list above and treat every other ODT workflow tool as denied.",
         "Treat persisted workflow artifacts, repo evidence, and project instructions as higher-trust inputs than conversational summaries.",
         "Do repo and artifact research before conclusions; cite concrete evidence when it materially supports the outcome.",
@@ -202,7 +195,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "system.shared.task_context": {
     id: "system.shared.task_context",
     purpose: "system",
-    builtinVersion: 2,
+    builtinVersion: 3,
     template: joinPromptBlocks(
       lineSection("Task context", [
         "- id: {{task.id}}",
@@ -212,15 +205,15 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
         "- qaRequired: {{task.qaRequired}}",
         "- description: {{task.description}}",
       ]),
-      lineSection("Existing documents", [
-        "- spec: {{task.specMarkdown}}",
-        "- implementationPlan: {{task.planMarkdown}}",
-        "- latestQaReport: {{task.latestQaReportMarkdown}}",
+      lineSection("Artifact access", [
+        "- Persisted spec, implementation plan, and latest QA report are intentionally not inlined in this system prompt.",
+        "- Use odt_read_task with taskId {{task.id}} to load the current canonical task documents.",
+        "- If you need to re-check persisted artifacts later in the session, call odt_read_task again instead of trusting stale summaries.",
       ]),
       bulletSection("Task-context handling", [
-        "Treat these documents as the latest persisted workflow artifacts unless newer evidence is produced in this session.",
-        "If a document is missing, say so explicitly and continue within the allowed workflow instead of inventing missing history.",
-        "If conversation history or summaries disagree with these artifacts, verify against repo evidence or workflow tools before proceeding.",
+        "Treat the odt_read_task response as the latest persisted workflow artifacts unless newer evidence is produced in this session.",
+        "If a document is missing in odt_read_task, say so explicitly and continue within the allowed workflow instead of inventing missing history.",
+        "If conversation history or summaries disagree with odt_read_task or repo evidence, verify before proceeding.",
       ]),
     ),
   },
@@ -708,9 +701,6 @@ const buildPlaceholderValues = ({
     "task.status": compact(task.status),
     "task.qaRequired": task.qaRequired ? "true" : "false",
     "task.description": compact(task.description),
-    "task.specMarkdown": compact(task.specMarkdown),
-    "task.planMarkdown": compact(task.planMarkdown),
-    "task.latestQaReportMarkdown": compact(task.latestQaReportMarkdown),
     ...(git
       ? {
           "git.operationLabel": compact(git.operationLabel),

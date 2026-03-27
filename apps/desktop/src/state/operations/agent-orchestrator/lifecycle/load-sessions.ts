@@ -377,11 +377,6 @@ export const createLoadAgentSessions = ({
         scenario: resolvedScenario,
         task,
         promptOverrides,
-        documents: {
-          specMarkdown: "",
-          planMarkdown: "",
-          qaMarkdown: "",
-        },
       });
 
       return buildSessionHeaderMessages({
@@ -412,11 +407,6 @@ export const createLoadAgentSessions = ({
         scenario: resolvedScenario,
         task,
         promptOverrides,
-        documents: {
-          specMarkdown: "",
-          planMarkdown: "",
-          qaMarkdown: "",
-        },
       });
     };
 

@@ -2,7 +2,6 @@ import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { buildAgentSystemPrompt } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { TaskDocuments } from "../runtime/runtime";
 
 type SessionPromptTask = Pick<
   TaskCard,
@@ -14,19 +13,15 @@ type SessionPromptInput = {
   scenario: AgentScenario;
   task: SessionPromptTask;
   promptOverrides: RepoPromptOverrides;
-  documents: TaskDocuments;
 };
 
 type SessionPromptContext = {
-  documents: TaskDocuments;
   promptOverrides: RepoPromptOverrides;
   systemPrompt: string;
 };
 
 type LoadSessionPromptInputsInput = {
   repoPath: string;
-  taskId: string;
-  loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
 };
 
@@ -47,7 +42,6 @@ export const buildSessionSystemPrompt = ({
   scenario,
   task,
   promptOverrides,
-  documents,
 }: SessionPromptInput): string =>
   buildAgentSystemPrompt({
     role,
@@ -59,28 +53,17 @@ export const buildSessionSystemPrompt = ({
       status: task.status,
       qaRequired: task.aiReviewEnabled,
       description: task.description,
-      specMarkdown: documents.specMarkdown,
-      planMarkdown: documents.planMarkdown,
-      latestQaReportMarkdown: documents.qaMarkdown,
     },
     overrides: promptOverrides,
   });
 
 export const loadSessionPromptInputs = async ({
   repoPath,
-  taskId,
-  loadTaskDocuments,
   loadRepoPromptOverrides,
-}: LoadSessionPromptInputsInput): Promise<
-  Pick<SessionPromptContext, "documents" | "promptOverrides">
-> => {
-  const [documents, promptOverrides] = await Promise.all([
-    loadTaskDocuments(repoPath, taskId),
-    loadRepoPromptOverrides(repoPath),
-  ]);
+}: LoadSessionPromptInputsInput): Promise<Pick<SessionPromptContext, "promptOverrides">> => {
+  const promptOverrides = await loadRepoPromptOverrides(repoPath);
 
   return {
-    documents,
     promptOverrides,
   };
 };
@@ -90,38 +73,31 @@ export const createSessionPromptContext = ({
   scenario,
   task,
   promptOverrides,
-  documents,
 }: CreateSessionPromptContextInput): SessionPromptContext => {
   return {
-    documents,
     promptOverrides,
     systemPrompt: buildSessionSystemPrompt({
       role,
       scenario,
       task,
       promptOverrides,
-      documents,
     }),
   };
 };
 
 export const loadSessionPromptContext = async ({
   repoPath,
-  taskId,
   role,
   scenario,
   task,
-  loadTaskDocuments,
   loadRepoPromptOverrides,
 }: LoadSessionPromptInputsInput & {
   role: AgentRole;
   scenario: AgentScenario;
   task: SessionPromptTask;
 }): Promise<SessionPromptContext> => {
-  const { documents, promptOverrides } = await loadSessionPromptInputs({
+  const { promptOverrides } = await loadSessionPromptInputs({
     repoPath,
-    taskId,
-    loadTaskDocuments,
     loadRepoPromptOverrides,
   });
 
@@ -130,7 +106,6 @@ export const loadSessionPromptContext = async ({
     scenario,
     task,
     promptOverrides,
-    documents,
   });
 };
 
