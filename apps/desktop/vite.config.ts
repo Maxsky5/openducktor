@@ -14,7 +14,8 @@ function getAppVersion(): string | null {
       readFileSync(path.resolve(__dirname, "src-tauri/tauri.conf.json"), "utf-8"),
     );
     return conf.version ?? null;
-  } catch {
+  } catch (error) {
+    console.warn("Could not read app version from tauri.conf.json:", error);
     return null;
   }
 }
@@ -156,7 +157,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   define: {
     "import.meta.env.VITE_ODT_APP_VERSION": JSON.stringify(
-      process.env.ODT_APP_VERSION ?? getAppVersion(),
+      process.env.ODT_APP_VERSION ?? getAppVersion() ?? "",
     ),
   },
   resolve: {
