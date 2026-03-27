@@ -263,11 +263,15 @@ describe("use-spec-operations", () => {
       markdown: "# Old plan (empty scope key)",
       updatedAt: "2026-02-22T10:00:00.000Z",
     });
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo-a", 1), {
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), {
       tasks: [],
       runs: [],
     });
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo-a", 7), {
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 1), {
+      tasks: [],
+      runs: [],
+    });
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 7), {
       tasks: [],
       runs: [],
     });
@@ -303,10 +307,13 @@ describe("use-spec-operations", () => {
       expect(
         queryClient.getQueryState(["task-documents", "plan", "", "task-1"])?.isInvalidated,
       ).toBe(true);
-      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a", 1))?.isInvalidated).toBe(
+      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a"))?.isInvalidated).toBe(
         true,
       );
-      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a", 7))?.isInvalidated).toBe(
+      expect(queryClient.getQueryState(taskQueryKeys.kanbanData("/repo-a", 1))?.isInvalidated).toBe(
+        true,
+      );
+      expect(queryClient.getQueryState(taskQueryKeys.kanbanData("/repo-a", 7))?.isInvalidated).toBe(
         true,
       );
     } finally {
@@ -355,11 +362,15 @@ describe("use-spec-operations", () => {
       markdown: "# Old spec (empty scope key)",
       updatedAt: "2026-02-22T10:00:00.000Z",
     });
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo-a", 1), {
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), {
       tasks: [],
       runs: [],
     });
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo-a", 7), {
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 1), {
+      tasks: [],
+      runs: [],
+    });
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 7), {
       tasks: [],
       runs: [],
     });
@@ -384,10 +395,13 @@ describe("use-spec-operations", () => {
       expect(
         queryClient.getQueryState(["task-documents", "spec", "", "task-1"])?.isInvalidated,
       ).toBe(true);
-      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a", 1))?.isInvalidated).toBe(
+      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a"))?.isInvalidated).toBe(
         true,
       );
-      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a", 7))?.isInvalidated).toBe(
+      expect(queryClient.getQueryState(taskQueryKeys.kanbanData("/repo-a", 1))?.isInvalidated).toBe(
+        true,
+      );
+      expect(queryClient.getQueryState(taskQueryKeys.kanbanData("/repo-a", 7))?.isInvalidated).toBe(
         true,
       );
     } finally {

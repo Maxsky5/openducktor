@@ -122,6 +122,7 @@ describe("settings modal content", () => {
 
     expect(html).toContain("Kanban Settings");
     expect(html).toContain("Done tasks visible for");
+    expect(html).toContain('value="7"');
   });
 
   test("renders general section when section is general", () => {

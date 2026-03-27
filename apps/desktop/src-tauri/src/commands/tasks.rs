@@ -41,6 +41,12 @@ pub async fn tasks_list(
     repo_path: String,
     done_visible_days: Option<i32>,
 ) -> Result<Vec<TaskCard>, String> {
+    if let Some(days) = done_visible_days {
+        if days < 0 {
+            return Err("doneVisibleDays must be greater than or equal to 0".to_string());
+        }
+    }
+
     let service = state.service.clone();
     let result = match done_visible_days {
         Some(days) => {

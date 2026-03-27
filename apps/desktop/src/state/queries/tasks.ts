@@ -13,18 +13,19 @@ type RepoTaskData = {
 
 export const taskQueryKeys = {
   all: ["tasks"] as const,
-  repoDataPrefix: (repoPath: string) => [...taskQueryKeys.all, "repo-data", repoPath] as const,
-  repoData: (repoPath: string, doneVisibleDays: number) =>
-    [...taskQueryKeys.repoDataPrefix(repoPath), doneVisibleDays] as const,
+  repoData: (repoPath: string) => [...taskQueryKeys.all, "repo-data", repoPath] as const,
+  kanbanDataPrefix: (repoPath: string) => [...taskQueryKeys.all, "kanban-data", repoPath] as const,
+  kanbanData: (repoPath: string, doneVisibleDays: number) =>
+    [...taskQueryKeys.kanbanDataPrefix(repoPath), doneVisibleDays] as const,
   runs: (repoPath: string) => [...taskQueryKeys.all, "runs", repoPath] as const,
 };
 
-export const repoTaskDataQueryOptions = (repoPath: string, doneVisibleDays: number) =>
+export const repoTaskDataQueryOptions = (repoPath: string) =>
   queryOptions({
-    queryKey: taskQueryKeys.repoData(repoPath, doneVisibleDays),
+    queryKey: taskQueryKeys.repoData(repoPath),
     queryFn: async (): Promise<RepoTaskData> => {
       const [taskList, runList] = await Promise.all([
-        host.tasksList(repoPath, doneVisibleDays),
+        host.tasksList(repoPath),
         host.runsList(repoPath),
       ]);
 
@@ -32,6 +33,16 @@ export const repoTaskDataQueryOptions = (repoPath: string, doneVisibleDays: numb
         tasks: toVisibleTasks(taskList),
         runs: runList,
       };
+    },
+    staleTime: TASK_DATA_STALE_TIME_MS,
+  });
+
+export const kanbanTaskListQueryOptions = (repoPath: string, doneVisibleDays: number) =>
+  queryOptions({
+    queryKey: taskQueryKeys.kanbanData(repoPath, doneVisibleDays),
+    queryFn: async (): Promise<TaskCard[]> => {
+      const taskList = await host.tasksList(repoPath, doneVisibleDays);
+      return toVisibleTasks(taskList);
     },
     staleTime: TASK_DATA_STALE_TIME_MS,
   });
@@ -46,13 +57,12 @@ const repoRunsQueryOptions = (repoPath: string) =>
 export const loadRepoTaskDataFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
-  doneVisibleDays: number,
 ): Promise<RepoTaskData> =>
   queryClient.fetchQuery({
-    ...repoTaskDataQueryOptions(repoPath, doneVisibleDays),
+    ...repoTaskDataQueryOptions(repoPath),
     queryFn: async (): Promise<RepoTaskData> => {
       const [taskList, runList] = await Promise.all([
-        host.tasksList(repoPath, doneVisibleDays),
+        host.tasksList(repoPath),
         host.runsList(repoPath),
       ]);
       const repoTaskData = {
@@ -77,10 +87,37 @@ export const invalidateRepoTaskDataQueries = (
   },
 ) => {
   return queryClient.invalidateQueries({
-    queryKey: taskQueryKeys.repoDataPrefix(repoPath),
+    queryKey: taskQueryKeys.repoData(repoPath),
+    exact: true,
+    ...(options?.refetchType ? { refetchType: options.refetchType } : {}),
+  });
+};
+
+export const invalidateKanbanTaskQueries = (
+  queryClient: QueryClient,
+  repoPath: string,
+  options?: {
+    refetchType?: "active" | "inactive" | "all" | "none";
+  },
+) => {
+  return queryClient.invalidateQueries({
+    queryKey: taskQueryKeys.kanbanDataPrefix(repoPath),
     exact: false,
     ...(options?.refetchType ? { refetchType: options.refetchType } : {}),
   });
+};
+
+export const invalidateRepoTaskListQueries = (
+  queryClient: QueryClient,
+  repoPath: string,
+  options?: {
+    refetchType?: "active" | "inactive" | "all" | "none";
+  },
+) => {
+  return Promise.all([
+    invalidateRepoTaskDataQueries(queryClient, repoPath, options),
+    invalidateKanbanTaskQueries(queryClient, repoPath, options),
+  ]);
 };
 
 export const invalidateRepoTaskQueries = (
@@ -88,7 +125,7 @@ export const invalidateRepoTaskQueries = (
   repoPath: string,
 ): Promise<unknown[]> => {
   return Promise.all([
-    invalidateRepoTaskDataQueries(queryClient, repoPath, { refetchType: "none" }),
+    invalidateRepoTaskListQueries(queryClient, repoPath, { refetchType: "none" }),
     queryClient.invalidateQueries({
       queryKey: taskQueryKeys.runs(repoPath),
       exact: true,
@@ -103,18 +140,58 @@ export const upsertAgentSessionInRepoTaskData = (
   taskId: string,
   session: AgentSessionRecord,
 ): void => {
-  queryClient.setQueriesData<RepoTaskData | undefined>(
+  const updateRepoTaskData = (current: RepoTaskData | undefined): RepoTaskData | undefined => {
+    if (!current) {
+      return current;
+    }
+
+    let didChange = false;
+    const nextTasks = current.tasks.map((task) => {
+      if (task.id !== taskId) {
+        return task;
+      }
+
+      const currentAgentSessions = task.agentSessions ?? [];
+      const existingIndex = currentAgentSessions.findIndex(
+        (entry) => entry.sessionId === session.sessionId,
+      );
+      const existingSession =
+        existingIndex === -1 ? null : (currentAgentSessions[existingIndex] ?? null);
+      if (existingSession === session) {
+        return task;
+      }
+
+      const nextAgentSessions =
+        existingIndex === -1
+          ? [...currentAgentSessions, session]
+          : currentAgentSessions.map((entry, index) => (index === existingIndex ? session : entry));
+
+      didChange = true;
+      return {
+        ...task,
+        agentSessions: nextAgentSessions,
+      };
+    });
+
+    return didChange ? { ...current, tasks: nextTasks } : current;
+  };
+
+  queryClient.setQueryData<RepoTaskData | undefined>(
+    taskQueryKeys.repoData(repoPath),
+    updateRepoTaskData,
+  );
+  queryClient.setQueriesData<TaskCard[] | undefined>(
     {
-      queryKey: taskQueryKeys.repoDataPrefix(repoPath),
+      queryKey: taskQueryKeys.kanbanDataPrefix(repoPath),
       exact: false,
     },
-    (current): RepoTaskData | undefined => {
+    (current): TaskCard[] | undefined => {
       if (!current) {
         return current;
       }
 
       let didChange = false;
-      const nextTasks = current.tasks.map((task) => {
+      const nextTasks = current.map((task) => {
         if (task.id !== taskId) {
           return task;
         }
@@ -143,7 +220,7 @@ export const upsertAgentSessionInRepoTaskData = (
         };
       });
 
-      return didChange ? { ...current, tasks: nextTasks } : current;
+      return didChange ? nextTasks : current;
     },
   );
 };

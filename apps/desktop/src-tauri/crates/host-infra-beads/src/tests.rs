@@ -1367,7 +1367,13 @@ fn list_tasks_for_kanban_requests_recent_closed_tasks() -> Result<()> {
     ]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
+    let earliest_cutoff = (Utc::now() - ChronoDuration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
     let tasks = store.list_tasks_for_kanban(repo.path(), 1)?;
+    let latest_cutoff = (Utc::now() - ChronoDuration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
     assert_eq!(tasks.len(), 2);
     assert!(tasks.iter().any(|task| task.id == "task-1"));
     assert!(tasks.iter().any(|task| task.id == "task-2"));
@@ -1382,13 +1388,15 @@ fn list_tasks_for_kanban_requests_recent_closed_tasks() -> Result<()> {
         .args
         .windows(2)
         .any(|pair| pair == ["--status", "closed"]));
-    let expected_cutoff = (Utc::now() - ChronoDuration::days(1))
-        .format("%Y-%m-%d")
-        .to_string();
-    assert!(calls[1]
+    let actual_cutoff = calls[1]
         .args
         .windows(2)
-        .any(|pair| pair[0] == "--closed-after" && pair[1] == expected_cutoff));
+        .find_map(|pair| (pair[0] == "--closed-after").then(|| pair[1].clone()))
+        .expect("expected --closed-after argument");
+    assert!(
+        actual_cutoff >= earliest_cutoff && actual_cutoff <= latest_cutoff,
+        "unexpected cutoff: {actual_cutoff}"
+    );
     Ok(())
 }
 

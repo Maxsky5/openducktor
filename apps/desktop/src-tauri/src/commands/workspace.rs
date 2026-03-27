@@ -4,7 +4,7 @@ use crate::{
 };
 use host_application::{
     HookTrustConfirmationPort, HookTrustConfirmationRequest, PreparedHookTrustChallenge,
-    RepoConfigUpdate, RepoSettingsUpdate,
+    RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate,
 };
 use host_infra_system::HookSet;
 #[cfg(test)]
@@ -180,12 +180,14 @@ pub async fn workspace_save_settings_snapshot<R: tauri::Runtime>(
     as_error(
         run_service_blocking("workspace_save_settings_snapshot", move || {
             service.workspace_save_settings_snapshot(
-                theme,
-                git,
-                chat,
-                kanban,
-                repos,
-                global_prompt_overrides,
+                WorkspaceSettingsSnapshotUpdate {
+                    theme,
+                    git,
+                    chat,
+                    kanban,
+                    repos,
+                    global_prompt_overrides,
+                },
                 &confirmation_port,
             )
         })

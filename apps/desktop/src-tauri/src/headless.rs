@@ -23,6 +23,7 @@ use axum::{Json, Router};
 use host_application::{
     AppService, BuildResponseAction, CleanupMode, DevServerEmitter, HookTrustConfirmationPort,
     HookTrustConfirmationRequest, RepoConfigUpdate, RepoSettingsUpdate, RunEmitter,
+    WorkspaceSettingsSnapshotUpdate,
 };
 use host_domain::AgentRuntimeKind;
 use serde::de::DeserializeOwned;
@@ -1235,12 +1236,14 @@ async fn handle_workspace_save_settings_snapshot(
     serialize_value(
         run_service_blocking_tokio("workspace_save_settings_snapshot", move || {
             service.workspace_save_settings_snapshot(
-                theme,
-                git,
-                chat,
-                kanban,
-                repos,
-                global_prompt_overrides,
+                WorkspaceSettingsSnapshotUpdate {
+                    theme,
+                    git,
+                    chat,
+                    kanban,
+                    repos,
+                    global_prompt_overrides,
+                },
                 &confirmation_port,
             )
         })

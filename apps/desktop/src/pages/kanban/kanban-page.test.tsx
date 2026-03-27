@@ -23,6 +23,7 @@ enableReactActEnvironment();
 const originalConsoleError = console.error;
 const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
 const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+const originalTasksList = host.tasksList;
 const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
 
 const startAgentSessionMock = mock(async () => "session-1");
@@ -61,6 +62,7 @@ const workspaceGetSettingsSnapshotMock = mock(async () => ({
   repos: {},
   globalPromptOverrides: {} as RepoPromptOverrides,
 }));
+const tasksListMock = mock(async () => [currentTaskFixture]);
 const buildContinuationTargetGetMock = mock(async () => ({
   workingDirectory: "/repo/worktrees/task-1",
   source: "builder_session" as const,
@@ -100,6 +102,7 @@ const loadRepoRuntimeCatalogMock = mock(
 );
 
 let latestKanbanColumnProps: Record<string, unknown> | null = null;
+let latestKanbanColumnPropsList: Record<string, unknown>[] = [];
 let latestHumanReviewFeedbackModalModel: Record<string, unknown> | null = null;
 let latestSessionStartModalModel: Record<string, unknown> | null = null;
 let latestResetImplementationModalModel: Record<string, unknown> | null = null;
@@ -229,7 +232,7 @@ const createRepoConfigFixture = (promptOverrides: RepoPromptOverrides = {}): Rep
   },
 });
 
-const renderPage = async (): Promise<RenderResult> => {
+const renderPage = async (options?: { waitForKanbanReady?: boolean }): Promise<RenderResult> => {
   const { KanbanPage } = await import("./kanban-page");
   const LocationProbe = (): ReactElement | null => {
     const location = useLocation();
@@ -237,7 +240,7 @@ const renderPage = async (): Promise<RenderResult> => {
     return null;
   };
 
-  return render(
+  const renderer = render(
     <QueryProvider useIsolatedClient>
       <MemoryRouter initialEntries={["/"]}>
         <LocationProbe />
@@ -245,6 +248,21 @@ const renderPage = async (): Promise<RenderResult> => {
       </MemoryRouter>
     </QueryProvider>,
   );
+
+  if (options?.waitForKanbanReady !== false) {
+    await waitFor(
+      () => {
+        const totalTaskCount = latestKanbanColumnPropsList.reduce((count, props) => {
+          const column = props.column as { tasks: unknown[] };
+          return count + column.tasks.length;
+        }, 0);
+        expect(totalTaskCount).toBeGreaterThan(0);
+      },
+      { timeout: 1000 },
+    );
+  }
+
+  return renderer;
 };
 
 const waitForMockCall = async (
@@ -336,6 +354,7 @@ describe("KanbanPage session start modal flow", () => {
     mock.module("@/components/features/kanban/kanban-column", () => ({
       KanbanColumn: (props: Record<string, unknown>): ReactElement | null => {
         latestKanbanColumnProps = props;
+        latestKanbanColumnPropsList.push(props);
         return null;
       },
     }));
@@ -438,6 +457,7 @@ describe("KanbanPage session start modal flow", () => {
     host.workspaceGetRepoConfig = workspaceGetRepoConfigMock as typeof host.workspaceGetRepoConfig;
     host.workspaceGetSettingsSnapshot =
       workspaceGetSettingsSnapshotMock as typeof host.workspaceGetSettingsSnapshot;
+    host.tasksList = tasksListMock as typeof host.tasksList;
     host.buildContinuationTargetGet =
       buildContinuationTargetGetMock as typeof host.buildContinuationTargetGet;
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
@@ -480,6 +500,7 @@ describe("KanbanPage session start modal flow", () => {
       },
     ];
     latestKanbanColumnProps = null;
+    latestKanbanColumnPropsList = [];
     latestHumanReviewFeedbackModalModel = null;
     latestSessionStartModalModel = null;
     latestResetImplementationModalModel = null;
@@ -504,6 +525,7 @@ describe("KanbanPage session start modal flow", () => {
     toastErrorMock.mockClear();
     workspaceGetRepoConfigMock.mockClear();
     workspaceGetSettingsSnapshotMock.mockClear();
+    tasksListMock.mockClear();
     buildContinuationTargetGetMock.mockClear();
     loadRepoRuntimeCatalogMock.mockClear();
     workspaceGetRepoConfigMock.mockImplementation(async () => createRepoConfigFixture());
@@ -521,11 +543,13 @@ describe("KanbanPage session start modal flow", () => {
       repos: {},
       globalPromptOverrides: {},
     }));
+    tasksListMock.mockImplementation(async () => [currentTaskFixture]);
   });
 
   afterEach(() => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+    host.tasksList = originalTasksList;
     host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
     mock.restore();
   });
@@ -535,7 +559,7 @@ describe("KanbanPage session start modal flow", () => {
   });
 
   test("delegate action opens modal and foreground confirm navigates to Agent Studio", async () => {
-    const renderer = await renderPage();
+    const renderer = await renderPage({ waitForKanbanReady: false });
 
     expect(latestKanbanColumnProps).toBeTruthy();
 
@@ -563,6 +587,56 @@ describe("KanbanPage session start modal flow", () => {
     );
     expect(updateAgentSessionModelMock).not.toHaveBeenCalled();
     expect(latestLocation).toContain("/agents?task=TASK-123");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("settings load failure reports an error and leaves the Kanban board empty", async () => {
+    workspaceGetSettingsSnapshotMock.mockImplementationOnce(async () => {
+      throw new Error("settings unavailable");
+    });
+
+    const renderer = await renderPage({ waitForKanbanReady: false });
+
+    await waitForMockCall(toastErrorMock);
+
+    expect(toastErrorMock).toHaveBeenCalledWith("Failed to load Kanban settings", {
+      description: "settings unavailable",
+    });
+    expect(tasksListMock).not.toHaveBeenCalled();
+    expect(
+      latestKanbanColumnPropsList.reduce((count, props) => {
+        const column = props.column as { tasks: unknown[] };
+        return count + column.tasks.length;
+      }, 0),
+    ).toBe(0);
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("kanban task load failure reports an error and does not reuse shared task state", async () => {
+    tasksListMock.mockImplementationOnce(async () => {
+      throw new Error("tasks unavailable");
+    });
+
+    const renderer = await renderPage({ waitForKanbanReady: false });
+
+    await waitForMockCall(toastErrorMock);
+
+    expect(toastErrorMock).toHaveBeenCalledWith("Failed to load Kanban tasks", {
+      description: "tasks unavailable",
+    });
+    expect(tasksListMock).toHaveBeenCalledWith("/repo", 1);
+    expect(
+      latestKanbanColumnPropsList.reduce((count, props) => {
+        const column = props.column as { tasks: unknown[] };
+        return count + column.tasks.length;
+      }, 0),
+    ).toBe(0);
 
     await act(async () => {
       renderer.unmount();

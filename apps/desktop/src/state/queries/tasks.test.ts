@@ -46,24 +46,31 @@ const sessionFixture: AgentSessionRecord = {
 describe("tasks query cache helpers", () => {
   test("upsertAgentSessionInRepoTaskData inserts a persisted session into the repo task cache", () => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS), {
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
       tasks: [taskFixture],
       runs: [] satisfies RunSummary[],
     });
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS), [
+      taskFixture,
+    ] satisfies TaskCard[]);
 
     upsertAgentSessionInRepoTaskData(queryClient, "/repo", "task-1", sessionFixture);
 
     const repoTaskData = queryClient.getQueryData<{
       tasks: TaskCard[];
       runs: RunSummary[];
-    }>(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS));
+    }>(taskQueryKeys.repoData("/repo"));
+    const kanbanTasks = queryClient.getQueryData<TaskCard[]>(
+      taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS),
+    );
 
     expect(repoTaskData?.tasks[0]?.agentSessions).toEqual([sessionFixture]);
+    expect(kanbanTasks?.[0]?.agentSessions).toEqual([sessionFixture]);
   });
 
   test("upsertAgentSessionInRepoTaskData replaces the existing persisted session for the same id", () => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS), {
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
       tasks: [
         {
           ...taskFixture,
@@ -72,6 +79,12 @@ describe("tasks query cache helpers", () => {
       ],
       runs: [] satisfies RunSummary[],
     });
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS), [
+      {
+        ...taskFixture,
+        agentSessions: [sessionFixture],
+      },
+    ] satisfies TaskCard[]);
 
     const updatedSession: AgentSessionRecord = {
       ...sessionFixture,
@@ -83,8 +96,12 @@ describe("tasks query cache helpers", () => {
     const repoTaskData = queryClient.getQueryData<{
       tasks: TaskCard[];
       runs: RunSummary[];
-    }>(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS));
+    }>(taskQueryKeys.repoData("/repo"));
+    const kanbanTasks = queryClient.getQueryData<TaskCard[]>(
+      taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS),
+    );
 
     expect(repoTaskData?.tasks[0]?.agentSessions).toEqual([updatedSession]);
+    expect(kanbanTasks?.[0]?.agentSessions).toEqual([updatedSession]);
   });
 });

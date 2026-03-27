@@ -216,7 +216,9 @@ impl BeadsTaskStore {
         )?;
 
         if done_visible_days > 0 {
-            let cutoff = (Utc::now() - ChronoDuration::days(i64::from(done_visible_days)))
+            let cutoff = Utc::now()
+                .checked_sub_signed(ChronoDuration::days(i64::from(done_visible_days)))
+                .ok_or_else(|| anyhow!("done_visible_days causes datetime underflow"))?
                 .format("%Y-%m-%d")
                 .to_string();
             self.append_raw_issue_list(

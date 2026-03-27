@@ -290,7 +290,9 @@ impl AppService {
         config.theme = theme;
         config.git = git;
         config.chat = chat;
-        config.kanban = kanban;
+        config.kanban = KanbanSettings {
+            done_visible_days: kanban.done_visible_days.max(0),
+        };
         config.global_prompt_overrides = global_prompt_overrides;
         for (repo_path, repo_config) in repos {
             config.repos.insert(repo_path, repo_config);

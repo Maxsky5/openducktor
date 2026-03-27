@@ -9,7 +9,7 @@ import {
   loadQaReportDocumentFromQuery,
   loadSpecDocumentFromQuery,
 } from "../../queries/documents";
-import { invalidateRepoTaskDataQueries } from "../../queries/tasks";
+import { invalidateRepoTaskListQueries } from "../../queries/tasks";
 import { host } from "../shared/host";
 import { requireActiveRepo } from "./task-operations-model";
 
@@ -90,7 +90,7 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });
-      await invalidateRepoTaskDataQueries(queryClient, repo);
+      await invalidateRepoTaskListQueries(queryClient, repo);
       return saved;
     },
     [activeRepo, queryClient],
@@ -111,7 +111,7 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });
-      await invalidateRepoTaskDataQueries(queryClient, repo);
+      await invalidateRepoTaskListQueries(queryClient, repo);
       return saved;
     },
     [activeRepo, queryClient],
@@ -132,7 +132,7 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });
-      await invalidateRepoTaskDataQueries(queryClient, repo);
+      await invalidateRepoTaskListQueries(queryClient, repo);
       return saved;
     },
     [activeRepo, queryClient],

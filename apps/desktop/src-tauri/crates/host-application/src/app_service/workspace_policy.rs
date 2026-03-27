@@ -43,6 +43,16 @@ pub struct RepoSettingsUpdate {
 }
 
 #[derive(Debug, Clone)]
+pub struct WorkspaceSettingsSnapshotUpdate {
+    pub theme: String,
+    pub git: host_infra_system::GlobalGitConfig,
+    pub chat: ChatSettings,
+    pub kanban: KanbanSettings,
+    pub repos: HashMap<String, RepoConfig>,
+    pub global_prompt_overrides: PromptOverrides,
+}
+
+#[derive(Debug, Clone)]
 pub struct HookTrustConfirmationRequest {
     pub repo_path: String,
     pub hooks: HookSet,
@@ -243,15 +253,10 @@ impl AppService {
 
     pub fn workspace_save_settings_snapshot<P: HookTrustConfirmationPort + ?Sized>(
         &self,
-        theme: String,
-        git: host_infra_system::GlobalGitConfig,
-        chat: ChatSettings,
-        kanban: KanbanSettings,
-        mut repos: HashMap<String, RepoConfig>,
-        global_prompt_overrides: PromptOverrides,
+        mut update: WorkspaceSettingsSnapshotUpdate,
         confirmation_port: &P,
     ) -> Result<Vec<WorkspaceRecord>> {
-        for (repo_path, repo_config) in repos.iter_mut() {
+        for (repo_path, repo_config) in update.repos.iter_mut() {
             let existing = self
                 .workspace_get_repo_config_optional(repo_path)?
                 .unwrap_or_default();
@@ -272,12 +277,12 @@ impl AppService {
         }
 
         self.workspace_persist_settings_snapshot(
-            theme,
-            git,
-            chat,
-            kanban,
-            repos,
-            global_prompt_overrides,
+            update.theme,
+            update.git,
+            update.chat,
+            update.kanban,
+            update.repos,
+            update.global_prompt_overrides,
         )?;
         self.workspace_list()
     }
@@ -441,7 +446,7 @@ fn validate_trust_challenge_entry(
 mod tests {
     use super::{
         canonical_repo_key, normalize_hook_set, validate_trust_challenge_entry, AppService,
-        HookTrustChallenge, RepoConfigUpdate, RepoSettingsUpdate,
+        HookTrustChallenge, RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate,
     };
     use crate::app_service::test_support::{
         lock_env, set_env_var, unique_temp_path, EnvVarGuard, FakeTaskStore, TaskStoreState,
@@ -903,12 +908,14 @@ mod tests {
         repo_config.trusted_hooks_fingerprint = None;
 
         fixture.service.workspace_save_settings_snapshot(
-            theme,
-            git,
-            chat,
-            kanban,
-            repos,
-            global_prompt_overrides,
+            WorkspaceSettingsSnapshotUpdate {
+                theme,
+                git,
+                chat,
+                kanban,
+                repos,
+                global_prompt_overrides,
+            },
             &confirmation,
         )?;
 
@@ -941,12 +948,14 @@ mod tests {
         chat.show_thinking_messages = true;
 
         fixture.service.workspace_save_settings_snapshot(
-            theme,
-            git,
-            chat,
-            kanban,
-            repos,
-            global_prompt_overrides,
+            WorkspaceSettingsSnapshotUpdate {
+                theme,
+                git,
+                chat,
+                kanban,
+                repos,
+                global_prompt_overrides,
+            },
             &confirmation,
         )?;
 

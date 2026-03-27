@@ -1,8 +1,13 @@
-import { useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { useGitConflictResolution } from "@/features/git-conflict-resolution";
+import { errorMessage } from "@/lib/errors";
 import { useAgentState, useTasksState, useWorkspaceState } from "@/state";
+import { kanbanTaskListQueryOptions } from "@/state/queries/tasks";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { useAgentStudioRepoSettings } from "../agents/use-agent-studio-repo-settings";
 import type { KanbanPageModels } from "./kanban-page-model-types";
 import { useKanbanBoardModel } from "./use-kanban-board-model";
@@ -32,7 +37,6 @@ export function useKanbanPageModels({
     sendAgentMessage,
   } = useAgentState();
   const {
-    tasks,
     runs,
     refreshTasks,
     syncPullRequests,
@@ -50,12 +54,61 @@ export function useKanbanPageModels({
     resumeDeferredTask,
     humanRequestChangesTask,
   } = useTasksState();
+  const reportedSettingsErrorRef = useRef<string | null>(null);
+  const reportedKanbanTasksErrorRef = useRef<string | null>(null);
+  const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
+  const doneVisibleDays = settingsSnapshotQuery.data?.kanban.doneVisibleDays;
+  const kanbanTaskListQuery = useQuery({
+    ...kanbanTaskListQueryOptions(activeRepo ?? "__disabled__", doneVisibleDays ?? 0),
+    enabled: activeRepo !== null && doneVisibleDays !== undefined,
+  });
+  useEffect(() => {
+    if (!settingsSnapshotQuery.isError) {
+      reportedSettingsErrorRef.current = null;
+      return;
+    }
+
+    const description = errorMessage(settingsSnapshotQuery.error);
+    if (reportedSettingsErrorRef.current === description) {
+      return;
+    }
+
+    reportedSettingsErrorRef.current = description;
+    toast.error("Failed to load Kanban settings", {
+      description,
+    });
+  }, [settingsSnapshotQuery.error, settingsSnapshotQuery.isError]);
+
+  useEffect(() => {
+    if (!kanbanTaskListQuery.isError) {
+      reportedKanbanTasksErrorRef.current = null;
+      return;
+    }
+
+    const description = errorMessage(kanbanTaskListQuery.error);
+    if (reportedKanbanTasksErrorRef.current === description) {
+      return;
+    }
+
+    reportedKanbanTasksErrorRef.current = description;
+    toast.error("Failed to load Kanban tasks", {
+      description,
+    });
+  }, [kanbanTaskListQuery.error, kanbanTaskListQuery.isError]);
+
+  const kanbanTasks = activeRepo ? (kanbanTaskListQuery.data ?? []) : [];
+  const isLoadingKanbanTasks =
+    isLoadingTasks ||
+    (activeRepo !== null &&
+      (settingsSnapshotQuery.isPending ||
+        (doneVisibleDays !== undefined &&
+          (kanbanTaskListQuery.isPending || kanbanTaskListQuery.isFetching))));
   const navigate = useNavigate();
 
   const sessionStartFlow = useKanbanSessionStartFlow({
     activeRepo,
     repoSettings,
-    tasks,
+    tasks: kanbanTasks,
     sessions,
     navigate,
     loadRepoSettings,
@@ -112,7 +165,7 @@ export function useKanbanPageModels({
   });
   const handleResolveKanbanGitConflict = useCallback(
     (conflict: GitConflict, taskId: string) => {
-      const task = tasks.find((entry) => entry.id === taskId) ?? null;
+      const task = kanbanTasks.find((entry) => entry.id === taskId) ?? null;
       const builderSessions = sessions.filter(
         (entry) => entry.role === "build" && entry.taskId === taskId,
       );
@@ -131,11 +184,11 @@ export function useKanbanPageModels({
         },
       });
     },
-    [handleResolveGitConflict, navigate, sessions, tasks],
+    [handleResolveGitConflict, kanbanTasks, navigate, sessions],
   );
   const { taskApprovalModal, taskGitConflictDialog, openTaskApproval } = useTaskApprovalFlow({
     activeRepo,
-    tasks,
+    tasks: kanbanTasks,
     requestPullRequestGeneration: onPullRequestGenerate,
     refreshTasks,
     onResolveGitConflict: handleResolveKanbanGitConflict,
@@ -149,7 +202,7 @@ export function useKanbanPageModels({
   );
 
   const { resetImplementationModal, openResetImplementation } = useTaskResetFlow({
-    tasks,
+    tasks: kanbanTasks,
     sessions,
     loadAgentSessions,
     removeAgentSessions,
@@ -158,13 +211,13 @@ export function useKanbanPageModels({
   });
 
   const taskDialogs = useKanbanTaskDialogs({
-    tasks,
+    tasks: kanbanTasks,
   });
 
   const content = useKanbanBoardModel({
-    isLoadingTasks,
+    isLoadingTasks: isLoadingKanbanTasks,
     isSwitchingWorkspace,
-    tasks,
+    tasks: kanbanTasks,
     runs,
     sessions,
     onOpenDetails,
@@ -181,7 +234,7 @@ export function useKanbanPageModels({
 
   return {
     header: {
-      isLoadingTasks,
+      isLoadingTasks: isLoadingKanbanTasks,
       isSwitchingWorkspace,
       onCreateTask: taskDialogs.onCreateTask,
       onRefreshTasks,
@@ -190,7 +243,7 @@ export function useKanbanPageModels({
     taskComposer: taskDialogs.taskComposer,
     taskDetailsController: {
       activeRepo,
-      allTasks: tasks,
+      allTasks: kanbanTasks,
       runs,
       taskSessionsByTaskId: content.taskSessionsByTaskId,
       activeTaskSessionContextByTaskId: content.activeTaskSessionContextByTaskId,
