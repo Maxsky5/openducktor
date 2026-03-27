@@ -3126,7 +3126,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("does not start a runtime when prompt loading fails", async () => {
+  test("does not start a runtime when prompt override loading fails", async () => {
     let runtimeCalls = 0;
 
     const adapter = new OpencodeSdkAdapter();
@@ -3162,7 +3162,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
         throw new Error("prompt load failed");
       },
       loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
+      loadRepoPromptOverrides: async () => {
+        throw new Error("prompt override load failed");
+      },
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionRecord: async () => {},
@@ -3177,7 +3179,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "fresh",
           selectedModel: BUILD_SELECTION,
         }),
-      ).rejects.toThrow("prompt load failed");
+      ).rejects.toThrow("prompt override load failed");
       expect(runtimeCalls).toBe(0);
     } finally {
       adapter.startSession = originalStartSession;

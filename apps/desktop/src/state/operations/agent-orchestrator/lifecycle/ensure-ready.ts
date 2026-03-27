@@ -75,7 +75,7 @@ export const createEnsureSessionReady = ({
   updateSession,
   attachSessionListener,
   ensureRuntime,
-  loadTaskDocuments,
+  loadTaskDocuments: _loadTaskDocuments,
   loadRepoPromptOverrides,
 }: EnsureSessionReadyDependencies) => {
   return async (
@@ -208,11 +208,9 @@ export const createEnsureSessionReady = ({
 
     const promptContext = await loadSessionPromptContext({
       repoPath,
-      taskId: session.taskId,
       role: session.role,
       scenario: session.scenario,
       task,
-      loadTaskDocuments,
       loadRepoPromptOverrides,
     });
     assertNotStale();

@@ -11,11 +11,6 @@ import { resolveBuildContinuationScenario } from "@/lib/build-scenarios";
 export const inferScenario = (
   role: AgentRole,
   task: TaskCard,
-  docs: {
-    specMarkdown: string;
-    planMarkdown: string;
-    qaMarkdown: string;
-  },
 ): AgentScenario => {
   if (role === "spec") {
     return "spec_initial";
@@ -27,7 +22,6 @@ export const inferScenario = (
     return "qa_review";
   }
 
-  void docs;
   return resolveBuildContinuationScenario(task);
 };
 
