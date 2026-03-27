@@ -102,6 +102,114 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("fairnest-97f");
   });
 
+  test("renders ListTodo icon for todowrite tool rows", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-todowrite",
+          role: "tool",
+          content: "Tool todowrite completed",
+          timestamp: "2026-02-22T10:20:31.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-todowrite",
+            callId: "call-todowrite",
+            tool: "todowrite",
+            status: "completed",
+            input: { todos: [] },
+            output: "ok",
+          },
+        },
+        sessionRole: "build",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("lucide-list-todo");
+  });
+
+  test("renders ListTodo icon for namespaced todo tool rows", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-namespaced-todowrite",
+          role: "tool",
+          content: "Tool openducktor_odt_todowrite completed",
+          timestamp: "2026-02-22T10:20:32.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-namespaced-todowrite",
+            callId: "call-namespaced-todowrite",
+            tool: "openducktor_odt_todowrite",
+            status: "completed",
+            input: { todos: [] },
+            output: "ok",
+          },
+        },
+        sessionRole: "build",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("lucide-list-todo");
+  });
+
+  test("renders ListTodo icon for todoread tool rows", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-todoread",
+          role: "tool",
+          content: "Tool todoread completed",
+          timestamp: "2026-02-22T10:20:33.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-todoread",
+            callId: "call-todoread",
+            tool: "todoread",
+            status: "completed",
+            input: {},
+            output: "[]",
+          },
+        },
+        sessionRole: "build",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("lucide-list-todo");
+  });
+
+  test("renders ListTodo icon for namespaced todoread tool rows", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-namespaced-todoread",
+          role: "tool",
+          content: "Tool openducktor_odt_todoread completed",
+          timestamp: "2026-02-22T10:20:34.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-namespaced-todoread",
+            callId: "call-namespaced-todoread",
+            tool: "openducktor_odt_todoread",
+            status: "completed",
+            input: {},
+            output: "[]",
+          },
+        },
+        sessionRole: "build",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("lucide-list-todo");
+  });
+
   test("renders file tool summaries relative to the session working directory", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
