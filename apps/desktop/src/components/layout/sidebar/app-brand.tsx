@@ -1,5 +1,8 @@
 import { Bot } from "lucide-react";
 import type { ReactElement } from "react";
+import { getAppVersion } from "@/lib/app-version";
+
+const APP_VERSION = getAppVersion();
 
 export function AppBrand(): ReactElement {
   return (
@@ -9,7 +12,7 @@ export function AppBrand(): ReactElement {
       </div>
       <div>
         <p className="text-lg font-semibold tracking-tight">OpenDucktor</p>
-        <p className="text-xs text-sidebar-muted-foreground">Agent Orchestration</p>
+        {APP_VERSION && <p className="text-xs text-sidebar-muted-foreground">{APP_VERSION}</p>}
       </div>
     </div>
   );

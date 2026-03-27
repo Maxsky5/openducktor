@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
@@ -6,6 +7,18 @@ import { defineConfig } from "vite";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+function getAppVersion(): string | null {
+  try {
+    const conf = JSON.parse(
+      readFileSync(path.resolve(__dirname, "src-tauri/tauri.conf.json"), "utf-8"),
+    );
+    return conf.version ?? null;
+  } catch (error) {
+    console.warn("Could not read app version from tauri.conf.json:", error);
+    return null;
+  }
+}
 
 const REACT_VENDOR_PACKAGES = new Set([
   "@remix-run/router",
@@ -142,6 +155,11 @@ function getVendorChunkName(id: string): string | undefined {
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  define: {
+    "import.meta.env.VITE_ODT_APP_VERSION": JSON.stringify(
+      process.env.ODT_APP_VERSION ?? getAppVersion() ?? "",
+    ),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
