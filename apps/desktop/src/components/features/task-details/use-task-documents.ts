@@ -2,6 +2,7 @@ import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { host } from "@/state/operations/host";
 import { resolveLatestDocumentPayload } from "@/state/queries/document-utils";
+import { documentQueryKeyForSection, TASK_DOCUMENT_STALE_TIME_MS } from "@/state/queries/documents";
 import type { TaskDocumentPayload } from "@/types/task-documents";
 
 export type DocumentSectionKey = "spec" | "plan" | "qa";
@@ -22,7 +23,6 @@ type TaskDocumentLoaders = {
 
 type SectionLoaders = Record<DocumentSectionKey, (taskId: string) => Promise<TaskDocumentPayload>>;
 
-const TASK_DOCUMENT_STALE_TIME_MS = 60_000;
 const DISABLED_TASK_ID = "__disabled__";
 
 const createTaskDocumentState = (input?: {
@@ -59,9 +59,6 @@ const createHostDocumentLoader = <TResult extends { markdown: string; updatedAt:
   };
 };
 
-const createDocumentQueryKey = (cacheScope: string, taskId: string, section: DocumentSectionKey) =>
-  ["task-documents", section, cacheScope, taskId] as const;
-
 const createDocumentQueryOptions = ({
   queryClient,
   cacheScope,
@@ -75,7 +72,7 @@ const createDocumentQueryOptions = ({
   section: DocumentSectionKey;
   loader: (taskId: string) => Promise<TaskDocumentPayload>;
 }) => {
-  const queryKey = createDocumentQueryKey(cacheScope, taskId, section);
+  const queryKey = documentQueryKeyForSection(cacheScope, taskId, section);
   return queryOptions({
     queryKey,
     queryFn: async (): Promise<TaskDocumentPayload> => {
