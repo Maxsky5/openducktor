@@ -444,6 +444,16 @@ export function useWorkspaceOperations({
     applyWorkspaceRecords(data);
   }, [applyWorkspaceRecords, hostClient, queryClient]);
 
+  const refreshWorkspaceCachesAfterMutation = useCallback(async (): Promise<void> => {
+    await queryClient.invalidateQueries({
+      queryKey: workspaceQueryKeys.list(),
+    });
+    queryClient.removeQueries({
+      queryKey: workspaceQueryKeys.settingsSnapshot(),
+      exact: true,
+    });
+  }, [queryClient]);
+
   const addWorkspace = useCallback(
     async (repoPath: string): Promise<void> => {
       const normalizedRepoPath = normalizeRepoPath(repoPath);
@@ -452,15 +462,13 @@ export function useWorkspaceOperations({
       }
 
       const workspace = await hostClient.workspaceAdd(normalizedRepoPath);
-      await queryClient.invalidateQueries({
-        queryKey: workspaceQueryKeys.list(),
-      });
+      await refreshWorkspaceCachesAfterMutation();
       await refreshWorkspaces();
       toast.success("Repository added", {
         description: workspace.path,
       });
     },
-    [hostClient, queryClient, refreshWorkspaces],
+    [hostClient, refreshWorkspaceCachesAfterMutation, refreshWorkspaces],
   );
 
   const selectWorkspace = useCallback(
@@ -472,9 +480,7 @@ export function useWorkspaceOperations({
 
       try {
         await hostClient.workspaceSelect(repoPath);
-        await queryClient.invalidateQueries({
-          queryKey: workspaceQueryKeys.list(),
-        });
+        await refreshWorkspaceCachesAfterMutation();
         if (workspaceSwitchVersionRef.current !== switchVersion) {
           return;
         }
@@ -541,6 +547,7 @@ export function useWorkspaceOperations({
       hostClient,
       markWorkspaceActiveLocally,
       queryClient,
+      refreshWorkspaceCachesAfterMutation,
       refreshWorkspaces,
       setActiveRepo,
     ],
