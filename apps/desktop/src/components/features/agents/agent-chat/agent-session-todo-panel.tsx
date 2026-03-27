@@ -19,6 +19,20 @@ type AgentSessionTodoPanelProps = {
   className?: string;
 };
 
+export const getVisibleSessionTodos = (todos: AgentSessionTodoItem[]): AgentSessionTodoItem[] => {
+  return todos.filter((todo) => todo.status !== "cancelled");
+};
+
+export const getActionableSessionTodo = (
+  todos: AgentSessionTodoItem[],
+): AgentSessionTodoItem | null => {
+  return (
+    todos.find((todo) => todo.status === "in_progress") ??
+    todos.find((todo) => todo.status === "pending") ??
+    null
+  );
+};
+
 const statusIcon = (
   status: AgentSessionTodoItem["status"],
   isSessionWorking: boolean,
@@ -43,15 +57,12 @@ export function AgentSessionTodoPanel({
   onToggleCollapse,
   className,
 }: AgentSessionTodoPanelProps): ReactElement | null {
-  const visibleTodos = todos.filter((todo) => todo.status !== "cancelled");
+  const visibleTodos = getVisibleSessionTodos(todos);
   if (visibleTodos.length === 0) {
     return null;
   }
 
-  const actionableTodo =
-    visibleTodos.find((todo) => todo.status === "in_progress") ??
-    visibleTodos.find((todo) => todo.status === "pending") ??
-    null;
+  const actionableTodo = getActionableSessionTodo(visibleTodos);
   if (!actionableTodo) {
     return null;
   }
@@ -60,23 +71,25 @@ export function AgentSessionTodoPanel({
 
   return (
     <section
-      className={cn("w-full rounded-xl border border-input bg-card shadow-sm", className)}
+      className={cn("w-full rounded-t-xl border border-input border-b-0 bg-card", className)}
       aria-label="Agent todo list"
     >
       <button
         type="button"
-        className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-muted"
+        className="flex w-full cursor-pointer items-center gap-3 px-3 py-2 text-left hover:bg-muted/70"
         onClick={onToggleCollapse}
         aria-label={toggleLabel}
       >
-        <ListTodo className="size-4 shrink-0 text-muted-foreground" />
-        <p className="text-[13px] font-semibold text-foreground">Todo</p>
-        <p className="text-[11px] font-medium text-muted-foreground">
-          {completedCount}/{visibleTodos.length}
-        </p>
-        <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2">
+            <ListTodo className="size-4 shrink-0 text-muted-foreground" />
+            <p className="text-[13px] font-semibold text-foreground">Todo</p>
+            <p className="text-[11px] font-medium text-muted-foreground">
+              {completedCount}/{visibleTodos.length}
+            </p>
+          </div>
           {collapsed ? (
-            <div className="flex min-w-0 items-center gap-2 text-sm text-foreground">
+            <div className="flex min-w-0 flex-1 items-center gap-2 border-l border-border/70 pl-3 text-sm text-foreground">
               <span className="inline-flex size-4 shrink-0 items-center justify-center">
                 {statusIcon(actionableTodo.status, isSessionWorking)}
               </span>
@@ -92,7 +105,7 @@ export function AgentSessionTodoPanel({
       </button>
 
       {collapsed ? null : (
-        <div className="border-t border-input px-3 pb-3 pt-2">
+        <div className="border-t border-input/80 px-3 pb-3 pt-2">
           <ul className="max-h-[40vh] space-y-1 overflow-y-auto overscroll-contain pr-1">
             {visibleTodos.map((todo) => (
               <li key={todo.id} className="flex items-start gap-2 rounded-md px-1 py-1 text-sm">

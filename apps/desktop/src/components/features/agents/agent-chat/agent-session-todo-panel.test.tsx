@@ -45,8 +45,11 @@ describe("AgentSessionTodoPanel", () => {
     expect(html).toContain("Current active item");
     expect(html).not.toContain("Queued item");
     expect(html).toContain("truncate");
+    expect(html).toContain("border-l border-border/70 pl-3");
     expect(html).not.toContain("line-clamp-2");
-    expect(html).toContain("w-full rounded-xl");
+    expect(html).toContain("w-full rounded-t-xl");
+    expect(html).toContain("border-b-0");
+    expect(html).not.toContain("justify-end");
     expect(html).not.toContain("max-w-md");
   });
 
