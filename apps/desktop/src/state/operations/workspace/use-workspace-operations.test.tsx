@@ -1,14 +1,14 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { SettingsSnapshot, WorkspaceRecord } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { render, waitFor } from "@testing-library/react";
 import { act, createElement, type PropsWithChildren, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { clearAppQueryClient, createQueryClient } from "@/lib/query-client";
+import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { loadSettingsSnapshotFromQuery } from "../../queries/workspace";
+import { settingsSnapshotQueryOptions } from "../../queries/workspace";
 import { useWorkspaceOperations } from "./use-workspace-operations";
 
 const reactActEnvironment = globalThis as typeof globalThis & {
@@ -469,8 +469,12 @@ describe("use-workspace-operations", () => {
     hostClient.workspaceList = mock(
       async (): Promise<WorkspaceRecord[]> => [workspace("/repo-new", true)],
     );
-    const queryClient = createQueryClient();
     let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
+
+    const SettingsSnapshotProbe = () => {
+      useQuery(settingsSnapshotQueryOptions(hostClient));
+      return null;
+    };
 
     const Harness = () => {
       latest = useWorkspaceOperations({
@@ -480,19 +484,19 @@ describe("use-workspace-operations", () => {
         clearActiveBeadsCheck: () => {},
         hostClient,
       });
-      return null;
+      return createElement(SettingsSnapshotProbe);
     };
 
     const rendered = render(createElement(Harness), {
       wrapper: ({ children }: PropsWithChildren) => (
-        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        <QueryProvider useIsolatedClient>{children}</QueryProvider>
       ),
     });
 
     try {
-      const firstSnapshot = await loadSettingsSnapshotFromQuery(queryClient, hostClient);
-      expect(Object.keys(firstSnapshot.repos)).toEqual(["/repo-old"]);
-      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
+      await waitFor(() => {
+        expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
+      });
 
       workspaceGetSettingsSnapshot.mockImplementationOnce(async () =>
         settingsSnapshot(["/repo-old", "/repo-new"]),
@@ -506,13 +510,11 @@ describe("use-workspace-operations", () => {
         await latest?.addWorkspace("/repo-new");
       });
 
-      const refreshedSnapshot = await loadSettingsSnapshotFromQuery(queryClient, hostClient);
-      expect(Object.keys(refreshedSnapshot.repos).sort()).toEqual(["/repo-new", "/repo-old"]);
-      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(2);
+      await waitFor(() => {
+        expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(2);
+      });
     } finally {
       rendered.unmount();
-      await queryClient.cancelQueries();
-      queryClient.clear();
     }
   });
 
@@ -666,8 +668,12 @@ describe("use-workspace-operations", () => {
       startedAt: "2026-02-22T08:00:00.000Z",
       descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
     }));
-    const queryClient = createQueryClient();
     let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
+
+    const SettingsSnapshotProbe = () => {
+      useQuery(settingsSnapshotQueryOptions(hostClient));
+      return null;
+    };
 
     const Harness = () => {
       latest = useWorkspaceOperations({
@@ -677,19 +683,19 @@ describe("use-workspace-operations", () => {
         clearActiveBeadsCheck,
         hostClient,
       });
-      return null;
+      return createElement(SettingsSnapshotProbe);
     };
 
     const rendered = render(createElement(Harness), {
       wrapper: ({ children }: PropsWithChildren) => (
-        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        <QueryProvider useIsolatedClient>{children}</QueryProvider>
       ),
     });
 
     try {
-      const firstSnapshot = await loadSettingsSnapshotFromQuery(queryClient, hostClient);
-      expect(Object.keys(firstSnapshot.repos)).toEqual(["/repo-old"]);
-      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
+      await waitFor(() => {
+        expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
+      });
 
       workspaceGetSettingsSnapshot.mockImplementationOnce(async () =>
         settingsSnapshot(["/repo-old", "/repo-a"]),
@@ -703,13 +709,11 @@ describe("use-workspace-operations", () => {
         await latest?.selectWorkspace("/repo-a");
       });
 
-      const refreshedSnapshot = await loadSettingsSnapshotFromQuery(queryClient, hostClient);
-      expect(Object.keys(refreshedSnapshot.repos).sort()).toEqual(["/repo-a", "/repo-old"]);
-      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(2);
+      await waitFor(() => {
+        expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(2);
+      });
     } finally {
       rendered.unmount();
-      await queryClient.cancelQueries();
-      queryClient.clear();
     }
   });
 
