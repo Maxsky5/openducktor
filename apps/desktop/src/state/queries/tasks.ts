@@ -117,6 +117,37 @@ export const refetchActiveKanbanQueries = (
     type: "active",
   });
 
+const cachedKanbanQueryKeysForRepo = (
+  queryClient: QueryClient,
+  repoPath: string,
+): Array<ReturnType<typeof taskQueryKeys.kanbanData>> =>
+  queryClient
+    .getQueryCache()
+    .findAll({
+      queryKey: taskQueryKeys.kanbanDataPrefix(repoPath),
+      exact: false,
+    })
+    .map((query) => query.queryKey)
+    .filter(
+      (queryKey): queryKey is ReturnType<typeof taskQueryKeys.kanbanData> =>
+        queryKey[0] === taskQueryKeys.all[0] &&
+        queryKey[1] === "kanban-data" &&
+        queryKey[2] === repoPath &&
+        typeof queryKey[3] === "number",
+    );
+
+export const refreshCachedKanbanQueries = async (
+  queryClient: QueryClient,
+  repoPath: string,
+): Promise<void> => {
+  const cachedQueryKeys = cachedKanbanQueryKeysForRepo(queryClient, repoPath);
+  await Promise.all(
+    cachedQueryKeys.map(([, , , doneVisibleDays]) =>
+      queryClient.fetchQuery(kanbanTaskListQueryOptions(repoPath, doneVisibleDays)),
+    ),
+  );
+};
+
 export const invalidateRepoTaskListQueries = (
   queryClient: QueryClient,
   repoPath: string,

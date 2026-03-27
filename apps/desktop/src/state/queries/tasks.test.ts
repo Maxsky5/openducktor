@@ -6,6 +6,7 @@ import {
   invalidateRepoTaskQueries,
   kanbanTaskListQueryOptions,
   refetchActiveKanbanQueries,
+  refreshCachedKanbanQueries,
   taskQueryKeys,
   upsertAgentSessionInRepoTaskData,
 } from "./tasks";
@@ -214,5 +215,53 @@ describe("tasks query cache helpers", () => {
       queryClient.getQueryState(taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS))
         ?.isInvalidated,
     ).toBe(true);
+  });
+
+  test("refreshCachedKanbanQueries refreshes inactive cached kanban queries for the repo", async () => {
+    const queryClient = new QueryClient();
+    let currentStatus: TaskCard["status"] = "ready_for_dev";
+    const tasksList = mock(
+      async (repoPath: string, doneVisibleDays?: number): Promise<TaskCard[]> => {
+        if (repoPath === "/repo") {
+          return [
+            {
+              ...taskFixture,
+              status: currentStatus,
+              id: `repo-${doneVisibleDays}`,
+            },
+          ];
+        }
+
+        if (repoPath === "/other") {
+          return [{ ...taskFixture, id: "other-1", status: "open" }];
+        }
+
+        throw new Error(`Unexpected repo path: ${repoPath}`);
+      },
+    );
+    host.tasksList = tasksList;
+
+    await queryClient.fetchQuery(kanbanTaskListQueryOptions("/repo", 1));
+    await queryClient.fetchQuery(kanbanTaskListQueryOptions("/repo", 7));
+    await queryClient.fetchQuery(kanbanTaskListQueryOptions("/other", 1));
+
+    currentStatus = "in_progress";
+    await invalidateRepoTaskQueries(queryClient, "/repo");
+    tasksList.mockClear();
+
+    await refreshCachedKanbanQueries(queryClient, "/repo");
+
+    expect(tasksList).toHaveBeenCalledTimes(2);
+    expect(tasksList).toHaveBeenCalledWith("/repo", 1);
+    expect(tasksList).toHaveBeenCalledWith("/repo", 7);
+    expect(
+      queryClient.getQueryData<TaskCard[]>(taskQueryKeys.kanbanData("/repo", 1))?.[0]?.status,
+    ).toBe("in_progress");
+    expect(
+      queryClient.getQueryData<TaskCard[]>(taskQueryKeys.kanbanData("/repo", 7))?.[0]?.status,
+    ).toBe("in_progress");
+    expect(
+      queryClient.getQueryData<TaskCard[]>(taskQueryKeys.kanbanData("/other", 1))?.[0]?.status,
+    ).toBe("open");
   });
 });
