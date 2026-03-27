@@ -79,48 +79,51 @@ export const PROMPT_TEMPLATE_LABELS: Record<AgentPromptTemplateId, string> = {
 
 export const PROMPT_TEMPLATE_DESCRIPTIONS: Record<AgentPromptTemplateId, string> = {
   "system.shared.workflow_guards":
-    "Added to every system prompt to enforce global workflow guardrails and operating rules.",
+    "Added to every system prompt to enforce lifecycle guardrails, artifact discipline, repo-guidance governance, and fail-fast rules.",
   "system.shared.tool_protocol":
-    "Added to every system prompt to define the required tool-calling protocol and response handling.",
+    "Added to every system prompt to define the required tool-calling protocol, task lock, question discipline, and evidence hierarchy.",
   "system.shared.task_context":
-    "Added to every system prompt to inject task/repository context and execution constraints.",
+    "Added to every system prompt to inject the task snapshot and latest persisted workflow artifacts as canonical context.",
   "system.role.spec.base":
-    "Base system instructions used for every Spec agent run, before scenario-specific additions.",
+    "Base system instructions used for every Spec run, focused on brownfield-first discovery, clarification discipline, and requirements-quality self-checks.",
   "system.role.planner.base":
-    "Base system instructions used for every Planner agent run, before scenario-specific additions.",
+    "Base system instructions used for every Planner run, focused on repo-fit execution planning, requirement traceability, dependency waves, and verification.",
   "system.role.build.base":
-    "Base system instructions used for every Builder agent run, before scenario-specific additions.",
+    "Base system instructions used for every Builder run, focused on plan-faithful execution, durable implementation, verification, and meaningful commits.",
   "system.role.qa.base":
-    "Base system instructions used for every QA agent run, before scenario-specific additions.",
+    "Base system instructions used for every QA run, focused on principal-level evidence-based review, requirement coverage, and adversarial edge-case hunting.",
   "system.scenario.spec_initial":
-    "Scenario-specific system instructions appended when starting an initial specification pass.",
+    "Scenario-specific system instructions appended when starting a discovery-first specification pass with clarification control and requirements self-checking.",
   "system.scenario.planner_initial":
-    "Scenario-specific system instructions appended when starting an initial planning pass.",
+    "Scenario-specific system instructions appended when starting an implementation planning pass with requirement traceability and dependency sequencing.",
   "system.scenario.build_implementation_start":
-    "Scenario-specific system instructions appended when Builder starts implementation from plan.",
+    "Scenario-specific system instructions appended when Builder starts implementation from the approved spec and plan with dependency-order execution and blocker discipline.",
   "system.scenario.build_after_qa_rejected":
-    "Scenario-specific system instructions appended when Builder resumes after a QA rejection.",
+    "Scenario-specific system instructions appended when Builder resumes to address all QA findings at the root cause.",
   "system.scenario.build_after_human_request_changes":
-    "Scenario-specific system instructions appended when Builder resumes after human-requested changes.",
+    "Scenario-specific system instructions appended when Builder resumes to incorporate human-requested changes while preserving prior must-haves.",
   "system.scenario.build_pull_request_generation":
     "Scenario-specific system instructions appended when Builder forks from an implementation session to generate or update a pull request.",
   "system.scenario.build_rebase_conflict_resolution":
     "Scenario-specific system instructions appended when a fresh Builder session is started to resolve an in-progress git conflict.",
   "system.scenario.qa_review":
-    "Scenario-specific system instructions appended when QA starts reviewing an implementation.",
-  "kickoff.spec_initial": "Initial kickoff message sent when a Spec session is created.",
-  "kickoff.planner_initial": "Initial kickoff message sent when a Planner session is created.",
+    "Scenario-specific system instructions appended when QA starts an evidence-based review with requirement mapping, adversarial review, and goal-backward verification.",
+  "kickoff.spec_initial":
+    "Initial kickoff message sent when a Spec session is created, reinforcing discovery, deferred-scope handling, and requirements-quality checks.",
+  "kickoff.planner_initial":
+    "Initial kickoff message sent when a Planner session is created, reinforcing requirement traceability, dependency waves, and execution-plan quality.",
   "kickoff.build_implementation_start":
-    "Initial kickoff message sent when Builder starts implementation.",
+    "Initial kickoff message sent when Builder starts implementation, reinforcing plan-faithful execution, blocker discipline, verification, and commit quality.",
   "kickoff.build_after_qa_rejected":
-    "Initial kickoff message sent when Builder restarts after QA rejection.",
+    "Initial kickoff message sent when Builder restarts after QA rejection, reinforcing root-cause fixes and renewed verification.",
   "kickoff.build_after_human_request_changes":
-    "Initial kickoff message sent when Builder restarts after human-requested changes.",
+    "Initial kickoff message sent when Builder restarts after human-requested changes, reinforcing must-have preservation and renewed verification.",
   "kickoff.build_pull_request_generation":
     "Initial kickoff message sent when Builder forks to generate or update a pull request.",
-  "kickoff.qa_review": "Initial kickoff message sent when a QA review session is created.",
+  "kickoff.qa_review":
+    "Initial kickoff message sent when a QA review session is created, reinforcing requirement mapping, adversarial review lenses, and the approval bar.",
   "message.build_rebase_conflict_resolution":
-    "Reusable in-session message sent to Builder when a git operation stops on conflicts.",
+    "Reusable in-session message sent to Builder when a git operation stops on conflicts and must be resolved safely.",
   "permission.read_only.reject":
     "Template used to reject mutating tool requests from read-only roles (spec, planner, qa).",
 };
