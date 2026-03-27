@@ -526,7 +526,7 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-1&agent=build",
+      "/agents?task=TASK-1&session=builder-session-1&agent=build&scenario=build_implementation_start",
     );
 
     await harness.unmount();
@@ -545,7 +545,7 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-archived&agent=build",
+      "/agents?task=TASK-1&session=builder-session-archived&agent=build&scenario=build_after_qa_rejected",
     );
 
     await harness.unmount();
@@ -561,7 +561,7 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-2&agent=build",
+      "/agents?task=TASK-1&session=builder-session-2&agent=build&scenario=build_after_qa_rejected",
     );
 
     await harness.unmount();
@@ -578,6 +578,57 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     expect(args.navigate).toHaveBeenCalledWith("/agents?task=TASK-404&agent=qa&scenario=qa_review");
+
+    await harness.unmount();
+  });
+
+  test("onOpenSession prefers waiting-input session before latest-by-time fallback", async () => {
+    const args = createBaseArgs();
+    args.sessions = [
+      createAgentSessionFixture({
+        sessionId: "builder-session-new-running",
+        taskId: "TASK-1",
+        runtimeKind: "opencode",
+        role: "build",
+        scenario: "build_after_qa_rejected",
+        status: "running",
+        pendingPermissions: [],
+        pendingQuestions: [],
+        startedAt: "2026-03-20T12:00:00.000Z",
+      }),
+      createAgentSessionFixture({
+        sessionId: "builder-session-old-waiting",
+        taskId: "TASK-1",
+        runtimeKind: "opencode",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+        pendingPermissions: [],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Question",
+                question: "Need input",
+                options: [{ label: "Continue", description: "Continue build" }],
+              },
+            ],
+          },
+        ],
+        startedAt: "2026-03-19T12:00:00.000Z",
+      }),
+    ];
+    const harness = createHookHarness(args);
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.onOpenSession("TASK-1", "build", { scenario: "build_after_qa_rejected" });
+    });
+
+    expect(args.navigate).toHaveBeenCalledWith(
+      "/agents?task=TASK-1&session=builder-session-old-waiting&agent=build&scenario=build_implementation_start",
+    );
 
     await harness.unmount();
   });

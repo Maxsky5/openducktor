@@ -1142,7 +1142,7 @@ describe("KanbanPage session start modal flow", () => {
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(latestLocation).toContain("/agents?task=TASK-123");
     expect(latestLocation).toContain("agent=build");
-    expect(latestLocation).toContain("session=session-build-latest");
+    expect(latestLocation).toContain("session=session-build-older");
 
     await act(async () => {
       renderer.unmount();
@@ -1166,7 +1166,7 @@ describe("KanbanPage session start modal flow", () => {
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(latestLocation).toContain("/agents?task=TASK-123");
     expect(latestLocation).toContain("agent=build");
-    expect(latestLocation).toContain("session=session-build-latest");
+    expect(latestLocation).toContain("session=session-build-older");
 
     await act(async () => {
       renderer.unmount();
@@ -1185,7 +1185,7 @@ describe("KanbanPage session start modal flow", () => {
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(latestLocation).toContain("/agents?task=TASK-123");
     expect(latestLocation).toContain("agent=build");
-    expect(latestLocation).toContain("session=session-build-latest");
+    expect(latestLocation).toContain("session=session-build-older");
 
     await act(async () => {
       renderer.unmount();
@@ -1280,7 +1280,7 @@ describe("KanbanPage session start modal flow", () => {
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(latestLocation).toContain("/agents?task=TASK-123");
     expect(latestLocation).toContain("agent=build");
-    expect(latestLocation).toContain("session=session-build-latest");
+    expect(latestLocation).toContain("session=session-build-older");
 
     await act(async () => {
       renderer.unmount();

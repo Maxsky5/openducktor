@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
+import { toKanbanSessionPresentationState } from "@/components/features/kanban/kanban-task-activity";
+import { resolvePreferredActiveSession } from "@/components/features/kanban/session-target-resolution";
 import {
   buildHumanReviewFeedbackModalModel,
   createHumanReviewFeedbackState,
@@ -71,6 +73,37 @@ const findLatestSessionByRoleForTask = (
   role: AgentRole,
 ): AgentSessionState | null => {
   return findSessionsByRoleForTask(sessions, taskId, role)[0] ?? null;
+};
+
+const findPreferredSessionByRoleForTask = (
+  sessions: AgentSessionState[],
+  taskId: string,
+  role: AgentRole,
+): AgentSessionState | null => {
+  const matchingSessions = findSessionsByRoleForTask(sessions, taskId, role);
+  if (matchingSessions.length === 0) {
+    return null;
+  }
+
+  const preferredSession = resolvePreferredActiveSession(
+    matchingSessions.map((session) => ({
+      sessionId: session.sessionId,
+      role: session.role,
+      scenario: session.scenario,
+      status: session.status,
+      startedAt: session.startedAt,
+      presentationState: toKanbanSessionPresentationState(session),
+    })),
+    role,
+  );
+
+  if (!preferredSession) {
+    return null;
+  }
+
+  return (
+    matchingSessions.find((session) => session.sessionId === preferredSession.sessionId) ?? null
+  );
 };
 
 const findSessionsByRoleForTask = (
@@ -170,6 +203,9 @@ export function useKanbanSessionStartFlow({
         session: sessionId,
         agent: intent.role,
       });
+      if (intent.scenario) {
+        params.set("scenario", intent.scenario);
+      }
       navigate(`/agents?${params.toString()}`);
     },
     [navigate],
@@ -322,16 +358,26 @@ export function useKanbanSessionStartFlow({
         return;
       }
 
-      const latestSessionByRole = findLatestSessionByRoleForTask(sessionsRef.current, taskId, role);
-      if (latestSessionByRole) {
+      const preferredSessionByRole = findPreferredSessionByRoleForTask(
+        sessionsRef.current,
+        taskId,
+        role,
+      );
+      const fallbackLatestSessionByRole = findLatestSessionByRoleForTask(
+        sessionsRef.current,
+        taskId,
+        role,
+      );
+      const sessionToOpen = preferredSessionByRole ?? fallbackLatestSessionByRole;
+      if (sessionToOpen) {
         openSessionInAgentStudio(
           {
             taskId,
             role,
-            scenario: latestSessionByRole.scenario,
+            scenario: sessionToOpen.scenario,
             postStartAction: "none",
           },
-          latestSessionByRole.sessionId,
+          sessionToOpen.sessionId,
         );
         return;
       }

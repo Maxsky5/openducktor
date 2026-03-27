@@ -44,9 +44,12 @@ describe("TaskDetailsSheetFooter", () => {
   test("renders active-session view action when active and historical context is provided", () => {
     const { unmount } = render(
       <TaskDetailsSheetFooter
-        task={createTaskCardFixture({ status: "in_progress", availableActions: ["open_builder"] })}
+        task={createTaskCardFixture({
+          status: "in_progress",
+          availableActions: ["open_builder", "build_start"],
+        })}
         onOpenChange={() => {}}
-        includeActions={["open_builder", "open_spec", "open_planner"]}
+        includeActions={["open_builder", "open_spec", "open_planner", "build_start"]}
         hasActiveSession
         activeSessionRole="build"
         historicalSessionRoles={["spec", "planner"]}

@@ -312,11 +312,10 @@ function TaskActions({
     "reset_implementation",
   ];
   const historicalSessionRoles = resolveHistoricalSessionRoles(task);
-  const resolvedActiveSessionRole = activeSessionRole;
   const workflowActions = resolveTaskCardActions(task, {
     include: includeActions,
     hasActiveSession,
-    ...(resolvedActiveSessionRole ? { activeSessionRole: resolvedActiveSessionRole } : {}),
+    ...(activeSessionRole ? { activeSessionRole } : {}),
     historicalSessionRoles,
   });
 
@@ -325,8 +324,8 @@ function TaskActions({
   }
 
   const primaryActiveSession =
-    hasActiveSession && resolvedActiveSessionRole
-      ? resolvePreferredActiveSession(taskSessions, resolvedActiveSessionRole)
+    hasActiveSession && activeSessionRole
+      ? resolvePreferredActiveSession(taskSessions, activeSessionRole)
       : null;
   const primarySessionIsWaitingInput =
     primaryActiveSession?.presentationState === "waiting_input" ||
@@ -397,7 +396,7 @@ function TaskActions({
         task={task}
         includeActions={includeActions}
         hasActiveSession={hasActiveSession}
-        {...(resolvedActiveSessionRole ? { activeSessionRole: resolvedActiveSessionRole } : {})}
+        {...(activeSessionRole ? { activeSessionRole } : {})}
         historicalSessionRoles={historicalSessionRoles}
         onAction={runAction}
         size="sm"
@@ -453,11 +452,11 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   onHumanRequestChanges,
   onResetImplementation,
 }: KanbanTaskCardProps): ReactElement {
-  const hasTaskSessions = hasActiveSession ?? taskSessions.length > 0;
+  const hasActiveSessionValue = hasActiveSession ?? taskSessions.length > 0;
   const isWaitingInput = taskActivityState === "waiting_input";
   const visibleRunState = toVisibleKanbanRunState(runState);
   const cardActivityClassName = getCardActivityClassName({
-    hasActiveSession: hasTaskSessions,
+    hasActiveSession: hasActiveSessionValue,
     isWaitingInput,
   });
 
@@ -468,7 +467,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
         cardActivityClassName,
       )}
     >
-      {hasTaskSessions && !isWaitingInput ? (
+      {hasActiveSessionValue && !isWaitingInput ? (
         <BorderRay turnDurationMs={2500} strokeWidth={4.4} className="kanban-active-session-ray" />
       ) : null}
 
@@ -506,7 +505,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
         <TaskActions
           task={task}
           taskSessions={taskSessions}
-          hasActiveSession={hasTaskSessions}
+          hasActiveSession={hasActiveSessionValue}
           {...(activeSessionRole ? { activeSessionRole } : {})}
           taskActivityState={taskActivityState}
           onPlan={onPlan}

@@ -108,6 +108,7 @@ describe("task-details-sheet-model", () => {
 
     expect(onPlan).toHaveBeenCalledWith("T-1", "set_spec");
     expect(onOpenSession).toHaveBeenCalledWith("T-1", "build", undefined);
+    expect(onBuild).not.toHaveBeenCalled();
 
     runTaskWorkflowAction("open_spec", "T-1", {
       onPlan,
@@ -182,6 +183,7 @@ describe("task-details-sheet-model", () => {
       onResetImplementation,
     });
     expect(onOpenSession).toHaveBeenCalledWith("T-1", "qa", undefined);
+    expect(onQaOpen).not.toHaveBeenCalled();
 
     runTaskWorkflowAction("reset_implementation", "T-1", {
       onPlan,

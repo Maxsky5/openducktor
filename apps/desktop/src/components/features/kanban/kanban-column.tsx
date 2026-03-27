@@ -276,64 +276,23 @@ export function KanbanColumn({
               <div style={{ height: renderModel.topSpacerHeight }} />
             ) : null}
             <div className="space-y-3">
-              {renderModel.visibleTasks.map((task) =>
-                (() => {
-                  const activeSessionContext = activeTaskSessionContextByTaskId.get(task.id);
-                  return (
-                    <MeasuredTaskCard
-                      key={task.id}
-                      task={task}
-                      runState={runStateByTaskId.get(task.id)}
-                      taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
-                      hasActiveSession={Boolean(activeSessionContext)}
-                      activeSessionRole={activeSessionContext?.role}
-                      activeSessionPresentationState={activeSessionContext?.presentationState}
-                      taskActivityState={getRequiredTaskActivityState(
-                        taskActivityStateByTaskId,
-                        task.id,
-                      )}
-                      measurementVersion={measurementVersion}
-                      onMeasuredHeight={handleMeasuredHeight}
-                      onOpenDetails={onOpenDetails}
-                      onDelegate={onDelegate}
-                      onOpenSession={onOpenSession}
-                      onPlan={onPlan}
-                      onBuild={onBuild}
-                      {...(onQaStart ? { onQaStart } : {})}
-                      {...(onQaOpen ? { onQaOpen } : {})}
-                      {...(onHumanApprove ? { onHumanApprove } : {})}
-                      {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
-                      {...(onResetImplementation ? { onResetImplementation } : {})}
-                    />
-                  );
-                })(),
-              )}
-            </div>
-            {renderModel.bottomSpacerHeight > 0 ? (
-              <div style={{ height: renderModel.bottomSpacerHeight }} />
-            ) : null}
-          </div>
-        ) : null}
-
-        {column.tasks.length > 0 && !isVirtualized ? (
-          <div className="space-y-3">
-            {renderModel.visibleTasks.map((task) =>
-              (() => {
+              {renderModel.visibleTasks.map((task) => {
                 const activeSessionContext = activeTaskSessionContextByTaskId.get(task.id);
                 return (
-                  <KanbanTaskCard
+                  <MeasuredTaskCard
                     key={task.id}
                     task={task}
                     runState={runStateByTaskId.get(task.id)}
                     taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
                     hasActiveSession={Boolean(activeSessionContext)}
-                    {...(activeSessionContext?.role
-                      ? { activeSessionRole: activeSessionContext.role }
-                      : {})}
+                    activeSessionRole={activeSessionContext?.role}
+                    activeSessionPresentationState={activeSessionContext?.presentationState}
                     taskActivityState={getRequiredTaskActivityState(
                       taskActivityStateByTaskId,
                       task.id,
                     )}
+                    measurementVersion={measurementVersion}
+                    onMeasuredHeight={handleMeasuredHeight}
                     onOpenDetails={onOpenDetails}
                     onDelegate={onDelegate}
                     onOpenSession={onOpenSession}
@@ -346,8 +305,45 @@ export function KanbanColumn({
                     {...(onResetImplementation ? { onResetImplementation } : {})}
                   />
                 );
-              })(),
-            )}
+              })}
+            </div>
+            {renderModel.bottomSpacerHeight > 0 ? (
+              <div style={{ height: renderModel.bottomSpacerHeight }} />
+            ) : null}
+          </div>
+        ) : null}
+
+        {column.tasks.length > 0 && !isVirtualized ? (
+          <div className="space-y-3">
+            {renderModel.visibleTasks.map((task) => {
+              const activeSessionContext = activeTaskSessionContextByTaskId.get(task.id);
+              return (
+                <KanbanTaskCard
+                  key={task.id}
+                  task={task}
+                  runState={runStateByTaskId.get(task.id)}
+                  taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
+                  hasActiveSession={Boolean(activeSessionContext)}
+                  {...(activeSessionContext?.role
+                    ? { activeSessionRole: activeSessionContext.role }
+                    : {})}
+                  taskActivityState={getRequiredTaskActivityState(
+                    taskActivityStateByTaskId,
+                    task.id,
+                  )}
+                  onOpenDetails={onOpenDetails}
+                  onDelegate={onDelegate}
+                  onOpenSession={onOpenSession}
+                  onPlan={onPlan}
+                  onBuild={onBuild}
+                  {...(onQaStart ? { onQaStart } : {})}
+                  {...(onQaOpen ? { onQaOpen } : {})}
+                  {...(onHumanApprove ? { onHumanApprove } : {})}
+                  {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
+                  {...(onResetImplementation ? { onResetImplementation } : {})}
+                />
+              );
+            })}
           </div>
         ) : null}
       </div>
