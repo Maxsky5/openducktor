@@ -1,3 +1,4 @@
+import { isTodoToolName } from "@/state/operations/agent-orchestrator/agent-tool-messages";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractPathFromInput, readInputString } from "./tool-input-utils";
 import { getToolLifecyclePhase, hasNonEmptyText } from "./tool-lifecycle";
@@ -130,15 +131,6 @@ const parseStructuredOutputSummary = (output: string): string | null => {
   } catch {
     return null;
   }
-};
-
-const isTodoToolName = (tool: string): boolean => {
-  return (
-    tool === "todowrite" ||
-    tool === "todoread" ||
-    tool.endsWith("_todowrite") ||
-    tool.endsWith("_todoread")
-  );
 };
 
 const countTodosFromUnknown = (value: unknown): number | null => {

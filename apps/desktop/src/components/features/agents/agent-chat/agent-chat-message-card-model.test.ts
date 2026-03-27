@@ -371,6 +371,16 @@ describe("agent-chat-message-card-model", () => {
           "",
         ),
       ).toBe("2 todos");
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "  todoread  ",
+            output: JSON.stringify({ todos: [{ id: "1" }] }),
+          }),
+          "",
+        ),
+      ).toBe("1 todo");
     });
 
     test("builds todo status summaries when counts are unavailable", () => {
