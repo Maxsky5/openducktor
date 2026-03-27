@@ -107,12 +107,30 @@ describe("use-spec-operations", () => {
   });
 
   test("saveSpec rejects invalid markdown and allows retry with valid markdown", async () => {
-    const setSpec = mock(async () => ({ updatedAt: "2026-02-22T10:30:00.000Z" }));
+    let currentSpecMarkdown = "";
+    let currentSpecUpdatedAt: string | null = null;
+    const specGet = mock(async () => ({
+      markdown: currentSpecMarkdown,
+      updatedAt: currentSpecUpdatedAt,
+    }));
+    const setSpec = mock(async ({ markdown }: { markdown: string }) => {
+      currentSpecMarkdown = markdown;
+      currentSpecUpdatedAt = "2026-02-22T10:30:00.000Z";
+      return { updatedAt: "2026-02-22T10:30:00.000Z" };
+    });
+    const tasksList = mock(async () => []);
+    const runsList = mock(async () => []);
 
     const original = {
+      specGet: host.specGet,
       setSpec: host.setSpec,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
     };
+    host.specGet = specGet;
     host.setSpec = setSpec;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
 
     const harness = createHookHarness({ activeRepo: "/repo-a" });
 
@@ -132,25 +150,42 @@ describe("use-spec-operations", () => {
       });
     } finally {
       await harness.unmount();
+      host.specGet = original.specGet;
       host.setSpec = original.setSpec;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
     }
   });
 
   test("loads and saves document variants through host adapter", async () => {
+    let currentSpecMarkdown = "# Spec";
+    let currentSpecUpdatedAt: string | null = "2026-02-22T10:00:00.000Z";
+    let currentPlanMarkdown = "# Plan";
+    let currentPlanUpdatedAt: string | null = "2026-02-22T10:01:00.000Z";
     const specGet = mock(async () => ({
-      markdown: "# Spec",
-      updatedAt: "2026-02-22T10:00:00.000Z",
+      markdown: currentSpecMarkdown,
+      updatedAt: currentSpecUpdatedAt,
     }));
     const planGet = mock(async () => ({
-      markdown: "# Plan",
-      updatedAt: "2026-02-22T10:01:00.000Z",
+      markdown: currentPlanMarkdown,
+      updatedAt: currentPlanUpdatedAt,
     }));
     const qaGetReport = mock(async () => ({
       markdown: "# QA",
       updatedAt: "2026-02-22T10:02:00.000Z",
     }));
-    const saveSpecDocument = mock(async () => ({ updatedAt: "2026-02-22T10:03:00.000Z" }));
-    const savePlanDocument = mock(async () => ({ updatedAt: "2026-02-22T10:04:00.000Z" }));
+    const saveSpecDocument = mock(async ({ markdown }: { markdown: string }) => {
+      currentSpecMarkdown = markdown;
+      currentSpecUpdatedAt = "2026-02-22T10:03:00.000Z";
+      return { updatedAt: "2026-02-22T10:03:00.000Z" };
+    });
+    const savePlanDocument = mock(async ({ markdown }: { markdown: string }) => {
+      currentPlanMarkdown = markdown;
+      currentPlanUpdatedAt = "2026-02-22T10:04:00.000Z";
+      return { updatedAt: "2026-02-22T10:04:00.000Z" };
+    });
+    const tasksList = mock(async () => []);
+    const runsList = mock(async () => []);
 
     const original = {
       specGet: host.specGet,
@@ -158,12 +193,16 @@ describe("use-spec-operations", () => {
       qaGetReport: host.qaGetReport,
       saveSpecDocument: host.saveSpecDocument,
       savePlanDocument: host.savePlanDocument,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
     };
     host.specGet = specGet;
     host.planGet = planGet;
     host.qaGetReport = qaGetReport;
     host.saveSpecDocument = saveSpecDocument;
     host.savePlanDocument = savePlanDocument;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
 
     const harness = createHookHarness({ activeRepo: "/repo-a" });
 
@@ -211,6 +250,8 @@ describe("use-spec-operations", () => {
       host.qaGetReport = original.qaGetReport;
       host.saveSpecDocument = original.saveSpecDocument;
       host.savePlanDocument = original.savePlanDocument;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
     }
   });
 
@@ -238,14 +279,44 @@ describe("use-spec-operations", () => {
       { wrapper },
     );
 
-    const saveSpecDocument = mock(async () => ({ updatedAt: "2026-02-22T10:03:00.000Z" }));
-    const savePlanDocument = mock(async () => ({ updatedAt: "2026-02-22T10:04:00.000Z" }));
+    let currentSpecMarkdown = "# Old spec";
+    let currentSpecUpdatedAt: string | null = "2026-02-22T10:00:00.000Z";
+    let currentPlanMarkdown = "# Old plan";
+    let currentPlanUpdatedAt: string | null = "2026-02-22T10:00:00.000Z";
+    const specGet = mock(async () => ({
+      markdown: currentSpecMarkdown,
+      updatedAt: currentSpecUpdatedAt,
+    }));
+    const planGet = mock(async () => ({
+      markdown: currentPlanMarkdown,
+      updatedAt: currentPlanUpdatedAt,
+    }));
+    const saveSpecDocument = mock(async ({ markdown }: { markdown: string }) => {
+      currentSpecMarkdown = markdown;
+      currentSpecUpdatedAt = "2026-02-22T10:03:00.000Z";
+      return { updatedAt: "2026-02-22T10:03:00.000Z" };
+    });
+    const savePlanDocument = mock(async ({ markdown }: { markdown: string }) => {
+      currentPlanMarkdown = markdown;
+      currentPlanUpdatedAt = "2026-02-22T10:04:00.000Z";
+      return { updatedAt: "2026-02-22T10:04:00.000Z" };
+    });
+    const tasksList = mock(async () => []);
+    const runsList = mock(async () => []);
     const original = {
+      specGet: host.specGet,
+      planGet: host.planGet,
       saveSpecDocument: host.saveSpecDocument,
       savePlanDocument: host.savePlanDocument,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
     };
+    host.specGet = specGet;
+    host.planGet = planGet;
     host.saveSpecDocument = saveSpecDocument;
     host.savePlanDocument = savePlanDocument;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
 
     queryClient.setQueryData(documentQueryKeys.spec("/repo-a", "task-1"), {
       markdown: "# Old spec",
@@ -267,14 +338,8 @@ describe("use-spec-operations", () => {
       tasks: [],
       runs: [],
     });
-    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 1), {
-      tasks: [],
-      runs: [],
-    });
-    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 7), {
-      tasks: [],
-      runs: [],
-    });
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 1), []);
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 7), []);
 
     try {
       await harness.mount();
@@ -308,18 +373,22 @@ describe("use-spec-operations", () => {
         queryClient.getQueryState(["task-documents", "plan", "", "task-1"])?.isInvalidated,
       ).toBe(true);
       expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a"))?.isInvalidated).toBe(
-        true,
+        false,
       );
       expect(queryClient.getQueryState(taskQueryKeys.kanbanData("/repo-a", 1))?.isInvalidated).toBe(
-        true,
+        false,
       );
       expect(queryClient.getQueryState(taskQueryKeys.kanbanData("/repo-a", 7))?.isInvalidated).toBe(
-        true,
+        false,
       );
     } finally {
       await harness.unmount();
+      host.specGet = original.specGet;
+      host.planGet = original.planGet;
       host.saveSpecDocument = original.saveSpecDocument;
       host.savePlanDocument = original.savePlanDocument;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
       queryClient.clear();
     }
   });
@@ -348,11 +417,29 @@ describe("use-spec-operations", () => {
       { wrapper },
     );
 
-    const setSpec = mock(async () => ({ updatedAt: "2026-02-22T10:06:00.000Z" }));
+    let currentSpecMarkdown = "# Old spec";
+    let currentSpecUpdatedAt: string | null = "2026-02-22T10:00:00.000Z";
+    const specGet = mock(async () => ({
+      markdown: currentSpecMarkdown,
+      updatedAt: currentSpecUpdatedAt,
+    }));
+    const setSpec = mock(async ({ markdown }: { markdown: string }) => {
+      currentSpecMarkdown = markdown;
+      currentSpecUpdatedAt = "2026-02-22T10:06:00.000Z";
+      return { updatedAt: "2026-02-22T10:06:00.000Z" };
+    });
+    const tasksList = mock(async () => []);
+    const runsList = mock(async () => []);
     const original = {
+      specGet: host.specGet,
       setSpec: host.setSpec,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
     };
+    host.specGet = specGet;
     host.setSpec = setSpec;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
 
     queryClient.setQueryData(documentQueryKeys.spec("/repo-a", "task-1"), {
       markdown: "# Old spec",
@@ -366,14 +453,8 @@ describe("use-spec-operations", () => {
       tasks: [],
       runs: [],
     });
-    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 1), {
-      tasks: [],
-      runs: [],
-    });
-    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 7), {
-      tasks: [],
-      runs: [],
-    });
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 1), []);
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 7), []);
 
     try {
       await harness.mount();
@@ -396,17 +477,20 @@ describe("use-spec-operations", () => {
         queryClient.getQueryState(["task-documents", "spec", "", "task-1"])?.isInvalidated,
       ).toBe(true);
       expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a"))?.isInvalidated).toBe(
-        true,
+        false,
       );
       expect(queryClient.getQueryState(taskQueryKeys.kanbanData("/repo-a", 1))?.isInvalidated).toBe(
-        true,
+        false,
       );
       expect(queryClient.getQueryState(taskQueryKeys.kanbanData("/repo-a", 7))?.isInvalidated).toBe(
-        true,
+        false,
       );
     } finally {
       await harness.unmount();
+      host.specGet = original.specGet;
       host.setSpec = original.setSpec;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
       queryClient.clear();
     }
   });
@@ -435,14 +519,36 @@ describe("use-spec-operations", () => {
       { wrapper },
     );
 
+    const currentSpecMarkdown = "# Newer spec";
+    const currentSpecUpdatedAt: string | null = "2026-02-22T10:05:00.000Z";
+    const currentPlanMarkdown = "# Newer plan";
+    const currentPlanUpdatedAt: string | null = "2026-02-22T10:05:00.000Z";
+    const specGet = mock(async () => ({
+      markdown: currentSpecMarkdown,
+      updatedAt: currentSpecUpdatedAt,
+    }));
+    const planGet = mock(async () => ({
+      markdown: currentPlanMarkdown,
+      updatedAt: currentPlanUpdatedAt,
+    }));
     const saveSpecDocument = mock(async () => ({ updatedAt: "2026-02-22T10:01:00.000Z" }));
     const savePlanDocument = mock(async () => ({ updatedAt: "2026-02-22T10:01:00.000Z" }));
+    const tasksList = mock(async () => []);
+    const runsList = mock(async () => []);
     const original = {
+      specGet: host.specGet,
+      planGet: host.planGet,
       saveSpecDocument: host.saveSpecDocument,
       savePlanDocument: host.savePlanDocument,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
     };
+    host.specGet = specGet;
+    host.planGet = planGet;
     host.saveSpecDocument = saveSpecDocument;
     host.savePlanDocument = savePlanDocument;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
 
     queryClient.setQueryData(documentQueryKeys.spec("/repo-a", "task-1"), {
       markdown: "# Newer spec",
@@ -483,8 +589,12 @@ describe("use-spec-operations", () => {
       });
     } finally {
       await harness.unmount();
+      host.specGet = original.specGet;
+      host.planGet = original.planGet;
       host.saveSpecDocument = original.saveSpecDocument;
       host.savePlanDocument = original.savePlanDocument;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
       queryClient.clear();
     }
   });
