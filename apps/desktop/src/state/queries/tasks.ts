@@ -107,6 +107,16 @@ export const invalidateKanbanTaskQueries = (
   });
 };
 
+export const refetchActiveKanbanQueries = (
+  queryClient: QueryClient,
+  repoPath: string,
+): Promise<void> =>
+  queryClient.refetchQueries({
+    queryKey: taskQueryKeys.kanbanDataPrefix(repoPath),
+    exact: false,
+    type: "active",
+  });
+
 export const invalidateRepoTaskListQueries = (
   queryClient: QueryClient,
   repoPath: string,

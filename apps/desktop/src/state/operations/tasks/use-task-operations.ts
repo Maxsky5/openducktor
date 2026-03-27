@@ -17,6 +17,7 @@ import { agentSessionQueryKeys } from "../../queries/agent-sessions";
 import {
   invalidateRepoTaskQueries,
   loadRepoTaskDataFromQuery,
+  refetchActiveKanbanQueries,
   repoTaskDataQueryOptions,
 } from "../../queries/tasks";
 import { host } from "../shared/host";
@@ -95,7 +96,10 @@ export function useTaskOperations({
   const refreshTaskData = useCallback(
     async (repoPath: string): Promise<void> => {
       await invalidateRepoTaskQueries(queryClient, repoPath);
-      await loadRepoTaskDataFromQuery(queryClient, repoPath);
+      await Promise.all([
+        loadRepoTaskDataFromQuery(queryClient, repoPath),
+        refetchActiveKanbanQueries(queryClient, repoPath),
+      ]);
     },
     [queryClient],
   );
