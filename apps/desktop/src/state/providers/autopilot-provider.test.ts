@@ -1,15 +1,16 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord, RepoConfig, TaskCard } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { repoConfigQueryOptions } from "@/state/queries/workspace";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { MISSING_BUILD_TARGET_ERROR } from "../operations/agent-orchestrator/handlers/start-session-constants";
+import { detectAutopilotEvents, executeAutopilotAction } from "./autopilot-provider";
 
-const startSessionWorkflowMock = mock(async () => undefined);
-
-let detectAutopilotEvents: typeof import("./autopilot-provider").detectAutopilotEvents;
-let executeAutopilotAction: typeof import("./autopilot-provider").executeAutopilotAction;
+const startSessionWorkflowMock = mock(async () => ({
+  sessionId: "session-new",
+  postStartActionError: null,
+}));
 
 const createBuilderSessionRecord = (
   overrides: Partial<AgentSessionRecord> = {},
@@ -103,6 +104,7 @@ const createExecuteArgs = (task: TaskCard) => ({
   resolveBuildContinuationTarget: mock(
     async (): Promise<{ workingDirectory: string } | null> => null,
   ),
+  startSessionWorkflow: startSessionWorkflowMock,
   startAgentSession: mock(async () => {
     throw new Error("startAgentSession should not be called in this test");
   }),
@@ -112,20 +114,12 @@ const createExecuteArgs = (task: TaskCard) => ({
 });
 
 describe("autopilot provider helpers", () => {
-  beforeAll(async () => {
-    mock.module("@/features/session-start/session-start-workflow", () => ({
-      startSessionWorkflow: startSessionWorkflowMock,
-    }));
-    ({ detectAutopilotEvents, executeAutopilotAction } = await import("./autopilot-provider"));
-  });
-
   beforeEach(() => {
     startSessionWorkflowMock.mockReset();
-    startSessionWorkflowMock.mockImplementation(async () => undefined);
-  });
-
-  afterAll(() => {
-    mock.restore();
+    startSessionWorkflowMock.mockImplementation(async () => ({
+      sessionId: "session-new",
+      postStartActionError: null,
+    }));
   });
 
   test("detects status transitions and canonical QA rejection", () => {

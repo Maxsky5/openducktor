@@ -61,9 +61,12 @@ type ExecuteAutopilotActionArgs = {
   ) => Promise<{
     workingDirectory: string;
   } | null>;
+  startSessionWorkflow: StartSessionWorkflowFn;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
 };
+
+type StartSessionWorkflowFn = typeof startSessionWorkflow;
 
 type ResolvedAutopilotStart = {
   startMode: "fresh" | "reuse" | "fork";
@@ -261,6 +264,7 @@ export const executeAutopilotAction = async ({
   queryClient,
   loadRepoRuntimeCatalog,
   resolveBuildContinuationTarget,
+  startSessionWorkflow,
   startAgentSession,
   sendAgentMessage,
 }: ExecuteAutopilotActionArgs): Promise<AutopilotActionOutcome> => {
@@ -383,6 +387,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
               queryClient,
               loadRepoRuntimeCatalog,
               resolveBuildContinuationTarget: loadBuildContinuationTarget,
+              startSessionWorkflow,
               startAgentSession: agentState.startAgentSession,
               sendAgentMessage: agentState.sendAgentMessage,
             });
