@@ -1,12 +1,14 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { WorkspaceRecord } from "@openducktor/contracts";
+import type { SettingsSnapshot, WorkspaceRecord } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { useQuery } from "@tanstack/react-query";
 import { render, waitFor } from "@testing-library/react";
 import { act, createElement, type PropsWithChildren, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { settingsSnapshotQueryOptions } from "../../queries/workspace";
 import { useWorkspaceOperations } from "./use-workspace-operations";
 
 const reactActEnvironment = globalThis as typeof globalThis & {
@@ -237,6 +239,42 @@ const workspace = (path: string, isActive = false): WorkspaceRecord => ({
   effectiveWorktreeBasePath: "/tmp/default-worktrees",
 });
 
+const settingsSnapshot = (repoPaths: string[]): SettingsSnapshot => ({
+  theme: "light",
+  git: {
+    defaultMergeMethod: "merge_commit",
+  },
+  chat: {
+    showThinkingMessages: false,
+  },
+  kanban: {
+    doneVisibleDays: 1,
+  },
+  repos: Object.fromEntries(
+    repoPaths.map((repoPath) => [
+      repoPath,
+      {
+        defaultRuntimeKind: "opencode" as const,
+        branchPrefix: "odt",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: {
+          providers: {},
+        },
+        trustedHooks: false,
+        hooks: {
+          preStart: [],
+          postComplete: [],
+        },
+        devServers: [],
+        worktreeFileCopies: [],
+        promptOverrides: {},
+        agentDefaults: {},
+      },
+    ]),
+  ),
+  globalPromptOverrides: {},
+});
+
 describe("use-workspace-operations", () => {
   test("hydrates branches when startup activates the persisted repository", async () => {
     const setActiveRepo = mock(() => {});
@@ -420,6 +458,66 @@ describe("use-workspace-operations", () => {
     }
   });
 
+  test("addWorkspace clears cached settings snapshot for next read", async () => {
+    const setActiveRepo = mock(() => {});
+    const workspaceGetSettingsSnapshot = mock(async () => settingsSnapshot(["/repo-old"]));
+    const hostClient = createWorkspaceHostClient();
+    hostClient.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+    hostClient.workspaceAdd = mock(
+      async (): Promise<WorkspaceRecord> => workspace("/repo-new", true),
+    );
+    hostClient.workspaceList = mock(
+      async (): Promise<WorkspaceRecord[]> => [workspace("/repo-new", true)],
+    );
+    let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
+
+    const SettingsSnapshotProbe = () => {
+      useQuery(settingsSnapshotQueryOptions(hostClient));
+      return null;
+    };
+
+    const Harness = () => {
+      latest = useWorkspaceOperations({
+        activeRepo: null,
+        setActiveRepo,
+        clearTaskData: () => {},
+        clearActiveBeadsCheck: () => {},
+        hostClient,
+      });
+      return createElement(SettingsSnapshotProbe);
+    };
+
+    const rendered = render(createElement(Harness), {
+      wrapper: ({ children }: PropsWithChildren) => (
+        <QueryProvider useIsolatedClient>{children}</QueryProvider>
+      ),
+    });
+
+    try {
+      await waitFor(() => {
+        expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
+      });
+
+      workspaceGetSettingsSnapshot.mockImplementationOnce(async () =>
+        settingsSnapshot(["/repo-old", "/repo-new"]),
+      );
+
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+
+      await act(async () => {
+        await latest?.addWorkspace("/repo-new");
+      });
+
+      await waitFor(() => {
+        expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(2);
+      });
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   test("selectWorkspace clears state and triggers runtime ensure", async () => {
     const setActiveRepo = mock(() => {});
     const clearTaskData = mock(() => {});
@@ -523,6 +621,99 @@ describe("use-workspace-operations", () => {
       workspaceHost.runtimeEnsure = original.runtimeEnsure;
       workspaceHost.workspaceGetRepoConfig = original.workspaceGetRepoConfig;
       workspaceHost.workspaceList = original.workspaceList;
+    }
+  });
+
+  test("selectWorkspace clears cached settings snapshot for next read", async () => {
+    const setActiveRepo = mock(() => {});
+    const clearTaskData = mock(() => {});
+    const clearActiveBeadsCheck = mock(() => {});
+    const workspaceGetSettingsSnapshot = mock(async () => settingsSnapshot(["/repo-old"]));
+    const hostClient = createWorkspaceHostClient();
+    hostClient.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+    hostClient.workspaceSelect = mock(
+      async (): Promise<WorkspaceRecord> => workspace("/repo-a", true),
+    );
+    hostClient.workspaceList = mock(
+      async (): Promise<WorkspaceRecord[]> => [workspace("/repo-a", true)],
+    );
+    hostClient.workspaceGetRepoConfig = mock(async () => ({
+      defaultRuntimeKind: "opencode" as const,
+      branchPrefix: "obp",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {
+        providers: {},
+      },
+      trustedHooks: false,
+      hooks: {
+        preStart: [],
+        postComplete: [],
+      },
+      devServers: [],
+      worktreeFileCopies: [],
+      promptOverrides: {},
+      agentDefaults: {},
+    }));
+    hostClient.runtimeEnsure = mock(async () => ({
+      kind: "opencode",
+      runtimeId: "runtime-1",
+      repoPath: "/repo-a",
+      taskId: null,
+      role: "workspace" as const,
+      workingDirectory: "/tmp/repo-a",
+      runtimeRoute: {
+        type: "local_http" as const,
+        endpoint: "http://127.0.0.1:3030",
+      },
+      startedAt: "2026-02-22T08:00:00.000Z",
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+    }));
+    let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
+
+    const SettingsSnapshotProbe = () => {
+      useQuery(settingsSnapshotQueryOptions(hostClient));
+      return null;
+    };
+
+    const Harness = () => {
+      latest = useWorkspaceOperations({
+        activeRepo: null,
+        setActiveRepo,
+        clearTaskData,
+        clearActiveBeadsCheck,
+        hostClient,
+      });
+      return createElement(SettingsSnapshotProbe);
+    };
+
+    const rendered = render(createElement(Harness), {
+      wrapper: ({ children }: PropsWithChildren) => (
+        <QueryProvider useIsolatedClient>{children}</QueryProvider>
+      ),
+    });
+
+    try {
+      await waitFor(() => {
+        expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
+      });
+
+      workspaceGetSettingsSnapshot.mockImplementationOnce(async () =>
+        settingsSnapshot(["/repo-old", "/repo-a"]),
+      );
+
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+
+      await act(async () => {
+        await latest?.selectWorkspace("/repo-a");
+      });
+
+      await waitFor(() => {
+        expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(2);
+      });
+    } finally {
+      rendered.unmount();
     }
   });
 
