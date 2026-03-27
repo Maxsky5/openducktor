@@ -124,7 +124,7 @@ const maybeSendKickoff = async ({
   throwIfRepoStale(startedCtx.isStaleRepoOperation, STALE_START_ERROR);
   runOrchestratorSideEffect(
     "start-session-refresh-task-data-after-kickoff",
-    task.refreshTaskData(startedCtx.repoPath),
+    task.refreshTaskData(startedCtx.repoPath, startedCtx.taskId),
     {
       tags: createSessionStartTags(startedCtx),
     },
