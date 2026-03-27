@@ -1,10 +1,17 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { BeadsCheck, RunSummary, TaskCard, TaskCreateInput } from "@openducktor/contracts";
+import { useQuery } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
 import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { kanbanTaskListQueryOptions } from "../../queries/tasks";
+import {
+  attachAgentSessionListener,
+  type SessionEventAdapter,
+} from "../agent-orchestrator/events/session-events";
 import { host } from "../shared/host";
 import { useTaskOperations } from "./use-task-operations";
 
@@ -60,6 +67,34 @@ const makeTask = (id: string, status: TaskCard["status"]): TaskCard => ({
   createdAt: "2026-02-22T08:00:00.000Z",
 });
 
+const buildAgentSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
+  runtimeKind: "opencode",
+  sessionId: "session-1",
+  externalSessionId: "external-1",
+  taskId: "A",
+  role: "build",
+  scenario: "build_implementation_start",
+  status: "running",
+  startedAt: "2026-02-22T08:00:00.000Z",
+  runtimeId: null,
+  runId: null,
+  runtimeEndpoint: "http://127.0.0.1:4321",
+  workingDirectory: "/repo",
+  messages: [],
+  draftAssistantText: "",
+  draftAssistantMessageId: null,
+  draftReasoningText: "",
+  draftReasoningMessageId: null,
+  contextUsage: null,
+  pendingPermissions: [],
+  pendingQuestions: [],
+  todos: [],
+  modelCatalog: null,
+  selectedModel: null,
+  isLoadingModelCatalog: false,
+  ...overrides,
+});
+
 type HookArgs = Parameters<typeof useTaskOperations>[0];
 
 const createHookHarness = (initialArgs: HookArgs) => {
@@ -101,6 +136,72 @@ const createHookHarness = (initialArgs: HookArgs) => {
     },
     waitFor: async (
       predicate: (value: ReturnType<typeof useTaskOperations>) => boolean,
+      timeoutMs?: number,
+    ) => {
+      await sharedHarness.waitFor(() => latest !== null && predicate(latest), timeoutMs);
+    },
+    unmount: async () => {
+      await sharedHarness.unmount();
+    },
+  };
+};
+
+type TaskAndKanbanHarnessState = {
+  operations: ReturnType<typeof useTaskOperations>;
+  kanbanTasks: TaskCard[];
+  isFetchingKanban: boolean;
+};
+
+const createTaskAndKanbanHarness = (initialArgs: HookArgs, doneVisibleDays = 1) => {
+  let latest: TaskAndKanbanHarnessState | null = null;
+  const currentArgs = initialArgs;
+
+  const Harness = ({ args }: { args: HookArgs }) => {
+    const operations = useTaskOperations(args);
+    const kanbanTaskListQuery = useQuery({
+      ...kanbanTaskListQueryOptions(args.activeRepo ?? "__disabled__", doneVisibleDays),
+      enabled: args.activeRepo !== null,
+    });
+
+    latest = {
+      operations,
+      kanbanTasks: args.activeRepo ? (kanbanTaskListQuery.data ?? []) : [],
+      isFetchingKanban:
+        args.activeRepo !== null &&
+        (kanbanTaskListQuery.isPending || kanbanTaskListQuery.isFetching),
+    };
+
+    return null;
+  };
+
+  const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+    <QueryProvider useIsolatedClient>{children}</QueryProvider>
+  );
+
+  const sharedHarness = createSharedHookHarness(Harness, { args: currentArgs }, { wrapper });
+
+  return {
+    mount: async () => {
+      await sharedHarness.mount();
+    },
+    run: async (fn: (value: TaskAndKanbanHarnessState) => Promise<void> | void) => {
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+
+      await sharedHarness.run(async () => {
+        await fn(latest as TaskAndKanbanHarnessState);
+      });
+    },
+    getLatest: () => {
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+
+      return latest;
+    },
+    waitFor: async (
+      predicate: (value: TaskAndKanbanHarnessState) => boolean,
       timeoutMs?: number,
     ) => {
       await sharedHarness.waitFor(() => latest !== null && predicate(latest), timeoutMs);
@@ -445,6 +546,211 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("refreshTasks updates an active kanban query after backend task status changes", async () => {
+    let currentStatus: TaskCard["status"] = "human_review";
+    const repoPullRequestSync = mock(async () => ({ ok: true }));
+    const tasksList = mock(async () => [makeTask("A", currentStatus)]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      repoPullRequestSync: host.repoPullRequestSync,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.repoPullRequestSync = repoPullRequestSync;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createTaskAndKanbanHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (value) =>
+          !value.isFetchingKanban &&
+          value.operations.tasks[0]?.status === "human_review" &&
+          value.kanbanTasks[0]?.status === "human_review",
+        1000,
+      );
+      tasksList.mockClear();
+      runsList.mockClear();
+
+      currentStatus = "closed";
+
+      await harness.run(async (value) => {
+        await value.operations.refreshTasks();
+      });
+      await harness.waitFor(
+        (value) =>
+          !value.isFetchingKanban &&
+          value.operations.tasks[0]?.status === "closed" &&
+          value.kanbanTasks[0]?.status === "closed",
+        1000,
+      );
+
+      expect(repoPullRequestSync).toHaveBeenCalledWith("/repo");
+      expect(
+        tasksList.mock.calls.some((call) => {
+          const args = call as unknown[];
+          return args[0] === "/repo" && args.length === 1;
+        }),
+      ).toBe(true);
+      expect(
+        tasksList.mock.calls.some((call) => {
+          const args = call as unknown[];
+          return args[0] === "/repo" && args[1] === 1;
+        }),
+      ).toBe(true);
+      expect(runsList).toHaveBeenCalledWith("/repo");
+    } finally {
+      await harness.unmount();
+      host.repoPullRequestSync = original.repoPullRequestSync;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
+  test("completed ODT tool events refresh an active kanban query through the session listener", async () => {
+    let currentStatus: TaskCard["status"] = "human_review";
+    const tasksList = mock(async () => [makeTask("A", currentStatus)]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+    const adapterHandlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        adapterHandlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const original = {
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createTaskAndKanbanHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildAgentSession(),
+      },
+    };
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (value) =>
+          !value.isFetchingKanban &&
+          value.operations.tasks[0]?.status === "human_review" &&
+          value.kanbanTasks[0]?.status === "human_review",
+        1000,
+      );
+
+      const unsubscribe = attachAgentSessionListener({
+        adapter,
+        repoPath: "/repo",
+        sessionId: "session-1",
+        sessionsRef,
+        draftRawBySessionRef: { current: {} },
+        draftSourceBySessionRef: { current: {} },
+        draftMessageIdBySessionRef: { current: {} },
+        draftFlushTimeoutBySessionRef: { current: {} },
+        turnStartedAtBySessionRef: { current: {} },
+        updateSession,
+        resolveTurnDurationMs: () => undefined,
+        clearTurnDuration: () => {},
+        refreshTaskData: harness.getLatest().operations.refreshTaskData,
+      });
+
+      try {
+        const handleEvent = adapterHandlers[0];
+        if (!handleEvent) {
+          throw new Error("Expected session event handler to be registered");
+        }
+
+        tasksList.mockClear();
+        runsList.mockClear();
+        currentStatus = "closed";
+
+        handleEvent({
+          type: "assistant_part",
+          sessionId: "session-1",
+          timestamp: "2026-02-22T08:00:05.000Z",
+          part: {
+            kind: "tool",
+            messageId: "tool-msg-1",
+            partId: "part-1",
+            callId: "call-1",
+            tool: "odt_build_completed",
+            status: "completed",
+            output: "done",
+            error: "",
+          },
+        });
+
+        await harness.waitFor(
+          (value) =>
+            !value.isFetchingKanban &&
+            value.operations.tasks[0]?.status === "closed" &&
+            value.kanbanTasks[0]?.status === "closed",
+          1000,
+        );
+
+        expect(
+          tasksList.mock.calls.some((call) => {
+            const args = call as unknown[];
+            return args[0] === "/repo" && args.length === 1;
+          }),
+        ).toBe(true);
+        expect(
+          tasksList.mock.calls.some((call) => {
+            const args = call as unknown[];
+            return args[0] === "/repo" && args[1] === 1;
+          }),
+        ).toBe(true);
+        expect(runsList).toHaveBeenCalledWith("/repo");
+      } finally {
+        unsubscribe();
+      }
+    } finally {
+      await harness.unmount();
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
   test("syncPullRequests links a detected pull request for the task", async () => {
     const taskPullRequestDetect = mock(async () => ({
       outcome: "linked" as const,
@@ -768,6 +1074,106 @@ describe("use-task-operations", () => {
       host.tasksList = original.tasksList;
       host.runsList = original.runsList;
       toast.success = originalToastSuccess;
+    }
+  });
+
+  test("linkMergedPullRequest refreshes an active kanban query after moving a task to done", async () => {
+    const mergedPullRequest = {
+      providerId: "github" as const,
+      number: 17,
+      url: "https://github.com/openai/openducktor/pull/17",
+      state: "merged" as const,
+      createdAt: "2026-02-20T10:00:00Z",
+      updatedAt: "2026-02-20T10:00:00Z",
+      lastSyncedAt: "2026-02-20T10:00:00Z",
+      mergedAt: "2026-02-20T10:00:00Z",
+      closedAt: "2026-02-20T10:00:00Z",
+    };
+    let currentStatus: TaskCard["status"] = "human_review";
+    const taskPullRequestDetect = mock(async () => ({
+      outcome: "merged" as const,
+      pullRequest: mergedPullRequest,
+    }));
+    const taskPullRequestLinkMerged = mock(async () => {
+      currentStatus = "closed";
+      return makeTask("A", currentStatus);
+    });
+    const tasksList = mock(async () => [makeTask("A", currentStatus)]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskPullRequestDetect: host.taskPullRequestDetect,
+      taskPullRequestLinkMerged: host.taskPullRequestLinkMerged,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.taskPullRequestDetect = taskPullRequestDetect;
+    host.taskPullRequestLinkMerged = taskPullRequestLinkMerged;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createTaskAndKanbanHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (value) =>
+          !value.isFetchingKanban &&
+          value.operations.tasks[0]?.status === "human_review" &&
+          value.kanbanTasks[0]?.status === "human_review",
+        1000,
+      );
+      tasksList.mockClear();
+      runsList.mockClear();
+
+      await harness.run(async (value) => {
+        await value.operations.syncPullRequests("A");
+      });
+
+      expect(harness.getLatest().operations.pendingMergedPullRequest).toEqual({
+        taskId: "A",
+        pullRequest: mergedPullRequest,
+      });
+      expect(tasksList).not.toHaveBeenCalled();
+
+      await harness.run(async (value) => {
+        await value.operations.linkMergedPullRequest();
+      });
+      await harness.waitFor(
+        (value) =>
+          !value.isFetchingKanban &&
+          value.operations.tasks[0]?.status === "closed" &&
+          value.kanbanTasks[0]?.status === "closed",
+        1000,
+      );
+
+      expect(taskPullRequestLinkMerged).toHaveBeenCalledWith("/repo", "A", mergedPullRequest);
+      expect(
+        tasksList.mock.calls.some((call) => {
+          const args = call as unknown[];
+          return args[0] === "/repo" && args.length === 1;
+        }),
+      ).toBe(true);
+      expect(
+        tasksList.mock.calls.some((call) => {
+          const args = call as unknown[];
+          return args[0] === "/repo" && args[1] === 1;
+        }),
+      ).toBe(true);
+      expect(runsList).toHaveBeenCalledWith("/repo");
+    } finally {
+      await harness.unmount();
+      host.taskPullRequestDetect = original.taskPullRequestDetect;
+      host.taskPullRequestLinkMerged = original.taskPullRequestLinkMerged;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
     }
   });
 
@@ -1145,6 +1551,90 @@ describe("use-task-operations", () => {
         title: "Ship feature",
       });
       expect(tasksList).toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+      host.taskCreate = original.taskCreate;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
+  test("createTask refreshes an active kanban query without remounting the board", async () => {
+    let currentTasks: TaskCard[] = [];
+    const taskCreate = mock(
+      async (_repoPath: string, input: TaskCreateInput): Promise<TaskCard> => {
+        const createdTask = {
+          ...makeTask("A", "open"),
+          title: input.title,
+        };
+        currentTasks = [createdTask];
+        return createdTask;
+      },
+    );
+    const tasksList = mock(async () => currentTasks);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskCreate: host.taskCreate,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.taskCreate = taskCreate;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createTaskAndKanbanHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    const input: TaskCreateInput = {
+      title: "  Ship feature  ",
+      issueType: "task",
+      aiReviewEnabled: true,
+      priority: 2,
+      labels: [],
+      description: "",
+    };
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (value) => !value.operations.isLoadingTasks && !value.isFetchingKanban,
+        1000,
+      );
+      tasksList.mockClear();
+      runsList.mockClear();
+
+      await harness.run(async (value) => {
+        await value.operations.createTask(input);
+      });
+      await harness.waitFor(
+        (value) => value.operations.tasks[0]?.id === "A" && value.kanbanTasks[0]?.id === "A",
+        1000,
+      );
+
+      expect(taskCreate).toHaveBeenCalledWith("/repo", {
+        ...input,
+        title: "Ship feature",
+      });
+      expect(
+        tasksList.mock.calls.some((call) => {
+          const args = call as unknown[];
+          return args[0] === "/repo" && args.length === 1;
+        }),
+      ).toBe(true);
+      expect(
+        tasksList.mock.calls.some((call) => {
+          const args = call as unknown[];
+          return args[0] === "/repo" && args[1] === 1;
+        }),
+      ).toBe(true);
+      expect(runsList).toHaveBeenCalledWith("/repo");
     } finally {
       await harness.unmount();
       host.taskCreate = original.taskCreate;
