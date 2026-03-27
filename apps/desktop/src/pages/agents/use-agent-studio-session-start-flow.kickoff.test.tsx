@@ -123,6 +123,9 @@ beforeAll(async () => {
   mock.module("sonner", () => ({
     toast: {
       error: toastErrorMock,
+      success: () => {},
+      loading: () => "",
+      dismiss: () => {},
     },
   }));
   ({ useAgentStudioSessionStartFlow } = await import("./use-agent-studio-session-start-flow"));

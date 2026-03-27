@@ -348,10 +348,6 @@ describe("KanbanPage session start modal flow", () => {
       },
     }));
 
-    mock.module("./task-approval-modal", () => ({
-      TaskApprovalModal: (): ReactElement | null => null,
-    }));
-
     mock.module("@/components/features/pull-requests/merged-pull-request-confirm-dialog", () => ({
       MergedPullRequestConfirmDialog: (props: Record<string, unknown>): ReactElement | null => {
         latestMergedPullRequestModalProps = props;
