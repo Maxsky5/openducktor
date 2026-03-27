@@ -91,6 +91,7 @@ export const TaskDetailsAsyncDocumentSection = memo(function TaskDetailsAsyncDoc
               active={isExpanded}
               markdown={document.markdown}
               empty={empty}
+              copyableMarkdown={document.markdown}
             />
           </Suspense>
         );
