@@ -100,12 +100,12 @@ describe("settings-modal-normalization", () => {
     const normalized = normalizePromptOverridesForSave({
       "system.shared.workflow_guards": {
         template: "  guards override  ",
-        baseVersion: 3,
+        baseVersion: 2,
         enabled: true,
       },
       "system.shared.tool_protocol": {
         template: " protocol override ",
-        baseVersion: 4,
+        baseVersion: 2,
         enabled: false,
       },
     });
@@ -113,12 +113,12 @@ describe("settings-modal-normalization", () => {
     expect(normalized).toEqual({
       "system.shared.workflow_guards": {
         template: "guards override",
-        baseVersion: 3,
+        baseVersion: 2,
         enabled: true,
       },
       "system.shared.tool_protocol": {
         template: "protocol override",
-        baseVersion: 4,
+        baseVersion: 2,
         enabled: false,
       },
     });

@@ -103,7 +103,7 @@ describe("settings-modal-model", () => {
     const overrides: RepoPromptOverrides = {
       "kickoff.spec_initial": {
         template: "custom",
-        baseVersion: 3,
+        baseVersion: 2,
         enabled: false,
       },
     };
@@ -195,11 +195,11 @@ describe("settings-modal-model", () => {
       "kickoff.spec_initial",
       true,
       "builtin",
-      3,
+      2,
     );
     expect(created["kickoff.spec_initial"]).toEqual({
       template: "builtin",
-      baseVersion: 3,
+      baseVersion: 2,
       enabled: true,
     });
 
@@ -208,11 +208,11 @@ describe("settings-modal-model", () => {
       "kickoff.spec_initial",
       false,
       "builtin",
-      3,
+      2,
     );
     expect(disabled["kickoff.spec_initial"]).toEqual({
       template: "builtin",
-      baseVersion: 3,
+      baseVersion: 2,
       enabled: false,
     });
   });
@@ -255,7 +255,7 @@ describe("settings-modal-model", () => {
     const enabledOverrides: RepoPromptOverrides = {
       "kickoff.spec_initial": {
         template: "old",
-        baseVersion: 4,
+        baseVersion: 2,
         enabled: true,
       },
     };
@@ -267,7 +267,7 @@ describe("settings-modal-model", () => {
     );
     expect(updated["kickoff.spec_initial"]).toEqual({
       template: "new",
-      baseVersion: 4,
+      baseVersion: 2,
       enabled: true,
     });
   });
