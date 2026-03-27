@@ -8,6 +8,7 @@ const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): Settings
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
   chat: { showThinkingMessages: false },
+  kanban: { doneVisibleDays: 1 },
   repos: {},
   globalPromptOverrides: {},
   ...overrides,
@@ -54,7 +55,14 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   selectedRepoPromptValidationErrorCount: 0,
   globalPromptRoleTabErrorCounts: { shared: 0, spec: 0, planner: 0, build: 0, qa: 0 },
   selectedRepoPromptRoleTabErrorCounts: { shared: 0, spec: 0, planner: 0, build: 0, qa: 0 },
-  settingsSectionErrorCountById: { general: 0, git: 0, repositories: 0, prompts: 0, chat: 0 },
+  settingsSectionErrorCountById: {
+    general: 0,
+    git: 0,
+    repositories: 0,
+    prompts: 0,
+    chat: 0,
+    kanban: 0,
+  },
   setSelectedRepoPath: () => {},
   markRepoScriptSaveAttempt: () => {},
   retrySelectedRepoBranchesLoad: () => {},
@@ -62,6 +70,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   updateSelectedRepoConfig: () => {},
   updateGlobalGitConfig: () => {},
   updateGlobalChatSettings: () => {},
+  updateGlobalKanbanSettings: () => {},
   updateGlobalPromptOverrides: () => {},
   updateRepoPromptOverrides: () => {},
   updateSelectedRepoAgentDefault: () => {},
@@ -91,6 +100,29 @@ describe("settings modal content", () => {
 
     expect(html).toContain("Chat Settings");
     expect(html).toContain("Show Thinking Messages");
+  });
+
+  test("renders kanban section when section is kanban", () => {
+    const snapshot = createMockSnapshot({ kanban: { doneVisibleDays: 7 } });
+    const controller = createMockController(snapshot);
+
+    const html = renderToStaticMarkup(
+      createElement(SettingsModalContent, {
+        section: "kanban",
+        repositorySection: "configuration",
+        globalPromptRoleTab: "shared",
+        repoPromptRoleTab: "shared",
+        isInteractionDisabled: false,
+        controller,
+        onRepositorySectionChange: () => {},
+        onGlobalPromptRoleTabChange: () => {},
+        onRepoPromptRoleTabChange: () => {},
+      }),
+    );
+
+    expect(html).toContain("Kanban Settings");
+    expect(html).toContain("Done tasks visible for");
+    expect(html).toContain('value="7"');
   });
 
   test("renders general section when section is general", () => {

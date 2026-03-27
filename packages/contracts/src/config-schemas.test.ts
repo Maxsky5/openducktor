@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { repoConfigSchema } from "./config-schemas";
+import { repoConfigSchema, settingsSnapshotSchema } from "./config-schemas";
 
 describe("config-schemas", () => {
   test("defaults dev servers to an empty array", () => {
@@ -56,5 +56,16 @@ describe("config-schemas", () => {
         devServers: [{ id: "frontend", name: "Frontend", command: "   " }],
       }),
     ).toThrow("Dev server command cannot be blank.");
+  });
+
+  test("defaults kanban done visibility to one day", () => {
+    const parsed = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      repos: {},
+      globalPromptOverrides: {},
+    });
+
+    expect(parsed.kanban.doneVisibleDays).toBe(1);
   });
 });

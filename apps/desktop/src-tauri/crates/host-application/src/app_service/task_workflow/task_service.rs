@@ -18,6 +18,15 @@ impl AppService {
         Ok(self.enrich_tasks(context.tasks))
     }
 
+    pub fn tasks_list_for_kanban(
+        &self,
+        repo_path: &str,
+        done_visible_days: i32,
+    ) -> Result<Vec<TaskCard>> {
+        let context = self.load_task_repo_context_for_kanban(repo_path, done_visible_days)?;
+        Ok(self.enrich_tasks(context.tasks))
+    }
+
     pub fn task_create(&self, repo_path: &str, mut input: CreateTaskInput) -> Result<TaskCard> {
         let mut context = self.load_task_repo_context(repo_path)?;
         if input.ai_review_enabled.is_none() {

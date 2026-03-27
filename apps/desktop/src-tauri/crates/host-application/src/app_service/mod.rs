@@ -75,7 +75,7 @@ pub(crate) use workflow_rules::{
 };
 pub use workspace_policy::{
     HookTrustConfirmationPort, HookTrustConfirmationRequest, PreparedHookTrustChallenge,
-    RepoConfigUpdate, RepoSettingsUpdate,
+    RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate,
 };
 
 #[cfg(test)]

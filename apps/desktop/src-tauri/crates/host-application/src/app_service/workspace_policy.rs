@@ -4,8 +4,8 @@ use chrono::{DateTime, Utc};
 use host_domain::WorkspaceRecord;
 use host_infra_system::{
     normalize_hook_set, normalize_repo_dev_servers, repo_script_fingerprint, AgentDefaults,
-    ChatSettings, GitTargetBranch, HookSet, PromptOverrides, RepoConfig, RepoDevServerScript,
-    RepoGitConfig,
+    ChatSettings, GitTargetBranch, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
+    RepoDevServerScript, RepoGitConfig,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -40,6 +40,16 @@ pub struct RepoSettingsUpdate {
     pub worktree_file_copies: Option<Vec<String>>,
     pub prompt_overrides: Option<PromptOverrides>,
     pub agent_defaults: Option<AgentDefaults>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WorkspaceSettingsSnapshotUpdate {
+    pub theme: String,
+    pub git: host_infra_system::GlobalGitConfig,
+    pub chat: ChatSettings,
+    pub kanban: KanbanSettings,
+    pub repos: HashMap<String, RepoConfig>,
+    pub global_prompt_overrides: PromptOverrides,
 }
 
 #[derive(Debug, Clone)]
@@ -243,14 +253,10 @@ impl AppService {
 
     pub fn workspace_save_settings_snapshot<P: HookTrustConfirmationPort + ?Sized>(
         &self,
-        theme: String,
-        git: host_infra_system::GlobalGitConfig,
-        chat: ChatSettings,
-        mut repos: HashMap<String, RepoConfig>,
-        global_prompt_overrides: PromptOverrides,
+        mut update: WorkspaceSettingsSnapshotUpdate,
         confirmation_port: &P,
     ) -> Result<Vec<WorkspaceRecord>> {
-        for (repo_path, repo_config) in repos.iter_mut() {
+        for (repo_path, repo_config) in update.repos.iter_mut() {
             let existing = self
                 .workspace_get_repo_config_optional(repo_path)?
                 .unwrap_or_default();
@@ -270,7 +276,14 @@ impl AppService {
             repo_config.trusted_hooks_fingerprint = trusted_hooks_fingerprint;
         }
 
-        self.workspace_persist_settings_snapshot(theme, git, chat, repos, global_prompt_overrides)?;
+        self.workspace_persist_settings_snapshot(
+            update.theme,
+            update.git,
+            update.chat,
+            update.kanban,
+            update.repos,
+            update.global_prompt_overrides,
+        )?;
         self.workspace_list()
     }
 
@@ -433,7 +446,7 @@ fn validate_trust_challenge_entry(
 mod tests {
     use super::{
         canonical_repo_key, normalize_hook_set, validate_trust_challenge_entry, AppService,
-        HookTrustChallenge, RepoConfigUpdate, RepoSettingsUpdate,
+        HookTrustChallenge, RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate,
     };
     use crate::app_service::test_support::{
         lock_env, set_env_var, unique_temp_path, EnvVarGuard, FakeTaskStore, TaskStoreState,
@@ -872,7 +885,7 @@ mod tests {
         );
         let confirmation = RecordingHookTrustConfirmationPort::default();
 
-        let (theme, git, mut chat, mut repos, mut global_prompt_overrides) =
+        let (theme, git, mut chat, kanban, mut repos, mut global_prompt_overrides) =
             fixture.service.workspace_get_settings_snapshot()?;
         chat.show_thinking_messages = true;
         global_prompt_overrides.insert(
@@ -895,11 +908,14 @@ mod tests {
         repo_config.trusted_hooks_fingerprint = None;
 
         fixture.service.workspace_save_settings_snapshot(
-            theme,
-            git,
-            chat,
-            repos,
-            global_prompt_overrides,
+            WorkspaceSettingsSnapshotUpdate {
+                theme,
+                git,
+                chat,
+                kanban,
+                repos,
+                global_prompt_overrides,
+            },
             &confirmation,
         )?;
 
@@ -926,17 +942,20 @@ mod tests {
         let fixture = setup_fixture("snapshot-chat-roundtrip", HookSet::default());
         let confirmation = RecordingHookTrustConfirmationPort::default();
 
-        let (theme, git, mut chat, repos, global_prompt_overrides) =
+        let (theme, git, mut chat, kanban, repos, global_prompt_overrides) =
             fixture.service.workspace_get_settings_snapshot()?;
         assert_eq!(chat, ChatSettings::default());
         chat.show_thinking_messages = true;
 
         fixture.service.workspace_save_settings_snapshot(
-            theme,
-            git,
-            chat,
-            repos,
-            global_prompt_overrides,
+            WorkspaceSettingsSnapshotUpdate {
+                theme,
+                git,
+                chat,
+                kanban,
+                repos,
+                global_prompt_overrides,
+            },
             &confirmation,
         )?;
 
@@ -944,6 +963,7 @@ mod tests {
             _persisted_theme,
             _persisted_git,
             persisted_chat,
+            _persisted_kanban,
             _persisted_repos,
             _persisted_global_prompt_overrides,
         ) = fixture.service.workspace_get_settings_snapshot()?;

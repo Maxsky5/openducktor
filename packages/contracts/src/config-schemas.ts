@@ -14,6 +14,9 @@ const DEFAULT_SOFT_GUARDRAILS = {
 const DEFAULT_CHAT_SETTINGS = {
   showThinkingMessages: false,
 } as const;
+export const DEFAULT_KANBAN_SETTINGS = {
+  doneVisibleDays: 1,
+} as const;
 const DEFAULT_THEME = "light" as const;
 
 const nullableToOptional = <T extends z.ZodTypeAny>(schema: T) =>
@@ -108,6 +111,11 @@ export const chatSettingsSchema = z.object({
 });
 export type ChatSettings = z.infer<typeof chatSettingsSchema>;
 
+export const kanbanSettingsSchema = z.object({
+  doneVisibleDays: z.number().int().min(0).default(DEFAULT_KANBAN_SETTINGS.doneVisibleDays),
+});
+export type KanbanSettings = z.infer<typeof kanbanSettingsSchema>;
+
 const themeValueSchema = z.enum(["light", "dark"]);
 
 export const themeSchema = themeValueSchema.default(DEFAULT_THEME);
@@ -119,6 +127,7 @@ export const globalConfigSchema = z.object({
   theme: themeSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
+  kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   repos: z.record(z.string(), repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
   recentRepos: z.array(z.string()).default([]),
@@ -129,6 +138,7 @@ export const settingsSnapshotSchema = z.object({
   theme: themeValueSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
+  kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   repos: z.record(z.string(), repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
 });

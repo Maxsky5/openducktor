@@ -39,9 +39,22 @@ pub(crate) fn map_task_update_payload(patch: TaskUpdatePayload) -> Result<Update
 pub async fn tasks_list(
     state: State<'_, AppState>,
     repo_path: String,
+    done_visible_days: Option<i32>,
 ) -> Result<Vec<TaskCard>, String> {
+    if let Some(days) = done_visible_days {
+        if days < 0 {
+            return Err("doneVisibleDays must be greater than or equal to 0".to_string());
+        }
+    }
+
     let service = state.service.clone();
-    let result = run_service_blocking("tasks_list", move || service.tasks_list(&repo_path)).await;
+    let result = match done_visible_days {
+        Some(days) => {
+            run_service_blocking("tasks_list", move || service.tasks_list_for_kanban(&repo_path, days))
+                .await
+        }
+        None => run_service_blocking("tasks_list", move || service.tasks_list(&repo_path)).await,
+    };
     as_error(result)
 }
 

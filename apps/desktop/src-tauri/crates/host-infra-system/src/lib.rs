@@ -13,9 +13,9 @@ pub use config::{
     hook_set_fingerprint, normalize_hook_set, normalize_repo_dev_servers, repo_script_fingerprint,
     AgentDefaults, AgentModelDefault, AppConfigStore, ChatSettings, GitMergeMethod,
     GitProviderConfig, GitProviderRepository, GitTargetBranch, GlobalConfig, GlobalGitConfig,
-    HookSet, OpencodeStartupReadinessConfig, PromptOverride, PromptOverrides, RepoConfig,
-    RepoDevServerScript, RepoGitConfig, RuntimeConfig, RuntimeConfigStore, SchedulerConfig,
-    SoftGuardrails,
+    HookSet, KanbanSettings, OpencodeStartupReadinessConfig, PromptOverride, PromptOverrides,
+    RepoConfig, RepoDevServerScript, RepoGitConfig, RuntimeConfig, RuntimeConfigStore,
+    SchedulerConfig, SoftGuardrails,
 };
 pub use git::GitCliPort;
 pub use process::{

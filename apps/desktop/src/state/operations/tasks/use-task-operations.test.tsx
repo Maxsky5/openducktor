@@ -180,6 +180,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.status === "open");
       await harness.run(async (value) => {
         await value.refreshTaskData("/repo");
       });
@@ -502,6 +503,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks.length === 1);
       tasksList.mockClear();
       runsList.mockClear();
       await harness.run(async (value) => {
@@ -563,6 +565,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => !value.isLoadingTasks);
 
       let syncPromise: Promise<void> | null = null;
       await harness.run((value) => {
@@ -652,6 +655,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks.length === 1);
       tasksList.mockClear();
       runsList.mockClear();
       await harness.run(async (value) => {
@@ -729,6 +733,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks.length === 1);
       tasksList.mockClear();
       runsList.mockClear();
       await harness.run(async (value) => {
@@ -829,6 +834,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks.length === 1);
       tasksList.mockClear();
       runsList.mockClear();
       await harness.run(async (value) => {
@@ -880,6 +886,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks.length === 1);
       tasksList.mockClear();
       runsList.mockClear();
       await harness.run(async (value) => {
@@ -966,6 +973,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks.length === 1);
       tasksList.mockClear();
       runsList.mockClear();
       await harness.run(async (value) => {
@@ -1063,6 +1071,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => !value.isLoadingTasks);
 
       let unlinkPromise: Promise<void> | null = null;
       await harness.run((value) => {
@@ -1211,6 +1220,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks.length === 1);
       tasksList.mockClear();
       runsList.mockClear();
       await harness.run(async (value) => {

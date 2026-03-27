@@ -464,6 +464,9 @@ describe("agent-orchestrator-runtime", () => {
       chat: {
         showThinkingMessages: false,
       },
+      kanban: {
+        doneVisibleDays: 1,
+      },
       repos: {},
       globalPromptOverrides: {
         "kickoff.spec_initial": {
@@ -534,6 +537,9 @@ describe("agent-orchestrator-runtime", () => {
       },
       chat: {
         showThinkingMessages: false,
+      },
+      kanban: {
+        doneVisibleDays: 1,
       },
       repos: {},
       globalPromptOverrides,

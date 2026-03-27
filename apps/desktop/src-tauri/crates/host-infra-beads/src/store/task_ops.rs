@@ -1,7 +1,53 @@
 use super::*;
+use chrono::{Duration as ChronoDuration, Utc};
 use serde::Deserialize;
 
 impl BeadsTaskStore {
+    fn append_raw_issue_list(
+        &self,
+        value: serde_json::Value,
+        metadata_namespace: &str,
+        seen_task_ids: &mut HashSet<String>,
+        tasks: &mut Vec<TaskCard>,
+    ) -> Result<()> {
+        for entry in value
+            .as_array()
+            .ok_or_else(|| anyhow!("bd list did not return an array"))?
+        {
+            let issue: RawIssue =
+                RawIssue::deserialize(entry).context("Failed to decode task from bd list")?;
+            if issue.issue_type == "event" || issue.issue_type == "gate" {
+                continue;
+            }
+
+            if !seen_task_ids.insert(issue.id.clone()) {
+                continue;
+            }
+
+            tasks.push(self.parse_task_card(issue, metadata_namespace)?);
+        }
+
+        Ok(())
+    }
+
+    fn finalize_task_cards(tasks: &mut [TaskCard]) {
+        let mut subtasks_by_parent: HashMap<String, Vec<String>> = HashMap::new();
+        for task in tasks.iter() {
+            if let Some(parent_id) = &task.parent_id {
+                subtasks_by_parent
+                    .entry(parent_id.clone())
+                    .or_default()
+                    .push(task.id.clone());
+            }
+        }
+
+        for task in tasks.iter_mut() {
+            let mut subtasks = subtasks_by_parent.remove(&task.id).unwrap_or_default();
+            subtasks.sort();
+            task.subtask_ids = subtasks;
+        }
+    }
+
     fn beads_store_footprint_exists(beads_dir: &Path) -> bool {
         beads_dir.join("dolt").exists() || beads_dir.join("beads.db").exists()
     }
@@ -124,37 +170,81 @@ impl BeadsTaskStore {
         let value = self.run_bd_json(repo_path, &["list", "--all", "--limit", "0"])?;
 
         let mut tasks = Vec::new();
-        for entry in value
-            .as_array()
-            .ok_or_else(|| anyhow!("bd list did not return an array"))?
-        {
-            let issue: RawIssue =
-                RawIssue::deserialize(entry).context("Failed to decode task from bd list")?;
-            if issue.issue_type == "event" || issue.issue_type == "gate" {
-                continue;
-            }
-            tasks.push(self.parse_task_card(issue, &metadata_namespace)?);
-        }
-
-        let mut subtasks_by_parent: HashMap<String, Vec<String>> = HashMap::new();
-        for task in &tasks {
-            if let Some(parent_id) = &task.parent_id {
-                subtasks_by_parent
-                    .entry(parent_id.clone())
-                    .or_default()
-                    .push(task.id.clone());
-            }
-        }
-
-        for task in &mut tasks {
-            let mut subtasks = subtasks_by_parent.remove(&task.id).unwrap_or_default();
-            subtasks.sort();
-            task.subtask_ids = subtasks;
-        }
+        let mut seen_task_ids = HashSet::new();
+        self.append_raw_issue_list(value, &metadata_namespace, &mut seen_task_ids, &mut tasks)?;
+        Self::finalize_task_cards(&mut tasks);
 
         self.cache_task_list_if_generation(
             &repo_key,
             &metadata_namespace,
+            cache_generation,
+            &tasks,
+        )?;
+        Ok(tasks)
+    }
+
+    pub(super) fn list_tasks_for_kanban_impl(
+        &self,
+        repo_path: &Path,
+        done_visible_days: i32,
+    ) -> Result<Vec<TaskCard>> {
+        if done_visible_days < 0 {
+            return Err(anyhow!(
+                "done_visible_days must be greater than or equal to 0"
+            ));
+        }
+
+        let metadata_namespace = self.current_metadata_namespace();
+        let repo_key = Self::repo_key(repo_path);
+        let (cached_tasks, cache_generation) = self.cached_kanban_task_list_and_generation(
+            &repo_key,
+            &metadata_namespace,
+            done_visible_days,
+        )?;
+        if let Some(tasks) = cached_tasks {
+            return Ok(tasks);
+        }
+
+        let mut tasks = Vec::new();
+        let mut seen_task_ids = HashSet::new();
+
+        self.append_raw_issue_list(
+            self.run_bd_json(repo_path, &["list", "--limit", "0"])?,
+            &metadata_namespace,
+            &mut seen_task_ids,
+            &mut tasks,
+        )?;
+
+        if done_visible_days > 0 {
+            let cutoff = Utc::now()
+                .checked_sub_signed(ChronoDuration::days(i64::from(done_visible_days)))
+                .ok_or_else(|| anyhow!("done_visible_days causes datetime underflow"))?
+                .format("%Y-%m-%d")
+                .to_string();
+            self.append_raw_issue_list(
+                self.run_bd_json(
+                    repo_path,
+                    &[
+                        "list",
+                        "--status",
+                        "closed",
+                        "--closed-after",
+                        cutoff.as_str(),
+                        "--limit",
+                        "0",
+                    ],
+                )?,
+                &metadata_namespace,
+                &mut seen_task_ids,
+                &mut tasks,
+            )?;
+        }
+
+        Self::finalize_task_cards(&mut tasks);
+        self.cache_kanban_task_list_if_generation(
+            &repo_key,
+            &metadata_namespace,
+            done_visible_days,
             cache_generation,
             &tasks,
         )?;

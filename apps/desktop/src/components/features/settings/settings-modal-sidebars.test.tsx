@@ -11,6 +11,7 @@ describe("settings modal sidebars", () => {
       repositories: 0,
       prompts: 0,
       chat: 0,
+      kanban: 0,
     };
 
     const html = renderToStaticMarkup(
@@ -27,6 +28,7 @@ describe("settings modal sidebars", () => {
     expect(html).toContain("Repositories");
     expect(html).toContain("Prompts");
     expect(html).toContain("Chat");
+    expect(html).toContain("Kanban");
   });
 
   test("renders chat section as active when selected", () => {
@@ -36,6 +38,7 @@ describe("settings modal sidebars", () => {
       repositories: 0,
       prompts: 0,
       chat: 0,
+      kanban: 0,
     };
 
     const html = renderToStaticMarkup(
@@ -48,6 +51,7 @@ describe("settings modal sidebars", () => {
     );
 
     expect(html).toContain("Chat");
+    expect(html).toContain("Kanban");
   });
 
   test("disables all buttons when disabled prop is true", () => {
@@ -57,6 +61,7 @@ describe("settings modal sidebars", () => {
       repositories: 0,
       prompts: 0,
       chat: 0,
+      kanban: 0,
     };
 
     const html = renderToStaticMarkup(
@@ -69,6 +74,7 @@ describe("settings modal sidebars", () => {
     );
 
     expect(html).toContain("disabled");
+    expect(html).toContain("Kanban");
   });
 
   test("displays error count for chat section when errors exist", () => {
@@ -78,6 +84,7 @@ describe("settings modal sidebars", () => {
       repositories: 0,
       prompts: 0,
       chat: 2,
+      kanban: 0,
     };
 
     const html = renderToStaticMarkup(
@@ -90,6 +97,7 @@ describe("settings modal sidebars", () => {
     );
 
     expect(html).toContain("Chat");
+    expect(html).toContain("Kanban");
     expect(html).toContain("2");
   });
 });

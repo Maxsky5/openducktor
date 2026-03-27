@@ -22,6 +22,9 @@ const createInitialSnapshot = (): SettingsSnapshot => ({
   chat: {
     showThinkingMessages: false,
   },
+  kanban: {
+    doneVisibleDays: 1,
+  },
   globalPromptOverrides: {},
   repos: {
     "/repo-a": {
@@ -118,6 +121,27 @@ describe("useSettingsModalDraftActions", () => {
     expect(snapshot?.chat.showThinkingMessages).toBe(true);
     expect(snapshot?.git.defaultMergeMethod).toBe("merge_commit");
     expect(snapshot?.repos["/repo-a"]?.branchPrefix).toBe("obp");
+
+    await harness.unmount();
+  });
+
+  test("updates global kanban settings without touching unrelated sections", async () => {
+    const harness = createHookHarness({
+      selectedRepoPath: "/repo-a",
+      initialSnapshot: createInitialSnapshot(),
+    });
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.updateGlobalKanbanSettings((kanban) => ({
+        ...kanban,
+        doneVisibleDays: 7,
+      }));
+    });
+
+    const snapshot = harness.getLatest().snapshotDraft;
+    expect(snapshot?.kanban.doneVisibleDays).toBe(7);
+    expect(snapshot?.chat.showThinkingMessages).toBe(false);
 
     await harness.unmount();
   });

@@ -455,6 +455,9 @@ describe("TauriHostClient", () => {
           chat: {
             showThinkingMessages: false,
           },
+          kanban: {
+            doneVisibleDays: 1,
+          },
           repos: {
             "/repo": {
               defaultRuntimeKind: "opencode",
@@ -513,6 +516,9 @@ describe("TauriHostClient", () => {
       chat: {
         showThinkingMessages: false,
       },
+      kanban: {
+        doneVisibleDays: 1,
+      },
       repos: {
         "/repo": {
           defaultRuntimeKind: "opencode",
@@ -543,6 +549,9 @@ describe("TauriHostClient", () => {
             },
             chat: {
               showThinkingMessages: false,
+            },
+            kanban: {
+              doneVisibleDays: 1,
             },
             repos: {
               "/repo": {

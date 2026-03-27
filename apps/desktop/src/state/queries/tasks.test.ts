@@ -3,6 +3,8 @@ import type { AgentSessionRecord, RunSummary, TaskCard } from "@openducktor/cont
 import { QueryClient } from "@tanstack/react-query";
 import { taskQueryKeys, upsertAgentSessionInRepoTaskData } from "./tasks";
 
+const DONE_VISIBLE_DAYS = 1;
+
 const taskFixture: TaskCard = {
   id: "task-1",
   title: "Task",
@@ -48,6 +50,9 @@ describe("tasks query cache helpers", () => {
       tasks: [taskFixture],
       runs: [] satisfies RunSummary[],
     });
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS), [
+      taskFixture,
+    ] satisfies TaskCard[]);
 
     upsertAgentSessionInRepoTaskData(queryClient, "/repo", "task-1", sessionFixture);
 
@@ -55,8 +60,12 @@ describe("tasks query cache helpers", () => {
       tasks: TaskCard[];
       runs: RunSummary[];
     }>(taskQueryKeys.repoData("/repo"));
+    const kanbanTasks = queryClient.getQueryData<TaskCard[]>(
+      taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS),
+    );
 
     expect(repoTaskData?.tasks[0]?.agentSessions).toEqual([sessionFixture]);
+    expect(kanbanTasks?.[0]?.agentSessions).toEqual([sessionFixture]);
   });
 
   test("upsertAgentSessionInRepoTaskData replaces the existing persisted session for the same id", () => {
@@ -70,6 +79,12 @@ describe("tasks query cache helpers", () => {
       ],
       runs: [] satisfies RunSummary[],
     });
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS), [
+      {
+        ...taskFixture,
+        agentSessions: [sessionFixture],
+      },
+    ] satisfies TaskCard[]);
 
     const updatedSession: AgentSessionRecord = {
       ...sessionFixture,
@@ -82,7 +97,11 @@ describe("tasks query cache helpers", () => {
       tasks: TaskCard[];
       runs: RunSummary[];
     }>(taskQueryKeys.repoData("/repo"));
+    const kanbanTasks = queryClient.getQueryData<TaskCard[]>(
+      taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS),
+    );
 
     expect(repoTaskData?.tasks[0]?.agentSessions).toEqual([updatedSession]);
+    expect(kanbanTasks?.[0]?.agentSessions).toEqual([updatedSession]);
   });
 });

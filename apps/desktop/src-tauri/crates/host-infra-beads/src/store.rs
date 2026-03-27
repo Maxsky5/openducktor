@@ -29,7 +29,7 @@ mod namespace;
 mod session_ops;
 mod task_ops;
 
-use cache::TaskListCacheState;
+use cache::{KanbanTaskListCacheState, TaskListCacheState};
 
 pub struct BeadsTaskStore {
     pub(crate) command_runner: Arc<dyn CommandRunner>,
@@ -37,6 +37,7 @@ pub struct BeadsTaskStore {
     pub(crate) init_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     pub(crate) initialized_repos: Mutex<HashSet<String>>,
     task_list_cache: Mutex<HashMap<String, TaskListCacheState>>,
+    kanban_task_list_cache: Mutex<HashMap<String, KanbanTaskListCacheState>>,
 }
 
 impl fmt::Debug for BeadsTaskStore {
@@ -75,6 +76,7 @@ impl BeadsTaskStore {
             init_locks: Mutex::new(HashMap::new()),
             initialized_repos: Mutex::new(HashSet::new()),
             task_list_cache: Mutex::new(HashMap::new()),
+            kanban_task_list_cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -94,6 +96,14 @@ impl TaskStore for BeadsTaskStore {
 
     fn list_tasks(&self, repo_path: &Path) -> Result<Vec<TaskCard>> {
         self.list_tasks_impl(repo_path)
+    }
+
+    fn list_tasks_for_kanban(
+        &self,
+        repo_path: &Path,
+        done_visible_days: i32,
+    ) -> Result<Vec<TaskCard>> {
+        self.list_tasks_for_kanban_impl(repo_path, done_visible_days)
     }
 
     fn create_task(&self, repo_path: &Path, input: CreateTaskInput) -> Result<TaskCard> {
