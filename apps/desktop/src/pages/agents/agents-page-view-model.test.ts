@@ -294,6 +294,7 @@ describe("agents-page-view-model", () => {
       onToggleTodoPanel,
       todoPanelBottomOffset: 12,
       messagesContainerRef: { current: null },
+      scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
       input: "message",
       isReadOnly: false,
       readOnlyReason: null,

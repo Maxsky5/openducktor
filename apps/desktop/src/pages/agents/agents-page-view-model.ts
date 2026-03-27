@@ -129,6 +129,7 @@ type AgentChatThreadModelArgs = {
   onToggleTodoPanel: () => void;
   todoPanelBottomOffset: number;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
+  scrollToBottomOnSendRef: React.MutableRefObject<(() => void) | null>;
 };
 
 type AgentChatComposerModelArgs = {
@@ -161,6 +162,7 @@ type AgentChatComposerModelArgs = {
   composerFormRef: RefObject<HTMLFormElement | null>;
   composerTextareaRef: RefObject<HTMLTextAreaElement | null>;
   onComposerTextareaInput: () => void;
+  scrollToBottomOnSendRef: AgentChatModel["composer"]["scrollToBottomOnSendRef"];
 };
 
 export const buildAgentChatThreadModel = (
@@ -190,6 +192,7 @@ export const buildAgentChatThreadModel = (
   onToggleTodoPanel: args.onToggleTodoPanel,
   todoPanelBottomOffset: args.todoPanelBottomOffset,
   messagesContainerRef: args.messagesContainerRef,
+  scrollToBottomOnSendRef: args.scrollToBottomOnSendRef,
 });
 
 export const buildAgentChatComposerModel = (
@@ -224,6 +227,7 @@ export const buildAgentChatComposerModel = (
   composerFormRef: args.composerFormRef,
   composerTextareaRef: args.composerTextareaRef,
   onComposerTextareaInput: args.onComposerTextareaInput,
+  scrollToBottomOnSendRef: args.scrollToBottomOnSendRef,
 });
 
 export const buildAgentChatModel = (

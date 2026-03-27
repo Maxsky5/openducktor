@@ -42,6 +42,7 @@ const baseModel = {
   onToggleTodoPanel: () => {},
   todoPanelBottomOffset: 120,
   messagesContainerRef: createRef<HTMLDivElement>(),
+  scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
 } as const;
 
 const flush = async (): Promise<void> => {

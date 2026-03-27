@@ -33,6 +33,7 @@ const buildModel = () => ({
     onToggleTodoPanel: () => {},
     todoPanelBottomOffset: 120,
     messagesContainerRef: createRef<HTMLDivElement>(),
+    scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
   },
   composer: {
     taskId: "task-1",
@@ -67,6 +68,7 @@ const buildModel = () => ({
     composerFormRef: createRef<HTMLFormElement>(),
     composerTextareaRef: createRef<HTMLTextAreaElement>(),
     onComposerTextareaInput: () => {},
+    scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
   },
 });
 

@@ -114,6 +114,7 @@ type UseAgentStudioThreadModelArgs = {
   onToggleTodoPanel: () => void;
   todoPanelBottomOffset: number;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
+  scrollToBottomOnSendRef: React.MutableRefObject<(() => void) | null>;
 };
 
 export const useAgentStudioThreadModel = ({
@@ -141,6 +142,7 @@ export const useAgentStudioThreadModel = ({
   onToggleTodoPanel,
   todoPanelBottomOffset,
   messagesContainerRef,
+  scrollToBottomOnSendRef,
 }: UseAgentStudioThreadModelArgs): ReturnType<typeof buildAgentChatThreadModel> => {
   const handleRefreshChecks = useCallback((): void => {
     void refreshChecks();
@@ -184,6 +186,7 @@ export const useAgentStudioThreadModel = ({
         onToggleTodoPanel,
         todoPanelBottomOffset,
         messagesContainerRef,
+        scrollToBottomOnSendRef,
       }),
     [
       activeSessionAgentColors,
@@ -203,6 +206,7 @@ export const useAgentStudioThreadModel = ({
       messagesContainerRef,
       onSubmitQuestionAnswers,
       permissionReplyErrorByRequestId,
+      scrollToBottomOnSendRef,
       selectedRoleAvailable,
       showThinkingMessages,
       taskId,
@@ -243,6 +247,7 @@ type UseAgentStudioComposerModelArgs = {
   composerFormRef: RefObject<HTMLFormElement | null>;
   composerTextareaRef: RefObject<HTMLTextAreaElement | null>;
   resizeComposerTextarea: () => void;
+  scrollToBottomOnSendRef: AgentChatModel["composer"]["scrollToBottomOnSendRef"];
 };
 
 export const useAgentStudioComposerModel = ({
@@ -274,6 +279,7 @@ export const useAgentStudioComposerModel = ({
   composerFormRef,
   composerTextareaRef,
   resizeComposerTextarea,
+  scrollToBottomOnSendRef,
 }: UseAgentStudioComposerModelArgs): ReturnType<typeof buildAgentChatComposerModel> => {
   const isModelSelectionPending = Boolean(
     activeSession?.isLoadingModelCatalog && !activeSession?.selectedModel,
@@ -285,7 +291,8 @@ export const useAgentStudioComposerModel = ({
 
   const handleSend = useCallback((): void => {
     void onSend();
-  }, [onSend]);
+    scrollToBottomOnSendRef.current?.();
+  }, [onSend, scrollToBottomOnSendRef]);
 
   const handleStopSession = useCallback((): void => {
     if (!activeSessionId) {
@@ -326,6 +333,7 @@ export const useAgentStudioComposerModel = ({
         composerFormRef,
         composerTextareaRef,
         onComposerTextareaInput: resizeComposerTextarea,
+        scrollToBottomOnSendRef,
       }),
     [
       activeSessionAgentColors,
@@ -351,6 +359,7 @@ export const useAgentStudioComposerModel = ({
       onSelectModel,
       onSelectVariant,
       resizeComposerTextarea,
+      scrollToBottomOnSendRef,
       selectedModelSelection,
       selectedRoleAvailable,
       selectedRoleReadOnlyReason,

@@ -21,6 +21,7 @@ type UseAgentChatScrollControllerResult = {
   hasPendingScrollRequest: () => boolean;
   captureScrollAnchor: (rowKey: string) => void;
   syncBottomIfPinned: () => void;
+  scrollToBottomOnSend: () => void;
   requestWindowScroll: (request: PendingScrollRequest) => void;
   applyPendingScrollRequest: () => void;
   setBottomAnchoredState: (windowStart: number) => void;
@@ -267,6 +268,21 @@ export function useAgentChatScrollController({
     setIsNearTop(true);
   }, []);
 
+  /**
+   * Immediately scrolls the messages container to the bottom when the user sends a message.
+   * Cancels any in-flight auto-follow animation to prevent the animation from overriding
+   * the instant scroll position.
+   */
+  const scrollToBottomOnSend = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    cancelScrollAnimation(true);
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: "instant",
+    });
+  }, [cancelScrollAnimation, messagesContainerRef]);
+
   // Intentionally runs after every render so a pending anchor captured in refs
   // is applied on the next commit regardless of which state update caused it.
   useLayoutEffect(() => {
@@ -339,6 +355,7 @@ export function useAgentChatScrollController({
     hasPendingScrollRequest: () => pendingScrollRequestRef.current !== null,
     captureScrollAnchor,
     syncBottomIfPinned,
+    scrollToBottomOnSend,
     requestWindowScroll,
     applyPendingScrollRequest,
     setBottomAnchoredState,
