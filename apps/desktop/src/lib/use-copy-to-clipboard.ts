@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getClipboardErrorMessage } from "@/lib/clipboard";
 
@@ -27,24 +27,29 @@ export function useCopyToClipboard({
   errorLogContext,
 }: UseCopyToClipboardOptions = {}): UseCopyToClipboardResult {
   const [copied, setCopied] = useState(false);
+  const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!copied) {
-      return;
-    }
-    const timeoutId = setTimeout(() => {
-      setCopied(false);
-    }, resetDelayMs);
     return () => {
-      clearTimeout(timeoutId);
+      if (resetTimeoutRef.current) {
+        clearTimeout(resetTimeoutRef.current);
+        resetTimeoutRef.current = null;
+      }
     };
-  }, [copied, resetDelayMs]);
+  }, []);
 
   const copyToClipboard = useCallback(
     async (value: string): Promise<boolean> => {
       try {
         await navigator.clipboard.writeText(value);
+        if (resetTimeoutRef.current) {
+          clearTimeout(resetTimeoutRef.current);
+        }
         setCopied(true);
+        resetTimeoutRef.current = setTimeout(() => {
+          setCopied(false);
+          resetTimeoutRef.current = null;
+        }, resetDelayMs);
         const description = getSuccessDescription?.(value);
         if (description) {
           toast.success(successMessage, { description });
@@ -62,7 +67,7 @@ export function useCopyToClipboard({
         return false;
       }
     },
-    [copyFailedMessage, errorLogContext, getSuccessDescription, successMessage],
+    [copyFailedMessage, errorLogContext, getSuccessDescription, resetDelayMs, successMessage],
   );
 
   return {

@@ -18,6 +18,7 @@ type TaskDetailsMarkdownContentProps = {
   empty: string;
   active: boolean;
   copyableMarkdown?: string;
+  copyResetDelayMs?: number;
 };
 
 const LARGE_MARKDOWN_DEFER_THRESHOLD = 2000;
@@ -91,8 +92,13 @@ function DeferredTaskDetailsMarkdown({
   }
 
   return (
-    <div className="relative max-h-84 overflow-y-auto">
-      <TaskDetailsRenderedMarkdown markdown={markdown} hasLabeledCodeFence={hasLabeledCodeFence} />
+    <div className="relative">
+      <div className="max-h-84 overflow-y-auto">
+        <TaskDetailsRenderedMarkdown
+          markdown={markdown}
+          hasLabeledCodeFence={hasLabeledCodeFence}
+        />
+      </div>
       {copyableMarkdown ? <TaskDetailsCopyButton copied={copied} onClick={onCopy} /> : null}
     </div>
   );
@@ -113,7 +119,7 @@ function TaskDetailsCopyButton({
             type="button"
             variant="outline"
             size="icon"
-            className="absolute top-2 right-2 size-7 text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="absolute top-2 right-2 z-10 size-7 text-muted-foreground hover:bg-accent hover:text-foreground"
             aria-label="Copy document content"
             data-testid="copy-document-content"
             onClick={onClick}
@@ -145,9 +151,11 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
   empty,
   active,
   copyableMarkdown,
+  copyResetDelayMs,
 }: TaskDetailsMarkdownContentProps): ReactElement {
   const { copied, copyToClipboard } = useCopyToClipboard({
     getSuccessDescription: buildCopyPreview,
+    ...(copyResetDelayMs === undefined ? {} : { resetDelayMs: copyResetDelayMs }),
     errorLogContext: "TaskDetailsMarkdownContent",
   });
   const hasContent = /\S/.test(markdown);
@@ -189,8 +197,13 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
   }
 
   return (
-    <div className="relative max-h-84 overflow-y-auto">
-      <TaskDetailsRenderedMarkdown markdown={markdown} hasLabeledCodeFence={hasLabeledCodeFence} />
+    <div className="relative">
+      <div className="max-h-84 overflow-y-auto">
+        <TaskDetailsRenderedMarkdown
+          markdown={markdown}
+          hasLabeledCodeFence={hasLabeledCodeFence}
+        />
+      </div>
       {copyableMarkdown ? <TaskDetailsCopyButton copied={copied} onClick={handleCopy} /> : null}
     </div>
   );

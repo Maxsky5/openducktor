@@ -11,13 +11,15 @@ type TaskIdBadgeProps = {
   iconSize?: number;
 };
 
+const getTaskIdDescription = (value: string): string => value;
+
 function TaskIdBadgeComponent({
   taskId,
   className,
   iconSize = 12,
 }: TaskIdBadgeProps): ReactElement {
   const { copied, copyToClipboard } = useCopyToClipboard({
-    getSuccessDescription: (value) => value,
+    getSuccessDescription: getTaskIdDescription,
     errorLogContext: "TaskIdBadge",
   });
 

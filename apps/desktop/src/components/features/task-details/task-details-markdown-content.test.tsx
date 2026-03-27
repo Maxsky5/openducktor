@@ -144,41 +144,34 @@ describe("TaskDetailsMarkdownContent", () => {
   });
 
   test("shows check icon for two seconds after successful copy", async () => {
-    const originalSetTimeout = globalThis.setTimeout;
-    const acceleratedSetTimeout = ((
-      handler: TimerHandler,
-      _timeout?: number,
-      ...args: unknown[]
-    ): number => {
-      return originalSetTimeout(handler, 1, ...args);
-    }) as typeof globalThis.setTimeout;
-    globalThis.setTimeout = acceleratedSetTimeout;
-
     const rendered = render(
       createElement(TaskDetailsMarkdownContent, {
         markdown: "# Spec",
         empty: "No doc",
         active: true,
         copyableMarkdown: "# Spec",
+        copyResetDelayMs: 5,
       }),
     );
 
-    const button = rendered.getByTestId("copy-document-content");
-    expect(button.querySelector(".lucide-copy")).not.toBeNull();
-
-    fireEvent.click(button);
-
-    await waitFor(() => {
-      expect(button.querySelector(".lucide-check")).not.toBeNull();
-    });
-
     try {
+      const button = rendered.getByTestId("copy-document-content");
+      expect(button.querySelector(".lucide-copy")).not.toBeNull();
+
+      fireEvent.click(button);
+
       await waitFor(() => {
-        expect(button.querySelector(".lucide-copy")).not.toBeNull();
+        expect(button.querySelector(".lucide-check")).not.toBeNull();
       });
-      rendered.unmount();
+
+      await waitFor(
+        () => {
+          expect(button.querySelector(".lucide-copy")).not.toBeNull();
+        },
+        { timeout: 200 },
+      );
     } finally {
-      globalThis.setTimeout = originalSetTimeout;
+      rendered.unmount();
     }
   });
 });
