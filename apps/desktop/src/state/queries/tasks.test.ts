@@ -1,7 +1,14 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord, RunSummary, TaskCard } from "@openducktor/contracts";
-import { QueryClient } from "@tanstack/react-query";
-import { taskQueryKeys, upsertAgentSessionInRepoTaskData } from "./tasks";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import { hostClient as host } from "@/lib/host-client";
+import {
+  invalidateRepoTaskQueries,
+  kanbanTaskListQueryOptions,
+  refetchActiveKanbanQueries,
+  taskQueryKeys,
+  upsertAgentSessionInRepoTaskData,
+} from "./tasks";
 
 const DONE_VISIBLE_DAYS = 1;
 
@@ -44,6 +51,12 @@ const sessionFixture: AgentSessionRecord = {
 };
 
 describe("tasks query cache helpers", () => {
+  const originalTasksList = host.tasksList;
+
+  afterEach(() => {
+    host.tasksList = originalTasksList;
+  });
+
   test("upsertAgentSessionInRepoTaskData inserts a persisted session into the repo task cache", () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
@@ -103,5 +116,103 @@ describe("tasks query cache helpers", () => {
 
     expect(repoTaskData?.tasks[0]?.agentSessions).toEqual([updatedSession]);
     expect(kanbanTasks?.[0]?.agentSessions).toEqual([updatedSession]);
+  });
+
+  test("refetchActiveKanbanQueries refreshes only active kanban queries for the target repo", async () => {
+    const queryClient = new QueryClient();
+    let repoACallCount = 0;
+    let repoBCallCount = 0;
+    const tasksList = mock(
+      async (repoPath: string, doneVisibleDays?: number): Promise<TaskCard[]> => {
+        if (doneVisibleDays !== DONE_VISIBLE_DAYS) {
+          throw new Error(`Unexpected doneVisibleDays: ${doneVisibleDays}`);
+        }
+
+        if (repoPath === "/repo-a") {
+          repoACallCount += 1;
+          return [
+            {
+              ...taskFixture,
+              id: `repo-a-${repoACallCount}`,
+              title: `repo-a-${repoACallCount}`,
+            },
+          ];
+        }
+
+        if (repoPath === "/repo-b") {
+          repoBCallCount += 1;
+          return [
+            {
+              ...taskFixture,
+              id: `repo-b-${repoBCallCount}`,
+              title: `repo-b-${repoBCallCount}`,
+            },
+          ];
+        }
+
+        throw new Error(`Unexpected repo path: ${repoPath}`);
+      },
+    );
+
+    host.tasksList = tasksList;
+
+    const repoAObserver = new QueryObserver(queryClient, kanbanTaskListQueryOptions("/repo-a", 1));
+    const repoBObserver = new QueryObserver(queryClient, kanbanTaskListQueryOptions("/repo-b", 1));
+    const unsubscribeRepoA = repoAObserver.subscribe(() => {});
+    const unsubscribeRepoB = repoBObserver.subscribe(() => {});
+
+    try {
+      await repoAObserver.refetch();
+      await repoBObserver.refetch();
+      const initialRepoBTaskId = queryClient.getQueryData<TaskCard[]>(
+        taskQueryKeys.kanbanData("/repo-b", 1),
+      )?.[0]?.id;
+      tasksList.mockClear();
+
+      await invalidateRepoTaskQueries(queryClient, "/repo-a");
+
+      expect(queryClient.getQueryState(taskQueryKeys.kanbanData("/repo-a", 1))?.isInvalidated).toBe(
+        true,
+      );
+      expect(queryClient.getQueryState(taskQueryKeys.kanbanData("/repo-b", 1))?.isInvalidated).toBe(
+        false,
+      );
+
+      await refetchActiveKanbanQueries(queryClient, "/repo-a");
+
+      expect(tasksList).toHaveBeenCalledTimes(1);
+      expect(tasksList).toHaveBeenCalledWith("/repo-a", 1);
+      expect(
+        queryClient.getQueryData<TaskCard[]>(taskQueryKeys.kanbanData("/repo-a", 1))?.[0]?.id,
+      ).toBe("repo-a-2");
+      expect(
+        queryClient.getQueryData<TaskCard[]>(taskQueryKeys.kanbanData("/repo-b", 1))?.[0]?.id,
+      ).toBe(initialRepoBTaskId);
+      expect(
+        queryClient.getQueryState(taskQueryKeys.kanbanData("/repo-a", 1))?.isInvalidated ?? false,
+      ).toBe(false);
+    } finally {
+      unsubscribeRepoA();
+      unsubscribeRepoB();
+    }
+  });
+
+  test("inactive kanban queries stay invalidated until they become active again", async () => {
+    const queryClient = new QueryClient();
+    const tasksList = mock(async (): Promise<TaskCard[]> => [taskFixture]);
+    host.tasksList = tasksList;
+
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS), [taskFixture]);
+
+    await invalidateRepoTaskQueries(queryClient, "/repo");
+    tasksList.mockClear();
+
+    await refetchActiveKanbanQueries(queryClient, "/repo");
+
+    expect(tasksList).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryState(taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS))
+        ?.isInvalidated,
+    ).toBe(true);
   });
 });
