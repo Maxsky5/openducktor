@@ -57,7 +57,12 @@ export const TaskDetailsDocumentSection = memo(
               </div>
             }
           >
-            <TaskDetailsMarkdownContent active={isExpanded} markdown={markdown} empty={empty} />
+            <TaskDetailsMarkdownContent
+              active={isExpanded}
+              markdown={markdown}
+              empty={empty}
+              copyableMarkdown={markdown}
+            />
           </Suspense>
         )}
       </TaskDetailsCollapsibleCard>
