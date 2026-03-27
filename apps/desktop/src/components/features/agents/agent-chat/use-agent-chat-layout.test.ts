@@ -4,7 +4,6 @@ import {
   COMPOSER_TEXTAREA_MAX_HEIGHT_PX,
   COMPOSER_TEXTAREA_MIN_HEIGHT_PX,
   computeComposerTextareaLayout,
-  computeTodoPanelBottomOffset,
   resizeComposerTextareaElement,
   useAgentChatLayout,
 } from "./use-agent-chat-layout";
@@ -13,7 +12,6 @@ type LayoutHookState = {
   messagesContainerRef: { current: HTMLDivElement | null };
   composerFormRef: { current: HTMLFormElement | null };
   composerTextareaRef: { current: HTMLTextAreaElement | null };
-  todoPanelBottomOffset: number;
   resizeComposerTextarea: () => void;
 };
 
@@ -23,13 +21,7 @@ type LayoutHookState = {
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const originalResizeObserver = globalThis.ResizeObserver;
-
 describe("use-agent-chat-layout helpers", () => {
-  afterEach(() => {
-    globalThis.ResizeObserver = originalResizeObserver;
-  });
-
   test("clamps textarea layout to minimum height", () => {
     expect(computeComposerTextareaLayout(10)).toEqual({
       heightPx: COMPOSER_TEXTAREA_MIN_HEIGHT_PX,
@@ -42,11 +34,6 @@ describe("use-agent-chat-layout helpers", () => {
       heightPx: COMPOSER_TEXTAREA_MAX_HEIGHT_PX,
       overflowY: "auto",
     });
-  });
-
-  test("anchors todo panel with a fixed offset from the thread bottom", () => {
-    expect(computeTodoPanelBottomOffset(40)).toBe(12);
-    expect(computeTodoPanelBottomOffset(180)).toBe(12);
   });
 
   test("resizeComposerTextareaElement avoids transient collapse when the target height is unchanged", () => {
@@ -103,7 +90,7 @@ describe("use-agent-chat-layout helpers", () => {
     expect(styleState.overflowY).toBe("hidden");
   });
 
-  test("returns stable refs and offset state for the layout hook", async () => {
+  test("returns stable refs for the layout hook", async () => {
     const harness = createSharedHookHarness(
       ({ activeSessionId, input }: { activeSessionId: string | null; input: string }) => {
         return useAgentChatLayout({ activeSessionId, input });
@@ -115,7 +102,6 @@ describe("use-agent-chat-layout helpers", () => {
 
     const initialState = harness.getLatest() as LayoutHookState;
 
-    expect(initialState.todoPanelBottomOffset).toBe(12);
     expect(initialState.messagesContainerRef.current).toBeNull();
     expect(initialState.composerFormRef.current).toBeNull();
     expect(initialState.composerTextareaRef.current).toBeNull();
@@ -124,8 +110,7 @@ describe("use-agent-chat-layout helpers", () => {
     await harness.update({ activeSessionId: "session-2", input: "draft" });
 
     const updatedState = harness.getLatest() as LayoutHookState;
-
-    expect(updatedState.todoPanelBottomOffset).toBe(12);
+    expect(updatedState.messagesContainerRef).toBe(initialState.messagesContainerRef);
 
     await harness.unmount();
   });

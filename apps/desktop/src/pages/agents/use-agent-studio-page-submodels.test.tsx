@@ -12,6 +12,7 @@ type HookArgs = Parameters<typeof useAgentStudioThreadModel>[0];
 
 const createHookArgs = (showThinkingMessages = false): HookArgs => ({
   threadSession: null,
+  isSessionWorking: false,
   showThinkingMessages,
   isContextSwitching: false,
   taskId: "task-1",
@@ -33,7 +34,6 @@ const createHookArgs = (showThinkingMessages = false): HookArgs => ({
   onReplyPermission: async () => {},
   todoPanelCollapsed: false,
   onToggleTodoPanel: () => {},
-  todoPanelBottomOffset: 0,
   messagesContainerRef: createRef<HTMLDivElement>(),
   scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
 });
@@ -50,6 +50,18 @@ describe("useAgentStudioThreadModel", () => {
 
     await harness.update(createHookArgs(false));
     expect(harness.getLatest().showThinkingMessages).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("forwards isSessionWorking into the thread model", async () => {
+    const harness = createHookHarness({
+      ...createHookArgs(false),
+      isSessionWorking: true,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest().isSessionWorking).toBe(true);
 
     await harness.unmount();
   });

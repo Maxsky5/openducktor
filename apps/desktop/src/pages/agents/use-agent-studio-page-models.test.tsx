@@ -202,6 +202,7 @@ describe("useAgentStudioPageModels", () => {
       totalTokens: 12,
       contextWindow: 100,
     });
+    expect(state.agentChatModel.thread.isSessionWorking).toBe(true);
     expect(state.agentChatModel.thread.showThinkingMessages).toBe(false);
 
     state.agentChatModel.thread.onRefreshChecks();
@@ -395,12 +396,12 @@ describe("useAgentStudioPageModels", () => {
     );
 
     await harness.mount();
-    expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(false);
+    expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(true);
 
     await harness.run((state) => {
       state.agentChatModel.thread.onToggleTodoPanel();
     });
-    expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(true);
+    expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(false);
 
     await harness.update(
       createHookArgs({
@@ -412,12 +413,12 @@ describe("useAgentStudioPageModels", () => {
         },
       }),
     );
-    expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(false);
+    expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(true);
 
     await harness.run((state) => {
       state.agentChatModel.thread.onToggleTodoPanel();
     });
-    expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(true);
+    expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(false);
 
     await harness.update(
       createHookArgs({
@@ -429,7 +430,7 @@ describe("useAgentStudioPageModels", () => {
         },
       }),
     );
-    expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(true);
+    expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(false);
 
     await harness.unmount();
   });
@@ -493,7 +494,7 @@ describe("useAgentStudioPageModels", () => {
     const nextState = harness.getLatest();
     expect(nextState.agentChatModel.thread).not.toBe(initialThreadModel);
     expect(nextState.agentChatModel.composer).toBe(initialComposerModel);
-    expect(nextState.agentChatModel.thread.todoPanelCollapsed).toBe(true);
+    expect(nextState.agentChatModel.thread.todoPanelCollapsed).toBe(false);
 
     await harness.unmount();
   });

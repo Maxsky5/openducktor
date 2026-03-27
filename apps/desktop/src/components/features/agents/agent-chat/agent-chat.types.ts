@@ -13,6 +13,7 @@ export type AgentRoleOption = {
 
 export type AgentChatThreadModel = {
   session: AgentSessionState | null;
+  isSessionWorking: boolean;
   showThinkingMessages: boolean;
   isSessionViewLoading: boolean;
   roleOptions: AgentRoleOption[];
@@ -34,7 +35,6 @@ export type AgentChatThreadModel = {
   onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
-  todoPanelBottomOffset: number;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   scrollToBottomOnSendRef: MutableRefObject<(() => void) | null>;
 };

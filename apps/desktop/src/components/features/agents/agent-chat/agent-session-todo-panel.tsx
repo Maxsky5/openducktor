@@ -1,21 +1,37 @@
 import type { AgentSessionTodoItem } from "@openducktor/core";
-import { CheckCircle2, ChevronDown, ChevronUp, Circle, ListTodo, LoaderCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Circle,
+  CircleDotDashed,
+  ListTodo,
+  LoaderCircle,
+} from "lucide-react";
 import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
 
 type AgentSessionTodoPanelProps = {
   todos: AgentSessionTodoItem[];
   collapsed: boolean;
+  isSessionWorking: boolean;
   onToggleCollapse: () => void;
   className?: string;
 };
 
-const statusIcon = (status: AgentSessionTodoItem["status"]): ReactElement => {
+const statusIcon = (
+  status: AgentSessionTodoItem["status"],
+  isSessionWorking: boolean,
+): ReactElement => {
   if (status === "completed") {
     return <CheckCircle2 className="size-3.5 text-success-accent" />;
   }
   if (status === "in_progress") {
-    return <LoaderCircle className="size-3.5 animate-spin text-primary" />;
+    return isSessionWorking ? (
+      <LoaderCircle className="size-3.5 animate-spin text-primary" />
+    ) : (
+      <CircleDotDashed className="size-3.5 text-primary" />
+    );
   }
   return <Circle className="size-3.5 text-muted-foreground" />;
 };
@@ -23,6 +39,7 @@ const statusIcon = (status: AgentSessionTodoItem["status"]): ReactElement => {
 export function AgentSessionTodoPanel({
   todos,
   collapsed,
+  isSessionWorking,
   onToggleCollapse,
   className,
 }: AgentSessionTodoPanelProps): ReactElement | null {
@@ -31,69 +48,60 @@ export function AgentSessionTodoPanel({
     return null;
   }
 
-  const hasActiveTodos = visibleTodos.some(
-    (todo) => todo.status === "in_progress" || todo.status === "pending",
-  );
-  if (!hasActiveTodos) {
-    return null;
-  }
-
-  const activeTodo =
+  const actionableTodo =
     visibleTodos.find((todo) => todo.status === "in_progress") ??
     visibleTodos.find((todo) => todo.status === "pending") ??
-    visibleTodos[0];
-  if (!activeTodo) {
+    null;
+  if (!actionableTodo) {
     return null;
   }
   const completedCount = visibleTodos.filter((todo) => todo.status === "completed").length;
+  const toggleLabel = collapsed ? "Expand todo list" : "Collapse todo list";
 
   return (
     <section
-      className={cn(
-        "w-full max-w-md rounded-lg border border-border bg-card/95 p-2 shadow-sm backdrop-blur-sm",
-        className,
-      )}
+      className={cn("w-full rounded-xl border border-input bg-card shadow-sm", className)}
       aria-label="Agent todo list"
     >
       <button
         type="button"
-        className="flex w-full cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-muted"
+        className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-muted"
         onClick={onToggleCollapse}
-        aria-label={collapsed ? "Expand todo list" : "Collapse todo list"}
+        aria-label={toggleLabel}
       >
-        <ListTodo className="size-3.5 text-muted-foreground" />
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Todo</p>
-        <p className="ml-auto text-xs text-muted-foreground">
+        <ListTodo className="size-4 shrink-0 text-muted-foreground" />
+        <p className="text-[13px] font-semibold text-foreground">Todo</p>
+        <p className="text-[11px] font-medium text-muted-foreground">
           {completedCount}/{visibleTodos.length}
         </p>
-        {collapsed ? (
-          <ChevronUp className="size-3.5 text-muted-foreground" />
-        ) : (
-          <ChevronDown className="size-3.5 text-muted-foreground" />
-        )}
+        <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
+          {collapsed ? (
+            <div className="flex min-w-0 items-center gap-2 text-sm text-foreground">
+              <span className="inline-flex size-4 shrink-0 items-center justify-center">
+                {statusIcon(actionableTodo.status, isSessionWorking)}
+              </span>
+              <span className="truncate">{actionableTodo.content}</span>
+            </div>
+          ) : null}
+          {collapsed ? (
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronUp className="size-4 shrink-0 text-muted-foreground" />
+          )}
+        </div>
       </button>
 
-      {collapsed ? (
-        <div className="mt-2 grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-2 px-2 py-1.5 text-sm text-foreground">
-          <span className="mt-[3px] inline-flex size-4 items-center justify-center">
-            {statusIcon(activeTodo.status)}
-          </span>
-          <p className="line-clamp-2">{activeTodo.content}</p>
-        </div>
-      ) : (
-        <div className="mt-2 max-h-[40vh] overflow-y-auto overscroll-contain pr-1">
-          <ul className="space-y-1">
+      {collapsed ? null : (
+        <div className="border-t border-input px-3 pb-3 pt-2">
+          <ul className="max-h-[40vh] space-y-1 overflow-y-auto overscroll-contain pr-1">
             {visibleTodos.map((todo) => (
-              <li
-                key={todo.id}
-                className="grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-2 rounded px-1 py-1 text-sm"
-              >
-                <span className="mt-[3px] inline-flex size-4 items-center justify-center">
-                  {statusIcon(todo.status)}
+              <li key={todo.id} className="flex items-start gap-2 rounded-md px-1 py-1 text-sm">
+                <span className="inline-flex size-5 shrink-0 items-center justify-center">
+                  {statusIcon(todo.status, isSessionWorking)}
                 </span>
                 <span
                   className={cn(
-                    "leading-5 text-foreground",
+                    "min-w-0 flex-1 leading-5 text-foreground",
                     todo.status === "in_progress" && "font-medium text-foreground",
                     todo.status === "completed" && "text-muted-foreground line-through",
                   )}

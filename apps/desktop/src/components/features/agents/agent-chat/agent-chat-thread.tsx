@@ -67,9 +67,9 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     isSubmittingPermissionByRequestId,
     permissionReplyErrorByRequestId,
     onReplyPermission,
+    isSessionWorking,
     todoPanelCollapsed,
     onToggleTodoPanel,
-    todoPanelBottomOffset,
     messagesContainerRef,
     scrollToBottomOnSendRef,
   } = model;
@@ -236,6 +236,15 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
               />
             </div>
           ))}
+
+          {session ? (
+            <AgentSessionTodoPanel
+              todos={session.todos}
+              collapsed={todoPanelCollapsed}
+              isSessionWorking={isSessionWorking}
+              onToggleCollapse={onToggleTodoPanel}
+            />
+          ) : null}
         </div>
       </div>
 
@@ -250,20 +259,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
 
       {session ? <ScrollToTopButton visible={!isNearTop} onClick={scrollToTop} /> : null}
       {session ? <ScrollToBottomButton visible={!isNearBottom} onClick={scrollToBottom} /> : null}
-
-      {session ? (
-        <div
-          className="pointer-events-none absolute right-3 z-20"
-          style={{ bottom: `${todoPanelBottomOffset}px` }}
-        >
-          <AgentSessionTodoPanel
-            todos={session.todos}
-            collapsed={todoPanelCollapsed}
-            className="pointer-events-auto"
-            onToggleCollapse={onToggleTodoPanel}
-          />
-        </div>
-      ) : null}
     </div>
   );
 }

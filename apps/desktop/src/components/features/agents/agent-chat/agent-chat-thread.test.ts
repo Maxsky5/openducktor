@@ -19,6 +19,7 @@ import { AgentChatThread } from "./agent-chat-thread";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const baseModel = {
+  isSessionWorking: false,
   showThinkingMessages: false,
   isSessionViewLoading: false,
   roleOptions: TEST_ROLE_OPTIONS,
@@ -40,7 +41,6 @@ const baseModel = {
   onReplyPermission: async () => {},
   todoPanelCollapsed: false,
   onToggleTodoPanel: () => {},
-  todoPanelBottomOffset: 120,
   messagesContainerRef: createRef<HTMLDivElement>(),
   scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
 } as const;
@@ -377,12 +377,14 @@ describe("AgentChatThread", () => {
     expect(html).toContain("hide-scrollbar");
   });
 
-  test("renders floating todo panel for active todo items", () => {
+  test("renders todo panel inline after questions and permissions", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
           ...baseModel,
           session: buildSession({
+            pendingQuestions: [buildQuestionRequest()],
+            pendingPermissions: [buildPermissionRequest()],
             todos: [
               buildTodoItem({
                 id: "todo-1",
@@ -403,8 +405,11 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Todo");
     expect(html).toContain("Analyze current styling");
     expect(html).toContain("Read layout and pages");
-    expect(html).toContain("max-h-[40vh]");
-    expect(html).toContain("overflow-y-auto");
+    expect(html).toContain("Input needed");
+    expect(html).toContain("Permission request");
+    expect(html.indexOf("Input needed")).toBeLessThan(html.indexOf("Permission request"));
+    expect(html.indexOf("Permission request")).toBeLessThan(html.indexOf("Todo"));
+    expect(html).not.toContain("pointer-events-none absolute right-3 z-20");
   });
 
   test("refreshes rendered rows when the session gains new visible rows", async () => {

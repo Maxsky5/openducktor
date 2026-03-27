@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 export const COMPOSER_TEXTAREA_MIN_HEIGHT_PX = 44;
 export const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 220;
@@ -61,10 +61,6 @@ export const resizeComposerTextareaElement = (
   };
 };
 
-export const computeTodoPanelBottomOffset = (_composerFormHeight: number): number => {
-  return 12;
-};
-
 type UseAgentChatLayoutInput = {
   input: string;
   activeSessionId: string | null;
@@ -74,7 +70,6 @@ type UseAgentChatLayoutResult = {
   messagesContainerRef: React.RefObject<HTMLDivElement | null>;
   composerFormRef: React.RefObject<HTMLFormElement | null>;
   composerTextareaRef: React.RefObject<HTMLTextAreaElement | null>;
-  todoPanelBottomOffset: number;
   resizeComposerTextarea: () => void;
 };
 
@@ -88,7 +83,6 @@ export const useAgentChatLayout = ({
   const resizeFrameIdRef = useRef<number | null>(null);
   const previousInputRef = useRef(input);
   const didInitializeTextareaForSessionRef = useRef(false);
-  const [composerFormHeight, setComposerFormHeight] = useState(0);
 
   const flushComposerTextareaResize = useCallback((): void => {
     const textarea = composerTextareaRef.current;
@@ -165,36 +159,10 @@ export const useAgentChatLayout = ({
     };
   }, []);
 
-  useEffect(() => {
-    const form = composerFormRef.current;
-    if (!form) {
-      setComposerFormHeight(0);
-      return;
-    }
-
-    const measure = () => {
-      setComposerFormHeight(form.offsetHeight);
-    };
-
-    measure();
-    if (typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const observer = new ResizeObserver(() => {
-      measure();
-    });
-    observer.observe(form);
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
-
   return {
     messagesContainerRef,
     composerFormRef,
     composerTextareaRef,
-    todoPanelBottomOffset: computeTodoPanelBottomOffset(composerFormHeight),
     resizeComposerTextarea,
   };
 };
