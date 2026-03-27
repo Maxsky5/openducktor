@@ -8,8 +8,24 @@ import { KanbanTaskCard } from "./kanban-task-card";
 const noop = (): void => {};
 
 describe("KanbanTaskCard active sessions", () => {
-  test("renders animated active state and session links", () => {
-    const task = createTaskCardFixture({ id: "TASK-1", title: "Implement payment flow" });
+  test("renders active-session primary action and removes sessions section", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-1",
+      title: "Implement payment flow",
+      availableActions: ["build_start", "open_builder", "open_qa"],
+      agentSessions: [
+        {
+          sessionId: "session-spec-old",
+          externalSessionId: "external-spec-old",
+          role: "spec",
+          scenario: "spec_initial",
+          startedAt: "2026-01-10T10:00:00.000Z",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktrees/spec",
+          selectedModel: null,
+        },
+      ],
+    });
 
     const html = renderToStaticMarkup(
       createElement(
@@ -18,6 +34,8 @@ describe("KanbanTaskCard active sessions", () => {
         createElement(KanbanTaskCard, {
           task,
           taskActivityState: "active",
+          hasActiveSession: true,
+          activeSessionRole: "build",
           taskSessions: [
             {
               runtimeKind: "opencode",
@@ -46,22 +64,46 @@ describe("KanbanTaskCard active sessions", () => {
 
     expect(html).toContain("kanban-active-session-card");
     expect(html).toContain("kanban-active-session-ray");
-    expect(html).toContain("Sessions");
     expect(html).toContain("Builder");
     expect(html).toContain("Running");
-    expect(html).toContain("QA");
-    expect(html).toContain("Starting");
-    expect(html).not.toContain("Active agent session");
-    expect(html).toContain(
-      'href="/agents?task=TASK-1&amp;session=session-build&amp;agent=build&amp;scenario=build_implementation_start"',
-    );
-    expect(html).toContain(
-      'href="/agents?task=TASK-1&amp;session=session-qa&amp;agent=qa&amp;scenario=qa_review"',
-    );
+    expect(html).toContain("lucide-circle-play");
+    expect(html).toContain('data-slot="popover-trigger"');
+    expect(html.split("kanban-active-session-ray")).toHaveLength(2);
+    expect(html).not.toContain("Start Builder");
+    expect(html).not.toContain("Start Spec");
+    expect(html).not.toContain("Start Planner");
+    expect(html).not.toContain("Request QA Review");
+    expect(html).not.toContain("Sessions");
   });
 
-  test("does not render active sessions section when none are active", () => {
-    const task = createTaskCardFixture({ id: "TASK-2", title: "Write specs" });
+  test("shows historical role view actions when there is no active session", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-2",
+      title: "Write specs",
+      availableActions: ["build_start"],
+      agentSessions: [
+        {
+          sessionId: "session-planner",
+          externalSessionId: "external-planner",
+          role: "planner",
+          scenario: "planner_initial",
+          startedAt: "2026-01-11T10:00:00.000Z",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktrees/planner",
+          selectedModel: null,
+        },
+        {
+          sessionId: "session-spec",
+          externalSessionId: "external-spec",
+          role: "spec",
+          scenario: "spec_initial",
+          startedAt: "2026-01-10T10:00:00.000Z",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktrees/spec",
+          selectedModel: null,
+        },
+      ],
+    });
 
     const html = renderToStaticMarkup(
       createElement(
@@ -80,11 +122,12 @@ describe("KanbanTaskCard active sessions", () => {
     );
 
     expect(html).not.toContain("kanban-active-session-card");
+    expect(html).toContain("Start Builder");
+    expect(html).toContain('data-slot="popover-trigger"');
     expect(html).not.toContain("Sessions");
-    expect(html).not.toContain("Active agent session");
   });
 
-  test("renders waiting-input card treatment and suppresses the animated ray", () => {
+  test("renders waiting-input active primary style and suppresses the animated ray", () => {
     const task = createTaskCardFixture({ id: "TASK-WAITING", title: "Need approval" });
 
     const html = renderToStaticMarkup(
@@ -94,6 +137,8 @@ describe("KanbanTaskCard active sessions", () => {
         createElement(KanbanTaskCard, {
           task,
           taskActivityState: "waiting_input",
+          hasActiveSession: true,
+          activeSessionRole: "build",
           taskSessions: [
             {
               runtimeKind: "opencode",
@@ -122,12 +167,12 @@ describe("KanbanTaskCard active sessions", () => {
 
     expect(html).toContain("kanban-waiting-input-card");
     expect(html).not.toContain("kanban-active-session-ray");
+    expect(html).toContain("Builder");
     expect(html).toContain("Waiting input");
-    expect(html).toContain("Sessions");
+    expect(html).toContain("lucide-circle-play");
     expect(html).toContain("border-warning-border");
     expect(html).toContain("bg-warning-surface");
-    expect(html).toContain("Builder");
-    expect(html).toContain("QA");
+    expect(html).not.toContain("Sessions");
   });
 
   test("renders qa rejected badge for rework tasks", () => {

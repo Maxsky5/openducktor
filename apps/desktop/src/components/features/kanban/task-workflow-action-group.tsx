@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
+import type { AgentRole } from "@openducktor/core";
 import { ChevronDown, MoreHorizontal } from "lucide-react";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -29,10 +30,14 @@ type TaskWorkflowActionGroupProps = {
   task: TaskCard;
   onAction: (action: TaskWorkflowAction) => void;
   includeActions?: readonly TaskWorkflowAction[];
+  hasActiveSession?: boolean;
+  activeSessionRole?: AgentRole;
+  historicalSessionRoles?: readonly AgentRole[];
   extraMenuActions?: readonly ExtraTaskMenuAction[];
   menuAlign?: "start" | "center" | "end";
   className?: string;
   primaryClassName?: string;
+  primaryContent?: ReactNode;
   size?: "default" | "sm";
   expandPrimary?: boolean;
   compactMenuTrigger?: boolean;
@@ -44,10 +49,14 @@ export function TaskWorkflowActionGroup({
   task,
   onAction,
   includeActions,
+  hasActiveSession = false,
+  activeSessionRole,
+  historicalSessionRoles,
   extraMenuActions = EMPTY_EXTRA_MENU_ACTIONS,
   menuAlign = "end",
   className,
   primaryClassName,
+  primaryContent,
   size = "default",
   expandPrimary = false,
   compactMenuTrigger = false,
@@ -55,9 +64,14 @@ export function TaskWorkflowActionGroup({
   hideWhenEmpty = false,
 }: TaskWorkflowActionGroupProps): ReactElement | null {
   const [isMenuOpen, setMenuOpen] = useState(false);
+  const resolveActionOptions = {
+    hasActiveSession,
+    ...(activeSessionRole ? { activeSessionRole } : {}),
+    ...(historicalSessionRoles ? { historicalSessionRoles } : {}),
+  };
   const { primaryAction, secondaryActions, allActions } = includeActions
-    ? resolveTaskCardActions(task, { include: includeActions })
-    : resolveTaskCardActions(task);
+    ? resolveTaskCardActions(task, { include: includeActions, ...resolveActionOptions })
+    : resolveTaskCardActions(task, resolveActionOptions);
   const hasWorkflowAction = allActions.length > 0;
   const hasExtraMenuAction = extraMenuActions.length > 0;
   const hasAnyAction = hasWorkflowAction || hasExtraMenuAction;
@@ -94,8 +108,12 @@ export function TaskWorkflowActionGroup({
           className={cn(expandPrimary ? "min-w-0 flex-1" : "", primaryClassName)}
           onClick={() => onAction(primary)}
         >
-          {TASK_ACTION_ICON[primary]}
-          {taskActionLabel(primary, task)}
+          {primaryContent ?? (
+            <>
+              {TASK_ACTION_ICON[primary]}
+              {taskActionLabel(primary, task)}
+            </>
+          )}
         </Button>
       ) : null}
 

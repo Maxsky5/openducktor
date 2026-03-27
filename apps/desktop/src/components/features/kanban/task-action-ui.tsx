@@ -22,6 +22,12 @@ export const taskActionLabel = (action: TaskWorkflowAction, task: TaskCard): str
   if (action === "set_plan") {
     return "Start Planner";
   }
+  if (action === "open_spec") {
+    return "Open Spec";
+  }
+  if (action === "open_planner") {
+    return "Open Planner";
+  }
   if (action === "open_builder") {
     return "Open Builder";
   }
@@ -52,6 +58,8 @@ export const taskActionLabel = (action: TaskWorkflowAction, task: TaskCard): str
 export const TASK_ACTION_ICON: Record<TaskWorkflowAction, ReactElement> = {
   set_spec: <Sparkles className="size-3.5" />,
   set_plan: <ScrollText className="size-3.5" />,
+  open_spec: <ArrowUpRightFromSquare className="size-3.5" />,
+  open_planner: <ArrowUpRightFromSquare className="size-3.5" />,
   open_builder: <ArrowUpRightFromSquare className="size-3.5" />,
   open_qa: <ArrowUpRightFromSquare className="size-3.5" />,
   reset_implementation: <RotateCcw className="size-3.5" />,

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "b
 import type { TaskCard } from "@openducktor/contracts";
 import { render } from "@testing-library/react";
 import { act, createElement, createRef, type ReactElement } from "react";
+import type { KanbanTaskSession } from "@/components/features/kanban/kanban-task-activity";
 import {
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -16,6 +17,8 @@ const taskDetailsSheetRenderMock = mock(
     task: TaskCard | null;
     allTasks: TaskCard[];
     runs: unknown[];
+    taskSessions: KanbanTaskSession[];
+    hasActiveSession: boolean;
     open: boolean;
     workflowActionsEnabled?: boolean;
     onOpenChange: (open: boolean) => void;
@@ -56,6 +59,9 @@ describe("TaskDetailsSheetController", () => {
         activeRepo: "/repo-a",
         allTasks: [task],
         runs: [],
+        taskSessionsByTaskId: new Map(),
+        activeTaskSessionContextByTaskId: new Map(),
+        onOpenSession: () => {},
         workflowActionsEnabled: false,
       });
     };
@@ -109,6 +115,9 @@ describe("TaskDetailsSheetController", () => {
         activeRepo: "/repo-a",
         allTasks: [task],
         runs: [],
+        taskSessionsByTaskId: new Map(),
+        activeTaskSessionContextByTaskId: new Map(),
+        onOpenSession: () => {},
         workflowActionsEnabled: false,
         onDetectPullRequest,
         onUnlinkPullRequest,

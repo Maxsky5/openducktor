@@ -20,6 +20,8 @@ describe("taskActionLabel", () => {
     expect(taskActionLabel("build_start", task)).toBe("Start Builder");
     expect(taskActionLabel("qa_start", task)).toBe("Request QA Review");
     expect(taskActionLabel("open_builder", task)).toBe("Open Builder");
+    expect(taskActionLabel("open_spec", task)).toBe("Open Spec");
+    expect(taskActionLabel("open_planner", task)).toBe("Open Planner");
     expect(taskActionLabel("defer_issue", task)).toBe("Defer Task");
     expect(taskActionLabel("resume_deferred", task)).toBe("Resume Task");
     expect(taskActionLabel("human_approve", task)).toBe("Approve Task");

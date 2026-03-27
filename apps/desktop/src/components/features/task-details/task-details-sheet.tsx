@@ -1,5 +1,10 @@
+import type { AgentRole } from "@openducktor/core";
 import type { ReactElement } from "react";
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
+import {
+  resolveHistoricalSessionRoles,
+  resolveSessionTargetOptions,
+} from "@/components/features/kanban/session-target-resolution";
 import { TaskDeleteConfirmDialog } from "@/components/features/task-details/task-delete-confirm-dialog";
 import { TaskDetailsSheetBody } from "@/components/features/task-details/task-details-sheet-body";
 import { TaskDetailsSheetFooter } from "@/components/features/task-details/task-details-sheet-footer";
@@ -18,6 +23,8 @@ import { canDetectTaskPullRequest } from "@/lib/task-display";
 const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
   "set_spec",
   "set_plan",
+  "open_spec",
+  "open_planner",
   "qa_start",
   "build_start",
   "open_builder",
@@ -34,6 +41,9 @@ export function TaskDetailsSheet({
   task,
   allTasks,
   runs,
+  taskSessions = [],
+  hasActiveSession = false,
+  activeSessionRole,
   open,
   onOpenChange,
   workflowActionsEnabled = true,
@@ -41,6 +51,7 @@ export function TaskDetailsSheet({
   onQaStart,
   onQaOpen,
   onBuild,
+  onOpenSession,
   onDelegate,
   onEdit,
   onDefer,
@@ -64,6 +75,13 @@ export function TaskDetailsSheet({
     onQaStart,
     onQaOpen,
     onBuild,
+    onOpenSession,
+    ...(task
+      ? {
+          resolveSessionOptionsByRole: (role: AgentRole) =>
+            resolveSessionTargetOptions(task, taskSessions, role),
+        }
+      : {}),
     onDelegate,
     onDefer,
     onResumeDeferred,
@@ -72,6 +90,8 @@ export function TaskDetailsSheet({
     onResetImplementation,
     onDelete,
   });
+
+  const historicalSessionRoles = task ? resolveHistoricalSessionRoles(task) : [];
 
   if (!task) {
     return (
@@ -147,6 +167,9 @@ export function TaskDetailsSheet({
           {...(workflowActionsEnabled
             ? {
                 includeActions: DETAIL_ACTIONS,
+                hasActiveSession,
+                ...(activeSessionRole ? { activeSessionRole } : {}),
+                ...(historicalSessionRoles.length > 0 ? { historicalSessionRoles } : {}),
                 onWorkflowAction: viewModel.runWorkflowAction,
               }
             : {})}

@@ -16,9 +16,11 @@ const model: KanbanPageContentModel = {
   ],
   runStateByTaskId: new Map(),
   taskSessionsByTaskId: new Map(),
+  activeTaskSessionContextByTaskId: new Map(),
   taskActivityStateByTaskId: new Map(),
   onOpenDetails: () => {},
   onDelegate: () => {},
+  onOpenSession: () => {},
   onPlan: () => {},
   onQaStart: () => {},
   onQaOpen: () => {},
@@ -32,7 +34,7 @@ describe("KanbanPageContent", () => {
   let KanbanPageContent: typeof import("./kanban-page-content").KanbanPageContent;
 
   beforeAll(async () => {
-    mock.module("@/components/features/kanban", () => ({
+    mock.module("@/components/features/kanban/kanban-column", () => ({
       KanbanColumn: (): ReactElement => <div data-testid="kanban-column" />,
     }));
 

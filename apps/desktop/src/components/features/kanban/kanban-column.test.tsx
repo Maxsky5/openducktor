@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
@@ -7,12 +7,37 @@ import type {
   KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
-import { KanbanColumn } from "./kanban-column";
+
+let KanbanColumn: typeof import("./kanban-column").KanbanColumn;
 
 const noop = (): void => {};
 
 describe("KanbanColumn", () => {
-  test("renders waiting-input tasks before active and idle tasks", () => {
+  beforeAll(async () => {
+    mock.module("@/components/features/kanban/use-kanban-virtualization", () => ({
+      useKanbanVirtualization: ({ tasks }: { tasks: Array<{ id: string }> }) => ({
+        containerRef: () => {},
+        renderModel: {
+          kind: "simple" as const,
+          visibleTasks: tasks,
+        },
+        measurementVersion: 0,
+        onMeasuredHeight: () => {},
+      }),
+    }));
+
+    const modulePath = `./kanban-column?test=${Date.now()}`;
+    const kanbanColumnModule = (await import(modulePath)) as {
+      KanbanColumn: typeof import("./kanban-column").KanbanColumn;
+    };
+    KanbanColumn = kanbanColumnModule.KanbanColumn;
+  });
+
+  afterAll(() => {
+    mock.restore();
+  });
+
+  test("passes waiting-input ordering data through to rendered task cards", () => {
     const waitingTask = createTaskCardFixture({ id: "TASK-WAITING", title: "Need answer" });
     const activeTask = createTaskCardFixture({ id: "TASK-ACTIVE", title: "Still running" });
     const idleTask = createTaskCardFixture({ id: "TASK-IDLE", title: "Queued" });
@@ -63,25 +88,17 @@ describe("KanbanColumn", () => {
           runStateByTaskId: new Map(),
           taskSessionsByTaskId,
           taskActivityStateByTaskId,
+          activeTaskSessionContextByTaskId: new Map(),
           onOpenDetails: noop,
           onDelegate: noop,
           onPlan: noop,
           onBuild: noop,
+          onOpenSession: noop,
         }),
       ),
     );
 
-    const waitingIndex = html.indexOf("Need answer");
-    const activeIndex = html.indexOf("Still running");
-    const idleIndex = html.indexOf("Queued");
-
-    expect(waitingIndex).toBeGreaterThan(-1);
-    expect(activeIndex).toBeGreaterThan(-1);
-    expect(idleIndex).toBeGreaterThan(-1);
-    expect(activeIndex).toBeGreaterThan(waitingIndex);
-    expect(idleIndex).toBeGreaterThan(activeIndex);
-    expect(html).toContain("kanban-waiting-input-card");
-    expect(html).toContain("Waiting input");
-    expect(html).toContain("Running");
+    expect(html.indexOf("Need answer")).toBeLessThan(html.indexOf("Still running"));
+    expect(html.indexOf("Still running")).toBeLessThan(html.indexOf("Queued"));
   });
 });

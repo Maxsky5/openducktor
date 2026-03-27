@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
+  buildActiveTaskSessionContextByTaskId,
   buildRunStateByTaskId,
   buildTaskActivityStateByTaskId,
   buildTaskSessionsByTaskId,
@@ -318,5 +319,41 @@ describe("use-kanban-board-model helpers", () => {
     expect(taskActivityStateByTaskId.get("task-waiting")).toBe("waiting_input");
     expect(taskActivityStateByTaskId.get("task-active")).toBe("active");
     expect(taskActivityStateByTaskId.get("task-idle")).toBe("idle");
+  });
+
+  test("buildActiveTaskSessionContextByTaskId prioritizes waiting-input session role", () => {
+    const activeTaskSessionContextByTaskId = buildActiveTaskSessionContextByTaskId([
+      createSession({
+        taskId: "task-1",
+        role: "build",
+        sessionId: "build-running",
+        status: "running",
+        startedAt: "2026-03-21T10:00:00.000Z",
+      }),
+      createSession({
+        taskId: "task-1",
+        role: "qa",
+        sessionId: "qa-waiting",
+        status: "idle",
+        startedAt: "2026-03-20T10:00:00.000Z",
+        pendingQuestions: [
+          {
+            requestId: "question-qa",
+            questions: [
+              {
+                header: "Approval",
+                question: "Need QA input",
+                options: [{ label: "Approve", description: "Approve" }],
+              },
+            ],
+          },
+        ],
+      }),
+    ]);
+
+    expect(activeTaskSessionContextByTaskId.get("task-1")).toEqual({
+      role: "qa",
+      presentationState: "waiting_input",
+    });
   });
 });

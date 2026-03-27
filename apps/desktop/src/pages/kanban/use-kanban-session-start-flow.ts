@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
+import { toKanbanSessionPresentationState } from "@/components/features/kanban/kanban-task-activity";
+import { resolvePreferredActiveSession } from "@/components/features/kanban/session-target-resolution";
 import {
   buildHumanReviewFeedbackModalModel,
   createHumanReviewFeedbackState,
@@ -53,6 +55,11 @@ type UseKanbanSessionStartFlowResult = {
   startSessionIntent: (intent: KanbanSessionStartIntent) => Promise<string | undefined>;
   onPullRequestGenerate: (taskId: string) => Promise<string | undefined>;
   onDelegate: (taskId: string) => void;
+  onOpenSession: (
+    taskId: string,
+    role: AgentRole,
+    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+  ) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
   onQaOpen: (taskId: string) => void;
@@ -66,6 +73,37 @@ const findLatestSessionByRoleForTask = (
   role: AgentRole,
 ): AgentSessionState | null => {
   return findSessionsByRoleForTask(sessions, taskId, role)[0] ?? null;
+};
+
+const findPreferredSessionByRoleForTask = (
+  sessions: AgentSessionState[],
+  taskId: string,
+  role: AgentRole,
+): AgentSessionState | null => {
+  const matchingSessions = findSessionsByRoleForTask(sessions, taskId, role);
+  if (matchingSessions.length === 0) {
+    return null;
+  }
+
+  const preferredSession = resolvePreferredActiveSession(
+    matchingSessions.map((session) => ({
+      sessionId: session.sessionId,
+      role: session.role,
+      scenario: session.scenario,
+      status: session.status,
+      startedAt: session.startedAt,
+      presentationState: toKanbanSessionPresentationState(session),
+    })),
+    role,
+  );
+
+  if (!preferredSession) {
+    return null;
+  }
+
+  return (
+    matchingSessions.find((session) => session.sessionId === preferredSession.sessionId) ?? null
+  );
 };
 
 const findSessionsByRoleForTask = (
@@ -165,6 +203,9 @@ export function useKanbanSessionStartFlow({
         session: sessionId,
         agent: intent.role,
       });
+      if (intent.scenario) {
+        params.set("scenario", intent.scenario);
+      }
       navigate(`/agents?${params.toString()}`);
     },
     [navigate],
@@ -291,29 +332,69 @@ export function useKanbanSessionStartFlow({
     [startSessionIntent],
   );
 
+  const onOpenSession = useCallback(
+    (
+      taskId: string,
+      role: AgentRole,
+      options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+    ): void => {
+      if (options?.sessionId) {
+        const explicitSession = sessionsRef.current.find(
+          (session) =>
+            session.taskId === taskId &&
+            session.role === role &&
+            session.sessionId === options.sessionId,
+        );
+
+        openSessionInAgentStudio(
+          {
+            taskId,
+            role,
+            scenario: explicitSession?.scenario ?? options.scenario ?? firstScenario(role),
+            postStartAction: "none",
+          },
+          options.sessionId,
+        );
+        return;
+      }
+
+      const preferredSessionByRole = findPreferredSessionByRoleForTask(
+        sessionsRef.current,
+        taskId,
+        role,
+      );
+      const fallbackLatestSessionByRole = findLatestSessionByRoleForTask(
+        sessionsRef.current,
+        taskId,
+        role,
+      );
+      const sessionToOpen = preferredSessionByRole ?? fallbackLatestSessionByRole;
+      if (sessionToOpen) {
+        openSessionInAgentStudio(
+          {
+            taskId,
+            role,
+            scenario: sessionToOpen.scenario,
+            postStartAction: "none",
+          },
+          sessionToOpen.sessionId,
+        );
+        return;
+      }
+
+      openAgents(taskId, role, options?.scenario ?? firstScenario(role));
+    },
+    [openAgents, openSessionInAgentStudio],
+  );
+
   const onPlan = useCallback(
     (taskId: string, action: "set_spec" | "set_plan"): void => {
       const currentTasks = tasksRef.current;
-      const currentSessions = sessionsRef.current;
       const role: AgentRole = action === "set_spec" ? "spec" : "planner";
       const startPreference = resolveKanbanPlanningStartPreference(currentTasks, taskId, action);
 
       if (action === "set_spec" && startPreference === "continue") {
-        const latestSpecSession = findLatestSessionByRoleForTask(currentSessions, taskId, "spec");
-
-        if (latestSpecSession) {
-          openSessionInAgentStudio(
-            {
-              taskId,
-              role: "spec",
-              scenario: firstScenario("spec"),
-              postStartAction: "none",
-            },
-            latestSpecSession.sessionId,
-          );
-        } else {
-          openAgents(taskId, "spec", firstScenario("spec"));
-        }
+        onOpenSession(taskId, "spec", { scenario: firstScenario("spec") });
         return;
       }
 
@@ -324,15 +405,15 @@ export function useKanbanSessionStartFlow({
         postStartAction: startPreference === "fresh" ? "kickoff" : "none",
       });
     },
-    [openAgents, openSessionInAgentStudio, startSessionIntent],
+    [onOpenSession, startSessionIntent],
   );
 
   const onBuild = useCallback(
     (taskId: string): void => {
       const task = tasksRef.current.find((entry) => entry.id === taskId);
-      openAgents(taskId, "build", resolveBuildContinuationScenario(task));
+      onOpenSession(taskId, "build", { scenario: resolveBuildContinuationScenario(task) });
     },
-    [openAgents],
+    [onOpenSession],
   );
 
   const onQaStart = useCallback(
@@ -349,24 +430,9 @@ export function useKanbanSessionStartFlow({
 
   const onQaOpen = useCallback(
     (taskId: string): void => {
-      const latestQaSession = findLatestSessionByRoleForTask(sessionsRef.current, taskId, "qa");
-
-      if (latestQaSession) {
-        openSessionInAgentStudio(
-          {
-            taskId,
-            role: "qa",
-            scenario: "qa_review",
-            postStartAction: "none",
-          },
-          latestQaSession.sessionId,
-        );
-        return;
-      }
-
-      openAgents(taskId, "qa", "qa_review");
+      onOpenSession(taskId, "qa", { scenario: "qa_review" });
     },
-    [openAgents, openSessionInAgentStudio],
+    [onOpenSession],
   );
 
   const onHumanRequestChanges = useCallback(
@@ -469,6 +535,7 @@ export function useKanbanSessionStartFlow({
     startSessionIntent,
     onPullRequestGenerate,
     onDelegate,
+    onOpenSession,
     onPlan,
     onQaStart,
     onQaOpen,

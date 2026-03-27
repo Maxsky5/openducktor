@@ -1,6 +1,11 @@
+import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import { SessionStartModal } from "@/components/features/agents";
+import type {
+  ActiveTaskSessionContextByTaskId,
+  KanbanTaskSession,
+} from "@/components/features/kanban/kanban-task-activity";
 import { MergedPullRequestConfirmDialog } from "@/components/features/pull-requests/merged-pull-request-confirm-dialog";
 import {
   TaskDetailsSheetController,
@@ -51,6 +56,15 @@ type AgentsPageShellModel = {
   sessionStartModal: ReactElement | null;
   taskDetailsSheet: ReactElement;
 };
+
+const EMPTY_TASK_SESSIONS_BY_TASK_ID = new Map<string, KanbanTaskSession[]>();
+const EMPTY_ACTIVE_TASK_SESSION_CONTEXT_BY_TASK_ID: ActiveTaskSessionContextByTaskId = new Map();
+
+const noopOpenSession = (
+  _taskId: string,
+  _role: AgentRole,
+  _options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+): void => {};
 
 export function useAgentsPageShellModel(): AgentsPageShellModel {
   const { activeRepo, activeBranch } = useWorkspaceState();
@@ -300,8 +314,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       ref={taskDetailsSheetRef}
       activeRepo={activeRepo}
       allTasks={tasks}
+      taskSessionsByTaskId={EMPTY_TASK_SESSIONS_BY_TASK_ID}
+      activeTaskSessionContextByTaskId={EMPTY_ACTIVE_TASK_SESSION_CONTEXT_BY_TASK_ID}
       runs={runs}
       workflowActionsEnabled={false}
+      onOpenSession={noopOpenSession}
       onDetectPullRequest={handleDetectPullRequest}
       onUnlinkPullRequest={handleUnlinkPullRequest}
       detectingPullRequestTaskId={detectingPullRequestTaskId}

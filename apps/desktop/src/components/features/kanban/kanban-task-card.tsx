@@ -1,7 +1,7 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
+import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { ExternalLink, PlayCircle } from "lucide-react";
 import { memo, type ReactElement } from "react";
-import { Link } from "react-router-dom";
 import type {
   KanbanTaskActivityState,
   KanbanTaskSession,
@@ -17,6 +17,11 @@ import {
   resolveTaskCardActions,
   type TaskWorkflowAction,
 } from "@/components/features/kanban/kanban-task-workflow";
+import {
+  resolveHistoricalSessionRoles,
+  resolvePreferredActiveSession,
+  resolveSessionTargetOptions,
+} from "@/components/features/kanban/session-target-resolution";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
@@ -49,9 +54,16 @@ type KanbanTaskCardProps = {
   task: TaskCard;
   runState?: RunSummary["state"] | undefined;
   taskSessions?: KanbanTaskSession[] | undefined;
+  hasActiveSession?: boolean;
+  activeSessionRole?: AgentRole;
   taskActivityState: KanbanTaskActivityState;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
+  onOpenSession?: (
+    taskId: string,
+    role: AgentRole,
+    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+  ) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart?: (taskId: string) => void;
   onQaOpen?: (taskId: string) => void;
@@ -87,7 +99,38 @@ const areTaskCardsEquivalent = (left: TaskCard, right: TaskCard): boolean =>
   left.pullRequest?.number === right.pullRequest?.number &&
   left.pullRequest?.url === right.pullRequest?.url &&
   left.pullRequest?.state === right.pullRequest?.state &&
+  areTaskAgentSessionsEqual(left.agentSessions, right.agentSessions) &&
   areStringArraysEqual(left.availableActions, right.availableActions);
+
+const areTaskAgentSessionsEqual = (
+  left: TaskCard["agentSessions"] | undefined,
+  right: TaskCard["agentSessions"] | undefined,
+): boolean => {
+  const leftSessions = left ?? [];
+  const rightSessions = right ?? [];
+  if (leftSessions.length !== rightSessions.length) {
+    return false;
+  }
+
+  for (let index = 0; index < leftSessions.length; index += 1) {
+    const leftSession = leftSessions[index];
+    const rightSession = rightSessions[index];
+    if (!leftSession || !rightSession) {
+      return false;
+    }
+
+    if (
+      leftSession.sessionId !== rightSession.sessionId ||
+      leftSession.role !== rightSession.role ||
+      leftSession.scenario !== rightSession.scenario ||
+      leftSession.startedAt !== rightSession.startedAt
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+};
 
 const areRunningTaskSessionsEqual = (
   left: KanbanTaskSession[] | undefined,
@@ -128,9 +171,12 @@ const areKanbanTaskCardPropsEqual = (
   areTaskCardsEquivalent(previous.task, next.task) &&
   previous.runState === next.runState &&
   areRunningTaskSessionsEqual(previous.taskSessions, next.taskSessions) &&
+  previous.hasActiveSession === next.hasActiveSession &&
+  previous.activeSessionRole === next.activeSessionRole &&
   previous.taskActivityState === next.taskActivityState &&
   previous.onOpenDetails === next.onOpenDetails &&
   previous.onDelegate === next.onDelegate &&
+  previous.onOpenSession === next.onOpenSession &&
   previous.onPlan === next.onPlan &&
   previous.onQaStart === next.onQaStart &&
   previous.onQaOpen === next.onQaOpen &&
@@ -139,8 +185,22 @@ const areKanbanTaskCardPropsEqual = (
   previous.onHumanRequestChanges === next.onHumanRequestChanges &&
   previous.onResetImplementation === next.onResetImplementation;
 
-const getSessionStatusLabel = (session: KanbanTaskSession): string => {
-  if (session.presentationState === "waiting_input") {
+const getSessionChipClassName = (isWaitingInput: boolean): string => {
+  if (isWaitingInput) {
+    return "border-warning-border bg-warning-surface text-warning-muted hover:border-warning-border hover:bg-warning-surface";
+  }
+
+  return "border-info-border bg-info-surface text-info-muted hover:border-info-border hover:bg-info-surface";
+};
+
+const getSessionStatusLabel = ({
+  session,
+  isWaitingInput,
+}: {
+  session: KanbanTaskSession;
+  isWaitingInput: boolean;
+}): string => {
+  if (isWaitingInput) {
     return "Waiting input";
   }
 
@@ -149,14 +209,6 @@ const getSessionStatusLabel = (session: KanbanTaskSession): string => {
   }
 
   return "Running";
-};
-
-const getSessionChipClassName = (isWaitingInput: boolean): string => {
-  if (isWaitingInput) {
-    return "border-warning-border bg-warning-surface text-warning-muted hover:border-warning-border hover:bg-warning-surface";
-  }
-
-  return "border-info-border bg-info-surface text-info-muted hover:border-info-border hover:bg-info-surface";
 };
 
 const getSessionStatusTextClassName = (isWaitingInput: boolean): string => {
@@ -168,13 +220,13 @@ const getSessionStatusTextClassName = (isWaitingInput: boolean): string => {
 };
 
 const getCardActivityClassName = ({
-  hasTaskSessions,
+  hasActiveSession,
   isWaitingInput,
 }: {
-  hasTaskSessions: boolean;
+  hasActiveSession: boolean;
   isWaitingInput: boolean;
 }): string | undefined => {
-  if (!hasTaskSessions) {
+  if (!hasActiveSession) {
     return undefined;
   }
 
@@ -184,92 +236,6 @@ const getCardActivityClassName = ({
 
   return "kanban-active-session-card border-info-border shadow-info-border";
 };
-
-function toSessionHref({
-  taskId,
-  session,
-}: {
-  taskId: string;
-  session: KanbanTaskSession;
-}): string {
-  const params = new URLSearchParams({
-    task: taskId,
-    session: session.sessionId,
-    agent: session.role,
-    scenario: session.scenario,
-  });
-
-  return `/agents?${params.toString()}`;
-}
-
-const ActiveSessionChip = memo(
-  function ActiveSessionChip({
-    taskId,
-    session,
-  }: {
-    taskId: string;
-    session: KanbanTaskSession;
-  }): ReactElement {
-    const roleLabel = AGENT_ROLE_LABELS[session.role] ?? session.role;
-    const isWaitingInput = session.presentationState === "waiting_input";
-    const statusLabel = getSessionStatusLabel(session);
-
-    return (
-      <Link
-        to={toSessionHref({ taskId, session })}
-        className={cn(
-          "inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition",
-          getSessionChipClassName(isWaitingInput),
-        )}
-      >
-        <PlayCircle className="size-3" />
-        {roleLabel}
-        <span
-          className={cn("text-[10px] font-medium", getSessionStatusTextClassName(isWaitingInput))}
-        >
-          {statusLabel}
-        </span>
-      </Link>
-    );
-  },
-  (previous, next) =>
-    previous.taskId === next.taskId &&
-    previous.session.sessionId === next.session.sessionId &&
-    previous.session.role === next.session.role &&
-    previous.session.scenario === next.session.scenario &&
-    previous.session.status === next.session.status &&
-    previous.session.presentationState === next.session.presentationState,
-);
-
-function TaskSessionsLine({
-  taskId,
-  taskSessions,
-  taskActivityState,
-}: {
-  taskId: string;
-  taskSessions: KanbanTaskSession[];
-  taskActivityState: KanbanTaskActivityState;
-}): ReactElement {
-  const isWaitingInput = taskActivityState === "waiting_input";
-
-  return (
-    <div
-      className={cn(
-        "space-y-1 border-t pt-2",
-        isWaitingInput ? "border-warning-border" : "border-info-border",
-      )}
-    >
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Sessions
-      </p>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {taskSessions.map((session) => (
-          <ActiveSessionChip key={session.sessionId} taskId={taskId} session={session} />
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function TaskMeta({
   task,
@@ -304,9 +270,14 @@ function TaskActions({
   onQaOpen,
   onBuild,
   onDelegate,
+  onOpenSession,
   onHumanApprove,
   onHumanRequestChanges,
   onResetImplementation,
+  taskSessions,
+  hasActiveSession,
+  activeSessionRole,
+  taskActivityState,
 }: {
   task: TaskCard;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
@@ -314,13 +285,24 @@ function TaskActions({
   onQaOpen?: (taskId: string) => void;
   onBuild: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
+  onOpenSession?: (
+    taskId: string,
+    role: AgentRole,
+    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+  ) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
   onResetImplementation?: (taskId: string) => void;
+  taskSessions: KanbanTaskSession[];
+  hasActiveSession: boolean;
+  activeSessionRole?: AgentRole;
+  taskActivityState: KanbanTaskActivityState;
 }): ReactElement | null {
   const includeActions: readonly TaskWorkflowAction[] = [
     "set_spec",
     "set_plan",
+    "open_spec",
+    "open_planner",
     "qa_start",
     "build_start",
     "open_builder",
@@ -329,11 +311,46 @@ function TaskActions({
     "human_request_changes",
     "reset_implementation",
   ];
-  const workflowActions = resolveTaskCardActions(task, { include: includeActions });
+  const historicalSessionRoles = resolveHistoricalSessionRoles(task);
+  const workflowActions = resolveTaskCardActions(task, {
+    include: includeActions,
+    hasActiveSession,
+    ...(activeSessionRole ? { activeSessionRole } : {}),
+    historicalSessionRoles,
+  });
 
   if (workflowActions.allActions.length === 0) {
     return null;
   }
+
+  const primaryActiveSession =
+    hasActiveSession && activeSessionRole
+      ? resolvePreferredActiveSession(taskSessions, activeSessionRole)
+      : null;
+  const primarySessionIsWaitingInput =
+    primaryActiveSession?.presentationState === "waiting_input" ||
+    (taskActivityState === "waiting_input" && hasActiveSession);
+
+  const openRoleSession = (role: AgentRole): void => {
+    const sessionOptions = resolveSessionTargetOptions(task, taskSessions, role);
+
+    if (onOpenSession) {
+      onOpenSession(task.id, role, sessionOptions);
+      return;
+    }
+
+    if (role === "build") {
+      onBuild(task.id);
+      return;
+    }
+
+    if (role === "qa") {
+      onQaOpen?.(task.id);
+      return;
+    }
+
+    onPlan(task.id, role === "spec" ? "set_spec" : "set_plan");
+  };
 
   const runAction = (action: TaskWorkflowAction): void => {
     switch (action) {
@@ -341,11 +358,17 @@ function TaskActions({
       case "set_plan":
         onPlan(task.id, action);
         return;
+      case "open_spec":
+        openRoleSession("spec");
+        return;
+      case "open_planner":
+        openRoleSession("planner");
+        return;
       case "open_builder":
-        onBuild(task.id);
+        openRoleSession("build");
         return;
       case "open_qa":
-        onQaOpen?.(task.id);
+        openRoleSession("qa");
         return;
       case "qa_start":
         onQaStart?.(task.id);
@@ -372,11 +395,40 @@ function TaskActions({
       <TaskWorkflowActionGroup
         task={task}
         includeActions={includeActions}
+        hasActiveSession={hasActiveSession}
+        {...(activeSessionRole ? { activeSessionRole } : {})}
+        historicalSessionRoles={historicalSessionRoles}
         onAction={runAction}
         size="sm"
         expandPrimary
         compactMenuTrigger
-        primaryClassName="h-9 rounded-lg font-semibold shadow-sm"
+        primaryClassName={cn(
+          hasActiveSession
+            ? [
+                "h-9 rounded-lg px-2 py-1 text-[11px] font-semibold shadow-none",
+                getSessionChipClassName(primarySessionIsWaitingInput),
+              ]
+            : "h-9 rounded-lg font-semibold shadow-sm",
+        )}
+        primaryContent={
+          hasActiveSession && primaryActiveSession ? (
+            <>
+              <PlayCircle className="size-3" />
+              {AGENT_ROLE_LABELS[primaryActiveSession.role] ?? primaryActiveSession.role}
+              <span
+                className={cn(
+                  "text-[10px] font-medium",
+                  getSessionStatusTextClassName(primarySessionIsWaitingInput),
+                )}
+              >
+                {getSessionStatusLabel({
+                  session: primaryActiveSession,
+                  isWaitingInput: primarySessionIsWaitingInput,
+                })}
+              </span>
+            </>
+          ) : undefined
+        }
       />
     </div>
   );
@@ -386,9 +438,12 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   task,
   runState,
   taskSessions = [],
+  hasActiveSession,
+  activeSessionRole,
   taskActivityState,
   onOpenDetails,
   onDelegate,
+  onOpenSession,
   onPlan,
   onQaStart,
   onQaOpen,
@@ -397,10 +452,13 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   onHumanRequestChanges,
   onResetImplementation,
 }: KanbanTaskCardProps): ReactElement {
-  const hasTaskSessions = taskSessions.length > 0;
+  const hasActiveSessionValue = hasActiveSession ?? taskSessions.length > 0;
   const isWaitingInput = taskActivityState === "waiting_input";
   const visibleRunState = toVisibleKanbanRunState(runState);
-  const cardActivityClassName = getCardActivityClassName({ hasTaskSessions, isWaitingInput });
+  const cardActivityClassName = getCardActivityClassName({
+    hasActiveSession: hasActiveSessionValue,
+    isWaitingInput,
+  });
 
   return (
     <article
@@ -409,7 +467,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
         cardActivityClassName,
       )}
     >
-      {hasTaskSessions && !isWaitingInput ? (
+      {hasActiveSessionValue && !isWaitingInput ? (
         <BorderRay turnDurationMs={2500} strokeWidth={4.4} className="kanban-active-session-ray" />
       ) : null}
 
@@ -444,18 +502,16 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
           </span>
         </div>
         <TaskMeta task={task} runState={visibleRunState} />
-        {hasTaskSessions ? (
-          <TaskSessionsLine
-            taskId={task.id}
-            taskSessions={taskSessions}
-            taskActivityState={taskActivityState}
-          />
-        ) : null}
         <TaskActions
           task={task}
+          taskSessions={taskSessions}
+          hasActiveSession={hasActiveSessionValue}
+          {...(activeSessionRole ? { activeSessionRole } : {})}
+          taskActivityState={taskActivityState}
           onPlan={onPlan}
           onBuild={onBuild}
           onDelegate={onDelegate}
+          {...(onOpenSession ? { onOpenSession } : {})}
           {...(onQaStart ? { onQaStart } : {})}
           {...(onQaOpen ? { onQaOpen } : {})}
           {...(onHumanApprove ? { onHumanApprove } : {})}

@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { KanbanColumn } from "@/components/features/kanban";
+import { KanbanColumn } from "@/components/features/kanban/kanban-column";
 import { cn } from "@/lib/utils";
 import { KanbanBoardLoadingShell } from "./kanban-board-loading-shell";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
@@ -28,9 +28,11 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
               column={column}
               runStateByTaskId={model.runStateByTaskId}
               taskSessionsByTaskId={model.taskSessionsByTaskId}
+              activeTaskSessionContextByTaskId={model.activeTaskSessionContextByTaskId}
               taskActivityStateByTaskId={model.taskActivityStateByTaskId}
               onOpenDetails={model.onOpenDetails}
               onDelegate={model.onDelegate}
+              onOpenSession={model.onOpenSession}
               onPlan={model.onPlan}
               onQaStart={model.onQaStart}
               onQaOpen={model.onQaOpen}

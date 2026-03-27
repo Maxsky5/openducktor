@@ -7,6 +7,7 @@ import type {
 } from "@openducktor/core";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type {
+  ActiveTaskSessionContextByTaskId,
   KanbanTaskActivityState,
   KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
@@ -88,9 +89,15 @@ export type KanbanPageContentModel = {
   columns: KanbanColumnData[];
   runStateByTaskId: Map<string, RunSummary["state"]>;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
+  activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
   taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
+  onOpenSession: (
+    taskId: string,
+    role: AgentRole,
+    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+  ) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
   onQaOpen: (taskId: string) => void;
@@ -111,6 +118,13 @@ export type KanbanPageTaskDetailsControllerModel = {
   activeRepo: string | null;
   allTasks: TaskCard[];
   runs: RunSummary[];
+  taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
+  activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
+  onOpenSession: (
+    taskId: string,
+    role: AgentRole,
+    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+  ) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
   onQaOpen: (taskId: string) => void;

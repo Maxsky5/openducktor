@@ -71,6 +71,7 @@ describe("task-details-sheet-model", () => {
     const onQaStart = mock(() => {});
     const onQaOpen = mock(() => {});
     const onBuild = mock(() => {});
+    const onOpenSession = mock(() => {});
     const onDelegate = mock(() => {});
     const onDefer = mock(() => {});
     const onResumeDeferred = mock(() => {});
@@ -83,6 +84,7 @@ describe("task-details-sheet-model", () => {
       onQaStart,
       onQaOpen,
       onBuild,
+      onOpenSession,
       onDelegate,
       onDefer,
       onResumeDeferred,
@@ -95,6 +97,7 @@ describe("task-details-sheet-model", () => {
       onQaStart,
       onQaOpen,
       onBuild,
+      onOpenSession,
       onDelegate,
       onDefer,
       onResumeDeferred,
@@ -104,13 +107,44 @@ describe("task-details-sheet-model", () => {
     });
 
     expect(onPlan).toHaveBeenCalledWith("T-1", "set_spec");
-    expect(onBuild).toHaveBeenCalledWith("T-1");
+    expect(onOpenSession).toHaveBeenCalledWith("T-1", "build", undefined);
+    expect(onBuild).not.toHaveBeenCalled();
+
+    runTaskWorkflowAction("open_spec", "T-1", {
+      onPlan,
+      onQaStart,
+      onQaOpen,
+      onBuild,
+      onOpenSession,
+      onDelegate,
+      onDefer,
+      onResumeDeferred,
+      onHumanApprove,
+      onHumanRequestChanges,
+      onResetImplementation,
+    });
+    runTaskWorkflowAction("open_planner", "T-1", {
+      onPlan,
+      onQaStart,
+      onQaOpen,
+      onBuild,
+      onOpenSession,
+      onDelegate,
+      onDefer,
+      onResumeDeferred,
+      onHumanApprove,
+      onHumanRequestChanges,
+      onResetImplementation,
+    });
+    expect(onOpenSession).toHaveBeenCalledWith("T-1", "spec", undefined);
+    expect(onOpenSession).toHaveBeenCalledWith("T-1", "planner", undefined);
 
     runTaskWorkflowAction("set_plan", null, {
       onPlan,
       onQaStart,
       onQaOpen,
       onBuild,
+      onOpenSession,
       onDelegate,
       onDefer,
       onResumeDeferred,
@@ -125,6 +159,7 @@ describe("task-details-sheet-model", () => {
       onQaStart,
       onQaOpen,
       onBuild,
+      onOpenSession,
       onDelegate,
       onDefer,
       onResumeDeferred,
@@ -139,6 +174,7 @@ describe("task-details-sheet-model", () => {
       onQaStart,
       onQaOpen,
       onBuild,
+      onOpenSession,
       onDelegate,
       onDefer,
       onResumeDeferred,
@@ -146,13 +182,15 @@ describe("task-details-sheet-model", () => {
       onHumanRequestChanges,
       onResetImplementation,
     });
-    expect(onQaOpen).toHaveBeenCalledWith("T-1");
+    expect(onOpenSession).toHaveBeenCalledWith("T-1", "qa", undefined);
+    expect(onQaOpen).not.toHaveBeenCalled();
 
     runTaskWorkflowAction("reset_implementation", "T-1", {
       onPlan,
       onQaStart,
       onQaOpen,
       onBuild,
+      onOpenSession,
       onDelegate,
       onDefer,
       onResumeDeferred,
@@ -169,5 +207,38 @@ describe("task-details-sheet-model", () => {
     expect(shouldLoadDocumentSection(true)).toBe(true);
     expect(shouldLoadDocumentSection(false)).toBe(false);
     expect(shouldLoadDocumentSection(undefined)).toBe(false);
+  });
+
+  test("forwards role-specific session options to onOpenSession", () => {
+    const onOpenSession = mock(() => {});
+
+    runTaskWorkflowAction(
+      "open_builder",
+      "T-1",
+      {
+        onPlan: undefined,
+        onQaStart: undefined,
+        onQaOpen: undefined,
+        onBuild: undefined,
+        onOpenSession,
+        onDelegate: undefined,
+        onDefer: undefined,
+        onResumeDeferred: undefined,
+        onHumanApprove: undefined,
+        onHumanRequestChanges: undefined,
+        onResetImplementation: undefined,
+      },
+      {
+        resolveSessionOptions: (role) =>
+          role === "build"
+            ? { sessionId: "session-build", scenario: "build_implementation_start" }
+            : undefined,
+      },
+    );
+
+    expect(onOpenSession).toHaveBeenCalledWith("T-1", "build", {
+      sessionId: "session-build",
+      scenario: "build_implementation_start",
+    });
   });
 });

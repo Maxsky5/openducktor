@@ -87,6 +87,7 @@ describe("TaskDetailsSheet", () => {
       onQaStart: undefined,
       onQaOpen: undefined,
       onBuild: undefined,
+      onOpenSession: undefined,
       onDelegate: undefined,
       onDefer: undefined,
       onResumeDeferred: undefined,
