@@ -35,6 +35,7 @@ const createHookArgs = (showThinkingMessages = false): HookArgs => ({
   onToggleTodoPanel: () => {},
   todoPanelBottomOffset: 0,
   messagesContainerRef: createRef<HTMLDivElement>(),
+  scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
 });
 
 const createHookHarness = (initialProps: HookArgs) =>

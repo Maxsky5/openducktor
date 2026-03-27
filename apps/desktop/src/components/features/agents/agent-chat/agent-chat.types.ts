@@ -1,6 +1,6 @@
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import type { LucideIcon } from "lucide-react";
-import type { RefObject } from "react";
+import type { MutableRefObject, RefObject } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
@@ -36,6 +36,7 @@ export type AgentChatThreadModel = {
   onToggleTodoPanel: () => void;
   todoPanelBottomOffset: number;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
+  scrollToBottomOnSendRef: MutableRefObject<(() => void) | null>;
 };
 
 export type AgentChatComposerModel = {
@@ -72,6 +73,7 @@ export type AgentChatComposerModel = {
   composerFormRef: RefObject<HTMLFormElement | null>;
   composerTextareaRef: RefObject<HTMLTextAreaElement | null>;
   onComposerTextareaInput: () => void;
+  scrollToBottomOnSendRef: MutableRefObject<(() => void) | null>;
 };
 
 export type AgentChatModel = {

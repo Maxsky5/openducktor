@@ -1,5 +1,5 @@
 import { AlertTriangle, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import { type ReactElement, useMemo, useRef } from "react";
+import { type ReactElement, useLayoutEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -71,6 +71,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     onToggleTodoPanel,
     todoPanelBottomOffset,
     messagesContainerRef,
+    scrollToBottomOnSendRef,
   } = model;
 
   const rows = useMemo(() => {
@@ -92,6 +93,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     bottomSentinelRef,
     scrollToBottom,
     scrollToTop,
+    scrollToBottomOnSend,
   } = useAgentChatWindow({
     rows,
     activeSessionId,
@@ -99,6 +101,11 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     messagesContainerRef,
     messagesContentRef,
   });
+
+  useLayoutEffect(() => {
+    scrollToBottomOnSendRef.current = scrollToBottomOnSend;
+  }, [scrollToBottomOnSend, scrollToBottomOnSendRef]);
+
   const showLoadingOverlay = useAgentChatLoadingOverlay({
     sessionId: activeSessionId,
     isSessionViewLoading,

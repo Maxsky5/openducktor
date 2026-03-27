@@ -21,6 +21,7 @@ type UseAgentChatScrollControllerResult = {
   hasPendingScrollRequest: () => boolean;
   captureScrollAnchor: (rowKey: string) => void;
   syncBottomIfPinned: () => void;
+  scrollToBottomOnSend: () => void;
   requestWindowScroll: (request: PendingScrollRequest) => void;
   applyPendingScrollRequest: () => void;
   setBottomAnchoredState: (windowStart: number) => void;
@@ -267,6 +268,15 @@ export function useAgentChatScrollController({
     setIsNearTop(true);
   }, []);
 
+  const scrollToBottomOnSend = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: "instant",
+    });
+  }, [messagesContainerRef]);
+
   // Intentionally runs after every render so a pending anchor captured in refs
   // is applied on the next commit regardless of which state update caused it.
   useLayoutEffect(() => {
@@ -339,6 +349,7 @@ export function useAgentChatScrollController({
     hasPendingScrollRequest: () => pendingScrollRequestRef.current !== null,
     captureScrollAnchor,
     syncBottomIfPinned,
+    scrollToBottomOnSend,
     requestWindowScroll,
     applyPendingScrollRequest,
     setBottomAnchoredState,

@@ -45,6 +45,7 @@ const buildModel = () => ({
   composerFormRef: createRef<HTMLFormElement>(),
   composerTextareaRef: createRef<HTMLTextAreaElement>(),
   onComposerTextareaInput: () => {},
+  scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
 });
 
 describe("AgentChatComposer", () => {

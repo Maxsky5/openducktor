@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import { useAgentChatLayout } from "@/components/features/agents/agent-chat/use-agent-chat-layout";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
@@ -154,6 +154,8 @@ export function useAgentStudioPageModels({
     activeSessionId: threadSession?.sessionId ?? null,
   });
 
+  const scrollToBottomOnSendRef = useRef<(() => void) | null>(null);
+
   const agentStudioTaskTabsModel = useMemo(
     () =>
       buildAgentStudioTaskTabsModel({
@@ -292,6 +294,7 @@ export function useAgentStudioPageModels({
     onToggleTodoPanel: handleToggleTodoPanel,
     todoPanelBottomOffset,
     messagesContainerRef,
+    scrollToBottomOnSendRef,
   });
 
   const agentChatComposerModel = useAgentStudioComposerModel({
@@ -323,6 +326,7 @@ export function useAgentStudioPageModels({
     composerFormRef,
     composerTextareaRef,
     resizeComposerTextarea,
+    scrollToBottomOnSendRef,
   });
 
   const agentChatModel = useMemo(

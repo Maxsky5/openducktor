@@ -26,6 +26,7 @@ type UseAgentChatWindowResult = {
   bottomSentinelRef: RefCallback<HTMLDivElement>;
   scrollToBottom: () => void;
   scrollToTop: () => void;
+  scrollToBottomOnSend: () => void;
 };
 
 export function useAgentChatWindow({
@@ -47,6 +48,7 @@ export function useAgentChatWindow({
     hasPendingScrollRequest,
     captureScrollAnchor,
     syncBottomIfPinned,
+    scrollToBottomOnSend,
     requestWindowScroll,
     applyPendingScrollRequest,
     setBottomAnchoredState,
@@ -110,5 +112,6 @@ export function useAgentChatWindow({
     bottomSentinelRef,
     scrollToBottom,
     scrollToTop,
+    scrollToBottomOnSend,
   };
 }
