@@ -8,10 +8,7 @@ import {
 } from "@openducktor/core";
 import { resolveBuildContinuationScenario } from "@/lib/build-scenarios";
 
-export const inferScenario = (
-  role: AgentRole,
-  task: TaskCard,
-): AgentScenario => {
+export const inferScenario = (role: AgentRole, task: TaskCard): AgentScenario => {
   if (role === "spec") {
     return "spec_initial";
   }

@@ -60,9 +60,7 @@ export const buildSessionSystemPrompt = ({
 export const loadSessionPromptInputs = async ({
   repoPath,
   loadRepoPromptOverrides,
-}: LoadSessionPromptInputsInput): Promise<
-  Pick<SessionPromptContext, "promptOverrides">
-> => {
+}: LoadSessionPromptInputsInput): Promise<Pick<SessionPromptContext, "promptOverrides">> => {
   const promptOverrides = await loadRepoPromptOverrides(repoPath);
 
   return {

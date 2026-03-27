@@ -1009,43 +1009,22 @@ describe("use-agent-orchestrator-operations", () => {
   test("rejects stale start when active repo changes mid-flight", async () => {
     await withSuppressedRendererWarning(async () => {
       let startCalls = 0;
-      const specDeferred = createDeferred<{ markdown: string; updatedAt: string | null }>();
+      const repoConfigDeferred =
+        createDeferred<Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>>();
 
       const originalAgentSessionsList = host.agentSessionsList;
-      const originalSpecGet = host.specGet;
-      const originalPlanGet = host.planGet;
-      const originalQaGetReport = host.qaGetReport;
       const originalBuildStart = host.buildStart;
       const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
 
       const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
 
       host.agentSessionsList = async () => [];
-      host.specGet = async () => specDeferred.promise;
-      host.planGet = async () => ({ markdown: "", updatedAt: null });
-      host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.buildStart = async () => ({
         ...runningRunFixture,
         repoPath: "/tmp/repo-a",
         worktreePath: "/tmp/repo-a/worktree",
       });
-      host.workspaceGetRepoConfig = async () => ({
-        defaultRuntimeKind: "opencode" as const,
-        branchPrefix: "obp",
-        defaultTargetBranch: { remote: "origin", branch: "main" },
-        git: {
-          providers: {},
-        },
-        trustedHooks: false,
-        hooks: {
-          preStart: [],
-          postComplete: [],
-        },
-        devServers: [],
-        worktreeFileCopies: [],
-        promptOverrides: {},
-        agentDefaults: {},
-      });
+      host.workspaceGetRepoConfig = async () => repoConfigDeferred.promise;
 
       OpencodeSdkAdapter.prototype.startSession = async () => {
         startCalls += 1;
@@ -1078,7 +1057,23 @@ describe("use-agent-orchestrator-operations", () => {
         });
 
         await harness.updateArgs({ activeRepo: "/tmp/repo-b" });
-        specDeferred.resolve({ markdown: "", updatedAt: null });
+        repoConfigDeferred.resolve({
+          defaultRuntimeKind: "opencode" as const,
+          branchPrefix: "obp",
+          defaultTargetBranch: { remote: "origin", branch: "main" },
+          git: {
+            providers: {},
+          },
+          trustedHooks: false,
+          hooks: {
+            preStart: [],
+            postComplete: [],
+          },
+          devServers: [],
+          worktreeFileCopies: [],
+          promptOverrides: {},
+          agentDefaults: {},
+        });
 
         let staleError: unknown = null;
         try {
@@ -1097,9 +1092,6 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.unmount();
 
         host.agentSessionsList = originalAgentSessionsList;
-        host.specGet = originalSpecGet;
-        host.planGet = originalPlanGet;
-        host.qaGetReport = originalQaGetReport;
         host.buildStart = originalBuildStart;
         host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
 
