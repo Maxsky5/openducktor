@@ -17,9 +17,6 @@ type TaskPromptContext = {
   status?: string;
   qaRequired?: boolean;
   description?: string;
-  specMarkdown?: string;
-  planMarkdown?: string;
-  latestQaReportMarkdown?: string;
 };
 
 type SessionStartPromptOptions = {

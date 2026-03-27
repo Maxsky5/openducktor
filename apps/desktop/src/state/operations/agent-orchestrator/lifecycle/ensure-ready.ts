@@ -4,7 +4,7 @@ import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
-import { type RuntimeInfo, resolveRuntimeConnection, type TaskDocuments } from "../runtime/runtime";
+import { type RuntimeInfo, resolveRuntimeConnection } from "../runtime/runtime";
 import { runOrchestratorTask } from "../support/async-side-effects";
 import {
   createRepoStaleGuard,
@@ -41,7 +41,6 @@ type EnsureSessionReadyDependencies = {
         : never;
     },
   ) => Promise<RuntimeInfo>;
-  loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
 };
 
@@ -75,7 +74,6 @@ export const createEnsureSessionReady = ({
   updateSession,
   attachSessionListener,
   ensureRuntime,
-  loadTaskDocuments: _loadTaskDocuments,
   loadRepoPromptOverrides,
 }: EnsureSessionReadyDependencies) => {
   return async (

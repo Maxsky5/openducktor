@@ -19,9 +19,6 @@ export type AgentPromptTaskContext = {
   status: string;
   qaRequired: boolean;
   description?: string;
-  specMarkdown?: string;
-  planMarkdown?: string;
-  latestQaReportMarkdown?: string;
 };
 
 export type BuildAgentPromptInput = {
@@ -41,9 +38,6 @@ export type BuildAgentKickoffPromptInput = {
     status?: string;
     qaRequired?: boolean;
     description?: string;
-    specMarkdown?: string;
-    planMarkdown?: string;
-    latestQaReportMarkdown?: string;
   };
   overrides?: RepoPromptOverrides;
 };
@@ -68,9 +62,6 @@ export type BuildAgentMessagePromptInput = {
     status?: string;
     qaRequired?: boolean;
     description?: string;
-    specMarkdown?: string;
-    planMarkdown?: string;
-    latestQaReportMarkdown?: string;
   };
   git?: AgentPromptGitContext;
   overrides?: RepoPromptOverrides;
@@ -710,9 +701,6 @@ const buildPlaceholderValues = ({
     "task.status": compact(task.status),
     "task.qaRequired": task.qaRequired ? "true" : "false",
     "task.description": compact(task.description),
-    "task.specMarkdown": compact(task.specMarkdown),
-    "task.planMarkdown": compact(task.planMarkdown),
-    "task.latestQaReportMarkdown": compact(task.latestQaReportMarkdown),
     ...(git
       ? {
           "git.operationLabel": compact(git.operationLabel),

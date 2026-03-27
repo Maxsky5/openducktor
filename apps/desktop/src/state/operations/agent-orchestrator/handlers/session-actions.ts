@@ -147,7 +147,6 @@ export const createAgentSessionActions = ({
     updateSession,
     attachSessionListener,
     ensureRuntime,
-    loadTaskDocuments,
     loadRepoPromptOverrides,
   });
 
