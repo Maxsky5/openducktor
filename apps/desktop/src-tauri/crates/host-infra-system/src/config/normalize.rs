@@ -1,8 +1,8 @@
 use super::types::{
     default_branch_prefix, normalize_git_target_branch_value, repo_script_fingerprint,
     AgentModelDefault, GitProviderConfig, GitProviderRepository, GitTargetBranch, GlobalConfig,
-    HookSet, OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig, RepoDevServerScript,
-    RuntimeConfig,
+    HookSet, KanbanSettings, OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig,
+    RepoDevServerScript, RuntimeConfig,
 };
 use anyhow::{anyhow, Result};
 use std::collections::HashSet;
@@ -190,7 +190,12 @@ pub(super) fn normalize_opencode_startup_readiness_config(
     }
 }
 
+fn normalize_kanban_settings(config: &mut KanbanSettings) {
+    config.done_visible_days = config.done_visible_days.max(0);
+}
+
 pub(super) fn normalize_global_config(config: &mut GlobalConfig) -> Result<()> {
+    normalize_kanban_settings(&mut config.kanban);
     normalize_prompt_overrides(&mut config.global_prompt_overrides);
     for repo in config.repos.values_mut() {
         normalize_repo_config(repo)?;

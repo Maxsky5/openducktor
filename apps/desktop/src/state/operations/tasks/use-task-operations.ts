@@ -1,12 +1,11 @@
-import {
-  type BeadsCheck,
-  DEFAULT_KANBAN_SETTINGS,
-  type PullRequest,
-  type RunSummary,
-  type TaskCard,
-  type TaskCreateInput,
-  type TaskStatus,
-  type TaskUpdatePatch,
+import type {
+  BeadsCheck,
+  PullRequest,
+  RunSummary,
+  TaskCard,
+  TaskCreateInput,
+  TaskStatus,
+  TaskUpdatePatch,
 } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -20,7 +19,10 @@ import {
   loadRepoTaskDataFromQuery,
   repoTaskDataQueryOptions,
 } from "../../queries/tasks";
-import { settingsSnapshotQueryOptions } from "../../queries/workspace";
+import {
+  loadSettingsSnapshotFromQuery,
+  settingsSnapshotQueryOptions,
+} from "../../queries/workspace";
 import { host } from "../shared/host";
 import {
   DEFERRED_BY_USER_REASON,
@@ -77,12 +79,12 @@ export function useTaskOperations({
     pullRequest: PullRequest;
   } | null>(null);
   const activeRepoRef = useRef(activeRepo);
+  const reportedSettingsErrorRef = useRef<string | null>(null);
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
-  const doneVisibleDays =
-    settingsSnapshotQuery.data?.kanban.doneVisibleDays ?? DEFAULT_KANBAN_SETTINGS.doneVisibleDays;
+  const doneVisibleDays = settingsSnapshotQuery.data?.kanban.doneVisibleDays;
   const repoTaskDataQuery = useQuery({
-    ...repoTaskDataQueryOptions(activeRepo ?? "__disabled__", doneVisibleDays),
-    enabled: activeRepo !== null,
+    ...repoTaskDataQueryOptions(activeRepo ?? "__disabled__", doneVisibleDays ?? 0),
+    enabled: activeRepo !== null && doneVisibleDays !== undefined,
   });
 
   useEffect(() => {
@@ -97,12 +99,34 @@ export function useTaskOperations({
     }
   }, [activeRepo]);
 
+  useEffect(() => {
+    if (!settingsSnapshotQuery.isError) {
+      reportedSettingsErrorRef.current = null;
+      return;
+    }
+
+    const description = errorMessage(settingsSnapshotQuery.error);
+    if (reportedSettingsErrorRef.current === description) {
+      return;
+    }
+
+    reportedSettingsErrorRef.current = description;
+    toast.error("Failed to load Kanban settings", {
+      description,
+    });
+  }, [settingsSnapshotQuery.error, settingsSnapshotQuery.isError]);
+
   const refreshTaskData = useCallback(
     async (repoPath: string): Promise<void> => {
+      const settingsSnapshot = await loadSettingsSnapshotFromQuery(queryClient);
       await invalidateRepoTaskQueries(queryClient, repoPath);
-      await loadRepoTaskDataFromQuery(queryClient, repoPath, doneVisibleDays);
+      await loadRepoTaskDataFromQuery(
+        queryClient,
+        repoPath,
+        settingsSnapshot.kanban.doneVisibleDays,
+      );
     },
-    [doneVisibleDays, queryClient],
+    [queryClient],
   );
 
   const runTaskMutation = useCallback(
@@ -429,7 +453,10 @@ export function useTaskOperations({
   const runs = activeRepo ? (repoTaskDataQuery.data?.runs ?? []) : [];
   const isLoadingTasks =
     isManualLoadingTasks ||
-    (activeRepo !== null && (repoTaskDataQuery.isPending || repoTaskDataQuery.isFetching));
+    (activeRepo !== null &&
+      (settingsSnapshotQuery.isPending ||
+        (doneVisibleDays !== undefined &&
+          (repoTaskDataQuery.isPending || repoTaskDataQuery.isFetching))));
 
   return {
     tasks,

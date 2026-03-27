@@ -1,8 +1,4 @@
-import {
-  DEFAULT_KANBAN_SETTINGS,
-  defaultSpecTemplateMarkdown,
-  validateSpecMarkdown,
-} from "@openducktor/contracts";
+import { defaultSpecTemplateMarkdown, validateSpecMarkdown } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import type { TaskDocumentPayload } from "../../../types/task-documents";
@@ -13,7 +9,7 @@ import {
   loadQaReportDocumentFromQuery,
   loadSpecDocumentFromQuery,
 } from "../../queries/documents";
-import { taskQueryKeys } from "../../queries/tasks";
+import { invalidateRepoTaskDataQueries } from "../../queries/tasks";
 import { host } from "../shared/host";
 import { requireActiveRepo } from "./task-operations-model";
 
@@ -94,10 +90,7 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });
-      await queryClient.invalidateQueries({
-        queryKey: taskQueryKeys.repoData(repo, DEFAULT_KANBAN_SETTINGS.doneVisibleDays),
-        exact: true,
-      });
+      await invalidateRepoTaskDataQueries(queryClient, repo);
       return saved;
     },
     [activeRepo, queryClient],
@@ -118,10 +111,7 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });
-      await queryClient.invalidateQueries({
-        queryKey: taskQueryKeys.repoData(repo, DEFAULT_KANBAN_SETTINGS.doneVisibleDays),
-        exact: true,
-      });
+      await invalidateRepoTaskDataQueries(queryClient, repo);
       return saved;
     },
     [activeRepo, queryClient],
@@ -142,10 +132,7 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });
-      await queryClient.invalidateQueries({
-        queryKey: taskQueryKeys.repoData(repo, DEFAULT_KANBAN_SETTINGS.doneVisibleDays),
-        exact: true,
-      });
+      await invalidateRepoTaskDataQueries(queryClient, repo);
       return saved;
     },
     [activeRepo, queryClient],

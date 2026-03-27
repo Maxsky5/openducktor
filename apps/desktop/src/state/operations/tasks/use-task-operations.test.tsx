@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { BeadsCheck, RunSummary, TaskCard, TaskCreateInput } from "@openducktor/contracts";
+import type {
+  BeadsCheck,
+  RunSummary,
+  SettingsSnapshot,
+  TaskCard,
+  TaskCreateInput,
+} from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
@@ -17,6 +23,22 @@ const TASK_REFRESH_WARNING = "Pull request sync failed during task refresh";
 const originalConsoleError = console.error;
 const originalConsoleWarn = console.warn;
 const originalToastSuccess = toast.success;
+const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+
+const DEFAULT_SETTINGS_SNAPSHOT: SettingsSnapshot = {
+  theme: "light",
+  git: {
+    defaultMergeMethod: "merge_commit",
+  },
+  chat: {
+    showThinkingMessages: false,
+  },
+  kanban: {
+    doneVisibleDays: 1,
+  },
+  repos: {},
+  globalPromptOverrides: {},
+};
 
 const createDeferred = <T,>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
@@ -114,6 +136,7 @@ const createHookHarness = (initialArgs: HookArgs) => {
 describe("use-task-operations", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
+    host.workspaceGetSettingsSnapshot = mock(async () => DEFAULT_SETTINGS_SNAPSHOT);
     console.error = (...args: Parameters<typeof console.error>): void => {
       const [firstArg] = args;
       if (typeof firstArg === "string" && firstArg.startsWith(TASK_REFRESH_WARNING)) {
@@ -137,6 +160,7 @@ describe("use-task-operations", () => {
     console.error = originalConsoleError;
     console.warn = originalConsoleWarn;
     toast.success = originalToastSuccess;
+    host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
   });
 
   test("refreshTaskData filters deferred tasks and loads runs", async () => {
@@ -180,6 +204,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.status === "open");
       await harness.run(async (value) => {
         await value.refreshTaskData("/repo");
       });
@@ -444,6 +469,56 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("surfaces settings load failures instead of silently using default Kanban visibility", async () => {
+    const settingsError = new Error("settings snapshot failed");
+    const workspaceGetSettingsSnapshot = mock(async () => {
+      throw settingsError;
+    });
+    const tasksList = mock(async () => [makeTask("A", "open")]);
+    const toastError = mock(() => {});
+
+    const original = {
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+      tasksList: host.tasksList,
+      toastError: toast.error,
+    };
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+    host.tasksList = tasksList;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        () =>
+          workspaceGetSettingsSnapshot.mock.calls.length > 0 && toastError.mock.calls.length > 0,
+      );
+
+      expect(tasksList).not.toHaveBeenCalled();
+      expect(toastError).toHaveBeenCalledWith("Failed to load Kanban settings", {
+        description: "settings snapshot failed",
+      });
+      await expect(
+        harness.run(async (value) => {
+          await value.refreshTaskData("/repo");
+        }),
+      ).rejects.toThrow("settings snapshot failed");
+    } finally {
+      await harness.unmount();
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+      host.tasksList = original.tasksList;
+      toast.error = original.toastError;
+    }
+  });
+
   test("syncPullRequests links a detected pull request for the task", async () => {
     const taskPullRequestDetect = mock(async () => ({
       outcome: "linked" as const,
@@ -502,6 +577,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks.length === 1);
       tasksList.mockClear();
       runsList.mockClear();
       await harness.run(async (value) => {
@@ -563,6 +639,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => !value.isLoadingTasks);
 
       let syncPromise: Promise<void> | null = null;
       await harness.run((value) => {
@@ -652,6 +729,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks.length === 1);
       tasksList.mockClear();
       runsList.mockClear();
       await harness.run(async (value) => {
@@ -729,6 +807,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks.length === 1);
       tasksList.mockClear();
       runsList.mockClear();
       await harness.run(async (value) => {
@@ -829,6 +908,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks.length === 1);
       tasksList.mockClear();
       runsList.mockClear();
       await harness.run(async (value) => {
@@ -880,6 +960,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks.length === 1);
       tasksList.mockClear();
       runsList.mockClear();
       await harness.run(async (value) => {
@@ -966,6 +1047,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks.length === 1);
       tasksList.mockClear();
       runsList.mockClear();
       await harness.run(async (value) => {
@@ -1063,6 +1145,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => !value.isLoadingTasks);
 
       let unlinkPromise: Promise<void> | null = null;
       await harness.run((value) => {
@@ -1211,6 +1294,7 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks.length === 1);
       tasksList.mockClear();
       runsList.mockClear();
       await harness.run(async (value) => {

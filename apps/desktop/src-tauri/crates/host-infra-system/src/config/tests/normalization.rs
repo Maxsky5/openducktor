@@ -18,6 +18,37 @@ fn load_missing_returns_default_config() {
 }
 
 #[test]
+fn load_clamps_negative_kanban_done_visible_days() {
+    let harness = TestStoreHarness::new("normalize-negative-kanban");
+    let store = harness.store();
+
+    fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
+    let payload = json!({
+        "version": 1,
+        "kanban": {
+            "doneVisibleDays": -5
+        },
+        "recentRepos": []
+    });
+    fs::write(
+        store.path(),
+        serde_json::to_string_pretty(&payload).expect("serialize payload"),
+    )
+    .expect("write config");
+    #[cfg(unix)]
+    {
+        let parent = store.path().parent().expect("config parent");
+        fs::set_permissions(parent, Permissions::from_mode(0o700))
+            .expect("config directory should be private");
+        fs::set_permissions(store.path(), Permissions::from_mode(0o600))
+            .expect("config file should be private");
+    }
+
+    let config = store.load().expect("load normalized config");
+    assert_eq!(config.kanban.done_visible_days, 0);
+}
+
+#[test]
 fn update_repo_config_normalizes_blank_worktree_path() {
     let _env_lock = lock_env();
     let harness = TestStoreHarness::new("normalize-worktree");

@@ -267,6 +267,10 @@ describe("use-spec-operations", () => {
       tasks: [],
       runs: [],
     });
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo-a", 7), {
+      tasks: [],
+      runs: [],
+    });
 
     try {
       await harness.mount();
@@ -300,6 +304,9 @@ describe("use-spec-operations", () => {
         queryClient.getQueryState(["task-documents", "plan", "", "task-1"])?.isInvalidated,
       ).toBe(true);
       expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a", 1))?.isInvalidated).toBe(
+        true,
+      );
+      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a", 7))?.isInvalidated).toBe(
         true,
       );
     } finally {
@@ -352,6 +359,10 @@ describe("use-spec-operations", () => {
       tasks: [],
       runs: [],
     });
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo-a", 7), {
+      tasks: [],
+      runs: [],
+    });
 
     try {
       await harness.mount();
@@ -374,6 +385,9 @@ describe("use-spec-operations", () => {
         queryClient.getQueryState(["task-documents", "spec", "", "task-1"])?.isInvalidated,
       ).toBe(true);
       expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a", 1))?.isInvalidated).toBe(
+        true,
+      );
+      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a", 7))?.isInvalidated).toBe(
         true,
       );
     } finally {
