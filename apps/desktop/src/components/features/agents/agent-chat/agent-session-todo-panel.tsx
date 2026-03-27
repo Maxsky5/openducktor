@@ -15,6 +15,7 @@ type AgentSessionTodoPanelProps = {
   todos: AgentSessionTodoItem[];
   collapsed: boolean;
   isSessionWorking: boolean;
+  accentColor?: string | undefined;
   onToggleCollapse: () => void;
   className?: string;
 };
@@ -54,6 +55,7 @@ export function AgentSessionTodoPanel({
   todos,
   collapsed,
   isSessionWorking,
+  accentColor,
   onToggleCollapse,
   className,
 }: AgentSessionTodoPanelProps): ReactElement | null {
@@ -71,8 +73,12 @@ export function AgentSessionTodoPanel({
 
   return (
     <section
-      className={cn("w-full rounded-t-xl border border-input border-b-0 bg-card", className)}
+      className={cn(
+        "w-full rounded-t-xl border border-input border-b-0 border-l-4 bg-card",
+        className,
+      )}
       aria-label="Agent todo list"
+      style={accentColor ? { borderLeftColor: accentColor } : undefined}
     >
       <button
         type="button"
@@ -108,13 +114,16 @@ export function AgentSessionTodoPanel({
         <div className="border-t border-input/80 px-3 pb-3 pt-2">
           <ul className="max-h-[40vh] space-y-1 overflow-y-auto overscroll-contain pr-1">
             {visibleTodos.map((todo) => (
-              <li key={todo.id} className="flex items-start gap-2 rounded-md px-1 py-1 text-sm">
-                <span className="inline-flex size-5 shrink-0 items-center justify-center">
+              <li
+                key={todo.id}
+                className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-2 rounded-md px-1 py-1 text-sm"
+              >
+                <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center self-start">
                   {statusIcon(todo.status, isSessionWorking)}
                 </span>
                 <span
                   className={cn(
-                    "min-w-0 flex-1 leading-5 text-foreground",
+                    "block min-w-0 leading-5 text-foreground",
                     todo.status === "in_progress" && "font-medium text-foreground",
                     todo.status === "completed" && "text-muted-foreground line-through",
                   )}

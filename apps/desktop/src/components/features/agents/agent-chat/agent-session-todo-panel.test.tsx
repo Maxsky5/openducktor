@@ -34,6 +34,7 @@ describe("AgentSessionTodoPanel", () => {
   test("renders collapsed by default with a single truncating actionable summary", () => {
     const html = renderPanel({
       collapsed: true,
+      accentColor: "#123456",
       todos: [
         buildTodoItem({ id: "todo-1", content: "Completed work", status: "completed" }),
         buildTodoItem({ id: "todo-2", content: "Current active item", status: "in_progress" }),
@@ -49,6 +50,8 @@ describe("AgentSessionTodoPanel", () => {
     expect(html).not.toContain("line-clamp-2");
     expect(html).toContain("w-full rounded-t-xl");
     expect(html).toContain("border-b-0");
+    expect(html).toContain("border-l-4");
+    expect(html).toContain("border-left-color:#123456");
     expect(html).not.toContain("justify-end");
     expect(html).not.toContain("max-w-md");
   });
@@ -92,13 +95,20 @@ describe("AgentSessionTodoPanel", () => {
       collapsed: false,
       todos: [
         buildTodoItem({ id: "todo-1", content: "Done item", status: "completed" }),
-        buildTodoItem({ id: "todo-2", content: "Active item", status: "in_progress" }),
+        buildTodoItem({
+          id: "todo-2",
+          content: "Active item with a much longer description that should wrap to another line",
+          status: "in_progress",
+        }),
       ],
     });
 
     expect(html).toContain("Done item");
-    expect(html).toContain("Active item");
-    expect(html).toContain("inline-flex size-5 shrink-0 items-center justify-center");
+    expect(html).toContain("Active item with a much longer description");
+    expect(html).toContain("grid grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-2");
+    expect(html).toContain("inline-flex h-5 w-5 shrink-0 items-center justify-center self-start");
+    expect(html).toContain("block min-w-0 leading-5");
+    expect(html).toContain("font-medium text-foreground");
     expect(html).not.toContain("mt-[3px]");
   });
 });

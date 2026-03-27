@@ -128,6 +128,7 @@ describe("AgentChat", () => {
           ...buildModel(),
           thread: {
             ...buildModel().thread,
+            sessionAgentColors: { "Hephaestus (Deep Agent)": "#123456" },
             session: buildSession({
               status: "idle",
               todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
@@ -139,6 +140,7 @@ describe("AgentChat", () => {
 
     expect(html).toContain("agent-chat-bottom-stack");
     expect(html).toContain("Keep todo anchored");
+    expect(html).toContain("border-left-color:#123456");
     expect(html.indexOf("agent-chat-bottom-stack")).toBeLessThan(html.indexOf("<form"));
   });
 });

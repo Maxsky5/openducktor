@@ -3,6 +3,7 @@ import { type ReactElement, useLayoutEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { resolveAgentAccentColor } from "../agent-accent-color";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
@@ -116,6 +117,14 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   });
   const sessionRole = session?.role ?? null;
   const sessionSelectedModel = session?.selectedModel ?? null;
+  const sessionAccentColor = useMemo(() => {
+    const profileId = sessionSelectedModel?.profileId;
+    if (!profileId) {
+      return undefined;
+    }
+
+    return resolveAgentAccentColor(profileId, sessionAgentColors[profileId]);
+  }, [sessionAgentColors, sessionSelectedModel?.profileId]);
   const sessionWorkingDirectory = session?.workingDirectory ?? null;
   const rowKeys = useMemo(() => windowedRows.map((row) => row.key), [windowedRows]);
   const rowRefByKeyRef = useRef<Map<string, (element: HTMLDivElement | null) => void>>(new Map());
@@ -258,6 +267,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
             todos={session.todos}
             collapsed={todoPanelCollapsed}
             isSessionWorking={isSessionWorking}
+            accentColor={sessionAccentColor}
             onToggleCollapse={onToggleTodoPanel}
           />
         </div>
