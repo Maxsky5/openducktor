@@ -25,6 +25,8 @@ type MockMessagesContainer = HTMLDivElement & {
   scrollTo: ReturnType<typeof mock<MockScrollTo>>;
   addEventListener: ReturnType<typeof mock<HTMLDivElement["addEventListener"]>>;
   removeEventListener: ReturnType<typeof mock<HTMLDivElement["removeEventListener"]>>;
+  getBoundingClientRect: ReturnType<typeof mock<HTMLDivElement["getBoundingClientRect"]>>;
+  querySelectorAll: ReturnType<typeof mock<HTMLDivElement["querySelectorAll"]>>;
 };
 
 type MockMessagesContent = HTMLDivElement & {
@@ -87,6 +89,12 @@ const createMessagesContainer = (): MockMessagesContainer => {
   const container = {
     addEventListener: mock<HTMLDivElement["addEventListener"]>(() => undefined),
     clientHeight: 300,
+    getBoundingClientRect: mock<HTMLDivElement["getBoundingClientRect"]>(
+      () => ({ top: 0 }) as DOMRect,
+    ),
+    querySelectorAll: mock<HTMLDivElement["querySelectorAll"]>(
+      () => [] as unknown as NodeListOf<Element>,
+    ),
     removeEventListener: mock<HTMLDivElement["removeEventListener"]>(() => undefined),
     scrollHeight: 1000,
     scrollTo: mock<MockScrollTo>(() => undefined),
@@ -100,6 +108,32 @@ const createMessagesContent = (): MockMessagesContent => {
   return {
     scrollHeight: 1000,
   } as unknown as MockMessagesContent;
+};
+
+const ROW_HEIGHT_PX = 40;
+
+const attachWindowedRowGeometry = ({
+  container,
+  rows,
+  getWindowStart,
+}: {
+  container: MockMessagesContainer;
+  rows: AgentChatWindowRow[];
+  getWindowStart: () => number;
+}): void => {
+  const rowElements = rows.map((row, index) => {
+    return {
+      dataset: { rowKey: row.key },
+      getBoundingClientRect: () =>
+        ({
+          top: (index - getWindowStart()) * ROW_HEIGHT_PX,
+        }) as DOMRect,
+    } as unknown as HTMLElement;
+  });
+
+  container.querySelectorAll.mockImplementation(
+    () => rowElements as unknown as ReturnType<HTMLDivElement["querySelectorAll"]>,
+  );
 };
 
 const getLatestResult = (latestResultRef: { current: HookResult | null }): HookResult => {
@@ -1020,6 +1054,102 @@ describe("useAgentChatWindow", () => {
       throw new Error("Expected the final window row to be a message");
     }
     expect(lastRow.message.id).toBe("msg-80");
+
+    await harness.unmount();
+  });
+
+  test("preserves the viewport anchor when older history is prepended into the window", async () => {
+    const rows = createRows(120);
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachContainer: true },
+    );
+
+    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    attachWindowedRowGeometry({
+      container,
+      rows,
+      getWindowStart: () => harness.getLatestResult().windowStart,
+    });
+    container.scrollTop = 160;
+
+    const sentinelElement = createMessagesContainer();
+    await act(async () => {
+      harness.getLatestResult().topSentinelRef(sentinelElement);
+      await flush();
+    });
+
+    const observer = mockIntersectionObservers.at(-1);
+    if (!observer) {
+      throw new Error("Expected top sentinel observer");
+    }
+
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(40);
+    expect(container.scrollTop).toBe(160 + CHAT_SHIFT_SIZE * ROW_HEIGHT_PX);
+
+    await harness.unmount();
+  });
+
+  test("preserves the viewport anchor when newer history replaces rows above the viewport", async () => {
+    const rows = createRows(120);
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachContainer: true },
+    );
+
+    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    attachWindowedRowGeometry({
+      container,
+      rows,
+      getWindowStart: () => harness.getLatestResult().windowStart,
+    });
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+
+    container.scrollTop = 600;
+
+    const sentinelElement = createMessagesContainer();
+    await act(async () => {
+      harness.getLatestResult().bottomSentinelRef(sentinelElement);
+      await flush();
+    });
+
+    const observer = mockIntersectionObservers.at(-1);
+    if (!observer) {
+      throw new Error("Expected bottom sentinel observer");
+    }
+
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(10);
+    expect(container.scrollTop).toBe(600 - 10 * ROW_HEIGHT_PX);
 
     await harness.unmount();
   });

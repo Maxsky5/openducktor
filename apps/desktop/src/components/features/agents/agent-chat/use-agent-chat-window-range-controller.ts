@@ -1,5 +1,6 @@
-import type { MutableRefObject, RefObject } from "react";
+import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import { CHAT_OVERSCAN, CHAT_SHIFT_SIZE, CHAT_WINDOW_SIZE } from "./agent-chat-thread-windowing";
 import {
   CHAT_AUTO_SCROLL_ANIMATION_DURATION_MS,
@@ -12,16 +13,15 @@ import {
 } from "./agent-chat-window-shared";
 
 type UseAgentChatWindowRangeControllerInput = {
+  rows: AgentChatWindowRow[];
   rowCount: number;
   activeSessionId: string | null;
   isSessionViewLoading: boolean;
-  messagesContainerRef: RefObject<HTMLDivElement | null>;
   isPinnedToBottomRef: MutableRefObject<boolean>;
   suppressSentinelsRef: MutableRefObject<boolean>;
-  prevScrollHeightRef: MutableRefObject<number | null>;
-  shouldCompensateScrollRef: MutableRefObject<boolean>;
   isUpdatingRef: MutableRefObject<boolean>;
   hasPendingScrollRequest: () => boolean;
+  captureScrollAnchor: (rowKey: string) => void;
   requestWindowScroll: (request: PendingScrollRequest) => void;
   setBottomAnchoredState: (windowStart: number) => void;
   setTopAnchoredState: () => void;
@@ -36,16 +36,15 @@ type UseAgentChatWindowRangeControllerResult = {
 };
 
 export function useAgentChatWindowRangeController({
+  rows,
   rowCount,
   activeSessionId,
   isSessionViewLoading,
-  messagesContainerRef,
   isPinnedToBottomRef,
   suppressSentinelsRef,
-  prevScrollHeightRef,
-  shouldCompensateScrollRef,
   isUpdatingRef,
   hasPendingScrollRequest,
+  captureScrollAnchor,
   requestWindowScroll,
   setBottomAnchoredState,
   setTopAnchoredState,
@@ -165,22 +164,20 @@ export function useAgentChatWindowRangeController({
         return current;
       }
 
-      const container = messagesContainerRef.current;
-      if (container) {
-        prevScrollHeightRef.current = container.scrollHeight;
-        shouldCompensateScrollRef.current = true;
+      const anchorRow = rows[current.start];
+      if (anchorRow) {
+        captureScrollAnchor(anchorRow.key);
       }
       releaseWindowUpdateLock();
       return nextRange;
     });
   }, [
+    captureScrollAnchor,
     isUpdatingRef,
-    messagesContainerRef,
-    prevScrollHeightRef,
     releaseWindowUpdateLock,
     rowCount,
-    shouldCompensateScrollRef,
     suppressSentinelsRef,
+    rows,
   ]);
 
   const shiftWindowDown = useCallback(() => {
@@ -205,6 +202,10 @@ export function useAgentChatWindowRangeController({
         return current;
       }
 
+      const anchorRow = rows[nextRange.start];
+      if (anchorRow) {
+        captureScrollAnchor(anchorRow.key);
+      }
       if (nextRange.end === rowCount - 1) {
         setBottomAnchoredState(nextRange.start);
       }
@@ -212,11 +213,13 @@ export function useAgentChatWindowRangeController({
       return nextRange;
     });
   }, [
+    captureScrollAnchor,
     isUpdatingRef,
     releaseWindowUpdateLock,
     rowCount,
     setBottomAnchoredState,
     suppressSentinelsRef,
+    rows,
   ]);
 
   const scrollToBottom = useCallback(() => {

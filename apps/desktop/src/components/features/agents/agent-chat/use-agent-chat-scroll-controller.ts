@@ -17,10 +17,9 @@ type UseAgentChatScrollControllerResult = {
   isAutoFollowingToBottom: boolean;
   isPinnedToBottomRef: MutableRefObject<boolean>;
   suppressSentinelsRef: MutableRefObject<boolean>;
-  prevScrollHeightRef: MutableRefObject<number | null>;
-  shouldCompensateScrollRef: MutableRefObject<boolean>;
   isUpdatingRef: MutableRefObject<boolean>;
   hasPendingScrollRequest: () => boolean;
+  captureScrollAnchor: (rowKey: string) => void;
   syncBottomIfPinned: () => void;
   requestWindowScroll: (request: PendingScrollRequest) => void;
   applyPendingScrollRequest: () => void;
@@ -42,9 +41,50 @@ export function useAgentChatScrollController({
   const scrollAnimationFrameRef = useRef<number | null>(null);
   const scrollAnimationCleanupRef = useRef<(() => void) | null>(null);
   const isBottomAutoFollowAnimationRef = useRef(false);
-  const prevScrollHeightRef = useRef<number | null>(null);
-  const shouldCompensateScrollRef = useRef(false);
   const isUpdatingRef = useRef(false);
+  const pendingScrollAnchorRef = useRef<{ rowKey: string; topOffset: number } | null>(null);
+
+  const getRowElementByKey = useCallback(
+    (container: HTMLDivElement, rowKey: string): HTMLElement | null => {
+      if (typeof container.querySelectorAll !== "function") {
+        return null;
+      }
+
+      const rowElements = container.querySelectorAll<HTMLElement>("[data-row-key]");
+      for (const rowElement of rowElements) {
+        if (rowElement.dataset.rowKey === rowKey) {
+          return rowElement;
+        }
+      }
+
+      return null;
+    },
+    [],
+  );
+
+  const captureScrollAnchor = useCallback(
+    (rowKey: string) => {
+      const container = messagesContainerRef.current;
+      if (!container || typeof container.getBoundingClientRect !== "function") {
+        pendingScrollAnchorRef.current = null;
+        return;
+      }
+
+      const rowElement = getRowElementByKey(container, rowKey);
+      if (!rowElement || typeof rowElement.getBoundingClientRect !== "function") {
+        pendingScrollAnchorRef.current = null;
+        return;
+      }
+
+      const containerTop = container.getBoundingClientRect().top;
+      const rowTop = rowElement.getBoundingClientRect().top;
+      pendingScrollAnchorRef.current = {
+        rowKey,
+        topOffset: rowTop - containerTop,
+      };
+    },
+    [getRowElementByKey, messagesContainerRef],
+  );
 
   const cancelScrollAnimation = useCallback((skipStateUpdate = false) => {
     if (scrollAnimationFrameRef.current !== null) {
@@ -190,6 +230,10 @@ export function useAgentChatScrollController({
       return;
     }
 
+    if (isUpdatingRef.current && !isPinnedToBottomRef.current) {
+      return;
+    }
+
     if (isBottomAutoFollowAnimationRef.current) {
       setIsNearBottom(true);
       return;
@@ -224,20 +268,26 @@ export function useAgentChatScrollController({
   }, []);
 
   useLayoutEffect(() => {
-    if (!shouldCompensateScrollRef.current) {
+    const pendingScrollAnchor = pendingScrollAnchorRef.current;
+    if (!pendingScrollAnchor) {
       return;
     }
 
-    shouldCompensateScrollRef.current = false;
-    const previousScrollHeight = prevScrollHeightRef.current;
-    prevScrollHeightRef.current = null;
+    pendingScrollAnchorRef.current = null;
     const container = messagesContainerRef.current;
-    if (!container || previousScrollHeight === null) {
+    if (!container || typeof container.getBoundingClientRect !== "function") {
       return;
     }
 
-    const delta = container.scrollHeight - previousScrollHeight;
-    if (delta > 0) {
+    const rowElement = getRowElementByKey(container, pendingScrollAnchor.rowKey);
+    if (!rowElement || typeof rowElement.getBoundingClientRect !== "function") {
+      return;
+    }
+
+    const containerTop = container.getBoundingClientRect().top;
+    const nextTopOffset = rowElement.getBoundingClientRect().top - containerTop;
+    const delta = nextTopOffset - pendingScrollAnchor.topOffset;
+    if (Math.abs(delta) >= 1) {
       container.scrollTop += delta;
     }
   });
@@ -283,10 +333,9 @@ export function useAgentChatScrollController({
     isAutoFollowingToBottom,
     isPinnedToBottomRef,
     suppressSentinelsRef,
-    prevScrollHeightRef,
-    shouldCompensateScrollRef,
     isUpdatingRef,
     hasPendingScrollRequest: () => pendingScrollRequestRef.current !== null,
+    captureScrollAnchor,
     syncBottomIfPinned,
     requestWindowScroll,
     applyPendingScrollRequest,
