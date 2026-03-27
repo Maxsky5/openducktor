@@ -19,6 +19,9 @@ describe("TaskPullRequestLink", () => {
     mock.module("sonner", () => ({
       toast: {
         error: toastErrorMock,
+        success: () => {},
+        loading: () => "",
+        dismiss: () => {},
       },
     }));
   });

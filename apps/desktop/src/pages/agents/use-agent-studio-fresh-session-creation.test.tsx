@@ -67,6 +67,9 @@ beforeAll(async () => {
   mock.module("sonner", () => ({
     toast: {
       error: toastErrorMock,
+      success: () => {},
+      loading: () => "",
+      dismiss: () => {},
     },
   }));
   ({ useAgentStudioFreshSessionCreation } = await import(

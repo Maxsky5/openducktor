@@ -1,5 +1,6 @@
-import type { MutableRefObject, RefObject } from "react";
+import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import { CHAT_OVERSCAN, CHAT_SHIFT_SIZE, CHAT_WINDOW_SIZE } from "./agent-chat-thread-windowing";
 import {
   CHAT_AUTO_SCROLL_ANIMATION_DURATION_MS,
@@ -12,16 +13,15 @@ import {
 } from "./agent-chat-window-shared";
 
 type UseAgentChatWindowRangeControllerInput = {
+  rows: AgentChatWindowRow[];
   rowCount: number;
   activeSessionId: string | null;
   isSessionViewLoading: boolean;
-  messagesContainerRef: RefObject<HTMLDivElement | null>;
   isPinnedToBottomRef: MutableRefObject<boolean>;
   suppressSentinelsRef: MutableRefObject<boolean>;
-  prevScrollHeightRef: MutableRefObject<number | null>;
-  shouldCompensateScrollRef: MutableRefObject<boolean>;
   isUpdatingRef: MutableRefObject<boolean>;
   hasPendingScrollRequest: () => boolean;
+  captureScrollAnchor: (rowKey: string) => void;
   requestWindowScroll: (request: PendingScrollRequest) => void;
   setBottomAnchoredState: (windowStart: number) => void;
   setTopAnchoredState: () => void;
@@ -36,25 +36,30 @@ type UseAgentChatWindowRangeControllerResult = {
 };
 
 export function useAgentChatWindowRangeController({
+  rows,
   rowCount,
   activeSessionId,
   isSessionViewLoading,
-  messagesContainerRef,
   isPinnedToBottomRef,
   suppressSentinelsRef,
-  prevScrollHeightRef,
-  shouldCompensateScrollRef,
   isUpdatingRef,
   hasPendingScrollRequest,
+  captureScrollAnchor,
   requestWindowScroll,
   setBottomAnchoredState,
   setTopAnchoredState,
 }: UseAgentChatWindowRangeControllerInput): UseAgentChatWindowRangeControllerResult {
   const initialWindow = createBottomAnchoredWindow(rowCount);
   const [windowRange, setWindowRange] = useState<WindowRange>(() => initialWindow);
+  const windowRangeRef = useRef(initialWindow);
   const prevSessionIdRef = useRef<string | null>(null);
   const prevIsSessionViewLoadingRef = useRef(isSessionViewLoading);
   const prevRowCountRef = useRef(rowCount);
+
+  const setWindowRangeState = useCallback((nextRange: WindowRange) => {
+    windowRangeRef.current = nextRange;
+    setWindowRange(nextRange);
+  }, []);
 
   const releaseWindowUpdateLock = useCallback(() => {
     isUpdatingRef.current = true;
@@ -65,9 +70,13 @@ export function useAgentChatWindowRangeController({
 
   const applyBottomAnchoredWindow = useCallback(() => {
     const nextWindow = createBottomAnchoredWindow(rowCount);
-    setWindowRange(nextWindow);
+    setWindowRangeState(nextWindow);
     setBottomAnchoredState(nextWindow.start);
-  }, [rowCount, setBottomAnchoredState]);
+  }, [rowCount, setBottomAnchoredState, setWindowRangeState]);
+
+  useEffect(() => {
+    windowRangeRef.current = windowRange;
+  }, [windowRange]);
 
   useEffect(() => {
     if (prevSessionIdRef.current === activeSessionId) {
@@ -103,7 +112,7 @@ export function useAgentChatWindowRangeController({
     prevRowCountRef.current = rowCount;
 
     if (rowCount === 0) {
-      setWindowRange(EMPTY_WINDOW);
+      setWindowRangeState(EMPTY_WINDOW);
       setBottomAnchoredState(0);
       return;
     }
@@ -111,11 +120,11 @@ export function useAgentChatWindowRangeController({
     if (rowCount < previousRowCount) {
       if (isPinnedToBottomRef.current) {
         const nextWindow = createBottomAnchoredWindow(rowCount);
-        setWindowRange(nextWindow);
+        setWindowRangeState(nextWindow);
         setBottomAnchoredState(nextWindow.start);
         return;
       }
-      setWindowRange((current) => clampWindowRange(current, rowCount));
+      setWindowRangeState(clampWindowRange(windowRangeRef.current, rowCount));
       return;
     }
 
@@ -141,6 +150,7 @@ export function useAgentChatWindowRangeController({
     requestWindowScroll,
     rowCount,
     setBottomAnchoredState,
+    setWindowRangeState,
   ]);
 
   const shiftWindowUp = useCallback(() => {
@@ -148,39 +158,37 @@ export function useAgentChatWindowRangeController({
       return;
     }
 
-    setWindowRange((current) => {
-      if (current.start <= 0) {
-        return current;
-      }
+    const current = windowRangeRef.current;
+    if (current.start <= 0) {
+      return;
+    }
 
-      const nextStart = Math.max(0, current.start - CHAT_SHIFT_SIZE);
-      const nextRange = clampWindowRange(
-        {
-          start: nextStart,
-          end: Math.min(rowCount - 1, nextStart + CHAT_MAX_RENDERED_ROWS - 1),
-        },
-        rowCount,
-      );
-      if (nextRange.start === current.start && nextRange.end === current.end) {
-        return current;
-      }
+    const nextStart = Math.max(0, current.start - CHAT_SHIFT_SIZE);
+    const nextRange = clampWindowRange(
+      {
+        start: nextStart,
+        end: Math.min(rowCount - 1, nextStart + CHAT_MAX_RENDERED_ROWS - 1),
+      },
+      rowCount,
+    );
+    if (nextRange.start === current.start && nextRange.end === current.end) {
+      return;
+    }
 
-      const container = messagesContainerRef.current;
-      if (container) {
-        prevScrollHeightRef.current = container.scrollHeight;
-        shouldCompensateScrollRef.current = true;
-      }
-      releaseWindowUpdateLock();
-      return nextRange;
-    });
+    const anchorRow = rows[current.start];
+    if (anchorRow) {
+      captureScrollAnchor(anchorRow.key);
+    }
+    releaseWindowUpdateLock();
+    setWindowRangeState(nextRange);
   }, [
+    captureScrollAnchor,
     isUpdatingRef,
-    messagesContainerRef,
-    prevScrollHeightRef,
     releaseWindowUpdateLock,
     rowCount,
-    shouldCompensateScrollRef,
+    setWindowRangeState,
     suppressSentinelsRef,
+    rows,
   ]);
 
   const shiftWindowDown = useCallback(() => {
@@ -188,35 +196,48 @@ export function useAgentChatWindowRangeController({
       return;
     }
 
-    setWindowRange((current) => {
-      if (current.end >= rowCount - 1) {
-        return current;
-      }
+    const current = windowRangeRef.current;
+    if (current.end >= rowCount - 1) {
+      return;
+    }
 
-      const nextEnd = Math.min(rowCount - 1, current.end + CHAT_SHIFT_SIZE);
-      const nextRange = clampWindowRange(
-        {
-          start: Math.max(0, nextEnd - CHAT_MAX_RENDERED_ROWS + 1),
-          end: nextEnd,
-        },
-        rowCount,
-      );
-      if (nextRange.start === current.start && nextRange.end === current.end) {
-        return current;
-      }
+    const nextEnd = Math.min(rowCount - 1, current.end + CHAT_SHIFT_SIZE);
+    const nextRange = clampWindowRange(
+      {
+        start: Math.max(0, nextEnd - CHAT_MAX_RENDERED_ROWS + 1),
+        end: nextEnd,
+      },
+      rowCount,
+    );
+    if (nextRange.start === current.start && nextRange.end === current.end) {
+      return;
+    }
 
-      if (nextRange.end === rowCount - 1) {
-        setBottomAnchoredState(nextRange.start);
-      }
-      releaseWindowUpdateLock();
-      return nextRange;
-    });
+    const reachedBottom = nextRange.end === rowCount - 1;
+    const anchorRow = rows[nextRange.start];
+    if (anchorRow && !reachedBottom) {
+      captureScrollAnchor(anchorRow.key);
+    }
+    if (reachedBottom) {
+      setBottomAnchoredState(nextRange.start);
+      requestWindowScroll({
+        target: "bottom",
+        behavior: "auto",
+        suppressSentinels: false,
+      });
+    }
+    releaseWindowUpdateLock();
+    setWindowRangeState(nextRange);
   }, [
+    captureScrollAnchor,
     isUpdatingRef,
     releaseWindowUpdateLock,
     rowCount,
+    requestWindowScroll,
     setBottomAnchoredState,
+    setWindowRangeState,
     suppressSentinelsRef,
+    rows,
   ]);
 
   const scrollToBottom = useCallback(() => {
@@ -236,14 +257,14 @@ export function useAgentChatWindowRangeController({
       },
       rowCount,
     );
-    setWindowRange(nextRange);
+    setWindowRangeState(nextRange);
     setTopAnchoredState();
     requestWindowScroll({
       target: "top",
       behavior: "auto",
       suppressSentinels: true,
     });
-  }, [requestWindowScroll, rowCount, setTopAnchoredState]);
+  }, [requestWindowScroll, rowCount, setTopAnchoredState, setWindowRangeState]);
 
   return {
     windowRange,

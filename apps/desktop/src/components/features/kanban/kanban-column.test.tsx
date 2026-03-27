@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
@@ -14,27 +14,11 @@ const noop = (): void => {};
 
 describe("KanbanColumn", () => {
   beforeAll(async () => {
-    mock.module("@/components/features/kanban/use-kanban-virtualization", () => ({
-      useKanbanVirtualization: ({ tasks }: { tasks: Array<{ id: string }> }) => ({
-        containerRef: () => {},
-        renderModel: {
-          kind: "simple" as const,
-          visibleTasks: tasks,
-        },
-        measurementVersion: 0,
-        onMeasuredHeight: () => {},
-      }),
-    }));
-
     const modulePath = `./kanban-column?test=${Date.now()}`;
     const kanbanColumnModule = (await import(modulePath)) as {
       KanbanColumn: typeof import("./kanban-column").KanbanColumn;
     };
     KanbanColumn = kanbanColumnModule.KanbanColumn;
-  });
-
-  afterAll(() => {
-    mock.restore();
   });
 
   test("passes waiting-input ordering data through to rendered task cards", () => {
