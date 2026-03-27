@@ -28,7 +28,7 @@ export const AUTOPILOT_EVENT_IDS = [
 ] as const;
 
 export const AUTOPILOT_ACTION_IDS = [
-  "startSpec",
+  "startPlanner",
   "startBuilder",
   "startQa",
   "startReviewQaFeedbacks",

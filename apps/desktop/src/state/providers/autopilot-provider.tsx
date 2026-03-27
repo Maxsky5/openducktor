@@ -5,6 +5,7 @@ import type {
   TaskCard,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import { getAgentScenarioDefinition } from "@openducktor/core";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type PropsWithChildren, type ReactElement, useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -30,6 +31,8 @@ import {
   useTaskDataContext,
 } from "../app-state-contexts";
 import { MISSING_BUILD_TARGET_ERROR } from "../operations/agent-orchestrator/handlers/start-session-constants";
+import { loadBuildContinuationTarget } from "../operations/agent-orchestrator/runtime/runtime";
+import { normalizeWorkingDirectory } from "../operations/agent-orchestrator/support/core";
 import {
   loadRepoConfigFromQuery,
   settingsSnapshotQueryOptions,
@@ -52,8 +55,21 @@ type ExecuteAutopilotActionArgs = {
   actionId: AutopilotActionId;
   queryClient: QueryClient;
   loadRepoRuntimeCatalog: (repoPath: string, runtimeKind: string) => Promise<AgentModelCatalog>;
+  resolveBuildContinuationTarget: (
+    repoPath: string,
+    taskId: string,
+  ) => Promise<{
+    workingDirectory: string;
+  } | null>;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
+};
+
+type ResolvedAutopilotStart = {
+  startMode: "fresh" | "reuse" | "fork";
+  sourceSessionId?: string | null;
+  targetWorkingDirectory?: string | null;
+  preferredSelection?: AgentModelSelection | null;
 };
 
 const ROLE_LABELS = AGENT_ROLE_LABELS as Record<AgentRole, string>;
@@ -189,12 +205,62 @@ const isSkippableAutopilotError = (actionId: AutopilotActionId, error: unknown):
   );
 };
 
+const resolveAutopilotStart = async ({
+  repoPath,
+  task,
+  actionId,
+  resolveBuildContinuationTarget,
+}: Pick<ExecuteAutopilotActionArgs, "repoPath" | "task" | "resolveBuildContinuationTarget"> & {
+  actionId: AutopilotActionId;
+}): Promise<ResolvedAutopilotStart> => {
+  const action = AUTOPILOT_ACTION_DEFINITIONS[actionId];
+  const latestRoleSession = findLatestSessionRecordByRole(task, action.role);
+
+  if (actionId === "startGeneratePullRequest") {
+    return {
+      startMode: "fork",
+      sourceSessionId: latestRoleSession?.sessionId ?? null,
+      preferredSelection: toAgentModelSelection(latestRoleSession?.selectedModel ?? null),
+    };
+  }
+
+  const { allowedStartModes } = getAgentScenarioDefinition(action.scenario);
+  if (!allowedStartModes.includes("reuse")) {
+    return {
+      startMode: "fresh",
+    };
+  }
+
+  const continuationTarget = await resolveBuildContinuationTarget(repoPath, task.id);
+  if (!continuationTarget) {
+    throw new Error(MISSING_BUILD_TARGET_ERROR);
+  }
+
+  if (
+    latestRoleSession &&
+    normalizeWorkingDirectory(latestRoleSession.workingDirectory) ===
+      normalizeWorkingDirectory(continuationTarget.workingDirectory)
+  ) {
+    return {
+      startMode: "reuse",
+      sourceSessionId: latestRoleSession.sessionId,
+      targetWorkingDirectory: continuationTarget.workingDirectory,
+    };
+  }
+
+  return {
+    startMode: "fresh",
+    targetWorkingDirectory: continuationTarget.workingDirectory,
+  };
+};
+
 export const executeAutopilotAction = async ({
   repoPath,
   task,
   actionId,
   queryClient,
   loadRepoRuntimeCatalog,
+  resolveBuildContinuationTarget,
   startAgentSession,
   sendAgentMessage,
 }: ExecuteAutopilotActionArgs): Promise<AutopilotActionOutcome> => {
@@ -209,43 +275,13 @@ export const executeAutopilotAction = async ({
   }
 
   try {
-    if (actionId === "startGeneratePullRequest") {
-      await startSessionWorkflow({
-        activeRepo: repoPath,
-        queryClient,
-        intent: {
-          taskId: task.id,
-          role: action.role,
-          scenario: action.scenario,
-          startMode: "fork",
-          sourceSessionId: latestRoleSession?.sessionId ?? null,
-          postStartAction: "kickoff",
-        },
-        selection: await resolveAutopilotSelection({
-          repoPath,
-          role: action.role,
-          preferredSelection: toAgentModelSelection(latestRoleSession?.selectedModel ?? null),
-          queryClient,
-          loadRepoRuntimeCatalog,
-        }),
-        task,
-        startAgentSession,
-        sendAgentMessage,
-        postStartExecution: "detached",
-        onDetachedPostStartError: (error) => {
-          toast.error(`Autopilot started ${action.label} for ${task.id}, but kickoff failed.`, {
-            description: error.message,
-          });
-        },
-      });
+    const resolvedStart = await resolveAutopilotStart({
+      repoPath,
+      task,
+      actionId,
+      resolveBuildContinuationTarget,
+    });
 
-      return {
-        kind: "started",
-        message: `Started ${action.label} for ${task.id}.`,
-      };
-    }
-
-    const startMode = latestRoleSession ? "reuse" : "fresh";
     await startSessionWorkflow({
       activeRepo: repoPath,
       queryClient,
@@ -253,16 +289,24 @@ export const executeAutopilotAction = async ({
         taskId: task.id,
         role: action.role,
         scenario: action.scenario,
-        startMode,
-        ...(startMode === "reuse" ? { sourceSessionId: latestRoleSession?.sessionId ?? null } : {}),
+        startMode: resolvedStart.startMode,
+        ...(resolvedStart.sourceSessionId
+          ? { sourceSessionId: resolvedStart.sourceSessionId }
+          : {}),
+        ...(resolvedStart.targetWorkingDirectory !== undefined
+          ? { targetWorkingDirectory: resolvedStart.targetWorkingDirectory }
+          : {}),
         postStartAction: "kickoff",
       },
       selection:
-        startMode === "reuse"
+        resolvedStart.startMode === "reuse"
           ? null
           : await resolveAutopilotSelection({
               repoPath,
               role: action.role,
+              ...(resolvedStart.preferredSelection !== undefined
+                ? { preferredSelection: resolvedStart.preferredSelection }
+                : {}),
               queryClient,
               loadRepoRuntimeCatalog,
             }),
@@ -338,6 +382,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
               actionId,
               queryClient,
               loadRepoRuntimeCatalog,
+              resolveBuildContinuationTarget: loadBuildContinuationTarget,
               startAgentSession: agentState.startAgentSession,
               sendAgentMessage: agentState.sendAgentMessage,
             });

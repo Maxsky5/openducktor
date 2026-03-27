@@ -27,12 +27,13 @@ export type AutopilotEventDefinition = {
 };
 
 export const AUTOPILOT_ACTION_DEFINITIONS: Record<AutopilotActionId, AutopilotActionDefinition> = {
-  startSpec: {
-    id: "startSpec",
-    label: "Start Spec",
-    description: "Start or continue the Spec workflow when a task becomes ready for specification.",
-    role: "spec",
-    scenario: "spec_initial",
+  startPlanner: {
+    id: "startPlanner",
+    label: "Start Planner",
+    description:
+      "Start the Planner workflow when a task becomes ready for implementation planning.",
+    role: "planner",
+    scenario: "planner_initial",
   },
   startBuilder: {
     id: "startBuilder",
@@ -69,7 +70,7 @@ export const AUTOPILOT_EVENT_DEFINITIONS: AutopilotEventDefinition[] = [
     id: "taskProgressedToSpecReady",
     label: "When a task progresses to Spec Ready",
     description: "Observed when a task first enters `spec_ready` while the app is running.",
-    availableActionIds: ["startSpec"],
+    availableActionIds: ["startPlanner"],
   },
   {
     id: "taskProgressedToReadyForDev",

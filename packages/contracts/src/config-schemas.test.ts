@@ -95,14 +95,14 @@ describe("config-schemas", () => {
           },
           {
             eventId: "taskProgressedToSpecReady",
-            actionIds: ["startSpec", "startSpec"],
+            actionIds: ["startPlanner", "startPlanner"],
           },
         ],
       },
     });
 
     expect(parsed.autopilot.rules).toEqual([
-      { eventId: "taskProgressedToSpecReady", actionIds: ["startSpec"] },
+      { eventId: "taskProgressedToSpecReady", actionIds: ["startPlanner"] },
       { eventId: "taskProgressedToReadyForDev", actionIds: [] },
       { eventId: "taskProgressedToAiReview", actionIds: [] },
       { eventId: "taskRejectedByQa", actionIds: [] },

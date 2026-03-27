@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
-import type { QueryClient } from "@tanstack/react-query";
+import type { AgentSessionRecord, RepoConfig, TaskCard } from "@openducktor/contracts";
+import type { AgentModelCatalog } from "@openducktor/core";
+import { QueryClient } from "@tanstack/react-query";
+import { repoConfigQueryOptions } from "@/state/queries/workspace";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { MISSING_BUILD_TARGET_ERROR } from "../operations/agent-orchestrator/handlers/start-session-constants";
 
@@ -32,13 +34,75 @@ const createBuilderSessionRecord = (
 const createTask = (overrides: Partial<TaskCard> = {}): TaskCard =>
   createTaskCardFixture({}, overrides);
 
+const createRepoConfig = (): RepoConfig => ({
+  defaultRuntimeKind: "opencode",
+  worktreeBasePath: undefined,
+  branchPrefix: "odt",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
+  git: { providers: {} },
+  trustedHooks: false,
+  trustedHooksFingerprint: undefined,
+  hooks: { preStart: [], postComplete: [] },
+  devServers: [],
+  worktreeFileCopies: [],
+  promptOverrides: {},
+  agentDefaults: {
+    spec: undefined,
+    planner: {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "planner",
+    },
+    build: {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "builder",
+    },
+    qa: {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "qa",
+    },
+  },
+});
+
+const createQueryClient = (): QueryClient => {
+  const queryClient = new QueryClient();
+  queryClient.setQueryData(repoConfigQueryOptions("/repo").queryKey, createRepoConfig());
+  return queryClient;
+};
+
 const createExecuteArgs = (task: TaskCard) => ({
   repoPath: "/repo",
   task,
-  queryClient: {} as QueryClient,
-  loadRepoRuntimeCatalog: mock(async () => {
-    throw new Error("loadRepoRuntimeCatalog should not be called in this test");
-  }),
+  queryClient: createQueryClient(),
+  loadRepoRuntimeCatalog: mock(
+    async (): Promise<AgentModelCatalog> => ({
+      models: [
+        {
+          id: "openai",
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: "gpt-5",
+          modelName: "GPT-5",
+          variants: ["high"],
+        },
+      ],
+      defaultModelsByProvider: {
+        openai: "gpt-5",
+      },
+      profiles: [{ id: "planner", label: "Planner", mode: "primary" }],
+    }),
+  ),
+  resolveBuildContinuationTarget: mock(
+    async (): Promise<{ workingDirectory: string } | null> => null,
+  ),
   startAgentSession: mock(async () => {
     throw new Error("startAgentSession should not be called in this test");
   }),
@@ -100,6 +164,44 @@ describe("autopilot provider helpers", () => {
     ]);
   });
 
+  test("does not backfill or retrigger unchanged task states", () => {
+    const currentTask = createTask({ id: "TASK-1", status: "spec_ready" });
+
+    expect(detectAutopilotEvents(new Map(), [currentTask])).toEqual([]);
+    expect(detectAutopilotEvents(new Map([[currentTask.id, currentTask]]), [currentTask])).toEqual(
+      [],
+    );
+  });
+
+  test("detects a later re-entry into ai_review after leaving the state", () => {
+    const previousTask = createTask({ id: "TASK-1", status: "human_review" });
+    const currentTask = createTask({ id: "TASK-1", status: "ai_review" });
+
+    expect(
+      detectAutopilotEvents(new Map([[previousTask.id, previousTask]]), [currentTask]),
+    ).toEqual([{ eventId: "taskProgressedToAiReview", task: currentTask }]);
+  });
+
+  test("maps spec_ready automation to the planner scenario", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-PLAN", status: "spec_ready" }));
+
+    await executeAutopilotAction({
+      ...args,
+      actionId: "startPlanner",
+    });
+
+    expect(startSessionWorkflowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: expect.objectContaining({
+          taskId: "TASK-PLAN",
+          role: "planner",
+          scenario: "planner_initial",
+          startMode: "fresh",
+        }),
+      }),
+    );
+  });
+
   test("skips pull request generation when no builder session exists", async () => {
     const outcome = await executeAutopilotAction({
       ...createExecuteArgs(createTask({ id: "TASK-PR", status: "human_review" })),
@@ -114,10 +216,6 @@ describe("autopilot provider helpers", () => {
   });
 
   test("skips builder follow-up when the build continuation target is missing", async () => {
-    startSessionWorkflowMock.mockImplementationOnce(async () => {
-      throw new Error(MISSING_BUILD_TARGET_ERROR);
-    });
-
     const outcome = await executeAutopilotAction({
       ...createExecuteArgs(
         createTask({
@@ -152,5 +250,74 @@ describe("autopilot provider helpers", () => {
         actionId: "startGeneratePullRequest",
       }),
     ).rejects.toThrow("workflow failed");
+  });
+
+  test("falls back to a fresh builder continuation when the latest builder session targets an older worktree", async () => {
+    const args = createExecuteArgs(
+      createTask({
+        id: "TASK-QA",
+        status: "in_progress",
+        agentSessions: [createBuilderSessionRecord({ workingDirectory: "/tmp/repo/old-worktree" })],
+      }),
+    );
+    args.resolveBuildContinuationTarget.mockResolvedValue({
+      workingDirectory: "/tmp/repo/new-worktree",
+    });
+
+    await executeAutopilotAction({
+      ...args,
+      actionId: "startReviewQaFeedbacks",
+    });
+
+    expect(startSessionWorkflowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: expect.objectContaining({
+          startMode: "fresh",
+          targetWorkingDirectory: "/tmp/repo/new-worktree",
+        }),
+      }),
+    );
+  });
+
+  test("reuses QA follow-up only when the latest QA session matches the current continuation target", async () => {
+    const args = createExecuteArgs(
+      createTask({
+        id: "TASK-QA",
+        status: "ai_review",
+        agentSessions: [
+          createBuilderSessionRecord({
+            sessionId: "qa-session-1",
+            role: "qa",
+            scenario: "qa_review",
+            workingDirectory: "/tmp/repo/current-worktree",
+            selectedModel: {
+              runtimeKind: "opencode",
+              providerId: "openai",
+              modelId: "gpt-5",
+              variant: "high",
+              profileId: "qa",
+            },
+          }),
+        ],
+      }),
+    );
+    args.resolveBuildContinuationTarget.mockResolvedValue({
+      workingDirectory: "/tmp/repo/current-worktree",
+    });
+
+    await executeAutopilotAction({
+      ...args,
+      actionId: "startQa",
+    });
+
+    expect(startSessionWorkflowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: expect.objectContaining({
+          startMode: "reuse",
+          sourceSessionId: "qa-session-1",
+        }),
+        selection: null,
+      }),
+    );
   });
 });

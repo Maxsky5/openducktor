@@ -188,7 +188,7 @@ pub enum AutopilotEventId {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum AutopilotActionId {
-    StartSpec,
+    StartPlanner,
     StartBuilder,
     StartQa,
     StartReviewQaFeedbacks,

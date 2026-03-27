@@ -204,13 +204,13 @@ describe("settings-modal-normalization", () => {
         },
         {
           eventId: "taskProgressedToSpecReady",
-          actionIds: ["startSpec", "startSpec"],
+          actionIds: ["startPlanner", "startPlanner"],
         },
       ],
     });
 
     expect(normalized.rules).toEqual([
-      { eventId: "taskProgressedToSpecReady", actionIds: ["startSpec"] },
+      { eventId: "taskProgressedToSpecReady", actionIds: ["startPlanner"] },
       { eventId: "taskProgressedToReadyForDev", actionIds: [] },
       { eventId: "taskProgressedToAiReview", actionIds: [] },
       { eventId: "taskRejectedByQa", actionIds: [] },
