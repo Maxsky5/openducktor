@@ -63,7 +63,7 @@ export type TaskDataContextValue = {
 };
 
 export type TaskControlContextValue = {
-  refreshTaskData: (repoPath: string) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
   clearTaskData: () => void;
   setIsLoadingTasks: (value: boolean) => void;
 };

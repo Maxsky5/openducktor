@@ -22,7 +22,7 @@ type UseAppLifecycleArgs = {
     beadsOk: boolean;
     beadsError?: string | null;
   }>;
-  refreshTaskData: (repoPath: string) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
   clearBranchData: () => void;
   beadsPreparationToastDelayMs?: number;
 };
