@@ -116,24 +116,28 @@ const attachWindowedRowGeometry = ({
   container,
   rows,
   getWindowStart,
+  getWindowEnd,
 }: {
   container: MockMessagesContainer;
   rows: AgentChatWindowRow[];
   getWindowStart: () => number;
+  getWindowEnd: () => number;
 }): void => {
-  const rowElements = rows.map((row, index) => {
-    return {
-      dataset: { rowKey: row.key },
-      getBoundingClientRect: () =>
-        ({
-          top: (index - getWindowStart()) * ROW_HEIGHT_PX,
-        }) as DOMRect,
-    } as unknown as HTMLElement;
-  });
+  container.querySelectorAll.mockImplementation(() => {
+    const windowStart = getWindowStart();
+    const windowEnd = getWindowEnd();
+    const rowElements = rows.slice(windowStart, windowEnd + 1).map((row, index) => {
+      return {
+        dataset: { rowKey: row.key },
+        getBoundingClientRect: () =>
+          ({
+            top: index * ROW_HEIGHT_PX,
+          }) as DOMRect,
+      } as unknown as HTMLElement;
+    });
 
-  container.querySelectorAll.mockImplementation(
-    () => rowElements as unknown as ReturnType<HTMLDivElement["querySelectorAll"]>,
-  );
+    return rowElements as unknown as ReturnType<HTMLDivElement["querySelectorAll"]>;
+  });
 };
 
 const getLatestResult = (latestResultRef: { current: HookResult | null }): HookResult => {
@@ -1078,6 +1082,7 @@ describe("useAgentChatWindow", () => {
       container,
       rows,
       getWindowStart: () => harness.getLatestResult().windowStart,
+      getWindowEnd: () => harness.getLatestResult().windowEnd,
     });
     container.scrollTop = 160;
 
@@ -1123,6 +1128,7 @@ describe("useAgentChatWindow", () => {
       container,
       rows,
       getWindowStart: () => harness.getLatestResult().windowStart,
+      getWindowEnd: () => harness.getLatestResult().windowEnd,
     });
 
     await act(async () => {

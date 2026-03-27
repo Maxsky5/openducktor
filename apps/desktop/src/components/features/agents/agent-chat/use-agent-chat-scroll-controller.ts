@@ -267,6 +267,8 @@ export function useAgentChatScrollController({
     setIsNearTop(true);
   }, []);
 
+  // Intentionally runs after every render so a pending anchor captured in refs
+  // is applied on the next commit regardless of which state update caused it.
   useLayoutEffect(() => {
     const pendingScrollAnchor = pendingScrollAnchorRef.current;
     if (!pendingScrollAnchor) {
