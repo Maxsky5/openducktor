@@ -377,8 +377,8 @@ describe("AgentChatThread", () => {
     expect(html).toContain("hide-scrollbar");
   });
 
-  test("renders todo panel inline after questions and permissions", () => {
-    const html = renderToStaticMarkup(
+  test("keeps pending cards and todo in a bottom stack outside the scroll region", async () => {
+    const rendered = render(
       createElement(AgentChatThread, {
         model: {
           ...baseModel,
@@ -401,15 +401,27 @@ describe("AgentChatThread", () => {
         },
       }),
     );
+    await act(flush);
 
-    expect(html).toContain("Todo");
-    expect(html).toContain("Analyze current styling");
-    expect(html).toContain("Read layout and pages");
-    expect(html).toContain("Input needed");
-    expect(html).toContain("Permission request");
-    expect(html.indexOf("Input needed")).toBeLessThan(html.indexOf("Permission request"));
-    expect(html.indexOf("Permission request")).toBeLessThan(html.indexOf("Todo"));
-    expect(html).not.toContain("pointer-events-none absolute right-3 z-20");
+    const scrollRegion = rendered.container.querySelector(".agent-chat-scroll-region");
+    const bottomStack = rendered.container.querySelector(".agent-chat-bottom-stack");
+
+    expect(scrollRegion?.textContent).not.toContain("Input needed");
+    expect(scrollRegion?.textContent).not.toContain("Permission request");
+    expect(scrollRegion?.textContent).not.toContain("Read layout and pages");
+    expect(bottomStack?.textContent).toContain("Input needed");
+    expect(bottomStack?.textContent).toContain("Permission request");
+    expect(bottomStack?.textContent).toContain("Todo");
+    expect(bottomStack?.textContent).toContain("Analyze current styling");
+    expect(bottomStack?.textContent).toContain("Read layout and pages");
+    expect((bottomStack as HTMLDivElement).innerHTML.indexOf("Input needed")).toBeLessThan(
+      (bottomStack as HTMLDivElement).innerHTML.indexOf("Permission request"),
+    );
+    expect((bottomStack as HTMLDivElement).innerHTML.indexOf("Permission request")).toBeLessThan(
+      (bottomStack as HTMLDivElement).innerHTML.indexOf("Todo"),
+    );
+
+    rendered.unmount();
   });
 
   test("refreshes rendered rows when the session gains new visible rows", async () => {

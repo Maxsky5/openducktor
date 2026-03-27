@@ -9,7 +9,11 @@ import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import { buildAgentChatWindowRows } from "./agent-chat-thread-windowing";
 import { AgentSessionPermissionCard } from "./agent-session-permission-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
-import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
+import {
+  AgentSessionTodoPanel,
+  getActionableSessionTodo,
+  getVisibleSessionTodos,
+} from "./agent-session-todo-panel";
 import { ScrollToBottomButton } from "./scroll-to-bottom-button";
 import { ScrollToTopButton } from "./scroll-to-top-button";
 import { useAgentChatLoadingOverlay } from "./use-agent-chat-loading-overlay";
@@ -120,6 +124,15 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     rowKeys,
     windowStart,
   });
+  const hasVisibleTodo = session
+    ? getActionableSessionTodo(getVisibleSessionTodos(session.todos)) !== null
+    : false;
+  const hasBottomStack = Boolean(
+    session &&
+      (session.pendingQuestions.length > 0 ||
+        session.pendingPermissions.length > 0 ||
+        hasVisibleTodo),
+  );
 
   const resolveRowRef = (rowKey: string) => {
     const cached = rowRefByKeyRef.current.get(rowKey);
@@ -156,7 +169,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
 
       <div
         ref={messagesContainerRef}
-        className="hide-scrollbar relative min-h-0 flex-1 overflow-y-auto p-4 pb-6"
+        className="agent-chat-scroll-region hide-scrollbar relative min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4"
       >
         <div ref={messagesContentRef} className="space-y-1">
           {!session ? (
@@ -214,8 +227,12 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
               </div>
             ) : null
           ) : null}
+        </div>
+      </div>
 
-          {session?.pendingQuestions.map((request) => (
+      {hasBottomStack && session ? (
+        <div className="agent-chat-bottom-stack shrink-0 space-y-2 px-4 pt-3">
+          {session.pendingQuestions.map((request) => (
             <AgentSessionQuestionCard
               key={`${session.sessionId}:${request.requestId}`}
               request={request}
@@ -225,7 +242,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
             />
           ))}
 
-          {session?.pendingPermissions.map((request) => (
+          {session.pendingPermissions.map((request) => (
             <div key={`${session.sessionId}:${request.requestId}`} className="relative z-30">
               <AgentSessionPermissionCard
                 request={request}
@@ -237,16 +254,14 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
             </div>
           ))}
 
-          {session ? (
-            <AgentSessionTodoPanel
-              todos={session.todos}
-              collapsed={todoPanelCollapsed}
-              isSessionWorking={isSessionWorking}
-              onToggleCollapse={onToggleTodoPanel}
-            />
-          ) : null}
+          <AgentSessionTodoPanel
+            todos={session.todos}
+            collapsed={todoPanelCollapsed}
+            isSessionWorking={isSessionWorking}
+            onToggleCollapse={onToggleTodoPanel}
+          />
         </div>
-      </div>
+      ) : null}
 
       {showLoadingOverlay ? (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-muted">

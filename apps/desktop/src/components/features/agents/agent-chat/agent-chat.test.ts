@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AgentChat } from "./agent-chat";
-import { buildModelSelection, buildSession, TEST_ROLE_OPTIONS } from "./agent-chat-test-fixtures";
+import {
+  buildModelSelection,
+  buildSession,
+  buildTodoItem,
+  TEST_ROLE_OPTIONS,
+} from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
   thread: {
@@ -114,5 +119,26 @@ describe("AgentChat", () => {
 
     expect(html).toContain("Send a message to start a new session automatically.");
     expect(html).toContain("Send message");
+  });
+
+  test("renders the todo stack immediately above the composer", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChat, {
+        model: {
+          ...buildModel(),
+          thread: {
+            ...buildModel().thread,
+            session: buildSession({
+              status: "idle",
+              todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
+            }),
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain("agent-chat-bottom-stack");
+    expect(html).toContain("Keep todo anchored");
+    expect(html.indexOf("agent-chat-bottom-stack")).toBeLessThan(html.indexOf("<form"));
   });
 });
