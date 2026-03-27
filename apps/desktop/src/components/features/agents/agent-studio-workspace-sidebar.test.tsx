@@ -33,6 +33,7 @@ describe("AgentStudioWorkspaceSidebar", () => {
     expect(html).toContain("Specification");
     expect(html).toContain("Current specification document for this task.");
     expect(html).toContain("Spec");
+    expect(html).toContain('data-testid="copy-agent-studio-document-content"');
     expect(html).toMatch(/Feb 21(?:, \d{1,2}:\d{2}\s?[AP]M| at)/u);
   });
 
@@ -54,6 +55,7 @@ describe("AgentStudioWorkspaceSidebar", () => {
 
     expect(html).toContain("No QA report yet.");
     expect(html).toContain("Not set");
+    expect(html).not.toContain('data-testid="copy-agent-studio-document-content"');
   });
 
   test("renders empty sidebar for Builder role documents", () => {

@@ -1,9 +1,17 @@
-import { Eye, FilePenLine, LayoutPanelLeft } from "lucide-react";
-import { type ReactElement, type ReactNode, useDeferredValue } from "react";
+import { Check, Copy, Eye, FilePenLine, LayoutPanelLeft } from "lucide-react";
+import {
+  type MouseEvent,
+  type ReactElement,
+  type ReactNode,
+  useCallback,
+  useDeferredValue,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { humanDate } from "@/lib/task-display";
+import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import type { DocumentEditorView } from "@/types/task-composer";
 
@@ -38,6 +46,57 @@ const hasLabeledCodeFence = (value: string): boolean =>
 
 const PANEL_MIN_HEIGHT_CLASS = "min-h-[52vh]";
 const PANEL_SCROLL_VIEWPORT_CLASS = "max-h-[52vh] overflow-y-auto";
+const PREVIEW_COPY_LENGTH = 50;
+
+function buildPreviewCopyDescription(markdown: string): string {
+  if (markdown.length <= PREVIEW_COPY_LENGTH) {
+    return markdown;
+  }
+  return `${markdown.slice(0, PREVIEW_COPY_LENGTH)}...`;
+}
+
+function TaskDocumentPreviewCopyButton({ markdown }: { markdown: string }): ReactElement {
+  const { copied, copyToClipboard } = useCopyToClipboard({
+    getSuccessDescription: buildPreviewCopyDescription,
+    errorLogContext: "TaskDocumentEditor",
+  });
+
+  const handleCopy = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      event.preventDefault();
+      void copyToClipboard(markdown);
+    },
+    [copyToClipboard, markdown],
+  );
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="absolute top-2 right-2 z-10 size-7 text-muted-foreground hover:bg-accent hover:text-foreground"
+            aria-label="Copy document preview content"
+            data-testid="copy-task-document-preview-content"
+            onClick={handleCopy}
+          >
+            {copied ? (
+              <Check className="size-3.5 text-emerald-500 dark:text-emerald-400" />
+            ) : (
+              <Copy className="size-3.5" />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="left">
+          <p>Copy</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 type PaneProps = {
   label: string;
@@ -178,17 +237,21 @@ export function TaskDocumentEditor({
             <Pane label="Preview" hiddenOnMobile={view === "split"}>
               <div
                 className={cn(
+                  "relative",
                   PANEL_MIN_HEIGHT_CLASS,
                   PANEL_SCROLL_VIEWPORT_CLASS,
                   "rounded-md border border-border bg-card p-3",
                 )}
               >
                 {deferredMarkdown.trim().length > 0 ? (
-                  <MarkdownRenderer
-                    markdown={deferredMarkdown}
-                    variant="document"
-                    premiumCodeBlocks={hasLabeledCodeFence(deferredMarkdown)}
-                  />
+                  <>
+                    <MarkdownRenderer
+                      markdown={deferredMarkdown}
+                      variant="document"
+                      premiumCodeBlocks={hasLabeledCodeFence(deferredMarkdown)}
+                    />
+                    <TaskDocumentPreviewCopyButton markdown={deferredMarkdown} />
+                  </>
                 ) : (
                   <p className="text-sm text-muted-foreground">Nothing to preview yet.</p>
                 )}
