@@ -4,8 +4,8 @@ use chrono::{DateTime, Utc};
 use host_domain::WorkspaceRecord;
 use host_infra_system::{
     normalize_hook_set, normalize_repo_dev_servers, repo_script_fingerprint, AgentDefaults,
-    ChatSettings, GitTargetBranch, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
-    RepoDevServerScript, RepoGitConfig,
+    AutopilotSettings, ChatSettings, GitTargetBranch, HookSet, KanbanSettings, PromptOverrides,
+    RepoConfig, RepoDevServerScript, RepoGitConfig,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -48,6 +48,7 @@ pub struct WorkspaceSettingsSnapshotUpdate {
     pub git: host_infra_system::GlobalGitConfig,
     pub chat: ChatSettings,
     pub kanban: KanbanSettings,
+    pub autopilot: AutopilotSettings,
     pub repos: HashMap<String, RepoConfig>,
     pub global_prompt_overrides: PromptOverrides,
 }
@@ -281,6 +282,7 @@ impl AppService {
             update.git,
             update.chat,
             update.kanban,
+            update.autopilot,
             update.repos,
             update.global_prompt_overrides,
         )?;
@@ -454,8 +456,8 @@ mod tests {
     use anyhow::{anyhow, Result};
     use host_domain::TaskStore;
     use host_infra_system::{
-        hook_set_fingerprint, repo_script_fingerprint, AppConfigStore, ChatSettings, GitCliPort,
-        HookSet, PromptOverride, RepoConfig, RepoDevServerScript,
+        hook_set_fingerprint, repo_script_fingerprint, AppConfigStore, AutopilotSettings,
+        ChatSettings, GitCliPort, HookSet, PromptOverride, RepoConfig, RepoDevServerScript,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -885,7 +887,7 @@ mod tests {
         );
         let confirmation = RecordingHookTrustConfirmationPort::default();
 
-        let (theme, git, mut chat, kanban, mut repos, mut global_prompt_overrides) =
+        let (theme, git, mut chat, kanban, autopilot, mut repos, mut global_prompt_overrides) =
             fixture.service.workspace_get_settings_snapshot()?;
         chat.show_thinking_messages = true;
         global_prompt_overrides.insert(
@@ -913,6 +915,7 @@ mod tests {
                 git,
                 chat,
                 kanban,
+                autopilot,
                 repos,
                 global_prompt_overrides,
             },
@@ -942,7 +945,7 @@ mod tests {
         let fixture = setup_fixture("snapshot-chat-roundtrip", HookSet::default());
         let confirmation = RecordingHookTrustConfirmationPort::default();
 
-        let (theme, git, mut chat, kanban, repos, global_prompt_overrides) =
+        let (theme, git, mut chat, kanban, autopilot, repos, global_prompt_overrides) =
             fixture.service.workspace_get_settings_snapshot()?;
         assert_eq!(chat, ChatSettings::default());
         chat.show_thinking_messages = true;
@@ -953,6 +956,7 @@ mod tests {
                 git,
                 chat,
                 kanban,
+                autopilot,
                 repos,
                 global_prompt_overrides,
             },
@@ -964,10 +968,12 @@ mod tests {
             _persisted_git,
             persisted_chat,
             _persisted_kanban,
+            persisted_autopilot,
             _persisted_repos,
             _persisted_global_prompt_overrides,
         ) = fixture.service.workspace_get_settings_snapshot()?;
         assert!(persisted_chat.show_thinking_messages);
+        assert_eq!(persisted_autopilot, AutopilotSettings::default());
         assert_eq!(confirmation.request_count(), 0);
         Ok(())
     }

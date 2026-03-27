@@ -250,6 +250,9 @@ const settingsSnapshot = (repoPaths: string[]): SettingsSnapshot => ({
   kanban: {
     doneVisibleDays: 1,
   },
+  autopilot: {
+    rules: [],
+  },
   repos: Object.fromEntries(
     repoPaths.map((repoPath) => [
       repoPath,

@@ -11,7 +11,8 @@ use host_domain::{
 use host_infra_system::{
     command_exists, copy_configured_worktree_files, remove_worktree, repo_script_fingerprint,
     resolve_central_beads_dir, run_command, run_command_allow_failure_with_env, version_command,
-    ChatSettings, GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
+    AutopilotSettings, ChatSettings, GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides,
+    RepoConfig,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -26,6 +27,7 @@ type SettingsSnapshotTuple = (
     GlobalGitConfig,
     ChatSettings,
     KanbanSettings,
+    AutopilotSettings,
     HashMap<String, RepoConfig>,
     PromptOverrides,
 );
@@ -260,6 +262,7 @@ impl AppService {
             config.git,
             config.chat,
             config.kanban,
+            config.autopilot,
             config.repos,
             config.global_prompt_overrides,
         ))
@@ -275,6 +278,7 @@ impl AppService {
         git: GlobalGitConfig,
         chat: ChatSettings,
         kanban: KanbanSettings,
+        autopilot: AutopilotSettings,
         repos: HashMap<String, RepoConfig>,
         global_prompt_overrides: PromptOverrides,
     ) -> Result<()> {
@@ -293,6 +297,7 @@ impl AppService {
         config.kanban = KanbanSettings {
             done_visible_days: kanban.done_visible_days.max(0),
         };
+        config.autopilot = autopilot;
         config.global_prompt_overrides = global_prompt_overrides;
         for (repo_path, repo_config) in repos {
             config.repos.insert(repo_path, repo_config);
@@ -917,7 +922,7 @@ mod tests {
     fn workspace_get_settings_snapshot_returns_defaulted_chat_settings() {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
 
-        let (_theme, _git, chat, kanban, repos, global_prompt_overrides) = service
+        let (_theme, _git, chat, kanban, _autopilot, repos, global_prompt_overrides) = service
             .workspace_get_settings_snapshot()
             .expect("settings snapshot should load");
 

@@ -9,6 +9,7 @@ const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): Settings
   git: { defaultMergeMethod: "merge_commit" },
   chat: { showThinkingMessages: false },
   kanban: { doneVisibleDays: 1 },
+  autopilot: { rules: [] },
   repos: {},
   globalPromptOverrides: {},
   ...overrides,
@@ -62,6 +63,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
     prompts: 0,
     chat: 0,
     kanban: 0,
+    autopilot: 0,
   },
   setSelectedRepoPath: () => {},
   markRepoScriptSaveAttempt: () => {},
@@ -71,6 +73,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   updateGlobalGitConfig: () => {},
   updateGlobalChatSettings: () => {},
   updateGlobalKanbanSettings: () => {},
+  updateGlobalAutopilotSettings: () => {},
   updateGlobalPromptOverrides: () => {},
   updateRepoPromptOverrides: () => {},
   updateSelectedRepoAgentDefault: () => {},
@@ -144,6 +147,28 @@ describe("settings modal content", () => {
     );
 
     expect(html).toContain("General Settings");
+  });
+
+  test("renders autopilot section when section is autopilot", () => {
+    const snapshot = createMockSnapshot();
+    const controller = createMockController(snapshot);
+
+    const html = renderToStaticMarkup(
+      createElement(SettingsModalContent, {
+        section: "autopilot",
+        repositorySection: "configuration",
+        globalPromptRoleTab: "shared",
+        repoPromptRoleTab: "shared",
+        isInteractionDisabled: false,
+        controller,
+        onRepositorySectionChange: () => {},
+        onGlobalPromptRoleTabChange: () => {},
+        onRepoPromptRoleTabChange: () => {},
+      }),
+    );
+
+    expect(html).toContain("Autopilot");
+    expect(html).toContain("When a task progresses to Spec Ready");
   });
 
   test("renders prompts section when section is prompts", () => {

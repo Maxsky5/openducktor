@@ -467,6 +467,9 @@ describe("agent-orchestrator-runtime", () => {
       kanban: {
         doneVisibleDays: 1,
       },
+      autopilot: {
+        rules: [],
+      },
       repos: {},
       globalPromptOverrides: {
         "kickoff.spec_initial": {
@@ -540,6 +543,9 @@ describe("agent-orchestrator-runtime", () => {
       },
       kanban: {
         doneVisibleDays: 1,
+      },
+      autopilot: {
+        rules: [],
       },
       repos: {},
       globalPromptOverrides,

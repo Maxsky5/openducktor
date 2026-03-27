@@ -1,0 +1,148 @@
+import type {
+  AutopilotActionId,
+  AutopilotEventId,
+  AutopilotRule,
+  AutopilotSettings,
+} from "@openducktor/contracts";
+import { AUTOPILOT_EVENT_IDS, createDefaultAutopilotSettings } from "@openducktor/contracts";
+import type { AgentRole, AgentScenario } from "@openducktor/core";
+
+export const AUTOPILOT_DISABLED_VALUE = "disabled" as const;
+
+export type AutopilotSelectValue = AutopilotActionId | typeof AUTOPILOT_DISABLED_VALUE;
+
+export type AutopilotActionDefinition = {
+  id: AutopilotActionId;
+  label: string;
+  description: string;
+  role: AgentRole;
+  scenario: AgentScenario;
+};
+
+export type AutopilotEventDefinition = {
+  id: AutopilotEventId;
+  label: string;
+  description: string;
+  availableActionIds: AutopilotActionId[];
+};
+
+export const AUTOPILOT_ACTION_DEFINITIONS: Record<AutopilotActionId, AutopilotActionDefinition> = {
+  startSpec: {
+    id: "startSpec",
+    label: "Start Spec",
+    description: "Start or continue the Spec workflow when a task becomes ready for specification.",
+    role: "spec",
+    scenario: "spec_initial",
+  },
+  startBuilder: {
+    id: "startBuilder",
+    label: "Start Builder",
+    description: "Start or continue Builder implementation when planning is complete.",
+    role: "build",
+    scenario: "build_implementation_start",
+  },
+  startQa: {
+    id: "startQa",
+    label: "Start QA",
+    description: "Start or continue QA review once implementation reaches AI review.",
+    role: "qa",
+    scenario: "qa_review",
+  },
+  startReviewQaFeedbacks: {
+    id: "startReviewQaFeedbacks",
+    label: "Start Review QA Feedbacks",
+    description: "Resume Builder to address rejected QA findings at the root cause.",
+    role: "build",
+    scenario: "build_after_qa_rejected",
+  },
+  startGeneratePullRequest: {
+    id: "startGeneratePullRequest",
+    label: "Start Generate Pull Request",
+    description: "Fork from the latest Builder session to generate or update the pull request.",
+    role: "build",
+    scenario: "build_pull_request_generation",
+  },
+};
+
+export const AUTOPILOT_EVENT_DEFINITIONS: AutopilotEventDefinition[] = [
+  {
+    id: "taskProgressedToSpecReady",
+    label: "When a task progresses to Spec Ready",
+    description: "Observed when a task first enters `spec_ready` while the app is running.",
+    availableActionIds: ["startSpec"],
+  },
+  {
+    id: "taskProgressedToReadyForDev",
+    label: "When a task progresses to Ready for Dev",
+    description: "Observed when a task first enters `ready_for_dev` while the app is running.",
+    availableActionIds: ["startBuilder"],
+  },
+  {
+    id: "taskProgressedToAiReview",
+    label: "When a task progresses to AI Review",
+    description: "Observed when a task first enters `ai_review` while the app is running.",
+    availableActionIds: ["startQa"],
+  },
+  {
+    id: "taskRejectedByQa",
+    label: "When a task is rejected by QA",
+    description: "Observed from the canonical QA rejection state while the app is running.",
+    availableActionIds: ["startReviewQaFeedbacks"],
+  },
+  {
+    id: "taskProgressedToHumanReview",
+    label: "When a task progresses to Human Review",
+    description: "Observed when a task first enters `human_review` while the app is running.",
+    availableActionIds: ["startGeneratePullRequest"],
+  },
+];
+
+export const AUTOPILOT_EVENT_DEFINITION_BY_ID: Record<AutopilotEventId, AutopilotEventDefinition> =
+  Object.fromEntries(
+    AUTOPILOT_EVENT_DEFINITIONS.map((definition) => [definition.id, definition]),
+  ) as Record<AutopilotEventId, AutopilotEventDefinition>;
+
+export const getAutopilotRule = (
+  settings: AutopilotSettings,
+  eventId: AutopilotEventId,
+): AutopilotRule => {
+  return (
+    settings.rules.find((rule) => rule.eventId === eventId) ??
+    createDefaultAutopilotSettings().rules.find((rule) => rule.eventId === eventId) ?? {
+      eventId,
+      actionIds: [],
+    }
+  );
+};
+
+export const getAutopilotSelectedValue = (rule: AutopilotRule): AutopilotSelectValue => {
+  return rule.actionIds[0] ?? AUTOPILOT_DISABLED_VALUE;
+};
+
+export const setAutopilotRuleAction = (
+  settings: AutopilotSettings,
+  eventId: AutopilotEventId,
+  value: AutopilotSelectValue,
+): AutopilotSettings => {
+  const nextSettings = createDefaultAutopilotSettings();
+  const currentRulesByEvent = new Map<AutopilotEventId, AutopilotRule>(
+    settings.rules.map((rule) => [rule.eventId, rule]),
+  );
+
+  nextSettings.rules = AUTOPILOT_EVENT_IDS.map((id) => {
+    const currentRule = currentRulesByEvent.get(id) ?? { eventId: id, actionIds: [] };
+    if (id !== eventId) {
+      return {
+        eventId: id,
+        actionIds: [...currentRule.actionIds],
+      };
+    }
+
+    return {
+      eventId: id,
+      actionIds: value === AUTOPILOT_DISABLED_VALUE ? [] : [value],
+    };
+  });
+
+  return nextSettings;
+};

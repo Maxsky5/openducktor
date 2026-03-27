@@ -93,6 +93,7 @@ export const useSettingsModalPromptValidation = ({
     prompts: promptValidationState.globalErrorCount,
     chat: 0,
     kanban: 0,
+    autopilot: 0,
   };
 
   return {

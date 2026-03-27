@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import { createDefaultAutopilotSettings, type SettingsSnapshot } from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -19,6 +19,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   kanban: {
     doneVisibleDays: 1,
   },
+  autopilot: createDefaultAutopilotSettings(),
   repos: {
     "/repo": {
       defaultRuntimeKind: "opencode",
@@ -29,6 +30,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
         providers: {},
       },
       trustedHooks: false,
+      trustedHooksFingerprint: undefined,
       hooks: { preStart: [], postComplete: [] },
       devServers: [],
       worktreeFileCopies: [],

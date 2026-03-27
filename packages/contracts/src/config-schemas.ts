@@ -19,6 +19,22 @@ export const DEFAULT_KANBAN_SETTINGS = {
 } as const;
 const DEFAULT_THEME = "light" as const;
 
+export const AUTOPILOT_EVENT_IDS = [
+  "taskProgressedToSpecReady",
+  "taskProgressedToReadyForDev",
+  "taskProgressedToAiReview",
+  "taskRejectedByQa",
+  "taskProgressedToHumanReview",
+] as const;
+
+export const AUTOPILOT_ACTION_IDS = [
+  "startSpec",
+  "startBuilder",
+  "startQa",
+  "startReviewQaFeedbacks",
+  "startGeneratePullRequest",
+] as const;
+
 const nullableToOptional = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => (value === null ? undefined : value), schema.optional());
 
@@ -27,6 +43,8 @@ const trimmedRequiredString = (field: string) =>
     .string()
     .transform((value) => value.trim())
     .refine((value) => value.length > 0, `${field} cannot be blank.`);
+
+const dedupeValues = <T>(values: readonly T[]) => [...new Set(values)];
 
 export const softGuardrailsSchema = z.object({
   cpuHighWatermarkPercent: z
@@ -116,6 +134,48 @@ export const kanbanSettingsSchema = z.object({
 });
 export type KanbanSettings = z.infer<typeof kanbanSettingsSchema>;
 
+export const autopilotEventIdSchema = z.enum(AUTOPILOT_EVENT_IDS);
+export type AutopilotEventId = z.infer<typeof autopilotEventIdSchema>;
+
+export const autopilotActionIdSchema = z.enum(AUTOPILOT_ACTION_IDS);
+export type AutopilotActionId = z.infer<typeof autopilotActionIdSchema>;
+
+export const autopilotRuleSchema = z.object({
+  eventId: autopilotEventIdSchema,
+  actionIds: z.array(autopilotActionIdSchema).default([]).transform(dedupeValues),
+});
+export type AutopilotRule = z.infer<typeof autopilotRuleSchema>;
+
+const normalizeAutopilotSettings = (value: { rules: AutopilotRule[] }) => {
+  const rulesByEvent = new Map<AutopilotEventId, AutopilotRule>();
+  for (const rule of value.rules) {
+    rulesByEvent.set(rule.eventId, {
+      eventId: rule.eventId,
+      actionIds: dedupeValues(rule.actionIds),
+    });
+  }
+
+  return {
+    rules: AUTOPILOT_EVENT_IDS.map(
+      (eventId): AutopilotRule =>
+        rulesByEvent.get(eventId) ?? {
+          eventId,
+          actionIds: [],
+        },
+    ),
+  };
+};
+
+export const autopilotSettingsSchema = z
+  .object({
+    rules: z.array(autopilotRuleSchema).default([]),
+  })
+  .transform(normalizeAutopilotSettings);
+export type AutopilotSettings = z.infer<typeof autopilotSettingsSchema>;
+
+export const createDefaultAutopilotSettings = (): AutopilotSettings =>
+  normalizeAutopilotSettings({ rules: [] });
+
 const themeValueSchema = z.enum(["light", "dark"]);
 
 export const themeSchema = themeValueSchema.default(DEFAULT_THEME);
@@ -128,6 +188,7 @@ export const globalConfigSchema = z.object({
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
+  autopilot: autopilotSettingsSchema.default(createDefaultAutopilotSettings()),
   repos: z.record(z.string(), repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
   recentRepos: z.array(z.string()).default([]),
@@ -139,6 +200,7 @@ export const settingsSnapshotSchema = z.object({
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
+  autopilot: autopilotSettingsSchema.default(createDefaultAutopilotSettings()),
   repos: z.record(z.string(), repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
 });

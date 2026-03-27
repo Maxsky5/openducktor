@@ -18,6 +18,9 @@ const hostMock = {
       kanban: {
         doneVisibleDays: 1,
       },
+      autopilot: {
+        rules: [],
+      },
       repos: {},
       globalPromptOverrides: {},
     }),

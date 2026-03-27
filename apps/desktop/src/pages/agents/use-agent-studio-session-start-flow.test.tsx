@@ -254,6 +254,9 @@ describe("useAgentStudioSessionStartFlow", () => {
       kanban: {
         doneVisibleDays: 1,
       },
+      autopilot: {
+        rules: [],
+      },
       repos: {},
       globalPromptOverrides: {},
     });

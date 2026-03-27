@@ -286,6 +286,9 @@ describe("use-agent-orchestrator-operations", () => {
       kanban: {
         doneVisibleDays: 1,
       },
+      autopilot: {
+        rules: [],
+      },
       repos: {},
       globalPromptOverrides: {},
     });

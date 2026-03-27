@@ -23,6 +23,7 @@ import {
   AgentStudioStateProvider,
   AppLifecycleStateProvider,
   AppRuntimeProvider,
+  AutopilotProvider,
   ChecksStateProvider,
   DelegationStateProvider,
   SpecStateProvider,
@@ -53,7 +54,9 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
             <AgentStudioStateProvider agentEngine={agentEngine}>
               <DelegationStateProvider>
                 <WorkspaceStateProvider>
-                  <AppLifecycleStateProvider>{children}</AppLifecycleStateProvider>
+                  <AppLifecycleStateProvider>
+                    <AutopilotProvider>{children}</AutopilotProvider>
+                  </AppLifecycleStateProvider>
                 </WorkspaceStateProvider>
               </DelegationStateProvider>
             </AgentStudioStateProvider>

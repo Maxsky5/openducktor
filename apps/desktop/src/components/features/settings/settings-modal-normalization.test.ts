@@ -6,6 +6,7 @@ import {
   type RepoPromptOverrides,
 } from "@openducktor/contracts";
 import {
+  normalizeAutopilotSettingsForSave,
   normalizePromptOverridesForSave,
   normalizeRepoConfigForSave,
   normalizeSnapshotForSave,
@@ -194,6 +195,29 @@ describe("settings-modal-normalization", () => {
     expect(normalized.trustedHooksFingerprint).toBe("fingerprint");
   });
 
+  test("normalizes autopilot settings into canonical event order", () => {
+    const normalized = normalizeAutopilotSettingsForSave({
+      rules: [
+        {
+          eventId: "taskProgressedToHumanReview",
+          actionIds: ["startGeneratePullRequest", "startGeneratePullRequest"],
+        },
+        {
+          eventId: "taskProgressedToSpecReady",
+          actionIds: ["startSpec", "startSpec"],
+        },
+      ],
+    });
+
+    expect(normalized.rules).toEqual([
+      { eventId: "taskProgressedToSpecReady", actionIds: ["startSpec"] },
+      { eventId: "taskProgressedToReadyForDev", actionIds: [] },
+      { eventId: "taskProgressedToAiReview", actionIds: [] },
+      { eventId: "taskRejectedByQa", actionIds: [] },
+      { eventId: "taskProgressedToHumanReview", actionIds: ["startGeneratePullRequest"] },
+    ]);
+  });
+
   test("disables trusted hooks when no hook commands remain after normalization", () => {
     const normalized = normalizeRepoConfigForSave({
       ...createRepoConfig(),
@@ -280,6 +304,9 @@ describe("settings-modal-normalization", () => {
       kanban: {
         doneVisibleDays: 1,
       },
+      autopilot: {
+        rules: [],
+      },
       repos: {
         "/repo-a": createRepoConfig(),
       },
@@ -324,6 +351,9 @@ describe("settings-modal-normalization", () => {
       kanban: {
         doneVisibleDays: 1,
       },
+      autopilot: {
+        rules: [],
+      },
       repos: {
         "/repo-b": createRepoConfig(),
         "/repo-a": createRepoConfig(),
@@ -345,6 +375,9 @@ describe("settings-modal-normalization", () => {
           },
           kanban: {
             doneVisibleDays: 1,
+          },
+          autopilot: {
+            rules: [],
           },
           repos: {},
           globalPromptOverrides: {},
