@@ -185,6 +185,7 @@ describe("agent-orchestrator-session-events", () => {
     for (const scenario of scenarios) {
       const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
       let refreshTaskDataCalls = 0;
+      const refreshTaskDataArgs: Array<[string, string | undefined]> = [];
 
       const adapter: SessionEventAdapter = {
         subscribeEvents: (_sessionId, handler) => {
@@ -229,8 +230,9 @@ describe("agent-orchestrator-session-events", () => {
         updateSession,
         resolveTurnDurationMs: () => undefined,
         clearTurnDuration: () => {},
-        refreshTaskData: async () => {
+        refreshTaskData: async (repoPath, taskId) => {
           refreshTaskDataCalls += 1;
+          refreshTaskDataArgs.push([repoPath, taskId]);
         },
       });
 
@@ -274,6 +276,9 @@ describe("agent-orchestrator-session-events", () => {
       await Promise.resolve();
 
       expect(refreshTaskDataCalls).toBe(scenario.expectedRefreshTaskDataCalls);
+      if (scenario.expectedRefreshTaskDataCalls > 0) {
+        expect(refreshTaskDataArgs).toEqual([["/tmp/repo", "task-1"]]);
+      }
     }
   });
 
