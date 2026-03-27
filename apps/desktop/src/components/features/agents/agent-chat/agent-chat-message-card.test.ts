@@ -102,6 +102,73 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("fairnest-97f");
   });
 
+  test.each([
+    {
+      id: "tool-todowrite",
+      tool: "todowrite",
+      content: "Tool todowrite completed",
+      timestamp: "2026-02-22T10:20:31.000Z",
+      input: { todos: [] },
+      output: "ok",
+    },
+    {
+      id: "tool-namespaced-todowrite",
+      tool: "openducktor_odt_todowrite",
+      content: "Tool openducktor_odt_todowrite completed",
+      timestamp: "2026-02-22T10:20:32.000Z",
+      input: { todos: [] },
+      output: "ok",
+    },
+    {
+      id: "tool-todoread",
+      tool: "todoread",
+      content: "Tool todoread completed",
+      timestamp: "2026-02-22T10:20:33.000Z",
+      input: {},
+      output: "[]",
+    },
+    {
+      id: "tool-namespaced-todoread",
+      tool: "openducktor_odt_todoread",
+      content: "Tool openducktor_odt_todoread completed",
+      timestamp: "2026-02-22T10:20:34.000Z",
+      input: {},
+      output: "[]",
+    },
+  ])("renders ListTodo icon for $tool tool rows", ({
+    id,
+    tool,
+    content,
+    timestamp,
+    input,
+    output,
+  }) => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id,
+          role: "tool",
+          content,
+          timestamp,
+          meta: {
+            kind: "tool",
+            partId: `part-${id}`,
+            callId: `call-${id}`,
+            tool,
+            status: "completed",
+            input,
+            output,
+          },
+        },
+        sessionRole: "build",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("lucide-list-todo");
+  });
+
   test("renders file tool summaries relative to the session working directory", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {

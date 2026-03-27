@@ -4,6 +4,7 @@ import {
   FileText,
   Folder,
   Globe,
+  ListTodo,
   LoaderCircle,
   Search,
   ShieldCheck,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
+import { isTodoToolName } from "@/state/operations/agent-orchestrator/agent-tool-messages";
 import { AgentChatFileEditCard } from "./agent-chat-file-edit-card";
 import {
   buildToolSummary,
@@ -60,6 +62,9 @@ const toolIcon = (toolName: string): ReactElement => {
   }
   if (value.startsWith("web")) {
     return <Globe className="size-3.5" />;
+  }
+  if (isTodoToolName(value)) {
+    return <ListTodo className="size-3.5" />;
   }
   return <Wrench className="size-3.5" />;
 };
