@@ -1059,6 +1059,184 @@ describe("OpencodeSdkAdapter", () => {
     });
   });
 
+  test("synthesizes session_idle from terminal assistant completion when no idle event follows", async () => {
+    const streamEvents: Event[] = [
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-terminal-1",
+            role: "assistant",
+            sessionID: "session-opencode-1",
+            providerID: "openai",
+            modelID: "gpt-5",
+            agent: "Hephaestus",
+            variant: "high",
+            finish: "stop",
+            time: {
+              created: Date.parse("2026-02-17T12:00:03Z"),
+              completed: Date.parse("2026-02-17T12:00:05Z"),
+            },
+          },
+          parts: [
+            {
+              id: "text-terminal-1",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-terminal-1",
+              type: "text",
+              text: "Done",
+              time: { start: 1, end: 1 },
+            },
+          ],
+        },
+      } as unknown as Event,
+    ];
+
+    const mock = makeMockClient({ streamEvents });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event);
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+    await flushAsync();
+
+    const idleEvents = events.filter((entry) => entry.type === "session_idle");
+    expect(idleEvents).toHaveLength(1);
+  });
+
+  test("maps terminal assistant metadata onto previously streamed text parts", async () => {
+    const streamEvents: Event[] = [
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "assistant-text-2",
+            sessionID: "session-opencode-1",
+            messageID: "assistant-2",
+            type: "text",
+            text: "All done",
+            time: { start: 1, end: 1 },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-2",
+            role: "assistant",
+            sessionID: "session-opencode-1",
+            providerID: "anthropic",
+            modelID: "claude-sonnet",
+            agent: "Hephaestus",
+            variant: "max",
+            finish: "stop",
+            tokens: {
+              input: 8,
+              output: 4,
+            },
+            time: {
+              created: Date.parse("2026-02-17T12:00:06Z"),
+              completed: Date.parse("2026-02-17T12:00:08Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ];
+
+    const mock = makeMockClient({ streamEvents });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event);
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+    await flushAsync();
+
+    const assistantMessages = events.filter((entry) => entry.type === "assistant_message");
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]).toMatchObject({
+      type: "assistant_message",
+      messageId: "assistant-2",
+      message: "All done",
+      totalTokens: 12,
+      model: {
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+        profileId: "Hephaestus",
+        variant: "max",
+      },
+    });
+  });
+
+  test("does not finalize previously streamed assistant text without a stop signal", async () => {
+    const streamEvents: Event[] = [
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "assistant-text-3",
+            sessionID: "session-opencode-1",
+            messageID: "assistant-3",
+            type: "text",
+            text: "Still thinking",
+            time: { start: 1, end: 1 },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-3",
+            role: "assistant",
+            sessionID: "session-opencode-1",
+            providerID: "anthropic",
+            modelID: "claude-sonnet",
+            agent: "Hephaestus",
+            variant: "max",
+            tokens: {
+              input: 8,
+              output: 4,
+            },
+            time: {
+              created: Date.parse("2026-02-17T12:00:06Z"),
+              completed: Date.parse("2026-02-17T12:00:08Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ];
+
+    const mock = makeMockClient({ streamEvents });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event);
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+    await flushAsync();
+
+    expect(events.some((entry) => entry.type === "assistant_message")).toBe(false);
+    expect(events.some((entry) => entry.type === "session_idle")).toBe(false);
+  });
+
   test("maps acknowledged user message.updated events into user_message", async () => {
     const streamEvents: Event[] = [
       {

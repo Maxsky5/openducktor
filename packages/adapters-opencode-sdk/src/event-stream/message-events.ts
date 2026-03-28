@@ -16,14 +16,14 @@ import {
 } from "../message-normalizers";
 import { toIsoFromEpoch } from "../session-runtime-utils";
 import { mapPartToAgentStreamPart } from "../stream-part-mapper";
-import {
-  readEventInfo,
-  readEventPart,
-  readEventProperties,
-  readMessageCompletedAt,
-} from "./schemas";
+import { readEventInfo, readEventPart, readEventProperties } from "./schemas";
 import type { EventStreamRuntime } from "./shared";
-import { applyDeltaToPart, isReasoningDeltaField, markSessionActive } from "./shared";
+import {
+  applyDeltaToPart,
+  emitSessionIdle,
+  isReasoningDeltaField,
+  markSessionActive,
+} from "./shared";
 
 const emitAssistantPart = (
   runtime: EventStreamRuntime,
@@ -87,6 +87,28 @@ const applyPendingDeltas = (runtime: EventStreamRuntime, partId: string, basePar
 
 const getKnownMessageParts = (runtime: EventStreamRuntime, messageId: string): Part[] => {
   return [...runtime.partsById.values()].filter((part) => part.messageID === messageId);
+};
+
+const hasTerminalStopSignal = (parts: Part[], finish: string | undefined): boolean => {
+  if (finish === "stop") {
+    return true;
+  }
+
+  return parts.some(
+    (part) =>
+      part.type === "step-finish" && typeof part.reason === "string" && part.reason === "stop",
+  );
+};
+
+const rawPartsHaveTerminalStopSignal = (parts: unknown[]): boolean => {
+  return parts.some((part) => {
+    const record = asUnknownRecord(part);
+    return (
+      record !== undefined &&
+      readStringProp(record, ["type"]) === "step-finish" &&
+      readStringProp(record, ["reason"]) === "stop"
+    );
+  });
 };
 
 const emitKnownUserMessage = (
@@ -174,16 +196,19 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     });
   }
 
-  const completedAt = infoRecord ? readMessageCompletedAt(infoRecord) : undefined;
   const finish = infoRecord ? readStringProp(infoRecord, ["finish"]) : undefined;
-  const isTerminalAssistantUpdate =
+  const rawParts = readRawMessageParts(properties, infoRecord);
+  const preserveIdleState =
     messageId !== undefined &&
     role === "assistant" &&
-    (completedAt !== undefined || finish === "stop");
-  const preserveIdleState = isTerminalAssistantUpdate && session?.hasIdleSinceActivity === true;
+    session?.hasIdleSinceActivity === true &&
+    (finish === "stop" ||
+      rawPartsHaveTerminalStopSignal(rawParts) ||
+      (messageId
+        ? hasTerminalStopSignal(getKnownMessageParts(runtime, messageId), finish)
+        : false));
 
   const normalizedParts: Part[] = [];
-  const rawParts = readRawMessageParts(properties, infoRecord);
   if (messageId && rawParts.length > 0) {
     for (const rawPart of rawParts) {
       const rawPartRecord = asUnknownRecord(rawPart);
@@ -244,22 +269,27 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     return true;
   }
 
+  const assistantParts =
+    messageId && role === "assistant"
+      ? normalizedParts.length > 0
+        ? normalizedParts
+        : getKnownMessageParts(runtime, messageId)
+      : [];
+  const hasStopSignal = hasTerminalStopSignal(assistantParts, finish);
   const shouldEmitCompletedMessage =
-    messageId !== undefined &&
-    role === "assistant" &&
-    normalizedParts.length > 0 &&
-    (completedAt !== undefined || finish === "stop");
+    messageId !== undefined && role === "assistant" && assistantParts.length > 0 && hasStopSignal;
   if (!shouldEmitCompletedMessage || !messageId) {
     return true;
   }
 
-  const text = readTextFromParts(normalizedParts);
+  const text = readTextFromParts(assistantParts);
   const visible = sanitizeAssistantMessage(text);
   if (visible.length === 0) {
+    emitSessionIdle(runtime);
     return true;
   }
 
-  const totalTokens = extractMessageTotalTokens(infoRecord, normalizedParts);
+  const totalTokens = extractMessageTotalTokens(infoRecord, assistantParts);
   const assistantModel = readMessageModelSelection(infoRecord);
   const emittedMessageIds = session?.emittedMessageIds;
   if (emittedMessageIds?.has(messageId)) {
@@ -276,6 +306,8 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     ...(assistantModel ? { model: assistantModel } : {}),
   });
   emittedMessageIds?.add(messageId);
+
+  emitSessionIdle(runtime);
   return true;
 };
 
