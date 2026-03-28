@@ -3,6 +3,7 @@ import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   assistantRoleFromMessage,
   buildToolSummary,
+  extractAllFileEditData,
   extractFileEditData,
   formatRawJsonLikeText,
   formatTime,
@@ -964,6 +965,93 @@ describe("agent-chat-message-card-model", () => {
       });
     });
 
+    test("extracts all file edit data from a multi-file git patch", () => {
+      const data = extractAllFileEditData(
+        createToolMeta({
+          tool: "apply_patch",
+          input: {
+            patch:
+              "diff --git a/src/first.ts b/src/first.ts\n--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
+              "diff --git a/src/second.ts b/src/second.ts\n--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1,2 @@\n-old\n+new\n+line\n" +
+              "diff --git a/src/third.ts b/src/third.ts\n--- a/src/third.ts\n+++ b/src/third.ts\n@@ -1,2 +1 @@\n-old\n-remove\n+new\n",
+          },
+        }),
+      );
+
+      expect(data).toEqual([
+        {
+          filePath: "src/first.ts",
+          diff: "diff --git a/src/first.ts b/src/first.ts\n--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          additions: 1,
+          deletions: 1,
+        },
+        {
+          filePath: "src/second.ts",
+          diff: "diff --git a/src/second.ts b/src/second.ts\n--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1,2 @@\n-old\n+new\n+line\n",
+          additions: 2,
+          deletions: 1,
+        },
+        {
+          filePath: "src/third.ts",
+          diff: "diff --git a/src/third.ts b/src/third.ts\n--- a/src/third.ts\n+++ b/src/third.ts\n@@ -1,2 +1 @@\n-old\n-remove\n+new\n",
+          additions: 1,
+          deletions: 2,
+        },
+      ]);
+    });
+
+    test("extracts all file edit data from a multi-file classic diff", () => {
+      const data = extractAllFileEditData(
+        createToolMeta({
+          tool: "apply_patch",
+          metadata: {
+            diff:
+              "Index: src/first.ts\n==================================================\n--- src/first.ts\n+++ src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
+              "Index: src/second.ts\n==================================================\n--- src/second.ts\n+++ src/second.ts\n@@ -1 +1,2 @@\n-old\n+new\n+line\n",
+          },
+        }),
+      );
+
+      expect(data).toEqual([
+        {
+          filePath: "src/first.ts",
+          diff: "--- src/first.ts\n+++ src/first.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          additions: 1,
+          deletions: 1,
+        },
+        {
+          filePath: "src/second.ts",
+          diff: "--- src/second.ts\n+++ src/second.ts\n@@ -1 +1,2 @@\n-old\n+new\n+line\n",
+          additions: 2,
+          deletions: 1,
+        },
+      ]);
+    });
+
+    test("extractAllFileEditData preserves single-file behavior", () => {
+      const meta = createToolMeta({
+        tool: "apply_patch",
+        input: {
+          patch: "--- a/src/patch.ts\n+++ b/src/patch.ts\n@@ -1 +1 @@\n-old\n+new",
+        },
+      });
+      const singleFileEditData = extractFileEditData(meta);
+
+      expect(singleFileEditData).not.toBeNull();
+      expect(extractAllFileEditData(meta)).toEqual(singleFileEditData ? [singleFileEditData] : []);
+    });
+
+    test("extractAllFileEditData returns an empty array when no file path is extractable", () => {
+      expect(
+        extractAllFileEditData(
+          createToolMeta({
+            tool: "apply_patch",
+            input: { patch: "@@ -1 +1 @@\n-old\n+new" },
+          }),
+        ),
+      ).toEqual([]);
+    });
+
     test("returns null when no file path can be extracted", () => {
       expect(
         extractFileEditData(
@@ -977,6 +1065,38 @@ describe("agent-chat-message-card-model", () => {
   });
 
   describe("tool summary helpers", () => {
+    test("summarizes multi-file apply_patch output by file count", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "apply_patch",
+            input: {
+              patch:
+                "diff --git a/src/first.ts b/src/first.ts\n--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
+                "diff --git a/src/second.ts b/src/second.ts\n--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1 @@\n-old\n+new\n",
+            },
+            output: "Updated 2 files",
+          }),
+          "",
+        ),
+      ).toBe("2 files modified");
+    });
+
+    test("preserves single-file apply_patch summaries", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "apply_patch",
+            input: {
+              patch: "--- a/src/patch.ts\n+++ b/src/patch.ts\n@@ -1 +1 @@\n-old\n+new",
+            },
+            output: "Updated 1 file",
+          }),
+          "",
+        ),
+      ).toBe("src/patch.ts");
+    });
+
     test("uses input taskId for read_task summaries", () => {
       expect(
         buildToolSummary(

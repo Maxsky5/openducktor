@@ -1,5 +1,6 @@
 import { isTodoToolName } from "@/state/operations/agent-orchestrator/agent-tool-messages";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import { extractAllFileEditData, isFileEditTool } from "./file-edit-tool";
 import { extractPathFromInput, readInputString } from "./tool-input-utils";
 import { getToolLifecyclePhase, hasNonEmptyText } from "./tool-lifecycle";
 import { relativizeDisplayPath, relativizeSearchSummary } from "./tool-path-utils";
@@ -251,6 +252,18 @@ export const buildToolSummary = (
   if (searchSummary) {
     return compactText(relativizeSearchSummary(searchSummary, workingDirectory), 160);
   }
+
+  if (isFileEditTool(lowerTool)) {
+    const allFileEditData = extractAllFileEditData(meta, workingDirectory);
+    if (allFileEditData.length > 1) {
+      return `${allFileEditData.length} files modified`;
+    }
+    const singleFileEditData = allFileEditData[0];
+    if (singleFileEditData) {
+      return compactText(singleFileEditData.filePath, 160);
+    }
+  }
+
   if (path && lowerTool !== "glob" && lowerTool !== "grep") {
     return compactText(relativizeDisplayPath(path, workingDirectory), 160);
   }

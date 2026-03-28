@@ -21,6 +21,7 @@ export {
 export type { FileEditData } from "./tool-summary-builder";
 export {
   buildToolSummary,
+  extractAllFileEditData,
   extractFileEditData,
   getToolDuration,
   isFileEditTool,
