@@ -18,7 +18,7 @@ import { AgentChatThread } from "./agent-chat-thread";
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const baseModel = {
+const buildBaseModel = () => ({
   isSessionWorking: false,
   showThinkingMessages: false,
   isSessionViewLoading: false,
@@ -43,7 +43,7 @@ const baseModel = {
   onToggleTodoPanel: () => {},
   messagesContainerRef: createRef<HTMLDivElement>(),
   scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
-} as const;
+});
 
 const flush = async (): Promise<void> => {
   await Promise.resolve();
@@ -151,7 +151,7 @@ describe("AgentChatThread", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
-          ...baseModel,
+          ...buildBaseModel(),
           session: null,
           taskSelected: false,
           canKickoffNewSession: true,
@@ -167,7 +167,7 @@ describe("AgentChatThread", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
-          ...baseModel,
+          ...buildBaseModel(),
           session: buildSession({
             status: "running",
             draftAssistantText: "",
@@ -184,7 +184,7 @@ describe("AgentChatThread", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
-          ...baseModel,
+          ...buildBaseModel(),
           session: buildSession({
             status: "stopped",
             messages: [],
@@ -203,7 +203,7 @@ describe("AgentChatThread", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
-          ...baseModel,
+          ...buildBaseModel(),
           showThinkingMessages: false,
           session: buildSession({
             status: "stopped",
@@ -226,7 +226,7 @@ describe("AgentChatThread", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
-          ...baseModel,
+          ...buildBaseModel(),
           showThinkingMessages: false,
           session: buildSession({
             status: "stopped",
@@ -247,7 +247,7 @@ describe("AgentChatThread", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
-          ...baseModel,
+          ...buildBaseModel(),
           session: null,
           taskSelected: true,
           isStarting: true,
@@ -264,7 +264,7 @@ describe("AgentChatThread", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
-          ...baseModel,
+          ...buildBaseModel(),
           agentStudioReady: false,
           blockedReason: "OpenCode runtime is unavailable",
           session: null,
@@ -280,7 +280,7 @@ describe("AgentChatThread", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
-          ...baseModel,
+          ...buildBaseModel(),
           session: buildSession({
             messages: [
               buildMessage("assistant", "Done", {
@@ -311,7 +311,7 @@ describe("AgentChatThread", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
-          ...baseModel,
+          ...buildBaseModel(),
           session: buildSession({
             status: "idle",
             messages: [buildMessage("assistant", "Need your input", { id: "assistant-idle-1" })],
@@ -329,7 +329,7 @@ describe("AgentChatThread", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
-          ...baseModel,
+          ...buildBaseModel(),
           session: buildSession({
             pendingPermissions: [
               buildPermissionRequest({
@@ -361,7 +361,7 @@ describe("AgentChatThread", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
-          ...baseModel,
+          ...buildBaseModel(),
           session: buildSession({
             messages: longMessages,
             pendingQuestions: [buildQuestionRequest()],
@@ -381,7 +381,7 @@ describe("AgentChatThread", () => {
     const rendered = render(
       createElement(AgentChatThread, {
         model: {
-          ...baseModel,
+          ...buildBaseModel(),
           session: buildSession({
             pendingQuestions: [buildQuestionRequest()],
             pendingPermissions: [buildPermissionRequest()],
@@ -414,6 +414,7 @@ describe("AgentChatThread", () => {
     expect(bottomStack?.textContent).toContain("Todo");
     expect(bottomStack?.textContent).toContain("Analyze current styling");
     expect(bottomStack?.textContent).toContain("Read layout and pages");
+    expect((bottomStack as HTMLDivElement).className).toContain("pb-2");
     expect((bottomStack as HTMLDivElement).innerHTML.indexOf("Input needed")).toBeLessThan(
       (bottomStack as HTMLDivElement).innerHTML.indexOf("Permission request"),
     );
@@ -432,7 +433,7 @@ describe("AgentChatThread", () => {
     );
     const session = buildSession({ messages });
     const model = {
-      ...baseModel,
+      ...buildBaseModel(),
       messagesContainerRef: { current: createContainer() },
       session,
     };
@@ -477,7 +478,7 @@ describe("AgentChatThread", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
-          ...baseModel,
+          ...buildBaseModel(),
           isSessionViewLoading: true,
           session: buildSession({
             sessionId: "session-loading",
@@ -495,7 +496,7 @@ describe("AgentChatThread", () => {
     const rendered = render(
       createElement(AgentChatThread, {
         model: {
-          ...baseModel,
+          ...buildBaseModel(),
           messagesContainerRef: createRef<HTMLDivElement>(),
           session: buildLongSession("session-scroll", 80),
         },

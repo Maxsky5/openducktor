@@ -240,7 +240,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       </div>
 
       {hasBottomStack && session ? (
-        <div className="agent-chat-bottom-stack shrink-0 space-y-2 px-4 pt-3">
+        <div className="agent-chat-bottom-stack shrink-0 space-y-2 px-4 pb-2 pt-3">
           {session.pendingQuestions.map((request) => (
             <AgentSessionQuestionCard
               key={`${session.sessionId}:${request.requestId}`}
