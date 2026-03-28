@@ -1113,6 +1113,71 @@ describe("OpencodeSdkAdapter", () => {
     });
   });
 
+  test("maps user message parts into user_message when message.updated omits text", async () => {
+    const streamEvents: Event[] = [
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "text-user-2",
+            sessionID: "session-opencode-1",
+            messageID: "user-2",
+            type: "text",
+            text: "Generate the pull request",
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "user-2",
+            role: "user",
+            sessionID: "session-opencode-1",
+            providerID: "openai",
+            modelID: "gpt-5",
+            agent: "Hephaestus",
+            variant: "high",
+            time: {
+              created: Date.parse("2026-02-17T12:00:05Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ];
+
+    const mock = makeMockClient({
+      streamEvents,
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event);
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+    await flushAsync();
+
+    const userEvents = events.filter((entry) => entry.type === "user_message");
+    expect(userEvents).toHaveLength(1);
+    expect(userEvents[0]).toMatchObject({
+      type: "user_message",
+      timestamp: "2026-02-17T12:00:05.000Z",
+      messageId: "user-2",
+      message: "Generate the pull request",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+        profileId: "Hephaestus",
+        variant: "high",
+      },
+    });
+  });
+
   test("includes step-finish total tokens on assistant part events", async () => {
     const streamEvents: Event[] = [
       {

@@ -54,6 +54,7 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   emittedMessageIds: new Set<string>(),
   partsById: new Map(),
   messageRoleById: new Map(),
+  messageMetadataById: new Map(),
   pendingDeltasByPartId: new Map(),
 });
 
@@ -128,6 +129,102 @@ describe("event-stream", () => {
       modelId: "gpt-5",
       profileId: "Hephaestus",
       variant: "high",
+    });
+  });
+
+  test("emits user_message from stored user text parts when message.updated omits visible text", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "user-part-1",
+            sessionID: "external-session-1",
+            messageID: "user-message-2",
+            type: "text",
+            text: "Generate the PR",
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "user-message-2",
+            role: "user",
+            sessionID: "external-session-1",
+            providerID: "openai",
+            modelID: "gpt-5",
+            agent: "Hephaestus",
+            variant: "high",
+            time: {
+              created: Date.parse("2026-02-22T12:00:04.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    if (userMessages[0]?.type !== "user_message") {
+      throw new Error("Expected user_message event");
+    }
+    expect(userMessages[0]).toMatchObject({
+      messageId: "user-message-2",
+      message: "Generate the PR",
+      timestamp: "2026-02-22T12:00:04.000Z",
+    });
+  });
+
+  test("emits user_message when user text parts arrive after message.updated", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "user-message-3",
+            role: "user",
+            sessionID: "external-session-1",
+            providerID: "openai",
+            modelID: "gpt-5",
+            agent: "Hephaestus",
+            variant: "high",
+            time: {
+              created: Date.parse("2026-02-22T12:00:05.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "user-part-2",
+            sessionID: "external-session-1",
+            messageID: "user-message-3",
+            type: "text",
+            text: "Ship it",
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    if (userMessages[0]?.type !== "user_message") {
+      throw new Error("Expected user_message event");
+    }
+    expect(userMessages[0]).toMatchObject({
+      messageId: "user-message-3",
+      message: "Ship it",
+      timestamp: "2026-02-22T12:00:05.000Z",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+        profileId: "Hephaestus",
+        variant: "high",
+      },
     });
   });
 

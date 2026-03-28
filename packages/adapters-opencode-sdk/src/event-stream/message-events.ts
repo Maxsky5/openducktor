@@ -85,6 +85,41 @@ const applyPendingDeltas = (runtime: EventStreamRuntime, partId: string, basePar
   return nextPart;
 };
 
+const getKnownMessageParts = (runtime: EventStreamRuntime, messageId: string): Part[] => {
+  return [...runtime.partsById.values()].filter((part) => part.messageID === messageId);
+};
+
+const emitKnownUserMessage = (
+  runtime: EventStreamRuntime,
+  input: {
+    messageId: string;
+    timestamp: string;
+    model?: ReturnType<typeof readMessageModelSelection>;
+  },
+): boolean => {
+  const session = runtime.getSession(runtime.sessionId);
+  const emittedMessageIds = session?.emittedMessageIds;
+  if (emittedMessageIds?.has(input.messageId)) {
+    return true;
+  }
+
+  const visible = readTextFromParts(getKnownMessageParts(runtime, input.messageId));
+  if (visible.trim().length === 0) {
+    return false;
+  }
+
+  runtime.emit(runtime.sessionId, {
+    type: "user_message",
+    sessionId: runtime.sessionId,
+    timestamp: input.timestamp,
+    messageId: input.messageId,
+    message: visible,
+    ...(input.model ? { model: input.model } : {}),
+  });
+  emittedMessageIds?.add(input.messageId);
+  return true;
+};
+
 const readRawMessageParts = (properties: unknown, info: unknown): unknown[] => {
   const directParts = readArrayProp(properties, "parts");
   if (directParts) {
@@ -128,10 +163,15 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     const infoTime = infoRecord ? readRecordProp(infoRecord, "time") : undefined;
     return toIsoFromEpoch(infoTime?.created, runtime.now);
   })();
+  const messageModel = readMessageModelSelection(infoRecord);
   const session = runtime.getSession(runtime.sessionId);
   const previousRole = messageId ? runtime.messageRoleById.get(messageId) : undefined;
   if (messageId && role) {
     runtime.messageRoleById.set(messageId, role);
+    session?.messageMetadataById.set(messageId, {
+      timestamp: messageTimestamp,
+      ...(messageModel ? { model: messageModel } : {}),
+    });
   }
 
   const completedAt = infoRecord ? readMessageCompletedAt(infoRecord) : undefined;
@@ -179,13 +219,14 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
   }
 
   if (messageId && role === "user") {
-    const textFromParts = readTextFromParts(normalizedParts);
+    const userParts =
+      normalizedParts.length > 0 ? normalizedParts : getKnownMessageParts(runtime, messageId);
+    const textFromParts = readTextFromParts(userParts);
     const visible = textFromParts.length > 0 ? textFromParts : readTextFromMessageInfo(infoRecord);
     if (visible.trim().length === 0) {
       return true;
     }
 
-    const messageModel = readMessageModelSelection(infoRecord);
     const emittedMessageIds = session?.emittedMessageIds;
     if (emittedMessageIds?.has(messageId)) {
       return true;
@@ -316,6 +357,16 @@ const handleMessagePartUpdatedEvent = (event: Event, runtime: EventStreamRuntime
   const nextPart = applyPendingDeltas(runtime, partId, current);
   runtime.partsById.set(partId, nextPart);
   emitAssistantPart(runtime, nextPart);
+  const messageId = nextPart.messageID;
+  const role = runtime.messageRoleById.get(messageId);
+  if (role === "user") {
+    const metadata = runtime.getSession(runtime.sessionId)?.messageMetadataById.get(messageId);
+    emitKnownUserMessage(runtime, {
+      messageId,
+      timestamp: metadata?.timestamp ?? runtime.now(),
+      ...(metadata?.model ? { model: metadata.model } : {}),
+    });
+  }
   return true;
 };
 
