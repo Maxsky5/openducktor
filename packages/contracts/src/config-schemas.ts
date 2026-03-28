@@ -149,9 +149,10 @@ export type AutopilotRule = z.infer<typeof autopilotRuleSchema>;
 const normalizeAutopilotSettings = (value: { rules: AutopilotRule[] }) => {
   const rulesByEvent = new Map<AutopilotEventId, AutopilotRule>();
   for (const rule of value.rules) {
+    const existing = rulesByEvent.get(rule.eventId);
     rulesByEvent.set(rule.eventId, {
       eventId: rule.eventId,
-      actionIds: dedupeValues(rule.actionIds),
+      actionIds: dedupeValues([...(existing?.actionIds ?? []), ...rule.actionIds]),
     });
   }
 

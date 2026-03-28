@@ -109,4 +109,30 @@ describe("config-schemas", () => {
       { eventId: "taskProgressedToHumanReview", actionIds: ["startGeneratePullRequest"] },
     ]);
   });
+
+  test("merges duplicate rules for the same event", () => {
+    const parsed = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      repos: {},
+      globalPromptOverrides: {},
+      autopilot: {
+        rules: [
+          {
+            eventId: "taskProgressedToSpecReady",
+            actionIds: ["startPlanner"],
+          },
+          {
+            eventId: "taskProgressedToSpecReady",
+            actionIds: ["startBuilder", "startPlanner"],
+          },
+        ],
+      },
+    });
+
+    expect(parsed.autopilot.rules[0]).toEqual({
+      eventId: "taskProgressedToSpecReady",
+      actionIds: ["startPlanner", "startBuilder"],
+    });
+  });
 });
