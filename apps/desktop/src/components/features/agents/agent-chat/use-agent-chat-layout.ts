@@ -50,6 +50,9 @@ export const resizeComposerTextareaElement = (
     };
   }
 
+  // The browser only reports a shrink-capable scrollHeight after the inline height
+  // stops constraining the textarea, so we remeasure at auto height and then restore
+  // the previous inline value when the final layout is unchanged.
   const previousInlineHeight = textarea.style.height;
   textarea.style.height = "auto";
   const layout = computeComposerTextareaLayout(textarea.scrollHeight);
