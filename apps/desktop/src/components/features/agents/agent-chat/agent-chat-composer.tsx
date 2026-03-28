@@ -84,7 +84,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
           className={
             isWaitingInput
               ? "odt-waiting-input-card relative border border-warning-border bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl"
-              : "relative border border-input bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl"
+              : "relative border border-input border-l-0 bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl"
           }
         >
           {isSessionWorking && !isWaitingInput ? (

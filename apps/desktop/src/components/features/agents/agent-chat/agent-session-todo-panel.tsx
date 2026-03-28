@@ -74,13 +74,13 @@ export function AgentSessionTodoPanel({
   return (
     <section
       className={cn(
-        "w-full rounded-t-xl border border-input border-b-0 border-l-transparent bg-card",
+        "w-full border border-input border-b-0 border-l-0 bg-card",
         className,
       )}
       aria-label="Agent todo list"
     >
       <div
-        className={cn("rounded-t-xl border-l-4", !accentColor && "border-l-transparent")}
+        className={cn("border-l-4", !accentColor && "border-l-0")}
         style={accentColor ? { borderLeftColor: accentColor } : undefined}
       >
         <button
