@@ -217,7 +217,7 @@ describe("tasks query cache helpers", () => {
     ).toBe(true);
   });
 
-  test("refreshCachedKanbanQueries refreshes inactive cached kanban queries for the repo", async () => {
+  test("refreshCachedKanbanQueries refreshes cached kanban queries even without prior invalidation", async () => {
     const queryClient = new QueryClient();
     let currentStatus: TaskCard["status"] = "ready_for_dev";
     const tasksList = mock(
@@ -246,7 +246,6 @@ describe("tasks query cache helpers", () => {
     await queryClient.fetchQuery(kanbanTaskListQueryOptions("/other", 1));
 
     currentStatus = "in_progress";
-    await invalidateRepoTaskQueries(queryClient, "/repo");
     tasksList.mockClear();
 
     await refreshCachedKanbanQueries(queryClient, "/repo");

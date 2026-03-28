@@ -828,6 +828,95 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("deleteTask removes cached task documents for deleted tasks and subtasks", async () => {
+    let isDeleted = false;
+    const taskDelete = mock(async () => {
+      isDeleted = true;
+      return { ok: true };
+    });
+    const tasksList = mock(async () =>
+      isDeleted ? [] : [{ ...makeTask("A", "open"), subtaskIds: ["B"] }, makeTask("B", "open")],
+    );
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskDelete: host.taskDelete,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.taskDelete = taskDelete;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const queryClient = createQueryClient();
+    let latest: ReturnType<typeof useTaskOperations> | null = null;
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useTaskOperations(args);
+      return null;
+    };
+
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const harness = createSharedHookHarness(
+      Harness,
+      {
+        args: {
+          activeRepo: "/repo",
+          refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+            beadsOk: true,
+            beadsPath: "/repo/.beads",
+            beadsError: null,
+          }),
+        },
+      },
+      { wrapper },
+    );
+
+    try {
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+        tasks: [{ ...makeTask("A", "open"), subtaskIds: ["B"] }, makeTask("B", "open")],
+        runs: [] satisfies RunSummary[],
+      });
+      queryClient.setQueryData(documentQueryKeys.spec("/repo", "A"), {
+        markdown: "# Parent spec",
+        updatedAt: "2026-03-28T00:00:00.000Z",
+      });
+      queryClient.setQueryData(documentQueryKeys.plan("/repo", "B"), {
+        markdown: "# Child plan",
+        updatedAt: "2026-03-28T00:00:00.000Z",
+      });
+
+      await harness.mount();
+      await harness.run(async () => {
+        if (!latest) {
+          throw new Error("Hook not mounted");
+        }
+
+        await latest.deleteTask("A", true);
+      });
+
+      await harness.waitFor(
+        () =>
+          queryClient.getQueryData<{ tasks: TaskCard[]; runs: RunSummary[] }>(
+            taskQueryKeys.repoData("/repo"),
+          )?.tasks.length === 0,
+        1000,
+      );
+
+      expect(taskDelete).toHaveBeenCalledWith("/repo", "A", true);
+      expect(queryClient.getQueryData(documentQueryKeys.spec("/repo", "A"))).toBeUndefined();
+      expect(queryClient.getQueryData(documentQueryKeys.plan("/repo", "B"))).toBeUndefined();
+    } finally {
+      await harness.unmount();
+      host.taskDelete = original.taskDelete;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
   test("completed ODT tool events refresh an active kanban query through the session listener", async () => {
     let currentStatus: TaskCard["status"] = "human_review";
     const tasksList = mock(async () => [makeTask("A", currentStatus)]);
