@@ -425,6 +425,75 @@ describe("AgentChatThread", () => {
     rendered.unmount();
   });
 
+  test("adds bottom spacing before the composer when the last bottom-stack item is a question", async () => {
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          session: buildSession({
+            pendingQuestions: [buildQuestionRequest()],
+            pendingPermissions: [],
+            todos: [],
+          }),
+        },
+      }),
+    );
+    await act(flush);
+
+    const bottomStack = rendered.container.querySelector(".agent-chat-bottom-stack");
+    expect(bottomStack?.className).toContain("pb-3");
+
+    rendered.unmount();
+  });
+
+  test("adds bottom spacing before the composer when the last bottom-stack item is a permission", async () => {
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          session: buildSession({
+            pendingQuestions: [],
+            pendingPermissions: [buildPermissionRequest()],
+            todos: [],
+          }),
+        },
+      }),
+    );
+    await act(flush);
+
+    const bottomStack = rendered.container.querySelector(".agent-chat-bottom-stack");
+    expect(bottomStack?.className).toContain("pb-3");
+
+    rendered.unmount();
+  });
+
+  test("keeps the todo panel flush with the composer when todo is the last bottom-stack item", async () => {
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          session: buildSession({
+            pendingQuestions: [buildQuestionRequest()],
+            pendingPermissions: [],
+            todos: [
+              buildTodoItem({
+                id: "todo-1",
+                content: "Read layout and pages",
+                status: "in_progress",
+              }),
+            ],
+          }),
+        },
+      }),
+    );
+    await act(flush);
+
+    const bottomStack = rendered.container.querySelector(".agent-chat-bottom-stack");
+    expect(bottomStack?.className).toContain("pb-0");
+
+    rendered.unmount();
+  });
+
   test("refreshes rendered rows when the session gains new visible rows", async () => {
     const messages = Array.from({ length: 80 }, (_, index) =>
       buildMessage("user", `Message ${index + 1}`, {
