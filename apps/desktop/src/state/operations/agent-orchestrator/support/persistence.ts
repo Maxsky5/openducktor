@@ -57,6 +57,7 @@ export const fromPersistedSessionRecord = (
     runId: null,
     runtimeEndpoint: "",
     workingDirectory: session.workingDirectory,
+    historyHydrationState: "not_requested",
     messages: [],
     draftAssistantText: "",
     draftAssistantMessageId: null,
@@ -266,7 +267,7 @@ export const historyToChatMessages = (
       const isFinalAssistantMessage = isFinalAssistantHistoryMessage(message);
       const assistantDurationMs = assistantDurationFromHistory(message, previousUserTimestampMs);
       next.push({
-        id: `history:text:${message.messageId}`,
+        id: message.messageId,
         role: message.role,
         content,
         timestamp: message.timestamp,
