@@ -299,6 +299,14 @@ export type AgentEvent =
       model?: AgentModelSelection;
     }
   | {
+      type: "user_message";
+      sessionId: string;
+      timestamp: string;
+      messageId: string;
+      message: string;
+      model?: AgentModelSelection;
+    }
+  | {
       type: "assistant_part";
       sessionId: string;
       timestamp: string;
