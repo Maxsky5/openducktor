@@ -98,6 +98,12 @@ export type AgentSessionContextUsage = {
   outputLimit?: number;
 };
 
+export type AgentSessionHistoryHydrationState =
+  | "not_requested"
+  | "hydrating"
+  | "hydrated"
+  | "failed";
+
 export type AgentSessionState = {
   sessionId: string;
   externalSessionId: string;
@@ -111,6 +117,7 @@ export type AgentSessionState = {
   runId: string | null;
   runtimeEndpoint: string;
   workingDirectory: string;
+  historyHydrationState?: AgentSessionHistoryHydrationState;
   messages: AgentChatMessage[];
   draftAssistantText: string;
   draftAssistantMessageId: string | null;

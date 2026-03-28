@@ -44,6 +44,7 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   runId: null,
   runtimeEndpoint: "http://127.0.0.1:4444",
   workingDirectory: "/tmp/repo/worktree",
+  historyHydrationState: "hydrated",
   messages: [],
   draftAssistantText: "",
   draftAssistantMessageId: null,
