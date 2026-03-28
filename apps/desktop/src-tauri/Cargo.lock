@@ -1292,7 +1292,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "host-application"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1312,7 +1312,7 @@ dependencies = [
 
 [[package]]
 name = "host-domain"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1323,7 +1323,7 @@ dependencies = [
 
 [[package]]
 name = "host-infra-beads"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1335,7 +1335,7 @@ dependencies = [
 
 [[package]]
 name = "host-infra-system"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1352,7 +1352,7 @@ dependencies = [
 
 [[package]]
 name = "host-test-support"
-version = "0.1.0"
+version = "0.0.1"
 
 [[package]]
 name = "html5ever"
@@ -2187,7 +2187,7 @@ checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 
 [[package]]
 name = "openducktor-desktop"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "axum",
