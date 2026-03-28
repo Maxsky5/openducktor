@@ -127,7 +127,7 @@ describe("useAgentStudioTaskTabs", () => {
     }
   });
 
-  test("selecting a tab routes as task intent and clears explicit session/role", async () => {
+  test("selecting a tab pins the session chosen for that task", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;
     Object.defineProperty(globalThis, "localStorage", {
@@ -164,8 +164,76 @@ describe("useAgentStudioTaskTabs", () => {
       const lastUpdate = updateCalls[updateCalls.length - 1];
       expect(lastUpdate).toEqual({
         task: "task-2",
-        session: undefined,
-        agent: undefined,
+        session: "session-2",
+        agent: "spec",
+        scenario: undefined,
+        autostart: undefined,
+        start: undefined,
+      });
+
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
+  test("selecting a tab prefers the current active session over a newer inactive session", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      const taskOne = createTask("task-1");
+      const taskTwo = createTask("task-2");
+      const runningSession = createAgentSessionFixture({
+        sessionId: "session-running",
+        externalSessionId: "ext-session-running",
+        taskId: "task-2",
+        role: "spec",
+        scenario: "spec_initial",
+        status: "running",
+        startedAt: "2026-02-22T09:00:00.000Z",
+      });
+      const newerIdleSession = createAgentSessionFixture({
+        sessionId: "session-newer",
+        externalSessionId: "ext-session-newer",
+        taskId: "task-2",
+        role: "planner",
+        scenario: "planner_initial",
+        status: "idle",
+        startedAt: "2026-02-22T10:00:00.000Z",
+      });
+      const updateCalls: Array<Record<string, string | undefined>> = [];
+
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+        taskId: "task-1",
+        selectedTask: taskOne,
+        tasks: [taskOne, taskTwo],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map([["task-2", newerIdleSession]]),
+        activeSessionByTaskId: new Map([["task-2", runningSession]]),
+        updateQuery: (updates) => {
+          updateCalls.push(updates);
+        },
+        clearComposerInput: () => {},
+      });
+
+      await harness.mount();
+      await harness.run((state) => {
+        state.handleSelectTab("task-2");
+      });
+
+      expect(updateCalls[updateCalls.length - 1]).toEqual({
+        task: "task-2",
+        session: "session-running",
+        agent: "spec",
         scenario: undefined,
         autostart: undefined,
         start: undefined,
@@ -272,8 +340,8 @@ describe("useAgentStudioTaskTabs", () => {
       const lastUpdate = updateCalls[updateCalls.length - 1];
       expect(lastUpdate).toEqual({
         task: "task-1",
-        session: undefined,
-        agent: undefined,
+        session: "session-1",
+        agent: "spec",
         scenario: undefined,
         autostart: undefined,
         start: undefined,

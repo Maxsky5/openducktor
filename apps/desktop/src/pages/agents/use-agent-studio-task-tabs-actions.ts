@@ -3,7 +3,7 @@ import { closeTaskTab } from "./agents-page-session-tabs";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
-type NavigateToTask = (taskId: string) => void;
+type NavigateToTask = (taskId: string, options?: { pinSession?: boolean }) => void;
 
 const focusTaskTabTrigger = (taskId: string): void => {
   globalThis.setTimeout(() => {
@@ -86,7 +86,7 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
       }
 
       focusTaskTabTrigger(nextActiveTaskId);
-      navigateToTask(nextActiveTaskId);
+      navigateToTask(nextActiveTaskId, { pinSession: true });
     },
     [
       activeTaskTabId,

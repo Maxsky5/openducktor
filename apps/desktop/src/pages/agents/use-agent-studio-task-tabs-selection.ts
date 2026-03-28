@@ -3,7 +3,7 @@ import { ensureActiveTaskTab, resolveFallbackTaskId } from "./agents-page-sessio
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
-type NavigateToTask = (taskId: string) => void;
+type NavigateToTask = (taskId: string, options?: { pinSession?: boolean }) => void;
 
 type UseTaskTabSelectionArgs = {
   activeRepo: string | null;
@@ -124,7 +124,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
         return [...current, nextTaskId];
       });
       setPersistedActiveTaskId(nextTaskId);
-      navigateToTask(nextTaskId);
+      navigateToTask(nextTaskId, { pinSession: true });
     },
     [
       activeTaskTabId,
