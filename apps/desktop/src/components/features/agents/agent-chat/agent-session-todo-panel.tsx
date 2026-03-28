@@ -116,9 +116,9 @@ export function AgentSessionTodoPanel({
             {visibleTodos.map((todo) => (
               <li
                 key={todo.id}
-                className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-2 rounded-md px-1 py-1 text-sm"
+                className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-x-2 rounded-md px-1 py-1 text-sm"
               >
-                <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center self-start">
+                <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center">
                   {statusIcon(todo.status, isSessionWorking)}
                 </span>
                 <span

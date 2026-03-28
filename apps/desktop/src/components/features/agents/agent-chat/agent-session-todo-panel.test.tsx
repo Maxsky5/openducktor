@@ -105,8 +105,8 @@ describe("AgentSessionTodoPanel", () => {
 
     expect(html).toContain("Done item");
     expect(html).toContain("Active item with a much longer description");
-    expect(html).toContain("grid grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-2");
-    expect(html).toContain("inline-flex h-5 w-5 shrink-0 items-center justify-center self-start");
+    expect(html).toContain("grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-x-2");
+    expect(html).toContain("inline-flex h-5 w-5 shrink-0 items-center justify-center");
     expect(html).toContain("block min-w-0 leading-5");
     expect(html).toContain("font-medium text-foreground");
     expect(html).not.toContain("mt-[3px]");
