@@ -99,6 +99,49 @@ describe("use-agent-chat-layout helpers", () => {
     expect(assignedOverflowValues).toEqual([]);
   });
 
+  test("resizeComposerTextareaElement writes an explicit height after a no-op probe with no prior inline height", () => {
+    const styleState = {
+      height: "",
+      overflowY: "hidden" as "auto" | "hidden",
+    };
+    const assignedHeights: string[] = [];
+    const style = {} as CSSStyleDeclaration;
+
+    Object.defineProperty(style, "height", {
+      configurable: true,
+      get: () => styleState.height,
+      set: (value: string) => {
+        assignedHeights.push(value);
+        styleState.height = value;
+      },
+    });
+    Object.defineProperty(style, "overflowY", {
+      configurable: true,
+      get: () => styleState.overflowY,
+      set: (value: "auto" | "hidden") => {
+        styleState.overflowY = value;
+      },
+    });
+
+    const textarea = {
+      getBoundingClientRect: () => ({ height: COMPOSER_TEXTAREA_MIN_HEIGHT_PX }),
+      style,
+      value: "draft",
+      get scrollHeight() {
+        return COMPOSER_TEXTAREA_MIN_HEIGHT_PX;
+      },
+    } as unknown as HTMLTextAreaElement;
+
+    const result = resizeComposerTextareaElement(textarea);
+
+    expect(result).toEqual({
+      didHeightChange: false,
+      overflowY: "hidden",
+    });
+    expect(assignedHeights).toEqual(["auto", "44px"]);
+    expect(styleState.height).toBe("44px");
+  });
+
   test("resizeComposerTextareaElement shrinks a non-empty multiline draft after browser-faithful remeasure", () => {
     const styleState = {
       height: "120px",

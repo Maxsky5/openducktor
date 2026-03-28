@@ -151,7 +151,12 @@ const getLatestResult = (latestResultRef: { current: HookResult | null }): HookR
 
 const mountHarness = async (
   props: HarnessProps,
-  options?: { attachContainer?: boolean; attachContent?: boolean },
+  options?: {
+    attachContainer?: boolean;
+    attachContent?: boolean;
+    containerFactory?: () => MockMessagesContainer;
+    contentFactory?: () => MockMessagesContent;
+  },
 ): Promise<{
   getLatestResult: () => HookResult;
   messagesContainerRef: ReturnType<typeof createHarness>["messagesContainerRef"];
@@ -159,13 +164,21 @@ const mountHarness = async (
   update: (nextProps: HarnessProps) => Promise<void>;
   unmount: () => Promise<void>;
 }> => {
+  const resolvedOptions = options ?? {};
   const { latestResultRef, messagesContainerRef, messagesContentRef } = createHarness();
-  const shouldAttachContent = options?.attachContent ?? options?.attachContainer ?? false;
-  if (options?.attachContainer) {
-    setRefCurrent(messagesContainerRef, createMessagesContainer());
+  const shouldAttachContent =
+    resolvedOptions.attachContent ?? resolvedOptions.attachContainer ?? false;
+  if (resolvedOptions.attachContainer) {
+    setRefCurrent(
+      messagesContainerRef,
+      resolvedOptions.containerFactory?.() ?? createMessagesContainer(),
+    );
   }
   if (shouldAttachContent) {
-    setRefCurrent(messagesContentRef, createMessagesContent());
+    setRefCurrent(
+      messagesContentRef,
+      resolvedOptions.contentFactory?.() ?? createMessagesContent(),
+    );
   }
 
   const harness = createSharedHookHarness((nextProps: HarnessProps) => {
@@ -739,6 +752,33 @@ describe("useAgentChatWindow", () => {
     const result = harness.getLatestResult();
     expect(result.isNearBottom).toBe(true);
     expect(result.isNearTop).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("does not preserve bottom pinning on the initial scroll sample when the container starts away from bottom", async () => {
+    const harness = await mountHarness(
+      {
+        rows: createRows(80),
+        activeSessionId: null,
+        isSessionViewLoading: false,
+      },
+      {
+        attachContainer: true,
+        containerFactory: () => {
+          const container = createMessagesContainer();
+          container.scrollTop = 500;
+          return container;
+        },
+      },
+    );
+
+    await act(async () => {
+      await flush();
+    });
+
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
+    expect(harness.getLatestResult().isNearTop).toBe(false);
 
     await harness.unmount();
   });

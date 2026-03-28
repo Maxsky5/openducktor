@@ -57,10 +57,13 @@ export const resizeComposerTextareaElement = (
   textarea.style.height = "auto";
   const layout = computeComposerTextareaLayout(textarea.scrollHeight);
   const didHeightChange = Math.abs(currentHeight - layout.heightPx) > 0.5;
+  const nextInlineHeight = `${layout.heightPx}px`;
   if (didHeightChange) {
-    textarea.style.height = `${layout.heightPx}px`;
-  } else if (textarea.style.height !== previousInlineHeight) {
+    textarea.style.height = nextInlineHeight;
+  } else if (previousInlineHeight.length > 0 && textarea.style.height !== previousInlineHeight) {
     textarea.style.height = previousInlineHeight;
+  } else if (textarea.style.height !== nextInlineHeight) {
+    textarea.style.height = nextInlineHeight;
   }
   if (textarea.style.overflowY !== layout.overflowY) {
     textarea.style.overflowY = layout.overflowY;

@@ -329,7 +329,10 @@ export function useAgentChatScrollController({
       const nearTop = nextScrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
 
       const shouldPreservePinnedState =
-        isPinnedToBottomRef.current && !didScrollTopChange && !nearBottom;
+        previousScrollTop !== null &&
+        isPinnedToBottomRef.current &&
+        !didScrollTopChange &&
+        !nearBottom;
 
       const isEffectivelyPinned =
         isBottomAutoFollowAnimationRef.current || nearBottom || shouldPreservePinnedState;
