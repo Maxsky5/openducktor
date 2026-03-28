@@ -85,6 +85,7 @@ export function AgentSessionTodoPanel({
         className="flex w-full cursor-pointer items-center gap-3 px-3 py-2 text-left hover:bg-muted/70"
         onClick={onToggleCollapse}
         aria-label={toggleLabel}
+        aria-expanded={!collapsed}
       >
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="flex shrink-0 items-center gap-2">
@@ -103,9 +104,9 @@ export function AgentSessionTodoPanel({
             </div>
           ) : null}
           {collapsed ? (
-            <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+            <ChevronDown className="ml-auto size-4 shrink-0 text-muted-foreground" />
           ) : (
-            <ChevronUp className="size-4 shrink-0 text-muted-foreground" />
+            <ChevronUp className="ml-auto size-4 shrink-0 text-muted-foreground" />
           )}
         </div>
       </button>

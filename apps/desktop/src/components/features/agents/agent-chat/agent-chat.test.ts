@@ -131,6 +131,7 @@ describe("AgentChat", () => {
             sessionAgentColors: { "Hephaestus (Deep Agent)": "#123456" },
             session: buildSession({
               status: "idle",
+              selectedModel: buildModelSelection({ profileId: "Hephaestus (Deep Agent)" }),
               todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
             }),
           },

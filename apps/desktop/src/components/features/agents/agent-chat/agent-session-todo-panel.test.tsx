@@ -52,6 +52,8 @@ describe("AgentSessionTodoPanel", () => {
     expect(html).toContain("border-b-0");
     expect(html).toContain("border-l-4");
     expect(html).toContain("border-left-color:#123456");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("ml-auto size-4 shrink-0 text-muted-foreground");
     expect(html).not.toContain("justify-end");
     expect(html).not.toContain("max-w-md");
   });
@@ -105,8 +107,10 @@ describe("AgentSessionTodoPanel", () => {
 
     expect(html).toContain("Done item");
     expect(html).toContain("Active item with a much longer description");
+    expect(html).toContain('aria-expanded="true"');
     expect(html).toContain("grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-x-2");
     expect(html).toContain("inline-flex h-5 w-5 shrink-0 items-center justify-center");
+    expect(html).toContain("ml-auto size-4 shrink-0 text-muted-foreground");
     expect(html).toContain("block min-w-0 leading-5");
     expect(html).toContain("font-medium text-foreground");
     expect(html).not.toContain("mt-[3px]");
