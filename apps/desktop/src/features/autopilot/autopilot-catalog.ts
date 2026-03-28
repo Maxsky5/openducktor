@@ -132,13 +132,17 @@ export const setAutopilotRuleAction = (
   eventId: AutopilotEventId,
   value: AutopilotSelectValue,
 ): AutopilotSettings => {
+  const defaultRulesByEvent = new Map<AutopilotEventId, AutopilotRule>(
+    createDefaultAutopilotSettings().rules.map((rule) => [rule.eventId, rule]),
+  );
   const currentRulesByEvent = new Map<AutopilotEventId, AutopilotRule>(
     settings.rules.map((rule) => [rule.eventId, rule]),
   );
   let hasChanged = false;
 
   const rules = AUTOPILOT_EVENT_IDS.map((id) => {
-    const currentRule = currentRulesByEvent.get(id) ?? { eventId: id, actionIds: [] };
+    const currentRule = currentRulesByEvent.get(id) ??
+      defaultRulesByEvent.get(id) ?? { eventId: id, actionIds: [] };
     if (!currentRulesByEvent.has(id)) {
       hasChanged = true;
     }

@@ -54,4 +54,25 @@ describe("autopilot-catalog", () => {
       settings,
     );
   });
+
+  test("preserves default-backed rules when updating a partial settings payload", () => {
+    const nextSettings = setAutopilotRuleAction(
+      {
+        rules: [
+          {
+            eventId: "taskProgressedToSpecReady",
+            actionIds: ["startPlanner"],
+          },
+        ],
+      },
+      "taskProgressedToSpecReady",
+      "startBuilder",
+    );
+
+    expect(nextSettings.rules).toHaveLength(5);
+    expect(nextSettings.rules[1]).toEqual({
+      eventId: "taskProgressedToReadyForDev",
+      actionIds: [],
+    });
+  });
 });
