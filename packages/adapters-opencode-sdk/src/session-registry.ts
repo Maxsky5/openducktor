@@ -128,7 +128,7 @@ export const registerSession = (input: {
     externalSessionId: input.externalSessionId,
     eventTransportKey,
     hasIdleSinceActivity: false,
-    emittedAssistantMessageIds: new Set<string>(),
+    emittedMessageIds: new Set<string>(),
     partsById: new Map(),
     messageRoleById: new Map(),
     pendingDeltasByPartId: new Map(),
