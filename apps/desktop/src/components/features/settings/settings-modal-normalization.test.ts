@@ -218,6 +218,22 @@ describe("settings-modal-normalization", () => {
     ]);
   });
 
+  test("preserves explicit empty autopilot actions for a configured event", () => {
+    const normalized = normalizeAutopilotSettingsForSave({
+      rules: [
+        {
+          eventId: "taskProgressedToSpecReady",
+          actionIds: [],
+        },
+      ],
+    });
+
+    expect(normalized.rules[0]).toEqual({
+      eventId: "taskProgressedToSpecReady",
+      actionIds: [],
+    });
+  });
+
   test("disables trusted hooks when no hook commands remain after normalization", () => {
     const normalized = normalizeRepoConfigForSave({
       ...createRepoConfig(),

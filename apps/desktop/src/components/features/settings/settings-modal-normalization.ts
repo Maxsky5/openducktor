@@ -119,16 +119,16 @@ export const normalizeAutopilotSettingsForSave = (
 
   return {
     rules: AUTOPILOT_EVENT_IDS.map((eventId) => {
-      const actionIds = (rulesByEvent.get(eventId)?.actionIds ?? []).filter(
+      const explicitRule = rulesByEvent.get(eventId);
+      const actionIds = (explicitRule?.actionIds ?? []).filter(
         (actionId, index, list) => list.indexOf(actionId) === index,
       ) as AutopilotActionId[];
 
       return {
         eventId,
-        actionIds:
-          actionIds.length > 0
-            ? actionIds
-            : (defaultSettings.rules.find((rule) => rule.eventId === eventId)?.actionIds ?? []),
+        actionIds: explicitRule
+          ? actionIds
+          : (defaultSettings.rules.find((rule) => rule.eventId === eventId)?.actionIds ?? []),
       };
     }),
   };
