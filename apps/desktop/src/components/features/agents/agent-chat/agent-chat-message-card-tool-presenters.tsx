@@ -18,7 +18,7 @@ import { isTodoToolName } from "@/state/operations/agent-orchestrator/agent-tool
 import { AgentChatFileEditCard } from "./agent-chat-file-edit-card";
 import {
   buildToolSummary,
-  extractFileEditData,
+  extractAllFileEditData,
   formatRawJsonLikeText,
   getToolDuration,
   getToolLifecyclePhase,
@@ -353,8 +353,12 @@ export const RegularToolMessage = ({
 
       {isFileEditTool(meta.tool) &&
         (() => {
-          const fileEditData = extractFileEditData(meta, sessionWorkingDirectory);
-          return fileEditData ? <AgentChatFileEditCard data={fileEditData} /> : null;
+          const allFileEditData = extractAllFileEditData(meta, sessionWorkingDirectory);
+          return allFileEditData.length > 0
+            ? allFileEditData.map((data) => (
+                <AgentChatFileEditCard key={data.filePath} data={data} />
+              ))
+            : null;
         })()}
     </div>
   );
