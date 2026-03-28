@@ -239,6 +239,10 @@ export const buildToolSummary = (
     return compactText(meta.error, 220);
   }
 
+  if (isFileEditTool(lowerTool) && lifecyclePhase === "completed") {
+    return "";
+  }
+
   if (typeof meta.preview === "string" && meta.preview.trim().length > 0) {
     return compactText(normalizeDisplaySummary(lowerTool, meta.preview, workingDirectory), 160);
   }

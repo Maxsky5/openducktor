@@ -199,7 +199,7 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("/repo/apps/web/src/contexts/AuthContext.tsx");
   });
 
-  test("renders one file edit card per file in a multi-file apply_patch result", () => {
+  test("renders one file edit card per file in a multi-file apply_patch result without a summary description", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: {
@@ -227,7 +227,7 @@ describe("AgentChatMessageCard tool duration", () => {
       }),
     );
 
-    expect(html).toContain("2 files modified");
+    expect(html).not.toContain("2 files modified");
     expect(html).toContain("src/");
     expect(html).toContain("first.ts");
     expect(html).toContain("second.ts");

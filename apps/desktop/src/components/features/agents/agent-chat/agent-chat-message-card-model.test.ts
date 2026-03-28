@@ -1065,7 +1065,7 @@ describe("agent-chat-message-card-model", () => {
   });
 
   describe("tool summary helpers", () => {
-    test("summarizes multi-file apply_patch output by file count", () => {
+    test("omits summaries for successful multi-file apply_patch tool calls", () => {
       expect(
         buildToolSummary(
           createToolMeta({
@@ -1079,10 +1079,10 @@ describe("agent-chat-message-card-model", () => {
           }),
           "",
         ),
-      ).toBe("2 files modified");
+      ).toBe("");
     });
 
-    test("preserves single-file apply_patch summaries", () => {
+    test("omits summaries for successful single-file apply_patch tool calls", () => {
       expect(
         buildToolSummary(
           createToolMeta({
@@ -1091,6 +1091,22 @@ describe("agent-chat-message-card-model", () => {
               patch: "--- a/src/patch.ts\n+++ b/src/patch.ts\n@@ -1 +1 @@\n-old\n+new",
             },
             output: "Updated 1 file",
+          }),
+          "",
+        ),
+      ).toBe("");
+    });
+
+    test("preserves file edit summaries until the tool succeeds", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "apply_patch",
+            status: "running",
+            input: {
+              patch: "--- a/src/patch.ts\n+++ b/src/patch.ts\n@@ -1 +1 @@\n-old\n+new",
+            },
+            output: "",
           }),
           "",
         ),
