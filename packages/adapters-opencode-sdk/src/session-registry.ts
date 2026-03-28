@@ -131,6 +131,7 @@ export const registerSession = (input: {
     emittedMessageIds: new Set<string>(),
     partsById: new Map(),
     messageRoleById: new Map(),
+    messageMetadataById: new Map(),
     pendingDeltasByPartId: new Map(),
   });
 

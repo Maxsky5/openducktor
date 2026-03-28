@@ -48,6 +48,7 @@ describe("types", () => {
       emittedMessageIds: new Set<string>(),
       partsById: new Map(),
       messageRoleById: new Map(),
+      messageMetadataById: new Map(),
       pendingDeltasByPartId: new Map(),
     };
     const status: McpServerStatus = { status: "connected" };
