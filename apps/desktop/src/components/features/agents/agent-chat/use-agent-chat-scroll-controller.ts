@@ -43,6 +43,7 @@ export function useAgentChatScrollController({
   const scrollAnimationCleanupRef = useRef<(() => void) | null>(null);
   const isBottomAutoFollowAnimationRef = useRef(false);
   const isUpdatingRef = useRef(false);
+  const lastScrollTopRef = useRef<number | null>(null);
   const pendingScrollAnchorRef = useRef<{ rowKey: string; topOffset: number } | null>(null);
 
   const getRowElementByKey = useCallback(
@@ -317,12 +318,21 @@ export function useAgentChatScrollController({
     }
 
     const handleScroll = () => {
+      const previousScrollTop = lastScrollTopRef.current;
+      const nextScrollTop = container.scrollTop;
+      lastScrollTopRef.current = nextScrollTop;
+      const didScrollTopChange =
+        previousScrollTop !== null && Math.abs(nextScrollTop - previousScrollTop) > 0.5;
       const nearBottom =
-        container.scrollHeight - container.scrollTop - container.clientHeight <=
+        container.scrollHeight - nextScrollTop - container.clientHeight <=
         CHAT_SCROLL_EDGE_THRESHOLD_PX;
-      const nearTop = container.scrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
+      const nearTop = nextScrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
 
-      const isEffectivelyPinned = isBottomAutoFollowAnimationRef.current || nearBottom;
+      const shouldPreservePinnedState =
+        isPinnedToBottomRef.current && !didScrollTopChange && !nearBottom;
+
+      const isEffectivelyPinned =
+        isBottomAutoFollowAnimationRef.current || nearBottom || shouldPreservePinnedState;
 
       setIsNearBottom(isEffectivelyPinned);
       setIsNearTop(nearTop);
