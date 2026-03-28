@@ -54,20 +54,134 @@ describe("use-agent-chat-layout helpers", () => {
     expect(styleState.overflowY).toBe("hidden");
   });
 
-  test("resizeComposerTextareaElement shrinks the composer when content becomes shorter", () => {
+  test("resizeComposerTextareaElement restores multiline height after measurement when the layout is unchanged", () => {
     const styleState = {
       height: "120px",
-      overflowY: "hidden" as const,
+      overflowY: "hidden" as "auto" | "hidden",
     };
+    const assignedHeights: string[] = [];
+    const assignedOverflowValues: Array<"auto" | "hidden"> = [];
+    const style = {} as CSSStyleDeclaration;
+
+    Object.defineProperty(style, "height", {
+      configurable: true,
+      get: () => styleState.height,
+      set: (value: string) => {
+        assignedHeights.push(value);
+        styleState.height = value;
+      },
+    });
+    Object.defineProperty(style, "overflowY", {
+      configurable: true,
+      get: () => styleState.overflowY,
+      set: (value: "auto" | "hidden") => {
+        assignedOverflowValues.push(value);
+        styleState.overflowY = value;
+      },
+    });
+
     const textarea = {
       getBoundingClientRect: () => ({ height: 120 }),
-      scrollHeight: 40,
-      style: styleState,
-      value: "draft",
+      style,
+      value: "line one\nline two",
+      get scrollHeight() {
+        return 120;
+      },
     } as unknown as HTMLTextAreaElement;
 
-    resizeComposerTextareaElement(textarea);
+    const result = resizeComposerTextareaElement(textarea);
 
+    expect(result).toEqual({
+      didHeightChange: false,
+      overflowY: "hidden",
+    });
+    expect(assignedHeights).toEqual(["auto", "120px"]);
+    expect(assignedOverflowValues).toEqual([]);
+  });
+
+  test("resizeComposerTextareaElement writes an explicit height after a no-op probe with no prior inline height", () => {
+    const styleState = {
+      height: "",
+      overflowY: "hidden" as "auto" | "hidden",
+    };
+    const assignedHeights: string[] = [];
+    const style = {} as CSSStyleDeclaration;
+
+    Object.defineProperty(style, "height", {
+      configurable: true,
+      get: () => styleState.height,
+      set: (value: string) => {
+        assignedHeights.push(value);
+        styleState.height = value;
+      },
+    });
+    Object.defineProperty(style, "overflowY", {
+      configurable: true,
+      get: () => styleState.overflowY,
+      set: (value: "auto" | "hidden") => {
+        styleState.overflowY = value;
+      },
+    });
+
+    const textarea = {
+      getBoundingClientRect: () => ({ height: COMPOSER_TEXTAREA_MIN_HEIGHT_PX }),
+      style,
+      value: "draft",
+      get scrollHeight() {
+        return COMPOSER_TEXTAREA_MIN_HEIGHT_PX;
+      },
+    } as unknown as HTMLTextAreaElement;
+
+    const result = resizeComposerTextareaElement(textarea);
+
+    expect(result).toEqual({
+      didHeightChange: false,
+      overflowY: "hidden",
+    });
+    expect(assignedHeights).toEqual(["auto", "44px"]);
+    expect(styleState.height).toBe("44px");
+  });
+
+  test("resizeComposerTextareaElement shrinks a non-empty multiline draft after browser-faithful remeasure", () => {
+    const styleState = {
+      height: "120px",
+      overflowY: "hidden" as "auto" | "hidden",
+    };
+    const assignedHeights: string[] = [];
+    const style = {} as CSSStyleDeclaration;
+
+    Object.defineProperty(style, "height", {
+      configurable: true,
+      get: () => styleState.height,
+      set: (value: string) => {
+        assignedHeights.push(value);
+        styleState.height = value;
+      },
+    });
+    Object.defineProperty(style, "overflowY", {
+      configurable: true,
+      get: () => styleState.overflowY,
+      set: (value: "auto" | "hidden") => {
+        styleState.overflowY = value;
+      },
+    });
+
+    const textarea = {
+      getBoundingClientRect: () => ({ height: 120 }),
+      style,
+      value: "draft",
+      get scrollHeight() {
+        return styleState.height === "auto" ? COMPOSER_TEXTAREA_MIN_HEIGHT_PX : 120;
+      },
+    } as unknown as HTMLTextAreaElement;
+
+    const result = resizeComposerTextareaElement(textarea);
+
+    expect(result).toEqual({
+      didHeightChange: true,
+      overflowY: "hidden",
+    });
+    expect(assignedHeights).toEqual(["auto", "44px"]);
     expect(styleState.height).toBe("44px");
     expect(styleState.overflowY).toBe("hidden");
   });

@@ -151,7 +151,12 @@ const getLatestResult = (latestResultRef: { current: HookResult | null }): HookR
 
 const mountHarness = async (
   props: HarnessProps,
-  options?: { attachContainer?: boolean; attachContent?: boolean },
+  options?: {
+    attachContainer?: boolean;
+    attachContent?: boolean;
+    containerFactory?: () => MockMessagesContainer;
+    contentFactory?: () => MockMessagesContent;
+  },
 ): Promise<{
   getLatestResult: () => HookResult;
   messagesContainerRef: ReturnType<typeof createHarness>["messagesContainerRef"];
@@ -159,13 +164,21 @@ const mountHarness = async (
   update: (nextProps: HarnessProps) => Promise<void>;
   unmount: () => Promise<void>;
 }> => {
+  const resolvedOptions = options ?? {};
   const { latestResultRef, messagesContainerRef, messagesContentRef } = createHarness();
-  const shouldAttachContent = options?.attachContent ?? options?.attachContainer ?? false;
-  if (options?.attachContainer) {
-    setRefCurrent(messagesContainerRef, createMessagesContainer());
+  const shouldAttachContent =
+    resolvedOptions.attachContent ?? resolvedOptions.attachContainer ?? false;
+  if (resolvedOptions.attachContainer) {
+    setRefCurrent(
+      messagesContainerRef,
+      resolvedOptions.containerFactory?.() ?? createMessagesContainer(),
+    );
   }
   if (shouldAttachContent) {
-    setRefCurrent(messagesContentRef, createMessagesContent());
+    setRefCurrent(
+      messagesContentRef,
+      resolvedOptions.contentFactory?.() ?? createMessagesContent(),
+    );
   }
 
   const harness = createSharedHookHarness((nextProps: HarnessProps) => {
@@ -739,6 +752,96 @@ describe("useAgentChatWindow", () => {
     const result = harness.getLatestResult();
     expect(result.isNearBottom).toBe(true);
     expect(result.isNearTop).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("does not preserve bottom pinning on the initial scroll sample when the container starts away from bottom", async () => {
+    const harness = await mountHarness(
+      {
+        rows: createRows(80),
+        activeSessionId: null,
+        isSessionViewLoading: false,
+      },
+      {
+        attachContainer: true,
+        containerFactory: () => {
+          const container = createMessagesContainer();
+          container.scrollTop = 500;
+          return container;
+        },
+      },
+    );
+
+    await act(async () => {
+      await flush();
+    });
+
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
+    expect(harness.getLatestResult().isNearTop).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("keeps bottom pinning sticky after the user scrolls back to bottom before composer resize", async () => {
+    const harness = await mountHarness(
+      {
+        rows: createRows(80),
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachContainer: true },
+    );
+
+    const container = harness.messagesContainerRef.current as
+      | (MockMessagesContainer & { clientHeight: number })
+      | null;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    const latestScrollListenerCall = container.addEventListener.mock.calls
+      .filter(([eventName]) => eventName === "scroll")
+      .at(-1);
+    const latestScrollListener = latestScrollListenerCall?.[1];
+    if (typeof latestScrollListener !== "function") {
+      throw new Error("Expected scroll listener");
+    }
+
+    container.scrollTop = 500;
+    await act(async () => {
+      latestScrollListener(new Event("scroll"));
+      await flush();
+    });
+
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
+
+    container.scrollTop = container.scrollHeight - container.clientHeight;
+    await act(async () => {
+      latestScrollListener(new Event("scroll"));
+      await flush();
+    });
+
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+
+    container.scrollTo.mockClear();
+    Object.assign(container, { clientHeight: 220 });
+
+    await act(async () => {
+      latestScrollListener(new Event("scroll"));
+      await flush();
+    });
+
+    await act(async () => {
+      triggerResizeObservers();
+      await flush();
+    });
+
+    expect(container.scrollTo).toHaveBeenCalledWith({
+      top: container.scrollHeight,
+      behavior: "auto",
+    });
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
 
     await harness.unmount();
   });

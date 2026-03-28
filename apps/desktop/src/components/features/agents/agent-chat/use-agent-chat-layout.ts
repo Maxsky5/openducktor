@@ -38,7 +38,9 @@ export const resizeComposerTextareaElement = (
   if (isEmptyDraft) {
     const nextHeight = COMPOSER_TEXTAREA_MIN_HEIGHT_PX;
     const didHeightChange = Math.abs(currentHeight - nextHeight) > 0.5;
-    textarea.style.height = `${nextHeight}px`;
+    if (didHeightChange) {
+      textarea.style.height = `${nextHeight}px`;
+    }
     if (textarea.style.overflowY !== "hidden") {
       textarea.style.overflowY = "hidden";
     }
@@ -48,10 +50,21 @@ export const resizeComposerTextareaElement = (
     };
   }
 
+  // The browser only reports a shrink-capable scrollHeight after the inline height
+  // stops constraining the textarea, so we remeasure at auto height and then restore
+  // the previous inline value when the final layout is unchanged.
+  const previousInlineHeight = textarea.style.height;
   textarea.style.height = "auto";
   const layout = computeComposerTextareaLayout(textarea.scrollHeight);
   const didHeightChange = Math.abs(currentHeight - layout.heightPx) > 0.5;
-  textarea.style.height = `${layout.heightPx}px`;
+  const nextInlineHeight = `${layout.heightPx}px`;
+  if (didHeightChange) {
+    textarea.style.height = nextInlineHeight;
+  } else if (previousInlineHeight.length > 0 && textarea.style.height !== previousInlineHeight) {
+    textarea.style.height = previousInlineHeight;
+  } else if (textarea.style.height !== nextInlineHeight) {
+    textarea.style.height = nextInlineHeight;
+  }
   if (textarea.style.overflowY !== layout.overflowY) {
     textarea.style.overflowY = layout.overflowY;
   }

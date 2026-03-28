@@ -145,6 +145,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         session.pendingPermissions.length > 0 ||
         hasVisibleTodo),
   );
+  const shouldAddComposerGap = hasBottomStack && !hasVisibleTodo;
 
   const resolveRowRef = (rowKey: string) => {
     const cached = rowRefByKeyRef.current.get(rowKey);
@@ -253,7 +254,12 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       </div>
 
       {hasBottomStack && session ? (
-        <div className="agent-chat-bottom-stack shrink-0 space-y-2 px-4 pb-0 pt-3">
+        <div
+          className={cn(
+            "agent-chat-bottom-stack shrink-0 space-y-2 px-4 pt-3",
+            shouldAddComposerGap ? "pb-3" : "pb-0",
+          )}
+        >
           {session.pendingQuestions.map((request) => (
             <AgentSessionQuestionCard
               key={`${session.sessionId}:${request.requestId}`}
