@@ -1,9 +1,8 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef } from "react";
+import type { NavigateToTask } from "./agent-studio-types";
 import { ensureActiveTaskTab, resolveFallbackTaskId } from "./agents-page-session-tabs";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
-
-type NavigateToTask = (taskId: string, options?: { pinSession?: boolean }) => void;
 
 type UseTaskTabSelectionArgs = {
   activeRepo: string | null;
