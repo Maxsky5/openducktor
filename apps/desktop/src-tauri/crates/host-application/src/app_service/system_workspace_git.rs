@@ -1,4 +1,7 @@
-use super::{read_opencode_version, resolve_opencode_binary_path, AppService, CachedRuntimeCheck};
+use super::{
+    read_opencode_version, resolve_opencode_binary_path, AppService, CachedRuntimeCheck,
+    WorkspaceSettingsSnapshotUpdate,
+};
 use anyhow::{anyhow, Result};
 use host_domain::{
     BeadsCheck, GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult,
@@ -11,7 +14,8 @@ use host_domain::{
 use host_infra_system::{
     command_exists, copy_configured_worktree_files, remove_worktree, repo_script_fingerprint,
     resolve_central_beads_dir, run_command, run_command_allow_failure_with_env, version_command,
-    ChatSettings, GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
+    AutopilotSettings, ChatSettings, GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides,
+    RepoConfig,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -26,6 +30,7 @@ type SettingsSnapshotTuple = (
     GlobalGitConfig,
     ChatSettings,
     KanbanSettings,
+    AutopilotSettings,
     HashMap<String, RepoConfig>,
     PromptOverrides,
 );
@@ -260,6 +265,7 @@ impl AppService {
             config.git,
             config.chat,
             config.kanban,
+            config.autopilot,
             config.repos,
             config.global_prompt_overrides,
         ))
@@ -271,15 +277,10 @@ impl AppService {
 
     pub(super) fn workspace_persist_settings_snapshot(
         &self,
-        theme: String,
-        git: GlobalGitConfig,
-        chat: ChatSettings,
-        kanban: KanbanSettings,
-        repos: HashMap<String, RepoConfig>,
-        global_prompt_overrides: PromptOverrides,
+        snapshot: WorkspaceSettingsSnapshotUpdate,
     ) -> Result<()> {
         let mut config = self.config_store.load()?;
-        for repo_path in repos.keys() {
+        for repo_path in snapshot.repos.keys() {
             if !config.repos.contains_key(repo_path) {
                 return Err(anyhow!(
                     "Workspace not found in config: {repo_path}. Add/select the workspace before updating configuration."
@@ -287,14 +288,15 @@ impl AppService {
             }
         }
 
-        config.theme = theme;
-        config.git = git;
-        config.chat = chat;
+        config.theme = snapshot.theme;
+        config.git = snapshot.git;
+        config.chat = snapshot.chat;
         config.kanban = KanbanSettings {
-            done_visible_days: kanban.done_visible_days.max(0),
+            done_visible_days: snapshot.kanban.done_visible_days.max(0),
         };
-        config.global_prompt_overrides = global_prompt_overrides;
-        for (repo_path, repo_config) in repos {
+        config.autopilot = snapshot.autopilot;
+        config.global_prompt_overrides = snapshot.global_prompt_overrides;
+        for (repo_path, repo_config) in snapshot.repos {
             config.repos.insert(repo_path, repo_config);
         }
         self.config_store.save(&config)
@@ -917,7 +919,7 @@ mod tests {
     fn workspace_get_settings_snapshot_returns_defaulted_chat_settings() {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
 
-        let (_theme, _git, chat, kanban, repos, global_prompt_overrides) = service
+        let (_theme, _git, chat, kanban, _autopilot, repos, global_prompt_overrides) = service
             .workspace_get_settings_snapshot()
             .expect("settings snapshot should load");
 

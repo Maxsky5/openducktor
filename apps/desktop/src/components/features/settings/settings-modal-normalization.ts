@@ -1,14 +1,19 @@
 import type {
   AgentPromptTemplateId,
+  AutopilotActionId,
+  AutopilotEventId,
+  AutopilotSettings,
   GlobalGitConfig,
   RepoConfig,
   RepoPromptOverrides,
   SettingsSnapshot,
 } from "@openducktor/contracts";
 import {
+  AUTOPILOT_EVENT_IDS,
+  createDefaultAutopilotSettings,
   DEFAULT_BRANCH_PREFIX,
-  normalizeRepoScriptsWithTrust,
-} from "@/components/features/settings/settings-model";
+} from "@openducktor/contracts";
+import { normalizeRepoScriptsWithTrust } from "@/components/features/settings/settings-model";
 import { normalizeTargetBranch } from "@/lib/target-branch";
 import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 
@@ -104,6 +109,31 @@ export const normalizeGlobalGitConfigForSave = (git: GlobalGitConfig): GlobalGit
   defaultMergeMethod: git.defaultMergeMethod,
 });
 
+export const normalizeAutopilotSettingsForSave = (
+  autopilot: AutopilotSettings,
+): AutopilotSettings => {
+  const defaultSettings = createDefaultAutopilotSettings();
+  const rulesByEvent = new Map<AutopilotEventId, AutopilotSettings["rules"][number]>(
+    autopilot.rules.map((rule) => [rule.eventId, rule]),
+  );
+
+  return {
+    rules: AUTOPILOT_EVENT_IDS.map((eventId) => {
+      const explicitRule = rulesByEvent.get(eventId);
+      const actionIds = (explicitRule?.actionIds ?? []).filter(
+        (actionId, index, list) => list.indexOf(actionId) === index,
+      ) as AutopilotActionId[];
+
+      return {
+        eventId,
+        actionIds: explicitRule
+          ? actionIds
+          : (defaultSettings.rules.find((rule) => rule.eventId === eventId)?.actionIds ?? []),
+      };
+    }),
+  };
+};
+
 export const normalizeSnapshotForSave = (snapshot: SettingsSnapshot): SettingsSnapshot => {
   const repos = Object.fromEntries(
     Object.entries(snapshot.repos).map(([repoPath, repoConfig]) => [
@@ -117,6 +147,7 @@ export const normalizeSnapshotForSave = (snapshot: SettingsSnapshot): SettingsSn
     git: normalizeGlobalGitConfigForSave(snapshot.git),
     chat: snapshot.chat,
     kanban: snapshot.kanban,
+    autopilot: normalizeAutopilotSettingsForSave(snapshot.autopilot),
     repos,
     globalPromptOverrides: normalizePromptOverridesForSave(snapshot.globalPromptOverrides),
   };

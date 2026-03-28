@@ -157,6 +157,7 @@ pub(crate) struct SettingsSnapshotPayload {
     git: host_infra_system::GlobalGitConfig,
     chat: host_infra_system::ChatSettings,
     kanban: host_infra_system::KanbanSettings,
+    autopilot: host_infra_system::AutopilotSettings,
     repos: HashMap<String, host_infra_system::RepoConfig>,
     global_prompt_overrides: host_infra_system::PromptOverrides,
 }
@@ -168,6 +169,7 @@ pub(crate) struct SettingsSnapshotResponsePayload {
     git: host_infra_system::GlobalGitConfig,
     chat: host_infra_system::ChatSettings,
     kanban: host_infra_system::KanbanSettings,
+    autopilot: host_infra_system::AutopilotSettings,
     repos: HashMap<String, host_infra_system::RepoConfig>,
     global_prompt_overrides: host_infra_system::PromptOverrides,
 }

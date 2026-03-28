@@ -72,6 +72,9 @@ describe("app-state-context-values", () => {
         kanban: {
           doneVisibleDays: 1,
         },
+        autopilot: {
+          rules: [],
+        },
         repos: {},
         globalPromptOverrides: {},
       }),

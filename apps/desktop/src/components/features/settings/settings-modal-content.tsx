@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { SettingsAutopilotSection } from "./settings-autopilot-section";
 import { SettingsChatSection } from "./settings-chat-section";
 import { GeneralSettingsSection } from "./settings-general-section";
 import { SettingsGitSection } from "./settings-git-section";
@@ -72,6 +73,7 @@ export function SettingsModalContent({
     updateGlobalGitConfig,
     updateGlobalChatSettings,
     updateGlobalKanbanSettings,
+    updateGlobalAutopilotSettings,
     updateGlobalPromptOverrides,
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,
@@ -150,6 +152,16 @@ export function SettingsModalContent({
         kanban={snapshotDraft.kanban}
         disabled={isInteractionDisabled}
         onUpdateKanban={updateGlobalKanbanSettings}
+      />
+    );
+  }
+
+  if (section === "autopilot") {
+    return (
+      <SettingsAutopilotSection
+        autopilot={snapshotDraft.autopilot}
+        disabled={isInteractionDisabled}
+        onUpdateAutopilot={updateGlobalAutopilotSettings}
       />
     );
   }

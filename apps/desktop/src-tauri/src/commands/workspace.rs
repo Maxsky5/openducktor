@@ -133,13 +133,14 @@ pub async fn workspace_detect_github_repository(
 pub async fn workspace_get_settings_snapshot(
     state: State<'_, AppState>,
 ) -> Result<SettingsSnapshotResponsePayload, String> {
-    let (theme, git, chat, kanban, repos, global_prompt_overrides) =
+    let (theme, git, chat, kanban, autopilot, repos, global_prompt_overrides) =
         as_error(state.service.workspace_get_settings_snapshot())?;
     Ok(SettingsSnapshotResponsePayload {
         theme,
         git,
         chat,
         kanban,
+        autopilot,
         repos,
         global_prompt_overrides,
     })
@@ -171,6 +172,7 @@ pub async fn workspace_save_settings_snapshot<R: tauri::Runtime>(
         git,
         chat,
         kanban,
+        autopilot,
         repos,
         global_prompt_overrides,
     } = snapshot;
@@ -185,6 +187,7 @@ pub async fn workspace_save_settings_snapshot<R: tauri::Runtime>(
                     git,
                     chat,
                     kanban,
+                    autopilot,
                     repos,
                     global_prompt_overrides,
                 },
@@ -749,7 +752,7 @@ mod tests {
             Some(false),
         );
 
-        let (theme, git, chat, kanban, repos, global_prompt_overrides) = fixture
+        let (theme, git, chat, kanban, autopilot, repos, global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
@@ -758,6 +761,7 @@ mod tests {
             git,
             chat,
             kanban,
+            autopilot,
             repos,
             global_prompt_overrides,
         };
@@ -800,7 +804,7 @@ mod tests {
             Some(true),
         );
 
-        let (theme, git, chat, kanban, repos, global_prompt_overrides) = fixture
+        let (theme, git, chat, kanban, autopilot, repos, global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
@@ -809,6 +813,7 @@ mod tests {
             git,
             chat,
             kanban,
+            autopilot,
             repos,
             global_prompt_overrides,
         };
@@ -933,7 +938,7 @@ mod tests {
         let fixture =
             setup_workspace_command_fixture("snapshot-ipc-shared-prompts", HookSet::default());
 
-        let (theme, git, chat, kanban, repos, global_prompt_overrides) = fixture
+        let (theme, git, chat, kanban, autopilot, repos, global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
@@ -942,6 +947,7 @@ mod tests {
             git,
             chat,
             kanban,
+            autopilot,
             repos,
             global_prompt_overrides,
         };
@@ -992,6 +998,7 @@ mod tests {
                 "git": snapshot.git,
                 "chat": snapshot.chat,
                 "kanban": snapshot.kanban,
+                "autopilot": snapshot.autopilot,
                 "repos": snapshot.repos,
                 "globalPromptOverrides": snapshot.global_prompt_overrides,
             }
@@ -1012,6 +1019,7 @@ mod tests {
             _persisted_git,
             persisted_chat,
             _persisted_kanban,
+            _persisted_autopilot,
             persisted_repos,
             persisted_global,
         ) = fixture
@@ -1057,7 +1065,7 @@ mod tests {
     fn workspace_get_settings_snapshot_returns_defaulted_chat_settings() -> Result<(), String> {
         let fixture = setup_workspace_command_fixture("snapshot-default-chat", HookSet::default());
 
-        let (_theme, _git, chat, kanban, _repos, _global_prompt_overrides) = fixture
+        let (_theme, _git, chat, kanban, _autopilot, _repos, _global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
@@ -1073,7 +1081,7 @@ mod tests {
         let fixture =
             setup_workspace_command_fixture("snapshot-chat-roundtrip", HookSet::default());
 
-        let (theme, git, _chat, kanban, repos, global_prompt_overrides) = fixture
+        let (theme, git, _chat, kanban, autopilot, repos, global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
@@ -1083,6 +1091,7 @@ mod tests {
                 "theme": theme.clone(),
                 "git": git.clone(),
                 "kanban": kanban.clone(),
+                "autopilot": autopilot.clone(),
                 "repos": repos.clone(),
                 "globalPromptOverrides": global_prompt_overrides.clone(),
             }
@@ -1102,6 +1111,7 @@ mod tests {
                     "showThinkingMessages": true
                 },
                 "kanban": kanban,
+                "autopilot": autopilot,
                 "repos": repos,
                 "globalPromptOverrides": global_prompt_overrides,
             }
@@ -1114,6 +1124,7 @@ mod tests {
             _reloaded_git,
             reloaded_chat,
             _reloaded_kanban,
+            _reloaded_autopilot,
             _reloaded_repos,
             _reloaded_global,
         ) = fixture

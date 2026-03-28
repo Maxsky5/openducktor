@@ -196,6 +196,9 @@ describe("useAgentStudioSessionActions", () => {
       kanban: {
         doneVisibleDays: 1,
       },
+      autopilot: {
+        rules: [],
+      },
       repos: {},
       globalPromptOverrides: {},
     });

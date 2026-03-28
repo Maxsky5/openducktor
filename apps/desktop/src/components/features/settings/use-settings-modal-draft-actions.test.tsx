@@ -25,6 +25,9 @@ const createInitialSnapshot = (): SettingsSnapshot => ({
   kanban: {
     doneVisibleDays: 1,
   },
+  autopilot: {
+    rules: [],
+  },
   globalPromptOverrides: {},
   repos: {
     "/repo-a": {

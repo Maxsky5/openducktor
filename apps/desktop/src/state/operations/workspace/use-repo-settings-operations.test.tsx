@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { agentPromptTemplateIdValues } from "@openducktor/contracts";
+import { agentPromptTemplateIdValues, type SettingsSnapshot } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
@@ -107,6 +107,9 @@ describe("use-repo-settings-operations", () => {
       kanban: {
         doneVisibleDays: 1,
       },
+      autopilot: {
+        rules: [],
+      },
       repos: {},
       globalPromptOverrides: {},
     }));
@@ -135,6 +138,9 @@ describe("use-repo-settings-operations", () => {
         kanban: {
           doneVisibleDays: 1,
         },
+        autopilot: {
+          rules: [],
+        },
         repos: {},
         globalPromptOverrides: {},
       });
@@ -148,6 +154,9 @@ describe("use-repo-settings-operations", () => {
         },
         kanban: {
           doneVisibleDays: 1,
+        },
+        autopilot: {
+          rules: [],
         },
         repos: {},
         globalPromptOverrides: {},
@@ -361,6 +370,9 @@ describe("use-repo-settings-operations", () => {
       kanban: {
         doneVisibleDays: 1,
       },
+      autopilot: {
+        rules: [],
+      },
       repos: {},
       globalPromptOverrides: {},
     }));
@@ -534,6 +546,9 @@ describe("use-repo-settings-operations", () => {
       kanban: {
         doneVisibleDays: 1,
       },
+      autopilot: {
+        rules: [],
+      },
       repos: {},
       globalPromptOverrides: {},
     }));
@@ -562,6 +577,9 @@ describe("use-repo-settings-operations", () => {
         kanban: {
           doneVisibleDays: 1,
         },
+        autopilot: {
+          rules: [],
+        },
         repos: {},
         globalPromptOverrides: {},
       });
@@ -589,6 +607,9 @@ describe("use-repo-settings-operations", () => {
       kanban: {
         doneVisibleDays: 1,
       },
+      autopilot: {
+        rules: [],
+      },
       repos: {},
       globalPromptOverrides: {},
     }));
@@ -605,10 +626,10 @@ describe("use-repo-settings-operations", () => {
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
-    const snapshot = {
-      theme: "light" as const,
+    const snapshot: SettingsSnapshot = {
+      theme: "light",
       git: {
-        defaultMergeMethod: "merge_commit" as const,
+        defaultMergeMethod: "merge_commit",
       },
       chat: {
         showThinkingMessages: false,
@@ -616,9 +637,12 @@ describe("use-repo-settings-operations", () => {
       kanban: {
         doneVisibleDays: 1,
       },
+      autopilot: {
+        rules: [],
+      },
       repos: {},
       globalPromptOverrides: {},
-    } as const;
+    };
 
     try {
       await harness.mount();
@@ -684,6 +708,9 @@ describe("use-repo-settings-operations", () => {
       },
       kanban: {
         doneVisibleDays: 1,
+      },
+      autopilot: {
+        rules: [],
       },
       repos: {
         "/repo-a": {

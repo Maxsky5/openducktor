@@ -34,6 +34,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   repos: {},
   chat: { showThinkingMessages: false },
   kanban: { doneVisibleDays: 1 },
+  autopilot: { rules: [] },
   globalPromptOverrides: {
     "kickoff.spec_initial": {
       template: "global kickoff {{task.id}}",

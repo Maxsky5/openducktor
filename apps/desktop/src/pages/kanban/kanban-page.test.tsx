@@ -59,6 +59,9 @@ const workspaceGetSettingsSnapshotMock = mock(async () => ({
   kanban: {
     doneVisibleDays: 1,
   },
+  autopilot: {
+    rules: [],
+  },
   repos: {},
   globalPromptOverrides: {} as RepoPromptOverrides,
 }));
@@ -539,6 +542,9 @@ describe("KanbanPage session start modal flow", () => {
       },
       kanban: {
         doneVisibleDays: 1,
+      },
+      autopilot: {
+        rules: [],
       },
       repos: {},
       globalPromptOverrides: {},

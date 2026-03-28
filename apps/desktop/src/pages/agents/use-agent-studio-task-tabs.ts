@@ -11,11 +11,14 @@ import { useTaskTabActions } from "./use-agent-studio-task-tabs-actions";
 import { useTaskTabPersistence } from "./use-agent-studio-task-tabs-persistence";
 import { useTaskTabSelection } from "./use-agent-studio-task-tabs-selection";
 
-const toTaskQueryUpdate = (taskId: string): QueryUpdate => {
+const toTaskQueryUpdate = (
+  taskId: string,
+  selectedSession?: Pick<AgentSessionState, "sessionId" | "role"> | null,
+): QueryUpdate => {
   return {
     [AGENT_STUDIO_QUERY_KEYS.task]: taskId,
-    [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
-    [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
+    [AGENT_STUDIO_QUERY_KEYS.session]: selectedSession?.sessionId,
+    [AGENT_STUDIO_QUERY_KEYS.agent]: selectedSession?.role,
     [AGENT_STUDIO_QUERY_KEYS.scenario]: undefined,
     [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
     [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
@@ -89,10 +92,13 @@ export function useAgentStudioTaskTabs(args: {
   );
 
   const navigateToTask = useCallback(
-    (nextTaskId: string) => {
-      deferQueryUpdate(toTaskQueryUpdate(nextTaskId));
+    (nextTaskId: string, options?: { pinSession?: boolean }) => {
+      const selectedSession = options?.pinSession
+        ? (activeSessionByTaskId?.get(nextTaskId) ?? latestSessionByTaskId.get(nextTaskId) ?? null)
+        : null;
+      deferQueryUpdate(toTaskQueryUpdate(nextTaskId, selectedSession));
     },
-    [deferQueryUpdate],
+    [activeSessionByTaskId, deferQueryUpdate, latestSessionByTaskId],
   );
 
   const clearTaskSelection = useCallback((): void => {

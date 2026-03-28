@@ -1190,7 +1190,7 @@ fn handle_workspace_update_repo_hooks(state: &HeadlessState, args: Value) -> Com
 }
 
 fn handle_workspace_get_settings_snapshot(state: &HeadlessState) -> CommandResult {
-    let (theme, git, chat, kanban, repos, global_prompt_overrides) = state
+    let (theme, git, chat, kanban, autopilot, repos, global_prompt_overrides) = state
         .service
         .workspace_get_settings_snapshot()
         .map_err(service_error)?;
@@ -1199,6 +1199,7 @@ fn handle_workspace_get_settings_snapshot(state: &HeadlessState) -> CommandResul
         git,
         chat,
         kanban,
+        autopilot,
         repos,
         global_prompt_overrides,
     })
@@ -1230,6 +1231,7 @@ async fn handle_workspace_save_settings_snapshot(
         git,
         chat,
         kanban,
+        autopilot,
         repos,
         global_prompt_overrides,
     } = snapshot;
@@ -1241,6 +1243,7 @@ async fn handle_workspace_save_settings_snapshot(
                     git,
                     chat,
                     kanban,
+                    autopilot,
                     repos,
                     global_prompt_overrides,
                 },

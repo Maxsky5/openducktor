@@ -175,6 +175,63 @@ impl Default for KanbanSettings {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
+pub enum AutopilotEventId {
+    TaskProgressedToSpecReady,
+    TaskProgressedToReadyForDev,
+    TaskProgressedToAiReview,
+    TaskRejectedByQa,
+    TaskProgressedToHumanReview,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
+pub enum AutopilotActionId {
+    StartPlanner,
+    StartBuilder,
+    StartQa,
+    StartReviewQaFeedbacks,
+    StartGeneratePullRequest,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AutopilotRule {
+    pub event_id: AutopilotEventId,
+    #[serde(default)]
+    pub action_ids: Vec<AutopilotActionId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AutopilotSettings {
+    #[serde(default)]
+    pub rules: Vec<AutopilotRule>,
+}
+
+pub const AUTOPILOT_EVENT_ORDER: [AutopilotEventId; 5] = [
+    AutopilotEventId::TaskProgressedToSpecReady,
+    AutopilotEventId::TaskProgressedToReadyForDev,
+    AutopilotEventId::TaskProgressedToAiReview,
+    AutopilotEventId::TaskRejectedByQa,
+    AutopilotEventId::TaskProgressedToHumanReview,
+];
+
+impl Default for AutopilotSettings {
+    fn default() -> Self {
+        Self {
+            rules: AUTOPILOT_EVENT_ORDER
+                .into_iter()
+                .map(|event_id| AutopilotRule {
+                    event_id,
+                    action_ids: Vec::new(),
+                })
+                .collect(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct HookSet {
@@ -429,6 +486,8 @@ pub struct GlobalConfig {
     #[serde(default)]
     pub kanban: KanbanSettings,
     #[serde(default)]
+    pub autopilot: AutopilotSettings,
+    #[serde(default)]
     pub global_prompt_overrides: PromptOverrides,
     #[serde(default)]
     pub repos: HashMap<String, RepoConfig>,
@@ -445,6 +504,7 @@ impl Default for GlobalConfig {
             git: GlobalGitConfig::default(),
             chat: ChatSettings::default(),
             kanban: KanbanSettings::default(),
+            autopilot: AutopilotSettings::default(),
             global_prompt_overrides: PromptOverrides::default(),
             repos: HashMap::new(),
             recent_repos: Vec::new(),

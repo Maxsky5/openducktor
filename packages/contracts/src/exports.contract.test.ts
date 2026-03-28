@@ -14,6 +14,10 @@ import type {
   AgentToolName,
   AgentWorkflowState,
   AgentWorkflows,
+  AutopilotActionId,
+  AutopilotEventId,
+  AutopilotRule,
+  AutopilotSettings,
   BeadsCheck,
   BuildContinuationTarget,
   BuildContinuationTargetSource,
@@ -115,6 +119,12 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionStartModeSchema",
   "agentSessionStartModeValues",
   "agentSessionStatusSchema",
+  "AUTOPILOT_ACTION_IDS",
+  "AUTOPILOT_EVENT_IDS",
+  "autopilotActionIdSchema",
+  "autopilotEventIdSchema",
+  "autopilotRuleSchema",
+  "autopilotSettingsSchema",
   "parseAgentSessionTodoPayloadEntry",
   "parseAgentSessionTodoPayloadList",
   "beadsCheckSchema",
@@ -134,6 +144,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitConflictOperationSchema",
   "gitConflictSchema",
   "commitsAheadBehindSchema",
+  "createDefaultAutopilotSettings",
   "directMergeRecordSchema",
   "gitDiffScopeSchema",
   "gitMergeMethodSchema",
@@ -251,6 +262,10 @@ type ExportedTypeContract = {
   AgentPromptOverride: AgentPromptOverride;
   AgentPromptTemplateId: AgentPromptTemplateId;
   AgentScenario: AgentScenario;
+  AutopilotActionId: AutopilotActionId;
+  AutopilotEventId: AutopilotEventId;
+  AutopilotRule: AutopilotRule;
+  AutopilotSettings: AutopilotSettings;
   RuntimeInstanceSummary: RuntimeInstanceSummary;
   RuntimeInstanceSummaryRole: RuntimeInstanceSummaryRole;
   BuildContinuationTarget: BuildContinuationTarget;

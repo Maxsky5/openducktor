@@ -1,8 +1,9 @@
 use super::types::{
     default_branch_prefix, normalize_git_target_branch_value, repo_script_fingerprint,
-    AgentModelDefault, GitProviderConfig, GitProviderRepository, GitTargetBranch, GlobalConfig,
-    HookSet, KanbanSettings, OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig,
-    RepoDevServerScript, RuntimeConfig,
+    AgentModelDefault, AutopilotActionId, AutopilotRule, AutopilotSettings, GitProviderConfig,
+    GitProviderRepository, GitTargetBranch, GlobalConfig, HookSet, KanbanSettings,
+    OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig, RepoDevServerScript,
+    RuntimeConfig, AUTOPILOT_EVENT_ORDER,
 };
 use anyhow::{anyhow, Result};
 use std::collections::HashSet;
@@ -194,8 +195,29 @@ fn normalize_kanban_settings(config: &mut KanbanSettings) {
     config.done_visible_days = config.done_visible_days.max(0);
 }
 
+fn normalize_autopilot_settings(config: &mut AutopilotSettings) {
+    let mut rules_by_event = std::collections::HashMap::new();
+    for mut rule in std::mem::take(&mut config.rules) {
+        let mut seen_actions = HashSet::new();
+        rule.action_ids
+            .retain(|action_id| seen_actions.insert(*action_id));
+        rules_by_event.insert(rule.event_id, rule);
+    }
+
+    config.rules = AUTOPILOT_EVENT_ORDER
+        .into_iter()
+        .map(|event_id| {
+            rules_by_event.remove(&event_id).unwrap_or(AutopilotRule {
+                event_id,
+                action_ids: Vec::<AutopilotActionId>::new(),
+            })
+        })
+        .collect();
+}
+
 pub(super) fn normalize_global_config(config: &mut GlobalConfig) -> Result<()> {
     normalize_kanban_settings(&mut config.kanban);
+    normalize_autopilot_settings(&mut config.autopilot);
     normalize_prompt_overrides(&mut config.global_prompt_overrides);
     for repo in config.repos.values_mut() {
         normalize_repo_config(repo)?;

@@ -37,6 +37,7 @@ type DirtySections = {
   chat: boolean;
   globalGit: boolean;
   kanban: boolean;
+  autopilot: boolean;
   globalPromptOverrides: boolean;
   repoSettings: boolean;
 };
@@ -45,6 +46,7 @@ const EMPTY_DIRTY_SECTIONS: DirtySections = {
   chat: false,
   globalGit: false,
   kanban: false,
+  autopilot: false,
   globalPromptOverrides: false,
   repoSettings: false,
 };
@@ -97,6 +99,9 @@ export type SettingsModalController = {
   ) => void;
   updateGlobalKanbanSettings: (
     updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"],
+  ) => void;
+  updateGlobalAutopilotSettings: (
+    updater: (current: SettingsSnapshot["autopilot"]) => SettingsSnapshot["autopilot"],
   ) => void;
   updateGlobalPromptOverrides: (
     updater: (current: RepoPromptOverrides) => RepoPromptOverrides,
@@ -197,6 +202,7 @@ export const useSettingsModalController = ({
     updateGlobalGitConfig: applyGlobalGitConfigUpdate,
     updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
     updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
+    updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
     updateGlobalPromptOverrides: applyGlobalPromptOverridesUpdate,
     updateRepoPromptOverrides: applyRepoPromptOverridesUpdate,
     updateSelectedRepoAgentDefault: applySelectedRepoAgentDefaultUpdate,
@@ -317,6 +323,14 @@ export const useSettingsModalController = ({
       applyGlobalPromptOverridesUpdate(updater);
     },
     [applyGlobalPromptOverridesUpdate, markDirty],
+  );
+
+  const updateGlobalAutopilotSettings = useCallback(
+    (updater: (current: SettingsSnapshot["autopilot"]) => SettingsSnapshot["autopilot"]): void => {
+      markDirty("autopilot");
+      applyGlobalAutopilotSettingsUpdate(updater);
+    },
+    [applyGlobalAutopilotSettingsUpdate, markDirty],
   );
 
   const updateRepoPromptOverrides = useCallback(
@@ -467,6 +481,7 @@ export const useSettingsModalController = ({
         !dirtySections.chat &&
         !dirtySections.globalGit &&
         !dirtySections.kanban &&
+        !dirtySections.autopilot &&
         !dirtySections.globalPromptOverrides &&
         !dirtySections.repoSettings
       ) {
@@ -477,6 +492,7 @@ export const useSettingsModalController = ({
         dirtySections.globalGit &&
         !dirtySections.chat &&
         !dirtySections.kanban &&
+        !dirtySections.autopilot &&
         !dirtySections.globalPromptOverrides &&
         !dirtySections.repoSettings;
 
@@ -510,6 +526,7 @@ export const useSettingsModalController = ({
     dirtySections.chat,
     dirtySections.globalGit,
     dirtySections.kanban,
+    dirtySections.autopilot,
     dirtySections.globalPromptOverrides,
     dirtySections.repoSettings,
     hasPromptValidationErrors,
@@ -567,6 +584,7 @@ export const useSettingsModalController = ({
     updateGlobalGitConfig,
     updateGlobalChatSettings,
     updateGlobalKanbanSettings,
+    updateGlobalAutopilotSettings,
     updateGlobalPromptOverrides,
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,

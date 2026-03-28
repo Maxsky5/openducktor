@@ -12,6 +12,7 @@ describe("settings modal sidebars", () => {
       prompts: 0,
       chat: 0,
       kanban: 0,
+      autopilot: 0,
     };
 
     const html = renderToStaticMarkup(
@@ -29,6 +30,7 @@ describe("settings modal sidebars", () => {
     expect(html).toContain("Prompts");
     expect(html).toContain("Chat");
     expect(html).toContain("Kanban");
+    expect(html).toContain("Autopilot");
   });
 
   test("renders chat section as active when selected", () => {
@@ -39,6 +41,7 @@ describe("settings modal sidebars", () => {
       prompts: 0,
       chat: 0,
       kanban: 0,
+      autopilot: 0,
     };
 
     const html = renderToStaticMarkup(
@@ -62,6 +65,7 @@ describe("settings modal sidebars", () => {
       prompts: 0,
       chat: 0,
       kanban: 0,
+      autopilot: 0,
     };
 
     const html = renderToStaticMarkup(
@@ -85,6 +89,7 @@ describe("settings modal sidebars", () => {
       prompts: 0,
       chat: 2,
       kanban: 0,
+      autopilot: 0,
     };
 
     const html = renderToStaticMarkup(

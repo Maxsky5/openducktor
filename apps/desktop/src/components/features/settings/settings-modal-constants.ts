@@ -2,15 +2,23 @@ import type { AgentPromptTemplateId } from "@openducktor/contracts";
 import { agentPromptTemplateIdValues } from "@openducktor/contracts";
 import { listBuiltinAgentPromptTemplates } from "@openducktor/core";
 import {
+  Columns3,
   FolderGit2,
-  LayoutGrid,
   type LucideIcon,
   MessageSquare,
   MessageSquareText,
   SlidersHorizontal,
+  Workflow,
 } from "lucide-react";
 
-export type SettingsSectionId = "general" | "git" | "repositories" | "prompts" | "chat" | "kanban";
+export type SettingsSectionId =
+  | "general"
+  | "git"
+  | "repositories"
+  | "prompts"
+  | "chat"
+  | "kanban"
+  | "autopilot";
 export type RepositorySectionId = "configuration" | "git" | "agents" | "prompts";
 export type PromptRoleTabId = "shared" | "spec" | "planner" | "build" | "qa";
 
@@ -26,7 +34,8 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{
   { id: "repositories", label: "Repositories", icon: FolderGit2 },
   { id: "prompts", label: "Prompts", icon: MessageSquareText },
   { id: "chat", label: "Chat", icon: MessageSquare },
-  { id: "kanban", label: "Kanban", icon: LayoutGrid },
+  { id: "kanban", label: "Kanban", icon: Columns3 },
+  { id: "autopilot", label: "Autopilot", icon: Workflow },
 ];
 
 export const REPOSITORY_SECTIONS: ReadonlyArray<{
