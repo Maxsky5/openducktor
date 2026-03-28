@@ -75,6 +75,7 @@ const mergePersistedSessionRecord = (
   promptOverrides: RepoPromptOverrides,
 ): AgentSessionState => {
   const persisted = fromPersistedSessionRecord(record, taskId);
+  const shouldPreserveCurrentWorkingDirectory = current.runtimeEndpoint.trim().length > 0;
 
   return {
     ...current,
@@ -83,7 +84,9 @@ const mergePersistedSessionRecord = (
     role: persisted.role,
     scenario: persisted.scenario,
     startedAt: persisted.startedAt,
-    workingDirectory: persisted.workingDirectory,
+    workingDirectory: shouldPreserveCurrentWorkingDirectory
+      ? current.workingDirectory
+      : persisted.workingDirectory,
     pendingPermissions: current.pendingPermissions,
     pendingQuestions: current.pendingQuestions,
     selectedModel: mergeModelSelection(current.selectedModel, persisted.selectedModel ?? undefined),
@@ -93,6 +96,26 @@ const mergePersistedSessionRecord = (
       DEFAULT_AGENT_SESSION_HISTORY_HYDRATION_STATE,
     promptOverrides,
   };
+};
+
+const mergeHydratedMessages = (
+  hydratedMessages: AgentSessionState["messages"],
+  currentMessages: AgentSessionState["messages"],
+): AgentSessionState["messages"] => {
+  const currentMessageById = new Map(currentMessages.map((message) => [message.id, message]));
+  const mergedMessages = hydratedMessages.map(
+    (message) => currentMessageById.get(message.id) ?? message,
+  );
+  const hydratedMessageIds = new Set(hydratedMessages.map((message) => message.id));
+
+  for (const message of currentMessages) {
+    if (hydratedMessageIds.has(message.id)) {
+      continue;
+    }
+    mergedMessages.push(message);
+  }
+
+  return mergedMessages;
 };
 
 const toRequestedHistoryRecordFromSession = (
@@ -338,12 +361,13 @@ export const createLoadAgentSessions = ({
         record: AgentSessionRecord,
         runtimeResolution: Extract<HydrationRuntimeResolution, { ok: true }>,
       ): Promise<LiveAgentSessionSnapshot | null> => {
+        const resolvedWorkingDirectory = runtimeResolution.runtimeConnection.workingDirectory;
         const externalSessionId = record.externalSessionId ?? record.sessionId;
         const storedSnapshot = liveAgentSessionStore?.readSnapshot({
           repoPath,
           runtimeKind: runtimeResolution.runtimeKind,
           runtimeEndpoint: runtimeResolution.runtimeEndpoint,
-          workingDirectory: record.workingDirectory,
+          workingDirectory: resolvedWorkingDirectory,
           externalSessionId,
         });
         if (storedSnapshot) {
@@ -354,7 +378,7 @@ export const createLoadAgentSessions = ({
           liveAgentSessionLookupKey(
             runtimeResolution.runtimeKind,
             runtimeResolution.runtimeEndpoint,
-            record.workingDirectory,
+            resolvedWorkingDirectory,
           ),
         );
         if (preloadedSnapshots) {
@@ -370,7 +394,7 @@ export const createLoadAgentSessions = ({
         const snapshots = await adapter.listLiveAgentSessionSnapshots({
           runtimeKind: runtimeResolution.runtimeKind,
           runtimeConnection: runtimeResolution.runtimeConnection,
-          directories: [record.workingDirectory],
+          directories: [resolvedWorkingDirectory],
         });
         return (
           snapshots.find((snapshot) => snapshot.externalSessionId === externalSessionId) ?? null
@@ -604,7 +628,6 @@ export const createLoadAgentSessions = ({
         }
 
         const shouldHydrateHistory = historyHydrationSessionIds.has(record.sessionId);
-        const workingDirectory = record.workingDirectory;
         const runtimeResolution =
           (shouldHydrateHistory ? readCurrentHydratedRuntimeResolution(record) : null) ??
           (await resolveHydrationRuntime(record));
@@ -635,7 +658,9 @@ export const createLoadAgentSessions = ({
           );
           return;
         }
-        const { runtimeKind, runtimeId, runId, runtimeEndpoint } = runtimeResolution;
+        const { runtimeKind, runtimeId, runId, runtimeEndpoint, runtimeConnection } =
+          runtimeResolution;
+        const workingDirectory = runtimeConnection.workingDirectory;
         const externalSessionId = record.externalSessionId ?? record.sessionId;
         if (!shouldHydrateHistory) {
           updateSession(
@@ -683,6 +708,13 @@ export const createLoadAgentSessions = ({
           record.sessionId,
           (current) => {
             const selectedModel = normalizePersistedSelection(record.selectedModel);
+            const hydratedMessages = [
+              ...preludeMessages,
+              ...historyToChatMessages(history, {
+                role: record.role,
+                selectedModel,
+              }),
+            ];
             return {
               ...current,
               runtimeKind,
@@ -696,13 +728,7 @@ export const createLoadAgentSessions = ({
               pendingPermissions: livePendingPermissions,
               pendingQuestions: livePendingQuestions,
               contextUsage: historyToSessionContextUsage(history, selectedModel),
-              messages: [
-                ...preludeMessages,
-                ...historyToChatMessages(history, {
-                  role: record.role,
-                  selectedModel,
-                }),
-              ],
+              messages: mergeHydratedMessages(hydratedMessages, current.messages),
             };
           },
           { persist: false },
