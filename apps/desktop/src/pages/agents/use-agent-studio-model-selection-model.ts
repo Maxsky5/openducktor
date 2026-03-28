@@ -83,6 +83,21 @@ const toModelDescriptorKey = (providerId: string, modelId: string): string => {
   return `${providerId}::${modelId}`;
 };
 
+const resolveContextUsageDescriptor = ({
+  liveContextUsage,
+  modelDescriptorByKey,
+}: {
+  liveContextUsage: AgentSessionContextUsage;
+  modelDescriptorByKey: ReadonlyMap<string, CatalogModelDescriptor>;
+}): CatalogModelDescriptor | undefined => {
+  if (!liveContextUsage.providerId || !liveContextUsage.modelId) {
+    return undefined;
+  }
+  return modelDescriptorByKey.get(
+    toModelDescriptorKey(liveContextUsage.providerId, liveContextUsage.modelId),
+  );
+};
+
 export const toModelDescriptorByKey = (
   catalog: AgentModelCatalog | null,
 ): Map<string, CatalogModelDescriptor> => {
@@ -108,16 +123,22 @@ export const extractLatestContextUsage = ({
   fallbackContextWindow?: number;
 }): AgentStudioContextUsage => {
   if (liveContextUsage && liveContextUsage.totalTokens > 0) {
-    const contextWindow = liveContextUsage.contextWindow ?? fallbackContextWindow;
+    const modelDescriptor = resolveContextUsageDescriptor({
+      liveContextUsage,
+      modelDescriptorByKey,
+    });
+    const contextWindow =
+      liveContextUsage.contextWindow ?? modelDescriptor?.contextWindow ?? fallbackContextWindow;
     if (typeof contextWindow === "number" && contextWindow > 0) {
+      const resolvedOutputLimit = liveContextUsage.outputLimit ?? modelDescriptor?.outputLimit;
       return {
         totalTokens: liveContextUsage.totalTokens,
         contextWindow,
-        ...(typeof liveContextUsage.outputLimit === "number"
-          ? { outputLimit: liveContextUsage.outputLimit }
-          : {}),
+        ...(typeof resolvedOutputLimit === "number" ? { outputLimit: resolvedOutputLimit } : {}),
       };
     }
+
+    return null;
   }
 
   if (!messages) {
