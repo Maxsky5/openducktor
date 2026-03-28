@@ -33,6 +33,13 @@ export const setSessionActive = (session: SessionRecord | undefined): void => {
   session.hasIdleSinceActivity = false;
 };
 
+export const setSessionIdle = (session: SessionRecord | undefined): void => {
+  if (!session) {
+    return;
+  }
+  session.hasIdleSinceActivity = true;
+};
+
 type SessionIdleEmitter = {
   sessionId: string;
   emit: (sessionId: string, event: AgentEvent) => void;
@@ -46,9 +53,7 @@ export const emitIdleForSession = (
   if (session?.hasIdleSinceActivity) {
     return false;
   }
-  if (session) {
-    session.hasIdleSinceActivity = true;
-  }
+  setSessionIdle(session);
   emitter.emit(emitter.sessionId, {
     type: "session_idle",
     sessionId: emitter.sessionId,
@@ -67,6 +72,12 @@ export const markSessionActive = (
   context: Pick<EventStreamContext, "sessionId" | "getSession">,
 ): void => {
   setSessionActive(getSessionRecord(context));
+};
+
+export const markSessionIdle = (
+  context: Pick<EventStreamContext, "sessionId" | "getSession">,
+): void => {
+  setSessionIdle(getSessionRecord(context));
 };
 
 export const emitSessionIdle = (

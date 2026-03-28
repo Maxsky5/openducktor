@@ -9,7 +9,7 @@ import {
   readTodoPayload,
 } from "./schemas";
 import type { EventStreamRuntime } from "./shared";
-import { emitSessionIdle, markSessionActive } from "./shared";
+import { emitSessionIdle, markSessionActive, markSessionIdle } from "./shared";
 
 const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   if (event.type !== "session.status") {
@@ -25,6 +25,8 @@ const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): bo
   if (status.type === "busy" || status.type === "idle") {
     if (status.type === "busy") {
       markSessionActive(runtime);
+    } else {
+      markSessionIdle(runtime);
     }
     runtime.emit(runtime.sessionId, {
       type: "session_status",
