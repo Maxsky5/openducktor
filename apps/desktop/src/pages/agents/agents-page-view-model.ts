@@ -106,6 +106,7 @@ export const buildAgentStudioWorkspaceSidebarModel = (args: {
 
 type AgentChatThreadModelArgs = {
   activeSession: AgentSessionState | null;
+  isSessionWorking: boolean;
   showThinkingMessages: boolean;
   isSessionViewLoading: boolean;
   roleOptions: AgentRoleOption[];
@@ -127,7 +128,6 @@ type AgentChatThreadModelArgs = {
   onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
-  todoPanelBottomOffset: number;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   scrollToBottomOnSendRef: React.MutableRefObject<(() => void) | null>;
 };
@@ -169,6 +169,7 @@ export const buildAgentChatThreadModel = (
   args: AgentChatThreadModelArgs,
 ): AgentChatThreadModel => ({
   session: args.activeSession,
+  isSessionWorking: args.isSessionWorking,
   showThinkingMessages: args.showThinkingMessages,
   isSessionViewLoading: args.isSessionViewLoading,
   roleOptions: args.roleOptions,
@@ -190,7 +191,6 @@ export const buildAgentChatThreadModel = (
   onReplyPermission: args.onReplyPermission,
   todoPanelCollapsed: args.todoPanelCollapsed,
   onToggleTodoPanel: args.onToggleTodoPanel,
-  todoPanelBottomOffset: args.todoPanelBottomOffset,
   messagesContainerRef: args.messagesContainerRef,
   scrollToBottomOnSendRef: args.scrollToBottomOnSendRef,
 });

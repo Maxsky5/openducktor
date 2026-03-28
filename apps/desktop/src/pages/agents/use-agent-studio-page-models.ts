@@ -143,16 +143,11 @@ export function useAgentStudioPageModels({
     contextSwitchVersion: core.contextSwitchVersion,
   });
 
-  const {
-    messagesContainerRef,
-    composerFormRef,
-    composerTextareaRef,
-    todoPanelBottomOffset,
-    resizeComposerTextarea,
-  } = useAgentChatLayout({
-    input: composer.input,
-    activeSessionId: threadSession?.sessionId ?? null,
-  });
+  const { messagesContainerRef, composerFormRef, composerTextareaRef, resizeComposerTextarea } =
+    useAgentChatLayout({
+      input: composer.input,
+      activeSessionId: threadSession?.sessionId ?? null,
+    });
 
   const scrollToBottomOnSendRef = useRef<(() => void) | null>(null);
 
@@ -256,8 +251,8 @@ export function useAgentStudioPageModels({
   );
 
   const activeTodoPanelCollapsed = activeSessionId
-    ? (todoPanelCollapsedBySession[activeSessionId] ?? false)
-    : false;
+    ? (todoPanelCollapsedBySession[activeSessionId] ?? true)
+    : true;
 
   const handleToggleTodoPanel = useCallback((): void => {
     if (!activeSessionId) {
@@ -265,12 +260,13 @@ export function useAgentStudioPageModels({
     }
     setTodoPanelCollapsedBySession((current) => ({
       ...current,
-      [activeSessionId]: !(current[activeSessionId] ?? false),
+      [activeSessionId]: !(current[activeSessionId] ?? true),
     }));
   }, [activeSessionId]);
 
   const agentChatThreadModel = useAgentStudioThreadModel({
     threadSession,
+    isSessionWorking: sessionActions.isSessionWorking,
     showThinkingMessages: chatSettings.showThinkingMessages,
     isContextSwitching,
     taskId: core.taskId,
@@ -292,7 +288,6 @@ export function useAgentStudioPageModels({
     onReplyPermission: permissions.onReplyPermission,
     todoPanelCollapsed: activeTodoPanelCollapsed,
     onToggleTodoPanel: handleToggleTodoPanel,
-    todoPanelBottomOffset,
     messagesContainerRef,
     scrollToBottomOnSendRef,
   });

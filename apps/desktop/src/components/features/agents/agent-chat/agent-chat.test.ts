@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AgentChat } from "./agent-chat";
-import { buildModelSelection, buildSession, TEST_ROLE_OPTIONS } from "./agent-chat-test-fixtures";
+import {
+  buildModelSelection,
+  buildSession,
+  buildTodoItem,
+  TEST_ROLE_OPTIONS,
+} from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
   thread: {
@@ -10,6 +15,7 @@ const buildModel = () => ({
       status: "running" as const,
       draftAssistantText: "",
     }),
+    isSessionWorking: true,
     showThinkingMessages: false,
     isSessionViewLoading: false,
     roleOptions: TEST_ROLE_OPTIONS,
@@ -31,7 +37,6 @@ const buildModel = () => ({
     onReplyPermission: async () => {},
     todoPanelCollapsed: false,
     onToggleTodoPanel: () => {},
-    todoPanelBottomOffset: 120,
     messagesContainerRef: createRef<HTMLDivElement>(),
     scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
   },
@@ -114,5 +119,29 @@ describe("AgentChat", () => {
 
     expect(html).toContain("Send a message to start a new session automatically.");
     expect(html).toContain("Send message");
+  });
+
+  test("renders the todo stack immediately above the composer", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChat, {
+        model: {
+          ...buildModel(),
+          thread: {
+            ...buildModel().thread,
+            sessionAgentColors: { "Hephaestus (Deep Agent)": "#123456" },
+            session: buildSession({
+              status: "idle",
+              selectedModel: buildModelSelection({ profileId: "Hephaestus (Deep Agent)" }),
+              todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
+            }),
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain("agent-chat-bottom-stack");
+    expect(html).toContain("Keep todo anchored");
+    expect(html).toContain("border-left-color:#123456");
+    expect(html.indexOf("agent-chat-bottom-stack")).toBeLessThan(html.indexOf("<form"));
   });
 });

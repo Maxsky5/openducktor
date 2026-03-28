@@ -91,6 +91,7 @@ export const useAgentStudioHeaderModel = ({
 
 type UseAgentStudioThreadModelArgs = {
   threadSession: AgentSessionState | null;
+  isSessionWorking: boolean;
   showThinkingMessages: boolean;
   isContextSwitching: boolean;
   taskId: string;
@@ -112,13 +113,13 @@ type UseAgentStudioThreadModelArgs = {
   onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
-  todoPanelBottomOffset: number;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   scrollToBottomOnSendRef: React.MutableRefObject<(() => void) | null>;
 };
 
 export const useAgentStudioThreadModel = ({
   threadSession,
+  isSessionWorking,
   showThinkingMessages,
   isContextSwitching,
   taskId,
@@ -140,7 +141,6 @@ export const useAgentStudioThreadModel = ({
   onReplyPermission,
   todoPanelCollapsed,
   onToggleTodoPanel,
-  todoPanelBottomOffset,
   messagesContainerRef,
   scrollToBottomOnSendRef,
 }: UseAgentStudioThreadModelArgs): ReturnType<typeof buildAgentChatThreadModel> => {
@@ -163,6 +163,7 @@ export const useAgentStudioThreadModel = ({
     () =>
       buildAgentChatThreadModel({
         activeSession: threadSession,
+        isSessionWorking,
         showThinkingMessages,
         isSessionViewLoading: isContextSwitching,
         roleOptions: ROLE_OPTIONS,
@@ -184,7 +185,6 @@ export const useAgentStudioThreadModel = ({
         onReplyPermission: handlePermissionReply,
         todoPanelCollapsed,
         onToggleTodoPanel,
-        todoPanelBottomOffset,
         messagesContainerRef,
         scrollToBottomOnSendRef,
       }),
@@ -198,6 +198,7 @@ export const useAgentStudioThreadModel = ({
       handleRefreshChecks,
       isContextSwitching,
       isLoadingChecks,
+      isSessionWorking,
       isSending,
       isStarting,
       isSubmittingPermissionByRequestId,
@@ -211,7 +212,6 @@ export const useAgentStudioThreadModel = ({
       showThinkingMessages,
       taskId,
       threadSession,
-      todoPanelBottomOffset,
       todoPanelCollapsed,
       onToggleTodoPanel,
     ],

@@ -271,6 +271,7 @@ describe("agents-page-view-model", () => {
 
     const model = buildAgentChatModel({
       activeSession: createSession(),
+      isSessionWorking: true,
       showThinkingMessages: true,
       isSessionViewLoading: false,
       roleOptions: [{ role: "spec", label: "Spec", icon: Sparkles }],
@@ -292,7 +293,6 @@ describe("agents-page-view-model", () => {
       onSubmitQuestionAnswers,
       todoPanelCollapsed: false,
       onToggleTodoPanel,
-      todoPanelBottomOffset: 12,
       messagesContainerRef: { current: null },
       scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
       input: "message",
@@ -300,7 +300,6 @@ describe("agents-page-view-model", () => {
       readOnlyReason: null,
       onInputChange: () => {},
       onSend,
-      isSessionWorking: true,
       isWaitingInput: false,
       isModelSelectionPending: false,
       selectedModelSelection: null,
@@ -321,6 +320,7 @@ describe("agents-page-view-model", () => {
     });
 
     expect(model.thread.taskSelected).toBe(false);
+    expect(model.thread.isSessionWorking).toBe(true);
     expect(model.thread.showThinkingMessages).toBe(true);
     expect(model.composer.contextUsage).toEqual({ totalTokens: 10, contextWindow: 100 });
 
