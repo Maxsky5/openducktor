@@ -3,6 +3,7 @@ import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   assistantRoleFromMessage,
   buildToolSummary,
+  extractAllFileEditData,
   extractFileEditData,
   formatRawJsonLikeText,
   formatTime,
@@ -964,6 +965,167 @@ describe("agent-chat-message-card-model", () => {
       });
     });
 
+    test("extracts all file edit data from a multi-file git patch", () => {
+      const data = extractAllFileEditData(
+        createToolMeta({
+          tool: "apply_patch",
+          input: {
+            patch:
+              "diff --git a/src/first.ts b/src/first.ts\n--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
+              "diff --git a/src/second.ts b/src/second.ts\n--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1,2 @@\n-old\n+new\n+line\n" +
+              "diff --git a/src/third.ts b/src/third.ts\n--- a/src/third.ts\n+++ b/src/third.ts\n@@ -1,2 +1 @@\n-old\n-remove\n+new\n",
+          },
+        }),
+      );
+
+      expect(data).toEqual([
+        {
+          filePath: "src/first.ts",
+          diff: "diff --git a/src/first.ts b/src/first.ts\n--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          additions: 1,
+          deletions: 1,
+        },
+        {
+          filePath: "src/second.ts",
+          diff: "diff --git a/src/second.ts b/src/second.ts\n--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1,2 @@\n-old\n+new\n+line\n",
+          additions: 2,
+          deletions: 1,
+        },
+        {
+          filePath: "src/third.ts",
+          diff: "diff --git a/src/third.ts b/src/third.ts\n--- a/src/third.ts\n+++ b/src/third.ts\n@@ -1,2 +1 @@\n-old\n-remove\n+new\n",
+          additions: 1,
+          deletions: 2,
+        },
+      ]);
+    });
+
+    test("extracts all file edit data from a multi-file classic diff", () => {
+      const data = extractAllFileEditData(
+        createToolMeta({
+          tool: "apply_patch",
+          metadata: {
+            diff:
+              "Index: src/first.ts\n==================================================\n--- src/first.ts\n+++ src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
+              "Index: src/second.ts\n==================================================\n--- src/second.ts\n+++ src/second.ts\n@@ -1 +1,2 @@\n-old\n+new\n+line\n",
+          },
+        }),
+      );
+
+      expect(data).toEqual([
+        {
+          filePath: "src/first.ts",
+          diff: "--- src/first.ts\n+++ src/first.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          additions: 1,
+          deletions: 1,
+        },
+        {
+          filePath: "src/second.ts",
+          diff: "--- src/second.ts\n+++ src/second.ts\n@@ -1 +1,2 @@\n-old\n+new\n+line\n",
+          additions: 2,
+          deletions: 1,
+        },
+      ]);
+    });
+
+    test("extracts all file edit data from a multi-file unified diff without diff headers", () => {
+      const data = extractAllFileEditData(
+        createToolMeta({
+          tool: "apply_patch",
+          input: {
+            patch:
+              "--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
+              "--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          },
+        }),
+      );
+
+      expect(data).toEqual([
+        {
+          filePath: "src/first.ts",
+          diff: "--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          additions: 1,
+          deletions: 1,
+        },
+        {
+          filePath: "src/second.ts",
+          diff: "--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          additions: 1,
+          deletions: 1,
+        },
+      ]);
+    });
+
+    test("extracts quoted paths and strips diff timestamps", () => {
+      const data = extractAllFileEditData(
+        createToolMeta({
+          tool: "apply_patch",
+          metadata: {
+            diff:
+              'diff --git "a/src/file with spaces.ts" "b/src/file with spaces.ts"\n' +
+              '--- "a/src/file with spaces.ts"\t2026-03-28 12:00:00 +0000\n' +
+              '+++ "b/src/file with spaces.ts"\t2026-03-28 12:00:00 +0000\n' +
+              "@@ -1 +1 @@\n-old\n+new\n",
+          },
+        }),
+      );
+
+      expect(data).toEqual([
+        {
+          filePath: "src/file with spaces.ts",
+          diff:
+            'diff --git "a/src/file with spaces.ts" "b/src/file with spaces.ts"\n' +
+            '--- "a/src/file with spaces.ts"\t2026-03-28 12:00:00 +0000\n' +
+            '+++ "b/src/file with spaces.ts"\t2026-03-28 12:00:00 +0000\n' +
+            "@@ -1 +1 @@\n-old\n+new\n",
+          additions: 1,
+          deletions: 1,
+        },
+      ]);
+    });
+
+    test("counts content lines that begin with three diff markers", () => {
+      const data = extractFileEditData(
+        createToolMeta({
+          input: { filePath: "src/symbols.ts" },
+          metadata: {
+            diff: "--- a/src/symbols.ts\n+++ b/src/symbols.ts\n@@ -1,2 +1,2 @@\n----old\n----gone\n++++added\n++++kept\n",
+          },
+        }),
+      );
+
+      expect(data).toEqual({
+        filePath: "src/symbols.ts",
+        diff: "--- a/src/symbols.ts\n+++ b/src/symbols.ts\n@@ -1,2 +1,2 @@\n----old\n----gone\n++++added\n++++kept\n",
+        additions: 2,
+        deletions: 2,
+      });
+    });
+
+    test("extractAllFileEditData preserves single-file behavior", () => {
+      const meta = createToolMeta({
+        tool: "apply_patch",
+        input: {
+          patch: "--- a/src/patch.ts\n+++ b/src/patch.ts\n@@ -1 +1 @@\n-old\n+new",
+        },
+      });
+      const singleFileEditData = extractFileEditData(meta);
+
+      expect(singleFileEditData).not.toBeNull();
+      expect(extractAllFileEditData(meta)).toEqual(singleFileEditData ? [singleFileEditData] : []);
+    });
+
+    test("extractAllFileEditData returns an empty array when no file path is extractable", () => {
+      expect(
+        extractAllFileEditData(
+          createToolMeta({
+            tool: "apply_patch",
+            input: { patch: "@@ -1 +1 @@\n-old\n+new" },
+          }),
+        ),
+      ).toEqual([]);
+    });
+
     test("returns null when no file path can be extracted", () => {
       expect(
         extractFileEditData(
@@ -977,6 +1139,85 @@ describe("agent-chat-message-card-model", () => {
   });
 
   describe("tool summary helpers", () => {
+    test("omits summaries for successful multi-file apply_patch tool calls", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "apply_patch",
+            input: {
+              patch:
+                "diff --git a/src/first.ts b/src/first.ts\n--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
+                "diff --git a/src/second.ts b/src/second.ts\n--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1 @@\n-old\n+new\n",
+            },
+            output: "Updated 2 files",
+          }),
+          "",
+        ),
+      ).toBe("");
+    });
+
+    test("omits summaries for successful single-file apply_patch tool calls", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "apply_patch",
+            input: {
+              patch: "--- a/src/patch.ts\n+++ b/src/patch.ts\n@@ -1 +1 @@\n-old\n+new",
+            },
+            output: "Updated 1 file",
+          }),
+          "",
+        ),
+      ).toBe("");
+    });
+
+    test("uses neutral multi-file summaries while file edit tools are still running", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "apply_patch",
+            status: "running",
+            input: {
+              patch:
+                "diff --git a/src/first.ts b/src/first.ts\n--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
+                "diff --git a/src/second.ts b/src/second.ts\n--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1 @@\n-old\n+new\n",
+            },
+            output: "",
+          }),
+          "",
+        ),
+      ).toBe("2 files");
+    });
+
+    test("preserves file edit summaries until the tool succeeds", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "apply_patch",
+            status: "running",
+            input: {
+              patch: "--- a/src/patch.ts\n+++ b/src/patch.ts\n@@ -1 +1 @@\n-old\n+new",
+            },
+            output: "",
+          }),
+          "",
+        ),
+      ).toBe("src/patch.ts");
+    });
+
+    test("keeps completed file edit summaries when no file cards can be built", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "apply_patch",
+            status: "completed",
+            output: "Success. Updated 3 files",
+          }),
+          "",
+        ),
+      ).toBe("Success. Updated 3 files");
+    });
+
     test("uses input taskId for read_task summaries", () => {
       expect(
         buildToolSummary(

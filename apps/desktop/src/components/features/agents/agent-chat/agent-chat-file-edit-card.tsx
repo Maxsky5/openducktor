@@ -51,7 +51,10 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
   const hasDiff = Boolean(data.diff);
 
   return (
-    <div className="my-1.5 overflow-hidden rounded-lg border border-border bg-card text-xs">
+    <div
+      className="my-1.5 overflow-hidden rounded-lg border border-border bg-card text-xs"
+      data-testid="agent-chat-file-edit-card"
+    >
       {data.diff ? <PierreDiffPreloader patch={data.diff} filePath={data.filePath} /> : null}
 
       {/* Header */}

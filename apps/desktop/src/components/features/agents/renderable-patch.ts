@@ -2,6 +2,7 @@ import { getSingularPatch } from "@pierre/diffs";
 
 const GIT_DIFF_HEADER = /^diff --git /m;
 const CLASSIC_DIFF_HEADER = /^Index: /m;
+const UNIFIED_MULTI_FILE_HEADER = /^--- .+\n\+\+\+ .+/m;
 
 export function normalizePatchCandidate(candidate: string, filePath: string): string {
   const trimmed = candidate.trim();
@@ -23,7 +24,7 @@ export function normalizePatchCandidate(candidate: string, filePath: string): st
   return `${normalized}\n`;
 }
 
-function splitPatchCandidates(rawDiff: string): string[] {
+export function splitPatchCandidates(rawDiff: string): string[] {
   const trimmed = rawDiff.trim();
   if (trimmed.length === 0) {
     return [];
@@ -43,10 +44,17 @@ function splitPatchCandidates(rawDiff: string): string[] {
       .filter((chunk) => chunk.length > 0);
   }
 
+  if (UNIFIED_MULTI_FILE_HEADER.test(trimmed)) {
+    return trimmed
+      .split(/(?=^--- .+\n\+\+\+ .+)/m)
+      .map((chunk) => chunk.trim())
+      .filter((chunk) => chunk.length > 0);
+  }
+
   return [trimmed];
 }
 
-function patchMatchesFile(candidate: string, filePath: string): boolean {
+export function patchMatchesFile(candidate: string, filePath: string): boolean {
   const normalizedPath = filePath.replaceAll("\\", "/");
   const quotedPath = normalizedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const suffixPattern = new RegExp(`(^|[\\s"'])((a|b)/)?${quotedPath}($|[\\s"'])`, "m");

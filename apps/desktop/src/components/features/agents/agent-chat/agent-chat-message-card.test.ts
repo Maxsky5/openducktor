@@ -199,6 +199,45 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("/repo/apps/web/src/contexts/AuthContext.tsx");
   });
 
+  test("renders one file edit card per file in a multi-file apply_patch result without a summary description", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-multi-file-apply-patch",
+          role: "tool",
+          content: "Tool apply_patch completed",
+          timestamp: "2026-02-22T10:20:36.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-multi-file-apply-patch",
+            callId: "call-multi-file-apply-patch",
+            tool: "apply_patch",
+            status: "completed",
+            input: {
+              patch:
+                "diff --git a/src/first.ts b/src/first.ts\n--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
+                "diff --git a/src/second.ts b/src/second.ts\n--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1,2 @@\n-old\n+new\n+line\n",
+            },
+            output: "Updated 2 files",
+          },
+        },
+        sessionRole: "build",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    const fileEditCardMatches = html.match(/data-testid="agent-chat-file-edit-card"/g) ?? [];
+
+    expect(fileEditCardMatches).toHaveLength(2);
+    expect(html).not.toContain("2 files modified");
+    expect(html).toContain("src/");
+    expect(html).toContain("first.ts");
+    expect(html).toContain("second.ts");
+    expect(html).toContain("+1");
+    expect(html).toContain("+2");
+  });
+
   test("renders workflow tool executing state with blue styling and running label", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
