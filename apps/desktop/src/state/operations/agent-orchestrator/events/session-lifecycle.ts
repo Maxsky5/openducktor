@@ -78,6 +78,20 @@ const findExistingAssistantMessageIndex = (
   return -1;
 };
 
+const toUserMessageMeta = (model: Extract<SessionEvent, { type: "user_message" }>["model"]) => {
+  if (!model) {
+    return undefined;
+  }
+
+  return {
+    kind: "user" as const,
+    ...(model.providerId ? { providerId: model.providerId } : {}),
+    ...(model.modelId ? { modelId: model.modelId } : {}),
+    ...(model.variant ? { variant: model.variant } : {}),
+    ...(model.profileId ? { profileId: model.profileId } : {}),
+  };
+};
+
 const shouldAutoRejectPermission = (
   role: AgentRole | undefined,
   event: PermissionRequiredEvent,
@@ -225,6 +239,29 @@ export const handleAssistantMessage = (
   });
   context.turn.clearTurnDuration(context.store.sessionId);
   clearTurnModelSnapshot(context);
+};
+
+export const handleUserMessage = (
+  context: Pick<SessionLifecycleEventContext, "store">,
+  event: Extract<SessionEvent, { type: "user_message" }>,
+): void => {
+  context.store.updateSession(
+    context.store.sessionId,
+    (current) => {
+      const userMessageMeta = toUserMessageMeta(event.model);
+      return {
+        ...current,
+        messages: upsertMessage(current.messages, {
+          id: event.messageId,
+          role: "user",
+          content: event.message,
+          timestamp: event.timestamp,
+          ...(userMessageMeta ? { meta: userMessageMeta } : {}),
+        }),
+      };
+    },
+    { persist: false },
+  );
 };
 
 export const handleSessionStatus = (

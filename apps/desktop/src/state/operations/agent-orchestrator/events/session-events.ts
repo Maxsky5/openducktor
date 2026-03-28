@@ -14,6 +14,7 @@ import {
   handleSessionStarted,
   handleSessionStatus,
   handleSessionTodosUpdated,
+  handleUserMessage,
 } from "./session-lifecycle";
 import { handleAssistantDelta, handleAssistantPart } from "./session-parts";
 
@@ -32,6 +33,9 @@ const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionE
       return;
     case "assistant_message":
       handleAssistantMessage(context.lifecycle, event);
+      return;
+    case "user_message":
+      handleUserMessage(context.lifecycle, event);
       return;
     case "session_status":
       handleSessionStatus(context.lifecycle, event);
@@ -63,6 +67,7 @@ const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionE
 const isImmediateSessionEvent = (event: SessionEvent): boolean => {
   switch (event.type) {
     case "assistant_message":
+    case "user_message":
     case "permission_required":
     case "question_required":
     case "session_error":

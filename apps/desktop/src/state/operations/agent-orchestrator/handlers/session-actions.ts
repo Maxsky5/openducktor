@@ -13,6 +13,7 @@ import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-o
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import { now } from "../support/core";
+import { requiresHydratedAgentSessionHistory } from "../support/history-hydration";
 import { toPersistedSessionRecord } from "../support/persistence";
 import { annotateQuestionToolMessage } from "../support/question-messages";
 import { createStartAgentSession } from "./start-session";
@@ -169,16 +170,16 @@ export const createAgentSessionActions = ({
 
     await ensureSessionReady(sessionId);
 
+    const readySession = sessionsRef.current[sessionId];
+    if (readySession && requiresHydratedAgentSessionHistory(readySession)) {
+      await loadAgentSessions(readySession.taskId, {
+        mode: "requested_history",
+        targetSessionId: sessionId,
+        historyPolicy: "requested_only",
+      });
+    }
+
     const selectedModel = sessionsRef.current[sessionId]?.selectedModel ?? undefined;
-    const userMessageMeta = selectedModel?.profileId
-      ? {
-          kind: "user" as const,
-          ...(selectedModel.providerId ? { providerId: selectedModel.providerId } : {}),
-          ...(selectedModel.modelId ? { modelId: selectedModel.modelId } : {}),
-          ...(selectedModel.variant ? { variant: selectedModel.variant } : {}),
-          ...(selectedModel.profileId ? { profileId: selectedModel.profileId } : {}),
-        }
-      : undefined;
     turnStartedAtBySessionRef.current[sessionId] = Date.now();
     if (turnModelBySessionRef) {
       turnModelBySessionRef.current[sessionId] = selectedModel ?? null;
@@ -193,16 +194,6 @@ export const createAgentSessionActions = ({
         draftAssistantMessageId: null,
         draftReasoningText: "",
         draftReasoningMessageId: null,
-        messages: [
-          ...current.messages,
-          {
-            id: crypto.randomUUID(),
-            role: "user",
-            content: trimmed,
-            timestamp: now(),
-            ...(userMessageMeta ? { meta: userMessageMeta } : {}),
-          },
-        ],
       }),
       { persist: false },
     );
