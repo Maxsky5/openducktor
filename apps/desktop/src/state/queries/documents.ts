@@ -97,11 +97,38 @@ const cachedTaskDocumentSections = (
       sections.add(section);
       continue;
     }
-    if (section === "qa" || section === "qa-report") {
+    if (section === "qa-report") {
       sections.add("qa");
     }
   }
   return [...sections];
+};
+
+export const removeCachedTaskDocumentQueries = (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskIds: string[],
+): void => {
+  const taskIdSet = new Set(taskIds);
+  for (const query of queryClient.getQueryCache().findAll({
+    queryKey: documentQueryKeys.all,
+    exact: false,
+  })) {
+    const [scope, _section, cachedRepoPath, cachedTaskId] = query.queryKey;
+    if (
+      scope !== documentQueryKeys.all[0] ||
+      cachedRepoPath !== repoPath ||
+      typeof cachedTaskId !== "string" ||
+      !taskIdSet.has(cachedTaskId)
+    ) {
+      continue;
+    }
+
+    queryClient.removeQueries({
+      queryKey: query.queryKey,
+      exact: true,
+    });
+  }
 };
 
 export const refreshCachedTaskDocumentQueries = async (

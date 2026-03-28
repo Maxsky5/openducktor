@@ -143,7 +143,10 @@ export const refreshCachedKanbanQueries = async (
   const cachedQueryKeys = cachedKanbanQueryKeysForRepo(queryClient, repoPath);
   await Promise.all(
     cachedQueryKeys.map(([, , , doneVisibleDays]) =>
-      queryClient.fetchQuery(kanbanTaskListQueryOptions(repoPath, doneVisibleDays)),
+      queryClient.fetchQuery({
+        ...kanbanTaskListQueryOptions(repoPath, doneVisibleDays),
+        staleTime: 0,
+      }),
     ),
   );
 };

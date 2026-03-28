@@ -90,7 +90,10 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });
-      await refreshRepoTaskViewsFromQuery(queryClient, repo, { taskId });
+      await refreshRepoTaskViewsFromQuery(queryClient, repo, {
+        taskDocumentStrategy: "refresh",
+        taskId,
+      });
       return saved;
     },
     [activeRepo, queryClient],
@@ -111,7 +114,10 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });
-      await refreshRepoTaskViewsFromQuery(queryClient, repo, { taskId });
+      await refreshRepoTaskViewsFromQuery(queryClient, repo, {
+        taskDocumentStrategy: "refresh",
+        taskId,
+      });
       return saved;
     },
     [activeRepo, queryClient],
@@ -132,7 +138,10 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });
-      await refreshRepoTaskViewsFromQuery(queryClient, repo, { taskId });
+      await refreshRepoTaskViewsFromQuery(queryClient, repo, {
+        taskDocumentStrategy: "refresh",
+        taskId,
+      });
       return saved;
     },
     [activeRepo, queryClient],
