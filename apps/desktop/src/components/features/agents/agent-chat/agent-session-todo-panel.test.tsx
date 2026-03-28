@@ -1,13 +1,25 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { buildTodoItem } from "./agent-chat-test-fixtures";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
+const reactActEnvironmentGlobal = globalThis as typeof globalThis & {
+  IS_REACT_ACT_ENVIRONMENT?: boolean;
+};
+const previousActEnvironmentValue = reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT;
+
+beforeAll(() => {
+  reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = true;
+});
+
+afterAll(() => {
+  if (typeof previousActEnvironmentValue === "undefined") {
+    delete reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT;
+    return;
   }
-).IS_REACT_ACT_ENVIRONMENT = true;
+
+  reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironmentValue;
+});
 
 afterEach(() => {
   cleanup();
