@@ -1396,6 +1396,10 @@ describe("agent-orchestrator-session-events", () => {
       totalTokens: 35_022,
       contextWindow: 200_000,
       outputLimit: 8_192,
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "Hephaestus",
     });
   });
 
@@ -1515,6 +1519,10 @@ describe("agent-orchestrator-session-events", () => {
       totalTokens: 35_022,
       contextWindow: 200_000,
       outputLimit: 8_192,
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "Hephaestus",
     });
   });
 

@@ -7,7 +7,11 @@ import {
   defaultAgentScenarioForRole,
 } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentChatMessage,
+  AgentSessionContextUsage,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";
@@ -298,4 +302,33 @@ export const historyToChatMessages = (
   }
 
   return next;
+};
+
+export const historyToSessionContextUsage = (
+  history: AgentSessionHistoryMessage[],
+  selectedModel: AgentModelSelection | null,
+): AgentSessionContextUsage | null => {
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const message = history[index];
+    if (!message || message.role !== "assistant") {
+      continue;
+    }
+    if (!isFinalAssistantHistoryMessage(message)) {
+      continue;
+    }
+    if (typeof message.totalTokens !== "number" || message.totalTokens <= 0) {
+      continue;
+    }
+
+    const effectiveModel = mergeModelSelection(selectedModel, message.model);
+    return {
+      totalTokens: message.totalTokens,
+      ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
+      ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
+      ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),
+      ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : {}),
+    };
+  }
+
+  return null;
 };

@@ -25,6 +25,7 @@ import {
   defaultScenarioForRole,
   fromPersistedSessionRecord,
   historyToChatMessages,
+  historyToSessionContextUsage,
 } from "../support/persistence";
 import { buildSessionHeaderMessages, buildSessionSystemPrompt } from "../support/session-prompt";
 import {
@@ -91,6 +92,31 @@ const mergePersistedSessionRecord = (
       persisted.historyHydrationState ??
       DEFAULT_AGENT_SESSION_HISTORY_HYDRATION_STATE,
     promptOverrides,
+  };
+};
+
+const toRequestedHistoryRecordFromSession = (
+  session: AgentSessionState,
+): AgentSessionRecord | null => {
+  const runtimeKind = session.runtimeKind ?? session.selectedModel?.runtimeKind ?? null;
+  if (!runtimeKind) {
+    return null;
+  }
+
+  return {
+    sessionId: session.sessionId,
+    externalSessionId: session.externalSessionId,
+    role: session.role,
+    scenario: session.scenario,
+    startedAt: session.startedAt,
+    workingDirectory: session.workingDirectory,
+    runtimeKind,
+    selectedModel: session.selectedModel
+      ? {
+          ...session.selectedModel,
+          runtimeKind,
+        }
+      : null,
   };
 };
 
@@ -174,9 +200,23 @@ export const createLoadAgentSessions = ({
     }
 
     const executeLoad = async (): Promise<void> => {
-      const persisted = await (options?.persistedRecords
-        ? Promise.resolve(options.persistedRecords)
-        : loadAgentSessionListFromQuery(appQueryClient, repoPath, taskId));
+      const currentRequestedSession = requestedSessionId
+        ? (sessionsRef.current[requestedSessionId] ?? null)
+        : null;
+      const requestedHistoryRecordFromSession =
+        shouldHydrateRequestedSession &&
+        options?.persistedRecords === undefined &&
+        currentRequestedSession &&
+        currentRequestedSession.taskId === taskId
+          ? toRequestedHistoryRecordFromSession(currentRequestedSession)
+          : null;
+      const shouldSkipPersistedSessionReload = requestedHistoryRecordFromSession !== null;
+
+      const persisted = shouldSkipPersistedSessionReload
+        ? [requestedHistoryRecordFromSession]
+        : await (options?.persistedRecords
+            ? Promise.resolve(options.persistedRecords)
+            : loadAgentSessionListFromQuery(appQueryClient, repoPath, taskId));
       if (isStaleRepoOperation()) {
         return;
       }
@@ -197,31 +237,33 @@ export const createLoadAgentSessions = ({
             ? "live_if_empty"
             : "none");
 
-      setSessionsById((current) => {
-        if (isStaleRepoOperation()) {
-          return current;
-        }
-        const next = { ...current };
-        for (const record of persisted) {
-          const existingSession = next[record.sessionId];
-          if (existingSession) {
-            next[record.sessionId] = mergePersistedSessionRecord(
-              existingSession,
-              record,
-              taskId,
-              existingSession.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
-            );
-            continue;
+      if (!shouldSkipPersistedSessionReload) {
+        setSessionsById((current) => {
+          if (isStaleRepoOperation()) {
+            return current;
           }
-          next[record.sessionId] = {
-            ...fromPersistedSessionRecord(record, taskId),
-            pendingPermissions: [],
-            pendingQuestions: [],
-            promptOverrides: EMPTY_PROMPT_OVERRIDES,
-          };
-        }
-        return next;
-      });
+          const next = { ...current };
+          for (const record of persisted) {
+            const existingSession = next[record.sessionId];
+            if (existingSession) {
+              next[record.sessionId] = mergePersistedSessionRecord(
+                existingSession,
+                record,
+                taskId,
+                existingSession.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
+              );
+              continue;
+            }
+            next[record.sessionId] = {
+              ...fromPersistedSessionRecord(record, taskId),
+              pendingPermissions: [],
+              pendingQuestions: [],
+              promptOverrides: EMPTY_PROMPT_OVERRIDES,
+            };
+          }
+          return next;
+        });
+      }
 
       if (isStaleRepoOperation()) {
         return;
@@ -640,6 +682,7 @@ export const createLoadAgentSessions = ({
         updateSession(
           record.sessionId,
           (current) => {
+            const selectedModel = normalizePersistedSelection(record.selectedModel);
             return {
               ...current,
               runtimeKind,
@@ -652,11 +695,12 @@ export const createLoadAgentSessions = ({
               promptOverrides,
               pendingPermissions: livePendingPermissions,
               pendingQuestions: livePendingQuestions,
+              contextUsage: historyToSessionContextUsage(history, selectedModel),
               messages: [
                 ...preludeMessages,
                 ...historyToChatMessages(history, {
                   role: record.role,
-                  selectedModel: normalizePersistedSelection(record.selectedModel),
+                  selectedModel,
                 }),
               ],
             };

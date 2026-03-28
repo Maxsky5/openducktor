@@ -96,6 +96,10 @@ export type AgentSessionContextUsage = {
   totalTokens: number;
   contextWindow?: number;
   outputLimit?: number;
+  providerId?: string;
+  modelId?: string;
+  variant?: string;
+  profileId?: string;
 };
 
 export type AgentSessionHistoryHydrationState =

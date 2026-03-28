@@ -3275,4 +3275,138 @@ describe("agent-orchestrator-load-sessions", () => {
       state["session-1"]?.messages.some((message) => message.content === "Previous request"),
     ).toBe(true);
   });
+
+  test("hydrates an already loaded requested session without reloading the full persisted session list", async () => {
+    const existingSession: AgentSessionState = {
+      sessionId: "session-1",
+      externalSessionId: "external-1",
+      taskId: "task-1",
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "idle",
+      startedAt: "2026-02-22T08:00:00.000Z",
+      runtimeKind: "opencode",
+      runtimeId: "runtime-1",
+      runId: null,
+      runtimeEndpoint: "http://127.0.0.1:4444",
+      workingDirectory: "/tmp/repo",
+      historyHydrationState: "not_requested",
+      messages: [],
+      draftAssistantText: "",
+      draftAssistantMessageId: null,
+      draftReasoningText: "",
+      draftReasoningMessageId: null,
+      contextUsage: null,
+      pendingPermissions: [],
+      pendingQuestions: [],
+      todos: [],
+      modelCatalog: null,
+      selectedModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+      isLoadingModelCatalog: false,
+      promptOverrides: {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: { "session-1": existingSession },
+    };
+    let state: Record<string, AgentSessionState> = sessionsRef.current;
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [sessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
+    let persistedListCalls = 0;
+    const originalList = (await import("../../shared/host")).host.agentSessionsList;
+    (await import("../../shared/host")).host.agentSessionsList = async () => {
+      persistedListCalls += 1;
+      return [];
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: createAdapter({
+        loadSessionHistory: async () => [
+          {
+            messageId: "hydrated-assistant-1",
+            role: "assistant",
+            timestamp: "2026-02-22T08:00:02.000Z",
+            text: "Hydrated response",
+            totalTokens: 123,
+            model: {
+              providerId: "openai",
+              modelId: "gpt-5",
+            },
+            parts: [
+              {
+                kind: "step",
+                messageId: "hydrated-assistant-1",
+                partId: "hydrated-step-finish-1",
+                phase: "finish",
+                reason: "stop",
+              },
+            ],
+          },
+          {
+            messageId: "hydrated-user-1",
+            role: "user",
+            timestamp: "2026-02-22T08:00:01.000Z",
+            text: "Hydrated message",
+            parts: [],
+          },
+        ],
+      }),
+      repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession,
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await loadAgentSessions("task-1", {
+        mode: "requested_history",
+        targetSessionId: "session-1",
+        historyPolicy: "requested_only",
+      });
+    } finally {
+      (await import("../../shared/host")).host.agentSessionsList = originalList;
+    }
+
+    expect(persistedListCalls).toBe(0);
+    expect(state["session-1"]?.historyHydrationState).toBe("hydrated");
+    expect(state["session-1"]?.contextUsage).toEqual({
+      totalTokens: 123,
+      providerId: "openai",
+      modelId: "gpt-5",
+    });
+    expect(
+      state["session-1"]?.messages.some((message) => message.content === "Hydrated message"),
+    ).toBe(true);
+  });
 });
