@@ -2,6 +2,7 @@ import { getSingularPatch } from "@pierre/diffs";
 
 const GIT_DIFF_HEADER = /^diff --git /m;
 const CLASSIC_DIFF_HEADER = /^Index: /m;
+const UNIFIED_MULTI_FILE_HEADER = /^--- .+\n\+\+\+ .+/m;
 
 export function normalizePatchCandidate(candidate: string, filePath: string): string {
   const trimmed = candidate.trim();
@@ -39,6 +40,13 @@ export function splitPatchCandidates(rawDiff: string): string[] {
   if (CLASSIC_DIFF_HEADER.test(trimmed)) {
     return trimmed
       .split(/(?=^Index: )/m)
+      .map((chunk) => chunk.trim())
+      .filter((chunk) => chunk.length > 0);
+  }
+
+  if (UNIFIED_MULTI_FILE_HEADER.test(trimmed)) {
+    return trimmed
+      .split(/(?=^--- .+\n\+\+\+ .+)/m)
       .map((chunk) => chunk.trim())
       .filter((chunk) => chunk.length > 0);
   }

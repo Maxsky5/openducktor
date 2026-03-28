@@ -21,6 +21,9 @@ export const isFileEditTool = (toolName: string): boolean => {
   return FILE_EDIT_TOOLS.has(toolName.toLowerCase());
 };
 
+const HEADER_ADDITION_PREFIX = "+++ ";
+const HEADER_DELETION_PREFIX = "--- ";
+
 export type FileEditData = {
   filePath: string;
   diff: string | null;
@@ -47,9 +50,13 @@ const countDiffChanges = (diff: string | null): Pick<FileEditData, "additions" |
   }
 
   for (const line of diff.split("\n")) {
-    if (line.startsWith("+") && !line.startsWith("+++")) {
+    if (line.startsWith(HEADER_ADDITION_PREFIX) || line.startsWith(HEADER_DELETION_PREFIX)) {
+      continue;
+    }
+
+    if (line.startsWith("+")) {
       additions++;
-    } else if (line.startsWith("-") && !line.startsWith("---")) {
+    } else if (line.startsWith("-")) {
       deletions++;
     }
   }
@@ -82,12 +89,38 @@ const normalizePatchPath = (value: string | undefined): string | null => {
     return null;
   }
 
-  const trimmed = value.trim();
+  let trimmed = value.trim().replace(/\t.*$/, "");
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    trimmed = trimmed.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  }
+
   if (trimmed.length === 0 || trimmed === "/dev/null") {
     return null;
   }
 
   return trimmed.replace(/^[ab]\//, "");
+};
+
+const extractDiffGitPaths = (
+  candidate: string,
+): { previousPath: string; nextPath: string } | null => {
+  const line = /^diff --git\s+(.+)$/m.exec(candidate)?.[1];
+  if (!line) {
+    return null;
+  }
+
+  const match = /^(?:"((?:[^"\\]|\\.)*)"|(\S+))\s+(?:"((?:[^"\\]|\\.)*)"|(\S+))$/.exec(line.trim());
+  if (!match) {
+    return null;
+  }
+
+  const previousPath = normalizePatchPath(match[1] ?? match[2]);
+  const nextPath = normalizePatchPath(match[3] ?? match[4]);
+  if (!previousPath || !nextPath) {
+    return null;
+  }
+
+  return { previousPath, nextPath };
 };
 
 const extractPatchFilePath = (candidate: string): string | null => {
@@ -106,7 +139,7 @@ const extractPatchFilePath = (candidate: string): string | null => {
     return indexPath;
   }
 
-  return normalizePatchPath(/^diff --git a\/(.+?) b\//m.exec(candidate)?.[1]);
+  return extractDiffGitPaths(candidate)?.nextPath ?? null;
 };
 
 export const extractAllFileEditData = (
@@ -120,12 +153,17 @@ export const extractAllFileEditData = (
 
     for (const candidate of splitPatchCandidates(rawDiff)) {
       const filePath = extractPatchFilePath(candidate);
-      if (!filePath || seenPaths.has(filePath) || !patchMatchesFile(candidate, filePath)) {
+      if (!filePath || !patchMatchesFile(candidate, filePath)) {
         continue;
       }
 
-      fileEditData.push(buildFileEditData(filePath, candidate, workingDirectory));
-      seenPaths.add(filePath);
+      const data = buildFileEditData(filePath, candidate, workingDirectory);
+      if (seenPaths.has(data.filePath)) {
+        continue;
+      }
+
+      fileEditData.push(data);
+      seenPaths.add(data.filePath);
     }
 
     if (fileEditData.length > 0) {
@@ -145,9 +183,9 @@ export const extractFileEditData = (
 
   if (!filePath && typeof meta.input?.patch === "string") {
     const patchContent = meta.input.patch as string;
-    const diffMatch = /^---\s+a\/(.+)$/m.exec(patchContent);
-    if (diffMatch?.[1]) {
-      filePath = diffMatch[1];
+    const patchFilePath = extractPatchFilePath(patchContent);
+    if (patchFilePath) {
+      filePath = patchFilePath;
     }
   }
 

@@ -1028,6 +1028,80 @@ describe("agent-chat-message-card-model", () => {
       ]);
     });
 
+    test("extracts all file edit data from a multi-file unified diff without diff headers", () => {
+      const data = extractAllFileEditData(
+        createToolMeta({
+          tool: "apply_patch",
+          input: {
+            patch:
+              "--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
+              "--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          },
+        }),
+      );
+
+      expect(data).toEqual([
+        {
+          filePath: "src/first.ts",
+          diff: "--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          additions: 1,
+          deletions: 1,
+        },
+        {
+          filePath: "src/second.ts",
+          diff: "--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          additions: 1,
+          deletions: 1,
+        },
+      ]);
+    });
+
+    test("extracts quoted paths and strips diff timestamps", () => {
+      const data = extractAllFileEditData(
+        createToolMeta({
+          tool: "apply_patch",
+          metadata: {
+            diff:
+              'diff --git "a/src/file with spaces.ts" "b/src/file with spaces.ts"\n' +
+              '--- "a/src/file with spaces.ts"\t2026-03-28 12:00:00 +0000\n' +
+              '+++ "b/src/file with spaces.ts"\t2026-03-28 12:00:00 +0000\n' +
+              "@@ -1 +1 @@\n-old\n+new\n",
+          },
+        }),
+      );
+
+      expect(data).toEqual([
+        {
+          filePath: "src/file with spaces.ts",
+          diff:
+            'diff --git "a/src/file with spaces.ts" "b/src/file with spaces.ts"\n' +
+            '--- "a/src/file with spaces.ts"\t2026-03-28 12:00:00 +0000\n' +
+            '+++ "b/src/file with spaces.ts"\t2026-03-28 12:00:00 +0000\n' +
+            "@@ -1 +1 @@\n-old\n+new\n",
+          additions: 1,
+          deletions: 1,
+        },
+      ]);
+    });
+
+    test("counts content lines that begin with three diff markers", () => {
+      const data = extractFileEditData(
+        createToolMeta({
+          input: { filePath: "src/symbols.ts" },
+          metadata: {
+            diff: "--- a/src/symbols.ts\n+++ b/src/symbols.ts\n@@ -1,2 +1,2 @@\n----old\n----gone\n++++added\n++++kept\n",
+          },
+        }),
+      );
+
+      expect(data).toEqual({
+        filePath: "src/symbols.ts",
+        diff: "--- a/src/symbols.ts\n+++ b/src/symbols.ts\n@@ -1,2 +1,2 @@\n----old\n----gone\n++++added\n++++kept\n",
+        additions: 2,
+        deletions: 2,
+      });
+    });
+
     test("extractAllFileEditData preserves single-file behavior", () => {
       const meta = createToolMeta({
         tool: "apply_patch",
@@ -1097,6 +1171,24 @@ describe("agent-chat-message-card-model", () => {
       ).toBe("");
     });
 
+    test("uses neutral multi-file summaries while file edit tools are still running", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "apply_patch",
+            status: "running",
+            input: {
+              patch:
+                "diff --git a/src/first.ts b/src/first.ts\n--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
+                "diff --git a/src/second.ts b/src/second.ts\n--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1 @@\n-old\n+new\n",
+            },
+            output: "",
+          }),
+          "",
+        ),
+      ).toBe("2 files");
+    });
+
     test("preserves file edit summaries until the tool succeeds", () => {
       expect(
         buildToolSummary(
@@ -1111,6 +1203,19 @@ describe("agent-chat-message-card-model", () => {
           "",
         ),
       ).toBe("src/patch.ts");
+    });
+
+    test("keeps completed file edit summaries when no file cards can be built", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "apply_patch",
+            status: "completed",
+            output: "Success. Updated 3 files",
+          }),
+          "",
+        ),
+      ).toBe("Success. Updated 3 files");
     });
 
     test("uses input taskId for read_task summaries", () => {

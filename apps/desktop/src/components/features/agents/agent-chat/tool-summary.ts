@@ -197,6 +197,9 @@ export const buildToolSummary = (
   const lowerTool = meta.tool.toLowerCase();
   const isTodoTool = isTodoToolName(lowerTool);
   const lifecyclePhase = getToolLifecyclePhase(meta);
+  const fileEditData = isFileEditTool(lowerTool)
+    ? extractAllFileEditData(meta, workingDirectory)
+    : [];
 
   if (
     lowerTool === "read_task" ||
@@ -239,7 +242,7 @@ export const buildToolSummary = (
     return compactText(meta.error, 220);
   }
 
-  if (isFileEditTool(lowerTool) && lifecyclePhase === "completed") {
+  if (lifecyclePhase === "completed" && fileEditData.length > 0) {
     return "";
   }
 
@@ -257,15 +260,15 @@ export const buildToolSummary = (
     return compactText(relativizeSearchSummary(searchSummary, workingDirectory), 160);
   }
 
-  if (isFileEditTool(lowerTool)) {
-    const allFileEditData = extractAllFileEditData(meta, workingDirectory);
-    if (allFileEditData.length > 1) {
-      return `${allFileEditData.length} files modified`;
-    }
-    const singleFileEditData = allFileEditData[0];
-    if (singleFileEditData) {
-      return compactText(singleFileEditData.filePath, 160);
-    }
+  if (fileEditData.length > 1) {
+    return lifecyclePhase === "completed"
+      ? `${fileEditData.length} files modified`
+      : `${fileEditData.length} files`;
+  }
+
+  const singleFileEditData = fileEditData[0];
+  if (singleFileEditData) {
+    return compactText(singleFileEditData.filePath, 160);
   }
 
   if (path && lowerTool !== "glob" && lowerTool !== "grep") {

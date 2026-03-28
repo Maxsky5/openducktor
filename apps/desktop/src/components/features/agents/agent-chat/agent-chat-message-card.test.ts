@@ -227,6 +227,9 @@ describe("AgentChatMessageCard tool duration", () => {
       }),
     );
 
+    const fileEditCardMatches = html.match(/data-testid="agent-chat-file-edit-card"/g) ?? [];
+
+    expect(fileEditCardMatches).toHaveLength(2);
     expect(html).not.toContain("2 files modified");
     expect(html).toContain("src/");
     expect(html).toContain("first.ts");
