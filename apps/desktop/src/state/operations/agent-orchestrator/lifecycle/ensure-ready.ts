@@ -160,10 +160,49 @@ export const createEnsureSessionReady = ({
         attachSessionListener(repoPath, sessionId);
       }
       if (session.status !== "error") {
+        let attachedRuntimeKind = session.runtimeKind;
+        let attachedRuntimeId = session.runtimeId;
+        let attachedRunId = session.runId;
+        let attachedRuntimeEndpoint = session.runtimeEndpoint;
+        let attachedWorkingDirectory = session.workingDirectory;
+
+        if (!attachedRuntimeKind || attachedRuntimeEndpoint.trim().length === 0) {
+          const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
+            targetWorkingDirectory: session.workingDirectory,
+            ...(session.selectedModel?.runtimeKind
+              ? { runtimeKind: session.selectedModel.runtimeKind }
+              : {}),
+          });
+          assertNotStale();
+
+          attachedRuntimeKind =
+            runtime.runtimeKind ??
+            session.selectedModel?.runtimeKind ??
+            session.runtimeKind ??
+            DEFAULT_RUNTIME_KIND;
+          attachedRuntimeId = runtime.runtimeId;
+          attachedRunId = runtime.runId;
+          attachedRuntimeEndpoint = runtime.runtimeEndpoint;
+          attachedWorkingDirectory = runtime.workingDirectory;
+
+          updateSession(
+            sessionId,
+            (current) => ({
+              ...current,
+              runtimeId: attachedRuntimeId,
+              runId: attachedRunId,
+              runtimeEndpoint: attachedRuntimeEndpoint,
+              workingDirectory: attachedWorkingDirectory,
+              ...(attachedRuntimeKind ? { runtimeKind: attachedRuntimeKind } : {}),
+            }),
+            { persist: false },
+          );
+        }
+
         const liveSnapshot = await loadLiveSnapshot({
-          runtimeKind: session.runtimeKind,
-          runtimeEndpoint: session.runtimeEndpoint,
-          workingDirectory: session.workingDirectory,
+          runtimeKind: attachedRuntimeKind,
+          runtimeEndpoint: attachedRuntimeEndpoint,
+          workingDirectory: attachedWorkingDirectory,
           externalSessionId: session.externalSessionId,
         });
         assertNotStale();
@@ -174,8 +213,13 @@ export const createEnsureSessionReady = ({
           (current) => ({
             ...current,
             status: liveSnapshot ? toLiveSessionState(liveSnapshot.status) : current.status,
+            runtimeId: attachedRuntimeId,
+            runId: attachedRunId,
+            runtimeEndpoint: attachedRuntimeEndpoint,
+            workingDirectory: attachedWorkingDirectory,
             pendingPermissions,
             pendingQuestions,
+            ...(attachedRuntimeKind ? { runtimeKind: attachedRuntimeKind } : {}),
           }),
           { persist: false },
         );

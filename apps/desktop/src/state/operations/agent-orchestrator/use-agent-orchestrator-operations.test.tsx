@@ -340,13 +340,18 @@ describe("use-agent-orchestrator-operations", () => {
       const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
       const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
-      host.agentSessionsList = async () => [persistedSessionFixture];
+      host.agentSessionsList = async () => [
+        {
+          ...persistedSessionFixture,
+          workingDirectory: "/tmp/repo/worktree",
+        },
+      ];
       host.agentSessionUpsert = async () => {};
       host.specGet = async () => ({ markdown: "", updatedAt: null });
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.buildContinuationTargetGet = async () => ({
-        workingDirectory: "/tmp/repo",
+        workingDirectory: "/tmp/repo/worktree",
         source: "active_build_run",
       });
 
@@ -426,7 +431,12 @@ describe("use-agent-orchestrator-operations", () => {
       const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
       const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
 
-      host.agentSessionsList = async () => [persistedSessionFixture];
+      host.agentSessionsList = async () => [
+        {
+          ...persistedSessionFixture,
+          workingDirectory: "/tmp/repo/worktree",
+        },
+      ];
       host.agentSessionUpsert = async () => {};
       host.runtimeList = async () => [
         {
@@ -545,7 +555,7 @@ describe("use-agent-orchestrator-operations", () => {
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.buildContinuationTargetGet = async () => ({
-        workingDirectory: "/tmp/repo",
+        workingDirectory: "/tmp/repo/worktree",
         source: "active_build_run",
       });
 
@@ -958,6 +968,7 @@ describe("use-agent-orchestrator-operations", () => {
                 ...persistedSessionFixture,
                 role: "spec",
                 scenario: "spec_initial",
+                workingDirectory: "/tmp/repo/worktree",
               },
             ],
           },
@@ -1613,6 +1624,7 @@ describe("use-agent-orchestrator-operations", () => {
           ...persistedSessionFixture,
           role: "build",
           scenario: "build_after_human_request_changes",
+          workingDirectory: "/tmp/repo/worktree",
         },
       ];
       host.agentSessionUpsert = async () => {};
@@ -1620,7 +1632,7 @@ describe("use-agent-orchestrator-operations", () => {
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.buildContinuationTargetGet = async () => ({
-        workingDirectory: "/tmp/repo",
+        workingDirectory: "/tmp/repo/worktree",
         source: "active_build_run",
       });
 
