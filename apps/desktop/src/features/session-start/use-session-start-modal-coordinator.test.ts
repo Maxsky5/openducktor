@@ -2,10 +2,20 @@ import { describe, expect, test } from "bun:test";
 import {
   buildSessionStartModalDescription,
   buildSessionStartModalTitle,
+  orderStartModesForDisplay,
   toSessionStartPostAction,
 } from "./use-session-start-modal-coordinator";
 
 describe("use-session-start-modal-coordinator", () => {
+  test("orders start modes for display consistently", () => {
+    expect(orderStartModesForDisplay(["fork", "reuse"])).toEqual(["reuse", "fork"]);
+    expect(orderStartModesForDisplay(["fork", "fresh", "reuse"])).toEqual([
+      "fresh",
+      "reuse",
+      "fork",
+    ]);
+  });
+
   test("builds role-specific session start titles", () => {
     expect(buildSessionStartModalTitle("spec")).toBe("Start Spec Session");
     expect(buildSessionStartModalTitle("planner")).toBe("Start Planner Session");

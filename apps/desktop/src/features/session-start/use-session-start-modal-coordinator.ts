@@ -14,6 +14,12 @@ import { SCENARIO_LABELS } from "./session-start-prompts";
 import type { SessionStartRequestReason } from "./session-start-types";
 import { useSessionStartModalState } from "./use-session-start-modal-state";
 
+const START_MODE_DISPLAY_ORDER: Record<"fresh" | "reuse" | "fork", number> = {
+  fresh: 0,
+  reuse: 1,
+  fork: 2,
+};
+
 const startModeLabelFor = (startMode: "fresh" | "reuse" | "fork"): string => {
   if (startMode === "fresh") {
     return "Start a fresh session";
@@ -29,13 +35,23 @@ export const buildSessionStartModalTitle = (role: AgentRole): string => {
   return `Start ${roleLabel} Session`;
 };
 
+export const orderStartModesForDisplay = (
+  startModes: readonly ("fresh" | "reuse" | "fork")[],
+): ("fresh" | "reuse" | "fork")[] => {
+  return [...startModes].sort(
+    (left, right) => START_MODE_DISPLAY_ORDER[left] - START_MODE_DISPLAY_ORDER[right],
+  );
+};
+
 export const buildSessionStartModalDescription = ({
   scenario,
 }: {
   scenario: AgentScenario;
 }): string => {
   const scenarioLabel = SCENARIO_LABELS[scenario] ?? scenario;
-  const allowedStartModes = getAgentScenarioDefinition(scenario).allowedStartModes;
+  const allowedStartModes = orderStartModesForDisplay(
+    getAgentScenarioDefinition(scenario).allowedStartModes,
+  );
   if (allowedStartModes.length > 1) {
     const allowedModeLabels = allowedStartModes.map((mode) => {
       if (mode === "fresh") {
