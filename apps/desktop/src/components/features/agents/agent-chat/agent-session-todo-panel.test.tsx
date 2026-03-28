@@ -26,14 +26,14 @@ const renderPanel = (props: Partial<Parameters<typeof AgentSessionTodoPanel>[0]>
 };
 
 describe("AgentSessionTodoPanel", () => {
-  test("stays hidden when todos are completed-only or cancelled-only", () => {
+  test("stays hidden when todos are completed-only", () => {
     const completedOnly = renderPanel({
       todos: [buildTodoItem({ status: "completed" })],
     });
     expect(completedOnly.container.innerHTML).toBe("");
+  });
 
-    cleanup();
-
+  test("stays hidden when todos are cancelled-only", () => {
     const cancelledOnly = renderPanel({
       todos: [buildTodoItem({ status: "cancelled" })],
     });
@@ -63,7 +63,6 @@ describe("AgentSessionTodoPanel", () => {
 
     const accentBorder = container.querySelector('[style*="border-left-color"]');
     expect(accentBorder).not.toBeNull();
-    expect(accentBorder?.getAttribute("style")).toContain("border-left-color");
 
     expect(screen.queryByRole("list")).toBeNull();
   });
@@ -77,7 +76,9 @@ describe("AgentSessionTodoPanel", () => {
       ],
     });
 
-    expect(screen.getByLabelText("Agent todo list").textContent ?? "").toContain("Next pending item");
+    expect(screen.getByLabelText("Agent todo list").textContent ?? "").toContain(
+      "Next pending item",
+    );
   });
 
   test("uses idle in-progress icon without spinner when session is not working", () => {

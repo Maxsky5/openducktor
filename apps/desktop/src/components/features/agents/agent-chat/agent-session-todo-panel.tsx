@@ -78,10 +78,9 @@ export function AgentSessionTodoPanel({
         className,
       )}
       aria-label="Agent todo list"
-
     >
       <div
-        className="rounded-t-xl border-l-4"
+        className={cn("rounded-t-xl border-l-4", !accentColor && "border-l-transparent")}
         style={accentColor ? { borderLeftColor: accentColor } : undefined}
       >
         <button
