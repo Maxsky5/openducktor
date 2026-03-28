@@ -1059,6 +1059,60 @@ describe("OpencodeSdkAdapter", () => {
     });
   });
 
+  test("maps acknowledged user message.updated events into user_message", async () => {
+    const streamEvents: Event[] = [
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "user-1",
+            role: "user",
+            sessionID: "session-opencode-1",
+            providerID: "openai",
+            modelID: "gpt-5",
+            agent: "Hephaestus",
+            variant: "high",
+            text: "Generate the pull request",
+            time: {
+              created: Date.parse("2026-02-17T12:00:04Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ];
+
+    const mock = makeMockClient({
+      streamEvents,
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event);
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+    await flushAsync();
+
+    const userEvents = events.filter((entry) => entry.type === "user_message");
+    expect(userEvents).toHaveLength(1);
+    expect(userEvents[0]).toMatchObject({
+      type: "user_message",
+      timestamp: "2026-02-17T12:00:04.000Z",
+      messageId: "user-1",
+      message: "Generate the pull request",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+        profileId: "Hephaestus",
+        variant: "high",
+      },
+    });
+  });
+
   test("includes step-finish total tokens on assistant part events", async () => {
     const streamEvents: Event[] = [
       {

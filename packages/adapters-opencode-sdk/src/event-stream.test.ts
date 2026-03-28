@@ -51,7 +51,7 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   externalSessionId: "external-session-1",
   eventTransportKey: "http://127.0.0.1:12345",
   hasIdleSinceActivity: false,
-  emittedAssistantMessageIds: new Set<string>(),
+  emittedMessageIds: new Set<string>(),
   partsById: new Map(),
   messageRoleById: new Map(),
   pendingDeltasByPartId: new Map(),
@@ -93,6 +93,44 @@ const assistantRoleEvent = (messageId: string): Event =>
   }) as unknown as Event;
 
 describe("event-stream", () => {
+  test("emits user_message when opencode acknowledges a user turn", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "user-message-1",
+            role: "user",
+            sessionID: "external-session-1",
+            providerID: "openai",
+            modelID: "gpt-5",
+            agent: "Hephaestus",
+            variant: "high",
+            text: "Generate the PR",
+            time: {
+              created: Date.parse("2026-02-22T12:00:03.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    if (userMessages[0]?.type !== "user_message") {
+      throw new Error("Expected user_message event");
+    }
+    expect(userMessages[0].messageId).toBe("user-message-1");
+    expect(userMessages[0].message).toBe("Generate the PR");
+    expect(userMessages[0].timestamp).toBe("2026-02-22T12:00:03.000Z");
+    expect(userMessages[0].model).toEqual({
+      providerId: "openai",
+      modelId: "gpt-5",
+      profileId: "Hephaestus",
+      variant: "high",
+    });
+  });
+
   test("deduplicates assistant_message across repeated message.updated events", async () => {
     const assistantEvent = {
       type: "message.updated",

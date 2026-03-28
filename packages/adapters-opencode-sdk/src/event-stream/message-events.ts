@@ -2,6 +2,7 @@ import type { Event, Part } from "@opencode-ai/sdk/v2/client";
 import {
   asUnknownRecord,
   readArrayProp,
+  readRecordProp,
   readStringProp,
   readUnknownProp,
   type UnknownRecord,
@@ -9,9 +10,11 @@ import {
 import {
   extractMessageTotalTokens,
   readMessageModelSelection,
+  readTextFromMessageInfo,
   readTextFromParts,
   sanitizeAssistantMessage,
 } from "../message-normalizers";
+import { toIsoFromEpoch } from "../session-runtime-utils";
 import { mapPartToAgentStreamPart } from "../stream-part-mapper";
 import {
   readEventInfo,
@@ -121,6 +124,10 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     ? readStringProp(infoRecord, ["id", "messageID", "messageId", "message_id"])
     : undefined;
   const role = infoRecord ? readStringProp(infoRecord, ["role"]) : undefined;
+  const messageTimestamp = (() => {
+    const infoTime = infoRecord ? readRecordProp(infoRecord, "time") : undefined;
+    return toIsoFromEpoch(infoTime?.created, runtime.now);
+  })();
   const session = runtime.getSession(runtime.sessionId);
   const previousRole = messageId ? runtime.messageRoleById.get(messageId) : undefined;
   if (messageId && role) {
@@ -170,6 +177,32 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
   ) {
     emitKnownAssistantPartsForMessage(runtime, messageId, role, !preserveIdleState);
   }
+
+  if (messageId && role === "user") {
+    const textFromParts = readTextFromParts(normalizedParts);
+    const visible = textFromParts.length > 0 ? textFromParts : readTextFromMessageInfo(infoRecord);
+    if (visible.trim().length === 0) {
+      return true;
+    }
+
+    const messageModel = readMessageModelSelection(infoRecord);
+    const emittedMessageIds = session?.emittedMessageIds;
+    if (emittedMessageIds?.has(messageId)) {
+      return true;
+    }
+
+    runtime.emit(runtime.sessionId, {
+      type: "user_message",
+      sessionId: runtime.sessionId,
+      timestamp: messageTimestamp,
+      messageId,
+      message: visible,
+      ...(messageModel ? { model: messageModel } : {}),
+    });
+    emittedMessageIds?.add(messageId);
+    return true;
+  }
+
   const shouldEmitCompletedMessage =
     messageId !== undefined &&
     role === "assistant" &&
@@ -187,21 +220,21 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
 
   const totalTokens = extractMessageTotalTokens(infoRecord, normalizedParts);
   const assistantModel = readMessageModelSelection(infoRecord);
-  const emittedAssistantMessageIds = session?.emittedAssistantMessageIds;
-  if (emittedAssistantMessageIds?.has(messageId)) {
+  const emittedMessageIds = session?.emittedMessageIds;
+  if (emittedMessageIds?.has(messageId)) {
     return true;
   }
 
   runtime.emit(runtime.sessionId, {
     type: "assistant_message",
     sessionId: runtime.sessionId,
-    timestamp: runtime.now(),
+    timestamp: messageTimestamp,
     messageId,
     message: visible,
     ...(typeof totalTokens === "number" ? { totalTokens } : {}),
     ...(assistantModel ? { model: assistantModel } : {}),
   });
-  emittedAssistantMessageIds?.add(messageId);
+  emittedMessageIds?.add(messageId);
   return true;
 };
 
