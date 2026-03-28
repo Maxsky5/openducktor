@@ -84,6 +84,7 @@ export function useAgentStudioTaskHydration({
     requestState.sessionId === activeSessionId && requestState.status === "pending";
   const isRequestFailed =
     requestState.sessionId === activeSessionId && requestState.status === "failed";
+  const shouldShowPendingHydrationState = shouldHydrateSessionHistory && !isRequestFailed;
 
   return {
     isActiveTaskHydrated: Boolean(activeRepo && activeTaskId),
@@ -93,7 +94,7 @@ export function useAgentStudioTaskHydration({
       ? historyHydrationState === "failed" || isRequestFailed
       : false,
     isActiveSessionHistoryHydrating: activeSessionId
-      ? historyHydrationState === "hydrating" || isRequestPending
+      ? shouldShowPendingHydrationState || historyHydrationState === "hydrating" || isRequestPending
       : false,
   };
 }
