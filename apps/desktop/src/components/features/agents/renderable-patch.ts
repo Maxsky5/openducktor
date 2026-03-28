@@ -23,7 +23,7 @@ export function normalizePatchCandidate(candidate: string, filePath: string): st
   return `${normalized}\n`;
 }
 
-function splitPatchCandidates(rawDiff: string): string[] {
+export function splitPatchCandidates(rawDiff: string): string[] {
   const trimmed = rawDiff.trim();
   if (trimmed.length === 0) {
     return [];
@@ -46,7 +46,7 @@ function splitPatchCandidates(rawDiff: string): string[] {
   return [trimmed];
 }
 
-function patchMatchesFile(candidate: string, filePath: string): boolean {
+export function patchMatchesFile(candidate: string, filePath: string): boolean {
   const normalizedPath = filePath.replaceAll("\\", "/");
   const quotedPath = normalizedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const suffixPattern = new RegExp(`(^|[\\s"'])((a|b)/)?${quotedPath}($|[\\s"'])`, "m");
