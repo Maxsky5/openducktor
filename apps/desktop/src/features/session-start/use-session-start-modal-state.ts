@@ -15,6 +15,7 @@ import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { DEFAULT_RUNTIME_KIND, resolveRuntimeKindSelection } from "@/lib/agent-runtime";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { RepoSettingsInput } from "@/types/state-slices";
+import { orderStartModesForDisplay } from "./session-start-display";
 import { useSessionStartModalReuseState } from "./session-start-modal-reuse-state";
 import { useSessionStartModalRuntimeState } from "./session-start-modal-runtime-state";
 import type { SessionStartModalIntent } from "./session-start-modal-types";
@@ -234,6 +235,10 @@ export function useSessionStartModalState({
     return [{ value: selection.variant, label: selection.variant }];
   }, [selectedModelEntry, selection?.variant]);
 
+  const orderedStartModes = useMemo<AgentSessionStartMode[]>(() => {
+    return orderStartModesForDisplay(availableStartModes);
+  }, [availableStartModes]);
+
   return {
     intent,
     isOpen: intent !== null,
@@ -247,7 +252,7 @@ export function useSessionStartModalState({
     modelOptions,
     modelGroups,
     variantOptions,
-    availableStartModes,
+    availableStartModes: orderedStartModes,
     selectedStartMode,
     existingSessionOptions,
     selectedSourceSessionId,

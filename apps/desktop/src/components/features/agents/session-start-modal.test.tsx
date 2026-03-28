@@ -139,13 +139,18 @@ describe("SessionStartModal", () => {
     }
     expect(runtimeCombobox.hasAttribute("disabled")).toBe(true);
 
-    const allComboboxes = container.querySelectorAll("mock-combobox");
-    expect(allComboboxes.length).toBeGreaterThanOrEqual(4);
-
-    const sourceCombobox = allComboboxes[0];
-    const agentCombobox = allComboboxes[1];
-    const modelCombobox = allComboboxes[2];
-    const variantCombobox = allComboboxes[3];
+    const sourceCombobox = screen
+      .getByTestId("session-start-source-field")
+      .querySelector("mock-combobox");
+    const agentCombobox = screen
+      .getByTestId("session-start-agent-field")
+      .querySelector("mock-combobox");
+    const modelCombobox = screen
+      .getByTestId("session-start-model-field")
+      .querySelector("mock-combobox");
+    const variantCombobox = screen
+      .getByTestId("session-start-variant-field")
+      .querySelector("mock-combobox");
 
     if (!sourceCombobox || !agentCombobox || !modelCombobox || !variantCombobox) {
       throw new Error("Expected existing session + agent/model/variant comboboxes");
@@ -236,13 +241,18 @@ describe("SessionStartModal", () => {
     }
     expect(runtimeCombobox.hasAttribute("disabled")).toBe(false);
 
-    const allComboboxes = container.querySelectorAll("mock-combobox");
-    expect(allComboboxes.length).toBeGreaterThanOrEqual(4);
-
-    const sourceCombobox = allComboboxes[0];
-    const agentCombobox = allComboboxes[1];
-    const modelCombobox = allComboboxes[2];
-    const variantCombobox = allComboboxes[3];
+    const sourceCombobox = screen
+      .getByTestId("session-start-source-field")
+      .querySelector("mock-combobox");
+    const agentCombobox = screen
+      .getByTestId("session-start-agent-field")
+      .querySelector("mock-combobox");
+    const modelCombobox = screen
+      .getByTestId("session-start-model-field")
+      .querySelector("mock-combobox");
+    const variantCombobox = screen
+      .getByTestId("session-start-variant-field")
+      .querySelector("mock-combobox");
 
     if (!sourceCombobox || !agentCombobox || !modelCombobox || !variantCombobox) {
       throw new Error("Expected existing session + agent/model/variant comboboxes");

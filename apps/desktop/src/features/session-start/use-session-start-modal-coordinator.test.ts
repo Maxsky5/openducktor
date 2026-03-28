@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { orderStartModesForDisplay } from "./session-start-display";
 import {
   buildSessionStartModalDescription,
   buildSessionStartModalTitle,
-  orderStartModesForDisplay,
   toSessionStartPostAction,
 } from "./use-session-start-modal-coordinator";
 

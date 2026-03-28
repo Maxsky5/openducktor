@@ -9,16 +9,11 @@ import { useCallback } from "react";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoSettingsInput } from "@/types/state-slices";
+import { orderStartModesForDisplay } from "./session-start-display";
 import type { SessionStartModalIntent, SessionStartPostAction } from "./session-start-modal-types";
 import { SCENARIO_LABELS } from "./session-start-prompts";
 import type { SessionStartRequestReason } from "./session-start-types";
 import { useSessionStartModalState } from "./use-session-start-modal-state";
-
-const START_MODE_DISPLAY_ORDER: Record<"fresh" | "reuse" | "fork", number> = {
-  fresh: 0,
-  reuse: 1,
-  fork: 2,
-};
 
 const startModeLabelFor = (startMode: "fresh" | "reuse" | "fork"): string => {
   if (startMode === "fresh") {
@@ -33,14 +28,6 @@ const startModeLabelFor = (startMode: "fresh" | "reuse" | "fork"): string => {
 export const buildSessionStartModalTitle = (role: AgentRole): string => {
   const roleLabel = AGENT_ROLE_LABELS[role] ?? role.toUpperCase();
   return `Start ${roleLabel} Session`;
-};
-
-export const orderStartModesForDisplay = (
-  startModes: readonly ("fresh" | "reuse" | "fork")[],
-): ("fresh" | "reuse" | "fork")[] => {
-  return [...startModes].sort(
-    (left, right) => START_MODE_DISPLAY_ORDER[left] - START_MODE_DISPLAY_ORDER[right],
-  );
 };
 
 export const buildSessionStartModalDescription = ({
