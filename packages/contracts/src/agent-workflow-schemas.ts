@@ -92,8 +92,8 @@ export const agentScenarioDefinitionByScenario = {
   build_pull_request_generation: {
     role: "build",
     label: "Generate Pull Request",
-    allowedStartModes: ["fork"],
-    defaultStartMode: "fork",
+    allowedStartModes: ["reuse", "fork"],
+    defaultStartMode: "reuse",
     supportsKickoff: true,
   },
   build_rebase_conflict_resolution: {

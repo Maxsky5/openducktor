@@ -534,6 +534,70 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
+  test("supports mixed reuse and fork modes for pull request generation", async () => {
+    const harness = createHookHarness(createBaseProps());
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-PR",
+        role: "build",
+        scenario: "build_pull_request_generation",
+        existingSessionOptions: [
+          {
+            value: "session-pr-2",
+            label: "Builder session 2",
+            description: "Latest builder session",
+            selectedModel: {
+              runtimeKind: "opencode",
+              providerId: "anthropic",
+              modelId: "claude-sonnet",
+              variant: "default",
+              profileId: "build-agent",
+            },
+          },
+          {
+            value: "session-pr-1",
+            label: "Builder session 1",
+            description: "Older builder session",
+            selectedModel: {
+              runtimeKind: "opencode",
+              providerId: "openai",
+              modelId: "gpt-5",
+              variant: "high",
+              profileId: "spec-agent",
+            },
+          },
+        ],
+        initialSourceSessionId: "session-pr-1",
+        postStartAction: "kickoff",
+        title: "Start Builder Session",
+      });
+    });
+
+    expect(harness.getLatest().availableStartModes).toEqual(["reuse", "fork"]);
+    expect(harness.getLatest().selectedStartMode).toBe("reuse");
+    expect(harness.getLatest().selectedSourceSessionId).toBe("session-pr-1");
+    expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "spec-agent",
+    });
+
+    await harness.run(() => {
+      harness.getLatest().handleSelectStartMode("fork");
+    });
+
+    expect(harness.getLatest().selectedStartMode).toBe("fork");
+    expect(harness.getLatest().selectedSourceSessionId).toBe("session-pr-1");
+
+    await harness.unmount();
+  });
+
   test("clears locked selection when reused source session has no model", async () => {
     const harness = createHookHarness(createBaseProps());
 

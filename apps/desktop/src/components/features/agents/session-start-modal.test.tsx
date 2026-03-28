@@ -212,4 +212,47 @@ describe("SessionStartModal", () => {
 
     unmount();
   });
+
+  test("keeps existing-session selection visible and model controls enabled in fork mode", () => {
+    const { container, unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          availableStartModes: ["reuse", "fork"],
+          selectedStartMode: "fork",
+          existingSessionOptions: [{ value: "session-1", label: "Session #1" }],
+          selectedSourceSessionId: "session-1",
+        }),
+      }),
+    );
+
+    expect(screen.getByText("Session Mode")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /reuse existing/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /fork existing/i })).toBeTruthy();
+    expect(screen.getByText("Existing Session")).toBeTruthy();
+
+    const runtimeCombobox = container.querySelector("agent-runtime-combobox");
+    if (!runtimeCombobox) {
+      throw new Error("Expected runtime combobox element");
+    }
+    expect(runtimeCombobox.hasAttribute("disabled")).toBe(false);
+
+    const allComboboxes = container.querySelectorAll("mock-combobox");
+    expect(allComboboxes.length).toBeGreaterThanOrEqual(4);
+
+    const sourceCombobox = allComboboxes[0];
+    const agentCombobox = allComboboxes[1];
+    const modelCombobox = allComboboxes[2];
+    const variantCombobox = allComboboxes[3];
+
+    if (!sourceCombobox || !agentCombobox || !modelCombobox || !variantCombobox) {
+      throw new Error("Expected existing session + agent/model/variant comboboxes");
+    }
+
+    expect(sourceCombobox.hasAttribute("disabled")).toBe(false);
+    expect(agentCombobox.hasAttribute("disabled")).toBe(false);
+    expect(modelCombobox.hasAttribute("disabled")).toBe(false);
+    expect(variantCombobox.hasAttribute("disabled")).toBe(false);
+
+    unmount();
+  });
 });

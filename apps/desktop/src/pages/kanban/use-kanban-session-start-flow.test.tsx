@@ -229,7 +229,7 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("opens the shared session start modal for pull request generation as a fork-only builder flow", async () => {
+  test("opens the shared session start modal for pull request generation with reuse as the default builder flow", async () => {
     const harness = createHookHarness(createBaseArgs());
     let startPromise: Promise<string | undefined> | undefined;
 
@@ -241,9 +241,12 @@ describe("useKanbanSessionStartFlow", () => {
     const modal = harness.getLatest().sessionStartModal;
     expect(modal).not.toBeNull();
     expect(modal?.title).toBe("Start Builder Session");
-    expect(modal?.availableStartModes).toEqual(["fork"]);
-    expect(modal?.selectedStartMode).toBe("fork");
+    expect(modal?.availableStartModes).toEqual(["reuse", "fork"]);
+    expect(modal?.selectedStartMode).toBe("reuse");
     expect(modal?.selectedSourceSessionId).toBe("builder-session-2");
+    expect(modal?.description).toBe(
+      "Choose how to reuse an existing session or fork an existing session for Generate Pull Request.",
+    );
     expect(modal?.existingSessionOptions).toEqual([
       expect.objectContaining({
         value: "builder-session-2",
@@ -266,7 +269,7 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("pull request generation resolves with the started builder session id", async () => {
+  test("pull request generation resolves with the started builder session id using reuse by default", async () => {
     const startAgentSession = mock(async () => "builder-session-pr");
     const args = createBaseArgs();
     args.repoSettings = createDefaultRepoSettings();
@@ -286,7 +289,7 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.run(async (state) => {
       state.sessionStartModal?.onConfirm({
         runInBackground: false,
-        startMode: "fork",
+        startMode: "reuse",
         sourceSessionId: "builder-session-2",
       });
       await Promise.resolve();
@@ -299,7 +302,7 @@ describe("useKanbanSessionStartFlow", () => {
         taskId: "TASK-1",
         role: "build",
         scenario: "build_pull_request_generation",
-        startMode: "fork",
+        startMode: "reuse",
         sourceSessionId: "builder-session-2",
       }),
     );
@@ -332,7 +335,7 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("pull request generation rejects when no builder session is available to fork", async () => {
+  test("pull request generation rejects when no builder session is available to fork or reuse", async () => {
     const args = createBaseArgs();
     args.sessions = [];
 
@@ -347,7 +350,7 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     await expect(startPromise).rejects.toThrow(
-      'No Builder session is available to fork for task "TASK-1".',
+      'No Builder session is available to fork or reuse for task "TASK-1".',
     );
     expect(harness.getLatest().sessionStartModal).toBeNull();
 

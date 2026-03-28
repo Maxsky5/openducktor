@@ -213,7 +213,7 @@ Current workflow implications:
 
 - `build_implementation_start` is `fresh` only
 - `build_after_qa_rejected`, `build_after_human_request_changes`, and `build_rebase_conflict_resolution` allow `fresh` and `reuse`
-- `build_pull_request_generation` is `fork` only
+- `build_pull_request_generation` allows `reuse` and `fork`
 - `qa_review` allows `fresh` and `reuse`
 
 This makes `supportsSessionFork` a hard requirement for full Builder compatibility. A runtime that cannot fork an existing Builder session cannot implement the complete OpenDucktor Builder workflow.
@@ -265,7 +265,7 @@ It must also implement the scenario-compatible session lifecycle:
 
 - `startSession(...)` for fresh sessions
 - reuse via existing session registration/resume flows
-- `forkSession(...)` for fork-only scenarios such as `build_pull_request_generation`
+- `forkSession(...)` for scenarios that support forking, including `build_pull_request_generation`
 
 If a runtime does not implement one of these surfaces, the descriptor and adapter surface should reflect that so unsupported operations fail explicitly.
 

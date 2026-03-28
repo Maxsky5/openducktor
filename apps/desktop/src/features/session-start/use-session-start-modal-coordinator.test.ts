@@ -25,6 +25,14 @@ describe("use-session-start-modal-coordinator", () => {
         scenario: "build_after_human_request_changes",
       }),
     ).toBe("Choose how to start fresh or reuse an existing session for Apply Human Changes.");
+
+    expect(
+      buildSessionStartModalDescription({
+        scenario: "build_pull_request_generation",
+      }),
+    ).toBe(
+      "Choose how to reuse an existing session or fork an existing session for Generate Pull Request.",
+    );
   });
 
   test("maps session-start reasons to post actions", () => {
