@@ -1,4 +1,8 @@
-import { queryOptions, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import {
+  getAgentSessionHistoryHydrationState,
+  shouldAutoHydrateAgentSessionHistory,
+} from "@/state/operations/agent-orchestrator/support/history-hydration";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 type UseAgentStudioTaskHydrationParams = {
@@ -19,27 +23,6 @@ type UseAgentStudioTaskHydrationResult = {
   isActiveSessionHistoryHydrating: boolean;
 };
 
-const sessionHistoryHydrationQueryOptions = (
-  repoPath: string,
-  taskId: string,
-  sessionId: string,
-  hydrateRequestedTaskSessionHistory: (input: {
-    taskId: string;
-    sessionId: string;
-  }) => Promise<void>,
-) =>
-  queryOptions({
-    queryKey: ["agent-session-history-hydration", repoPath, taskId, sessionId] as const,
-    queryFn: (): Promise<null> =>
-      hydrateRequestedTaskSessionHistory({
-        taskId,
-        sessionId,
-      }).then(() => null),
-    staleTime: Number.POSITIVE_INFINITY,
-    gcTime: Number.POSITIVE_INFINITY,
-    retry: false,
-  });
-
 export function useAgentStudioTaskHydration({
   activeRepo,
   activeTaskId,
@@ -47,58 +30,70 @@ export function useAgentStudioTaskHydration({
   hydrateRequestedTaskSessionHistory,
 }: UseAgentStudioTaskHydrationParams): UseAgentStudioTaskHydrationResult {
   const activeSessionId = activeSession?.sessionId ?? null;
-  const activeRepoPath = activeRepo ?? "";
+  const [requestState, setRequestState] = useState<{
+    sessionId: string | null;
+    status: "idle" | "pending" | "failed";
+  }>({ sessionId: null, status: "idle" });
+  const historyHydrationState = getAgentSessionHistoryHydrationState(activeSession);
   const shouldHydrateSessionHistory =
     Boolean(activeRepo && activeTaskId && activeSessionId) &&
-    !(
-      activeSession &&
-      activeSession.status !== "stopped" &&
-      activeSession.runtimeEndpoint.trim().length > 0 &&
-      activeSession.messages.length > 0
-    );
-  const sessionHistoryHydrationQuery = useQuery({
-    queryKey:
-      shouldHydrateSessionHistory && activeSessionId
-        ? sessionHistoryHydrationQueryOptions(
-            activeRepoPath,
-            activeTaskId,
-            activeSessionId,
-            hydrateRequestedTaskSessionHistory,
-          ).queryKey
-        : (["agent-session-history-hydration", "", "", ""] as const),
-    queryFn: async (): Promise<null> => {
-      if (!activeRepo || !activeTaskId || !activeSessionId) {
-        return null;
-      }
-      await hydrateRequestedTaskSessionHistory({
-        taskId: activeTaskId,
-        sessionId: activeSessionId,
+    shouldAutoHydrateAgentSessionHistory(activeSession);
+
+  useEffect(() => {
+    if (!activeSessionId) {
+      setRequestState({ sessionId: null, status: "idle" });
+      return;
+    }
+
+    if (!shouldHydrateSessionHistory) {
+      setRequestState((current) =>
+        current.sessionId === activeSessionId && current.status !== "idle"
+          ? { sessionId: activeSessionId, status: "idle" }
+          : current,
+      );
+      return;
+    }
+
+    setRequestState({ sessionId: activeSessionId, status: "pending" });
+    void hydrateRequestedTaskSessionHistory({
+      taskId: activeTaskId,
+      sessionId: activeSessionId,
+    })
+      .then(() => {
+        setRequestState((current) =>
+          current.sessionId === activeSessionId
+            ? { sessionId: activeSessionId, status: "idle" }
+            : current,
+        );
+      })
+      .catch(() => {
+        setRequestState((current) =>
+          current.sessionId === activeSessionId
+            ? { sessionId: activeSessionId, status: "failed" }
+            : current,
+        );
       });
-      return null;
-    },
-    enabled: shouldHydrateSessionHistory,
-    staleTime: Number.POSITIVE_INFINITY,
-    gcTime: Number.POSITIVE_INFINITY,
-    retry: false,
-  });
+  }, [
+    activeSessionId,
+    activeTaskId,
+    hydrateRequestedTaskSessionHistory,
+    shouldHydrateSessionHistory,
+  ]);
+
+  const isRequestPending =
+    requestState.sessionId === activeSessionId && requestState.status === "pending";
+  const isRequestFailed =
+    requestState.sessionId === activeSessionId && requestState.status === "failed";
 
   return {
     isActiveTaskHydrated: Boolean(activeRepo && activeTaskId),
     isActiveTaskHydrationFailed: false,
-    isActiveSessionHistoryHydrated: activeSessionId
-      ? shouldHydrateSessionHistory
-        ? sessionHistoryHydrationQuery.isSuccess
-        : true
-      : false,
+    isActiveSessionHistoryHydrated: activeSessionId ? historyHydrationState === "hydrated" : false,
     isActiveSessionHistoryHydrationFailed: activeSessionId
-      ? shouldHydrateSessionHistory
-        ? sessionHistoryHydrationQuery.isError
-        : false
+      ? historyHydrationState === "failed" || isRequestFailed
       : false,
     isActiveSessionHistoryHydrating: activeSessionId
-      ? shouldHydrateSessionHistory
-        ? sessionHistoryHydrationQuery.isPending
-        : false
+      ? historyHydrationState === "hydrating" || isRequestPending
       : false,
   };
 }

@@ -74,7 +74,14 @@ describe("useAgentStudioTaskHydration", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((state) => state.isActiveSessionHistoryHydrated);
+      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 1);
+
+      await harness.update(
+        createBaseArgs({
+          activeSession: createSession({ historyHydrationState: "hydrated" }),
+          hydrateRequestedTaskSessionHistory,
+        }),
+      );
 
       expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledTimes(1);
       expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledWith({
@@ -84,7 +91,7 @@ describe("useAgentStudioTaskHydration", () => {
 
       await harness.update(
         createBaseArgs({
-          activeSession: createSession(),
+          activeSession: createSession({ historyHydrationState: "hydrated" }),
           hydrateRequestedTaskSessionHistory,
         }),
       );
@@ -132,6 +139,7 @@ describe("useAgentStudioTaskHydration", () => {
       createBaseArgs({
         activeSession: createSession({
           status: "running",
+          historyHydrationState: "hydrated",
           messages: [
             {
               id: "kickoff",
@@ -152,6 +160,64 @@ describe("useAgentStudioTaskHydration", () => {
       expect(harness.getLatest().isActiveSessionHistoryHydrated).toBe(true);
       expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(false);
       expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("still hydrates when a reused live session only has newly added local messages", async () => {
+    const hydrateRequestedTaskSessionHistory = mock(async (): Promise<void> => {});
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeSession: createSession({
+          status: "running",
+          historyHydrationState: "not_requested",
+          messages: [
+            {
+              id: "local-user-message",
+              role: "user",
+              content: "Generate the PR",
+              timestamp: "2026-02-22T08:00:05.000Z",
+            },
+          ],
+        }),
+        hydrateRequestedTaskSessionHistory,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 1);
+
+      await harness.update(
+        createBaseArgs({
+          activeSession: createSession({
+            status: "running",
+            historyHydrationState: "hydrated",
+            messages: [
+              {
+                id: "m-user",
+                role: "user",
+                content: "Earlier request",
+                timestamp: "2026-02-22T08:00:00.000Z",
+              },
+              {
+                id: "local-user-message",
+                role: "user",
+                content: "Generate the PR",
+                timestamp: "2026-02-22T08:00:05.000Z",
+              },
+            ],
+          }),
+          hydrateRequestedTaskSessionHistory,
+        }),
+      );
+
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledTimes(1);
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledWith({
+        taskId: "task-1",
+        sessionId: "session-1",
+      });
     } finally {
       await harness.unmount();
     }
