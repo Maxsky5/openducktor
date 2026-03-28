@@ -3,7 +3,7 @@ import { appQueryClient } from "@/lib/query-client";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
-import { hasOnlySessionHeaderMessages } from "../support/session-prompt";
+import { requiresHydratedAgentSessionHistory } from "../support/history-hydration";
 import type {
   StartSessionContext,
   StartSessionCreationInput,
@@ -155,11 +155,7 @@ export const resolveLoadedSourceSession = async ({
       entry.taskId === ctx.taskId && entry.role === ctx.role && entry.sessionId === sourceSessionId,
   );
   if (existingSourceSession) {
-    if (
-      existingSourceSession.messages.length === 0 ||
-      (existingSourceSession.status === "stopped" &&
-        hasOnlySessionHeaderMessages(existingSourceSession))
-    ) {
+    if (requiresHydratedAgentSessionHistory(existingSourceSession)) {
       return ensureSessionHydrated({
         ctx,
         deps,
