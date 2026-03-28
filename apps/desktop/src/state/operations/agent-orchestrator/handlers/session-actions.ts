@@ -179,7 +179,12 @@ export const createAgentSessionActions = ({
       });
     }
 
-    const selectedModel = sessionsRef.current[sessionId]?.selectedModel ?? undefined;
+    const hydratedSession = sessionsRef.current[sessionId];
+    if (!hydratedSession || isAgentSessionWaitingInput(hydratedSession)) {
+      return;
+    }
+
+    const selectedModel = hydratedSession.selectedModel ?? undefined;
     turnStartedAtBySessionRef.current[sessionId] = Date.now();
     if (turnModelBySessionRef) {
       turnModelBySessionRef.current[sessionId] = selectedModel ?? null;
