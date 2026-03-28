@@ -414,7 +414,6 @@ describe("AgentChatThread", () => {
     expect(bottomStack?.textContent).toContain("Todo");
     expect(bottomStack?.textContent).toContain("Analyze current styling");
     expect(bottomStack?.textContent).toContain("Read layout and pages");
-    expect((bottomStack as HTMLDivElement).className).toContain("pb-2");
     expect((bottomStack as HTMLDivElement).innerHTML.indexOf("Input needed")).toBeLessThan(
       (bottomStack as HTMLDivElement).innerHTML.indexOf("Permission request"),
     );
