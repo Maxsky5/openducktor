@@ -120,30 +120,49 @@ export const getAutopilotSelectedValue = (rule: AutopilotRule): AutopilotSelectV
   return rule.actionIds[0] ?? AUTOPILOT_DISABLED_VALUE;
 };
 
+const hasSameActionIds = (
+  left: AutopilotRule["actionIds"],
+  right: AutopilotRule["actionIds"],
+): boolean => {
+  return left.length === right.length && left.every((actionId, index) => actionId === right[index]);
+};
+
 export const setAutopilotRuleAction = (
   settings: AutopilotSettings,
   eventId: AutopilotEventId,
   value: AutopilotSelectValue,
 ): AutopilotSettings => {
-  const nextSettings = createDefaultAutopilotSettings();
   const currentRulesByEvent = new Map<AutopilotEventId, AutopilotRule>(
     settings.rules.map((rule) => [rule.eventId, rule]),
   );
+  let hasChanged = false;
 
-  nextSettings.rules = AUTOPILOT_EVENT_IDS.map((id) => {
+  const rules = AUTOPILOT_EVENT_IDS.map((id) => {
     const currentRule = currentRulesByEvent.get(id) ?? { eventId: id, actionIds: [] };
-    if (id !== eventId) {
-      return {
-        eventId: id,
-        actionIds: [...currentRule.actionIds],
-      };
+    if (!currentRulesByEvent.has(id)) {
+      hasChanged = true;
     }
+
+    if (id !== eventId) {
+      return currentRule;
+    }
+
+    const nextActionIds =
+      value === AUTOPILOT_DISABLED_VALUE
+        ? []
+        : [value, ...currentRule.actionIds.filter((actionId) => actionId !== value)];
+
+    if (hasSameActionIds(currentRule.actionIds, nextActionIds)) {
+      return currentRule;
+    }
+
+    hasChanged = true;
 
     return {
       eventId: id,
-      actionIds: value === AUTOPILOT_DISABLED_VALUE ? [] : [value],
+      actionIds: nextActionIds,
     };
   });
 
-  return nextSettings;
+  return hasChanged ? { ...settings, rules } : settings;
 };
