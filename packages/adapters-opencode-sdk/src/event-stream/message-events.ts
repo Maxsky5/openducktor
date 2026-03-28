@@ -2,6 +2,7 @@ import type { Event, Part } from "@opencode-ai/sdk/v2/client";
 import {
   asUnknownRecord,
   readArrayProp,
+  readRecordProp,
   readStringProp,
   readUnknownProp,
   type UnknownRecord,
@@ -9,18 +10,20 @@ import {
 import {
   extractMessageTotalTokens,
   readMessageModelSelection,
+  readTextFromMessageInfo,
   readTextFromParts,
   sanitizeAssistantMessage,
 } from "../message-normalizers";
+import { toIsoFromEpoch } from "../session-runtime-utils";
 import { mapPartToAgentStreamPart } from "../stream-part-mapper";
-import {
-  readEventInfo,
-  readEventPart,
-  readEventProperties,
-  readMessageCompletedAt,
-} from "./schemas";
+import { readEventInfo, readEventPart, readEventProperties } from "./schemas";
 import type { EventStreamRuntime } from "./shared";
-import { applyDeltaToPart, isReasoningDeltaField, markSessionActive } from "./shared";
+import {
+  applyDeltaToPart,
+  emitSessionIdle,
+  isReasoningDeltaField,
+  markSessionActive,
+} from "./shared";
 
 const emitAssistantPart = (
   runtime: EventStreamRuntime,
@@ -82,6 +85,63 @@ const applyPendingDeltas = (runtime: EventStreamRuntime, partId: string, basePar
   return nextPart;
 };
 
+const getKnownMessageParts = (runtime: EventStreamRuntime, messageId: string): Part[] => {
+  return [...runtime.partsById.values()].filter((part) => part.messageID === messageId);
+};
+
+const hasTerminalStopSignal = (parts: Part[], finish: string | undefined): boolean => {
+  if (finish === "stop") {
+    return true;
+  }
+
+  return parts.some(
+    (part) =>
+      part.type === "step-finish" && typeof part.reason === "string" && part.reason === "stop",
+  );
+};
+
+const rawPartsHaveTerminalStopSignal = (parts: unknown[]): boolean => {
+  return parts.some((part) => {
+    const record = asUnknownRecord(part);
+    return (
+      record !== undefined &&
+      readStringProp(record, ["type"]) === "step-finish" &&
+      readStringProp(record, ["reason"]) === "stop"
+    );
+  });
+};
+
+const emitKnownUserMessage = (
+  runtime: EventStreamRuntime,
+  input: {
+    messageId: string;
+    timestamp: string;
+    model?: ReturnType<typeof readMessageModelSelection>;
+  },
+): boolean => {
+  const session = runtime.getSession(runtime.sessionId);
+  const emittedMessageIds = session?.emittedMessageIds;
+  if (emittedMessageIds?.has(input.messageId)) {
+    return true;
+  }
+
+  const visible = readTextFromParts(getKnownMessageParts(runtime, input.messageId));
+  if (visible.trim().length === 0) {
+    return false;
+  }
+
+  runtime.emit(runtime.sessionId, {
+    type: "user_message",
+    sessionId: runtime.sessionId,
+    timestamp: input.timestamp,
+    messageId: input.messageId,
+    message: visible,
+    ...(input.model ? { model: input.model } : {}),
+  });
+  emittedMessageIds?.add(input.messageId);
+  return true;
+};
+
 const readRawMessageParts = (properties: unknown, info: unknown): unknown[] => {
   const directParts = readArrayProp(properties, "parts");
   if (directParts) {
@@ -121,22 +181,34 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     ? readStringProp(infoRecord, ["id", "messageID", "messageId", "message_id"])
     : undefined;
   const role = infoRecord ? readStringProp(infoRecord, ["role"]) : undefined;
+  const messageTimestamp = (() => {
+    const infoTime = infoRecord ? readRecordProp(infoRecord, "time") : undefined;
+    return toIsoFromEpoch(infoTime?.created, runtime.now);
+  })();
+  const messageModel = readMessageModelSelection(infoRecord);
   const session = runtime.getSession(runtime.sessionId);
   const previousRole = messageId ? runtime.messageRoleById.get(messageId) : undefined;
   if (messageId && role) {
     runtime.messageRoleById.set(messageId, role);
+    session?.messageMetadataById.set(messageId, {
+      timestamp: messageTimestamp,
+      ...(messageModel ? { model: messageModel } : {}),
+    });
   }
 
-  const completedAt = infoRecord ? readMessageCompletedAt(infoRecord) : undefined;
   const finish = infoRecord ? readStringProp(infoRecord, ["finish"]) : undefined;
-  const isTerminalAssistantUpdate =
+  const rawParts = readRawMessageParts(properties, infoRecord);
+  const preserveIdleState =
     messageId !== undefined &&
     role === "assistant" &&
-    (completedAt !== undefined || finish === "stop");
-  const preserveIdleState = isTerminalAssistantUpdate && session?.hasIdleSinceActivity === true;
+    session?.hasIdleSinceActivity === true &&
+    (finish === "stop" ||
+      rawPartsHaveTerminalStopSignal(rawParts) ||
+      (messageId
+        ? hasTerminalStopSignal(getKnownMessageParts(runtime, messageId), finish)
+        : false));
 
   const normalizedParts: Part[] = [];
-  const rawParts = readRawMessageParts(properties, infoRecord);
   if (messageId && rawParts.length > 0) {
     for (const rawPart of rawParts) {
       const rawPartRecord = asUnknownRecord(rawPart);
@@ -170,38 +242,72 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
   ) {
     emitKnownAssistantPartsForMessage(runtime, messageId, role, !preserveIdleState);
   }
+
+  if (messageId && role === "user") {
+    const userParts =
+      normalizedParts.length > 0 ? normalizedParts : getKnownMessageParts(runtime, messageId);
+    const textFromParts = readTextFromParts(userParts);
+    const visible = textFromParts.length > 0 ? textFromParts : readTextFromMessageInfo(infoRecord);
+    if (visible.trim().length === 0) {
+      return true;
+    }
+
+    const emittedMessageIds = session?.emittedMessageIds;
+    if (emittedMessageIds?.has(messageId)) {
+      return true;
+    }
+
+    runtime.emit(runtime.sessionId, {
+      type: "user_message",
+      sessionId: runtime.sessionId,
+      timestamp: messageTimestamp,
+      messageId,
+      message: visible,
+      ...(messageModel ? { model: messageModel } : {}),
+    });
+    emittedMessageIds?.add(messageId);
+    return true;
+  }
+
+  const assistantParts =
+    messageId && role === "assistant"
+      ? normalizedParts.length > 0
+        ? normalizedParts
+        : getKnownMessageParts(runtime, messageId)
+      : [];
+  const hasStopSignal = hasTerminalStopSignal(assistantParts, finish);
   const shouldEmitCompletedMessage =
-    messageId !== undefined &&
-    role === "assistant" &&
-    normalizedParts.length > 0 &&
-    (completedAt !== undefined || finish === "stop");
+    messageId !== undefined && role === "assistant" && assistantParts.length > 0 && hasStopSignal;
   if (!shouldEmitCompletedMessage || !messageId) {
     return true;
   }
 
-  const text = readTextFromParts(normalizedParts);
+  const text = readTextFromParts(assistantParts);
   const visible = sanitizeAssistantMessage(text);
   if (visible.length === 0) {
+    emitSessionIdle(runtime);
     return true;
   }
 
-  const totalTokens = extractMessageTotalTokens(infoRecord, normalizedParts);
+  const totalTokens = extractMessageTotalTokens(infoRecord, assistantParts);
   const assistantModel = readMessageModelSelection(infoRecord);
-  const emittedAssistantMessageIds = session?.emittedAssistantMessageIds;
-  if (emittedAssistantMessageIds?.has(messageId)) {
+  const emittedMessageIds = session?.emittedMessageIds;
+  if (emittedMessageIds?.has(messageId)) {
     return true;
   }
 
   runtime.emit(runtime.sessionId, {
     type: "assistant_message",
     sessionId: runtime.sessionId,
-    timestamp: runtime.now(),
+    timestamp: messageTimestamp,
     messageId,
     message: visible,
     ...(typeof totalTokens === "number" ? { totalTokens } : {}),
     ...(assistantModel ? { model: assistantModel } : {}),
   });
-  emittedAssistantMessageIds?.add(messageId);
+  emittedMessageIds?.add(messageId);
+
+  emitSessionIdle(runtime);
   return true;
 };
 
@@ -283,6 +389,16 @@ const handleMessagePartUpdatedEvent = (event: Event, runtime: EventStreamRuntime
   const nextPart = applyPendingDeltas(runtime, partId, current);
   runtime.partsById.set(partId, nextPart);
   emitAssistantPart(runtime, nextPart);
+  const messageId = nextPart.messageID;
+  const role = runtime.messageRoleById.get(messageId);
+  if (role === "user") {
+    const metadata = runtime.getSession(runtime.sessionId)?.messageMetadataById.get(messageId);
+    emitKnownUserMessage(runtime, {
+      messageId,
+      timestamp: metadata?.timestamp ?? runtime.now(),
+      ...(metadata?.model ? { model: metadata.model } : {}),
+    });
+  }
   return true;
 };
 

@@ -966,7 +966,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }
   });
 
-  test("sends user message and appends optimistic user entry", async () => {
+  test("sends user message without mutating the transcript optimistically", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
     const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
@@ -1032,16 +1032,184 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       await actions.sendAgentMessage("session-1", " hello ");
       expect(sendCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.status).toBe("running");
-      const latest = sessionsRef.current["session-1"]?.messages.at(-1);
-      expect(latest?.role).toBe("user");
-      expect(latest?.content).toBe("hello");
-      if (!latest?.meta || latest.meta.kind !== "user") {
-        throw new Error("Expected user message metadata");
-      }
-      expect(latest.meta.providerId).toBe("openai");
-      expect(latest.meta.modelId).toBe("gpt-5.3-codex");
-      expect(latest.meta.variant).toBe("high");
-      expect(latest.meta.profileId).toBe("Hephaestus (Deep Agent)");
+      expect(sessionsRef.current["session-1"]?.messages).toHaveLength(0);
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("hydrates requested history before sending to an unhydrated reused session", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalSendUserMessage = adapter.sendUserMessage;
+    const callOrder: string[] = [];
+
+    adapter.hasSession = () => true;
+    adapter.listLiveAgentSessionSnapshots = async () => [];
+    adapter.sendUserMessage = async () => {
+      callOrder.push("send");
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          status: "idle",
+          historyHydrationState: "not_requested",
+          messages: [],
+        }),
+      },
+    };
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[sessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {
+        callOrder.push("hydrate");
+        const currentSession = sessionsRef.current["session-1"];
+        if (!currentSession) {
+          throw new Error("Expected session to hydrate");
+        }
+        sessionsRef.current["session-1"] = {
+          ...currentSession,
+          historyHydrationState: "hydrated",
+          messages: [
+            {
+              id: "m-user",
+              role: "user",
+              content: "Earlier request",
+              timestamp: "2026-02-22T08:00:00.000Z",
+            },
+          ],
+        };
+      },
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+    });
+
+    try {
+      await actions.sendAgentMessage("session-1", "hello");
+
+      expect(callOrder).toEqual(["hydrate", "send"]);
+      expect(sessionsRef.current["session-1"]?.messages.map((message) => message.content)).toEqual([
+        "Earlier request",
+      ]);
+      expect(sessionsRef.current["session-1"]?.historyHydrationState).toBe("hydrated");
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("does not send a free-form message if hydration reveals pending input", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalSendUserMessage = adapter.sendUserMessage;
+    let sendCalls = 0;
+
+    adapter.hasSession = () => true;
+    adapter.listLiveAgentSessionSnapshots = async () => [];
+    adapter.sendUserMessage = async () => {
+      sendCalls += 1;
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          status: "idle",
+          historyHydrationState: "not_requested",
+          messages: [],
+        }),
+      },
+    };
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[sessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {
+        const currentSession = sessionsRef.current["session-1"];
+        if (!currentSession) {
+          throw new Error("Expected session to hydrate");
+        }
+        sessionsRef.current["session-1"] = {
+          ...currentSession,
+          historyHydrationState: "hydrated",
+          pendingQuestions: [
+            {
+              requestId: "question-1",
+              questions: [{ header: "Confirm", question: "Confirm", options: [] }],
+            },
+          ],
+        };
+      },
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+    });
+
+    try {
+      await actions.sendAgentMessage("session-1", "hello");
+
+      expect(sendCalls).toBe(0);
+      expect(sessionsRef.current["session-1"]?.status).toBe("idle");
+      expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(1);
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;

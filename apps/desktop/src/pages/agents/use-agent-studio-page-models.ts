@@ -269,6 +269,7 @@ export function useAgentStudioPageModels({
     isSessionWorking: sessionActions.isSessionWorking,
     showThinkingMessages: chatSettings.showThinkingMessages,
     isContextSwitching,
+    isSessionHistoryLoading: core.isSessionHistoryHydrating,
     taskId: core.taskId,
     activeSessionAgentColors: modelSelection.activeSessionAgentColors,
     agentStudioReady: readiness.agentStudioReady,

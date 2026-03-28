@@ -15,6 +15,7 @@ const createHookArgs = (showThinkingMessages = false): HookArgs => ({
   isSessionWorking: false,
   showThinkingMessages,
   isContextSwitching: false,
+  isSessionHistoryLoading: false,
   taskId: "task-1",
   activeSessionAgentColors: {},
   agentStudioReady: true,

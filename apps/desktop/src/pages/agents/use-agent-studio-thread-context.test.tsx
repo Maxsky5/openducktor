@@ -133,7 +133,7 @@ describe("useAgentStudioThreadContext", () => {
     await harness.unmount();
   });
 
-  test("clears context-switch intent after one animation frame when no hydration is active", async () => {
+  test("keeps the visible thread ready immediately when the selected session is already available", async () => {
     const session = createSession({
       runtimeKind: "opencode",
       sessionId: "session-a",
@@ -148,11 +148,6 @@ describe("useAgentStudioThreadContext", () => {
 
     await harness.mount();
     await harness.update(createHookArgs({ activeSession: session, contextSwitchVersion: 1 }));
-    expect(harness.getLatest().isContextSwitching).toBe(true);
-
-    await harness.run(() => {
-      flushRafFrames(1);
-    });
     expect(harness.getLatest().isContextSwitching).toBe(false);
     await harness.unmount();
   });
@@ -193,11 +188,28 @@ describe("useAgentStudioThreadContext", () => {
         isSessionHistoryHydrating: false,
       }),
     );
-    expect(harness.getLatest().isContextSwitching).toBe(true);
+    expect(harness.getLatest().isContextSwitching).toBe(false);
+    await harness.unmount();
+  });
 
-    await harness.run(() => {
-      flushRafFrames(1);
+  test("does not treat session history hydration as a full context switch once session is selected", async () => {
+    const session = createSession({
+      runtimeKind: "opencode",
+      sessionId: "session-a",
+      externalSessionId: "external-a",
+      role: "spec",
+      scenario: "spec_initial",
     });
+    const harness = createHookHarness(
+      useAgentStudioThreadContext,
+      createHookArgs({
+        activeSession: session,
+        isSessionHistoryHydrating: true,
+      }),
+    );
+
+    await harness.mount();
+    expect(harness.getLatest().threadSession?.sessionId).toBe("session-a");
     expect(harness.getLatest().isContextSwitching).toBe(false);
     await harness.unmount();
   });

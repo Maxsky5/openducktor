@@ -51,9 +51,10 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   externalSessionId: "external-session-1",
   eventTransportKey: "http://127.0.0.1:12345",
   hasIdleSinceActivity: false,
-  emittedAssistantMessageIds: new Set<string>(),
+  emittedMessageIds: new Set<string>(),
   partsById: new Map(),
   messageRoleById: new Map(),
+  messageMetadataById: new Map(),
   pendingDeltasByPartId: new Map(),
 });
 
@@ -93,6 +94,140 @@ const assistantRoleEvent = (messageId: string): Event =>
   }) as unknown as Event;
 
 describe("event-stream", () => {
+  test("emits user_message when opencode acknowledges a user turn", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "user-message-1",
+            role: "user",
+            sessionID: "external-session-1",
+            providerID: "openai",
+            modelID: "gpt-5",
+            agent: "Hephaestus",
+            variant: "high",
+            text: "Generate the PR",
+            time: {
+              created: Date.parse("2026-02-22T12:00:03.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    if (userMessages[0]?.type !== "user_message") {
+      throw new Error("Expected user_message event");
+    }
+    expect(userMessages[0].messageId).toBe("user-message-1");
+    expect(userMessages[0].message).toBe("Generate the PR");
+    expect(userMessages[0].timestamp).toBe("2026-02-22T12:00:03.000Z");
+    expect(userMessages[0].model).toEqual({
+      providerId: "openai",
+      modelId: "gpt-5",
+      profileId: "Hephaestus",
+      variant: "high",
+    });
+  });
+
+  test("emits user_message from stored user text parts when message.updated omits visible text", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "user-part-1",
+            sessionID: "external-session-1",
+            messageID: "user-message-2",
+            type: "text",
+            text: "Generate the PR",
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "user-message-2",
+            role: "user",
+            sessionID: "external-session-1",
+            providerID: "openai",
+            modelID: "gpt-5",
+            agent: "Hephaestus",
+            variant: "high",
+            time: {
+              created: Date.parse("2026-02-22T12:00:04.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    if (userMessages[0]?.type !== "user_message") {
+      throw new Error("Expected user_message event");
+    }
+    expect(userMessages[0]).toMatchObject({
+      messageId: "user-message-2",
+      message: "Generate the PR",
+      timestamp: "2026-02-22T12:00:04.000Z",
+    });
+  });
+
+  test("emits user_message when user text parts arrive after message.updated", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "user-message-3",
+            role: "user",
+            sessionID: "external-session-1",
+            providerID: "openai",
+            modelID: "gpt-5",
+            agent: "Hephaestus",
+            variant: "high",
+            time: {
+              created: Date.parse("2026-02-22T12:00:05.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "user-part-2",
+            sessionID: "external-session-1",
+            messageID: "user-message-3",
+            type: "text",
+            text: "Ship it",
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    if (userMessages[0]?.type !== "user_message") {
+      throw new Error("Expected user_message event");
+    }
+    expect(userMessages[0]).toMatchObject({
+      messageId: "user-message-3",
+      message: "Ship it",
+      timestamp: "2026-02-22T12:00:05.000Z",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+        profileId: "Hephaestus",
+        variant: "high",
+      },
+    });
+  });
+
   test("deduplicates assistant_message across repeated message.updated events", async () => {
     const assistantEvent = {
       type: "message.updated",
@@ -170,7 +305,7 @@ describe("event-stream", () => {
     expect(emitted.some((event) => event.type === "assistant_part")).toBe(true);
   });
 
-  test("does not emit session_idle for stop-finished assistant turns without visible text", async () => {
+  test("emits session_idle for stop-finished assistant turns without visible text", async () => {
     const emitted = await runEventStream([
       {
         type: "message.updated",
@@ -195,11 +330,11 @@ describe("event-stream", () => {
     ]);
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
-    expect(idleEvents).toHaveLength(0);
+    expect(idleEvents).toHaveLength(1);
     expect(emitted.some((event) => event.type === "assistant_message")).toBe(false);
   });
 
-  test("does not emit session_idle when assistant completion has completed time without finish stop", async () => {
+  test("does not emit session_idle or final assistant_message when completion lacks a stop signal", async () => {
     const emitted = await runEventStream([
       {
         type: "message.updated",
@@ -228,10 +363,10 @@ describe("event-stream", () => {
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
     expect(idleEvents).toHaveLength(0);
-    expect(emitted.some((event) => event.type === "assistant_message")).toBe(true);
+    expect(emitted.some((event) => event.type === "assistant_message")).toBe(false);
   });
 
-  test("emits only the upstream session.idle when a terminal assistant update is followed by session.idle", async () => {
+  test("deduplicates upstream session.idle after a terminal assistant update", async () => {
     const emitted = await runEventStream([
       {
         type: "message.updated",
@@ -257,7 +392,7 @@ describe("event-stream", () => {
       {
         type: "session.idle",
         properties: {
-          directory: "/repo",
+          sessionID: "external-session-1",
         },
       } as unknown as Event,
     ]);
@@ -266,12 +401,117 @@ describe("event-stream", () => {
     expect(idleEvents).toHaveLength(1);
   });
 
+  test("emits final assistant_message from known parts when terminal metadata arrives later", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "assistant-part-late-1",
+            sessionID: "external-session-1",
+            messageID: "assistant-message-late-final",
+            type: "text",
+            text: "Final answer",
+            time: { start: 1, end: 1 },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-message-late-final",
+            role: "assistant",
+            sessionID: "external-session-1",
+            providerID: "anthropic",
+            modelID: "claude-sonnet",
+            agent: "Hephaestus",
+            variant: "max",
+            tokens: {
+              input: 10,
+              output: 5,
+            },
+            time: {
+              created: Date.parse("2026-02-22T12:00:06.000Z"),
+              completed: Date.parse("2026-02-22T12:00:08.000Z"),
+            },
+            finish: "stop",
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
+    expect(assistantMessages).toHaveLength(1);
+    if (assistantMessages[0]?.type !== "assistant_message") {
+      throw new Error("Expected assistant_message event");
+    }
+    expect(assistantMessages[0]).toMatchObject({
+      messageId: "assistant-message-late-final",
+      message: "Final answer",
+      totalTokens: 15,
+      model: {
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+        profileId: "Hephaestus",
+        variant: "max",
+      },
+    });
+
+    const idleEvents = emitted.filter((event) => event.type === "session_idle");
+    expect(idleEvents).toHaveLength(1);
+  });
+
+  test("does not emit idle or final assistant_message from known parts without a stop signal", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "assistant-part-late-2",
+            sessionID: "external-session-1",
+            messageID: "assistant-message-late-nonfinal",
+            type: "text",
+            text: "Intermediate answer",
+            time: { start: 1, end: 1 },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-message-late-nonfinal",
+            role: "assistant",
+            sessionID: "external-session-1",
+            providerID: "anthropic",
+            modelID: "claude-sonnet",
+            agent: "Hephaestus",
+            variant: "max",
+            tokens: {
+              input: 10,
+              output: 5,
+            },
+            time: {
+              created: Date.parse("2026-02-22T12:00:06.000Z"),
+              completed: Date.parse("2026-02-22T12:00:08.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    expect(emitted.some((event) => event.type === "assistant_message")).toBe(false);
+    const idleEvents = emitted.filter((event) => event.type === "session_idle");
+    expect(idleEvents).toHaveLength(0);
+  });
+
   test("preserves existing idle state when session.idle arrives before a terminal assistant update", async () => {
     const emitted = await runEventStream([
       {
         type: "session.idle",
         properties: {
-          directory: "/repo",
+          sessionID: "external-session-1",
         },
       } as unknown as Event,
       {
@@ -301,7 +541,7 @@ describe("event-stream", () => {
     expect(idleEvents).toHaveLength(1);
   });
 
-  test("does not emit session_idle across repeated terminal message updates", async () => {
+  test("does not emit duplicate session_idle across repeated terminal message updates", async () => {
     const terminalEvent = {
       type: "message.updated",
       properties: {
@@ -329,6 +569,49 @@ describe("event-stream", () => {
 
     const emitted = await runEventStream([terminalEvent, terminalEvent]);
 
+    const idleEvents = emitted.filter((event) => event.type === "session_idle");
+    expect(idleEvents).toHaveLength(1);
+  });
+
+  test("marks session idle on session.status idle so later terminal updates do not duplicate it", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "external-session-1",
+          status: {
+            type: "idle",
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-message-status-idle",
+            role: "assistant",
+            sessionID: "external-session-1",
+            time: {
+              completed: 1,
+            },
+            finish: "stop",
+          },
+          parts: [
+            {
+              id: "text-status-idle-1",
+              sessionID: "external-session-1",
+              messageID: "assistant-message-status-idle",
+              type: "text",
+              text: "Done after idle status",
+              time: { start: 1, end: 1 },
+            },
+          ],
+        },
+      } as unknown as Event,
+    ]);
+
+    const statusEvents = emitted.filter((event) => event.type === "session_status");
+    expect(statusEvents).toHaveLength(1);
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
     expect(idleEvents).toHaveLength(0);
   });

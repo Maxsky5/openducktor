@@ -100,7 +100,7 @@ Must not own:
   - `fork`
 - Uses stale-repo guards across async boundaries.
 - Rolls back newly created remote sessions when the repo context becomes stale.
-- Builder PR generation now goes through this same path using scenario `build_pull_request_generation`, which is `fork`-only.
+- Builder PR generation now goes through this same path using scenario `build_pull_request_generation`, which supports `reuse` and `fork` from an existing Builder session.
 
 `handlers/public-operations.ts`
 

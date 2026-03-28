@@ -94,6 +94,7 @@ type UseAgentStudioThreadModelArgs = {
   isSessionWorking: boolean;
   showThinkingMessages: boolean;
   isContextSwitching: boolean;
+  isSessionHistoryLoading: boolean;
   taskId: string;
   activeSessionAgentColors: Record<string, string>;
   agentStudioReady: boolean;
@@ -122,6 +123,7 @@ export const useAgentStudioThreadModel = ({
   isSessionWorking,
   showThinkingMessages,
   isContextSwitching,
+  isSessionHistoryLoading,
   taskId,
   activeSessionAgentColors,
   agentStudioReady,
@@ -166,6 +168,7 @@ export const useAgentStudioThreadModel = ({
         isSessionWorking,
         showThinkingMessages,
         isSessionViewLoading: isContextSwitching,
+        isSessionHistoryLoading,
         roleOptions: ROLE_OPTIONS,
         agentStudioReady,
         agentStudioBlockedReason,
@@ -197,6 +200,7 @@ export const useAgentStudioThreadModel = ({
       handlePermissionReply,
       handleRefreshChecks,
       isContextSwitching,
+      isSessionHistoryLoading,
       isLoadingChecks,
       isSessionWorking,
       isSending,

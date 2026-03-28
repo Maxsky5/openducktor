@@ -501,7 +501,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
     template: joinPromptBlocks(
       "Scenario: Pull request generation.",
       bulletSection("Objective", [
-        "Create or update the canonical pull request for this task from the current forked Builder worktree.",
+        "Create or update the canonical pull request for this task from the current Builder session or a fork created from it.",
       ]),
       bulletSection("Required sequence", [
         "Use the runtime's native git and GitHub tools to inspect branch state, push the source branch if needed, and create or update the pull request.",
@@ -593,7 +593,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
     purpose: "kickoff",
     builtinVersion: 2,
     template:
-      'Focus only on pull request publication work for this Builder fork.\nInspect branch and remote state, create or update the GitHub pull request, then call odt_set_pull_request with taskId {{task.id}}, providerId "github", and the pull request number.\nUse taskId {{task.id}} for every odt_* tool call.',
+      'Focus only on pull request publication work for the current Builder session or fork.\nInspect branch and remote state, create or update the GitHub pull request, then call odt_set_pull_request with taskId {{task.id}}, providerId "github", and the pull request number.\nUse taskId {{task.id}} for every odt_* tool call.',
   },
   "kickoff.qa_review": {
     id: "kickoff.qa_review",

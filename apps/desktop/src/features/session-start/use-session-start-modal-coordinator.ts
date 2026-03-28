@@ -9,6 +9,7 @@ import { useCallback } from "react";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoSettingsInput } from "@/types/state-slices";
+import { orderStartModesForDisplay } from "./session-start-display";
 import type { SessionStartModalIntent, SessionStartPostAction } from "./session-start-modal-types";
 import { SCENARIO_LABELS } from "./session-start-prompts";
 import type { SessionStartRequestReason } from "./session-start-types";
@@ -35,7 +36,9 @@ export const buildSessionStartModalDescription = ({
   scenario: AgentScenario;
 }): string => {
   const scenarioLabel = SCENARIO_LABELS[scenario] ?? scenario;
-  const allowedStartModes = getAgentScenarioDefinition(scenario).allowedStartModes;
+  const allowedStartModes = orderStartModesForDisplay(
+    getAgentScenarioDefinition(scenario).allowedStartModes,
+  );
   if (allowedStartModes.length > 1) {
     const allowedModeLabels = allowedStartModes.map((mode) => {
       if (mode === "fresh") {

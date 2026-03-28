@@ -253,6 +253,26 @@ describe("use-agent-studio-model-selection-model", () => {
     });
   });
 
+  test("derives live session context window from stored model identity without scanning messages", () => {
+    const lookup = toModelDescriptorByKey(CATALOG);
+
+    expect(
+      extractLatestContextUsage({
+        messages: null,
+        liveContextUsage: {
+          totalTokens: 44,
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+        modelDescriptorByKey: lookup,
+      }),
+    ).toEqual({
+      totalTokens: 44,
+      contextWindow: 200_000,
+      outputLimit: 8_192,
+    });
+  });
+
   test("falls back to an older assistant message when the latest tokenized one has no usable context window", () => {
     const lookup = toModelDescriptorByKey(CATALOG);
     const messages: AgentChatMessage[] = [

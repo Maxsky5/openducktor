@@ -1016,6 +1016,40 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("jumps to bottom without animation when session history loading settles", async () => {
+    const harness = await mountHarness(
+      {
+        rows: [],
+        activeSessionId: "session-1",
+        isSessionViewLoading: true,
+      },
+      { attachContainer: true, attachContent: true },
+    );
+
+    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
+    const content = harness.messagesContentRef.current as MockMessagesContent | null;
+    if (!container || !content) {
+      throw new Error("Expected messages container and content");
+    }
+
+    container.scrollTo.mockClear();
+    Object.assign(content, { scrollHeight: 1600 });
+    Object.assign(container, { scrollHeight: 1600 });
+
+    await harness.update({
+      rows: createRows(80),
+      activeSessionId: "session-1",
+      isSessionViewLoading: false,
+    });
+
+    expect(container.scrollTo).toHaveBeenCalledWith({
+      top: 1600,
+      behavior: "auto",
+    });
+
+    await harness.unmount();
+  });
+
   test("restores bottom pinning when downward shifts reach the latest rows", async () => {
     const harness = await mountHarness({
       rows: createRows(80),

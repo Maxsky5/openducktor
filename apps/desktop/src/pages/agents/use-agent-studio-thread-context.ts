@@ -17,7 +17,7 @@ type AgentStudioThreadContext = {
 export const useAgentStudioThreadContext = ({
   activeSession,
   isTaskHydrating,
-  isSessionHistoryHydrating,
+  isSessionHistoryHydrating: _isSessionHistoryHydrating,
   contextSwitchVersion,
 }: UseAgentStudioThreadContextArgs): AgentStudioThreadContext => {
   const [isContextSwitchIntentActive, setIsContextSwitchIntentActive] = useState(false);
@@ -43,7 +43,7 @@ export const useAgentStudioThreadContext = ({
       return;
     }
 
-    if (isTaskHydrating || isSessionHistoryHydrating) {
+    if (isTaskHydrating) {
       return;
     }
 
@@ -69,7 +69,7 @@ export const useAgentStudioThreadContext = ({
         clearIntentRafRef.current = null;
       }
     };
-  }, [isContextSwitchIntentActive, isSessionHistoryHydrating, isTaskHydrating]);
+  }, [isContextSwitchIntentActive, isTaskHydrating]);
 
   useEffect(() => {
     return () => {
@@ -82,6 +82,7 @@ export const useAgentStudioThreadContext = ({
   return {
     threadSession: activeSession,
     activeSessionId,
-    isContextSwitching: isTaskHydrating || isSessionHistoryHydrating || isContextSwitchIntentActive,
+    isContextSwitching:
+      isTaskHydrating || (isContextSwitchIntentActive && activeSessionId === null),
   };
 };

@@ -274,6 +274,7 @@ describe("agents-page-view-model", () => {
       isSessionWorking: true,
       showThinkingMessages: true,
       isSessionViewLoading: false,
+      isSessionHistoryLoading: false,
       roleOptions: [{ role: "spec", label: "Spec", icon: Sparkles }],
       agentStudioReady: true,
       agentStudioBlockedReason: "",

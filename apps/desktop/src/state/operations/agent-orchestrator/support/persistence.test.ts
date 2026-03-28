@@ -4,6 +4,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   fromPersistedSessionRecord,
   historyToChatMessages,
+  historyToSessionContextUsage,
   toPersistedSessionRecord,
 } from "./persistence";
 
@@ -105,6 +106,70 @@ describe("agent-orchestrator/support/persistence", () => {
       selectedModel: null,
     });
     expect(messages).toEqual([]);
+  });
+
+  test("extracts latest final assistant context usage from hydrated history", () => {
+    const contextUsage = historyToSessionContextUsage(
+      [
+        {
+          messageId: "m-assistant-1",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:02.000Z",
+          text: "Working",
+          totalTokens: 50,
+          model: {
+            providerId: "openai",
+            modelId: "gpt-5",
+            profileId: "Ares",
+            variant: "high",
+          },
+          parts: [
+            {
+              kind: "step",
+              messageId: "m-assistant-1",
+              partId: "p-step-intermediate",
+              phase: "finish",
+              reason: "length",
+            },
+          ],
+        },
+        {
+          messageId: "m-assistant-2",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:05.000Z",
+          text: "Done",
+          totalTokens: 123,
+          model: {
+            providerId: "anthropic",
+            modelId: "claude-3-7-sonnet",
+            profileId: "Hephaestus",
+            variant: "max",
+          },
+          parts: [
+            {
+              kind: "step",
+              messageId: "m-assistant-2",
+              partId: "p-step-finish",
+              phase: "finish",
+              reason: "stop",
+            },
+          ],
+        },
+      ],
+      {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+    );
+
+    expect(contextUsage).toEqual({
+      totalTokens: 123,
+      providerId: "anthropic",
+      modelId: "claude-3-7-sonnet",
+      profileId: "Hephaestus",
+      variant: "max",
+    });
   });
 
   test("maps history parts into chat timeline entries", () => {

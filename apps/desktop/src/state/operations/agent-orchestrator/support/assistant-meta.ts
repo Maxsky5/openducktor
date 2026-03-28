@@ -33,6 +33,10 @@ export const toSessionContextUsage = (
 
   return {
     totalTokens,
+    ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
+    ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
+    ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),
+    ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : {}),
     ...(typeof modelDescriptor?.contextWindow === "number"
       ? { contextWindow: modelDescriptor.contextWindow }
       : {}),

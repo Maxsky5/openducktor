@@ -302,7 +302,7 @@ export function useKanbanSessionStartFlow({
     async (taskId: string): Promise<string | undefined> => {
       const builderSessions = findSessionsByRoleForTask(sessionsRef.current, taskId, "build");
       if (builderSessions.length === 0) {
-        throw new Error(`No Builder session is available to fork for task "${taskId}".`);
+        throw new Error(`No Builder session is available to fork or reuse for task "${taskId}".`);
       }
 
       return startSessionIntent({

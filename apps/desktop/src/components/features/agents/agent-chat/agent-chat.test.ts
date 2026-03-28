@@ -18,6 +18,7 @@ const buildModel = () => ({
     isSessionWorking: true,
     showThinkingMessages: false,
     isSessionViewLoading: false,
+    isSessionHistoryLoading: false,
     roleOptions: TEST_ROLE_OPTIONS,
     agentStudioReady: true,
     blockedReason: "",

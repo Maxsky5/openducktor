@@ -82,7 +82,7 @@ Agent-triggered path:
 
 ### 4) Generate a pull request
 1. The approval flow starts a Builder session with scenario `build_pull_request_generation`.
-2. That scenario is `fork`-only and must start from an existing Builder source session.
+2. That scenario must start from an existing Builder source session and supports `reuse` or `fork`.
 3. The Builder uses provider-native git or GitHub tools to create or update the PR.
 4. Once the PR exists, the Builder calls `odt_set_pull_request`.
 5. `odt_set_pull_request` persists canonical PR metadata into task metadata by resolving the provider record from `providerId + number`.

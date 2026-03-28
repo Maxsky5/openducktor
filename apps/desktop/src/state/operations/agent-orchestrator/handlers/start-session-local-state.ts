@@ -38,6 +38,7 @@ export const buildInitialSession = ({
   runId: runtime.runId,
   runtimeEndpoint: runtime.runtimeEndpoint,
   workingDirectory: runtime.workingDirectory,
+  historyHydrationState: "hydrated",
   messages:
     initialMessages ??
     buildSessionHeaderMessages({

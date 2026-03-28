@@ -45,9 +45,10 @@ describe("types", () => {
       externalSessionId: "external-session-1",
       eventTransportKey: "http://127.0.0.1:12345",
       hasIdleSinceActivity: false,
-      emittedAssistantMessageIds: new Set<string>(),
+      emittedMessageIds: new Set<string>(),
       partsById: new Map(),
       messageRoleById: new Map(),
+      messageMetadataById: new Map(),
       pendingDeltasByPartId: new Map(),
     };
     const status: McpServerStatus = { status: "connected" };

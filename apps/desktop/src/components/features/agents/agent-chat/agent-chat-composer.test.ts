@@ -114,7 +114,7 @@ describe("AgentChatComposer", () => {
     );
 
     expect(html).toContain("px-4 pb-4");
-    expect(html).toContain("relative border border-input bg-card shadow-md");
+    expect(html).toContain("relative border border-input border-l-0 bg-card shadow-md");
     expect(html).toContain("border-l-4");
     expect(html).toContain("focus-within:shadow-xl");
     expect(html).toContain("border-left-color:#d97706");

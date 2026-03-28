@@ -56,6 +56,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     session,
     showThinkingMessages,
     isSessionViewLoading,
+    isSessionHistoryLoading,
     agentStudioReady,
     blockedReason,
     isLoadingChecks,
@@ -78,14 +79,16 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     messagesContainerRef,
     scrollToBottomOnSendRef,
   } = model;
+  const isTranscriptLoading = isSessionViewLoading || isSessionHistoryLoading;
+  const hideTranscriptWhileHydrating = isSessionHistoryLoading;
 
   const rows = useMemo(() => {
-    if (!session) {
+    if (!session || hideTranscriptWhileHydrating) {
       return [];
     }
 
     return buildAgentChatWindowRows(session, { showThinkingMessages });
-  }, [session, showThinkingMessages]);
+  }, [hideTranscriptWhileHydrating, session, showThinkingMessages]);
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
   const activeSessionId = session?.sessionId ?? null;
   const {
@@ -102,7 +105,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   } = useAgentChatWindow({
     rows,
     activeSessionId,
-    isSessionViewLoading,
+    isSessionViewLoading: isTranscriptLoading,
     messagesContainerRef,
     messagesContentRef,
   });
@@ -113,7 +116,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
 
   const showLoadingOverlay = useAgentChatLoadingOverlay({
     sessionId: activeSessionId,
-    isSessionViewLoading,
+    isSessionViewLoading: isTranscriptLoading,
   });
   const sessionRole = session?.role ?? null;
   const sessionSelectedModel = session?.selectedModel ?? null;
@@ -211,32 +214,42 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
 
           {session ? (
             rows.length > 0 ? (
-              <>
-                {windowStart > 0 ? <div ref={topSentinelRef} className="h-px" /> : null}
+              hideTranscriptWhileHydrating ? null : (
+                <>
+                  {windowStart > 0 ? <div ref={topSentinelRef} className="h-px" /> : null}
 
-                {windowedRows.map((row) => (
-                  <AgentChatThreadMotionRow
-                    key={row.key}
-                    row={row}
-                    sessionRole={sessionRole}
-                    sessionSelectedModel={sessionSelectedModel}
-                    sessionAgentColors={sessionAgentColors}
-                    sessionWorkingDirectory={sessionWorkingDirectory}
-                    resolveRowRef={resolveRowRef}
-                  />
-                ))}
+                  {windowedRows.map((row) => (
+                    <AgentChatThreadMotionRow
+                      key={row.key}
+                      row={row}
+                      sessionRole={sessionRole}
+                      sessionSelectedModel={sessionSelectedModel}
+                      sessionAgentColors={sessionAgentColors}
+                      sessionWorkingDirectory={sessionWorkingDirectory}
+                      resolveRowRef={resolveRowRef}
+                    />
+                  ))}
 
-                {windowEnd < rows.length - 1 ? (
-                  <div ref={bottomSentinelRef} className="h-px" />
-                ) : null}
-              </>
-            ) : session.messages.length === 0 ? (
+                  {windowEnd < rows.length - 1 ? (
+                    <div ref={bottomSentinelRef} className="h-px" />
+                  ) : null}
+                </>
+              )
+            ) : session.messages.length === 0 && !hideTranscriptWhileHydrating ? (
               <div className="rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
                 Loading session history...
               </div>
             ) : null
           ) : null}
         </div>
+        {showLoadingOverlay ? (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-muted">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm">
+              <LoaderCircle className="size-3.5 animate-spin" />
+              Loading session...
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {hasBottomStack && session ? (
@@ -272,16 +285,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
           />
         </div>
       ) : null}
-
-      {showLoadingOverlay ? (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-muted">
-          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm">
-            <LoaderCircle className="size-3.5 animate-spin" />
-            Preparing chat...
-          </div>
-        </div>
-      ) : null}
-
       {session ? <ScrollToTopButton visible={!isNearTop} onClick={scrollToTop} /> : null}
       {session ? <ScrollToBottomButton visible={!isNearBottom} onClick={scrollToBottom} /> : null}
     </div>

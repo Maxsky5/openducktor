@@ -164,6 +164,22 @@ describe("buildAgentSystemPrompt", () => {
     ]);
   });
 
+  test("pull request generation prompt supports reuse and fork publication flows", () => {
+    const prompt = buildAgentSystemPrompt({
+      role: "build",
+      scenario: "build_pull_request_generation",
+      task: taskContext,
+    });
+
+    expectPromptToContainAll(prompt, [
+      "Scenario: Pull request generation.",
+      "current Builder session or a fork created from it",
+      "Use the runtime's native git and GitHub tools to inspect branch state",
+      'call odt_set_pull_request exactly once with taskId task-42, providerId "github", and the pull request number.',
+    ]);
+    expect(prompt).not.toContain("forked Builder worktree");
+  });
+
   test("qa prompt uses an adversarial evidence-based review rubric", () => {
     const prompt = buildAgentSystemPrompt({
       role: "qa",
@@ -340,6 +356,22 @@ describe("kickoff and permission prompts", () => {
 
     expect(result.prompt).toBe("Planner kickoff task-2 / desc");
     expect(result.templates[0]?.source).toBe("override");
+  });
+
+  test("pull request generation kickoff supports reused sessions and forks", () => {
+    const prompt = buildAgentKickoffPrompt({
+      role: "build",
+      scenario: "build_pull_request_generation",
+      task: {
+        taskId: "task-1",
+      },
+    });
+
+    expectPromptToContainAll(prompt, [
+      "Focus only on pull request publication work for the current Builder session or fork.",
+      'call odt_set_pull_request with taskId task-1, providerId "github", and the pull request number.',
+    ]);
+    expect(prompt).not.toContain("Builder fork");
   });
 
   test("allows enabled empty kickoff override templates", () => {

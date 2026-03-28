@@ -1701,13 +1701,13 @@ describe("agent-orchestrator/handlers/start-session", () => {
           timestamp: "2026-02-22T08:20:00.000Z",
         },
         {
-          id: "history:text:fork-user-1",
+          id: "fork-user-1",
           role: "user",
           content: "Generate the PR summary.",
           timestamp: "2026-02-22T08:21:00.000Z",
         },
         {
-          id: "history:text:fork-assistant-1",
+          id: "fork-assistant-1",
           role: "assistant",
           content: "I drafted the summary.",
           timestamp: "2026-02-22T08:22:00.000Z",
@@ -1863,7 +1863,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           timestamp: "2026-02-22T08:20:00.000Z",
         },
         {
-          id: "history:text:child-user-1",
+          id: "child-user-1",
           role: "user",
           content: "Hydrated child history",
           timestamp: "2026-02-22T08:21:00.000Z",

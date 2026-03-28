@@ -35,12 +35,12 @@ describe("resolveScenarioStartMode", () => {
     ).toBe("fresh");
   });
 
-  test("keeps fork when the scenario only allows fork", () => {
+  test("keeps reuse as the default when the scenario allows reuse and fork", () => {
     expect(
       resolveScenarioStartMode({
         scenario: "build_pull_request_generation",
         existingSessionOptions: [],
       }),
-    ).toBe("fork");
+    ).toBe("reuse");
   });
 });

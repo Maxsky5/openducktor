@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { sessionStartModeButtonLabel } from "@/features/session-start/session-start-display";
 
 type SessionStartModalConfirmInput =
   | boolean
@@ -142,6 +143,10 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     agentHelperText = "No agent profiles are available for this runtime.";
   }
 
+  const isStartModeDisabled = (startMode: AgentSessionStartMode): boolean => {
+    return (startMode === "reuse" || startMode === "fork") && !hasExistingSessionOptions;
+  };
+
   return (
     <Dialog
       open={open}
@@ -165,41 +170,23 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                 <div className="grid gap-1.5">
                   <p className="text-sm font-medium text-foreground">Session Mode</p>
                   <div className="grid grid-cols-2 gap-2">
-                    {availableStartModes.includes("fresh") ? (
+                    {availableStartModes.map((startMode) => (
                       <Button
+                        key={startMode}
                         type="button"
-                        variant={selectedStartMode === "fresh" ? "default" : "outline"}
-                        onClick={() => onSelectStartMode("fresh")}
+                        variant={selectedStartMode === startMode ? "default" : "outline"}
+                        disabled={isStartModeDisabled(startMode)}
+                        onClick={() => onSelectStartMode(startMode)}
                       >
-                        Start fresh
+                        {sessionStartModeButtonLabel(startMode)}
                       </Button>
-                    ) : null}
-                    {availableStartModes.includes("reuse") ? (
-                      <Button
-                        type="button"
-                        variant={selectedStartMode === "reuse" ? "default" : "outline"}
-                        disabled={!hasExistingSessionOptions}
-                        onClick={() => onSelectStartMode("reuse")}
-                      >
-                        Reuse existing
-                      </Button>
-                    ) : null}
-                    {availableStartModes.includes("fork") ? (
-                      <Button
-                        type="button"
-                        variant={selectedStartMode === "fork" ? "default" : "outline"}
-                        disabled={!hasExistingSessionOptions}
-                        onClick={() => onSelectStartMode("fork")}
-                      >
-                        Fork existing
-                      </Button>
-                    ) : null}
+                    ))}
                   </div>
                 </div>
               ) : null}
 
               {requiresExistingSession ? (
-                <div className="grid gap-1.5">
+                <div className="grid gap-1.5" data-testid="session-start-source-field">
                   <label
                     className="text-sm font-medium text-foreground"
                     htmlFor="session-start-source"
@@ -218,7 +205,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                 </div>
               ) : null}
 
-              <div className="grid gap-1.5">
+              <div className="grid gap-1.5" data-testid="session-start-runtime-field">
                 <label
                   className="text-sm font-medium text-foreground"
                   htmlFor="session-start-runtime"
@@ -234,7 +221,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                 />
               </div>
 
-              <div className="grid gap-1.5">
+              <div className="grid gap-1.5" data-testid="session-start-agent-field">
                 <label
                   className="text-sm font-medium text-foreground"
                   htmlFor="session-start-agent"
@@ -255,7 +242,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-1.5">
+                <div className="grid gap-1.5" data-testid="session-start-model-field">
                   <label
                     className="text-sm font-medium text-foreground"
                     htmlFor="session-start-model"
@@ -273,7 +260,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                   />
                 </div>
 
-                <div className="grid gap-1.5">
+                <div className="grid gap-1.5" data-testid="session-start-variant-field">
                   <label
                     className="text-sm font-medium text-foreground"
                     htmlFor="session-start-variant"

@@ -282,6 +282,88 @@ describe("agent-orchestrator-session-events", () => {
     }
   });
 
+  test("writes canonical user_message events into the transcript", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession(),
+      },
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "user_message",
+      sessionId: "session-1",
+      messageId: "user-message-1",
+      timestamp: "2026-02-22T08:00:01.000Z",
+      message: "Generate the pull request",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        profileId: "Hephaestus",
+      },
+    });
+
+    const userMessages = sessionsRef.current["session-1"]?.messages.filter(
+      (message) => message.role === "user",
+    );
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages?.[0]?.id).toBe("user-message-1");
+    expect(userMessages?.[0]?.content).toBe("Generate the pull request");
+    if (!userMessages?.[0]?.meta || userMessages[0].meta.kind !== "user") {
+      throw new Error("Expected canonical user message metadata");
+    }
+    expect(userMessages[0].meta.providerId).toBe("openai");
+    expect(userMessages[0].meta.modelId).toBe("gpt-5");
+    expect(userMessages[0].meta.variant).toBe("high");
+    expect(userMessages[0].meta.profileId).toBe("Hephaestus");
+  });
+
   test("auto-rejects mutating permissions for read-only roles", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const replyPermission = mock(
@@ -1314,6 +1396,10 @@ describe("agent-orchestrator-session-events", () => {
       totalTokens: 35_022,
       contextWindow: 200_000,
       outputLimit: 8_192,
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "Hephaestus",
     });
   });
 
@@ -1433,6 +1519,10 @@ describe("agent-orchestrator-session-events", () => {
       totalTokens: 35_022,
       contextWindow: 200_000,
       outputLimit: 8_192,
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "Hephaestus",
     });
   });
 
