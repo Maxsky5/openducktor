@@ -277,15 +277,7 @@ impl AppService {
             repo_config.trusted_hooks_fingerprint = trusted_hooks_fingerprint;
         }
 
-        self.workspace_persist_settings_snapshot(
-            update.theme,
-            update.git,
-            update.chat,
-            update.kanban,
-            update.autopilot,
-            update.repos,
-            update.global_prompt_overrides,
-        )?;
+        self.workspace_persist_settings_snapshot(update)?;
         self.workspace_list()
     }
 

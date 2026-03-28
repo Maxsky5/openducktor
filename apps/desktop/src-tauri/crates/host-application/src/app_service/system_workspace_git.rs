@@ -1,4 +1,7 @@
-use super::{read_opencode_version, resolve_opencode_binary_path, AppService, CachedRuntimeCheck};
+use super::{
+    read_opencode_version, resolve_opencode_binary_path, AppService, CachedRuntimeCheck,
+    WorkspaceSettingsSnapshotUpdate,
+};
 use anyhow::{anyhow, Result};
 use host_domain::{
     BeadsCheck, GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult,
@@ -274,16 +277,10 @@ impl AppService {
 
     pub(super) fn workspace_persist_settings_snapshot(
         &self,
-        theme: String,
-        git: GlobalGitConfig,
-        chat: ChatSettings,
-        kanban: KanbanSettings,
-        autopilot: AutopilotSettings,
-        repos: HashMap<String, RepoConfig>,
-        global_prompt_overrides: PromptOverrides,
+        snapshot: WorkspaceSettingsSnapshotUpdate,
     ) -> Result<()> {
         let mut config = self.config_store.load()?;
-        for repo_path in repos.keys() {
+        for repo_path in snapshot.repos.keys() {
             if !config.repos.contains_key(repo_path) {
                 return Err(anyhow!(
                     "Workspace not found in config: {repo_path}. Add/select the workspace before updating configuration."
@@ -291,15 +288,15 @@ impl AppService {
             }
         }
 
-        config.theme = theme;
-        config.git = git;
-        config.chat = chat;
+        config.theme = snapshot.theme;
+        config.git = snapshot.git;
+        config.chat = snapshot.chat;
         config.kanban = KanbanSettings {
-            done_visible_days: kanban.done_visible_days.max(0),
+            done_visible_days: snapshot.kanban.done_visible_days.max(0),
         };
-        config.autopilot = autopilot;
-        config.global_prompt_overrides = global_prompt_overrides;
-        for (repo_path, repo_config) in repos {
+        config.autopilot = snapshot.autopilot;
+        config.global_prompt_overrides = snapshot.global_prompt_overrides;
+        for (repo_path, repo_config) in snapshot.repos {
             config.repos.insert(repo_path, repo_config);
         }
         self.config_store.save(&config)
