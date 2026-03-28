@@ -22,6 +22,7 @@ const buildBaseModel = () => ({
   isSessionWorking: false,
   showThinkingMessages: false,
   isSessionViewLoading: false,
+  isSessionHistoryLoading: false,
   roleOptions: TEST_ROLE_OPTIONS,
   agentStudioReady: true,
   blockedReason: "",
@@ -487,7 +488,25 @@ describe("AgentChatThread", () => {
       }),
     );
 
-    expect(html).toContain("Preparing chat...");
+    expect(html).toContain("Loading session...");
+  });
+
+  test("hides transcript rows while session history is hydrating", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          isSessionHistoryLoading: true,
+          session: buildSession({
+            sessionId: "session-hydrating",
+            messages: [buildMessage("assistant", "Old cached message", { id: "assistant-old-1" })],
+          }),
+        },
+      }),
+    );
+
+    expect(html).toContain("Loading session...");
+    expect(html).not.toContain("Old cached message");
   });
 
   test("renders native scroll controls for top and bottom navigation", async () => {

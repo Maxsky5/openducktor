@@ -109,6 +109,7 @@ type AgentChatThreadModelArgs = {
   isSessionWorking: boolean;
   showThinkingMessages: boolean;
   isSessionViewLoading: boolean;
+  isSessionHistoryLoading: boolean;
   roleOptions: AgentRoleOption[];
   agentStudioReady: boolean;
   agentStudioBlockedReason: string | null;
@@ -172,6 +173,7 @@ export const buildAgentChatThreadModel = (
   isSessionWorking: args.isSessionWorking,
   showThinkingMessages: args.showThinkingMessages,
   isSessionViewLoading: args.isSessionViewLoading,
+  isSessionHistoryLoading: args.isSessionHistoryLoading,
   roleOptions: args.roleOptions,
   agentStudioReady: args.agentStudioReady,
   blockedReason: args.agentStudioBlockedReason,

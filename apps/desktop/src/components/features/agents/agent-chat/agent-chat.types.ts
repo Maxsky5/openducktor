@@ -16,6 +16,7 @@ export type AgentChatThreadModel = {
   isSessionWorking: boolean;
   showThinkingMessages: boolean;
   isSessionViewLoading: boolean;
+  isSessionHistoryLoading: boolean;
   roleOptions: AgentRoleOption[];
   agentStudioReady: boolean;
   blockedReason: string | null;
