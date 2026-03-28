@@ -67,7 +67,7 @@ export type TaskDocuments = {
 
 type EnsureRuntimeDependencies = {
   runsRef: { current: RunSummary[] };
-  refreshTaskData: (repoPath: string) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
 };
 
 export const loadTaskDocuments = async (

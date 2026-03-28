@@ -12,14 +12,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { documentQueryKeys } from "@/state/queries/documents";
+import { refreshRepoTaskViewsFromQuery } from "@/state/queries/task-view-sync";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import { agentSessionQueryKeys } from "../../queries/agent-sessions";
-import {
-  invalidateRepoTaskQueries,
-  loadRepoTaskDataFromQuery,
-  refetchActiveKanbanQueries,
-  repoTaskDataQueryOptions,
-} from "../../queries/tasks";
+import { repoTaskDataQueryOptions } from "../../queries/tasks";
 import { host } from "../shared/host";
 import {
   DEFERRED_BY_USER_REASON,
@@ -43,7 +39,7 @@ type UseTaskOperationsResult = {
   pendingMergedPullRequest: { taskId: string; pullRequest: PullRequest } | null;
   setIsLoadingTasks: (value: boolean) => void;
   clearTaskData: () => void;
-  refreshTaskData: (repoPath: string) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
   refreshTasks: () => Promise<void>;
   syncPullRequests: (taskId: string) => Promise<void>;
   linkMergedPullRequest: () => Promise<void>;
@@ -58,6 +54,44 @@ type UseTaskOperationsResult = {
   resumeDeferredTask: (taskId: string) => Promise<void>;
   humanApproveTask: (taskId: string) => Promise<void>;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
+};
+
+type TaskMutationRefreshStrategy =
+  | { kind: "repo" }
+  | { kind: "task"; taskId: string }
+  | { kind: "remove-task"; taskIds: string[] };
+
+const collectTaskDeletionIds = (
+  tasks: TaskCard[],
+  taskId: string,
+  deleteSubtasks: boolean,
+): string[] => {
+  if (!deleteSubtasks) {
+    return [taskId];
+  }
+
+  const taskById = new Map(tasks.map((task) => [task.id, task]));
+  const collectedIds: string[] = [];
+  const pendingIds = [taskId];
+  const seenIds = new Set<string>();
+
+  while (pendingIds.length > 0) {
+    const currentId = pendingIds.shift();
+    if (!currentId || seenIds.has(currentId)) {
+      continue;
+    }
+
+    seenIds.add(currentId);
+    collectedIds.push(currentId);
+
+    for (const subtaskId of taskById.get(currentId)?.subtaskIds ?? []) {
+      if (!seenIds.has(subtaskId)) {
+        pendingIds.push(subtaskId);
+      }
+    }
+  }
+
+  return collectedIds;
 };
 
 export function useTaskOperations({
@@ -94,18 +128,42 @@ export function useTaskOperations({
   }, [activeRepo]);
 
   const refreshTaskData = useCallback(
-    async (repoPath: string): Promise<void> => {
-      await invalidateRepoTaskQueries(queryClient, repoPath);
-      await Promise.all([
-        loadRepoTaskDataFromQuery(queryClient, repoPath),
-        refetchActiveKanbanQueries(queryClient, repoPath),
-      ]);
+    async (repoPath: string, taskId?: string): Promise<void> => {
+      await refreshRepoTaskViewsFromQuery(
+        queryClient,
+        repoPath,
+        taskId ? { taskDocumentStrategy: "refresh", taskId } : undefined,
+      );
+    },
+    [queryClient],
+  );
+
+  const refreshTaskMutationViews = useCallback(
+    async (repoPath: string, strategy: TaskMutationRefreshStrategy): Promise<void> => {
+      if (strategy.kind === "task") {
+        await refreshRepoTaskViewsFromQuery(queryClient, repoPath, {
+          taskDocumentStrategy: "refresh",
+          taskId: strategy.taskId,
+        });
+        return;
+      }
+
+      if (strategy.kind === "remove-task") {
+        await refreshRepoTaskViewsFromQuery(queryClient, repoPath, {
+          taskDocumentStrategy: "remove",
+          taskIds: strategy.taskIds,
+        });
+        return;
+      }
+
+      await refreshRepoTaskViewsFromQuery(queryClient, repoPath);
     },
     [queryClient],
   );
 
   const runTaskMutation = useCallback(
     async (options: {
+      refreshStrategy: TaskMutationRefreshStrategy;
       run: (repoPath: string) => Promise<void>;
       successTitle?: string;
       successDescription: string;
@@ -114,7 +172,7 @@ export function useTaskOperations({
       try {
         const repoPath = requireActiveRepo(activeRepo);
         await options.run(repoPath);
-        await refreshTaskData(repoPath);
+        await refreshTaskMutationViews(repoPath, options.refreshStrategy);
         if (options.successTitle) {
           toast.success(options.successTitle, {
             description: options.successDescription,
@@ -127,7 +185,7 @@ export function useTaskOperations({
         throw error;
       }
     },
-    [activeRepo, refreshTaskData],
+    [activeRepo, refreshTaskMutationViews],
   );
 
   const refreshTasks = useCallback(async (): Promise<void> => {
@@ -166,7 +224,7 @@ export function useTaskOperations({
         const repoPath = requireActiveRepo(activeRepo);
         const result = await host.taskPullRequestDetect(repoPath, taskId);
         if (result.outcome === "linked") {
-          await refreshTaskData(repoPath);
+          await refreshTaskData(repoPath, taskId);
           toast.success("Pull request linked", {
             description: `PR #${result.pullRequest.number}`,
           });
@@ -216,7 +274,7 @@ export function useTaskOperations({
       const repoPath = requireActiveRepo(activeRepo);
       await host.taskPullRequestLinkMerged(repoPath, taskId, pullRequest);
       setPendingMergedPullRequest((current) => (current?.taskId === taskId ? null : current));
-      await refreshTaskData(repoPath);
+      await refreshTaskData(repoPath, taskId);
       toast.success("Merged pull request linked", {
         description: `PR #${pullRequest.number}; task moved to Done.`,
       });
@@ -236,6 +294,7 @@ export function useTaskOperations({
       setUnlinkingPullRequestTaskId(taskId);
       try {
         await runTaskMutation({
+          refreshStrategy: { kind: "task", taskId },
           run: async (repoPath) => {
             await host.taskPullRequestUnlink(repoPath, taskId);
           },
@@ -264,6 +323,7 @@ export function useTaskOperations({
       }
 
       await runTaskMutation({
+        refreshStrategy: { kind: "repo" },
         run: async (repoPath) => {
           await host.taskCreate(repoPath, {
             ...input,
@@ -281,6 +341,7 @@ export function useTaskOperations({
   const updateTask = useCallback(
     async (taskId: string, patch: TaskUpdatePatch): Promise<void> => {
       await runTaskMutation({
+        refreshStrategy: { kind: "task", taskId },
         run: async (repoPath) => {
           await host.taskUpdate(repoPath, taskId, patch);
         },
@@ -294,7 +355,13 @@ export function useTaskOperations({
 
   const deleteTask = useCallback(
     async (taskId: string, deleteSubtasks = false): Promise<void> => {
+      const taskIdsToRemove = collectTaskDeletionIds(
+        repoTaskDataQuery.data?.tasks ?? [],
+        taskId,
+        deleteSubtasks,
+      );
       await runTaskMutation({
+        refreshStrategy: { kind: "remove-task", taskIds: taskIdsToRemove },
         run: async (repoPath) => {
           await host.taskDelete(repoPath, taskId, deleteSubtasks);
         },
@@ -303,7 +370,7 @@ export function useTaskOperations({
         failureTitle: "Failed to delete task",
       });
     },
-    [runTaskMutation],
+    [repoTaskDataQuery.data?.tasks, runTaskMutation],
   );
 
   const resetTaskImplementation = useCallback(
@@ -333,7 +400,7 @@ export function useTaskOperations({
             refetchType: "none",
           }),
         ]);
-        await refreshTaskData(repoPath);
+        await refreshTaskData(repoPath, taskId);
         toast.success("Implementation reset", {
           description: taskId,
         });
@@ -350,6 +417,7 @@ export function useTaskOperations({
   const transitionTask = useCallback(
     async (taskId: string, status: TaskStatus, reason?: string): Promise<void> => {
       await runTaskMutation({
+        refreshStrategy: { kind: "task", taskId },
         run: async (repoPath) => {
           await host.taskTransition(repoPath, taskId, status, reason);
         },
@@ -363,6 +431,7 @@ export function useTaskOperations({
   const deferTask = useCallback(
     async (taskId: string): Promise<void> => {
       await runTaskMutation({
+        refreshStrategy: { kind: "task", taskId },
         run: async (repoPath) => {
           await host.taskDefer(repoPath, taskId, DEFERRED_BY_USER_REASON);
         },
@@ -377,6 +446,7 @@ export function useTaskOperations({
   const resumeDeferredTask = useCallback(
     async (taskId: string): Promise<void> => {
       await runTaskMutation({
+        refreshStrategy: { kind: "task", taskId },
         run: async (repoPath) => {
           await host.taskResumeDeferred(repoPath, taskId);
         },
@@ -391,6 +461,7 @@ export function useTaskOperations({
   const humanApproveTask = useCallback(
     async (taskId: string): Promise<void> => {
       await runTaskMutation({
+        refreshStrategy: { kind: "task", taskId },
         run: async (repoPath) => {
           await host.humanApprove(repoPath, taskId);
         },
@@ -405,6 +476,7 @@ export function useTaskOperations({
   const humanRequestChangesTask = useCallback(
     async (taskId: string, note?: string): Promise<void> => {
       await runTaskMutation({
+        refreshStrategy: { kind: "task", taskId },
         run: async (repoPath) => {
           await host.humanRequestChanges(repoPath, taskId, note);
         },

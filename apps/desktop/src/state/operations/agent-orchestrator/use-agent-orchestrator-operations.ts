@@ -48,7 +48,7 @@ type UseAgentOrchestratorOperationsArgs = {
   activeRepo: string | null;
   tasks: TaskCard[];
   runs: RunSummary[];
-  refreshTaskData: (repoPath: string) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
   agentEngine: AgentEnginePort;
 };
 

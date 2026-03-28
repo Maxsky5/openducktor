@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { BeadsCheck, RunSummary, TaskCard, TaskCreateInput } from "@openducktor/contracts";
-import { useQuery } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
 import { toast } from "sonner";
-import { clearAppQueryClient } from "@/lib/query-client";
+import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
+import { clearAppQueryClient, createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { kanbanTaskListQueryOptions } from "../../queries/tasks";
+import { documentQueryKeys } from "../../queries/documents";
+import { kanbanTaskListQueryOptions, taskQueryKeys } from "../../queries/tasks";
 import {
   attachAgentSessionListener,
   type SessionEventAdapter,
@@ -612,6 +614,304 @@ describe("use-task-operations", () => {
     } finally {
       await harness.unmount();
       host.repoPullRequestSync = original.repoPullRequestSync;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
+  test("refreshTaskData updates inactive cached kanban queries after off-board task changes", async () => {
+    let currentStatus: TaskCard["status"] = "ready_for_dev";
+    const tasksList = mock(async () => [makeTask("A", currentStatus)]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const queryClient = createQueryClient();
+    let latest: ReturnType<typeof useTaskOperations> | null = null;
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useTaskOperations(args);
+      return null;
+    };
+
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const harness = createSharedHookHarness(
+      Harness,
+      {
+        args: {
+          activeRepo: "/repo",
+          refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+            beadsOk: true,
+            beadsPath: "/repo/.beads",
+            beadsError: null,
+          }),
+        },
+      },
+      { wrapper },
+    );
+
+    try {
+      await queryClient.fetchQuery(kanbanTaskListQueryOptions("/repo", 1));
+      expect(
+        queryClient.getQueryData<TaskCard[]>(taskQueryKeys.kanbanData("/repo", 1))?.[0]?.status,
+      ).toBe("ready_for_dev");
+
+      await harness.mount();
+      await harness.waitFor(() => latest?.tasks[0]?.status === "ready_for_dev", 1000);
+
+      tasksList.mockClear();
+      runsList.mockClear();
+      currentStatus = "in_progress";
+
+      await harness.run(async () => {
+        if (!latest) {
+          throw new Error("Hook not mounted");
+        }
+
+        await latest.refreshTaskData("/repo");
+      });
+
+      await harness.waitFor(
+        () =>
+          latest?.tasks[0]?.status === "in_progress" &&
+          queryClient.getQueryData<TaskCard[]>(taskQueryKeys.kanbanData("/repo", 1))?.[0]
+            ?.status === "in_progress",
+        1000,
+      );
+
+      expect(
+        tasksList.mock.calls.some((call) => {
+          const args = call as unknown[];
+          return args[0] === "/repo" && args.length === 1;
+        }),
+      ).toBe(true);
+      expect(
+        tasksList.mock.calls.some((call) => {
+          const args = call as unknown[];
+          return args[0] === "/repo" && args[1] === 1;
+        }),
+      ).toBe(true);
+      expect(runsList).toHaveBeenCalledWith("/repo");
+    } finally {
+      await harness.unmount();
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
+  test("refreshTaskData refreshes cached task detail documents after off-board workflow updates", async () => {
+    let currentStatus: TaskCard["status"] = "ready_for_dev";
+    let currentPlanMarkdown = "";
+    let currentPlanUpdatedAt: string | null = null;
+    const tasksList = mock(async () => [makeTask("A", currentStatus)]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+    const specGet = mock(async () => ({ markdown: "", updatedAt: null }));
+    const planGet = mock(async () => ({
+      markdown: currentPlanMarkdown,
+      updatedAt: currentPlanUpdatedAt,
+    }));
+    const qaGetReport = mock(async () => ({ markdown: "", updatedAt: null }));
+
+    const original = {
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+      specGet: host.specGet,
+      planGet: host.planGet,
+      qaGetReport: host.qaGetReport,
+    };
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+    host.specGet = specGet;
+    host.planGet = planGet;
+    host.qaGetReport = qaGetReport;
+
+    const queryClient = createQueryClient();
+    let latest: {
+      operations: ReturnType<typeof useTaskOperations>;
+      planMarkdown: string;
+      planLoaded: boolean;
+    } | null = null;
+    const getLatestState = () => {
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+      return latest;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      const operations = useTaskOperations(args);
+      const { planDoc } = useTaskDocuments("A", true, args.activeRepo ?? "");
+      latest = {
+        operations,
+        planMarkdown: planDoc.markdown,
+        planLoaded: planDoc.loaded,
+      };
+      return null;
+    };
+
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const harness = createSharedHookHarness(
+      Harness,
+      {
+        args: {
+          activeRepo: "/repo",
+          refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+            beadsOk: true,
+            beadsPath: "/repo/.beads",
+            beadsError: null,
+          }),
+        },
+      },
+      { wrapper },
+    );
+
+    try {
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+        tasks: [makeTask("A", "ready_for_dev")],
+        runs: [] satisfies RunSummary[],
+      });
+      queryClient.setQueryData(documentQueryKeys.plan("/repo", "A"), {
+        markdown: "",
+        updatedAt: null,
+      });
+      await harness.mount();
+      expect(getLatestState().planMarkdown).toBe("");
+
+      tasksList.mockClear();
+      runsList.mockClear();
+      planGet.mockClear();
+      currentStatus = "in_progress";
+      currentPlanMarkdown = "# New plan";
+      currentPlanUpdatedAt = "2026-03-28T00:00:00.000Z";
+
+      await harness.run(async () => {
+        await getLatestState().operations.refreshTaskData("/repo", "A");
+      });
+
+      await harness.waitFor(
+        () =>
+          queryClient.getQueryData<{
+            tasks: TaskCard[];
+            runs: RunSummary[];
+          }>(taskQueryKeys.repoData("/repo"))?.tasks[0]?.status === "in_progress" &&
+          queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
+            documentQueryKeys.plan("/repo", "A"),
+          )?.markdown === "# New plan",
+        3000,
+      );
+
+      expect(planGet).toHaveBeenCalledWith("/repo", "A");
+      expect(tasksList).toHaveBeenCalledWith("/repo");
+      expect(
+        queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
+          documentQueryKeys.plan("/repo", "A"),
+        )?.markdown,
+      ).toBe("# New plan");
+    } finally {
+      await harness.unmount();
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+      host.specGet = original.specGet;
+      host.planGet = original.planGet;
+      host.qaGetReport = original.qaGetReport;
+    }
+  });
+
+  test("deleteTask removes cached task documents for deleted tasks and subtasks", async () => {
+    let isDeleted = false;
+    const taskDelete = mock(async () => {
+      isDeleted = true;
+      return { ok: true };
+    });
+    const tasksList = mock(async () =>
+      isDeleted ? [] : [{ ...makeTask("A", "open"), subtaskIds: ["B"] }, makeTask("B", "open")],
+    );
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskDelete: host.taskDelete,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.taskDelete = taskDelete;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const queryClient = createQueryClient();
+    let latest: ReturnType<typeof useTaskOperations> | null = null;
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useTaskOperations(args);
+      return null;
+    };
+
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const harness = createSharedHookHarness(
+      Harness,
+      {
+        args: {
+          activeRepo: "/repo",
+          refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+            beadsOk: true,
+            beadsPath: "/repo/.beads",
+            beadsError: null,
+          }),
+        },
+      },
+      { wrapper },
+    );
+
+    try {
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+        tasks: [{ ...makeTask("A", "open"), subtaskIds: ["B"] }, makeTask("B", "open")],
+        runs: [] satisfies RunSummary[],
+      });
+      queryClient.setQueryData(documentQueryKeys.spec("/repo", "A"), {
+        markdown: "# Parent spec",
+        updatedAt: "2026-03-28T00:00:00.000Z",
+      });
+      queryClient.setQueryData(documentQueryKeys.plan("/repo", "B"), {
+        markdown: "# Child plan",
+        updatedAt: "2026-03-28T00:00:00.000Z",
+      });
+
+      await harness.mount();
+      await harness.run(async () => {
+        if (!latest) {
+          throw new Error("Hook not mounted");
+        }
+
+        await latest.deleteTask("A", true);
+      });
+
+      await harness.waitFor(
+        () =>
+          queryClient.getQueryData<{ tasks: TaskCard[]; runs: RunSummary[] }>(
+            taskQueryKeys.repoData("/repo"),
+          )?.tasks.length === 0,
+        1000,
+      );
+
+      expect(taskDelete).toHaveBeenCalledWith("/repo", "A", true);
+      expect(queryClient.getQueryData(documentQueryKeys.spec("/repo", "A"))).toBeUndefined();
+      expect(queryClient.getQueryData(documentQueryKeys.plan("/repo", "B"))).toBeUndefined();
+    } finally {
+      await harness.unmount();
+      host.taskDelete = original.taskDelete;
       host.tasksList = original.tasksList;
       host.runsList = original.runsList;
     }

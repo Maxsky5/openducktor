@@ -76,7 +76,7 @@ export type RuntimeDependencies = {
 export type TaskDependencies = {
   taskRef: { current: TaskCard[] };
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
-  refreshTaskData: (repoPath: string) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
 };
 

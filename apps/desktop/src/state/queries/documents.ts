@@ -1,12 +1,14 @@
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { host } from "../operations/host";
 
-const TASK_DOCUMENT_STALE_TIME_MS = 60_000;
+export const TASK_DOCUMENT_STALE_TIME_MS = 60_000;
 
-type TaskDocument = {
+export type TaskDocument = {
   markdown: string;
   updatedAt: string | null;
 };
+
+export type TaskDocumentSection = "spec" | "plan" | "qa";
 
 export const documentQueryKeys = {
   all: ["task-documents"] as const,
@@ -16,6 +18,22 @@ export const documentQueryKeys = {
     [...documentQueryKeys.all, "plan", repoPath, taskId] as const,
   qaReport: (repoPath: string, taskId: string) =>
     [...documentQueryKeys.all, "qa-report", repoPath, taskId] as const,
+};
+
+export const documentQueryKeyForSection = (
+  repoPath: string,
+  taskId: string,
+  section: TaskDocumentSection,
+) => {
+  if (section === "spec") {
+    return documentQueryKeys.spec(repoPath, taskId);
+  }
+
+  if (section === "plan") {
+    return documentQueryKeys.plan(repoPath, taskId);
+  }
+
+  return documentQueryKeys.qaReport(repoPath, taskId);
 };
 
 const specDocumentQueryOptions = (repoPath: string, taskId: string) =>
@@ -56,6 +74,90 @@ const qaReportDocumentQueryOptions = (repoPath: string, taskId: string) =>
     },
     staleTime: TASK_DOCUMENT_STALE_TIME_MS,
   });
+
+const cachedTaskDocumentSections = (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+): TaskDocumentSection[] => {
+  const sections = new Set<TaskDocumentSection>();
+  for (const query of queryClient.getQueryCache().findAll({
+    queryKey: documentQueryKeys.all,
+    exact: false,
+  })) {
+    const [scope, section, cachedRepoPath, cachedTaskId] = query.queryKey;
+    if (
+      scope !== documentQueryKeys.all[0] ||
+      cachedRepoPath !== repoPath ||
+      cachedTaskId !== taskId
+    ) {
+      continue;
+    }
+    if (section === "spec" || section === "plan") {
+      sections.add(section);
+      continue;
+    }
+    if (section === "qa-report") {
+      sections.add("qa");
+    }
+  }
+  return [...sections];
+};
+
+export const removeCachedTaskDocumentQueries = (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskIds: string[],
+): void => {
+  const taskIdSet = new Set(taskIds);
+  for (const query of queryClient.getQueryCache().findAll({
+    queryKey: documentQueryKeys.all,
+    exact: false,
+  })) {
+    const [scope, _section, cachedRepoPath, cachedTaskId] = query.queryKey;
+    if (
+      scope !== documentQueryKeys.all[0] ||
+      cachedRepoPath !== repoPath ||
+      typeof cachedTaskId !== "string" ||
+      !taskIdSet.has(cachedTaskId)
+    ) {
+      continue;
+    }
+
+    queryClient.removeQueries({
+      queryKey: query.queryKey,
+      exact: true,
+    });
+  }
+};
+
+export const refreshCachedTaskDocumentQueries = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+): Promise<void> => {
+  const cachedSections = cachedTaskDocumentSections(queryClient, repoPath, taskId);
+  await Promise.all(
+    cachedSections.map((section) => {
+      if (section === "spec") {
+        return queryClient.fetchQuery({
+          ...specDocumentQueryOptions(repoPath, taskId),
+          staleTime: 0,
+        });
+      }
+      if (section === "plan") {
+        return queryClient.fetchQuery({
+          ...planDocumentQueryOptions(repoPath, taskId),
+          staleTime: 0,
+        });
+      }
+      return queryClient.fetchQuery({
+        ...qaReportDocumentQueryOptions(repoPath, taskId),
+        staleTime: 0,
+      });
+    }),
+  );
+};
 
 export const loadSpecDocumentFromQuery = (
   queryClient: QueryClient,

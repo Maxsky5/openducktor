@@ -6,7 +6,7 @@ import { requireActiveRepo } from "./task-operations-model";
 
 type UseDelegationOperationsArgs = {
   activeRepo: string | null;
-  refreshTaskData: (repoPath: string) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
 };
 
 type UseDelegationOperationsResult = {

@@ -9,7 +9,7 @@ import {
   loadQaReportDocumentFromQuery,
   loadSpecDocumentFromQuery,
 } from "../../queries/documents";
-import { invalidateRepoTaskListQueries } from "../../queries/tasks";
+import { refreshRepoTaskViewsFromQuery } from "../../queries/task-view-sync";
 import { host } from "../shared/host";
 import { requireActiveRepo } from "./task-operations-model";
 
@@ -90,7 +90,10 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });
-      await invalidateRepoTaskListQueries(queryClient, repo);
+      await refreshRepoTaskViewsFromQuery(queryClient, repo, {
+        taskDocumentStrategy: "refresh",
+        taskId,
+      });
       return saved;
     },
     [activeRepo, queryClient],
@@ -111,7 +114,10 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });
-      await invalidateRepoTaskListQueries(queryClient, repo);
+      await refreshRepoTaskViewsFromQuery(queryClient, repo, {
+        taskDocumentStrategy: "refresh",
+        taskId,
+      });
       return saved;
     },
     [activeRepo, queryClient],
@@ -132,7 +138,10 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });
-      await invalidateRepoTaskListQueries(queryClient, repo);
+      await refreshRepoTaskViewsFromQuery(queryClient, repo, {
+        taskDocumentStrategy: "refresh",
+        taskId,
+      });
       return saved;
     },
     [activeRepo, queryClient],

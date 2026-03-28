@@ -50,7 +50,7 @@ type SessionActionsDependencies = {
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   clearTurnDuration: (sessionId: string) => void;
-  refreshTaskData: (repoPath: string) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
   stopBuildRun?: (runId: string) => Promise<void>;
   invalidateSessionStopQueries?: (input: {

@@ -208,6 +208,7 @@ export const handleToolPart = (
   const observedEventTimestampMs = eventTimestampMs(event.timestamp);
   const todoUpdateFromTool = resolveTodoUpdateFromTool(part, input, output);
   let shouldRefreshTaskData = false;
+  const taskId = context.store.sessionsRef.current[context.store.sessionId]?.taskId;
 
   context.store.updateSession(
     context.store.sessionId,
@@ -236,7 +237,7 @@ export const handleToolPart = (
   if (shouldRefreshTaskData) {
     runOrchestratorSideEffect(
       "session-events-refresh-task-data",
-      context.refresh.refreshTaskData(context.refresh.repoPath),
+      context.refresh.refreshTaskData(context.refresh.repoPath, taskId),
       {
         tags: {
           repoPath: context.refresh.repoPath,
