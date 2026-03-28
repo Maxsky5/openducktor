@@ -189,7 +189,7 @@ export const globalConfigSchema = z.object({
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
-  autopilot: autopilotSettingsSchema.default(createDefaultAutopilotSettings()),
+  autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
   repos: z.record(z.string(), repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
   recentRepos: z.array(z.string()).default([]),
@@ -201,7 +201,7 @@ export const settingsSnapshotSchema = z.object({
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
-  autopilot: autopilotSettingsSchema.default(createDefaultAutopilotSettings()),
+  autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
   repos: z.record(z.string(), repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
 });

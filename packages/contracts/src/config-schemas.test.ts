@@ -81,6 +81,24 @@ describe("config-schemas", () => {
     expect(parsed.autopilot.rules.every((rule) => rule.actionIds.length === 0)).toBe(true);
   });
 
+  test("creates a fresh autopilot default for each parse", () => {
+    const first = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      repos: {},
+      globalPromptOverrides: {},
+    });
+    const second = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      repos: {},
+      globalPromptOverrides: {},
+    });
+
+    expect(first.autopilot).not.toBe(second.autopilot);
+    expect(first.autopilot.rules).not.toBe(second.autopilot.rules);
+  });
+
   test("normalizes autopilot rule order and dedupes actions", () => {
     const parsed = settingsSnapshotSchema.parse({
       theme: "light",
