@@ -74,68 +74,73 @@ export function AgentSessionTodoPanel({
   return (
     <section
       className={cn(
-        "w-full rounded-t-xl border border-input border-b-0 border-l-4 bg-card",
+        "w-full rounded-t-xl border border-input border-b-0 border-l-transparent bg-card",
         className,
       )}
       aria-label="Agent todo list"
-      style={accentColor ? { borderLeftColor: accentColor } : undefined}
-    >
-      <button
-        type="button"
-        className="flex w-full cursor-pointer items-center gap-3 px-3 py-2 text-left hover:bg-muted/70"
-        onClick={onToggleCollapse}
-        aria-label={toggleLabel}
-        aria-expanded={!collapsed}
-      >
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="flex shrink-0 items-center gap-2">
-            <ListTodo className="size-4 shrink-0 text-muted-foreground" />
-            <p className="text-[13px] font-semibold text-foreground">Todo</p>
-            <p className="text-[11px] font-medium text-muted-foreground">
-              {completedCount}/{visibleTodos.length}
-            </p>
-          </div>
-          {collapsed ? (
-            <div className="flex min-w-0 flex-1 items-center gap-2 border-l border-border/70 pl-3 text-sm text-foreground">
-              <span className="inline-flex size-4 shrink-0 items-center justify-center">
-                {statusIcon(actionableTodo.status, isSessionWorking)}
-              </span>
-              <span className="truncate">{actionableTodo.content}</span>
-            </div>
-          ) : null}
-          {collapsed ? (
-            <ChevronDown className="ml-auto size-4 shrink-0 text-muted-foreground" />
-          ) : (
-            <ChevronUp className="ml-auto size-4 shrink-0 text-muted-foreground" />
-          )}
-        </div>
-      </button>
 
-      {collapsed ? null : (
-        <div className="border-t border-input/80 px-3 pb-3 pt-2">
-          <ul className="max-h-[40vh] space-y-1 overflow-y-auto overscroll-contain pr-1">
-            {visibleTodos.map((todo) => (
-              <li
-                key={todo.id}
-                className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-x-2 rounded-md px-1 py-1 text-sm"
-              >
-                <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center">
-                  {statusIcon(todo.status, isSessionWorking)}
+    >
+      <div
+        className="rounded-t-xl border-l-4"
+        style={accentColor ? { borderLeftColor: accentColor } : undefined}
+      >
+        <button
+          type="button"
+          className="flex w-full cursor-pointer items-center gap-3 px-3 py-2 text-left hover:bg-muted/70"
+          onClick={onToggleCollapse}
+          aria-label={toggleLabel}
+          aria-expanded={!collapsed}
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="flex shrink-0 items-center gap-2">
+              <ListTodo className="size-4 shrink-0 text-muted-foreground" />
+              <p className="text-[13px] font-semibold text-foreground">Todo</p>
+              <p className="text-[11px] font-medium text-muted-foreground">
+                {completedCount}/{visibleTodos.length}
+              </p>
+            </div>
+            {collapsed ? (
+              <div className="flex min-w-0 flex-1 items-center gap-2 border-l border-border/70 pl-3 text-sm text-foreground">
+                <span className="inline-flex size-4 shrink-0 items-center justify-center">
+                  {statusIcon(actionableTodo.status, isSessionWorking)}
                 </span>
-                <span
-                  className={cn(
-                    "block min-w-0 leading-5 text-foreground",
-                    todo.status === "in_progress" && "font-medium text-foreground",
-                    todo.status === "completed" && "text-muted-foreground line-through",
-                  )}
+                <span className="truncate">{actionableTodo.content}</span>
+              </div>
+            ) : null}
+            {collapsed ? (
+              <ChevronDown className="ml-auto size-4 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronUp className="ml-auto size-4 shrink-0 text-muted-foreground" />
+            )}
+          </div>
+        </button>
+
+        {collapsed ? null : (
+          <div className="border-t border-input/80 px-3 pb-3 pt-2">
+            <ul className="max-h-[40vh] space-y-1 overflow-y-auto overscroll-contain pr-1">
+              {visibleTodos.map((todo) => (
+                <li
+                  key={todo.id}
+                  className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-x-2 rounded-md px-1 py-1 text-sm"
                 >
-                  {todo.content}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+                  <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center">
+                    {statusIcon(todo.status, isSessionWorking)}
+                  </span>
+                  <span
+                    className={cn(
+                      "block min-w-0 leading-5 text-foreground",
+                      todo.status === "in_progress" && "font-medium text-foreground",
+                      todo.status === "completed" && "text-muted-foreground line-through",
+                    )}
+                  >
+                    {todo.content}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

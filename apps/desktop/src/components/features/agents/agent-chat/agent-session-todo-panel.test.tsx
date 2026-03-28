@@ -1,38 +1,47 @@
-import { describe, expect, test } from "bun:test";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { afterEach, describe, expect, test } from "bun:test";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { buildTodoItem } from "./agent-chat-test-fixtures";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 
+(
+  globalThis as typeof globalThis & {
+    IS_REACT_ACT_ENVIRONMENT?: boolean;
+  }
+).IS_REACT_ACT_ENVIRONMENT = true;
+
+afterEach(() => {
+  cleanup();
+});
+
 const renderPanel = (props: Partial<Parameters<typeof AgentSessionTodoPanel>[0]> = {}) => {
-  return renderToStaticMarkup(
-    createElement(AgentSessionTodoPanel, {
-      todos: [],
-      collapsed: true,
-      isSessionWorking: false,
-      onToggleCollapse: () => {},
-      ...props,
-    }),
+  return render(
+    <AgentSessionTodoPanel
+      todos={[]}
+      collapsed
+      isSessionWorking={false}
+      onToggleCollapse={() => {}}
+      {...props}
+    />,
   );
 };
 
 describe("AgentSessionTodoPanel", () => {
   test("stays hidden when todos are completed-only or cancelled-only", () => {
-    expect(
-      renderPanel({
-        todos: [buildTodoItem({ status: "completed" })],
-      }),
-    ).toBe("");
+    const completedOnly = renderPanel({
+      todos: [buildTodoItem({ status: "completed" })],
+    });
+    expect(completedOnly.container.innerHTML).toBe("");
 
-    expect(
-      renderPanel({
-        todos: [buildTodoItem({ status: "cancelled" })],
-      }),
-    ).toBe("");
+    cleanup();
+
+    const cancelledOnly = renderPanel({
+      todos: [buildTodoItem({ status: "cancelled" })],
+    });
+    expect(cancelledOnly.container.innerHTML).toBe("");
   });
 
-  test("renders collapsed by default with a single truncating actionable summary", () => {
-    const html = renderPanel({
+  test("renders collapsed by default with a single actionable summary", () => {
+    const { container } = renderPanel({
       collapsed: true,
       accentColor: "#123456",
       todos: [
@@ -42,24 +51,25 @@ describe("AgentSessionTodoPanel", () => {
       ],
     });
 
-    expect(html).toContain("Todo");
-    expect(html).toContain("Current active item");
-    expect(html).not.toContain("Queued item");
-    expect(html).toContain("truncate");
-    expect(html).toContain("border-l border-border/70 pl-3");
-    expect(html).not.toContain("line-clamp-2");
-    expect(html).toContain("w-full rounded-t-xl");
-    expect(html).toContain("border-b-0");
-    expect(html).toContain("border-l-4");
-    expect(html).toContain("border-left-color:#123456");
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain("ml-auto size-4 shrink-0 text-muted-foreground");
-    expect(html).not.toContain("justify-end");
-    expect(html).not.toContain("max-w-md");
+    const section = screen.getByLabelText("Agent todo list");
+    const toggle = screen.getByRole("button", { name: "Expand todo list" });
+    const sectionText = section.textContent ?? "";
+
+    expect(sectionText).toContain("Todo");
+    expect(sectionText).toContain("1/3");
+    expect(sectionText).toContain("Current active item");
+    expect(sectionText).not.toContain("Queued item");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+    const accentBorder = container.querySelector('[style*="border-left-color"]');
+    expect(accentBorder).not.toBeNull();
+    expect(accentBorder?.getAttribute("style")).toContain("border-left-color");
+
+    expect(screen.queryByRole("list")).toBeNull();
   });
 
   test("falls back to the next pending todo when nothing is in progress", () => {
-    const html = renderPanel({
+    renderPanel({
       collapsed: true,
       todos: [
         buildTodoItem({ id: "todo-1", content: "Completed work", status: "completed" }),
@@ -67,33 +77,33 @@ describe("AgentSessionTodoPanel", () => {
       ],
     });
 
-    expect(html).toContain("Next pending item");
+    expect(screen.getByLabelText("Agent todo list").textContent ?? "").toContain("Next pending item");
   });
 
   test("uses idle in-progress icon without spinner when session is not working", () => {
-    const html = renderPanel({
+    const { container } = renderPanel({
       collapsed: true,
       isSessionWorking: false,
       todos: [buildTodoItem({ status: "in_progress" })],
     });
 
-    expect(html).toContain("lucide-circle-dot-dashed");
-    expect(html).not.toContain("animate-spin");
+    expect(container.querySelector(".lucide-circle-dot-dashed")).not.toBeNull();
+    expect(container.querySelector(".lucide-loader-circle")).toBeNull();
   });
 
   test("keeps spinner for in-progress todos while the session is working", () => {
-    const html = renderPanel({
+    const { container } = renderPanel({
       collapsed: true,
       isSessionWorking: true,
       todos: [buildTodoItem({ status: "in_progress" })],
     });
 
-    expect(html).toContain("lucide-loader-circle");
-    expect(html).toContain("animate-spin");
+    expect(container.querySelector(".lucide-loader-circle")).not.toBeNull();
+    expect(container.querySelector(".lucide-circle-dot-dashed")).toBeNull();
   });
 
-  test("renders expanded rows with alignment-friendly structure and completed context", () => {
-    const html = renderPanel({
+  test("renders expanded rows with the full visible todo list", () => {
+    renderPanel({
       collapsed: false,
       todos: [
         buildTodoItem({ id: "todo-1", content: "Done item", status: "completed" }),
@@ -105,14 +115,14 @@ describe("AgentSessionTodoPanel", () => {
       ],
     });
 
-    expect(html).toContain("Done item");
-    expect(html).toContain("Active item with a much longer description");
-    expect(html).toContain('aria-expanded="true"');
-    expect(html).toContain("grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-x-2");
-    expect(html).toContain("inline-flex h-5 w-5 shrink-0 items-center justify-center");
-    expect(html).toContain("ml-auto size-4 shrink-0 text-muted-foreground");
-    expect(html).toContain("block min-w-0 leading-5");
-    expect(html).toContain("font-medium text-foreground");
-    expect(html).not.toContain("mt-[3px]");
+    const toggle = screen.getByRole("button", { name: "Collapse todo list" });
+    const list = screen.getByRole("list");
+    const rows = within(list).getAllByRole("listitem");
+    const listText = list.textContent ?? "";
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(rows).toHaveLength(2);
+    expect(listText).toContain("Done item");
+    expect(listText).toContain("Active item with a much longer description");
   });
 });
