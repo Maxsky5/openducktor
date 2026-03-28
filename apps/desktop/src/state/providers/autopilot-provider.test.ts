@@ -5,7 +5,11 @@ import { QueryClient } from "@tanstack/react-query";
 import { repoConfigQueryOptions } from "@/state/queries/workspace";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { MISSING_BUILD_TARGET_ERROR } from "../operations/agent-orchestrator/handlers/start-session-constants";
-import { detectAutopilotEvents, executeAutopilotAction } from "./autopilot-provider";
+import {
+  detectAutopilotEvents,
+  executeAutopilotAction,
+  shouldAdvanceAutopilotBaseline,
+} from "./autopilot-provider";
 
 const startSessionWorkflowMock = mock(async () => ({
   sessionId: "session-new",
@@ -165,6 +169,29 @@ describe("autopilot provider helpers", () => {
     expect(detectAutopilotEvents(new Map([[currentTask.id, currentTask]]), [currentTask])).toEqual(
       [],
     );
+  });
+
+  test("keeps the previous baseline when settings are unavailable and an event was observed", () => {
+    const observedEvents = detectAutopilotEvents(
+      new Map([["TASK-1", createTask({ id: "TASK-1", status: "open" })]]),
+      [createTask({ id: "TASK-1", status: "spec_ready" })],
+    );
+
+    expect(
+      shouldAdvanceAutopilotBaseline({
+        observedEvents,
+        hasAutopilotSettings: false,
+      }),
+    ).toBe(false);
+  });
+
+  test("advances the baseline immediately when no event was observed", () => {
+    expect(
+      shouldAdvanceAutopilotBaseline({
+        observedEvents: [],
+        hasAutopilotSettings: false,
+      }),
+    ).toBe(true);
   });
 
   test("detects a later re-entry into ai_review after leaving the state", () => {

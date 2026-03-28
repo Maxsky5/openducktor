@@ -4,6 +4,7 @@ import type {
   AutopilotEventId,
   TaskCard,
 } from "@openducktor/contracts";
+import { AUTOPILOT_EVENT_IDS } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { getAgentScenarioDefinition } from "@openducktor/core";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -111,13 +112,7 @@ export const detectAutopilotEvents = (
   const observedEvents: AutopilotObservedEvent[] = [];
 
   for (const task of tasks) {
-    for (const eventId of [
-      "taskProgressedToSpecReady",
-      "taskProgressedToReadyForDev",
-      "taskProgressedToAiReview",
-      "taskRejectedByQa",
-      "taskProgressedToHumanReview",
-    ] as const) {
+    for (const eventId of AUTOPILOT_EVENT_IDS) {
       if (detectTaskEvent(previousTasksById.get(task.id), task, eventId)) {
         observedEvents.push({ eventId, task });
       }
@@ -125,6 +120,13 @@ export const detectAutopilotEvents = (
   }
 
   return observedEvents;
+};
+
+export const shouldAdvanceAutopilotBaseline = (params: {
+  observedEvents: AutopilotObservedEvent[];
+  hasAutopilotSettings: boolean;
+}): boolean => {
+  return params.hasAutopilotSettings || params.observedEvents.length === 0;
 };
 
 const findLatestSessionRecordByRole = (
@@ -365,12 +367,15 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     }
 
     const observedEvents = detectAutopilotEvents(previousTasksByIdRef.current, tasks);
-    previousTasksByIdRef.current = nextTasksById;
-    if (observedEvents.length === 0) {
-      return;
-    }
-
     const autopilotSettings = settingsSnapshotQuery.data?.autopilot;
+    if (
+      shouldAdvanceAutopilotBaseline({
+        observedEvents,
+        hasAutopilotSettings: Boolean(autopilotSettings),
+      })
+    ) {
+      previousTasksByIdRef.current = nextTasksById;
+    }
     if (!autopilotSettings) {
       return;
     }
