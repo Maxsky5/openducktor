@@ -38,7 +38,9 @@ export const resizeComposerTextareaElement = (
   if (isEmptyDraft) {
     const nextHeight = COMPOSER_TEXTAREA_MIN_HEIGHT_PX;
     const didHeightChange = Math.abs(currentHeight - nextHeight) > 0.5;
-    textarea.style.height = `${nextHeight}px`;
+    if (didHeightChange) {
+      textarea.style.height = `${nextHeight}px`;
+    }
     if (textarea.style.overflowY !== "hidden") {
       textarea.style.overflowY = "hidden";
     }
@@ -48,10 +50,11 @@ export const resizeComposerTextareaElement = (
     };
   }
 
-  textarea.style.height = "auto";
   const layout = computeComposerTextareaLayout(textarea.scrollHeight);
   const didHeightChange = Math.abs(currentHeight - layout.heightPx) > 0.5;
-  textarea.style.height = `${layout.heightPx}px`;
+  if (didHeightChange) {
+    textarea.style.height = `${layout.heightPx}px`;
+  }
   if (textarea.style.overflowY !== layout.overflowY) {
     textarea.style.overflowY = layout.overflowY;
   }

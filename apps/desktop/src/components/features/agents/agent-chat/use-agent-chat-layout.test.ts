@@ -54,6 +54,49 @@ describe("use-agent-chat-layout helpers", () => {
     expect(styleState.overflowY).toBe("hidden");
   });
 
+  test("resizeComposerTextareaElement skips no-op multiline style writes when the layout is unchanged", () => {
+    const styleState = {
+      height: "120px",
+      overflowY: "hidden" as "auto" | "hidden",
+    };
+    const assignedHeights: string[] = [];
+    const assignedOverflowValues: Array<"auto" | "hidden"> = [];
+    const style = {} as CSSStyleDeclaration;
+
+    Object.defineProperty(style, "height", {
+      configurable: true,
+      get: () => styleState.height,
+      set: (value: string) => {
+        assignedHeights.push(value);
+        styleState.height = value;
+      },
+    });
+    Object.defineProperty(style, "overflowY", {
+      configurable: true,
+      get: () => styleState.overflowY,
+      set: (value: "auto" | "hidden") => {
+        assignedOverflowValues.push(value);
+        styleState.overflowY = value;
+      },
+    });
+
+    const textarea = {
+      getBoundingClientRect: () => ({ height: 120 }),
+      scrollHeight: 120,
+      style,
+      value: "line one\nline two",
+    } as unknown as HTMLTextAreaElement;
+
+    const result = resizeComposerTextareaElement(textarea);
+
+    expect(result).toEqual({
+      didHeightChange: false,
+      overflowY: "hidden",
+    });
+    expect(assignedHeights).toEqual([]);
+    expect(assignedOverflowValues).toEqual([]);
+  });
+
   test("resizeComposerTextareaElement shrinks the composer when content becomes shorter", () => {
     const styleState = {
       height: "120px",
