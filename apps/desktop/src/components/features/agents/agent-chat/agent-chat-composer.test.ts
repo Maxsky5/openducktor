@@ -9,6 +9,7 @@ const buildModel = () => ({
   agentStudioReady: true,
   isReadOnly: false,
   readOnlyReason: null,
+  busySendBlockedReason: null,
   input: "hello",
   onInputChange: () => {},
   onSend: () => {},
@@ -186,6 +187,24 @@ describe("AgentChatComposer", () => {
     );
 
     expect(html).toContain("Planner is unavailable for this task right now.");
+    expect(html).toContain('aria-label="Send message" disabled');
+  });
+
+  test("blocks busy sends when the runtime does not support queued messages", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          isSessionWorking: true,
+          busySendBlockedReason:
+            "Current runtime does not support queued messages while the session is working.",
+        },
+      }),
+    );
+
+    expect(html).toContain(
+      "Current runtime does not support queued messages while the session is working.",
+    );
     expect(html).toContain('aria-label="Send message" disabled');
   });
 });

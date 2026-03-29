@@ -3524,6 +3524,7 @@ describe("agent-orchestrator-load-sessions", () => {
       {
         messageId: "history-user-1",
         role: "user",
+        state: "read",
         timestamp: "2026-02-22T08:00:01.000Z",
         text: "Previous request",
         parts: [],
@@ -3635,6 +3636,7 @@ describe("agent-orchestrator-load-sessions", () => {
           {
             messageId: "hydrated-user-1",
             role: "user",
+            state: "read",
             timestamp: "2026-02-22T08:00:01.000Z",
             text: "Hydrated message",
             parts: [],

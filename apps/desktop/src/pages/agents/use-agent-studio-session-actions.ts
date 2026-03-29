@@ -94,6 +94,7 @@ export function useAgentStudioSessionActions({
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   isSessionWorking: boolean;
   isWaitingInput: boolean;
+  busySendBlockedReason: string | null;
   canKickoffNewSession: boolean;
   kickoffLabel: string;
   canStopSession: boolean;
@@ -126,6 +127,13 @@ export function useAgentStudioSessionActions({
       (activeSession?.status ?? "stopped") === "starting" ||
       isSending);
   const isWaitingInput = Boolean(activeSession && isAgentSessionWaitingInput(activeSession));
+  const supportsQueuedUserMessages = Boolean(
+    activeSession?.modelCatalog?.runtime?.capabilities.supportsQueuedUserMessages,
+  );
+  const busySendBlockedReason =
+    activeSession && isSessionWorking && !isWaitingInput && !supportsQueuedUserMessages
+      ? `${activeSession.modelCatalog?.runtime?.label ?? "Current runtime"} does not support queued messages while the session is working.`
+      : null;
 
   const {
     isStarting,
@@ -162,7 +170,7 @@ export function useAgentStudioSessionActions({
   }, [input]);
 
   const onSend = useCallback(async (): Promise<void> => {
-    if (isSending || isStarting || !agentStudioReady || isWaitingInput) {
+    if (isSending || isStarting || !agentStudioReady || isWaitingInput || busySendBlockedReason) {
       return;
     }
     if (!canStartSessionForRole(selectedTask, role)) {
@@ -238,6 +246,7 @@ export function useAgentStudioSessionActions({
     isSending,
     isStarting,
     isWaitingInput,
+    busySendBlockedReason,
     role,
     selectedTask,
     sendAgentMessage,
@@ -413,6 +422,7 @@ export function useAgentStudioSessionActions({
     isSubmittingQuestionByRequestId,
     isSessionWorking,
     isWaitingInput,
+    busySendBlockedReason,
     canKickoffNewSession,
     kickoffLabel,
     canStopSession,

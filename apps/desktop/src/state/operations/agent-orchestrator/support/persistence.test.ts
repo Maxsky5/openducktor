@@ -178,6 +178,7 @@ describe("agent-orchestrator/support/persistence", () => {
         {
           messageId: "m-user",
           role: "user",
+          state: "read",
           timestamp: "2026-02-22T08:00:00.000Z",
           text: "Please implement this",
           model: {
@@ -336,6 +337,7 @@ describe("agent-orchestrator/support/persistence", () => {
         {
           messageId: "m-user",
           role: "user",
+          state: "read",
           timestamp: "2026-02-22T08:00:00.000Z",
           text: "Please implement this",
           parts: [

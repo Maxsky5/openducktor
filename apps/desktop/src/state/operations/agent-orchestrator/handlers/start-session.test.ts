@@ -1630,6 +1630,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         {
           messageId: "fork-user-1",
           role: "user",
+          state: "read",
           timestamp: "2026-02-22T08:21:00.000Z",
           text: "Generate the PR summary.",
           parts: [],
@@ -1705,6 +1706,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
           role: "user",
           content: "Generate the PR summary.",
           timestamp: "2026-02-22T08:21:00.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+          },
         },
         {
           id: "fork-assistant-1",
@@ -1777,6 +1782,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       {
         messageId: "child-user-1",
         role: "user",
+        state: "read",
         timestamp: "2026-02-22T08:21:00.000Z",
         text: "Hydrated child history",
         parts: [],
@@ -1867,6 +1873,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
           role: "user",
           content: "Hydrated child history",
           timestamp: "2026-02-22T08:21:00.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+          },
         },
       ]);
     } finally {
@@ -2028,6 +2038,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         {
           messageId: "child-user-1",
           role: "user",
+          state: "read",
           timestamp: "2026-02-22T08:21:00.000Z",
           text: "Hydrated child history",
           parts: [],

@@ -16,6 +16,11 @@ export type SessionInput = Omit<StartAgentSessionInput, "sessionId"> & {
   sessionId: string;
 };
 
+export type QueuedUserMessageSend = {
+  content: string;
+  model?: AgentModelSelection;
+};
+
 export type SessionRecord = {
   summary: AgentSessionSummary;
   input: SessionInput;
@@ -23,7 +28,11 @@ export type SessionRecord = {
   externalSessionId: string;
   eventTransportKey: string;
   hasIdleSinceActivity: boolean;
-  emittedMessageIds: Set<string>;
+  activeAssistantMessageId: string | null;
+  emittedAssistantMessageIds: Set<string>;
+  emittedUserMessageSignatures: Map<string, string>;
+  emittedUserMessageStates: Map<string, import("@openducktor/core").AgentUserMessageState>;
+  pendingQueuedUserMessages: QueuedUserMessageSend[];
   partsById: Map<string, import("@opencode-ai/sdk/v2/client").Part>;
   messageRoleById: Map<string, string>;
   messageMetadataById: Map<
@@ -31,6 +40,8 @@ export type SessionRecord = {
     {
       timestamp: string;
       model?: AgentModelSelection;
+      parentId?: string;
+      text?: string;
     }
   >;
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;

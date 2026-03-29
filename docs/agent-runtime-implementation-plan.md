@@ -37,6 +37,7 @@ The runtime capability model must drive orchestration and UI:
 - runtime profile support
 - variant support
 - workflow tool support
+- queued user-message support
 - permission reply support
 - question reply support
 - history / todos / diff / file-status support
@@ -73,6 +74,7 @@ The runtime capability model must drive orchestration and UI:
 
 - Make runtime selection first-class.
 - Make model/profile/variant controls capability-driven.
+- Make busy-session follow-up sends capability-driven.
 - Store repo defaults per role with runtime-aware selection.
 
 ### Phase 6 - Verification

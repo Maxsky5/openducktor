@@ -185,23 +185,26 @@ export const createAgentSessionActions = ({
     }
 
     const selectedModel = hydratedSession.selectedModel ?? undefined;
-    turnStartedAtBySessionRef.current[sessionId] = Date.now();
-    if (turnModelBySessionRef) {
-      turnModelBySessionRef.current[sessionId] = selectedModel ?? null;
-    }
+    const isBusyQueuedSend = hydratedSession.status === "running";
+    if (!isBusyQueuedSend) {
+      turnStartedAtBySessionRef.current[sessionId] = Date.now();
+      if (turnModelBySessionRef) {
+        turnModelBySessionRef.current[sessionId] = selectedModel ?? null;
+      }
 
-    updateSession(
-      sessionId,
-      (current) => ({
-        ...current,
-        status: "running",
-        draftAssistantText: "",
-        draftAssistantMessageId: null,
-        draftReasoningText: "",
-        draftReasoningMessageId: null,
-      }),
-      { persist: false },
-    );
+      updateSession(
+        sessionId,
+        (current) => ({
+          ...current,
+          status: "running",
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+        }),
+        { persist: false },
+      );
+    }
 
     try {
       await adapter.sendUserMessage({
@@ -214,11 +217,15 @@ export const createAgentSessionActions = ({
         sessionId,
         (current) => ({
           ...current,
-          status: "error",
-          draftAssistantText: "",
-          draftAssistantMessageId: null,
-          draftReasoningText: "",
-          draftReasoningMessageId: null,
+          status: isBusyQueuedSend ? current.status : "error",
+          ...(isBusyQueuedSend
+            ? {}
+            : {
+                draftAssistantText: "",
+                draftAssistantMessageId: null,
+                draftReasoningText: "",
+                draftReasoningMessageId: null,
+              }),
           messages: [
             ...current.messages,
             {
@@ -231,9 +238,11 @@ export const createAgentSessionActions = ({
         }),
         { persist: false },
       );
-      clearTurnDuration(sessionId);
-      if (turnModelBySessionRef) {
-        delete turnModelBySessionRef.current[sessionId];
+      if (!isBusyQueuedSend) {
+        clearTurnDuration(sessionId);
+        if (turnModelBySessionRef) {
+          delete turnModelBySessionRef.current[sessionId];
+        }
       }
     }
   };

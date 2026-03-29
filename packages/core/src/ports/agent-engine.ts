@@ -11,6 +11,7 @@ import type {
   AgentSessionContext,
   AgentSessionTodoItem,
   AgentStreamPart,
+  AgentUserMessageState,
   RuntimeKind,
 } from "../types/agent-orchestrator";
 
@@ -89,15 +90,25 @@ export type LoadAgentFileStatusInput = {
   runtimeConnection: AgentRuntimeConnection;
 };
 
-export type AgentSessionHistoryMessage = {
-  messageId: string;
-  role: "user" | "assistant";
-  timestamp: string;
-  text: string;
-  totalTokens?: number;
-  model?: AgentModelSelection;
-  parts: AgentStreamPart[];
-};
+export type AgentSessionHistoryMessage =
+  | {
+      messageId: string;
+      role: "user";
+      timestamp: string;
+      text: string;
+      state: AgentUserMessageState;
+      model?: AgentModelSelection;
+      parts: AgentStreamPart[];
+    }
+  | {
+      messageId: string;
+      role: "assistant";
+      timestamp: string;
+      text: string;
+      totalTokens?: number;
+      model?: AgentModelSelection;
+      parts: AgentStreamPart[];
+    };
 
 export type LiveAgentSessionStatus =
   | {

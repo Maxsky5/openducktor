@@ -165,18 +165,18 @@ const isFinalAssistantHistoryMessage = (message: AgentSessionHistoryMessage): bo
   );
 };
 
-const userMessageMeta = (messageModel: AgentModelSelection | undefined) => {
+const userMessageMeta = (
+  messageModel: AgentModelSelection | undefined,
+  state: Extract<AgentSessionHistoryMessage, { role: "user" }>["state"],
+) => {
   const effectiveModel = mergeModelSelection(null, messageModel);
-  if (!effectiveModel) {
-    return undefined;
-  }
-
   return {
     kind: "user",
-    ...(effectiveModel.providerId ? { providerId: effectiveModel.providerId } : {}),
-    ...(effectiveModel.modelId ? { modelId: effectiveModel.modelId } : {}),
-    ...(effectiveModel.variant ? { variant: effectiveModel.variant } : {}),
-    ...(effectiveModel.profileId ? { profileId: effectiveModel.profileId } : {}),
+    state,
+    ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
+    ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
+    ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),
+    ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : {}),
   } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }>;
 };
 
@@ -287,10 +287,7 @@ export const historyToChatMessages = (
               ),
             }
           : message.role === "user"
-            ? (() => {
-                const meta = userMessageMeta(message.model);
-                return meta ? { meta } : {};
-              })()
+            ? { meta: userMessageMeta(message.model, message.state) }
             : {}),
       });
     }

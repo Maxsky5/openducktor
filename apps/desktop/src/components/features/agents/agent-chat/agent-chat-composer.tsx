@@ -14,6 +14,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     agentStudioReady,
     isReadOnly,
     readOnlyReason,
+    busySendBlockedReason,
     input,
     onInputChange,
     onSend,
@@ -44,8 +45,8 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
   const sendDisabled =
     isSending ||
     isStarting ||
-    isSessionWorking ||
     isWaitingInput ||
+    Boolean(busySendBlockedReason) ||
     isModelSelectionPending ||
     isReadOnly ||
     !taskId ||
@@ -70,12 +71,18 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
   };
   const isSubmitting = isSending || isStarting || isModelSelectionPending;
   const isComposerInputDisabled =
-    !agentStudioReady || isReadOnly || isModelSelectionPending || isWaitingInput;
+    !agentStudioReady ||
+    isReadOnly ||
+    isModelSelectionPending ||
+    isWaitingInput ||
+    Boolean(busySendBlockedReason);
   const composerPlaceholder = isWaitingInput
     ? (waitingInputPlaceholder ?? "Resolve the pending request above to continue")
-    : isReadOnly && readOnlyReason
-      ? readOnlyReason
-      : "@ for files/agents; / for commands; ! for shell";
+    : busySendBlockedReason
+      ? busySendBlockedReason
+      : isReadOnly && readOnlyReason
+        ? readOnlyReason
+        : "@ for files/agents; / for commands; ! for shell";
 
   return (
     <form ref={composerFormRef} className="px-4 pb-4" action={handleSubmit}>

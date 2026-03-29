@@ -1,4 +1,5 @@
 import type { Event, Part } from "@opencode-ai/sdk/v2/client";
+import type { AgentUserMessageState } from "@openducktor/core";
 import {
   asUnknownRecord,
   readArrayProp,
@@ -16,7 +17,12 @@ import {
 } from "../message-normalizers";
 import { toIsoFromEpoch } from "../session-runtime-utils";
 import { mapPartToAgentStreamPart } from "../stream-part-mapper";
-import { readEventInfo, readEventPart, readEventProperties } from "./schemas";
+import {
+  readEventInfo,
+  readEventPart,
+  readEventProperties,
+  readMessageCompletedAt,
+} from "./schemas";
 import type { EventStreamRuntime } from "./shared";
 import {
   applyDeltaToPart,
@@ -116,18 +122,75 @@ const emitKnownUserMessage = (
   input: {
     messageId: string;
     timestamp: string;
+    state: AgentUserMessageState;
     model?: ReturnType<typeof readMessageModelSelection>;
   },
 ): boolean => {
   const session = runtime.getSession(runtime.sessionId);
-  const emittedMessageIds = session?.emittedMessageIds;
-  if (emittedMessageIds?.has(input.messageId)) {
-    return true;
+  const authoritativeState =
+    resolveUserMessageStateFromAssistantProgress(session, input.messageId, input.state) ??
+    input.state;
+  const existingState = session?.emittedUserMessageStates.get(input.messageId);
+
+  if (
+    existingState === authoritativeState &&
+    session?.emittedUserMessageSignatures.has(input.messageId)
+  ) {
+    const visible = readTextFromParts(getKnownMessageParts(runtime, input.messageId));
+    if (visible.trim().length > 0) {
+      return true;
+    }
   }
 
-  const visible = readTextFromParts(getKnownMessageParts(runtime, input.messageId));
+  const visible =
+    readTextFromParts(getKnownMessageParts(runtime, input.messageId)) ||
+    session?.messageMetadataById.get(input.messageId)?.text ||
+    "";
   if (visible.trim().length === 0) {
     return false;
+  }
+
+  return emitUserMessage(runtime, {
+    messageId: input.messageId,
+    timestamp: input.timestamp,
+    message: visible,
+    state: authoritativeState,
+    ...(input.model ? { model: input.model } : {}),
+  });
+};
+
+const buildUserMessageSignature = (input: {
+  timestamp: string;
+  message: string;
+  state: AgentUserMessageState;
+  model?: ReturnType<typeof readMessageModelSelection>;
+}): string => {
+  const model = input.model;
+  return JSON.stringify({
+    timestamp: input.timestamp,
+    message: input.message,
+    state: input.state,
+    providerId: model?.providerId ?? null,
+    modelId: model?.modelId ?? null,
+    variant: model?.variant ?? null,
+    profileId: model?.profileId ?? null,
+  });
+};
+
+const emitUserMessage = (
+  runtime: EventStreamRuntime,
+  input: {
+    messageId: string;
+    timestamp: string;
+    message: string;
+    state: AgentUserMessageState;
+    model?: ReturnType<typeof readMessageModelSelection>;
+  },
+): boolean => {
+  const session = runtime.getSession(runtime.sessionId);
+  const signature = buildUserMessageSignature(input);
+  if (session?.emittedUserMessageSignatures.get(input.messageId) === signature) {
+    return true;
   }
 
   runtime.emit(runtime.sessionId, {
@@ -135,11 +198,109 @@ const emitKnownUserMessage = (
     sessionId: runtime.sessionId,
     timestamp: input.timestamp,
     messageId: input.messageId,
-    message: visible,
+    message: input.message,
+    state: input.state,
     ...(input.model ? { model: input.model } : {}),
   });
-  emittedMessageIds?.add(input.messageId);
+  session?.emittedUserMessageSignatures.set(input.messageId, signature);
+  session?.emittedUserMessageStates.set(input.messageId, input.state);
   return true;
+};
+
+const readExplicitUserMessageState = (
+  ...sources: Array<unknown>
+): AgentUserMessageState | undefined => {
+  for (const source of sources) {
+    const rawState = readStringProp(source, ["state", "status"]);
+    if (rawState === "queued" || rawState === "read") {
+      return rawState;
+    }
+  }
+  return undefined;
+};
+
+const modelsMatch = (
+  left: ReturnType<typeof readMessageModelSelection> | undefined,
+  right: ReturnType<typeof readMessageModelSelection> | undefined,
+): boolean => {
+  if (!left || !right) {
+    return true;
+  }
+  return (
+    left.providerId === right.providerId &&
+    left.modelId === right.modelId &&
+    left.variant === right.variant &&
+    left.profileId === right.profileId
+  );
+};
+
+const takeQueuedUserSendMatch = (
+  runtime: EventStreamRuntime,
+  visible: string,
+  model: ReturnType<typeof readMessageModelSelection> | undefined,
+): boolean => {
+  const session = runtime.getSession(runtime.sessionId);
+  if (!session || session.pendingQueuedUserMessages.length === 0) {
+    return false;
+  }
+
+  const normalizedVisible = visible.trim();
+  const matchIndex = session.pendingQueuedUserMessages.findIndex(
+    (entry) => entry.content === normalizedVisible && modelsMatch(entry.model, model),
+  );
+  if (matchIndex < 0) {
+    return false;
+  }
+
+  session.pendingQueuedUserMessages.splice(matchIndex, 1);
+  return true;
+};
+
+const resolveUserMessageStateFromAssistantProgress = (
+  session: ReturnType<EventStreamRuntime["getSession"]>,
+  messageId: string,
+  fallbackState: AgentUserMessageState,
+): AgentUserMessageState => {
+  if (!session) {
+    return fallbackState;
+  }
+
+  for (const metadata of session.messageMetadataById.values()) {
+    if (metadata.parentId === messageId) {
+      return "read";
+    }
+  }
+
+  return session.emittedUserMessageStates.get(messageId) ?? fallbackState;
+};
+
+const resolveLiveUserMessageState = (
+  runtime: EventStreamRuntime,
+  input: {
+    messageId: string;
+    visible: string;
+    explicitState?: AgentUserMessageState;
+    model?: ReturnType<typeof readMessageModelSelection>;
+  },
+): AgentUserMessageState => {
+  const session = runtime.getSession(runtime.sessionId);
+  if (input.explicitState) {
+    return resolveUserMessageStateFromAssistantProgress(
+      session,
+      input.messageId,
+      input.explicitState,
+    );
+  }
+
+  if (takeQueuedUserSendMatch(runtime, input.visible, input.model)) {
+    return "queued";
+  }
+
+  if (session?.activeAssistantMessageId && session.activeAssistantMessageId < input.messageId) {
+    return "queued";
+  }
+
+  return resolveUserMessageStateFromAssistantProgress(session, input.messageId, "read");
 };
 
 const readRawMessageParts = (properties: unknown, info: unknown): unknown[] => {
@@ -185,15 +346,41 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     const infoTime = infoRecord ? readRecordProp(infoRecord, "time") : undefined;
     return toIsoFromEpoch(infoTime?.created, runtime.now);
   })();
+  const messageCompletedAt = infoRecord ? readMessageCompletedAt(infoRecord) : undefined;
   const messageModel = readMessageModelSelection(infoRecord);
   const session = runtime.getSession(runtime.sessionId);
   const previousRole = messageId ? runtime.messageRoleById.get(messageId) : undefined;
+  const parentId = infoRecord
+    ? readStringProp(infoRecord, ["parentID", "parentId", "parent_id"])
+    : undefined;
   if (messageId && role) {
     runtime.messageRoleById.set(messageId, role);
     session?.messageMetadataById.set(messageId, {
       timestamp: messageTimestamp,
       ...(messageModel ? { model: messageModel } : {}),
+      ...(parentId ? { parentId } : {}),
     });
+  }
+
+  if (messageId && role === "assistant") {
+    const hasError = Boolean(infoRecord && readRecordProp(infoRecord, "error"));
+    if (messageCompletedAt === undefined && !hasError) {
+      if (session) {
+        session.activeAssistantMessageId = messageId;
+      }
+    } else if (session?.activeAssistantMessageId === messageId) {
+      session.activeAssistantMessageId = null;
+    }
+
+    if (parentId) {
+      const parentMetadata = session?.messageMetadataById.get(parentId);
+      emitKnownUserMessage(runtime, {
+        messageId: parentId,
+        timestamp: parentMetadata?.timestamp ?? messageTimestamp,
+        state: "read",
+        ...(parentMetadata?.model ? { model: parentMetadata.model } : {}),
+      });
+    }
   }
 
   const finish = infoRecord ? readStringProp(infoRecord, ["finish"]) : undefined;
@@ -252,21 +439,27 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
       return true;
     }
 
-    const emittedMessageIds = session?.emittedMessageIds;
-    if (emittedMessageIds?.has(messageId)) {
-      return true;
-    }
+    const existingMetadata = session?.messageMetadataById.get(messageId);
+    session?.messageMetadataById.set(messageId, {
+      timestamp: existingMetadata?.timestamp ?? messageTimestamp,
+      ...(existingMetadata?.model ? { model: existingMetadata.model } : {}),
+      ...(existingMetadata?.parentId ? { parentId: existingMetadata.parentId } : {}),
+      text: visible,
+    });
 
-    runtime.emit(runtime.sessionId, {
-      type: "user_message",
-      sessionId: runtime.sessionId,
-      timestamp: messageTimestamp,
+    const explicitState = readExplicitUserMessageState(infoRecord, properties);
+    return emitUserMessage(runtime, {
       messageId,
+      timestamp: messageTimestamp,
       message: visible,
+      state: resolveLiveUserMessageState(runtime, {
+        messageId,
+        visible,
+        ...(explicitState ? { explicitState } : {}),
+        ...(messageModel ? { model: messageModel } : {}),
+      }),
       ...(messageModel ? { model: messageModel } : {}),
     });
-    emittedMessageIds?.add(messageId);
-    return true;
   }
 
   const assistantParts =
@@ -291,7 +484,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
 
   const totalTokens = extractMessageTotalTokens(infoRecord, assistantParts);
   const assistantModel = readMessageModelSelection(infoRecord);
-  const emittedMessageIds = session?.emittedMessageIds;
+  const emittedMessageIds = session?.emittedAssistantMessageIds;
   if (emittedMessageIds?.has(messageId)) {
     return true;
   }
@@ -392,10 +585,27 @@ const handleMessagePartUpdatedEvent = (event: Event, runtime: EventStreamRuntime
   const messageId = nextPart.messageID;
   const role = runtime.messageRoleById.get(messageId);
   if (role === "user") {
-    const metadata = runtime.getSession(runtime.sessionId)?.messageMetadataById.get(messageId);
+    const session = runtime.getSession(runtime.sessionId);
+    const metadata = session?.messageMetadataById.get(messageId);
+    const visible = readTextFromParts(getKnownMessageParts(runtime, messageId));
+    if (visible.trim().length > 0) {
+      session?.messageMetadataById.set(messageId, {
+        timestamp: metadata?.timestamp ?? runtime.now(),
+        ...(metadata?.model ? { model: metadata.model } : {}),
+        ...(metadata?.parentId ? { parentId: metadata.parentId } : {}),
+        text: visible,
+      });
+    }
     emitKnownUserMessage(runtime, {
       messageId,
       timestamp: metadata?.timestamp ?? runtime.now(),
+      state: resolveUserMessageStateFromAssistantProgress(
+        session,
+        messageId,
+        session?.activeAssistantMessageId && session.activeAssistantMessageId < messageId
+          ? "queued"
+          : "read",
+      ),
       ...(metadata?.model ? { model: metadata.model } : {}),
     });
   }

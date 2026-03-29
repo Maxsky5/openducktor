@@ -51,7 +51,11 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   externalSessionId: "external-session-1",
   eventTransportKey: "http://127.0.0.1:12345",
   hasIdleSinceActivity: false,
-  emittedMessageIds: new Set<string>(),
+  activeAssistantMessageId: null,
+  emittedAssistantMessageIds: new Set<string>(),
+  emittedUserMessageSignatures: new Map<string, string>(),
+  emittedUserMessageStates: new Map(),
+  pendingQueuedUserMessages: [],
   partsById: new Map(),
   messageRoleById: new Map(),
   messageMetadataById: new Map(),
@@ -219,12 +223,74 @@ describe("event-stream", () => {
       messageId: "user-message-3",
       message: "Ship it",
       timestamp: "2026-02-22T12:00:05.000Z",
+      state: "read",
       model: {
         providerId: "openai",
         modelId: "gpt-5",
         profileId: "Hephaestus",
         variant: "high",
       },
+    });
+  });
+
+  test("emits queued then read user_message updates for queued follow-ups", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "message-100",
+            role: "assistant",
+            sessionID: "external-session-1",
+            time: {
+              created: Date.parse("2026-02-22T12:00:01.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "message-200",
+            role: "user",
+            sessionID: "external-session-1",
+            text: "Ship it",
+            time: {
+              created: Date.parse("2026-02-22T12:00:02.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "message-300",
+            role: "assistant",
+            parentID: "message-200",
+            sessionID: "external-session-1",
+            time: {
+              created: Date.parse("2026-02-22T12:00:03.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages[0]).toMatchObject({
+      type: "user_message",
+      messageId: "message-200",
+      message: "Ship it",
+      state: "queued",
+    });
+    expect(userMessages[1]).toMatchObject({
+      type: "user_message",
+      messageId: "message-200",
+      message: "Ship it",
+      state: "read",
     });
   });
 

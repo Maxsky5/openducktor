@@ -29,6 +29,7 @@ const runtimeFixture: RuntimeInstanceSummary = {
       supportsOdtWorkflowTools: true,
       supportsPermissionRequests: true,
       supportsProfiles: true,
+      supportsQueuedUserMessages: true,
       supportsQuestionRequests: true,
       supportsSessionFork: true,
       supportsTodos: true,

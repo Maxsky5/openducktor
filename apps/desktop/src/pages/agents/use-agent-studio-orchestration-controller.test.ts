@@ -69,6 +69,7 @@ const baseArgs: BuildArgs = {
     isSending: false,
     isSessionWorking: false,
     isWaitingInput: false,
+    busySendBlockedReason: null,
     canKickoffNewSession: false,
     kickoffLabel: "Kickoff",
     canStopSession: false,

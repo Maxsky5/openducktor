@@ -164,27 +164,77 @@ export const loadSessionHistory = async (
     ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
   });
   const data = unwrapData(response, "load session messages");
-  const mapped = data.map((entry) => {
-    const rawTextFromParts = readTextFromParts(entry.parts);
-    const rawText =
-      rawTextFromParts.length > 0 ? rawTextFromParts : readTextFromMessageInfo(entry.info);
-    const text = entry.info.role === "assistant" ? sanitizeAssistantMessage(rawText) : rawText;
-    const totalTokens = extractMessageTotalTokens(entry.info, entry.parts);
-    const parts = entry.parts
-      .map(mapPartToAgentStreamPart)
-      .filter((part): part is AgentStreamPart => part !== null && part.kind !== "text");
+  const entries = data
+    .map((entry) => {
+      const rawTextFromParts = readTextFromParts(entry.parts);
+      const rawText =
+        rawTextFromParts.length > 0 ? rawTextFromParts : readTextFromMessageInfo(entry.info);
+      const text = entry.info.role === "assistant" ? sanitizeAssistantMessage(rawText) : rawText;
+      const totalTokens = extractMessageTotalTokens(entry.info, entry.parts);
+      const parts = entry.parts
+        .map(mapPartToAgentStreamPart)
+        .filter((part): part is AgentStreamPart => part !== null && part.kind !== "text");
+      const timestamp = toIsoFromEpoch(entry.info.time.created, now);
+      const model = readMessageModelSelection(entry.info);
+      const infoRecord = asRecord(entry.info);
+      const parentId = infoRecord
+        ? readString(infoRecord, ["parentID", "parentId", "parent_id"])
+        : undefined;
+
+      return {
+        entry,
+        timestamp,
+        text,
+        ...(typeof totalTokens === "number" ? { totalTokens } : {}),
+        ...(model ? { model } : {}),
+        ...(parentId ? { parentId } : {}),
+        parts,
+      };
+    })
+    .sort((a, b) => {
+      const aTime = Date.parse(a.timestamp);
+      const bTime = Date.parse(b.timestamp);
+      if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
+        return 0;
+      }
+      return aTime - bTime;
+    });
+
+  const assistantParentIds = new Set(
+    entries.flatMap((item) =>
+      item.entry.info.role === "assistant" && item.parentId ? [item.parentId] : [],
+    ),
+  );
+  const lastAssistantParentId = [...entries]
+    .reverse()
+    .find((item) => item.entry.info.role === "assistant" && item.parentId)?.parentId;
+
+  const mapped: AgentSessionHistoryMessage[] = entries.map((item) => {
+    if (item.entry.info.role === "assistant") {
+      return {
+        messageId: item.entry.info.id,
+        role: "assistant",
+        timestamp: item.timestamp,
+        text: item.text,
+        ...(typeof item.totalTokens === "number" ? { totalTokens: item.totalTokens } : {}),
+        ...(item.model ? { model: item.model } : {}),
+        parts: item.parts,
+      };
+    }
 
     return {
-      messageId: entry.info.id,
-      role: entry.info.role,
-      timestamp: toIsoFromEpoch(entry.info.time.created, now),
-      text,
-      ...(typeof totalTokens === "number" ? { totalTokens } : {}),
-      ...(() => {
-        const model = readMessageModelSelection(entry.info);
-        return model ? { model } : {};
-      })(),
-      parts,
+      messageId: item.entry.info.id,
+      role: "user",
+      timestamp: item.timestamp,
+      text: item.text,
+      state:
+        assistantParentIds.has(item.entry.info.id) ||
+        !lastAssistantParentId ||
+        item.entry.info.id <= lastAssistantParentId
+          ? "read"
+          : "queued",
+      ...(item.model ? { model: item.model } : {}),
+      parts: item.parts,
     };
   });
 
@@ -299,6 +349,16 @@ export const sendUserMessage = async (input: {
   tools: Record<string, boolean>;
 }): Promise<void> => {
   const model = input.request.model ?? input.session.input.model;
+  const wasBusy = input.session.hasIdleSinceActivity === false;
+  const queuedSend = wasBusy
+    ? {
+        content: input.request.content.trim(),
+        ...(model ? { model } : {}),
+      }
+    : null;
+  if (queuedSend) {
+    input.session.pendingQueuedUserMessages.push(queuedSend);
+  }
   const modelInput = normalizeModelInput(model);
   const promptRequest = {
     sessionID: input.session.externalSessionId,
@@ -320,6 +380,11 @@ export const sendUserMessage = async (input: {
       throw toOpenCodeRequestError("prompt session", response.error, response.response);
     }
   } catch (error) {
+    if (queuedSend) {
+      input.session.pendingQueuedUserMessages = input.session.pendingQueuedUserMessages.filter(
+        (entry) => entry !== queuedSend,
+      );
+    }
     throw toOpenCodeRequestError("prompt session", error);
   }
 };

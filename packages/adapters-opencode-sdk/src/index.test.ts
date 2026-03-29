@@ -965,7 +965,14 @@ describe("OpencodeSdkAdapter", () => {
       variant: "high",
     });
     expect(history[1]?.text).toBe("Final answer");
-    expect(history[1]?.totalTokens).toBe(2_450);
+    if (history[0]?.role !== "user") {
+      throw new Error("Expected first history entry to be a user message");
+    }
+    if (history[1]?.role !== "assistant") {
+      throw new Error("Expected second history entry to be an assistant message");
+    }
+    expect(history[0].state).toBe("read");
+    expect(history[1].totalTokens).toBe(2_450);
     expect(history[1]?.model).toEqual({
       providerId: "openai",
       modelId: "gpt-5",
@@ -1282,6 +1289,7 @@ describe("OpencodeSdkAdapter", () => {
       timestamp: "2026-02-17T12:00:04.000Z",
       messageId: "user-1",
       message: "Generate the pull request",
+      state: "read",
       model: {
         providerId: "openai",
         modelId: "gpt-5",
@@ -1347,6 +1355,7 @@ describe("OpencodeSdkAdapter", () => {
       timestamp: "2026-02-17T12:00:05.000Z",
       messageId: "user-2",
       message: "Generate the pull request",
+      state: "read",
       model: {
         providerId: "openai",
         modelId: "gpt-5",

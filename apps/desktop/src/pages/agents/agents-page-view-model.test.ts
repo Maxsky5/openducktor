@@ -300,6 +300,7 @@ describe("agents-page-view-model", () => {
       input: "message",
       isReadOnly: false,
       readOnlyReason: null,
+      busySendBlockedReason: null,
       onInputChange: () => {},
       onSend,
       isWaitingInput: false,

@@ -121,6 +121,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       isSending: false,
       isSessionWorking: true,
       isWaitingInput: false,
+      busySendBlockedReason: null,
       canKickoffNewSession: false,
       kickoffLabel: "Start Spec",
       canStopSession: true,

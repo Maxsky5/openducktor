@@ -1508,4 +1508,188 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
+
+  test("preserves active turn drafts and timing for busy queued sends", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalSendUserMessage = adapter.sendUserMessage;
+    const sendCalls: Array<{ sessionId: string; content: string }> = [];
+
+    adapter.hasSession = () => true;
+    adapter.listLiveAgentSessionSnapshots = async () => [];
+    adapter.sendUserMessage = async (input) => {
+      sendCalls.push({ sessionId: input.sessionId, content: input.content });
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          status: "running",
+          draftAssistantText: "Still working",
+          draftAssistantMessageId: "assistant-live-1",
+          draftReasoningText: "Thinking",
+          draftReasoningMessageId: "reasoning-live-1",
+        }),
+      },
+    };
+    const turnStartedAtBySessionRef = { current: { "session-1": 1234 } };
+    const turnModelBySessionRef = {
+      current: {
+        "session-1": {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+      } as Record<string, AgentSessionState["selectedModel"]>,
+    };
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      turnStartedAtBySessionRef,
+      turnModelBySessionRef,
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[sessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {
+        throw new Error("busy queued send should not clear turn timing");
+      },
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+    });
+
+    try {
+      await actions.sendAgentMessage("session-1", "queued follow-up");
+
+      expect(sendCalls).toEqual([{ sessionId: "session-1", content: "queued follow-up" }]);
+      expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("Still working");
+      expect(sessionsRef.current["session-1"]?.draftAssistantMessageId).toBe("assistant-live-1");
+      expect(sessionsRef.current["session-1"]?.draftReasoningText).toBe("Thinking");
+      expect(sessionsRef.current["session-1"]?.draftReasoningMessageId).toBe("reasoning-live-1");
+      expect(turnStartedAtBySessionRef.current["session-1"]).toBe(1234);
+      expect(turnModelBySessionRef.current["session-1"]?.modelId).toBe("gpt-5");
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("keeps the active turn running when a busy queued send fails", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalSendUserMessage = adapter.sendUserMessage;
+    let clearCalls = 0;
+
+    adapter.hasSession = () => true;
+    adapter.listLiveAgentSessionSnapshots = async () => [];
+    adapter.sendUserMessage = async () => {
+      throw new Error("queued send failed");
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          status: "running",
+          draftAssistantText: "Still working",
+          draftAssistantMessageId: "assistant-live-1",
+          draftReasoningText: "Thinking",
+          draftReasoningMessageId: "reasoning-live-1",
+        }),
+      },
+    };
+    const turnStartedAtBySessionRef = { current: { "session-1": 1234 } };
+    const turnModelBySessionRef = {
+      current: {
+        "session-1": {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+      } as Record<string, AgentSessionState["selectedModel"]>,
+    };
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      turnStartedAtBySessionRef,
+      turnModelBySessionRef,
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[sessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {
+        clearCalls += 1;
+      },
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+    });
+
+    try {
+      await actions.sendAgentMessage("session-1", "queued follow-up");
+
+      expect(sessionsRef.current["session-1"]?.status).toBe("running");
+      expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("Still working");
+      expect(sessionsRef.current["session-1"]?.draftReasoningText).toBe("Thinking");
+      expect(
+        sessionsRef.current["session-1"]?.messages.some((message) =>
+          message.content.includes("Failed to send message:"),
+        ),
+      ).toBe(true);
+      expect(clearCalls).toBe(0);
+      expect(turnStartedAtBySessionRef.current["session-1"]).toBe(1234);
+      expect(turnModelBySessionRef.current["session-1"]?.modelId).toBe("gpt-5");
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
 });

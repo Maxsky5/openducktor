@@ -231,6 +231,7 @@ type UseAgentStudioComposerModelArgs = {
   activeSession: AgentSessionState | null;
   isSessionWorking: boolean;
   isWaitingInput: boolean;
+  busySendBlockedReason: string | null;
   canStopSession: boolean;
   stopAgentSession: (sessionId: string) => Promise<void>;
   agentStudioReady: boolean;
@@ -263,6 +264,7 @@ export const useAgentStudioComposerModel = ({
   activeSession,
   isSessionWorking,
   isWaitingInput,
+  busySendBlockedReason,
   canStopSession,
   stopAgentSession,
   agentStudioReady,
@@ -316,6 +318,7 @@ export const useAgentStudioComposerModel = ({
         agentStudioReady,
         isReadOnly: !selectedRoleAvailable,
         readOnlyReason: selectedRoleReadOnlyReason,
+        busySendBlockedReason,
         input,
         onInputChange: setInput,
         onSend: handleSend,
@@ -359,6 +362,7 @@ export const useAgentStudioComposerModel = ({
       isSending,
       isSessionWorking,
       isWaitingInput,
+      busySendBlockedReason,
       isStarting,
       waitingInputPlaceholder,
       modelGroups,

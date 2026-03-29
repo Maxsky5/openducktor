@@ -116,6 +116,7 @@ Canonical capability schema: `packages/contracts/src/agent-runtime-schemas.ts`
 | `supportsVariants` | Optional enhancement | Runtime supports model variants | Session start flow and repo settings | Variant selectors read this before showing variant choices |
 | `supportsOdtWorkflowTools` | Product-required capability | Runtime can execute ODT workflow tools | Workflow roles and tool policy | Built-in OpenDucktor roles rely on this when the runtime runs ODT tools |
 | `supportsSessionFork` | Product-required capability | Runtime can fork or branch an existing session | Session controls and workflow continuity | Runtime validation rejects integrations that cannot support OpenDucktor's fork-capable session model |
+| `supportsQueuedUserMessages` | Optional enhancement | Runtime can accept follow-up user messages while the current turn is still running and later acknowledge them through the normal transcript lifecycle | Agent Studio composer, transcript rendering, and history hydration | Busy-session sends stay enabled only when this flag is true; queued user turns must flow through the standard `user_message` event/history path and update in place from `queued` to `read` |
 | `supportsPermissionRequests` | Optional enhancement | Runtime can emit permission prompts | Session event handling | Permission reply flows are only needed if the runtime emits permission prompts |
 | `supportsQuestionRequests` | Optional enhancement | Runtime can emit question prompts | Session event handling | Question reply flows are only needed if the runtime emits question prompts |
 | `supportsTodos` | Optional enhancement | Runtime can list session todo items | Session warmup and event refresh | Todo warmup and refresh logic read from this surface |
@@ -338,11 +339,25 @@ Update capability-driven UI surfaces:
 Concrete consumers to keep in mind:
 
 - `supportsProfiles` and `supportsVariants` drive session-start and repo-settings controls,
+- `supportsQueuedUserMessages` drives whether Agent Studio allows busy-session follow-up sends and whether queued user-turn rendering is expected,
 - `supportsMcpStatus` drives diagnostics sections and MCP health checks.
 
 `apps/desktop/src/state/operations/runtime-catalog.ts` is the main optional-capability gate for runtime diagnostics. It now skips MCP probing when `supportsMcpStatus` is false.
 
 When contributors add new capability-driven UI behavior, the capability information comes from runtime descriptors rather than per-session state.
+
+## Queued User Messages
+
+Queued user messages are a runtime-owned transcript lifecycle, not a desktop placeholder system.
+
+Rules:
+
+- Agent Studio may only allow a follow-up free-form send while a session is already working when the active runtime descriptor sets `supportsQueuedUserMessages: true`.
+- Waiting-input states still win. If the session is blocked on a permission or question, the composer must keep free-form sends disabled even when queued follow-ups are supported.
+- Queued turns still use the existing `user_message` contract. OpenDucktor does not add a separate queued-message event type.
+- The adapter must emit the same user message id first as `queued`, then later as `read` once the runtime starts processing that turn.
+- History hydration must preserve that authoritative queued/read state and prefer `read` over stale live `queued` state when the same message is seen in both places.
+- If a runtime cannot provide enough information to drive that lifecycle through the normal message/event/history surfaces, leave `supportsQueuedUserMessages` disabled instead of simulating the feature in desktop code.
 
 ### 7. Rust host integration
 

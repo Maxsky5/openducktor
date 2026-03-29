@@ -46,6 +46,7 @@ export type AgentChatComposerModel = {
   agentStudioReady: boolean;
   isReadOnly: boolean;
   readOnlyReason: string | null;
+  busySendBlockedReason: string | null;
   input: string;
   onInputChange: (value: string) => void;
   onSend: () => void;
