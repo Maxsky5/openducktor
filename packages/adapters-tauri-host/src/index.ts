@@ -45,6 +45,9 @@ const TASK_METHODS = [
   "savePlanDocument",
   "planGet",
   "taskMetadataGet",
+  "taskMetadataGetFresh",
+  "taskDocumentGet",
+  "taskDocumentGetFresh",
   "qaGetReport",
   "qaApproved",
   "qaRejected",
@@ -149,7 +152,6 @@ const bindDelegates = <
 
 export type TauriHostClient = TauriHostClientApi & PlannerTools;
 export type { BuildRespondInput } from "./build-runtime-client";
-export type { TaskMetadataReadOptions } from "./task-metadata-cache";
 
 const createTauriHostClientApi = (invokeFn: InvokeFn): TauriHostClientApi => {
   const metadataCache = new TaskMetadataCache();

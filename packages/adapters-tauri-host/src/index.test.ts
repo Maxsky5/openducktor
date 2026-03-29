@@ -1415,9 +1415,7 @@ describe("TauriHostClient", () => {
 
     expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
     expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
-    expect((await client.specGet("/repo", "task-1", { forceFresh: true })).markdown).toBe(
-      "Spec V2",
-    );
+    expect((await client.taskDocumentGetFresh("/repo", "task-1", "spec")).markdown).toBe("Spec V2");
     expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V2");
 
     expect(calls.map((entry) => entry.command)).toEqual(["task_metadata_get", "task_metadata_get"]);
@@ -1448,8 +1446,8 @@ describe("TauriHostClient", () => {
     });
 
     const staleRead = client.specGet("/repo", "task-1");
-    const freshSpecRead = client.specGet("/repo", "task-1", { forceFresh: true });
-    const freshPlanRead = client.planGet("/repo", "task-1", { forceFresh: true });
+    const freshSpecRead = client.taskDocumentGetFresh("/repo", "task-1", "spec");
+    const freshPlanRead = client.taskDocumentGetFresh("/repo", "task-1", "plan");
 
     freshReadPromise.resolve(makeTaskMetadataPayload("Spec V2"));
 
