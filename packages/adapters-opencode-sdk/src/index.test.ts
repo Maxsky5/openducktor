@@ -841,6 +841,54 @@ describe("OpencodeSdkAdapter", () => {
     expect(mock.session.promptAsyncCalls).toHaveLength(0);
   });
 
+  test("sendUserMessage emits session_idle when the send fails after reporting busy", async () => {
+    const mock = makeMockClient({
+      commandResult: {
+        mode: "api_error",
+        error: new Error("bad command payload"),
+        response: { status: 400, statusText: "Bad Request" },
+      },
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "build");
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => events.push(event));
+
+    await expect(
+      adapter.sendUserMessage({
+        sessionId: "session-1",
+        parts: [
+          {
+            kind: "slash_command",
+            command: {
+              id: "compact",
+              trigger: "compact",
+              title: "compact",
+              hints: [],
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow("OpenCode request failed: run slash command (400 Bad Request)");
+
+    expect(events).toContainEqual({
+      type: "session_status",
+      sessionId: "session-1",
+      timestamp: "2026-02-17T12:00:00Z",
+      status: { type: "busy" },
+    });
+    expect(events).toContainEqual({
+      type: "session_idle",
+      sessionId: "session-1",
+      timestamp: "2026-02-17T12:00:00Z",
+    });
+  });
+
   test("sendUserMessage resets session activity so the next stream idle can settle the turn", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({

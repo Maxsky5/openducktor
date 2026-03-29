@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { OpencodeSdkAdapter } from "./opencode-sdk-adapter";
@@ -207,7 +207,7 @@ describe("opencode-sdk-adapter", () => {
     const unsupportedClient = {
       ...mock.client,
       global: {},
-    } as OpencodeClient;
+    } as unknown as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => unsupportedClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -271,6 +271,58 @@ describe("opencode-sdk-adapter", () => {
         },
       },
     ]);
+  });
+
+  test("listAvailableSlashCommands forwards runtime inputs to the catalog loader", async () => {
+    const list = mock(async () => ({
+      data: [{ name: "review", description: "Review changes", source: "command", hints: [] }],
+      error: undefined,
+    }));
+    const createClient = mock(() => ({ command: { list } })) as () => OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({ createClient, now: () => "2026-02-22T12:00:00.000Z" });
+
+    const catalog = await adapter.listAvailableSlashCommands({
+      runtimeKind: "opencode",
+      runtimeConnection: {
+        endpoint: "http://127.0.0.1:12345",
+        workingDirectory: "/repo",
+      },
+    });
+
+    expect(createClient).toHaveBeenCalledWith({
+      runtimeEndpoint: "http://127.0.0.1:12345",
+      workingDirectory: "/repo",
+    });
+    expect(list).toHaveBeenCalledWith({ directory: "/repo" });
+    expect(catalog).toEqual({
+      commands: [
+        {
+          id: "review",
+          trigger: "review",
+          title: "review",
+          description: "Review changes",
+          source: "command",
+          hints: [],
+        },
+      ],
+    });
+  });
+
+  test("listAvailableSlashCommands propagates catalog loader failures", async () => {
+    const adapter = new OpencodeSdkAdapter({
+      createClient: (() => ({})) as () => OpencodeClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await expect(
+      adapter.listAvailableSlashCommands({
+        runtimeKind: "opencode",
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:12345",
+          workingDirectory: "/repo",
+        },
+      }),
+    ).rejects.toThrow("OpenCode runtime does not expose the command listing API.");
   });
 
   test("listLiveAgentSessionSnapshots merges status and pending input into a single live-session view", async () => {
@@ -355,7 +407,7 @@ describe("opencode-sdk-adapter", () => {
           error: undefined,
         }),
       },
-    } as OpencodeClient;
+    } as unknown as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => malformedClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -383,7 +435,7 @@ describe("opencode-sdk-adapter", () => {
           error: undefined,
         }),
       },
-    } as OpencodeClient;
+    } as unknown as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => malformedClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -421,7 +473,7 @@ describe("opencode-sdk-adapter", () => {
           error: undefined,
         }),
       },
-    } as OpencodeClient;
+    } as unknown as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => whitespaceClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -473,7 +525,7 @@ describe("opencode-sdk-adapter", () => {
           error: undefined,
         }),
       },
-    } as OpencodeClient;
+    } as unknown as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => malformedClient,
       now: () => "2026-02-22T12:00:00.000Z",

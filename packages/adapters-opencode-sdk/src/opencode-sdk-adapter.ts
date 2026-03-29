@@ -47,6 +47,7 @@ import {
   type SessionEventListeners,
   subscribeSessionEvents,
 } from "./event-emitter";
+import { setSessionIdle } from "./event-stream/shared";
 import { sendUserMessage } from "./message-execution";
 import {
   listLiveAgentSessionPendingInput,
@@ -461,11 +462,21 @@ export class OpencodeSdkAdapter
       timestamp: this.now(),
       status: { type: "busy" },
     });
-    await sendUserMessage({
-      session,
-      request: input,
-      tools,
-    });
+    try {
+      await sendUserMessage({
+        session,
+        request: input,
+        tools,
+      });
+    } catch (error) {
+      setSessionIdle(session);
+      this.emit(input.sessionId, {
+        type: "session_idle",
+        sessionId: input.sessionId,
+        timestamp: this.now(),
+      });
+      throw error;
+    }
   }
 
   updateSessionModel(input: UpdateAgentSessionModelInput): void {
