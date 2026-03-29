@@ -53,11 +53,7 @@ export function useAgentChatSentinelObservers({
             return;
           }
 
-          if (
-            suppressSentinelsRef.current ||
-            isUpdatingRef.current ||
-            !topShiftArmedRef.current
-          ) {
+          if (suppressSentinelsRef.current || isUpdatingRef.current || !topShiftArmedRef.current) {
             return;
           }
 
@@ -114,7 +110,14 @@ export function useAgentChatSentinelObservers({
       observer.observe(element);
       bottomObserverRef.current = observer;
     },
-    [isUpdatingRef, messagesContainerRef, rowCount, shiftWindowDown, suppressSentinelsRef, windowEnd],
+    [
+      isUpdatingRef,
+      messagesContainerRef,
+      rowCount,
+      shiftWindowDown,
+      suppressSentinelsRef,
+      windowEnd,
+    ],
   );
 
   useEffect(() => {
