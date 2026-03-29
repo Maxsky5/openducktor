@@ -271,8 +271,9 @@ const resolveLiveUserMessageState = (
     session,
     input.messageId,
   );
+  const matchedQueuedSend = takeQueuedUserSendMatch(runtime, input.visible, input.model);
 
-  if (takeQueuedUserSendMatch(runtime, input.visible, input.model)) {
+  if (matchedQueuedSend && pendingAssistantState === "queued") {
     return "queued";
   }
 

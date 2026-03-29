@@ -332,6 +332,54 @@ describe("event-stream", () => {
     });
   });
 
+  test("does not leave a late queued-send acknowledgement stuck queued after idle", async () => {
+    const client = makeClientWithEvents([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "message-200",
+            role: "user",
+            sessionID: "external-session-1",
+            text: "Ship it",
+            time: {
+              created: Date.parse("2026-02-22T12:00:02.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+    const emitted: AgentEvent[] = [];
+    const sessionRecord = makeSessionRecord(client);
+    sessionRecord.pendingQueuedUserMessages.push({ content: "Ship it" });
+    sessionRecord.activeAssistantMessageId = null;
+
+    await subscribeOpencodeEvents({
+      context: {
+        sessionId: "local-session-1",
+        externalSessionId: "external-session-1",
+        input: makeSessionInput(),
+      },
+      client,
+      controller: new AbortController(),
+      now: () => "2026-02-22T12:00:00.000Z",
+      emit: (_sessionId, event) => {
+        emitted.push(event);
+      },
+      getSession: () => sessionRecord,
+    });
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]).toMatchObject({
+      type: "user_message",
+      messageId: "message-200",
+      message: "Ship it",
+      state: "read",
+    });
+    expect(sessionRecord.pendingQueuedUserMessages).toHaveLength(0);
+  });
+
   test("ignores unrelated status fields when deriving explicit user message state", async () => {
     const emitted = await runEventStream([
       {
@@ -396,6 +444,7 @@ describe("event-stream", () => {
     ]);
     const emitted: AgentEvent[] = [];
     const sessionRecord = makeSessionRecord(client);
+    sessionRecord.activeAssistantMessageId = "msg-100";
     sessionRecord.pendingQueuedUserMessages.push(
       { content: "Ship it" },
       {
