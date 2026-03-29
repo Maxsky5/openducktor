@@ -150,7 +150,6 @@ export function useAgentChatScrollController({
     (options?: { allowedRowKeys?: ReadonlySet<string> }) => {
       const viewportAnchor = findViewportAnchor(options);
       pendingScrollAnchorRef.current = viewportAnchor;
-      viewportAnchorRef.current = viewportAnchor;
       return viewportAnchor !== null;
     },
     [findViewportAnchor],
@@ -432,6 +431,8 @@ export function useAgentChatScrollController({
     if (Math.abs(delta) >= 1) {
       container.scrollTop += delta;
     }
+
+    viewportAnchorRef.current = isPinnedToBottomRef.current ? null : findViewportAnchor();
   });
 
   useEffect(() => {

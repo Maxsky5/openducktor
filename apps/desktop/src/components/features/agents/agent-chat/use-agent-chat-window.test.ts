@@ -1837,6 +1837,79 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("refreshes the resize anchor after a window shift before later content growth", async () => {
+    const rows = createRows(120);
+    const rowHeights = new Map<number, number>();
+    rowHeights.set(10, 120);
+
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachContainer: true },
+    );
+
+    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
+    const content = harness.messagesContentRef.current as MockMessagesContent | null;
+    if (!container || !content) {
+      throw new Error("Expected messages container and content");
+    }
+
+    attachScrollableWindowedRowGeometry({
+      container,
+      rows,
+      getWindowStart: () => harness.getLatestResult().windowStart,
+      getWindowEnd: () => harness.getLatestResult().windowEnd,
+      getRowHeight: (_row, index) => rowHeights.get(index) ?? ROW_HEIGHT_PX,
+    });
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+
+    container.scrollTop = 600;
+
+    const sentinelElement = createMessagesContainer();
+    await act(async () => {
+      harness.getLatestResult().bottomSentinelRef(sentinelElement);
+      await flush();
+    });
+
+    const observer = mockIntersectionObservers.at(-1);
+    if (!observer) {
+      throw new Error("Expected bottom sentinel observer");
+    }
+
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(10);
+    expect(container.scrollTop).toBe(200);
+
+    rowHeights.set(10, 320);
+    Object.assign(content, { scrollHeight: 1400 });
+    Object.assign(container, { scrollHeight: 1400 });
+
+    await act(async () => {
+      triggerResizeObservers();
+      await flush();
+    });
+
+    expect(container.scrollTop).toBe(400);
+
+    await harness.unmount();
+  });
+
   test("returns windowedRows as the active slice", async () => {
     const rows = createRows(95);
     const harness = await mountHarness({
