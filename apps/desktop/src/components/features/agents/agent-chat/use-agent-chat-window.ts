@@ -157,6 +157,7 @@ export function useAgentChatWindow({
     rowCount,
     windowStart: windowRange.start,
     windowEnd: windowRange.end,
+    isUpdatingRef,
     suppressSentinelsRef,
     shiftWindowUp,
     shiftWindowDown,

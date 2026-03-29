@@ -1513,13 +1513,7 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("upward window shifts suppress repeated top sentinel triggers until the unlock frame", async () => {
-    const queuedFrameCallbacks: FrameRequestCallback[] = [];
-    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      queuedFrameCallbacks.push(callback);
-      return queuedFrameCallbacks.length;
-    }) as typeof requestAnimationFrame;
-
+  test("upward window shifts ignore repeated top sentinel intersections until the sentinel exits", async () => {
     const rows = createRows(120);
     const harness = await mountHarness(
       {
@@ -1543,14 +1537,6 @@ describe("useAgentChatWindow", () => {
     });
     container.scrollTop = 160;
 
-    await act(async () => {
-      while (queuedFrameCallbacks.length > 0) {
-        const callback = queuedFrameCallbacks.shift();
-        callback?.(0);
-        await flush();
-      }
-    });
-
     const sentinelElement = createMessagesContainer();
     await act(async () => {
       harness.getLatestResult().topSentinelRef(sentinelElement);
@@ -1571,23 +1557,22 @@ describe("useAgentChatWindow", () => {
     expect(result.windowStart).toBe(50);
 
     await act(async () => {
+      observer.trigger([{ isIntersecting: false }]);
+      await flush();
+    });
+
+    await act(async () => {
       observer.trigger([{ isIntersecting: true }]);
       await flush();
     });
 
     result = harness.getLatestResult();
-    expect(result.windowStart).toBe(50);
+    expect(result.windowStart).toBe(40);
 
     await harness.unmount();
   });
 
-  test("downward window shifts suppress repeated bottom sentinel triggers until the unlock frame", async () => {
-    const queuedFrameCallbacks: FrameRequestCallback[] = [];
-    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      queuedFrameCallbacks.push(callback);
-      return queuedFrameCallbacks.length;
-    }) as typeof requestAnimationFrame;
-
+  test("downward window shifts ignore repeated bottom sentinel intersections until the sentinel exits", async () => {
     const rows = createRows(120);
     const harness = await mountHarness(
       {
@@ -1617,14 +1602,6 @@ describe("useAgentChatWindow", () => {
 
     container.scrollTop = 600;
 
-    await act(async () => {
-      while (queuedFrameCallbacks.length > 0) {
-        const callback = queuedFrameCallbacks.shift();
-        callback?.(0);
-        await flush();
-      }
-    });
-
     const sentinelElement = createMessagesContainer();
     await act(async () => {
       harness.getLatestResult().bottomSentinelRef(sentinelElement);
@@ -1646,13 +1623,18 @@ describe("useAgentChatWindow", () => {
     expect(result.windowEnd).toBe(69);
 
     await act(async () => {
+      observer.trigger([{ isIntersecting: false }]);
+      await flush();
+    });
+
+    await act(async () => {
       observer.trigger([{ isIntersecting: true }]);
       await flush();
     });
 
     result = harness.getLatestResult();
-    expect(result.windowStart).toBe(0);
-    expect(result.windowEnd).toBe(69);
+    expect(result.windowStart).toBe(10);
+    expect(result.windowEnd).toBe(79);
 
     await harness.unmount();
   });
@@ -1780,6 +1762,11 @@ describe("useAgentChatWindow", () => {
     });
 
     await act(async () => {
+      observer.trigger([{ isIntersecting: false }]);
+      await flush();
+    });
+
+    await act(async () => {
       observer.trigger([{ isIntersecting: true }]);
       await flush();
     });
@@ -1891,6 +1878,11 @@ describe("useAgentChatWindow", () => {
 
     await act(async () => {
       observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    await act(async () => {
+      observer.trigger([{ isIntersecting: false }]);
       await flush();
     });
 

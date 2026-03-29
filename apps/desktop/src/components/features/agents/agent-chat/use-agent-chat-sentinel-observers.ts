@@ -7,6 +7,7 @@ type UseAgentChatSentinelObserversInput = {
   rowCount: number;
   windowStart: number;
   windowEnd: number;
+  isUpdatingRef: MutableRefObject<boolean>;
   suppressSentinelsRef: MutableRefObject<boolean>;
   shiftWindowUp: () => void;
   shiftWindowDown: () => void;
@@ -22,13 +23,15 @@ export function useAgentChatSentinelObservers({
   rowCount,
   windowStart,
   windowEnd,
+  isUpdatingRef,
   suppressSentinelsRef,
   shiftWindowUp,
   shiftWindowDown,
 }: UseAgentChatSentinelObserversInput): UseAgentChatSentinelObserversResult {
-  void suppressSentinelsRef;
   const topObserverRef = useRef<IntersectionObserver | null>(null);
   const bottomObserverRef = useRef<IntersectionObserver | null>(null);
+  const topShiftArmedRef = useRef(true);
+  const bottomShiftArmedRef = useRef(true);
 
   const topSentinelRef = useCallback<RefCallback<HTMLDivElement>>(
     (element) => {
@@ -41,9 +44,25 @@ export function useAgentChatSentinelObservers({
       const observer = new IntersectionObserver(
         (entries) => {
           const entry = entries[0];
-          if (entry?.isIntersecting) {
-            shiftWindowUp();
+          if (!entry) {
+            return;
           }
+
+          if (!entry.isIntersecting) {
+            topShiftArmedRef.current = true;
+            return;
+          }
+
+          if (
+            suppressSentinelsRef.current ||
+            isUpdatingRef.current ||
+            !topShiftArmedRef.current
+          ) {
+            return;
+          }
+
+          topShiftArmedRef.current = false;
+          shiftWindowUp();
         },
         {
           root: messagesContainerRef.current,
@@ -53,7 +72,7 @@ export function useAgentChatSentinelObservers({
       observer.observe(element);
       topObserverRef.current = observer;
     },
-    [messagesContainerRef, shiftWindowUp, windowStart],
+    [isUpdatingRef, messagesContainerRef, shiftWindowUp, suppressSentinelsRef, windowStart],
   );
 
   const bottomSentinelRef = useCallback<RefCallback<HTMLDivElement>>(
@@ -67,9 +86,25 @@ export function useAgentChatSentinelObservers({
       const observer = new IntersectionObserver(
         (entries) => {
           const entry = entries[0];
-          if (entry?.isIntersecting) {
-            shiftWindowDown();
+          if (!entry) {
+            return;
           }
+
+          if (!entry.isIntersecting) {
+            bottomShiftArmedRef.current = true;
+            return;
+          }
+
+          if (
+            suppressSentinelsRef.current ||
+            isUpdatingRef.current ||
+            !bottomShiftArmedRef.current
+          ) {
+            return;
+          }
+
+          bottomShiftArmedRef.current = false;
+          shiftWindowDown();
         },
         {
           root: messagesContainerRef.current,
@@ -79,7 +114,7 @@ export function useAgentChatSentinelObservers({
       observer.observe(element);
       bottomObserverRef.current = observer;
     },
-    [messagesContainerRef, rowCount, shiftWindowDown, windowEnd],
+    [isUpdatingRef, messagesContainerRef, rowCount, shiftWindowDown, suppressSentinelsRef, windowEnd],
   );
 
   useEffect(() => {
