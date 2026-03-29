@@ -35,10 +35,6 @@ type MockMessagesContent = HTMLDivElement & {
   scrollHeight: number;
 };
 
-type TriggerableIntersectionObserver = IntersectionObserver & {
-  trigger: (entries?: Partial<IntersectionObserverEntry>[]) => void;
-};
-
 const createRows = (count: number): AgentChatWindowRow[] =>
   Array.from({ length: count }, (_, i) => ({
     kind: "message" as const,
@@ -183,6 +179,40 @@ const attachScrollableWindowedRowGeometry = ({
   });
 };
 
+const dispatchContainerEvent = (
+  container: MockMessagesContainer,
+  eventName: string,
+  event: Event,
+): void => {
+  const listeners = container.addEventListener.mock.calls
+    .filter(([registeredEventName]) => registeredEventName === eventName)
+    .map(([, listener]) => listener)
+    .filter((listener): listener is EventListener => typeof listener === "function");
+  const removedListeners = new Set(
+    container.removeEventListener.mock.calls
+      .filter(([registeredEventName]) => registeredEventName === eventName)
+      .map(([, listener]) => listener)
+      .filter((listener): listener is EventListener => typeof listener === "function"),
+  );
+  const activeListeners = listeners.filter((listener) => !removedListeners.has(listener));
+  if (activeListeners.length === 0) {
+    throw new Error(`Expected ${eventName} listeners`);
+  }
+
+  for (const listener of activeListeners) {
+    listener(event);
+  }
+};
+
+const syncWindowedScrollHeight = (
+  container: MockMessagesContainer,
+  getWindowStart: () => number,
+  getWindowEnd: () => number,
+): void => {
+  const renderedRowCount = Math.max(0, getWindowEnd() - getWindowStart() + 1);
+  Object.assign(container, { scrollHeight: renderedRowCount * ROW_HEIGHT_PX });
+};
+
 const getLatestResult = (latestResultRef: { current: HookResult | null }): HookResult => {
   const result = latestResultRef.current;
   if (!result) {
@@ -251,7 +281,6 @@ const mountHarness = async (
   };
 };
 
-const mockIntersectionObservers: TriggerableIntersectionObserver[] = [];
 type MockResizeObserverController = {
   callback: ResizeObserverCallback;
   observer: ResizeObserver;
@@ -259,64 +288,6 @@ type MockResizeObserverController = {
 };
 
 const mockResizeObserverControllers = new Set<MockResizeObserverController>();
-
-class MockIntersectionObserver implements TriggerableIntersectionObserver {
-  readonly root: Element | Document | null;
-  readonly rootMargin: string;
-  readonly thresholds: ReadonlyArray<number>;
-
-  private readonly callback: IntersectionObserverCallback;
-  private observedElements = new Set<Element>();
-
-  constructor(callback: IntersectionObserverCallback, options: IntersectionObserverInit = {}) {
-    this.callback = callback;
-    this.root = options.root ?? null;
-    this.rootMargin = options.rootMargin ?? "";
-    if (Array.isArray(options.threshold)) {
-      this.thresholds = options.threshold;
-    } else if (typeof options.threshold === "number") {
-      this.thresholds = [options.threshold];
-    } else {
-      this.thresholds = [0];
-    }
-    mockIntersectionObservers.push(this);
-  }
-
-  disconnect(): void {
-    this.observedElements = new Set<Element>();
-  }
-
-  observe(target: Element): void {
-    this.observedElements.add(target);
-  }
-
-  takeRecords(): IntersectionObserverEntry[] {
-    return [];
-  }
-
-  unobserve(target: Element): void {
-    this.observedElements.delete(target);
-  }
-
-  trigger(entries: Partial<IntersectionObserverEntry>[] = [{ isIntersecting: true }]): void {
-    const fallbackTarget = createMessagesContainer() as unknown as Element;
-    const observedTargets = Array.from(this.observedElements);
-    const resolvedEntries = entries.map((entry, index) => {
-      return {
-        boundingClientRect: {} as DOMRectReadOnly,
-        intersectionRatio: entry.isIntersecting ? 1 : 0,
-        intersectionRect: {} as DOMRectReadOnly,
-        isIntersecting: entry.isIntersecting ?? false,
-        rootBounds: null,
-        target: observedTargets[index] ?? fallbackTarget,
-        time: 0,
-        ...entry,
-      } as IntersectionObserverEntry;
-    });
-
-    this.callback(resolvedEntries, this);
-  }
-}
 
 class MockResizeObserver implements ResizeObserver {
   private readonly observedElements = new Set<Element>();
@@ -364,17 +335,13 @@ const triggerResizeObservers = (): void => {
 };
 
 describe("useAgentChatWindow", () => {
-  const originalIntersectionObserver = globalThis.IntersectionObserver;
   const originalResizeObserver = globalThis.ResizeObserver;
   const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
   const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
   const originalWindow = (globalThis as { window?: unknown }).window;
 
   beforeEach(() => {
-    mockIntersectionObservers.length = 0;
     mockResizeObserverControllers.clear();
-    globalThis.IntersectionObserver =
-      MockIntersectionObserver as unknown as typeof IntersectionObserver;
     globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
     globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
       callback(0);
@@ -384,7 +351,6 @@ describe("useAgentChatWindow", () => {
   });
 
   afterEach(() => {
-    globalThis.IntersectionObserver = originalIntersectionObserver;
     globalThis.ResizeObserver = originalResizeObserver;
     globalThis.requestAnimationFrame = originalRequestAnimationFrame;
     globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
@@ -800,17 +766,9 @@ describe("useAgentChatWindow", () => {
       getRowHeight: (_row, index) => rowHeights.get(index) ?? ROW_HEIGHT_PX,
     });
 
-    const scrollListenerCall = container.addEventListener.mock.calls
-      .filter(([eventName]) => eventName === "scroll")
-      .at(-1);
-    const scrollListener = scrollListenerCall?.[1];
-    if (typeof scrollListener !== "function") {
-      throw new Error("Expected scroll listener");
-    }
-
     container.scrollTop = 300;
     await act(async () => {
-      scrollListener(new Event("scroll"));
+      dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
     });
 
@@ -863,14 +821,6 @@ describe("useAgentChatWindow", () => {
       isSessionViewLoading: false,
     });
 
-    const scrollListenerCalls = container.addEventListener.mock.calls.filter(
-      ([eventName]) => eventName === "scroll",
-    );
-    const latestScrollListener = scrollListenerCalls.at(-1)?.[1];
-    if (typeof latestScrollListener !== "function") {
-      throw new Error("Expected scroll listener");
-    }
-
     const frameAtStart = queuedFrameCallbacks.shift();
     if (!frameAtStart) {
       throw new Error("Expected initial animation frame");
@@ -883,7 +833,7 @@ describe("useAgentChatWindow", () => {
 
     container.scrollTop = 780;
     await act(async () => {
-      latestScrollListener(new Event("scroll"));
+      dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
     });
 
@@ -1108,17 +1058,9 @@ describe("useAgentChatWindow", () => {
       throw new Error("Expected messages container");
     }
 
-    const latestScrollListenerCall = container.addEventListener.mock.calls
-      .filter(([eventName]) => eventName === "scroll")
-      .at(-1);
-    const latestScrollListener = latestScrollListenerCall?.[1];
-    if (typeof latestScrollListener !== "function") {
-      throw new Error("Expected scroll listener");
-    }
-
     container.scrollTop = 500;
     await act(async () => {
-      latestScrollListener(new Event("scroll"));
+      dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
     });
 
@@ -1126,7 +1068,7 @@ describe("useAgentChatWindow", () => {
 
     container.scrollTop = container.scrollHeight - container.clientHeight;
     await act(async () => {
-      latestScrollListener(new Event("scroll"));
+      dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
     });
 
@@ -1136,7 +1078,7 @@ describe("useAgentChatWindow", () => {
     Object.assign(container, { clientHeight: 220 });
 
     await act(async () => {
-      latestScrollListener(new Event("scroll"));
+      dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
     });
 
@@ -1173,14 +1115,6 @@ describe("useAgentChatWindow", () => {
       throw new Error("Expected messages container");
     }
 
-    const latestScrollListenerCall = container.addEventListener.mock.calls
-      .filter(([eventName]) => eventName === "scroll")
-      .at(-1);
-    const latestScrollListener = latestScrollListenerCall?.[1];
-    if (typeof latestScrollListener !== "function") {
-      throw new Error("Expected scroll listener");
-    }
-
     container.scrollTo.mockClear();
     Object.assign(container, {
       scrollTop: 660,
@@ -1193,7 +1127,7 @@ describe("useAgentChatWindow", () => {
     }
 
     await act(async () => {
-      latestScrollListener(new Event("scroll"));
+      dispatchContainerEvent(container, "scroll", new Event("scroll"));
       syncBottomAfterComposerLayout();
       await flush();
     });
@@ -1239,14 +1173,6 @@ describe("useAgentChatWindow", () => {
         throw new Error("Expected messages container");
       }
 
-      const latestScrollListenerCall = container.addEventListener.mock.calls
-        .filter(([eventName]) => eventName === "scroll")
-        .at(-1);
-      const latestScrollListener = latestScrollListenerCall?.[1];
-      if (typeof latestScrollListener !== "function") {
-        throw new Error("Expected scroll listener");
-      }
-
       const userScrollIntentListenerCall = container.addEventListener.mock.calls
         .filter(([eventName]) => eventName === "wheel")
         .at(-1);
@@ -1267,7 +1193,7 @@ describe("useAgentChatWindow", () => {
       }
 
       await act(async () => {
-        latestScrollListener(new Event("scroll"));
+        dispatchContainerEvent(container, "scroll", new Event("scroll"));
         syncBottomAfterComposerLayout();
       });
 
@@ -1317,17 +1243,9 @@ describe("useAgentChatWindow", () => {
       throw new Error("Expected messages container");
     }
 
-    const latestScrollListenerCall = container.addEventListener.mock.calls
-      .filter(([eventName]) => eventName === "scroll")
-      .at(-1);
-    const latestScrollListener = latestScrollListenerCall?.[1];
-    if (typeof latestScrollListener !== "function") {
-      throw new Error("Expected scroll listener");
-    }
-
     container.scrollTop = 500;
     await act(async () => {
-      latestScrollListener(new Event("scroll"));
+      dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
     });
 
@@ -1449,7 +1367,7 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("scrollToTop suppresses bottom sentinel shifts until the unlock frame", async () => {
+  test("scrollToTop suppresses bottom edge shifts until the unlock frame", async () => {
     (globalThis as { window?: unknown }).window = globalThis;
     const queuedFrameCallbacks: FrameRequestCallback[] = [];
     globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
@@ -1471,19 +1389,27 @@ describe("useAgentChatWindow", () => {
       await flush();
     });
 
-    const sentinelElement = createMessagesContainer();
-    await act(async () => {
-      harness.getLatestResult().bottomSentinelRef(sentinelElement);
-      await flush();
-    });
-
-    const observer = mockIntersectionObservers.at(-1);
-    if (!observer) {
-      throw new Error("Expected bottom sentinel observer");
+    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
+    if (!container) {
+      throw new Error("Expected messages container");
     }
 
+    attachWindowedRowGeometry({
+      container,
+      rows: createRows(80),
+      getWindowStart: () => harness.getLatestResult().windowStart,
+      getWindowEnd: () => harness.getLatestResult().windowEnd,
+    });
+    syncWindowedScrollHeight(
+      container,
+      () => harness.getLatestResult().windowStart,
+      () => harness.getLatestResult().windowEnd,
+    );
+
+    container.scrollTop = container.scrollHeight - container.clientHeight - 40;
+
     await act(async () => {
-      observer.trigger([{ isIntersecting: true }]);
+      dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
     });
 
@@ -1502,7 +1428,13 @@ describe("useAgentChatWindow", () => {
     });
 
     await act(async () => {
-      observer.trigger([{ isIntersecting: true }]);
+      syncWindowedScrollHeight(
+        container,
+        () => harness.getLatestResult().windowStart,
+        () => harness.getLatestResult().windowEnd,
+      );
+      container.scrollTop = container.scrollHeight - container.clientHeight - 40;
+      dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
     });
 
@@ -1513,7 +1445,7 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("upward window shifts ignore repeated top sentinel intersections until the sentinel exits", async () => {
+  test("upward window shifts continue while the user stays near the top edge", async () => {
     const rows = createRows(120);
     const harness = await mountHarness(
       {
@@ -1535,34 +1467,19 @@ describe("useAgentChatWindow", () => {
       getWindowStart: () => harness.getLatestResult().windowStart,
       getWindowEnd: () => harness.getLatestResult().windowEnd,
     });
-    container.scrollTop = 160;
-
-    const sentinelElement = createMessagesContainer();
-    await act(async () => {
-      harness.getLatestResult().topSentinelRef(sentinelElement);
-      await flush();
-    });
-
-    const observer = mockIntersectionObservers.at(-1);
-    if (!observer) {
-      throw new Error("Expected top sentinel observer");
-    }
+    container.scrollTop = 80;
 
     await act(async () => {
-      observer.trigger([{ isIntersecting: true }]);
+      dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
     });
 
     let result = harness.getLatestResult();
     expect(result.windowStart).toBe(50);
 
+    container.scrollTop = 80;
     await act(async () => {
-      observer.trigger([{ isIntersecting: false }]);
-      await flush();
-    });
-
-    await act(async () => {
-      observer.trigger([{ isIntersecting: true }]);
+      dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
     });
 
@@ -1572,7 +1489,7 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("downward window shifts ignore repeated bottom sentinel intersections until the sentinel exits", async () => {
+  test("downward window shifts continue while the user stays near the bottom edge", async () => {
     const rows = createRows(120);
     const harness = await mountHarness(
       {
@@ -1600,21 +1517,15 @@ describe("useAgentChatWindow", () => {
       await flush();
     });
 
-    container.scrollTop = 600;
-
-    const sentinelElement = createMessagesContainer();
-    await act(async () => {
-      harness.getLatestResult().bottomSentinelRef(sentinelElement);
-      await flush();
-    });
-
-    const observer = mockIntersectionObservers.at(-1);
-    if (!observer) {
-      throw new Error("Expected bottom sentinel observer");
-    }
+    syncWindowedScrollHeight(
+      container,
+      () => harness.getLatestResult().windowStart,
+      () => harness.getLatestResult().windowEnd,
+    );
+    container.scrollTop = container.scrollHeight - container.clientHeight - 40;
 
     await act(async () => {
-      observer.trigger([{ isIntersecting: true }]);
+      dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
     });
 
@@ -1622,13 +1533,14 @@ describe("useAgentChatWindow", () => {
     expect(result.windowStart).toBe(0);
     expect(result.windowEnd).toBe(69);
 
+    syncWindowedScrollHeight(
+      container,
+      () => harness.getLatestResult().windowStart,
+      () => harness.getLatestResult().windowEnd,
+    );
+    container.scrollTop = container.scrollHeight - container.clientHeight - 40;
     await act(async () => {
-      observer.trigger([{ isIntersecting: false }]);
-      await flush();
-    });
-
-    await act(async () => {
-      observer.trigger([{ isIntersecting: true }]);
+      dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
     });
 
@@ -1734,48 +1646,60 @@ describe("useAgentChatWindow", () => {
   });
 
   test("restores bottom pinning when downward shifts reach the latest rows", async () => {
-    const harness = await mountHarness({
-      rows: createRows(80),
-      activeSessionId: "session-1",
-      isSessionViewLoading: false,
-    });
+    const harness = await mountHarness(
+      {
+        rows: createRows(80),
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachContainer: true },
+    );
 
     await act(async () => {
       harness.getLatestResult().scrollToTop();
       await flush();
     });
 
-    const sentinelElement = createMessagesContainer();
-    await act(async () => {
-      harness.getLatestResult().bottomSentinelRef(sentinelElement);
-      await flush();
-    });
-
-    const observer = mockIntersectionObservers.at(-1);
-    if (!observer) {
-      throw new Error("Expected bottom sentinel observer");
+    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
+    if (!container) {
+      throw new Error("Expected messages container");
     }
 
-    await act(async () => {
-      observer.trigger([{ isIntersecting: true }]);
-      await flush();
+    attachWindowedRowGeometry({
+      container,
+      rows: createRows(80),
+      getWindowStart: () => harness.getLatestResult().windowStart,
+      getWindowEnd: () => harness.getLatestResult().windowEnd,
     });
+    for (let shiftIndex = 0; shiftIndex < 2; shiftIndex += 1) {
+      syncWindowedScrollHeight(
+        container,
+        () => harness.getLatestResult().windowStart,
+        () => harness.getLatestResult().windowEnd,
+      );
+      container.scrollTop = container.scrollHeight - container.clientHeight - 40;
+      await act(async () => {
+        dispatchContainerEvent(container, "scroll", new Event("scroll"));
+        await flush();
+      });
+    }
 
-    await act(async () => {
-      observer.trigger([{ isIntersecting: false }]);
-      await flush();
-    });
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    const queuedFrameCallbacks: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      queuedFrameCallbacks.push(callback);
+      return queuedFrameCallbacks.length;
+    }) as typeof requestAnimationFrame;
 
-    await act(async () => {
-      observer.trigger([{ isIntersecting: true }]);
-      await flush();
-    });
-
-    await harness.update({
-      rows: createRows(81),
-      activeSessionId: "session-1",
-      isSessionViewLoading: false,
-    });
+    try {
+      await harness.update({
+        rows: createRows(81),
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      });
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
 
     const result = harness.getLatestResult();
     expect(result.windowStart).toBe(21);
@@ -1805,32 +1729,22 @@ describe("useAgentChatWindow", () => {
       throw new Error("Expected messages container");
     }
 
-    attachWindowedRowGeometry({
+    attachScrollableWindowedRowGeometry({
       container,
       rows,
       getWindowStart: () => harness.getLatestResult().windowStart,
       getWindowEnd: () => harness.getLatestResult().windowEnd,
+      getRowHeight: () => ROW_HEIGHT_PX,
     });
-    container.scrollTop = 160;
-
-    const sentinelElement = createMessagesContainer();
-    await act(async () => {
-      harness.getLatestResult().topSentinelRef(sentinelElement);
-      await flush();
-    });
-
-    const observer = mockIntersectionObservers.at(-1);
-    if (!observer) {
-      throw new Error("Expected top sentinel observer");
-    }
+    container.scrollTop = 80;
 
     await act(async () => {
-      observer.trigger([{ isIntersecting: true }]);
+      dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
     });
 
     expect(harness.getLatestResult().windowStart).toBe(50);
-    expect(container.scrollTop).toBe(160 + CHAT_SHIFT_SIZE * ROW_HEIGHT_PX);
+    expect(container.scrollTop).toBe(80 + CHAT_SHIFT_SIZE * ROW_HEIGHT_PX);
 
     await harness.unmount();
   });
@@ -1863,36 +1777,17 @@ describe("useAgentChatWindow", () => {
       await flush();
     });
 
-    container.scrollTop = 600;
-
-    const sentinelElement = createMessagesContainer();
-    await act(async () => {
-      harness.getLatestResult().bottomSentinelRef(sentinelElement);
-      await flush();
-    });
-
-    const observer = mockIntersectionObservers.at(-1);
-    if (!observer) {
-      throw new Error("Expected bottom sentinel observer");
+    for (let shiftIndex = 0; shiftIndex < 2; shiftIndex += 1) {
+      Object.assign(container, { scrollHeight: 1000 });
+      container.scrollTop = 660;
+      await act(async () => {
+        dispatchContainerEvent(container, "scroll", new Event("scroll"));
+        await flush();
+      });
     }
 
-    await act(async () => {
-      observer.trigger([{ isIntersecting: true }]);
-      await flush();
-    });
-
-    await act(async () => {
-      observer.trigger([{ isIntersecting: false }]);
-      await flush();
-    });
-
-    await act(async () => {
-      observer.trigger([{ isIntersecting: true }]);
-      await flush();
-    });
-
     expect(harness.getLatestResult().windowStart).toBe(10);
-    expect(container.scrollTop).toBe(600 - 10 * ROW_HEIGHT_PX);
+    expect(container.scrollTop).toBe(260);
 
     await harness.unmount();
   });

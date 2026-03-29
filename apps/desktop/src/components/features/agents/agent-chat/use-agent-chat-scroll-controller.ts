@@ -17,6 +17,7 @@ type UseAgentChatScrollControllerResult = {
   isNearTop: boolean;
   isAutoFollowingToBottom: boolean;
   isPinnedToBottomRef: MutableRefObject<boolean>;
+  isHistoryNavigationRef: MutableRefObject<boolean>;
   shouldAutoFollowLiveUpdatesRef: MutableRefObject<boolean>;
   userScrollIntentVersionRef: MutableRefObject<number>;
   suppressSentinelsRef: MutableRefObject<boolean>;
@@ -45,6 +46,7 @@ export function useAgentChatScrollController({
   const [isNearTop, setIsNearTop] = useState(initialWindow.start === 0);
   const [isAutoFollowingToBottom, setIsAutoFollowingToBottom] = useState(false);
   const isPinnedToBottomRef = useRef(true);
+  const isHistoryNavigationRef = useRef(false);
   const shouldAutoFollowLiveUpdatesRef = useRef(true);
   const userScrollIntentVersionRef = useRef(0);
   const pendingScrollRequestRef = useRef<PendingScrollRequest | null>(null);
@@ -365,11 +367,13 @@ export function useAgentChatScrollController({
     setIsNearBottom(true);
     setIsNearTop(windowStart === 0);
     isPinnedToBottomRef.current = true;
+    isHistoryNavigationRef.current = false;
     shouldAutoFollowLiveUpdatesRef.current = true;
   }, []);
 
   const setTopAnchoredState = useCallback(() => {
     isPinnedToBottomRef.current = false;
+    isHistoryNavigationRef.current = true;
     setIsNearBottom(false);
     setIsNearTop(true);
     shouldAutoFollowLiveUpdatesRef.current = false;
@@ -384,6 +388,7 @@ export function useAgentChatScrollController({
     const container = messagesContainerRef.current;
     if (!container) return;
     cancelScrollAnimation(true);
+    isHistoryNavigationRef.current = false;
     shouldAutoFollowLiveUpdatesRef.current = true;
     container.scrollTo({
       top: container.scrollHeight,
@@ -502,6 +507,7 @@ export function useAgentChatScrollController({
     isNearTop,
     isAutoFollowingToBottom,
     isPinnedToBottomRef,
+    isHistoryNavigationRef,
     shouldAutoFollowLiveUpdatesRef,
     userScrollIntentVersionRef,
     suppressSentinelsRef,

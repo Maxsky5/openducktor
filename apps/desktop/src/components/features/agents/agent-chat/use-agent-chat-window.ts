@@ -1,10 +1,10 @@
-import type { MutableRefObject, RefCallback, RefObject } from "react";
+import type { MutableRefObject, RefObject } from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import { clampWindowRange, createBottomAnchoredWindow } from "./agent-chat-window-shared";
 import { useAgentChatResizeSync } from "./use-agent-chat-resize-sync";
 import { useAgentChatScrollController } from "./use-agent-chat-scroll-controller";
-import { useAgentChatSentinelObservers } from "./use-agent-chat-sentinel-observers";
+import { useAgentChatScrollEdgeShifts } from "./use-agent-chat-scroll-edge-shifts";
 import { useAgentChatWindowRangeController } from "./use-agent-chat-window-range-controller";
 
 type UseAgentChatWindowInput = {
@@ -24,8 +24,6 @@ type UseAgentChatWindowResult = {
   isNearBottom: boolean;
   isNearTop: boolean;
   isAutoFollowingToBottom: boolean;
-  topSentinelRef: RefCallback<HTMLDivElement>;
-  bottomSentinelRef: RefCallback<HTMLDivElement>;
   scrollToBottom: () => void;
   scrollToTop: () => void;
   scrollToBottomOnSend: () => void;
@@ -50,6 +48,7 @@ export function useAgentChatWindow({
     isNearTop,
     isAutoFollowingToBottom,
     isPinnedToBottomRef,
+    isHistoryNavigationRef,
     shouldAutoFollowLiveUpdatesRef,
     userScrollIntentVersionRef,
     suppressSentinelsRef,
@@ -141,6 +140,7 @@ export function useAgentChatWindow({
       isSessionViewLoading,
       isSessionWorking,
       isPinnedToBottomRef,
+      isHistoryNavigationRef,
       shouldAutoFollowLiveUpdatesRef,
       suppressSentinelsRef,
       isUpdatingRef,
@@ -152,11 +152,12 @@ export function useAgentChatWindow({
       setTopAnchoredState,
     });
 
-  const { topSentinelRef, bottomSentinelRef } = useAgentChatSentinelObservers({
+  useAgentChatScrollEdgeShifts({
     messagesContainerRef,
     rowCount,
     windowStart: windowRange.start,
     windowEnd: windowRange.end,
+    isHistoryNavigationRef,
     isUpdatingRef,
     suppressSentinelsRef,
     shiftWindowUp,
@@ -178,8 +179,6 @@ export function useAgentChatWindow({
     isNearBottom,
     isNearTop: effectiveIsNearTop,
     isAutoFollowingToBottom,
-    topSentinelRef,
-    bottomSentinelRef,
     scrollToBottom,
     scrollToTop,
     scrollToBottomOnSend,
