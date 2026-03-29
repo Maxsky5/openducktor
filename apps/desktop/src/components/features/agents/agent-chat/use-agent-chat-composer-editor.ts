@@ -202,14 +202,16 @@ export const useAgentChatComposerEditor = ({
   const handleTextInput = useCallback(
     (segmentId: string, element: HTMLDivElement) => {
       const nextText = readEditableTextContent(element);
+      const caretOffset = getCaretOffsetWithinElement(element);
       applyEditResult(
         applyComposerDraftEdit(draft, {
           type: "update_text",
           segmentId,
           text: nextText,
+          caretOffset,
         }),
       );
-      updateSlashMenuForText(segmentId, nextText, getCaretOffsetWithinElement(element));
+      updateSlashMenuForText(segmentId, nextText, caretOffset);
     },
     [applyEditResult, draft, updateSlashMenuForText],
   );

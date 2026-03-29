@@ -131,4 +131,24 @@ describe("AgentChatComposerEditor", () => {
 
     expect(setCaretOffsetWithinElementMock).toHaveBeenCalled();
   });
+
+  test("preserves caret position after text input rerenders", () => {
+    setCaretOffsetWithinElementMock.mockClear();
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    typeIntoEditor(rendered.container, "hello");
+
+    expect(setCaretOffsetWithinElementMock).toHaveBeenCalledWith(expect.any(HTMLDivElement), 5);
+  });
+
+  test("keeps slash autocomplete open through the keyup after typing slash", async () => {
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "/");
+    fireEvent.keyUp(editable, { key: "/" });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /compact the current session/i })).toBeDefined();
+    });
+  });
 });

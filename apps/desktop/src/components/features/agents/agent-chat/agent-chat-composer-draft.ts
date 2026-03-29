@@ -36,6 +36,7 @@ export type AgentChatComposerDraftEdit =
       type: "update_text";
       segmentId: string;
       text: string;
+      caretOffset?: number | null;
     }
   | {
       type: "insert_newline";
@@ -232,7 +233,13 @@ export const applyComposerDraftEdit = (
     case "update_text": {
       return {
         draft: updateTextSegmentInDraft(draft, edit.segmentId, edit.text),
-        focusTarget: null,
+        focusTarget:
+          typeof edit.caretOffset === "number"
+            ? {
+                segmentId: edit.segmentId,
+                offset: Math.max(0, Math.min(edit.caretOffset, edit.text.length)),
+              }
+            : null,
       };
     }
     case "insert_newline":
