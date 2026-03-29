@@ -17,6 +17,7 @@ type UseAgentChatWindowRangeControllerInput = {
   rowCount: number;
   activeSessionId: string | null;
   isSessionViewLoading: boolean;
+  isSessionWorking: boolean;
   isPinnedToBottomRef: MutableRefObject<boolean>;
   shouldAutoFollowLiveUpdatesRef: MutableRefObject<boolean>;
   suppressSentinelsRef: MutableRefObject<boolean>;
@@ -42,6 +43,7 @@ export function useAgentChatWindowRangeController({
   rowCount,
   activeSessionId,
   isSessionViewLoading,
+  isSessionWorking,
   isPinnedToBottomRef,
   shouldAutoFollowLiveUpdatesRef,
   suppressSentinelsRef,
@@ -136,7 +138,7 @@ export function useAgentChatWindowRangeController({
       return;
     }
 
-    if (!shouldAutoFollowLiveUpdatesRef.current) {
+    if (isSessionWorking && !shouldAutoFollowLiveUpdatesRef.current) {
       return;
     }
 
@@ -154,6 +156,7 @@ export function useAgentChatWindowRangeController({
   }, [
     applyBottomAnchoredWindow,
     hasPendingScrollRequest,
+    isSessionWorking,
     isPinnedToBottomRef,
     requestWindowScroll,
     rowCount,
@@ -227,7 +230,7 @@ export function useAgentChatWindowRangeController({
     }
 
     const reachedBottom = nextRange.end === rowCount - 1;
-    if (!reachedBottom || !shouldAutoFollowLiveUpdatesRef.current) {
+    if (!reachedBottom) {
       const survivingRowKeys = new Set(
         rows.slice(nextRange.start, current.end + 1).map((row) => row.key),
       );
@@ -239,7 +242,7 @@ export function useAgentChatWindowRangeController({
         }
       }
     }
-    if (reachedBottom && shouldAutoFollowLiveUpdatesRef.current) {
+    if (reachedBottom) {
       setBottomAnchoredState(nextRange.start);
       requestWindowScroll({
         target: "bottom",
@@ -258,7 +261,6 @@ export function useAgentChatWindowRangeController({
     requestWindowScroll,
     setBottomAnchoredState,
     setWindowRangeState,
-    shouldAutoFollowLiveUpdatesRef,
     suppressSentinelsRef,
     rows,
   ]);

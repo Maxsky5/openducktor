@@ -767,133 +767,6 @@ describe("useAgentChatWindow", () => {
     });
 
     expect(container.scrollTo).not.toHaveBeenCalled();
-    expect(harness.getLatestResult().isNearBottom).toBe(false);
-
-    await harness.unmount();
-  });
-
-  test("does not auto-follow the first idle append after live follow was disabled", async () => {
-    const harness = await mountHarness(
-      {
-        rows: createRows(80),
-        activeSessionId: "session-1",
-        isSessionViewLoading: false,
-        isSessionWorking: true,
-      },
-      { attachContainer: true },
-    );
-
-    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
-    if (!container) {
-      throw new Error("Expected messages container");
-    }
-
-    const wheelListenerCall = container.addEventListener.mock.calls
-      .filter(([eventName]) => eventName === "wheel")
-      .at(-1);
-    const wheelListener = wheelListenerCall?.[1];
-    if (typeof wheelListener !== "function") {
-      throw new Error("Expected wheel listener");
-    }
-
-    await act(async () => {
-      wheelListener({ deltaY: -24 } as WheelEvent);
-      await flush();
-    });
-
-    container.scrollTo.mockClear();
-
-    await harness.update({
-      rows: createRows(81),
-      activeSessionId: "session-1",
-      isSessionViewLoading: false,
-      isSessionWorking: false,
-    });
-
-    const result = harness.getLatestResult();
-    expect(result.windowStart).toBe(20);
-    expect(result.windowEnd).toBe(79);
-    const lastRow = result.windowedRows.at(-1);
-    if (!lastRow || lastRow.kind !== "message") {
-      throw new Error("Expected the final window row to be a message");
-    }
-    expect(lastRow.message.id).toBe("msg-79");
-    expect(container.scrollTo).not.toHaveBeenCalled();
-
-    await harness.unmount();
-  });
-
-  test("re-arms live follow when the user scrolls back to bottom after the run becomes idle", async () => {
-    const harness = await mountHarness(
-      {
-        rows: createRows(80),
-        activeSessionId: "session-1",
-        isSessionViewLoading: false,
-        isSessionWorking: true,
-      },
-      { attachContainer: true },
-    );
-
-    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
-    if (!container) {
-      throw new Error("Expected messages container");
-    }
-
-    const wheelListenerCall = container.addEventListener.mock.calls
-      .filter(([eventName]) => eventName === "wheel")
-      .at(-1);
-    const wheelListener = wheelListenerCall?.[1];
-    if (typeof wheelListener !== "function") {
-      throw new Error("Expected wheel listener");
-    }
-
-    const scrollListenerCall = container.addEventListener.mock.calls
-      .filter(([eventName]) => eventName === "scroll")
-      .at(-1);
-    const scrollListener = scrollListenerCall?.[1];
-    if (typeof scrollListener !== "function") {
-      throw new Error("Expected scroll listener");
-    }
-
-    await act(async () => {
-      wheelListener({ deltaY: -24 } as WheelEvent);
-      await flush();
-    });
-
-    await harness.update({
-      rows: createRows(80),
-      activeSessionId: "session-1",
-      isSessionViewLoading: false,
-      isSessionWorking: false,
-    });
-
-    container.scrollTop = 620;
-    await act(async () => {
-      scrollListener(new Event("scroll"));
-      await flush();
-    });
-
-    container.scrollTop = 700;
-    await act(async () => {
-      scrollListener(new Event("scroll"));
-      await flush();
-    });
-
-    await harness.update({
-      rows: createRows(81),
-      activeSessionId: "session-1",
-      isSessionViewLoading: false,
-      isSessionWorking: true,
-    });
-
-    const result = harness.getLatestResult();
-    expect(result.windowStart).toBe(21);
-    expect(result.windowEnd).toBe(80);
-    const lastRow = result.windowedRows.at(-1);
-    if (!lastRow || lastRow.kind !== "message") {
-      throw new Error("Expected the final window row to be a message");
-    }
-    expect(lastRow.message.id).toBe("msg-80");
 
     await harness.unmount();
   });
@@ -1734,6 +1607,57 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("restores bottom pinning when downward shifts reach the latest rows", async () => {
+    const harness = await mountHarness({
+      rows: createRows(80),
+      activeSessionId: "session-1",
+      isSessionViewLoading: false,
+    });
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+
+    const sentinelElement = createMessagesContainer();
+    await act(async () => {
+      harness.getLatestResult().bottomSentinelRef(sentinelElement);
+      await flush();
+    });
+
+    const observer = mockIntersectionObservers.at(-1);
+    if (!observer) {
+      throw new Error("Expected bottom sentinel observer");
+    }
+
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    await harness.update({
+      rows: createRows(81),
+      activeSessionId: "session-1",
+      isSessionViewLoading: false,
+    });
+
+    const result = harness.getLatestResult();
+    expect(result.windowStart).toBe(21);
+    expect(result.windowEnd).toBe(80);
+    const lastRow = result.windowedRows.at(-1);
+    if (!lastRow || lastRow.kind !== "message") {
+      throw new Error("Expected the final window row to be a message");
+    }
+    expect(lastRow.message.id).toBe("msg-80");
+
+    await harness.unmount();
+  });
+
   test("preserves the viewport anchor when older history is prepended into the window", async () => {
     const rows = createRows(120);
     const harness = await mountHarness(
@@ -1833,79 +1757,6 @@ describe("useAgentChatWindow", () => {
 
     expect(harness.getLatestResult().windowStart).toBe(10);
     expect(container.scrollTop).toBe(600 - 10 * ROW_HEIGHT_PX);
-
-    await harness.unmount();
-  });
-
-  test("refreshes the resize anchor after a window shift before later content growth", async () => {
-    const rows = createRows(120);
-    const rowHeights = new Map<number, number>();
-    rowHeights.set(10, 120);
-
-    const harness = await mountHarness(
-      {
-        rows,
-        activeSessionId: "session-1",
-        isSessionViewLoading: false,
-      },
-      { attachContainer: true },
-    );
-
-    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
-    const content = harness.messagesContentRef.current as MockMessagesContent | null;
-    if (!container || !content) {
-      throw new Error("Expected messages container and content");
-    }
-
-    attachScrollableWindowedRowGeometry({
-      container,
-      rows,
-      getWindowStart: () => harness.getLatestResult().windowStart,
-      getWindowEnd: () => harness.getLatestResult().windowEnd,
-      getRowHeight: (_row, index) => rowHeights.get(index) ?? ROW_HEIGHT_PX,
-    });
-
-    await act(async () => {
-      harness.getLatestResult().scrollToTop();
-      await flush();
-    });
-
-    container.scrollTop = 600;
-
-    const sentinelElement = createMessagesContainer();
-    await act(async () => {
-      harness.getLatestResult().bottomSentinelRef(sentinelElement);
-      await flush();
-    });
-
-    const observer = mockIntersectionObservers.at(-1);
-    if (!observer) {
-      throw new Error("Expected bottom sentinel observer");
-    }
-
-    await act(async () => {
-      observer.trigger([{ isIntersecting: true }]);
-      await flush();
-    });
-
-    await act(async () => {
-      observer.trigger([{ isIntersecting: true }]);
-      await flush();
-    });
-
-    expect(harness.getLatestResult().windowStart).toBe(10);
-    expect(container.scrollTop).toBe(200);
-
-    rowHeights.set(10, 320);
-    Object.assign(content, { scrollHeight: 1400 });
-    Object.assign(container, { scrollHeight: 1400 });
-
-    await act(async () => {
-      triggerResizeObservers();
-      await flush();
-    });
-
-    expect(container.scrollTop).toBe(400);
 
     await harness.unmount();
   });
