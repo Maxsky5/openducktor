@@ -16,6 +16,7 @@ type UseAgentChatScrollControllerResult = {
   isNearTop: boolean;
   isAutoFollowingToBottom: boolean;
   isPinnedToBottomRef: MutableRefObject<boolean>;
+  userScrollIntentVersionRef: MutableRefObject<number>;
   suppressSentinelsRef: MutableRefObject<boolean>;
   isUpdatingRef: MutableRefObject<boolean>;
   hasPendingScrollRequest: () => boolean;
@@ -36,6 +37,7 @@ export function useAgentChatScrollController({
   const [isNearTop, setIsNearTop] = useState(initialWindow.start === 0);
   const [isAutoFollowingToBottom, setIsAutoFollowingToBottom] = useState(false);
   const isPinnedToBottomRef = useRef(true);
+  const userScrollIntentVersionRef = useRef(0);
   const pendingScrollRequestRef = useRef<PendingScrollRequest | null>(null);
   const suppressSentinelsRef = useRef(false);
   const sentinelUnlockFrameRef = useRef<number | null>(null);
@@ -321,6 +323,10 @@ export function useAgentChatScrollController({
       return;
     }
 
+    const registerUserScrollIntent = () => {
+      userScrollIntentVersionRef.current += 1;
+    };
+
     const handleScroll = () => {
       const previousScrollTop = lastScrollTopRef.current;
       const nextScrollTop = container.scrollTop;
@@ -347,8 +353,14 @@ export function useAgentChatScrollController({
     };
 
     handleScroll();
+    container.addEventListener("wheel", registerUserScrollIntent, { passive: true });
+    container.addEventListener("touchstart", registerUserScrollIntent, { passive: true });
+    container.addEventListener("pointerdown", registerUserScrollIntent, { passive: true });
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
+      container.removeEventListener("wheel", registerUserScrollIntent);
+      container.removeEventListener("touchstart", registerUserScrollIntent);
+      container.removeEventListener("pointerdown", registerUserScrollIntent);
       container.removeEventListener("scroll", handleScroll);
     };
   }, [messagesContainerRef]);
@@ -367,6 +379,7 @@ export function useAgentChatScrollController({
     isNearTop,
     isAutoFollowingToBottom,
     isPinnedToBottomRef,
+    userScrollIntentVersionRef,
     suppressSentinelsRef,
     isUpdatingRef,
     hasPendingScrollRequest: () => pendingScrollRequestRef.current !== null,

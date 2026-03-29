@@ -910,6 +910,99 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("cancels composer-layout sync when the user starts scrolling during the settle window", async () => {
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+    const queuedFrameCallbacks: FrameRequestCallback[] = [];
+
+    try {
+      globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+        queuedFrameCallbacks.push(callback);
+        return queuedFrameCallbacks.length;
+      }) as typeof requestAnimationFrame;
+      globalThis.cancelAnimationFrame = (() => undefined) as typeof cancelAnimationFrame;
+
+      const syncBottomAfterComposerLayoutRef = { current: null } as {
+        current: (() => void) | null;
+      };
+      const harness = await mountHarness(
+        {
+          rows: createRows(80),
+          activeSessionId: "session-1",
+          isSessionViewLoading: false,
+          syncBottomAfterComposerLayoutRef,
+        },
+        { attachContainer: true },
+      );
+
+      const container = harness.messagesContainerRef.current as
+        | (MockMessagesContainer & { clientHeight: number })
+        | null;
+      if (!container) {
+        throw new Error("Expected messages container");
+      }
+
+      const latestScrollListenerCall = container.addEventListener.mock.calls
+        .filter(([eventName]) => eventName === "scroll")
+        .at(-1);
+      const latestScrollListener = latestScrollListenerCall?.[1];
+      if (typeof latestScrollListener !== "function") {
+        throw new Error("Expected scroll listener");
+      }
+
+      const userScrollIntentListenerCall = container.addEventListener.mock.calls
+        .filter(([eventName]) => eventName === "wheel")
+        .at(-1);
+      const userScrollIntentListener = userScrollIntentListenerCall?.[1];
+      if (typeof userScrollIntentListener !== "function") {
+        throw new Error("Expected user scroll intent listener");
+      }
+
+      container.scrollTo.mockClear();
+      Object.assign(container, {
+        scrollTop: 660,
+        clientHeight: 220,
+      });
+
+      const syncBottomAfterComposerLayout = syncBottomAfterComposerLayoutRef.current;
+      if (typeof syncBottomAfterComposerLayout !== "function") {
+        throw new Error("Expected composer layout sync callback");
+      }
+
+      await act(async () => {
+        latestScrollListener(new Event("scroll"));
+        syncBottomAfterComposerLayout();
+      });
+
+      const firstSettleFrame = queuedFrameCallbacks.shift();
+      if (!firstSettleFrame) {
+        throw new Error("Expected first settle frame");
+      }
+
+      await act(async () => {
+        firstSettleFrame(0);
+      });
+
+      const secondSettleFrame = queuedFrameCallbacks.shift();
+      if (!secondSettleFrame) {
+        throw new Error("Expected second settle frame");
+      }
+
+      await act(async () => {
+        userScrollIntentListener(new Event("wheel"));
+        secondSettleFrame(16);
+        await flush();
+      });
+
+      expect(container.scrollTo).not.toHaveBeenCalled();
+
+      await harness.unmount();
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    }
+  });
+
   test("does not auto-scroll to bottom when container height changes while not near bottom", async () => {
     const harness = await mountHarness(
       {

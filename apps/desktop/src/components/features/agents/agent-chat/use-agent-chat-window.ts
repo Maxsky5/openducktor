@@ -40,6 +40,7 @@ export function useAgentChatWindow({
 }: UseAgentChatWindowInput): UseAgentChatWindowResult {
   const composerLayoutSyncFrameRef = useRef<number | null>(null);
   const composerLayoutSyncSettleFrameRef = useRef<number | null>(null);
+  const composerLayoutSyncTokenRef = useRef(0);
   const rowCount = rows.length;
   const initialWindow = createBottomAnchoredWindow(rowCount);
   const {
@@ -47,6 +48,7 @@ export function useAgentChatWindow({
     isNearTop,
     isAutoFollowingToBottom,
     isPinnedToBottomRef,
+    userScrollIntentVersionRef,
     suppressSentinelsRef,
     isUpdatingRef,
     hasPendingScrollRequest,
@@ -78,6 +80,7 @@ export function useAgentChatWindow({
     }
 
     const cancelScheduledComposerLayoutSync = () => {
+      composerLayoutSyncTokenRef.current += 1;
       if (composerLayoutSyncFrameRef.current !== null) {
         globalThis.cancelAnimationFrame(composerLayoutSyncFrameRef.current);
         composerLayoutSyncFrameRef.current = null;
@@ -96,10 +99,20 @@ export function useAgentChatWindow({
         return;
       }
 
+      const scheduledToken = composerLayoutSyncTokenRef.current + 1;
+      composerLayoutSyncTokenRef.current = scheduledToken;
+      const scheduledUserScrollIntentVersion = userScrollIntentVersionRef.current;
+
       composerLayoutSyncFrameRef.current = requestAnimationFrameFn(() => {
         composerLayoutSyncFrameRef.current = null;
         composerLayoutSyncSettleFrameRef.current = requestAnimationFrameFn(() => {
           composerLayoutSyncSettleFrameRef.current = null;
+          if (composerLayoutSyncTokenRef.current !== scheduledToken) {
+            return;
+          }
+          if (userScrollIntentVersionRef.current !== scheduledUserScrollIntentVersion) {
+            return;
+          }
           syncBottomIfPinned({ forcePinned: true });
         });
       });
@@ -111,7 +124,8 @@ export function useAgentChatWindow({
         syncBottomAfterComposerLayoutRef.current = null;
       }
     };
-  }, [syncBottomAfterComposerLayoutRef, syncBottomIfPinned]);
+  }, [syncBottomAfterComposerLayoutRef, syncBottomIfPinned, userScrollIntentVersionRef]);
+
   const { windowRange, scrollToBottom, scrollToTop, shiftWindowUp, shiftWindowDown } =
     useAgentChatWindowRangeController({
       rows,
