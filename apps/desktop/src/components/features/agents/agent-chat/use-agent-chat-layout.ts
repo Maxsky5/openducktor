@@ -1,4 +1,6 @@
+import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { CHAT_SCROLL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
 
 export const COMPOSER_TEXTAREA_MIN_HEIGHT_PX = 44;
 export const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 220;
@@ -27,6 +29,40 @@ const readComposerTextareaHeight = (textarea: HTMLTextAreaElement): number => {
   return textarea.getBoundingClientRect().height;
 };
 
+const measureComposerTextareaScrollHeight = (textarea: HTMLTextAreaElement): number => {
+  const ownerDocument = textarea.ownerDocument;
+  const body = ownerDocument?.body;
+  if (!ownerDocument || !body || typeof textarea.cloneNode !== "function") {
+    return textarea.scrollHeight;
+  }
+
+  const clone = textarea.cloneNode(false) as HTMLTextAreaElement;
+  clone.value = textarea.value;
+  clone.rows = textarea.rows;
+  clone.setAttribute("aria-hidden", "true");
+  clone.setAttribute("tabindex", "-1");
+
+  const width = textarea.clientWidth || textarea.getBoundingClientRect().width;
+  clone.style.position = "absolute";
+  clone.style.top = "0";
+  clone.style.left = "0";
+  clone.style.height = "0px";
+  clone.style.minHeight = "0px";
+  clone.style.maxHeight = "none";
+  clone.style.overflowY = "hidden";
+  clone.style.visibility = "hidden";
+  clone.style.pointerEvents = "none";
+  clone.style.zIndex = "-1";
+  if (width > 0) {
+    clone.style.width = `${width}px`;
+  }
+
+  body.appendChild(clone);
+  const measuredScrollHeight = clone.scrollHeight;
+  clone.remove();
+  return measuredScrollHeight;
+};
+
 export const resizeComposerTextareaElement = (
   textarea: HTMLTextAreaElement,
 ): {
@@ -50,19 +86,11 @@ export const resizeComposerTextareaElement = (
     };
   }
 
-  // The browser only reports a shrink-capable scrollHeight after the inline height
-  // stops constraining the textarea, so we remeasure at auto height and then restore
-  // the previous inline value when the final layout is unchanged.
-  const previousInlineHeight = textarea.style.height;
-  textarea.style.height = "auto";
-  const layout = computeComposerTextareaLayout(textarea.scrollHeight);
+  const layout = computeComposerTextareaLayout(measureComposerTextareaScrollHeight(textarea));
+
   const didHeightChange = Math.abs(currentHeight - layout.heightPx) > 0.5;
   const nextInlineHeight = `${layout.heightPx}px`;
   if (didHeightChange) {
-    textarea.style.height = nextInlineHeight;
-  } else if (previousInlineHeight.length > 0 && textarea.style.height !== previousInlineHeight) {
-    textarea.style.height = previousInlineHeight;
-  } else if (textarea.style.height !== nextInlineHeight) {
     textarea.style.height = nextInlineHeight;
   }
   if (textarea.style.overflowY !== layout.overflowY) {
@@ -77,6 +105,7 @@ export const resizeComposerTextareaElement = (
 type UseAgentChatLayoutInput = {
   input: string;
   activeSessionId: string | null;
+  syncBottomAfterComposerLayoutRef?: MutableRefObject<(() => void) | null>;
 };
 
 type UseAgentChatLayoutResult = {
@@ -89,6 +118,7 @@ type UseAgentChatLayoutResult = {
 export const useAgentChatLayout = ({
   input,
   activeSessionId,
+  syncBottomAfterComposerLayoutRef,
 }: UseAgentChatLayoutInput): UseAgentChatLayoutResult => {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
@@ -103,8 +133,17 @@ export const useAgentChatLayout = ({
       return;
     }
 
-    resizeComposerTextareaElement(textarea);
-  }, []);
+    const container = messagesContainerRef.current;
+    const wasNearBottom =
+      container !== null
+        ? container.scrollHeight - container.scrollTop - container.clientHeight <=
+          CHAT_SCROLL_EDGE_THRESHOLD_PX
+        : false;
+    const { didHeightChange } = resizeComposerTextareaElement(textarea);
+    if (wasNearBottom && didHeightChange) {
+      syncBottomAfterComposerLayoutRef?.current?.();
+    }
+  }, [syncBottomAfterComposerLayoutRef]);
 
   const resizeComposerTextarea = useCallback((): void => {
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
