@@ -295,6 +295,7 @@ export function useAgentStudioOrchestrationController({
     role: viewRole,
     scenario: viewScenario,
     activeSession: viewActiveSession,
+    selectedModelSelection,
     sessionsForTask: viewSessionsForTask,
     selectedTask: viewSelectedTask,
     agentStudioReady,

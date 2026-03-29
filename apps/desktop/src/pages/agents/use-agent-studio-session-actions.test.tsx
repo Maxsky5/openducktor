@@ -35,6 +35,16 @@ const createComposerDraft = (text: string): AgentChatComposerDraft => ({
 
 const createSession = (overrides = {}) => createAgentSessionFixture(overrides);
 
+const QUEUED_RUNTIME_DESCRIPTOR = {
+  ...OPENCODE_RUNTIME_DESCRIPTOR,
+  kind: "queued-runtime",
+  label: "Queued Runtime",
+  capabilities: {
+    ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+    supportsQueuedUserMessages: true,
+  },
+} as const;
+
 const createHookHarness = (initialProps: HookArgs) => {
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
@@ -71,10 +81,13 @@ const createHookHarness = (initialProps: HookArgs) => {
         { useIsolatedClient: true },
         createElement(RuntimeDefinitionsContext.Provider, {
           value: {
-            runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+            runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR],
             isLoadingRuntimeDefinitions: false,
             runtimeDefinitionsError: null,
-            refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+            refreshRuntimeDefinitions: async () => [
+              OPENCODE_RUNTIME_DESCRIPTOR,
+              QUEUED_RUNTIME_DESCRIPTOR,
+            ],
             loadRepoRuntimeCatalog: async () => ({
               runtime: OPENCODE_RUNTIME_DESCRIPTOR,
               models: [
@@ -162,6 +175,7 @@ const createBaseArgs = (): HookArgs => {
     role: "spec",
     scenario: "spec_initial",
     activeSession: null,
+    selectedModelSelection: null,
     sessionsForTask: [],
     selectedTask: createTask(),
     agentStudioReady: true,
@@ -371,6 +385,101 @@ describe("useAgentStudioSessionActions", () => {
         runtimeKind: "opencode",
         modelCatalog: null,
       }),
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest().busySendBlockedReason).toBeNull();
+    await harness.run(async (state) => {
+      await state.onSend(createComposerDraft("hello world"));
+    });
+
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+      { kind: "text", text: "hello world" },
+    ]);
+
+    await harness.unmount();
+  });
+
+  test("onSend re-enables busy follow-ups when queued-message support becomes available", async () => {
+    const sendAgentMessage = mock(async () => {});
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createSession({
+        sessionId: "session-existing",
+        status: "running",
+        modelCatalog: {
+          runtime: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR,
+            capabilities: {
+              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+              supportsQueuedUserMessages: false,
+            },
+          },
+          models: [],
+          defaultModelsByProvider: {},
+        },
+      }),
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest().busySendBlockedReason).toContain(
+      "does not support queued messages while the session is working",
+    );
+
+    await harness.update({
+      ...createBaseArgs(),
+      activeSession: createSession({
+        sessionId: "session-existing",
+        status: "running",
+        runtimeKind: "opencode",
+        modelCatalog: null,
+      }),
+      sendAgentMessage,
+    });
+
+    expect(harness.getLatest().busySendBlockedReason).toBeNull();
+    await harness.run(async (state) => {
+      await state.onSend(createComposerDraft("hello world"));
+    });
+
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+      { kind: "text", text: "hello world" },
+    ]);
+
+    await harness.unmount();
+  });
+
+  test("onSend allows busy follow-ups when the selected runtime supports queued messages", async () => {
+    const sendAgentMessage = mock(async () => {});
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createSession({
+        sessionId: "session-existing",
+        status: "running",
+        runtimeKind: "opencode",
+        modelCatalog: {
+          runtime: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR,
+            capabilities: {
+              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+              supportsQueuedUserMessages: false,
+            },
+          },
+          models: [],
+          defaultModelsByProvider: {},
+        },
+      }),
+      selectedModelSelection: {
+        runtimeKind: "queued-runtime",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        profileId: "spec",
+      },
       sendAgentMessage,
     });
 

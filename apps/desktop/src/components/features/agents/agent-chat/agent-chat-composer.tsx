@@ -11,6 +11,10 @@ import {
   draftHasMeaningfulContent,
 } from "./agent-chat-composer-draft";
 import { AgentChatComposerEditor } from "./agent-chat-composer-editor";
+import {
+  readEditableTextContent,
+  setCaretOffsetWithinElement,
+} from "./agent-chat-composer-selection";
 import { AgentContextUsageIndicator } from "./agent-context-usage-indicator";
 
 const AgentChatComposerControls = memo(function AgentChatComposerControls({
@@ -31,8 +35,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   contextUsage,
   canStopSession,
   onStopSession,
-  isSending,
-  isModelSelectionPending,
+  showSubmittingState,
   sendDisabled,
 }: {
   selectedModelSelection: AgentChatComposerModel["selectedModelSelection"];
@@ -52,8 +55,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   contextUsage: AgentChatComposerModel["contextUsage"];
   canStopSession: boolean;
   onStopSession: AgentChatComposerModel["onStopSession"];
-  isSending: boolean;
-  isModelSelectionPending: boolean;
+  showSubmittingState: boolean;
   sendDisabled: boolean;
 }): ReactElement {
   return (
@@ -140,10 +142,10 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
           type="submit"
           size="icon"
           className="size-8 rounded-full"
-          aria-label={isSending || isModelSelectionPending ? "Preparing message" : "Send message"}
+          aria-label={showSubmittingState ? "Preparing message" : "Send message"}
           disabled={sendDisabled}
         >
-          {isSending || isModelSelectionPending ? (
+          {showSubmittingState ? (
             <LoaderCircle className="size-3.5 animate-spin" />
           ) : (
             <SendHorizontal className="size-3.5" />
@@ -198,14 +200,6 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
   const latestOnSendRef = useRef(onSend);
 
   useEffect(() => {
-    latestDraftRef.current = draft;
-  }, [draft]);
-
-  useEffect(() => {
-    latestOnSendRef.current = onSend;
-  }, [onSend]);
-
-  useEffect(() => {
     void draftStateKey;
     setDraft(createEmptyComposerDraft());
     onComposerEditorInput();
@@ -217,7 +211,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
   }, []);
 
   const sendDisabled =
-    isSending ||
+    (isSending && !isSessionWorking) ||
     isStarting ||
     isWaitingInput ||
     Boolean(busySendBlockedReason) ||
@@ -227,11 +221,11 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     !draftHasMeaningfulContent(draft) ||
     !agentStudioReady;
 
-  useEffect(() => {
-    latestSendDisabledRef.current = sendDisabled;
-  }, [sendDisabled]);
+  latestDraftRef.current = draft;
+  latestOnSendRef.current = onSend;
+  latestSendDisabledRef.current = sendDisabled;
 
-  const isSubmitting = isSending || isStarting || isModelSelectionPending;
+  const isSubmitting = (isSending && !isSessionWorking) || isStarting || isModelSelectionPending;
   const selectorDisabled =
     !taskId || isSelectionCatalogLoading || isSubmitting || !agentStudioReady || isReadOnly;
 
@@ -242,6 +236,39 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     }
     return resolveAgentAccentColor(agentName, sessionAgentColors?.[agentName]);
   }, [selectedModelSelection?.profileId, sessionAgentColors]);
+
+  const focusComposerEditor = useCallback(() => {
+    const editor = composerEditorRef.current;
+    if (!editor) {
+      return;
+    }
+
+    const textSegments = editor.querySelectorAll<HTMLElement>("[data-segment-id]");
+    for (let index = textSegments.length - 1; index >= 0; index -= 1) {
+      const segment = textSegments[index];
+      if (!segment?.isContentEditable) {
+        continue;
+      }
+
+      setCaretOffsetWithinElement(segment, readEditableTextContent(segment).length);
+      return;
+    }
+
+    editor.focus();
+  }, [composerEditorRef]);
+
+  const scheduleComposerFocus = useCallback(() => {
+    const requestAnimationFrameFn = globalThis.requestAnimationFrame;
+    if (typeof requestAnimationFrameFn === "function") {
+      requestAnimationFrameFn(() => {
+        focusComposerEditor();
+      });
+      return;
+    }
+
+    focusComposerEditor();
+  }, [focusComposerEditor]);
+
   const handleSubmit = useCallback(async (): Promise<void> => {
     if (latestSendDisabledRef.current) {
       return;
@@ -249,16 +276,19 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     const submittedDraft = latestDraftRef.current;
     setDraft(createEmptyComposerDraft());
     onComposerEditorInput();
+    scheduleComposerFocus();
     try {
       await latestOnSendRef.current(submittedDraft);
       scrollToBottomOnSendRef.current?.();
+      scheduleComposerFocus();
     } catch {
       setDraft((currentDraft) =>
         draftHasMeaningfulContent(currentDraft) ? currentDraft : submittedDraft,
       );
       onComposerEditorInput();
+      scheduleComposerFocus();
     }
-  }, [onComposerEditorInput, scrollToBottomOnSendRef]);
+  }, [onComposerEditorInput, scheduleComposerFocus, scrollToBottomOnSendRef]);
   const isComposerInputDisabled =
     !agentStudioReady ||
     isReadOnly ||
@@ -344,8 +374,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
             contextUsage={contextUsage}
             canStopSession={canStopSession}
             onStopSession={onStopSession}
-            isSending={isSending}
-            isModelSelectionPending={isModelSelectionPending}
+            showSubmittingState={isSubmitting}
             sendDisabled={sendDisabled}
           />
         </div>

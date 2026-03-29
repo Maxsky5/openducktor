@@ -36,6 +36,7 @@ type UseAgentStudioSessionActionsArgs = {
   role: AgentRole;
   scenario: AgentScenario;
   activeSession: AgentSessionState | null;
+  selectedModelSelection: AgentModelSelection | null;
   sessionsForTask: AgentSessionState[];
   selectedTask: TaskCard | null;
   agentStudioReady: boolean;
@@ -58,6 +59,7 @@ export function useAgentStudioSessionActions({
   role,
   scenario,
   activeSession,
+  selectedModelSelection,
   sessionsForTask,
   selectedTask,
   agentStudioReady,
@@ -130,12 +132,19 @@ export function useAgentStudioSessionActions({
       (activeSession?.status ?? "stopped") === "starting" ||
       isSending);
   const isWaitingInput = Boolean(activeSession && isAgentSessionWaitingInput(activeSession));
+  const selectedRuntimeKind =
+    selectedModelSelection?.runtimeKind ?? activeSession?.selectedModel?.runtimeKind ?? null;
   const activeRuntimeDescriptor =
+    (selectedRuntimeKind
+      ? runtimeDefinitions.find((runtime) => runtime.kind === selectedRuntimeKind)
+      : null) ??
     activeSession?.modelCatalog?.runtime ??
     runtimeDefinitions.find((runtime) => runtime.kind === activeSession?.runtimeKind) ??
     null;
   const supportsQueuedUserMessages =
     activeRuntimeDescriptor?.capabilities.supportsQueuedUserMessages !== false;
+  const canQueueBusyFollowups =
+    activeSession?.status === "running" && !isWaitingInput && supportsQueuedUserMessages;
   const busySendBlockedReason =
     activeSession && isSessionWorking && !isWaitingInput && !supportsQueuedUserMessages
       ? `${activeRuntimeDescriptor?.label ?? "Current runtime"} does not support queued messages while the session is working.`
@@ -173,7 +182,13 @@ export function useAgentStudioSessionActions({
 
   const onSend = useCallback(
     async (draft: AgentChatComposerDraft): Promise<void> => {
-      if (isSending || isStarting || !agentStudioReady || isWaitingInput || busySendBlockedReason) {
+      if (
+        (!canQueueBusyFollowups && isSending) ||
+        isStarting ||
+        !agentStudioReady ||
+        isWaitingInput ||
+        busySendBlockedReason
+      ) {
         return;
       }
       if (!canStartSessionForRole(selectedTask, role)) {
@@ -233,6 +248,7 @@ export function useAgentStudioSessionActions({
       activeComposerContextKey,
       activeSession,
       agentStudioReady,
+      canQueueBusyFollowups,
       isSending,
       isStarting,
       isWaitingInput,

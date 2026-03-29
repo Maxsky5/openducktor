@@ -97,14 +97,14 @@ describe("AgentChatComposer", () => {
     expect(html).not.toContain('aria-label="Stop session" disabled');
   });
 
-  test("stop button stays enabled while a message is submitting", () => {
+  test("stop button stays enabled while a non-queueable message is submitting", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {
         model: {
           ...buildModel(),
           canStopSession: true,
           isSending: true,
-          isSessionWorking: true,
+          isSessionWorking: false,
         },
       }),
     );
@@ -112,6 +112,22 @@ describe("AgentChatComposer", () => {
     expect(html).toContain("Stop session");
     expect(html).not.toContain('aria-label="Stop session" disabled');
     expect(html).toContain('aria-label="Preparing message" disabled');
+  });
+
+  test("keeps send enabled while a queueable session is working", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          isSending: true,
+          isSessionWorking: true,
+          draftStateKey: "queued-followup-ready",
+        },
+      }),
+    );
+
+    expect(html).toContain('aria-label="Send message"');
+    expect(html).not.toContain('aria-label="Preparing message"');
   });
 
   test("disables send when input is blank", () => {
