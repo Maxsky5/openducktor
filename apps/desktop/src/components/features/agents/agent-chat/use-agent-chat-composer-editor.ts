@@ -106,6 +106,23 @@ const usePendingFocus = () => {
   };
 };
 
+const useLastKnownCaretOffsets = () => {
+  const caretOffsetBySegmentRef = useRef<Record<string, number>>({});
+
+  return {
+    rememberCaretOffset: (segmentId: string, caretOffset: number | null) => {
+      if (typeof caretOffset !== "number") {
+        return;
+      }
+      caretOffsetBySegmentRef.current[segmentId] = caretOffset;
+    },
+    readCaretOffset: (segmentId: string): number | null => {
+      const caretOffset = caretOffsetBySegmentRef.current[segmentId];
+      return typeof caretOffset === "number" ? caretOffset : null;
+    },
+  };
+};
+
 export const useAgentChatComposerEditor = ({
   draft,
   onDraftChange,
@@ -116,6 +133,7 @@ export const useAgentChatComposerEditor = ({
   slashCommands,
 }: UseAgentChatComposerEditorArgs): UseAgentChatComposerEditorResult => {
   const { registerTextSegmentRef, focusTextSegment, setPendingFocusTarget } = usePendingFocus();
+  const { rememberCaretOffset, readCaretOffset } = useLastKnownCaretOffsets();
   const [slashMenuState, setSlashMenuState] = useState<SlashMenuState | null>(null);
   const [activeSlashIndex, setActiveSlashIndex] = useState(0);
 
@@ -189,19 +207,18 @@ export const useAgentChatComposerEditor = ({
 
   const syncSlashMenuFromElement = useCallback(
     (segmentId: string, element: HTMLElement) => {
-      updateSlashMenuForText(
-        segmentId,
-        readEditableTextContent(element),
-        getCaretOffsetWithinElement(element),
-      );
+      const caretOffset = getCaretOffsetWithinElement(element);
+      rememberCaretOffset(segmentId, caretOffset);
+      updateSlashMenuForText(segmentId, readEditableTextContent(element), caretOffset);
     },
-    [updateSlashMenuForText],
+    [rememberCaretOffset, updateSlashMenuForText],
   );
 
   const handleTextInput = useCallback(
     (segmentId: string, element: HTMLElement) => {
       const nextText = readEditableTextContent(element);
       const caretOffset = getCaretOffsetWithinElement(element);
+      rememberCaretOffset(segmentId, caretOffset);
       applyEditResult(
         applyComposerDraftEdit(draft, {
           type: "update_text",
@@ -212,7 +229,7 @@ export const useAgentChatComposerEditor = ({
       );
       updateSlashMenuForText(segmentId, nextText, caretOffset);
     },
-    [applyEditResult, draft, updateSlashMenuForText],
+    [applyEditResult, draft, rememberCaretOffset, updateSlashMenuForText],
   );
 
   const handleTextBeforeInput = useCallback(
@@ -229,7 +246,8 @@ export const useAgentChatComposerEditor = ({
         return;
       }
 
-      const caretOffset = getCaretOffsetWithinElement(event.currentTarget);
+      const caretOffset =
+        getCaretOffsetWithinElement(event.currentTarget) ?? readCaretOffset(segmentId);
       if (caretOffset === null) {
         return;
       }
@@ -246,7 +264,7 @@ export const useAgentChatComposerEditor = ({
         setSlashMenuState(null);
       }
     },
-    [applyEditResult, draft],
+    [applyEditResult, draft, readCaretOffset],
   );
 
   const handleTextKeyUp = useCallback(
@@ -262,7 +280,8 @@ export const useAgentChatComposerEditor = ({
   const handleTextKeyDown = useCallback(
     (segmentId: string, event: ReactKeyboardEvent<HTMLElement>) => {
       const target = event.currentTarget;
-      const caretOffset = getCaretOffsetWithinElement(target);
+      const caretOffset = getCaretOffsetWithinElement(target) ?? readCaretOffset(segmentId);
+      rememberCaretOffset(segmentId, caretOffset);
 
       if (slashMenuState && filteredSlashCommands.length > 0) {
         if (event.key === "ArrowDown") {
@@ -340,6 +359,8 @@ export const useAgentChatComposerEditor = ({
       draft,
       filteredSlashCommands,
       onSend,
+      readCaretOffset,
+      rememberCaretOffset,
       selectSlashCommand,
       slashMenuState,
     ],

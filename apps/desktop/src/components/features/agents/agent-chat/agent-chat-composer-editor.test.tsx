@@ -6,14 +6,17 @@ import { createComposerDraft } from "./agent-chat-test-fixtures";
 
 let AgentChatComposerEditor: typeof import("./agent-chat-composer-editor").AgentChatComposerEditor;
 const setCaretOffsetWithinElementMock = mock(() => {});
+const getCaretOffsetWithinElementMock = mock(
+  (element: HTMLElement): number | null =>
+    (element.textContent ?? "").replace(/\u200B/g, "").length,
+);
 
 beforeAll(async () => {
   mock.module("./agent-chat-composer-selection", () => ({
     EMPTY_TEXT_SEGMENT_SENTINEL: "\u200B",
     readEditableTextContent: (element: HTMLElement): string =>
       (element.textContent ?? "").replace(/\u200B/g, ""),
-    getCaretOffsetWithinElement: (element: HTMLElement): number =>
-      (element.textContent ?? "").replace(/\u200B/g, "").length,
+    getCaretOffsetWithinElement: getCaretOffsetWithinElementMock,
     setCaretOffsetWithinElement: setCaretOffsetWithinElementMock,
   }));
 
@@ -23,6 +26,14 @@ beforeAll(async () => {
 afterAll(() => {
   mock.restore();
 });
+
+const resetSelectionMocks = (): void => {
+  setCaretOffsetWithinElementMock.mockClear();
+  getCaretOffsetWithinElementMock.mockImplementation(
+    (element: HTMLElement): number | null =>
+      (element.textContent ?? "").replace(/\u200B/g, "").length,
+  );
+};
 
 const COMMANDS = [
   {
@@ -123,7 +134,7 @@ describe("AgentChatComposerEditor", () => {
   });
 
   test("redirects empty-shell clicks to the editable text segment", () => {
-    setCaretOffsetWithinElementMock.mockClear();
+    resetSelectionMocks();
     const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
 
     const shell = getEditorShell(rendered.container);
@@ -133,7 +144,7 @@ describe("AgentChatComposerEditor", () => {
   });
 
   test("preserves caret position after text input rerenders", () => {
-    setCaretOffsetWithinElementMock.mockClear();
+    resetSelectionMocks();
     const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
 
     typeIntoEditor(rendered.container, "hello");
@@ -153,6 +164,7 @@ describe("AgentChatComposerEditor", () => {
   });
 
   test("inserts a newline on the first shift-enter", async () => {
+    resetSelectionMocks();
     const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
 
     const editable = typeIntoEditor(rendered.container, "hello");
@@ -165,6 +177,7 @@ describe("AgentChatComposerEditor", () => {
   });
 
   test("inserts a newline from beforeinput line-break events", async () => {
+    resetSelectionMocks();
     const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
 
     const editable = typeIntoEditor(rendered.container, "hello");
@@ -178,6 +191,23 @@ describe("AgentChatComposerEditor", () => {
         data: null,
       }),
     );
+
+    await waitFor(() => {
+      const updatedEditable = rendered.container.querySelector('[contenteditable="true"]');
+      expect(updatedEditable?.textContent).toBe("hello\n");
+    });
+  });
+
+  test("falls back to the last known caret offset when shift-enter keydown loses selection", async () => {
+    resetSelectionMocks();
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "hello");
+    getCaretOffsetWithinElementMock
+      .mockImplementationOnce(() => 5)
+      .mockImplementationOnce(() => null);
+
+    fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
 
     await waitFor(() => {
       const updatedEditable = rendered.container.querySelector('[contenteditable="true"]');
