@@ -42,6 +42,7 @@ type UseAgentChatComposerEditorResult = {
   activeSlashIndex: number;
   showSlashMenu: boolean;
   registerTextSegmentRef: (segmentId: string, element: HTMLDivElement | null) => void;
+  focusLastTextSegment: () => void;
   selectSlashCommand: (command: AgentSlashCommand) => void;
   handleTextInput: (segmentId: string, element: HTMLDivElement) => void;
   handleTextFocus: (segmentId: string, element: HTMLDivElement) => void;
@@ -89,6 +90,13 @@ const usePendingFocus = () => {
 
   return {
     registerTextSegmentRef,
+    focusTextSegment: (segmentId: string, offset: number) => {
+      const target = textSegmentRefs.current[segmentId];
+      if (!target) {
+        return;
+      }
+      setCaretOffsetWithinElement(target, offset);
+    },
     setPendingFocusTarget: (focusTarget: AgentChatComposerDraftEditResult["focusTarget"]) => {
       pendingFocusRef.current = focusTarget;
     },
@@ -104,7 +112,7 @@ export const useAgentChatComposerEditor = ({
   supportsSlashCommands,
   slashCommands,
 }: UseAgentChatComposerEditorArgs): UseAgentChatComposerEditorResult => {
-  const { registerTextSegmentRef, setPendingFocusTarget } = usePendingFocus();
+  const { registerTextSegmentRef, focusTextSegment, setPendingFocusTarget } = usePendingFocus();
   const [slashMenuState, setSlashMenuState] = useState<SlashMenuState | null>(null);
   const [activeSlashIndex, setActiveSlashIndex] = useState(0);
 
@@ -288,11 +296,23 @@ export const useAgentChatComposerEditor = ({
     ],
   );
 
+  const focusLastTextSegment = useCallback(() => {
+    for (let index = draft.segments.length - 1; index >= 0; index -= 1) {
+      const segment = draft.segments[index];
+      if (!segment || segment.kind !== "text") {
+        continue;
+      }
+      focusTextSegment(segment.id, segment.text.length);
+      return;
+    }
+  }, [draft.segments, focusTextSegment]);
+
   return {
     filteredSlashCommands,
     activeSlashIndex,
     showSlashMenu: supportsSlashCommands && slashMenuState !== null,
     registerTextSegmentRef,
+    focusLastTextSegment,
     selectSlashCommand,
     handleTextInput,
     handleTextFocus: syncSlashMenuFromElement,

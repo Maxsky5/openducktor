@@ -1,5 +1,5 @@
 import { Bot, Brain, BrainCog, LoaderCircle, SendHorizontal, Square } from "lucide-react";
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BorderRay } from "@/components/ui/border-ray";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
@@ -12,6 +12,147 @@ import {
 } from "./agent-chat-composer-draft";
 import { AgentChatComposerEditor } from "./agent-chat-composer-editor";
 import { AgentContextUsageIndicator } from "./agent-context-usage-indicator";
+
+const AgentChatComposerControls = memo(function AgentChatComposerControls({
+  selectedModelSelection,
+  agentOptions,
+  modelOptions,
+  modelGroups,
+  variantOptions,
+  isSelectionCatalogLoading,
+  selectorDisabled,
+  taskId,
+  agentStudioReady,
+  isStarting,
+  isReadOnly,
+  onSelectAgent,
+  onSelectModel,
+  onSelectVariant,
+  contextUsage,
+  canStopSession,
+  onStopSession,
+  isSending,
+  isModelSelectionPending,
+  sendDisabled,
+}: {
+  selectedModelSelection: AgentChatComposerModel["selectedModelSelection"];
+  agentOptions: AgentChatComposerModel["agentOptions"];
+  modelOptions: AgentChatComposerModel["modelOptions"];
+  modelGroups: AgentChatComposerModel["modelGroups"];
+  variantOptions: AgentChatComposerModel["variantOptions"];
+  isSelectionCatalogLoading: boolean;
+  selectorDisabled: boolean;
+  taskId: string;
+  agentStudioReady: boolean;
+  isStarting: boolean;
+  isReadOnly: boolean;
+  onSelectAgent: AgentChatComposerModel["onSelectAgent"];
+  onSelectModel: AgentChatComposerModel["onSelectModel"];
+  onSelectVariant: AgentChatComposerModel["onSelectVariant"];
+  contextUsage: AgentChatComposerModel["contextUsage"];
+  canStopSession: boolean;
+  onStopSession: AgentChatComposerModel["onStopSession"];
+  isSending: boolean;
+  isModelSelectionPending: boolean;
+  sendDisabled: boolean;
+}): ReactElement {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/80 px-2.5 py-2">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+        <div className="relative">
+          <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Combobox
+            value={selectedModelSelection?.profileId ?? ""}
+            options={agentOptions}
+            className="w-[22rem] max-w-[min(90vw,28rem)] p-0"
+            placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
+            searchPlaceholder="Search agent..."
+            triggerClassName="!h-7 !w-auto max-w-[15rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
+            disabled={selectorDisabled}
+            onValueChange={onSelectAgent}
+          />
+        </div>
+
+        <div className="relative">
+          <Brain className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Combobox
+            value={
+              selectedModelSelection
+                ? `${selectedModelSelection.providerId}/${selectedModelSelection.modelId}`
+                : ""
+            }
+            options={modelOptions}
+            groups={modelGroups}
+            className="w-[26rem] max-w-[min(90vw,34rem)] p-0"
+            placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
+            searchPlaceholder="Search model..."
+            triggerClassName="!h-7 !w-auto max-w-[19rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
+            disabled={selectorDisabled}
+            onValueChange={onSelectModel}
+          />
+        </div>
+
+        <div className="relative">
+          <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Combobox
+            value={selectedModelSelection?.variant ?? ""}
+            options={variantOptions}
+            className="w-[16rem] max-w-[min(90vw,22rem)] p-0"
+            placeholder={variantOptions.length > 0 ? "Variant" : "No variants"}
+            searchPlaceholder="Search variant..."
+            triggerClassName="!h-7 !w-auto max-w-[12rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
+            disabled={
+              !taskId ||
+              variantOptions.length === 0 ||
+              isStarting ||
+              !agentStudioReady ||
+              isReadOnly
+            }
+            onValueChange={onSelectVariant}
+          />
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-2">
+        {contextUsage ? (
+          <div className="mr-3">
+            <AgentContextUsageIndicator
+              totalTokens={contextUsage.totalTokens}
+              contextWindow={contextUsage.contextWindow}
+              {...(typeof contextUsage.outputLimit === "number"
+                ? { outputLimit: contextUsage.outputLimit }
+                : {})}
+            />
+          </div>
+        ) : null}
+        {canStopSession ? (
+          <Button
+            type="button"
+            size="icon"
+            className="size-8 rounded-full border-0 bg-red-500 text-white shadow-sm hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700"
+            aria-label="Stop session"
+            onClick={onStopSession}
+          >
+            <Square className="size-3 fill-current" />
+          </Button>
+        ) : null}
+        <Button
+          type="submit"
+          size="icon"
+          className="size-8 rounded-full"
+          aria-label={isSending || isModelSelectionPending ? "Preparing message" : "Send message"}
+          disabled={sendDisabled}
+        >
+          {isSending || isModelSelectionPending ? (
+            <LoaderCircle className="size-3.5 animate-spin" />
+          ) : (
+            <SendHorizontal className="size-3.5" />
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+});
 
 export function AgentChatComposer({ model }: { model: AgentChatComposerModel }): ReactElement {
   const {
@@ -52,10 +193,16 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
 
   const [draft, setDraft] = useState(createEmptyComposerDraft);
   const latestDraftRef = useRef<AgentChatComposerDraft>(draft);
+  const latestSendDisabledRef = useRef(false);
+  const latestOnSendRef = useRef(onSend);
 
   useEffect(() => {
     latestDraftRef.current = draft;
   }, [draft]);
+
+  useEffect(() => {
+    latestOnSendRef.current = onSend;
+  }, [onSend]);
 
   useEffect(() => {
     void draftStateKey;
@@ -79,6 +226,10 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     !draftHasMeaningfulContent(draft) ||
     !agentStudioReady;
 
+  useEffect(() => {
+    latestSendDisabledRef.current = sendDisabled;
+  }, [sendDisabled]);
+
   const selectorDisabled =
     !taskId || isSelectionCatalogLoading || isStarting || !agentStudioReady || isReadOnly;
 
@@ -89,15 +240,15 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     }
     return resolveAgentAccentColor(agentName, sessionAgentColors?.[agentName]);
   }, [selectedModelSelection?.profileId, sessionAgentColors]);
-  const handleSubmit = async (): Promise<void> => {
-    if (sendDisabled) {
+  const handleSubmit = useCallback(async (): Promise<void> => {
+    if (latestSendDisabledRef.current) {
       return;
     }
     const submittedDraft = latestDraftRef.current;
     setDraft(createEmptyComposerDraft());
     onComposerEditorInput();
     try {
-      await onSend(submittedDraft);
+      await latestOnSendRef.current(submittedDraft);
       scrollToBottomOnSendRef.current?.();
     } catch {
       setDraft((currentDraft) =>
@@ -105,7 +256,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
       );
       onComposerEditorInput();
     }
-  };
+  }, [onComposerEditorInput, scrollToBottomOnSendRef]);
   const isSubmitting = isSending || isStarting || isModelSelectionPending;
   const isComposerInputDisabled =
     !agentStudioReady ||
@@ -175,108 +326,28 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
               isSlashCommandsLoading={isSlashCommandsLoading}
             />
 
-            {composerHelperText ? (
-              <div className="border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
-                {composerHelperText}
-              </div>
-            ) : null}
-
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/80 px-2.5 py-2">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-                <div className="relative">
-                  <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Combobox
-                    value={selectedModelSelection?.profileId ?? ""}
-                    options={agentOptions}
-                    className="w-[22rem] max-w-[min(90vw,28rem)] p-0"
-                    placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
-                    searchPlaceholder="Search agent..."
-                    triggerClassName="!h-7 !w-auto max-w-[15rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
-                    disabled={selectorDisabled}
-                    onValueChange={onSelectAgent}
-                  />
-                </div>
-
-                <div className="relative">
-                  <Brain className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Combobox
-                    value={
-                      selectedModelSelection
-                        ? `${selectedModelSelection.providerId}/${selectedModelSelection.modelId}`
-                        : ""
-                    }
-                    options={modelOptions}
-                    groups={modelGroups}
-                    className="w-[26rem] max-w-[min(90vw,34rem)] p-0"
-                    placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
-                    searchPlaceholder="Search model..."
-                    triggerClassName="!h-7 !w-auto max-w-[19rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
-                    disabled={selectorDisabled}
-                    onValueChange={onSelectModel}
-                  />
-                </div>
-
-                <div className="relative">
-                  <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Combobox
-                    value={selectedModelSelection?.variant ?? ""}
-                    options={variantOptions}
-                    className="w-[16rem] max-w-[min(90vw,22rem)] p-0"
-                    placeholder={variantOptions.length > 0 ? "Variant" : "No variants"}
-                    searchPlaceholder="Search variant..."
-                    triggerClassName="!h-7 !w-auto max-w-[12rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
-                    disabled={
-                      !taskId ||
-                      variantOptions.length === 0 ||
-                      isStarting ||
-                      !agentStudioReady ||
-                      isReadOnly
-                    }
-                    onValueChange={onSelectVariant}
-                  />
-                </div>
-              </div>
-
-              <div className="flex shrink-0 items-center gap-2">
-                {contextUsage ? (
-                  <div className="mr-3">
-                    <AgentContextUsageIndicator
-                      totalTokens={contextUsage.totalTokens}
-                      contextWindow={contextUsage.contextWindow}
-                      {...(typeof contextUsage.outputLimit === "number"
-                        ? { outputLimit: contextUsage.outputLimit }
-                        : {})}
-                    />
-                  </div>
-                ) : null}
-                {canStopSession ? (
-                  <Button
-                    type="button"
-                    size="icon"
-                    className="size-8 rounded-full border-0 bg-red-500 text-white shadow-sm hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700"
-                    aria-label="Stop session"
-                    onClick={onStopSession}
-                  >
-                    <Square className="size-3 fill-current" />
-                  </Button>
-                ) : null}
-                <Button
-                  type="submit"
-                  size="icon"
-                  className="size-8 rounded-full"
-                  aria-label={
-                    isSending || isModelSelectionPending ? "Preparing message" : "Send message"
-                  }
-                  disabled={sendDisabled}
-                >
-                  {isSending || isModelSelectionPending ? (
-                    <LoaderCircle className="size-3.5 animate-spin" />
-                  ) : (
-                    <SendHorizontal className="size-3.5" />
-                  )}
-                </Button>
-              </div>
-            </div>
+            <AgentChatComposerControls
+              selectedModelSelection={selectedModelSelection}
+              agentOptions={agentOptions}
+              modelOptions={modelOptions}
+              modelGroups={modelGroups}
+              variantOptions={variantOptions}
+              isSelectionCatalogLoading={isSelectionCatalogLoading}
+              selectorDisabled={selectorDisabled}
+              taskId={taskId}
+              agentStudioReady={agentStudioReady}
+              isStarting={isStarting}
+              isReadOnly={isReadOnly}
+              onSelectAgent={onSelectAgent}
+              onSelectModel={onSelectModel}
+              onSelectVariant={onSelectVariant}
+              contextUsage={contextUsage}
+              canStopSession={canStopSession}
+              onStopSession={onStopSession}
+              isSending={isSending}
+              isModelSelectionPending={isModelSelectionPending}
+              sendDisabled={sendDisabled}
+            />
           </div>
         </div>
       </fieldset>

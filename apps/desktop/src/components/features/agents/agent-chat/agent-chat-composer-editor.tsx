@@ -42,6 +42,7 @@ export function AgentChatComposerEditor({
     activeSlashIndex,
     showSlashMenu,
     registerTextSegmentRef,
+    focusLastTextSegment,
     selectSlashCommand,
     handleTextInput,
     handleTextFocus,
@@ -69,6 +70,7 @@ export function AgentChatComposerEditor({
         />
       ) : null}
 
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: editor shell needs click-to-focus behavior for empty token content. */}
       <div
         ref={editorRef}
         className={cn(
@@ -76,6 +78,13 @@ export function AgentChatComposerEditor({
           disabled ? "cursor-not-allowed opacity-60" : "cursor-text",
         )}
         aria-disabled={disabled}
+        onMouseDown={(event) => {
+          if (disabled || event.target !== event.currentTarget) {
+            return;
+          }
+          event.preventDefault();
+          focusLastTextSegment();
+        }}
       >
         {!draftHasMeaningfulContent(draft) ? (
           <div className="pointer-events-none absolute left-3 top-2.5 text-[15px] leading-6 text-muted-foreground">
