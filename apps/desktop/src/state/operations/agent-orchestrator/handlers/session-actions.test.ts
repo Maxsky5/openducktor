@@ -1514,12 +1514,17 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const originalHasSession = adapter.hasSession;
     const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
     const originalSendUserMessage = adapter.sendUserMessage;
-    const sendCalls: Array<{ sessionId: string; content: string }> = [];
+    const sendCalls: Array<{ sessionId: string; parts: { kind: string; text?: string }[] }> = [];
 
     adapter.hasSession = () => true;
     adapter.listLiveAgentSessionSnapshots = async () => [];
     adapter.sendUserMessage = async (input) => {
-      sendCalls.push({ sessionId: input.sessionId, content: input.content });
+      sendCalls.push({
+        sessionId: input.sessionId,
+        parts: input.parts.map((part) =>
+          part.kind === "text" ? { kind: part.kind, text: part.text } : { kind: part.kind },
+        ),
+      });
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -1583,9 +1588,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.sendAgentMessage("session-1", "queued follow-up");
+      await actions.sendAgentMessage("session-1", [{ kind: "text", text: "queued follow-up" }]);
 
-      expect(sendCalls).toEqual([{ sessionId: "session-1", content: "queued follow-up" }]);
+      expect(sendCalls).toEqual([
+        { sessionId: "session-1", parts: [{ kind: "text", text: "queued follow-up" }] },
+      ]);
       expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("Still working");
       expect(sessionsRef.current["session-1"]?.draftAssistantMessageId).toBe("assistant-live-1");
       expect(sessionsRef.current["session-1"]?.draftReasoningText).toBe("Thinking");
@@ -1673,7 +1680,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.sendAgentMessage("session-1", "queued follow-up");
+      await actions.sendAgentMessage("session-1", [{ kind: "text", text: "queued follow-up" }]);
 
       expect(sessionsRef.current["session-1"]?.status).toBe("running");
       expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("Still working");

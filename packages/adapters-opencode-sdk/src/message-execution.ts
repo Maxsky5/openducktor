@@ -116,6 +116,18 @@ export const sendUserMessage = async (input: {
   const model = input.request.model ?? input.session.input.model;
   const modelInput = normalizeModelInput(model);
   const slashCommandRequest = toSlashCommandExecutionRequest(input.request.parts);
+  const queuedContent = serializeAgentUserMessagePartsToText(input.request.parts).trim();
+  const pendingQueuedUserMessages = input.session.pendingQueuedUserMessages ?? [];
+  input.session.pendingQueuedUserMessages = pendingQueuedUserMessages;
+  const shouldTrackAsQueued =
+    input.session.activeAssistantMessageId !== null && queuedContent.length > 0;
+
+  if (shouldTrackAsQueued) {
+    pendingQueuedUserMessages.push({
+      content: queuedContent,
+      ...(model ? { model } : {}),
+    });
+  }
 
   setSessionActive(input.session);
   try {
@@ -135,6 +147,14 @@ export const sendUserMessage = async (input: {
       modelInput,
     });
   } catch (error) {
+    if (shouldTrackAsQueued) {
+      const matchIndex = pendingQueuedUserMessages.findIndex(
+        (entry) => entry.content === queuedContent,
+      );
+      if (matchIndex >= 0) {
+        pendingQueuedUserMessages.splice(matchIndex, 1);
+      }
+    }
     throw toOpenCodeRequestError("prompt session", error);
   }
 };

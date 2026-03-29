@@ -13,6 +13,7 @@ import type {
   AgentSlashCommandCatalog,
   AgentStreamPart,
   AgentUserMessagePart,
+  AgentUserMessageState,
   RuntimeKind,
 } from "../types/agent-orchestrator";
 

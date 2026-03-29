@@ -314,10 +314,12 @@ describe("useAgentStudioSessionActions", () => {
     await harness.mount();
     expect(harness.getLatest().busySendBlockedReason).toBeNull();
     await harness.run(async (state) => {
-      await state.onSend();
+      await state.onSend(createComposerDraft("hello world"));
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", "hello world");
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+      { kind: "text", text: "hello world" },
+    ]);
 
     await harness.unmount();
   });
@@ -350,7 +352,7 @@ describe("useAgentStudioSessionActions", () => {
       "does not support queued messages while the session is working",
     );
     await harness.run(async (state) => {
-      await state.onSend();
+      await state.onSend(createComposerDraft("hello world"));
     });
 
     expect(sendAgentMessage).not.toHaveBeenCalled();
@@ -375,10 +377,12 @@ describe("useAgentStudioSessionActions", () => {
     await harness.mount();
     expect(harness.getLatest().busySendBlockedReason).toBeNull();
     await harness.run(async (state) => {
-      await state.onSend();
+      await state.onSend(createComposerDraft("hello world"));
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", "hello world");
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+      { kind: "text", text: "hello world" },
+    ]);
 
     await harness.unmount();
   });

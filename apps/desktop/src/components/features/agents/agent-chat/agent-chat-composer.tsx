@@ -160,6 +160,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     agentStudioReady,
     isReadOnly,
     readOnlyReason,
+    busySendBlockedReason,
     draftStateKey,
     onSend,
     isSending,

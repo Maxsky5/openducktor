@@ -9,6 +9,7 @@ const buildModel = () => ({
   agentStudioReady: true,
   isReadOnly: false,
   readOnlyReason: null,
+  busySendBlockedReason: null,
   draftStateKey: "draft-1",
   onSend: async () => {},
   isSending: false,
@@ -210,10 +211,10 @@ describe("AgentChatComposer", () => {
       createElement(AgentChatComposer, {
         model: {
           ...buildModel(),
-          input: "draft follow-up",
-          isSessionWorking: true,
           busySendBlockedReason:
             "Current runtime does not support queued messages while the session is working.",
+          draftStateKey: "busy-send-visible",
+          isSessionWorking: true,
         },
       }),
     );
@@ -221,7 +222,6 @@ describe("AgentChatComposer", () => {
     expect(html).toContain(
       "Current runtime does not support queued messages while the session is working.",
     );
-    expect(html).toContain("draft follow-up");
     expect(html).toContain('aria-label="Send message" disabled');
   });
 

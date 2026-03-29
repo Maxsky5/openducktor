@@ -898,7 +898,7 @@ describe("OpencodeSdkAdapter", () => {
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "First turn",
+      parts: [{ kind: "text", text: "First turn" }],
     });
 
     expect(session.pendingQueuedUserMessages).toHaveLength(0);
@@ -935,7 +935,7 @@ describe("OpencodeSdkAdapter", () => {
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "Queued follow-up",
+      parts: [{ kind: "text", text: "Queued follow-up" }],
     });
 
     expect(session.pendingQueuedUserMessages).toEqual([{ content: "Queued follow-up" }]);

@@ -301,6 +301,7 @@ describe("agents-page-view-model", () => {
       draftStateKey: "draft-1",
       isReadOnly: false,
       readOnlyReason: null,
+      busySendBlockedReason: null,
       onSend: async (draft) => onSend(draft),
       isWaitingInput: false,
       isModelSelectionPending: false,

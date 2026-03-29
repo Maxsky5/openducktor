@@ -114,6 +114,7 @@ export function useAgentStudioSessionActions({
   const [isSubmittingQuestionByRequestId, setIsSubmittingQuestionByRequestId] = useState<
     Record<string, boolean>
   >({});
+  const { runtimeDefinitions } = useRuntimeDefinitionsContext();
 
   const activeSessionId = activeSession?.sessionId ?? null;
   const activeComposerContextKey = buildAgentStudioAsyncActivityContextKey({
@@ -172,7 +173,7 @@ export function useAgentStudioSessionActions({
 
   const onSend = useCallback(
     async (draft: AgentChatComposerDraft): Promise<void> => {
-      if (isSending || isStarting || !agentStudioReady || isWaitingInput) {
+      if (isSending || isStarting || !agentStudioReady || isWaitingInput || busySendBlockedReason) {
         return;
       }
       if (!canStartSessionForRole(selectedTask, role)) {
@@ -235,6 +236,7 @@ export function useAgentStudioSessionActions({
       isSending,
       isStarting,
       isWaitingInput,
+      busySendBlockedReason,
       role,
       selectedTask,
       sendAgentMessage,

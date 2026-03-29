@@ -329,6 +329,7 @@ export const useAgentStudioComposerModel = ({
         agentStudioReady,
         isReadOnly: !selectedRoleAvailable,
         readOnlyReason: selectedRoleReadOnlyReason,
+        busySendBlockedReason,
         draftStateKey,
         onSend: handleSend,
         isSending,
