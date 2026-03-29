@@ -139,7 +139,6 @@ export function useAgentChatWindow({
       rowCount,
       activeSessionId,
       isSessionViewLoading,
-      isSessionWorking,
       isPinnedToBottomRef,
       shouldAutoFollowLiveUpdatesRef,
       suppressSentinelsRef,

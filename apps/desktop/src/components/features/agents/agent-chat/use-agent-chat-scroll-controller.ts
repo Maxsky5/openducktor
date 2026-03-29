@@ -150,6 +150,7 @@ export function useAgentChatScrollController({
     (options?: { allowedRowKeys?: ReadonlySet<string> }) => {
       const viewportAnchor = findViewportAnchor(options);
       pendingScrollAnchorRef.current = viewportAnchor;
+      viewportAnchorRef.current = viewportAnchor;
       return viewportAnchor !== null;
     },
     [findViewportAnchor],
@@ -331,6 +332,21 @@ export function useAgentChatScrollController({
         !shouldAutoFollowLiveUpdatesRef.current &&
         !forcePinned
       ) {
+        const distanceFromBottom =
+          container.scrollHeight - container.scrollTop - container.clientHeight;
+        const isWithinBottomThreshold = distanceFromBottom <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
+        const isWithinTopThreshold = container.scrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
+
+        isPinnedToBottomRef.current = isWithinBottomThreshold;
+        setIsNearBottom(isWithinBottomThreshold);
+        setIsNearTop(isWithinTopThreshold);
+
+        if (isWithinBottomThreshold) {
+          viewportAnchorRef.current = null;
+        } else if (viewportAnchorRef.current === null) {
+          viewportAnchorRef.current = findViewportAnchor();
+        }
+
         return;
       }
 
@@ -358,7 +374,7 @@ export function useAgentChatScrollController({
       setIsNearBottom(true);
       setIsNearTop(false);
     },
-    [isSessionWorking, messagesContainerRef],
+    [findViewportAnchor, isSessionWorking, messagesContainerRef],
   );
 
   const setBottomAnchoredState = useCallback((windowStart: number) => {
@@ -456,7 +472,7 @@ export function useAgentChatScrollController({
       if (isSessionWorking && didScrollUp && isPinnedToBottomRef.current) {
         shouldAutoFollowLiveUpdatesRef.current = false;
       }
-      if (isSessionWorking && didScrollDown && nearBottom) {
+      if (didScrollDown && nearBottom) {
         shouldAutoFollowLiveUpdatesRef.current = true;
       }
 
