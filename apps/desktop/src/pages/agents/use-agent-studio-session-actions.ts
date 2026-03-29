@@ -6,6 +6,7 @@ import type { SessionStartModalModel } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { SessionStartRequestReason } from "@/features/session-start";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
+import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import { SCENARIO_LABELS } from "./agents-page-constants";
@@ -112,6 +113,7 @@ export function useAgentStudioSessionActions({
     Record<string, boolean>
   >({});
   const latestInputRef = useRef(input);
+  const { runtimeDefinitions } = useRuntimeDefinitionsContext();
 
   const activeSessionId = activeSession?.sessionId ?? null;
   const activeComposerContextKey = buildAgentStudioAsyncActivityContextKey({
@@ -127,12 +129,15 @@ export function useAgentStudioSessionActions({
       (activeSession?.status ?? "stopped") === "starting" ||
       isSending);
   const isWaitingInput = Boolean(activeSession && isAgentSessionWaitingInput(activeSession));
-  const supportsQueuedUserMessages = Boolean(
-    activeSession?.modelCatalog?.runtime?.capabilities.supportsQueuedUserMessages,
-  );
+  const activeRuntimeDescriptor =
+    activeSession?.modelCatalog?.runtime ??
+    runtimeDefinitions.find((runtime) => runtime.kind === activeSession?.runtimeKind) ??
+    null;
+  const supportsQueuedUserMessages =
+    activeRuntimeDescriptor?.capabilities.supportsQueuedUserMessages !== false;
   const busySendBlockedReason =
     activeSession && isSessionWorking && !isWaitingInput && !supportsQueuedUserMessages
-      ? `${activeSession.modelCatalog?.runtime?.label ?? "Current runtime"} does not support queued messages while the session is working.`
+      ? `${activeRuntimeDescriptor?.label ?? "Current runtime"} does not support queued messages while the session is working.`
       : null;
 
   const {
