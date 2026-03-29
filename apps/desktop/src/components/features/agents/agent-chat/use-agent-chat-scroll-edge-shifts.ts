@@ -7,6 +7,8 @@ type UseAgentChatScrollEdgeShiftsInput = {
   rowCount: number;
   windowStart: number;
   windowEnd: number;
+  topSpacerHeight: number;
+  renderedContentHeight: number;
   isHistoryNavigationRef: MutableRefObject<boolean>;
   isUpdatingRef: MutableRefObject<boolean>;
   suppressSentinelsRef: MutableRefObject<boolean>;
@@ -19,6 +21,8 @@ export function useAgentChatScrollEdgeShifts({
   rowCount,
   windowStart,
   windowEnd,
+  topSpacerHeight,
+  renderedContentHeight,
   isHistoryNavigationRef,
   isUpdatingRef,
   suppressSentinelsRef,
@@ -32,21 +36,27 @@ export function useAgentChatScrollEdgeShifts({
     }
 
     const maybeShiftWindowForScrollEdge = () => {
-      if (rowCount === 0 || isUpdatingRef.current || suppressSentinelsRef.current) {
+      if (
+        rowCount === 0 ||
+        renderedContentHeight <= 0 ||
+        isUpdatingRef.current ||
+        suppressSentinelsRef.current
+      ) {
         return;
       }
 
-      if (windowStart > 0 && container.scrollTop <= CHAT_WINDOW_SHIFT_EDGE_THRESHOLD_PX) {
+      const distanceFromRenderedTop = container.scrollTop - topSpacerHeight;
+      if (windowStart > 0 && distanceFromRenderedTop <= CHAT_WINDOW_SHIFT_EDGE_THRESHOLD_PX) {
         shiftWindowUp();
         return;
       }
 
-      const distanceFromBottom =
-        container.scrollHeight - container.scrollTop - container.clientHeight;
+      const distanceFromRenderedBottom =
+        topSpacerHeight + renderedContentHeight - (container.scrollTop + container.clientHeight);
       if (
         isHistoryNavigationRef.current &&
         windowEnd < rowCount - 1 &&
-        distanceFromBottom <= CHAT_WINDOW_SHIFT_EDGE_THRESHOLD_PX
+        distanceFromRenderedBottom <= CHAT_WINDOW_SHIFT_EDGE_THRESHOLD_PX
       ) {
         shiftWindowDown();
       }
@@ -61,9 +71,11 @@ export function useAgentChatScrollEdgeShifts({
     isUpdatingRef,
     messagesContainerRef,
     rowCount,
+    renderedContentHeight,
     shiftWindowDown,
     shiftWindowUp,
     suppressSentinelsRef,
+    topSpacerHeight,
     windowEnd,
     windowStart,
   ]);

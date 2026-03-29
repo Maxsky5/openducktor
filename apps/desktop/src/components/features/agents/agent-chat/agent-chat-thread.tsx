@@ -95,8 +95,11 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const {
     windowedRows,
     windowStart,
+    topSpacerHeight,
+    bottomSpacerHeight,
     isNearBottom,
     isNearTop,
+    registerMeasuredRowElement,
     scrollToBottom,
     scrollToTop,
     scrollToBottomOnSend,
@@ -153,7 +156,12 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       return cached;
     }
 
-    const nextRef = registerRowElement(rowKey);
+    const registerMotionRowElement = registerRowElement(rowKey);
+    const registerMeasuredElement = registerMeasuredRowElement(rowKey);
+    const nextRef = (element: HTMLDivElement | null) => {
+      registerMotionRowElement(element);
+      registerMeasuredElement(element);
+    };
     rowRefByKeyRef.current.set(rowKey, nextRef);
     return nextRef;
   };
@@ -217,17 +225,27 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
           {session ? (
             rows.length > 0 ? (
               hideTranscriptWhileHydrating ? null : (
-                windowedRows.map((row) => (
-                  <AgentChatThreadMotionRow
-                    key={row.key}
-                    row={row}
-                    sessionRole={sessionRole}
-                    sessionSelectedModel={sessionSelectedModel}
-                    sessionAgentColors={sessionAgentColors}
-                    sessionWorkingDirectory={sessionWorkingDirectory}
-                    resolveRowRef={resolveRowRef}
-                  />
-                ))
+                <>
+                  {topSpacerHeight > 0 ? (
+                    <div aria-hidden="true" style={{ height: `${topSpacerHeight}px` }} />
+                  ) : null}
+
+                  {windowedRows.map((row) => (
+                    <AgentChatThreadMotionRow
+                      key={row.key}
+                      row={row}
+                      sessionRole={sessionRole}
+                      sessionSelectedModel={sessionSelectedModel}
+                      sessionAgentColors={sessionAgentColors}
+                      sessionWorkingDirectory={sessionWorkingDirectory}
+                      resolveRowRef={resolveRowRef}
+                    />
+                  ))}
+
+                  {bottomSpacerHeight > 0 ? (
+                    <div aria-hidden="true" style={{ height: `${bottomSpacerHeight}px` }} />
+                  ) : null}
+                </>
               )
             ) : session.messages.length === 0 && !hideTranscriptWhileHydrating ? (
               <div className="rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
