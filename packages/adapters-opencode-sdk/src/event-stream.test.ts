@@ -327,6 +327,67 @@ describe("event-stream", () => {
     });
   });
 
+  test("matches queued sends by exact model selection when content repeats", async () => {
+    const client = makeClientWithEvents([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "msg-200",
+            role: "user",
+            sessionID: "external-session-1",
+            providerID: "openai",
+            modelID: "gpt-5",
+            agent: "Hephaestus",
+            variant: "high",
+            text: "Ship it",
+            time: {
+              created: Date.parse("2026-02-22T12:00:02.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+    const emitted: AgentEvent[] = [];
+    const sessionRecord = makeSessionRecord(client);
+    sessionRecord.pendingQueuedUserMessages.push(
+      { content: "Ship it" },
+      {
+        content: "Ship it",
+        model: {
+          providerId: "openai",
+          modelId: "gpt-5",
+          profileId: "Hephaestus",
+          variant: "high",
+        },
+      },
+    );
+
+    await subscribeOpencodeEvents({
+      context: {
+        sessionId: "local-session-1",
+        externalSessionId: "external-session-1",
+        input: makeSessionInput(),
+      },
+      client,
+      controller: new AbortController(),
+      now: () => "2026-02-22T12:00:00.000Z",
+      emit: (_sessionId, event) => {
+        emitted.push(event);
+      },
+      getSession: () => sessionRecord,
+    });
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]).toMatchObject({
+      type: "user_message",
+      messageId: "msg-200",
+      state: "queued",
+    });
+    expect(sessionRecord.pendingQueuedUserMessages).toEqual([{ content: "Ship it" }]);
+  });
+
   test("reconciles queued follow-ups when a newer assistant becomes pending", async () => {
     const emitted = await runEventStream([
       {

@@ -210,14 +210,16 @@ export const loadSessionHistory = async (
       return aTime - bTime;
     });
 
-  const pendingAssistantId = [...entries]
+  const pendingAssistantReverseIndex = [...entries]
     .reverse()
-    .find(
+    .findIndex(
       (item) =>
         item.entry.info.role === "assistant" && !hasCompletedAssistantMessage(item.entry.info),
-    )?.entry.info.id;
+    );
+  const pendingAssistantIndex =
+    pendingAssistantReverseIndex >= 0 ? entries.length - 1 - pendingAssistantReverseIndex : -1;
 
-  return entries.map((item) => {
+  return entries.map((item, index) => {
     if (item.entry.info.role === "assistant") {
       return {
         messageId: item.entry.info.id,
@@ -235,7 +237,7 @@ export const loadSessionHistory = async (
       role: "user",
       timestamp: item.timestamp,
       text: item.text,
-      state: pendingAssistantId && item.entry.info.id > pendingAssistantId ? "queued" : "read",
+      state: pendingAssistantIndex >= 0 && index > pendingAssistantIndex ? "queued" : "read",
       ...(item.model ? { model: item.model } : {}),
       parts: item.parts,
     };

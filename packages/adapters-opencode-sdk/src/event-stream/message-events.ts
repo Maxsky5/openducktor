@@ -217,8 +217,11 @@ const modelsMatch = (
   left: ReturnType<typeof readMessageModelSelection> | undefined,
   right: ReturnType<typeof readMessageModelSelection> | undefined,
 ): boolean => {
-  if (!left || !right) {
+  if (!left && !right) {
     return true;
+  }
+  if (!left || !right) {
+    return false;
   }
   return (
     left.providerId === right.providerId &&
