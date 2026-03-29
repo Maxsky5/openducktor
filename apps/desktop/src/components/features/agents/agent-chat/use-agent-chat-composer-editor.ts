@@ -62,15 +62,25 @@ const filterSlashCommands = (commands: AgentSlashCommand[], query: string): Agen
     return commands;
   }
 
-  return commands.filter((command) => {
-    const haystacks = [command.trigger, command.title, command.description ?? "", ...command.hints];
-    return haystacks.some((value) => value.toLowerCase().includes(normalizedQuery));
-  });
+  return commands.filter((command) => command.trigger.toLowerCase().includes(normalizedQuery));
 };
 
 const usePendingFocus = () => {
   const textSegmentRefs = useRef<Record<string, HTMLElement | null>>({});
   const pendingFocusRef = useRef<AgentChatComposerDraftEditResult["focusTarget"]>(null);
+
+  const applyFocusTarget = useCallback(
+    (focusTarget: NonNullable<AgentChatComposerDraftEditResult["focusTarget"]>): boolean => {
+      const target = textSegmentRefs.current[focusTarget.segmentId];
+      if (!target) {
+        return false;
+      }
+
+      setCaretOffsetWithinElement(target, focusTarget.offset);
+      return true;
+    },
+    [],
+  );
 
   useLayoutEffect(() => {
     const pendingFocus = pendingFocusRef.current;
@@ -78,13 +88,26 @@ const usePendingFocus = () => {
       return;
     }
 
-    const target = textSegmentRefs.current[pendingFocus.segmentId];
-    if (!target) {
+    if (!applyFocusTarget(pendingFocus)) {
+      return;
+    }
+    pendingFocusRef.current = null;
+
+    const requestAnimationFrameFn = globalThis.requestAnimationFrame;
+    if (typeof requestAnimationFrameFn !== "function") {
       return;
     }
 
-    setCaretOffsetWithinElement(target, pendingFocus.offset);
-    pendingFocusRef.current = null;
+    const rafId = requestAnimationFrameFn(() => {
+      void applyFocusTarget(pendingFocus);
+    });
+
+    return () => {
+      const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;
+      if (typeof cancelAnimationFrameFn === "function") {
+        cancelAnimationFrameFn(rafId);
+      }
+    };
   });
 
   const registerTextSegmentRef = useCallback((segmentId: string, element: HTMLElement | null) => {

@@ -238,9 +238,10 @@ describe("AgentChatComposerEditor", () => {
     fireEvent.keyDown(editable, { key: "Enter" });
 
     await waitFor(() => {
-      const trailingEditable = Array.from(
-        rendered.container.querySelectorAll('[contenteditable="true"]'),
-      ).at(-1);
+      const editables = Array.from(rendered.container.querySelectorAll('[contenteditable="true"]'));
+      const leadingEditable = editables[0];
+      const trailingEditable = editables.at(-1);
+      expect(leadingEditable?.className).not.toContain("inline-block");
       expect(trailingEditable?.className).toContain("inline-block");
       expect(trailingEditable?.className).toContain("min-w-[1px]");
     });

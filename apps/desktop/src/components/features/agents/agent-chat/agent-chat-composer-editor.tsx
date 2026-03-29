@@ -141,7 +141,7 @@ export function AgentChatComposerEditor({
         ) : null}
 
         <div className="relative z-10 min-h-6 whitespace-pre-wrap break-words">
-          {draft.segments.map((segment) => {
+          {draft.segments.map((segment, index) => {
             if (segment.kind === "slash_command") {
               return (
                 <button
@@ -172,7 +172,9 @@ export function AgentChatComposerEditor({
                 data-segment-id={segment.id}
                 className={cn(
                   "whitespace-pre-wrap break-words align-baseline outline-none",
-                  segment.text.length === 0 ? "inline-block min-w-[1px]" : "inline",
+                  segment.text.length === 0 && draft.segments[index - 1]?.kind === "slash_command"
+                    ? "inline-block min-w-[1px]"
+                    : "inline",
                 )}
                 onBeforeInput={(event) => handleTextBeforeInput(segment.id, event)}
                 onInput={(event) => handleTextInput(segment.id, event.currentTarget)}
