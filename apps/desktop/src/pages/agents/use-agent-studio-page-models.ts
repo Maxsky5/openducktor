@@ -64,7 +64,7 @@ type AgentStudioSessionActionsContext = {
   kickoffLabel: string;
   canStopSession: boolean;
   startScenarioKickoff: () => Promise<void>;
-  onSend: (draft: AgentChatComposerDraft) => Promise<void>;
+  onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   stopAgentSession: (sessionId: string) => Promise<void>;

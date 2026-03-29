@@ -49,7 +49,7 @@ const buildModel = () => ({
     readOnlyReason: null,
     busySendBlockedReason: null,
     draftStateKey: "draft-1",
-    onSend: async () => {},
+    onSend: async () => true,
     isSending: false,
     isStarting: false,
     isSessionWorking: false,

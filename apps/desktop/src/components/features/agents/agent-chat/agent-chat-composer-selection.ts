@@ -4,6 +4,16 @@ export const readEditableTextContent = (element: HTMLElement): string => {
   return (element.textContent ?? "").split(EMPTY_TEXT_SEGMENT_SENTINEL).join("");
 };
 
+const normalizeEditableTextNode = (element: HTMLElement): Text => {
+  const ownerDocument = element.ownerDocument;
+  const normalizedText = readEditableTextContent(element);
+  const textNode = ownerDocument.createTextNode(
+    normalizedText.length > 0 ? normalizedText : EMPTY_TEXT_SEGMENT_SENTINEL,
+  );
+  element.replaceChildren(textNode);
+  return textNode;
+};
+
 export const getCaretOffsetWithinElement = (element: HTMLElement): number | null => {
   const selection =
     element.ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
@@ -29,13 +39,7 @@ export const setCaretOffsetWithinElement = (element: HTMLElement, logicalOffset:
     return;
   }
 
-  const textNode =
-    element.firstChild instanceof Text
-      ? element.firstChild
-      : ownerDocument.createTextNode(EMPTY_TEXT_SEGMENT_SENTINEL);
-  if (!element.firstChild) {
-    element.appendChild(textNode);
-  }
+  const textNode = normalizeEditableTextNode(element);
 
   const textContent = textNode.textContent ?? "";
   const domOffset =
@@ -61,11 +65,9 @@ export const insertTextAtCaretWithinElement = (
     return null;
   }
 
-  const normalizedElementText = (element.textContent ?? "")
-    .split(EMPTY_TEXT_SEGMENT_SENTINEL)
-    .join("");
-  if (normalizedElementText.length === 0) {
-    element.textContent = "";
+  const textNode = normalizeEditableTextNode(element);
+  if (textNode.textContent === EMPTY_TEXT_SEGMENT_SENTINEL) {
+    textNode.textContent = "";
   }
 
   if (

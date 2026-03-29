@@ -267,7 +267,7 @@ describe("agents-page-view-model", () => {
     const onSubmitQuestionAnswers = mock(async () => {});
     const onReplyPermission = mock(async () => {});
     const onToggleTodoPanel = mock(() => {});
-    const onSend = mock((_draft?: unknown) => {});
+    const onSend = mock((_draft?: unknown) => true);
     const onStopSession = mock(() => {});
 
     const model = buildAgentChatModel({

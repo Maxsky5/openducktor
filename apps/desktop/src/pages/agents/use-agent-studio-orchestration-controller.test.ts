@@ -74,7 +74,7 @@ const baseArgs: BuildArgs = {
     kickoffLabel: "Kickoff",
     canStopSession: false,
     startScenarioKickoff: async () => {},
-    onSend: async () => {},
+    onSend: async () => true,
     onSubmitQuestionAnswers: async () => {},
     isSubmittingQuestionByRequestId: {},
     stopAgentSession: async () => {},

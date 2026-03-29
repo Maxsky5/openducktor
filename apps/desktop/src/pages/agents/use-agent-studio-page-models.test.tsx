@@ -127,7 +127,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       kickoffLabel: "Start Spec",
       canStopSession: true,
       startScenarioKickoff: async () => {},
-      onSend: async () => {},
+      onSend: async () => true,
       onSubmitQuestionAnswers: async () => {},
       isSubmittingQuestionByRequestId: {},
       stopAgentSession: async () => {},
@@ -176,7 +176,7 @@ describe("useAgentStudioPageModels", () => {
   test("builds page models and forwards wrapper callbacks", async () => {
     const onRefreshChecks = mock(async () => {});
     const onKickoff = mock(async () => {});
-    const onSend = mock(async () => {});
+    const onSend = mock(async () => true);
     const onStopSession = mock(async () => {});
 
     const harness = createHookHarness(

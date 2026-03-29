@@ -104,7 +104,7 @@ export function useAgentStudioSessionActions({
   kickoffLabel: string;
   canStopSession: boolean;
   startScenarioKickoff: () => Promise<void>;
-  onSend: (draft: AgentChatComposerDraft) => Promise<void>;
+  onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   handleWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
@@ -181,7 +181,7 @@ export function useAgentStudioSessionActions({
   });
 
   const onSend = useCallback(
-    async (draft: AgentChatComposerDraft): Promise<void> => {
+    async (draft: AgentChatComposerDraft): Promise<boolean> => {
       if (
         (!canQueueBusyFollowups && isSending) ||
         isStarting ||
@@ -189,18 +189,18 @@ export function useAgentStudioSessionActions({
         isWaitingInput ||
         busySendBlockedReason
       ) {
-        return;
+        return false;
       }
       if (!canStartSessionForRole(selectedTask, role)) {
-        return;
+        return false;
       }
       if (activeSession?.isLoadingModelCatalog && !activeSession.selectedModel) {
-        return;
+        return false;
       }
 
       const serializedDraft = draftToSerializedText(draft).trim();
       if (!draftHasMeaningfulContent(draft) || !serializedDraft || !taskId) {
-        return;
+        return false;
       }
       const sendContextKeys = new Set<string>();
 
@@ -211,7 +211,7 @@ export function useAgentStudioSessionActions({
         }
 
         if (!targetSessionId) {
-          return;
+          return false;
         }
 
         const targetComposerContextKey = buildAgentStudioAsyncActivityContextKey({
@@ -231,6 +231,7 @@ export function useAgentStudioSessionActions({
           return next;
         });
         await sendAgentMessage(targetSessionId, draftToUserMessageParts(draft));
+        return true;
       } finally {
         if (sendContextKeys.size > 0) {
           setSendingActivityCountByContext((current) => {

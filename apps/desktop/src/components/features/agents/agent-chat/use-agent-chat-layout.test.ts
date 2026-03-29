@@ -95,8 +95,48 @@ describe("use-agent-chat-layout helpers", () => {
       didHeightChange: false,
       overflowY: "hidden",
     });
-    expect(assignedHeights).toEqual([]);
+    expect(assignedHeights).toEqual(["auto", "120px"]);
     expect(assignedOverflowValues).toEqual([]);
+  });
+
+  test("resizeComposerTextareaElement shrinks when content height decreases", () => {
+    const styleState = {
+      height: "120px",
+      overflowY: "hidden" as "auto" | "hidden",
+    };
+    const style = {} as CSSStyleDeclaration;
+
+    Object.defineProperty(style, "height", {
+      configurable: true,
+      get: () => styleState.height,
+      set: (value: string) => {
+        styleState.height = value;
+      },
+    });
+    Object.defineProperty(style, "overflowY", {
+      configurable: true,
+      get: () => styleState.overflowY,
+      set: (value: "auto" | "hidden") => {
+        styleState.overflowY = value;
+      },
+    });
+
+    const textarea = {
+      getBoundingClientRect: () => ({ height: 120 }),
+      style,
+      value: "short",
+      get scrollHeight() {
+        return styleState.height === "auto" ? COMPOSER_TEXTAREA_MIN_HEIGHT_PX : 120;
+      },
+    } as unknown as HTMLTextAreaElement;
+
+    const result = resizeComposerTextareaElement(textarea);
+
+    expect(result).toEqual({
+      didHeightChange: true,
+      overflowY: "hidden",
+    });
+    expect(styleState.height).toBe(`${COMPOSER_TEXTAREA_MIN_HEIGHT_PX}px`);
   });
 
   test("resizeComposerTextareaElement preserves height when the editor already reports the target size", () => {
@@ -177,7 +217,7 @@ describe("use-agent-chat-layout helpers", () => {
       didHeightChange: false,
       overflowY: "hidden",
     });
-    expect(assignedHeights).toEqual([]);
+    expect(assignedHeights).toEqual(["auto", "120px"]);
     expect(styleState.height).toBe("120px");
   });
 
@@ -220,7 +260,7 @@ describe("use-agent-chat-layout helpers", () => {
       didHeightChange: false,
       overflowY: "hidden",
     });
-    expect(assignedHeights).toEqual([]);
+    expect(assignedHeights).toEqual(["auto", ""]);
     expect(styleState.height).toBe("");
   });
 

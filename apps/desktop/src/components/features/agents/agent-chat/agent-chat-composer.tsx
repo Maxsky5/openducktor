@@ -191,7 +191,6 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     composerFormRef,
     composerEditorRef,
     onComposerEditorInput,
-    scrollToBottomOnSendRef,
   } = model;
 
   const [draft, setDraft] = useState(createEmptyComposerDraft);
@@ -278,8 +277,15 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     onComposerEditorInput();
     scheduleComposerFocus();
     try {
-      await latestOnSendRef.current(submittedDraft);
-      scrollToBottomOnSendRef.current?.();
+      const didSend = await latestOnSendRef.current(submittedDraft);
+      if (!didSend) {
+        setDraft((currentDraft) =>
+          draftHasMeaningfulContent(currentDraft) ? currentDraft : submittedDraft,
+        );
+        onComposerEditorInput();
+        scheduleComposerFocus();
+        return;
+      }
       scheduleComposerFocus();
     } catch {
       setDraft((currentDraft) =>
@@ -288,7 +294,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
       onComposerEditorInput();
       scheduleComposerFocus();
     }
-  }, [onComposerEditorInput, scheduleComposerFocus, scrollToBottomOnSendRef]);
+  }, [onComposerEditorInput, scheduleComposerFocus]);
   const isComposerInputDisabled =
     !agentStudioReady ||
     isReadOnly ||

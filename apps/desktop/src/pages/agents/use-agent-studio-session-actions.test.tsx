@@ -246,7 +246,7 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.mount();
-    let sendPromise: Promise<void> | undefined;
+    let sendPromise: Promise<boolean | undefined> | undefined;
     await harness.run((state) => {
       sendPromise = state.onSend(draft);
     });
@@ -327,7 +327,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.mount();
     expect(harness.getLatest().busySendBlockedReason).toBeNull();
     await harness.run(async (state) => {
-      await state.onSend(createComposerDraft("hello world"));
+      await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
     });
 
     expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
@@ -365,7 +365,7 @@ describe("useAgentStudioSessionActions", () => {
       "does not support queued messages while the session is working",
     );
     await harness.run(async (state) => {
-      await state.onSend(createComposerDraft("hello world"));
+      await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(false);
     });
 
     expect(sendAgentMessage).not.toHaveBeenCalled();
@@ -390,7 +390,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.mount();
     expect(harness.getLatest().busySendBlockedReason).toBeNull();
     await harness.run(async (state) => {
-      await state.onSend(createComposerDraft("hello world"));
+      await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
     });
 
     expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
@@ -441,7 +441,7 @@ describe("useAgentStudioSessionActions", () => {
 
     expect(harness.getLatest().busySendBlockedReason).toBeNull();
     await harness.run(async (state) => {
-      await state.onSend(createComposerDraft("hello world"));
+      await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
     });
 
     expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
@@ -485,7 +485,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.mount();
     expect(harness.getLatest().busySendBlockedReason).toBeNull();
     await harness.run(async (state) => {
-      await state.onSend(createComposerDraft("hello world"));
+      await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
     });
 
     expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
@@ -525,7 +525,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await state.onSend(draft);
+      await expect(state.onSend(draft)).resolves.toBe(false);
     });
 
     expect(startAgentSession).not.toHaveBeenCalled();
@@ -547,7 +547,7 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.mount();
-    let sendPromise: Promise<void> | undefined;
+    let sendPromise: Promise<boolean | undefined> | undefined;
     await harness.run(async (state) => {
       sendPromise = state.onSend(draft);
       expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
@@ -575,7 +575,7 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.mount();
-    let sendPromise: Promise<void> | undefined;
+    let sendPromise: Promise<boolean | undefined> | undefined;
     await harness.run(async (state) => {
       sendPromise = state.onSend(draft).catch(() => undefined);
     });
@@ -614,7 +614,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
 
-    let sendPromise: Promise<void> | undefined;
+    let sendPromise: Promise<boolean> | undefined;
     await harness.run((state) => {
       sendPromise = state.onSend(taskOneDraft);
     });
@@ -665,7 +665,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
 
-    let firstSendPromise: Promise<void> | undefined;
+    let firstSendPromise: Promise<boolean> | undefined;
     await harness.run((state) => {
       firstSendPromise = state.onSend(firstDraft);
     });
@@ -723,7 +723,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
 
-    let firstSendPromise: Promise<void> | undefined;
+    let firstSendPromise: Promise<boolean> | undefined;
     await harness.run((state) => {
       firstSendPromise = state.onSend(firstDraft);
     });
@@ -780,7 +780,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
 
-    let sendPromise: Promise<void> | undefined;
+    let sendPromise: Promise<boolean> | undefined;
     await harness.run((state) => {
       sendPromise = state.onSend(draft);
     });
@@ -829,7 +829,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await state.onSend(draft);
+      await expect(state.onSend(draft)).resolves.toBe(true);
     });
 
     expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [

@@ -52,7 +52,7 @@ export type AgentChatComposerModel = {
   readOnlyReason: string | null;
   busySendBlockedReason: string | null;
   draftStateKey: string;
-  onSend: (draft: import("./agent-chat-composer-draft").AgentChatComposerDraft) => Promise<void>;
+  onSend: (draft: import("./agent-chat-composer-draft").AgentChatComposerDraft) => Promise<boolean>;
   isSending: boolean;
   isStarting: boolean;
   isSessionWorking: boolean;

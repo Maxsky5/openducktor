@@ -85,16 +85,19 @@ const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
 
 const toRuntimeQueryInput = (
   session: AgentSessionState | null,
-  fallbackRuntimeKind: RuntimeKind,
 ): {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
 } | null => {
-  const runtimeKind =
-    session?.runtimeKind ?? session?.selectedModel?.runtimeKind ?? fallbackRuntimeKind;
-  const runtimeEndpoint = session?.runtimeEndpoint.trim() ?? "";
-  const workingDirectory = session?.workingDirectory.trim() ?? "";
-  if (!session || runtimeEndpoint.length === 0 || workingDirectory.length === 0) {
+  const runtimeKind = session?.runtimeKind ?? null;
+  const runtimeEndpoint = session?.runtimeEndpoint?.trim() ?? "";
+  const workingDirectory = session?.workingDirectory?.trim() ?? "";
+  if (
+    !session ||
+    runtimeKind == null ||
+    runtimeEndpoint.length === 0 ||
+    workingDirectory.length === 0
+  ) {
     return null;
   }
   return {
@@ -149,15 +152,17 @@ export function useAgentStudioModelSelection({
     roleDefaultSelection?.runtimeKind,
   ]);
   const activeSessionRuntimeQueryInput = useMemo(
-    () => toRuntimeQueryInput(activeSession, composerRuntimeKind),
-    [activeSession, composerRuntimeKind],
+    () => toRuntimeQueryInput(activeSession),
+    [activeSession],
   );
+  const slashCommandRuntimeKind =
+    activeSessionRuntimeQueryInput?.runtimeKind ?? composerRuntimeKind;
   const supportsSlashCommands = useMemo(() => {
     return (
-      runtimeDefinitions.find((definition) => definition.kind === composerRuntimeKind)?.capabilities
-        .supportsSlashCommands ?? false
+      runtimeDefinitions.find((definition) => definition.kind === slashCommandRuntimeKind)
+        ?.capabilities.supportsSlashCommands ?? false
     );
-  }, [composerRuntimeKind, runtimeDefinitions]);
+  }, [runtimeDefinitions, slashCommandRuntimeKind]);
 
   useEffect(() => {
     if (previousActiveRepoRef.current === activeRepo) {
@@ -226,12 +231,6 @@ export function useAgentStudioModelSelection({
       loadSlashCommandsForRepo,
     ),
     enabled: supportsSlashCommands && activeRepo !== null && activeSession == null,
-    queryFn: async (): Promise<AgentSlashCommandCatalog> => {
-      if (!activeRepo) {
-        throw new Error("No repository selected.");
-      }
-      return loadSlashCommandsForRepo(activeRepo, composerRuntimeKind);
-    },
   });
   const hasDraftSelectionForActiveRepo = previousActiveRepoRef.current === activeRepo;
   const isDraftSelectionTouched = hasDraftSelectionForActiveRepo

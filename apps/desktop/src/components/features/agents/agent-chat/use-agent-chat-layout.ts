@@ -57,7 +57,10 @@ export const resizeComposerEditorElement = (
     };
   }
 
+  const previousInlineHeight = editor.style.height;
+  editor.style.height = "auto";
   const layout = computeComposerEditorLayout(editor.scrollHeight);
+  editor.style.height = previousInlineHeight;
   const didHeightChange = Math.abs(currentHeight - layout.heightPx) > 0.5;
   if (didHeightChange) {
     editor.style.height = `${layout.heightPx}px`;
