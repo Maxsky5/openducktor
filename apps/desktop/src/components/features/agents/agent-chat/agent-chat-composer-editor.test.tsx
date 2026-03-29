@@ -173,6 +173,29 @@ describe("AgentChatComposerEditor", () => {
     });
   });
 
+  test("does not open slash autocomplete when slash is typed after normal text", async () => {
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "hello /");
+    fireEvent.keyUp(editable, { key: "/" });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /compact the current session/i })).toBeNull();
+    });
+  });
+
+  test("keeps focus when backspace is pressed on an empty composer", () => {
+    resetSelectionMocks();
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "");
+    fireEvent.focus(editable);
+    fireEvent.keyDown(editable, { key: "Backspace" });
+
+    expect(document.activeElement).toBe(editable);
+    expect(setCaretOffsetWithinElementMock).toHaveBeenCalledWith(editable, 0);
+  });
+
   test("inserts a newline on the first shift-enter", async () => {
     resetSelectionMocks();
     const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);

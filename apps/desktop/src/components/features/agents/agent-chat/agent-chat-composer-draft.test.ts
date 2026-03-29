@@ -4,6 +4,7 @@ import {
   applyComposerDraftEdit,
   createSlashCommandSegment,
   createTextSegment,
+  readSlashTriggerMatchForDraft,
 } from "./agent-chat-composer-draft";
 
 const COMMAND = {
@@ -61,5 +62,25 @@ describe("applyComposerDraftEdit", () => {
         offset: 7,
       },
     });
+  });
+
+  test("only exposes slash autocomplete at the beginning of the draft", () => {
+    const draft: AgentChatComposerDraft = {
+      segments: [createTextSegment("hello /compact", "text-1")],
+    };
+
+    expect(readSlashTriggerMatchForDraft(draft, "text-1", 14)).toBeNull();
+  });
+
+  test("does not expose slash autocomplete when a slash command chip already exists", () => {
+    const draft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("", "text-1"),
+        createSlashCommandSegment(COMMAND, "slash-1"),
+        createTextSegment("/compact", "text-2"),
+      ],
+    };
+
+    expect(readSlashTriggerMatchForDraft(draft, "text-2", 8)).toBeNull();
   });
 });

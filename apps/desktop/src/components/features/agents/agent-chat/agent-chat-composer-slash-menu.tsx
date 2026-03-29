@@ -33,7 +33,7 @@ export function AgentChatComposerSlashMenu({
   }, [activeIndex, commands]);
 
   return (
-    <div className="absolute inset-x-3 bottom-full z-20 mb-2 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
+    <div className="absolute bottom-full rounded-xl z-20 mb-2 border border-border bg-popover shadow-lg">
       {isSlashCommandsLoading ? (
         <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
@@ -44,7 +44,7 @@ export function AgentChatComposerSlashMenu({
       ) : commands.length === 0 ? (
         <div className="px-3 py-2 text-sm text-muted-foreground">No slash commands found.</div>
       ) : (
-        <div className="flex max-h-64 flex-col overflow-y-auto">
+        <div className="hide-scrollbar flex rounded-xl max-h-64 flex-col overflow-y-auto">
           {commands.map((command, index) => {
             const isActive = index === activeIndex;
             return (
@@ -55,8 +55,8 @@ export function AgentChatComposerSlashMenu({
                 }}
                 type="button"
                 className={cn(
-                  "flex w-full cursor-pointer items-start gap-3 rounded-lg px-3 py-2 text-left transition-colors",
-                  isActive ? "bg-muted" : "hover:bg-muted/80",
+                  "flex w-full cursor-pointer gap-3 px-3 py-2 text-left transition-colors",
+                  isActive ? "bg-primary/20" : "hover:bg-muted/80",
                 )}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => onSelectCommand(command)}

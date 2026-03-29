@@ -26,6 +26,19 @@ export type AgentChatSlashTriggerMatch = {
   rangeEnd: number;
 };
 
+const hasExistingSlashCommandSegment = (draft: AgentChatComposerDraft): boolean => {
+  return draft.segments.some((segment) => segment.kind === "slash_command");
+};
+
+const hasMeaningfulTextBeforeSegment = (
+  draft: AgentChatComposerDraft,
+  segmentIndex: number,
+): boolean => {
+  return draft.segments.slice(0, segmentIndex).some((segment) => {
+    return segment.kind === "text" && segment.text.trim().length > 0;
+  });
+};
+
 export type AgentChatComposerFocusTarget = {
   segmentId: string;
   offset: number;
@@ -204,6 +217,15 @@ export const replaceTextRangeWithSlashCommand = (
   if (index < 0 || !segment || segment.kind !== "text") {
     return null;
   }
+  if (hasExistingSlashCommandSegment(draft)) {
+    return null;
+  }
+  if (hasMeaningfulTextBeforeSegment(draft, index)) {
+    return null;
+  }
+  if (segment.text.slice(0, rangeStart).trim().length > 0) {
+    return null;
+  }
 
   const beforeText = segment.text.slice(0, rangeStart);
   const afterText = segment.text.slice(rangeEnd);
@@ -277,6 +299,39 @@ export const draftHasMeaningfulContent = (draft: AgentChatComposerDraft): boolea
   return draftToUserMessageParts(draft).some(
     (part) => part.kind === "slash_command" || part.text.trim().length > 0,
   );
+};
+
+export const readSlashTriggerMatchForDraft = (
+  draft: AgentChatComposerDraft,
+  textSegmentId: string,
+  caretOffset: number,
+  textOverride?: string,
+): AgentChatSlashTriggerMatch | null => {
+  if (hasExistingSlashCommandSegment(draft)) {
+    return null;
+  }
+
+  const segmentIndex = draft.segments.findIndex((segment) => segment.id === textSegmentId);
+  const segment = draft.segments[segmentIndex];
+  if (segmentIndex < 0 || !segment || segment.kind !== "text") {
+    return null;
+  }
+
+  if (hasMeaningfulTextBeforeSegment(draft, segmentIndex)) {
+    return null;
+  }
+
+  const segmentText = textOverride ?? segment.text;
+  const match = readSlashTriggerMatch(segmentText, caretOffset);
+  if (!match) {
+    return null;
+  }
+
+  if (segmentText.slice(0, match.rangeStart).trim().length > 0) {
+    return null;
+  }
+
+  return match;
 };
 
 const SLASH_QUERY_ALLOWED_PATTERN = /^[a-zA-Z0-9._:-]*$/;

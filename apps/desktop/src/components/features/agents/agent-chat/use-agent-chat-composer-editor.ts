@@ -13,7 +13,7 @@ import {
   type AgentChatComposerDraftEditResult,
   applyComposerDraftEdit,
   draftHasMeaningfulContent,
-  readSlashTriggerMatch,
+  readSlashTriggerMatchForDraft,
 } from "./agent-chat-composer-draft";
 import {
   getCaretOffsetWithinElement,
@@ -183,7 +183,7 @@ export const useAgentChatComposerEditor = ({
         return;
       }
 
-      const match = readSlashTriggerMatch(text, caretOffset);
+      const match = readSlashTriggerMatchForDraft(draft, segmentId, caretOffset, text);
       if (!match) {
         setActiveSlashIndex(0);
         setSlashMenuState(null);
@@ -198,7 +198,7 @@ export const useAgentChatComposerEditor = ({
         rangeEnd: match.rangeEnd,
       });
     },
-    [disabled, supportsSlashCommands],
+    [disabled, draft, supportsSlashCommands],
   );
 
   const applyEditResult = useCallback(
@@ -347,6 +347,15 @@ export const useAgentChatComposerEditor = ({
         return;
       }
 
+      if (event.key === "Backspace") {
+        const currentText = readEditableTextContent(target);
+        if (currentText.length === 0 && !draftHasMeaningfulContent(draft)) {
+          event.preventDefault();
+          focusTextSegmentWithMemory(segmentId, 0);
+          return;
+        }
+      }
+
       if (event.key === "Backspace" && caretOffset === 0) {
         const currentIndex = draft.segments.findIndex((segment) => segment.id === segmentId);
         const previousSegment = currentIndex > 0 ? draft.segments[currentIndex - 1] : null;
@@ -370,6 +379,7 @@ export const useAgentChatComposerEditor = ({
       disabled,
       draft,
       filteredSlashCommands,
+      focusTextSegmentWithMemory,
       onSend,
       readCaretOffset,
       rememberCaretOffset,
