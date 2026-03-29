@@ -14,7 +14,11 @@ import {
 import type { SetPlanOutput, SetSpecOutput } from "@openducktor/core";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray, parseOkResult, parseUpdatedAtResult } from "./invoke-utils";
-import type { ParsedTaskMetadata, TaskMetadataCache } from "./task-metadata-cache";
+import type {
+  ParsedTaskMetadata,
+  TaskMetadataCache,
+  TaskMetadataReadOptions,
+} from "./task-metadata-cache";
 
 export type SetSpecInput = {
   taskId: string;
@@ -47,8 +51,12 @@ export class TauriTaskClient {
     private readonly metadataCache: TaskMetadataCache,
   ) {}
 
-  private readTaskMetadata(repoPath: string, taskId: string): Promise<ParsedTaskMetadata> {
-    return this.metadataCache.get(this.invokeFn, repoPath, taskId);
+  private readTaskMetadata(
+    repoPath: string,
+    taskId: string,
+    options?: TaskMetadataReadOptions,
+  ): Promise<ParsedTaskMetadata> {
+    return this.metadataCache.get(this.invokeFn, repoPath, taskId, options);
   }
 
   private invalidateTaskMetadata(repoPath: string, taskId: string): void {
@@ -148,8 +156,9 @@ export class TauriTaskClient {
   async specGet(
     repoPath: string,
     taskId: string,
+    options?: TaskMetadataReadOptions,
   ): Promise<{ markdown: string; updatedAt: string | null }> {
-    const payload = await this.readTaskMetadata(repoPath, taskId);
+    const payload = await this.readTaskMetadata(repoPath, taskId, options);
     return {
       markdown: payload.spec.markdown,
       updatedAt: payload.spec.updatedAt ?? null,
@@ -208,23 +217,29 @@ export class TauriTaskClient {
   async planGet(
     repoPath: string,
     taskId: string,
+    options?: TaskMetadataReadOptions,
   ): Promise<{ markdown: string; updatedAt: string | null }> {
-    const payload = await this.readTaskMetadata(repoPath, taskId);
+    const payload = await this.readTaskMetadata(repoPath, taskId, options);
     return {
       markdown: payload.plan.markdown,
       updatedAt: payload.plan.updatedAt ?? null,
     };
   }
 
-  async taskMetadataGet(repoPath: string, taskId: string): Promise<ParsedTaskMetadata> {
-    return this.readTaskMetadata(repoPath, taskId);
+  async taskMetadataGet(
+    repoPath: string,
+    taskId: string,
+    options?: TaskMetadataReadOptions,
+  ): Promise<ParsedTaskMetadata> {
+    return this.readTaskMetadata(repoPath, taskId, options);
   }
 
   async qaGetReport(
     repoPath: string,
     taskId: string,
+    options?: TaskMetadataReadOptions,
   ): Promise<{ markdown: string; updatedAt: string | null }> {
-    const payload = await this.readTaskMetadata(repoPath, taskId);
+    const payload = await this.readTaskMetadata(repoPath, taskId, options);
     return {
       markdown: payload.qaReport?.markdown ?? "",
       updatedAt: payload.qaReport?.updatedAt ?? null,
