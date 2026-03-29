@@ -377,6 +377,7 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Input needed");
     expect(html).toContain("Permission request");
     expect(html).toContain("hide-scrollbar");
+    expect(html).toContain("overflow-anchor:none");
   });
 
   test("keeps pending cards and todo in a bottom stack outside the scroll region", async () => {

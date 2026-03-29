@@ -107,6 +107,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     rows,
     activeSessionId,
     isSessionViewLoading: isTranscriptLoading,
+    isSessionWorking,
     messagesContainerRef,
     messagesContentRef,
     syncBottomAfterComposerLayoutRef,
@@ -185,6 +186,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       <div
         ref={messagesContainerRef}
         className="agent-chat-scroll-region hide-scrollbar relative min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4"
+        style={{ overflowAnchor: "none" }}
       >
         <div ref={messagesContentRef} className="space-y-1">
           {!session ? (

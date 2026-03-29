@@ -4,12 +4,17 @@ import { useEffect, useRef } from "react";
 type UseAgentChatResizeSyncInput = {
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
-  syncBottomIfPinned: (options?: { forcePinned?: boolean }) => void;
+  restoreViewportAnchor: () => boolean;
+  syncBottomIfPinned: (options?: {
+    forcePinned?: boolean;
+    source?: "content" | "container";
+  }) => void;
 };
 
 export function useAgentChatResizeSync({
   messagesContainerRef,
   messagesContentRef,
+  restoreViewportAnchor,
   syncBottomIfPinned,
 }: UseAgentChatResizeSyncInput): void {
   const contentResizeFrameRef = useRef<number | null>(null);
@@ -46,7 +51,11 @@ export function useAgentChatResizeSync({
         return;
       }
 
-      syncBottomIfPinned();
+      if (restoreViewportAnchor()) {
+        return;
+      }
+
+      syncBottomIfPinned({ source: "content" });
     };
 
     const syncAfterResize = () => {
@@ -97,7 +106,7 @@ export function useAgentChatResizeSync({
         contentSettleFrameRef.current = null;
       }
     };
-  }, [messagesContainerRef, messagesContentRef, syncBottomIfPinned]);
+  }, [messagesContainerRef, messagesContentRef, restoreViewportAnchor, syncBottomIfPinned]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -125,7 +134,11 @@ export function useAgentChatResizeSync({
         return;
       }
 
-      syncBottomIfPinned();
+      if (restoreViewportAnchor()) {
+        return;
+      }
+
+      syncBottomIfPinned({ source: "container" });
     };
 
     const syncAfterResize = () => {
@@ -176,5 +189,5 @@ export function useAgentChatResizeSync({
         containerSettleFrameRef.current = null;
       }
     };
-  }, [messagesContainerRef, syncBottomIfPinned]);
+  }, [messagesContainerRef, restoreViewportAnchor, syncBottomIfPinned]);
 }

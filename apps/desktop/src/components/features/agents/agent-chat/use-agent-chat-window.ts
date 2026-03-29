@@ -11,6 +11,7 @@ type UseAgentChatWindowInput = {
   rows: AgentChatWindowRow[];
   activeSessionId: string | null;
   isSessionViewLoading: boolean;
+  isSessionWorking?: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
   syncBottomAfterComposerLayoutRef?: MutableRefObject<(() => void) | null>;
@@ -34,6 +35,7 @@ export function useAgentChatWindow({
   rows,
   activeSessionId,
   isSessionViewLoading,
+  isSessionWorking = false,
   messagesContainerRef,
   messagesContentRef,
   syncBottomAfterComposerLayoutRef,
@@ -48,11 +50,14 @@ export function useAgentChatWindow({
     isNearTop,
     isAutoFollowingToBottom,
     isPinnedToBottomRef,
+    shouldAutoFollowLiveUpdatesRef,
     userScrollIntentVersionRef,
     suppressSentinelsRef,
     isUpdatingRef,
     hasPendingScrollRequest,
     captureScrollAnchor,
+    captureViewportAnchor,
+    restoreViewportAnchor,
     syncBottomIfPinned,
     scrollToBottomOnSend,
     requestWindowScroll,
@@ -62,6 +67,7 @@ export function useAgentChatWindow({
   } = useAgentChatScrollController({
     messagesContainerRef,
     initialWindow,
+    isSessionWorking,
   });
 
   useLayoutEffect(() => {
@@ -71,6 +77,7 @@ export function useAgentChatWindow({
   useAgentChatResizeSync({
     messagesContainerRef,
     messagesContentRef,
+    restoreViewportAnchor,
     syncBottomIfPinned,
   });
 
@@ -132,11 +139,14 @@ export function useAgentChatWindow({
       rowCount,
       activeSessionId,
       isSessionViewLoading,
+      isSessionWorking,
       isPinnedToBottomRef,
+      shouldAutoFollowLiveUpdatesRef,
       suppressSentinelsRef,
       isUpdatingRef,
       hasPendingScrollRequest,
       captureScrollAnchor,
+      captureViewportAnchor,
       requestWindowScroll,
       setBottomAnchoredState,
       setTopAnchoredState,

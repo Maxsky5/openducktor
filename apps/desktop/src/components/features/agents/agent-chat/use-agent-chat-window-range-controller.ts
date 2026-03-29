@@ -17,11 +17,14 @@ type UseAgentChatWindowRangeControllerInput = {
   rowCount: number;
   activeSessionId: string | null;
   isSessionViewLoading: boolean;
+  isSessionWorking: boolean;
   isPinnedToBottomRef: MutableRefObject<boolean>;
+  shouldAutoFollowLiveUpdatesRef: MutableRefObject<boolean>;
   suppressSentinelsRef: MutableRefObject<boolean>;
   isUpdatingRef: MutableRefObject<boolean>;
   hasPendingScrollRequest: () => boolean;
   captureScrollAnchor: (rowKey: string) => void;
+  captureViewportAnchor: (options?: { allowedRowKeys?: ReadonlySet<string> }) => boolean;
   requestWindowScroll: (request: PendingScrollRequest) => void;
   setBottomAnchoredState: (windowStart: number) => void;
   setTopAnchoredState: () => void;
@@ -40,11 +43,14 @@ export function useAgentChatWindowRangeController({
   rowCount,
   activeSessionId,
   isSessionViewLoading,
+  isSessionWorking,
   isPinnedToBottomRef,
+  shouldAutoFollowLiveUpdatesRef,
   suppressSentinelsRef,
   isUpdatingRef,
   hasPendingScrollRequest,
   captureScrollAnchor,
+  captureViewportAnchor,
   requestWindowScroll,
   setBottomAnchoredState,
   setTopAnchoredState,
@@ -132,6 +138,10 @@ export function useAgentChatWindowRangeController({
       return;
     }
 
+    if (isSessionWorking && !shouldAutoFollowLiveUpdatesRef.current) {
+      return;
+    }
+
     applyBottomAnchoredWindow();
     if (hasPendingScrollRequest()) {
       return;
@@ -146,11 +156,13 @@ export function useAgentChatWindowRangeController({
   }, [
     applyBottomAnchoredWindow,
     hasPendingScrollRequest,
+    isSessionWorking,
     isPinnedToBottomRef,
     requestWindowScroll,
     rowCount,
     setBottomAnchoredState,
     setWindowRangeState,
+    shouldAutoFollowLiveUpdatesRef,
   ]);
 
   const shiftWindowUp = useCallback(() => {
@@ -175,14 +187,18 @@ export function useAgentChatWindowRangeController({
       return;
     }
 
-    const anchorRow = rows[current.start];
-    if (anchorRow) {
-      captureScrollAnchor(anchorRow.key);
+    const capturedViewportAnchor = captureViewportAnchor();
+    if (!capturedViewportAnchor) {
+      const anchorRow = rows[current.start];
+      if (anchorRow) {
+        captureScrollAnchor(anchorRow.key);
+      }
     }
     releaseWindowUpdateLock();
     setWindowRangeState(nextRange);
   }, [
     captureScrollAnchor,
+    captureViewportAnchor,
     isUpdatingRef,
     releaseWindowUpdateLock,
     rowCount,
@@ -214,9 +230,17 @@ export function useAgentChatWindowRangeController({
     }
 
     const reachedBottom = nextRange.end === rowCount - 1;
-    const anchorRow = rows[nextRange.start];
-    if (anchorRow && !reachedBottom) {
-      captureScrollAnchor(anchorRow.key);
+    if (!reachedBottom) {
+      const survivingRowKeys = new Set(
+        rows.slice(nextRange.start, current.end + 1).map((row) => row.key),
+      );
+      const capturedViewportAnchor = captureViewportAnchor({ allowedRowKeys: survivingRowKeys });
+      if (!capturedViewportAnchor) {
+        const anchorRow = rows[nextRange.start];
+        if (anchorRow) {
+          captureScrollAnchor(anchorRow.key);
+        }
+      }
     }
     if (reachedBottom) {
       setBottomAnchoredState(nextRange.start);
@@ -230,6 +254,7 @@ export function useAgentChatWindowRangeController({
     setWindowRangeState(nextRange);
   }, [
     captureScrollAnchor,
+    captureViewportAnchor,
     isUpdatingRef,
     releaseWindowUpdateLock,
     rowCount,

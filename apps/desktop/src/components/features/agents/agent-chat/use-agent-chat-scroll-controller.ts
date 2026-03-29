@@ -9,6 +9,7 @@ import {
 type UseAgentChatScrollControllerInput = {
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   initialWindow: WindowRange;
+  isSessionWorking: boolean;
 };
 
 type UseAgentChatScrollControllerResult = {
@@ -16,12 +17,18 @@ type UseAgentChatScrollControllerResult = {
   isNearTop: boolean;
   isAutoFollowingToBottom: boolean;
   isPinnedToBottomRef: MutableRefObject<boolean>;
+  shouldAutoFollowLiveUpdatesRef: MutableRefObject<boolean>;
   userScrollIntentVersionRef: MutableRefObject<number>;
   suppressSentinelsRef: MutableRefObject<boolean>;
   isUpdatingRef: MutableRefObject<boolean>;
   hasPendingScrollRequest: () => boolean;
   captureScrollAnchor: (rowKey: string) => void;
-  syncBottomIfPinned: (options?: { forcePinned?: boolean }) => void;
+  captureViewportAnchor: (options?: { allowedRowKeys?: ReadonlySet<string> }) => boolean;
+  restoreViewportAnchor: () => boolean;
+  syncBottomIfPinned: (options?: {
+    forcePinned?: boolean;
+    source?: "content" | "container";
+  }) => void;
   scrollToBottomOnSend: () => void;
   requestWindowScroll: (request: PendingScrollRequest) => void;
   applyPendingScrollRequest: () => void;
@@ -32,11 +39,13 @@ type UseAgentChatScrollControllerResult = {
 export function useAgentChatScrollController({
   messagesContainerRef,
   initialWindow,
+  isSessionWorking,
 }: UseAgentChatScrollControllerInput): UseAgentChatScrollControllerResult {
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [isNearTop, setIsNearTop] = useState(initialWindow.start === 0);
   const [isAutoFollowingToBottom, setIsAutoFollowingToBottom] = useState(false);
   const isPinnedToBottomRef = useRef(true);
+  const shouldAutoFollowLiveUpdatesRef = useRef(true);
   const userScrollIntentVersionRef = useRef(0);
   const pendingScrollRequestRef = useRef<PendingScrollRequest | null>(null);
   const suppressSentinelsRef = useRef(false);
@@ -47,6 +56,7 @@ export function useAgentChatScrollController({
   const isUpdatingRef = useRef(false);
   const lastScrollTopRef = useRef<number | null>(null);
   const pendingScrollAnchorRef = useRef<{ rowKey: string; topOffset: number } | null>(null);
+  const viewportAnchorRef = useRef<{ rowKey: string; topOffset: number } | null>(null);
 
   const getRowElementByKey = useCallback(
     (container: HTMLDivElement, rowKey: string): HTMLElement | null => {
@@ -89,6 +99,84 @@ export function useAgentChatScrollController({
     },
     [getRowElementByKey, messagesContainerRef],
   );
+
+  const findViewportAnchor = useCallback(
+    (options?: { allowedRowKeys?: ReadonlySet<string> }) => {
+      const allowedRowKeys = options?.allowedRowKeys;
+      const container = messagesContainerRef.current;
+      if (!container || typeof container.getBoundingClientRect !== "function") {
+        return null;
+      }
+
+      if (typeof container.querySelectorAll !== "function") {
+        return null;
+      }
+
+      const containerRect = container.getBoundingClientRect();
+      const containerTop = containerRect.top;
+      const rowElements = container.querySelectorAll<HTMLElement>("[data-row-key]");
+
+      for (const rowElement of rowElements) {
+        if (typeof rowElement.getBoundingClientRect !== "function") {
+          continue;
+        }
+
+        const rowRect = rowElement.getBoundingClientRect();
+        if (rowRect.bottom <= containerTop) {
+          continue;
+        }
+
+        const rowKey = rowElement.dataset.rowKey;
+        if (!rowKey) {
+          continue;
+        }
+
+        if (allowedRowKeys && !allowedRowKeys.has(rowKey)) {
+          continue;
+        }
+
+        return {
+          rowKey,
+          topOffset: rowRect.top - containerTop,
+        };
+      }
+
+      return null;
+    },
+    [messagesContainerRef],
+  );
+
+  const captureViewportAnchor = useCallback(
+    (options?: { allowedRowKeys?: ReadonlySet<string> }) => {
+      const viewportAnchor = findViewportAnchor(options);
+      pendingScrollAnchorRef.current = viewportAnchor;
+      return viewportAnchor !== null;
+    },
+    [findViewportAnchor],
+  );
+
+  const restoreViewportAnchor = useCallback(() => {
+    const container = messagesContainerRef.current;
+    const viewportAnchor = viewportAnchorRef.current;
+    if (!container || !viewportAnchor || typeof container.getBoundingClientRect !== "function") {
+      return false;
+    }
+
+    const rowElement = getRowElementByKey(container, viewportAnchor.rowKey);
+    if (!rowElement || typeof rowElement.getBoundingClientRect !== "function") {
+      viewportAnchorRef.current = null;
+      return false;
+    }
+
+    const containerTop = container.getBoundingClientRect().top;
+    const nextTopOffset = rowElement.getBoundingClientRect().top - containerTop;
+    const delta = nextTopOffset - viewportAnchor.topOffset;
+    if (Math.abs(delta) >= 1) {
+      container.scrollTop += delta;
+    }
+
+    return true;
+  }, [getRowElementByKey, messagesContainerRef]);
 
   const cancelScrollAnimation = useCallback((skipStateUpdate = false) => {
     if (scrollAnimationFrameRef.current !== null) {
@@ -225,14 +313,24 @@ export function useAgentChatScrollController({
   }, [animateScrollTo, cancelScrollAnimation, messagesContainerRef]);
 
   const syncBottomIfPinned = useCallback(
-    (options?: { forcePinned?: boolean }) => {
+    (options?: { forcePinned?: boolean; source?: "content" | "container" }) => {
       const container = messagesContainerRef.current;
       if (!container) {
         return;
       }
       const forcePinned = options?.forcePinned === true;
+      const source = options?.source;
 
       if (pendingScrollRequestRef.current?.target === "bottom" || suppressSentinelsRef.current) {
+        return;
+      }
+
+      if (
+        source === "content" &&
+        isSessionWorking &&
+        !shouldAutoFollowLiveUpdatesRef.current &&
+        !forcePinned
+      ) {
         return;
       }
 
@@ -260,19 +358,21 @@ export function useAgentChatScrollController({
       setIsNearBottom(true);
       setIsNearTop(false);
     },
-    [messagesContainerRef],
+    [isSessionWorking, messagesContainerRef],
   );
 
   const setBottomAnchoredState = useCallback((windowStart: number) => {
     setIsNearBottom(true);
     setIsNearTop(windowStart === 0);
     isPinnedToBottomRef.current = true;
+    shouldAutoFollowLiveUpdatesRef.current = true;
   }, []);
 
   const setTopAnchoredState = useCallback(() => {
     isPinnedToBottomRef.current = false;
     setIsNearBottom(false);
     setIsNearTop(true);
+    shouldAutoFollowLiveUpdatesRef.current = false;
   }, []);
 
   /**
@@ -284,6 +384,7 @@ export function useAgentChatScrollController({
     const container = messagesContainerRef.current;
     if (!container) return;
     cancelScrollAnimation(true);
+    shouldAutoFollowLiveUpdatesRef.current = true;
     container.scrollTo({
       top: container.scrollHeight,
       behavior: "instant",
@@ -327,16 +428,37 @@ export function useAgentChatScrollController({
       userScrollIntentVersionRef.current += 1;
     };
 
+    const handleWheel = (event: Event) => {
+      registerUserScrollIntent();
+      if (!isSessionWorking) {
+        return;
+      }
+
+      const wheelEvent = event as WheelEvent;
+      if (wheelEvent.deltaY < 0 && isPinnedToBottomRef.current) {
+        shouldAutoFollowLiveUpdatesRef.current = false;
+      }
+    };
+
     const handleScroll = () => {
       const previousScrollTop = lastScrollTopRef.current;
       const nextScrollTop = container.scrollTop;
       lastScrollTopRef.current = nextScrollTop;
       const didScrollTopChange =
         previousScrollTop !== null && Math.abs(nextScrollTop - previousScrollTop) > 0.5;
+      const didScrollUp = previousScrollTop !== null && nextScrollTop < previousScrollTop - 0.5;
+      const didScrollDown = previousScrollTop !== null && nextScrollTop > previousScrollTop + 0.5;
       const nearBottom =
         container.scrollHeight - nextScrollTop - container.clientHeight <=
         CHAT_SCROLL_EDGE_THRESHOLD_PX;
       const nearTop = nextScrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
+
+      if (isSessionWorking && didScrollUp && isPinnedToBottomRef.current) {
+        shouldAutoFollowLiveUpdatesRef.current = false;
+      }
+      if (isSessionWorking && didScrollDown && nearBottom) {
+        shouldAutoFollowLiveUpdatesRef.current = true;
+      }
 
       const shouldPreservePinnedState =
         previousScrollTop !== null &&
@@ -350,20 +472,21 @@ export function useAgentChatScrollController({
       setIsNearBottom(isEffectivelyPinned);
       setIsNearTop(nearTop);
       isPinnedToBottomRef.current = isEffectivelyPinned;
+      viewportAnchorRef.current = isEffectivelyPinned ? null : findViewportAnchor();
     };
 
     handleScroll();
-    container.addEventListener("wheel", registerUserScrollIntent, { passive: true });
+    container.addEventListener("wheel", handleWheel, { passive: true });
     container.addEventListener("touchstart", registerUserScrollIntent, { passive: true });
     container.addEventListener("pointerdown", registerUserScrollIntent, { passive: true });
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
-      container.removeEventListener("wheel", registerUserScrollIntent);
+      container.removeEventListener("wheel", handleWheel);
       container.removeEventListener("touchstart", registerUserScrollIntent);
       container.removeEventListener("pointerdown", registerUserScrollIntent);
       container.removeEventListener("scroll", handleScroll);
     };
-  }, [messagesContainerRef]);
+  }, [findViewportAnchor, isSessionWorking, messagesContainerRef]);
 
   useEffect(() => {
     return () => {
@@ -379,11 +502,14 @@ export function useAgentChatScrollController({
     isNearTop,
     isAutoFollowingToBottom,
     isPinnedToBottomRef,
+    shouldAutoFollowLiveUpdatesRef,
     userScrollIntentVersionRef,
     suppressSentinelsRef,
     isUpdatingRef,
     hasPendingScrollRequest: () => pendingScrollRequestRef.current !== null,
     captureScrollAnchor,
+    captureViewportAnchor,
+    restoreViewportAnchor,
     syncBottomIfPinned,
     scrollToBottomOnSend,
     requestWindowScroll,

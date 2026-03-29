@@ -15,6 +15,7 @@ type HarnessProps = {
   rows: AgentChatWindowRow[];
   activeSessionId: string | null;
   isSessionViewLoading: boolean;
+  isSessionWorking?: boolean;
   syncBottomAfterComposerLayoutRef?: { current: (() => void) | null };
 };
 
@@ -72,6 +73,7 @@ const createHarness = () => {
   const Harness = (props: HarnessProps): null => {
     const result = useAgentChatWindow({
       ...props,
+      isSessionWorking: props.isSessionWorking ?? false,
       messagesContainerRef,
       messagesContentRef,
       ...(props.syncBottomAfterComposerLayoutRef
@@ -146,6 +148,41 @@ const attachWindowedRowGeometry = ({
   });
 };
 
+const attachScrollableWindowedRowGeometry = ({
+  container,
+  rows,
+  getWindowStart,
+  getWindowEnd,
+  getRowHeight,
+}: {
+  container: MockMessagesContainer;
+  rows: AgentChatWindowRow[];
+  getWindowStart: () => number;
+  getWindowEnd: () => number;
+  getRowHeight: (row: AgentChatWindowRow, index: number) => number;
+}): void => {
+  container.querySelectorAll.mockImplementation(() => {
+    const windowStart = getWindowStart();
+    const windowEnd = getWindowEnd();
+    let accumulatedTop = 0;
+    const rowElements = rows.slice(windowStart, windowEnd + 1).map((row, index) => {
+      const rowHeight = getRowHeight(row, windowStart + index);
+      const top = accumulatedTop - container.scrollTop;
+      accumulatedTop += rowHeight;
+      return {
+        dataset: { rowKey: row.key },
+        getBoundingClientRect: () =>
+          ({
+            top,
+            bottom: top + rowHeight,
+          }) as DOMRect,
+      } as unknown as HTMLElement;
+    });
+
+    return rowElements as unknown as ReturnType<HTMLDivElement["querySelectorAll"]>;
+  });
+};
+
 const getLatestResult = (latestResultRef: { current: HookResult | null }): HookResult => {
   const result = latestResultRef.current;
   if (!result) {
@@ -190,6 +227,7 @@ const mountHarness = async (
   const harness = createSharedHookHarness((nextProps: HarnessProps) => {
     const result = useAgentChatWindow({
       ...nextProps,
+      isSessionWorking: nextProps.isSessionWorking ?? false,
       messagesContainerRef,
       messagesContentRef,
       ...(nextProps.syncBottomAfterComposerLayoutRef
@@ -604,6 +642,194 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("does not auto-follow live appends after upward wheel intent within the bottom threshold", async () => {
+    const harness = await mountHarness(
+      {
+        rows: createRows(80),
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+        isSessionWorking: true,
+      },
+      { attachContainer: true },
+    );
+
+    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    const wheelListenerCall = container.addEventListener.mock.calls
+      .filter(([eventName]) => eventName === "wheel")
+      .at(-1);
+    const wheelListener = wheelListenerCall?.[1];
+    if (typeof wheelListener !== "function") {
+      throw new Error("Expected wheel listener");
+    }
+
+    await act(async () => {
+      wheelListener({ deltaY: -24 } as WheelEvent);
+      await flush();
+    });
+
+    container.scrollTo.mockClear();
+
+    await harness.update({
+      rows: createRows(81),
+      activeSessionId: "session-1",
+      isSessionViewLoading: false,
+      isSessionWorking: true,
+    });
+
+    const result = harness.getLatestResult();
+    expect(result.windowStart).toBe(20);
+    expect(result.windowEnd).toBe(79);
+    const lastRow = result.windowedRows.at(-1);
+    if (!lastRow || lastRow.kind !== "message") {
+      throw new Error("Expected the final window row to be a message");
+    }
+    expect(lastRow.message.id).toBe("msg-79");
+    expect(container.scrollTo).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("ignores upward wheel intent for idle sessions", async () => {
+    const harness = await mountHarness(
+      {
+        rows: createRows(80),
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+        isSessionWorking: false,
+      },
+      { attachContainer: true },
+    );
+
+    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    const wheelListenerCall = container.addEventListener.mock.calls
+      .filter(([eventName]) => eventName === "wheel")
+      .at(-1);
+    const wheelListener = wheelListenerCall?.[1];
+    if (typeof wheelListener !== "function") {
+      throw new Error("Expected wheel listener");
+    }
+
+    await act(async () => {
+      wheelListener({ deltaY: -24 } as WheelEvent);
+      await flush();
+    });
+
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("does not bottom-sync content growth after live auto-follow is disabled", async () => {
+    const harness = await mountHarness(
+      {
+        rows: createRows(80),
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+        isSessionWorking: true,
+      },
+      { attachContainer: true },
+    );
+
+    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
+    const content = harness.messagesContentRef.current as MockMessagesContent | null;
+    if (!container || !content) {
+      throw new Error("Expected messages container and content");
+    }
+
+    const wheelListenerCall = container.addEventListener.mock.calls
+      .filter(([eventName]) => eventName === "wheel")
+      .at(-1);
+    const wheelListener = wheelListenerCall?.[1];
+    if (typeof wheelListener !== "function") {
+      throw new Error("Expected wheel listener");
+    }
+
+    await act(async () => {
+      wheelListener({ deltaY: -24 } as WheelEvent);
+      await flush();
+    });
+
+    container.scrollTo.mockClear();
+    Object.assign(content, { scrollHeight: 1240 });
+    Object.assign(container, { scrollHeight: 1240 });
+
+    await act(async () => {
+      triggerResizeObservers();
+      await flush();
+    });
+
+    expect(container.scrollTo).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("preserves the visible viewport when a tall rendered message above it grows", async () => {
+    const rows = createRows(80);
+    const rowHeights = new Map<number, number>();
+    rowHeights.set(20, 120);
+
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+        isSessionWorking: false,
+      },
+      { attachContainer: true },
+    );
+
+    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
+    const content = harness.messagesContentRef.current as MockMessagesContent | null;
+    if (!container || !content) {
+      throw new Error("Expected messages container and content");
+    }
+
+    attachScrollableWindowedRowGeometry({
+      container,
+      rows,
+      getWindowStart: () => harness.getLatestResult().windowStart,
+      getWindowEnd: () => harness.getLatestResult().windowEnd,
+      getRowHeight: (_row, index) => rowHeights.get(index) ?? ROW_HEIGHT_PX,
+    });
+
+    const scrollListenerCall = container.addEventListener.mock.calls
+      .filter(([eventName]) => eventName === "scroll")
+      .at(-1);
+    const scrollListener = scrollListenerCall?.[1];
+    if (typeof scrollListener !== "function") {
+      throw new Error("Expected scroll listener");
+    }
+
+    container.scrollTop = 300;
+    await act(async () => {
+      scrollListener(new Event("scroll"));
+      await flush();
+    });
+
+    container.scrollTo.mockClear();
+    rowHeights.set(20, 320);
+    Object.assign(content, { scrollHeight: 1200 });
+    Object.assign(container, { scrollHeight: 1200 });
+
+    await act(async () => {
+      triggerResizeObservers();
+      await flush();
+    });
+
+    expect(container.scrollTop).toBe(500);
+    expect(container.scrollTo).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
   test("does not cancel appended auto-follow when scroll events come from the animation itself", async () => {
     (globalThis as { window?: unknown }).window = globalThis;
     const queuedFrameCallbacks: FrameRequestCallback[] = [];
@@ -689,6 +915,77 @@ describe("useAgentChatWindow", () => {
 
     expect(container.scrollTop).toBe(950);
     expect(harness.getLatestResult().isAutoFollowingToBottom).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("does not restart live bottom follow after the user interrupts an append animation", async () => {
+    (globalThis as { window?: unknown }).window = globalThis;
+    const queuedFrameCallbacks: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      queuedFrameCallbacks.push(callback);
+      return queuedFrameCallbacks.length;
+    }) as typeof requestAnimationFrame;
+
+    const harness = await mountHarness(
+      {
+        rows: createRows(80),
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+        isSessionWorking: true,
+      },
+      { attachContainer: true },
+    );
+
+    queuedFrameCallbacks.length = 0;
+
+    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    container.scrollTop = 700;
+    Object.assign(container, { scrollHeight: 1100 });
+
+    await harness.update({
+      rows: createRows(81),
+      activeSessionId: "session-1",
+      isSessionViewLoading: false,
+      isSessionWorking: true,
+    });
+
+    expect(queuedFrameCallbacks.length).toBeGreaterThan(0);
+
+    const wheelListeners = container.addEventListener.mock.calls
+      .filter(([eventName]) => eventName === "wheel")
+      .map(([, listener]) => listener)
+      .filter((listener): listener is EventListener => typeof listener === "function");
+    if (wheelListeners.length === 0) {
+      throw new Error("Expected wheel listeners");
+    }
+
+    await act(async () => {
+      for (const wheelListener of wheelListeners) {
+        wheelListener({ deltaY: -24 } as WheelEvent);
+      }
+      await flush();
+    });
+
+    queuedFrameCallbacks.length = 0;
+    container.scrollTo.mockClear();
+
+    await harness.update({
+      rows: createRows(82),
+      activeSessionId: "session-1",
+      isSessionViewLoading: false,
+      isSessionWorking: true,
+    });
+
+    const result = harness.getLatestResult();
+    expect(result.windowStart).toBe(21);
+    expect(result.windowEnd).toBe(80);
+    expect(queuedFrameCallbacks).toHaveLength(0);
+    expect(container.scrollTo).not.toHaveBeenCalled();
 
     await harness.unmount();
   });
@@ -1210,8 +1507,8 @@ describe("useAgentChatWindow", () => {
     });
 
     result = harness.getLatestResult();
-    expect(result.windowStart).toBe(10);
-    expect(result.windowEnd).toBe(79);
+    expect(result.windowStart).toBe(0);
+    expect(result.windowEnd).toBe(69);
 
     await harness.unmount();
   });
@@ -1338,6 +1635,11 @@ describe("useAgentChatWindow", () => {
       await flush();
     });
 
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
     await harness.update({
       rows: createRows(81),
       activeSessionId: "session-1",
@@ -1396,7 +1698,7 @@ describe("useAgentChatWindow", () => {
       await flush();
     });
 
-    expect(harness.getLatestResult().windowStart).toBe(40);
+    expect(harness.getLatestResult().windowStart).toBe(50);
     expect(container.scrollTop).toBe(160 + CHAT_SHIFT_SIZE * ROW_HEIGHT_PX);
 
     await harness.unmount();
@@ -1448,6 +1750,11 @@ describe("useAgentChatWindow", () => {
       await flush();
     });
 
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
     expect(harness.getLatestResult().windowStart).toBe(10);
     expect(container.scrollTop).toBe(600 - 10 * ROW_HEIGHT_PX);
 
@@ -1471,6 +1778,6 @@ describe("useAgentChatWindow", () => {
   test("exports the expected chat window constants", () => {
     expect(CHAT_WINDOW_SIZE).toBe(50);
     expect(CHAT_OVERSCAN).toBe(10);
-    expect(CHAT_SHIFT_SIZE).toBe(20);
+    expect(CHAT_SHIFT_SIZE).toBe(10);
   });
 });
