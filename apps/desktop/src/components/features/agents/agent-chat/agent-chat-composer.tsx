@@ -76,13 +76,17 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     isModelSelectionPending ||
     isWaitingInput ||
     Boolean(busySendBlockedReason);
-  const composerPlaceholder = isWaitingInput
-    ? (waitingInputPlaceholder ?? "Resolve the pending request above to continue")
-    : busySendBlockedReason
-      ? busySendBlockedReason
-      : isReadOnly && readOnlyReason
-        ? readOnlyReason
-        : "@ for files/agents; / for commands; ! for shell";
+  let composerPlaceholder = "@ for files/agents; / for commands; ! for shell";
+  if (isReadOnly && readOnlyReason) {
+    composerPlaceholder = readOnlyReason;
+  }
+  if (busySendBlockedReason) {
+    composerPlaceholder = busySendBlockedReason;
+  }
+  if (isWaitingInput) {
+    composerPlaceholder =
+      waitingInputPlaceholder ?? "Resolve the pending request above to continue";
+  }
 
   return (
     <form ref={composerFormRef} className="px-4 pb-4" action={handleSubmit}>
