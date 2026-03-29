@@ -30,7 +30,7 @@ describe("agent-chat-thread windowing helpers", () => {
   test("exports the native windowing constants", () => {
     expect(CHAT_WINDOW_SIZE).toBe(50);
     expect(CHAT_OVERSCAN).toBe(10);
-    expect(CHAT_SHIFT_SIZE).toBe(10);
+    expect(CHAT_SHIFT_SIZE).toBe(5);
   });
 
   test("buildAgentChatWindowRows keeps message order without synthetic draft rows", () => {

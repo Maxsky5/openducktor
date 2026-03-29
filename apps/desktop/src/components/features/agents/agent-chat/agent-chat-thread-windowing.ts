@@ -4,8 +4,8 @@ import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestr
 export const CHAT_WINDOW_SIZE = 50;
 /** Extra messages rendered above/below the viewport for smooth scrolling. */
 export const CHAT_OVERSCAN = 10;
-/** Number of messages shifted when a sentinel is triggered. Keep this small for variable-height rows. */
-export const CHAT_SHIFT_SIZE = CHAT_OVERSCAN;
+/** Number of messages shifted when a sentinel is triggered. Keep this smaller than overscan for tall rows. */
+export const CHAT_SHIFT_SIZE = 5;
 
 export type AgentChatWindowRow =
   | {

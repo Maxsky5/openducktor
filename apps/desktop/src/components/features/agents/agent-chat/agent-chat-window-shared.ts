@@ -14,7 +14,7 @@ export type PendingScrollRequest = {
 
 export const CHAT_AUTO_SCROLL_ANIMATION_DURATION_MS = 500;
 export const CHAT_SCROLL_EDGE_THRESHOLD_PX = 48;
-export const CHAT_SENTINEL_ROOT_MARGIN_PX = 200;
+export const CHAT_SENTINEL_ROOT_MARGIN_PX = 64;
 export const CHAT_MAX_RENDERED_ROWS = CHAT_WINDOW_SIZE + CHAT_OVERSCAN * 2;
 export const EMPTY_WINDOW: WindowRange = { start: 0, end: -1 };
 
