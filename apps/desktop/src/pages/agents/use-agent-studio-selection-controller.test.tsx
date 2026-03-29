@@ -434,4 +434,77 @@ describe("useAgentStudioSelectionController", () => {
       await harness.unmount();
     }
   });
+
+  test("keeps build selected after task-tab navigation settles on a human_review task", async () => {
+    const updateQuery = mock(() => {});
+    const taskOne = createTask("task-1");
+    const humanReviewTask = createTaskCardFixture({
+      id: "task-2",
+      title: "task-2",
+      status: "human_review",
+    });
+    const buildSession = createSession("task-2", "session-build", {
+      role: "build",
+      scenario: "build_implementation_start",
+      startedAt: "2026-02-22T10:00:00.000Z",
+      status: "idle",
+    });
+    const qaSession = createSession("task-2", "session-qa", {
+      role: "qa",
+      scenario: "qa_review",
+      startedAt: "2026-02-22T11:00:00.000Z",
+      status: "idle",
+    });
+
+    const harness = createHookHarness(
+      createBaseArgs({
+        tasks: [taskOne, humanReviewTask],
+        sessions: [buildSession, qaSession],
+        taskIdParam: "task-1",
+        sessionParam: null,
+        hasExplicitRoleParam: false,
+        roleFromQuery: "qa",
+        updateQuery,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      await harness.run((state) => {
+        state.handleSelectTab("task-2");
+      });
+
+      expect(harness.getLatest().viewTaskId).toBe("task-2");
+      expect(harness.getLatest().viewActiveSession?.sessionId).toBe("session-build");
+      expect(harness.getLatest().viewRole).toBe("build");
+      expect(updateQuery).toHaveBeenCalledWith({
+        task: "task-2",
+        session: undefined,
+        agent: undefined,
+        scenario: undefined,
+        autostart: undefined,
+        start: undefined,
+      });
+
+      await harness.update(
+        createBaseArgs({
+          tasks: [taskOne, humanReviewTask],
+          sessions: [buildSession, qaSession],
+          taskIdParam: "task-2",
+          sessionParam: null,
+          hasExplicitRoleParam: false,
+          roleFromQuery: "qa",
+          updateQuery,
+        }),
+      );
+
+      expect(harness.getLatest().viewTaskId).toBe("task-2");
+      expect(harness.getLatest().viewActiveSession?.sessionId).toBe("session-build");
+      expect(harness.getLatest().viewRole).toBe("build");
+      expect(harness.getLatest().viewScenario).toBe("build_implementation_start");
+    } finally {
+      await harness.unmount();
+    }
+  });
 });
