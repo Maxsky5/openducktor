@@ -1,5 +1,5 @@
 import { type Dispatch, type SetStateAction, useCallback } from "react";
-import type { NavigateToTask } from "./agent-studio-types";
+import type { NavigateToTaskIntent } from "./agent-studio-types";
 import { closeTaskTab } from "./agents-page-session-tabs";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
@@ -23,7 +23,7 @@ type UseTaskTabActionsArgs = {
   clearComposerInput: () => void;
   onContextSwitchIntent: (() => void) | undefined;
   clearTaskSelection: () => void;
-  navigateToTask: NavigateToTask;
+  navigateToTaskIntent: NavigateToTaskIntent;
   handleSelectTab: (nextTaskId: string) => void;
   setOpenTaskTabs: SetState<string[]>;
   setPersistedActiveTaskId: SetState<string | null>;
@@ -42,7 +42,7 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
     clearComposerInput,
     onContextSwitchIntent,
     clearTaskSelection,
-    navigateToTask,
+    navigateToTaskIntent,
     handleSelectTab,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
@@ -85,13 +85,13 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
       }
 
       focusTaskTabTrigger(nextActiveTaskId);
-      navigateToTask(nextActiveTaskId, { pinSession: true });
+      navigateToTaskIntent(nextActiveTaskId);
     },
     [
       activeTaskTabId,
       clearComposerInput,
       clearTaskSelection,
-      navigateToTask,
+      navigateToTaskIntent,
       onContextSwitchIntent,
       setIntentActiveTaskId,
       setOpenTaskTabs,

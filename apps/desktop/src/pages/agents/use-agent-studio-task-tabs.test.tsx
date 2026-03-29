@@ -127,7 +127,7 @@ describe("useAgentStudioTaskTabs", () => {
     }
   });
 
-  test("selecting a tab pins the session chosen for that task", async () => {
+  test("selecting a tab keeps navigation task-scoped without pinning a session", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;
     Object.defineProperty(globalThis, "localStorage", {
@@ -164,8 +164,8 @@ describe("useAgentStudioTaskTabs", () => {
       const lastUpdate = updateCalls[updateCalls.length - 1];
       expect(lastUpdate).toEqual({
         task: "task-2",
-        session: "session-2",
-        agent: "spec",
+        session: undefined,
+        agent: undefined,
         scenario: undefined,
         autostart: undefined,
         start: undefined,
@@ -180,7 +180,7 @@ describe("useAgentStudioTaskTabs", () => {
     }
   });
 
-  test("selecting a tab prefers the current active session over a newer inactive session", async () => {
+  test("selecting a tab does not manufacture session authority for review tasks", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;
     Object.defineProperty(globalThis, "localStorage", {
@@ -191,12 +191,12 @@ describe("useAgentStudioTaskTabs", () => {
     try {
       const taskOne = createTask("task-1");
       const taskTwo = createTask("task-2");
-      const runningSession = createAgentSessionFixture({
-        sessionId: "session-running",
-        externalSessionId: "ext-session-running",
+      const runningBuildSession = createAgentSessionFixture({
+        sessionId: "session-build",
+        externalSessionId: "ext-session-build",
         taskId: "task-2",
-        role: "spec",
-        scenario: "spec_initial",
+        role: "build",
+        scenario: "build_implementation_start",
         status: "running",
         startedAt: "2026-02-22T09:00:00.000Z",
       });
@@ -204,8 +204,8 @@ describe("useAgentStudioTaskTabs", () => {
         sessionId: "session-newer",
         externalSessionId: "ext-session-newer",
         taskId: "task-2",
-        role: "planner",
-        scenario: "planner_initial",
+        role: "qa",
+        scenario: "qa_review",
         status: "idle",
         startedAt: "2026-02-22T10:00:00.000Z",
       });
@@ -218,7 +218,7 @@ describe("useAgentStudioTaskTabs", () => {
         tasks: [taskOne, taskTwo],
         isLoadingTasks: false,
         latestSessionByTaskId: new Map([["task-2", newerIdleSession]]),
-        activeSessionByTaskId: new Map([["task-2", runningSession]]),
+        activeSessionByTaskId: new Map([["task-2", runningBuildSession]]),
         updateQuery: (updates) => {
           updateCalls.push(updates);
         },
@@ -232,8 +232,8 @@ describe("useAgentStudioTaskTabs", () => {
 
       expect(updateCalls[updateCalls.length - 1]).toEqual({
         task: "task-2",
-        session: "session-running",
-        agent: "spec",
+        session: undefined,
+        agent: undefined,
         scenario: undefined,
         autostart: undefined,
         start: undefined,
@@ -306,7 +306,6 @@ describe("useAgentStudioTaskTabs", () => {
 
       const taskOne = createTask("task-1");
       const taskTwo = createTask("task-2");
-      const fallbackSession = createSession("task-1", "session-1");
       const updateCalls: Array<Record<string, string | undefined>> = [];
       const clearComposerInput = mock(() => {});
 
@@ -316,7 +315,7 @@ describe("useAgentStudioTaskTabs", () => {
         selectedTask: taskOne,
         tasks: [taskOne, taskTwo],
         isLoadingTasks: false,
-        latestSessionByTaskId: new Map([["task-1", fallbackSession]]),
+        latestSessionByTaskId: new Map([["task-1", createSession("task-1", "session-1")]]),
         updateQuery: (updates) => {
           updateCalls.push(updates);
         },
@@ -340,8 +339,8 @@ describe("useAgentStudioTaskTabs", () => {
       const lastUpdate = updateCalls[updateCalls.length - 1];
       expect(lastUpdate).toEqual({
         task: "task-1",
-        session: "session-1",
-        agent: "spec",
+        session: undefined,
+        agent: undefined,
         scenario: undefined,
         autostart: undefined,
         start: undefined,

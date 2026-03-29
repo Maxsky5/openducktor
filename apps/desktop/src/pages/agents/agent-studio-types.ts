@@ -1,1 +1,1 @@
-export type NavigateToTask = (taskId: string, options?: { pinSession?: boolean }) => void;
+export type NavigateToTaskIntent = (taskId: string) => void;
