@@ -1572,6 +1572,69 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("upward window shifts rearm when a new top sentinel mounts after a shift", async () => {
+    const rows = createRows(120);
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachContainer: true },
+    );
+
+    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    attachWindowedRowGeometry({
+      container,
+      rows,
+      getWindowStart: () => harness.getLatestResult().windowStart,
+      getWindowEnd: () => harness.getLatestResult().windowEnd,
+    });
+    container.scrollTop = 160;
+
+    const firstSentinelElement = createMessagesContainer();
+    await act(async () => {
+      harness.getLatestResult().topSentinelRef(firstSentinelElement);
+      await flush();
+    });
+
+    const firstObserver = mockIntersectionObservers.at(-1);
+    if (!firstObserver) {
+      throw new Error("Expected first top sentinel observer");
+    }
+
+    await act(async () => {
+      firstObserver.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(50);
+
+    const secondSentinelElement = createMessagesContainer();
+    await act(async () => {
+      harness.getLatestResult().topSentinelRef(secondSentinelElement);
+      await flush();
+    });
+
+    const secondObserver = mockIntersectionObservers.at(-1);
+    if (!secondObserver || secondObserver === firstObserver) {
+      throw new Error("Expected remounted top sentinel observer");
+    }
+
+    await act(async () => {
+      secondObserver.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(40);
+
+    await harness.unmount();
+  });
+
   test("downward window shifts ignore repeated bottom sentinel intersections until the sentinel exits", async () => {
     const rows = createRows(120);
     const harness = await mountHarness(
@@ -1635,6 +1698,77 @@ describe("useAgentChatWindow", () => {
     result = harness.getLatestResult();
     expect(result.windowStart).toBe(10);
     expect(result.windowEnd).toBe(79);
+
+    await harness.unmount();
+  });
+
+  test("downward window shifts rearm when a new bottom sentinel mounts after a shift", async () => {
+    const rows = createRows(120);
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachContainer: true },
+    );
+
+    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    attachWindowedRowGeometry({
+      container,
+      rows,
+      getWindowStart: () => harness.getLatestResult().windowStart,
+      getWindowEnd: () => harness.getLatestResult().windowEnd,
+    });
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+
+    container.scrollTop = 600;
+
+    const firstSentinelElement = createMessagesContainer();
+    await act(async () => {
+      harness.getLatestResult().bottomSentinelRef(firstSentinelElement);
+      await flush();
+    });
+
+    const firstObserver = mockIntersectionObservers.at(-1);
+    if (!firstObserver) {
+      throw new Error("Expected first bottom sentinel observer");
+    }
+
+    await act(async () => {
+      firstObserver.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(0);
+    expect(harness.getLatestResult().windowEnd).toBe(69);
+
+    const secondSentinelElement = createMessagesContainer();
+    await act(async () => {
+      harness.getLatestResult().bottomSentinelRef(secondSentinelElement);
+      await flush();
+    });
+
+    const secondObserver = mockIntersectionObservers.at(-1);
+    if (!secondObserver || secondObserver === firstObserver) {
+      throw new Error("Expected remounted bottom sentinel observer");
+    }
+
+    await act(async () => {
+      secondObserver.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(10);
+    expect(harness.getLatestResult().windowEnd).toBe(79);
 
     await harness.unmount();
   });

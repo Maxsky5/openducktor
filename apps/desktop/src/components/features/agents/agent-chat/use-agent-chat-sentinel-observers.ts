@@ -40,6 +40,7 @@ export function useAgentChatSentinelObservers({
       if (!element || windowStart <= 0) {
         return;
       }
+      topShiftArmedRef.current = true;
 
       const observer = new IntersectionObserver(
         (entries) => {
@@ -78,6 +79,7 @@ export function useAgentChatSentinelObservers({
       if (!element || windowEnd >= rowCount - 1) {
         return;
       }
+      bottomShiftArmedRef.current = true;
 
       const observer = new IntersectionObserver(
         (entries) => {
