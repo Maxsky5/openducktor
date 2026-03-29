@@ -43,12 +43,16 @@ type UseAgentChatComposerEditorResult = {
   showSlashMenu: boolean;
   registerTextSegmentRef: (segmentId: string, element: HTMLDivElement | null) => void;
   focusLastTextSegment: () => void;
+  focusSlashCommandSegment: (segmentId: string) => void;
   selectSlashCommand: (command: AgentSlashCommand) => void;
   handleTextInput: (segmentId: string, element: HTMLDivElement) => void;
   handleTextFocus: (segmentId: string, element: HTMLDivElement) => void;
-  handleTextKeyUp: (segmentId: string, element: HTMLDivElement) => void;
+  handleTextClick: (segmentId: string, element: HTMLDivElement) => void;
+  handleTextKeyUp: (segmentId: string, event: ReactKeyboardEvent<HTMLDivElement>) => void;
   handleTextKeyDown: (segmentId: string, event: ReactKeyboardEvent<HTMLDivElement>) => void;
 };
+
+const SLASH_MENU_NAVIGATION_KEYS = new Set(["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"]);
 
 const filterSlashCommands = (commands: AgentSlashCommand[], query: string): AgentSlashCommand[] => {
   const normalizedQuery = query.trim().toLowerCase();
@@ -210,6 +214,16 @@ export const useAgentChatComposerEditor = ({
     [applyEditResult, draft, updateSlashMenuForText],
   );
 
+  const handleTextKeyUp = useCallback(
+    (segmentId: string, event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (SLASH_MENU_NAVIGATION_KEYS.has(event.key)) {
+        return;
+      }
+      syncSlashMenuFromElement(segmentId, event.currentTarget);
+    },
+    [syncSlashMenuFromElement],
+  );
+
   const handleTextKeyDown = useCallback(
     (segmentId: string, event: ReactKeyboardEvent<HTMLDivElement>) => {
       const target = event.currentTarget;
@@ -307,16 +321,39 @@ export const useAgentChatComposerEditor = ({
     }
   }, [draft.segments, focusTextSegment]);
 
+  const focusSlashCommandSegment = useCallback(
+    (segmentId: string) => {
+      const currentIndex = draft.segments.findIndex((segment) => segment.id === segmentId);
+      if (currentIndex < 0) {
+        return;
+      }
+
+      const nextSegment = draft.segments[currentIndex + 1];
+      if (nextSegment?.kind === "text") {
+        focusTextSegment(nextSegment.id, 0);
+        return;
+      }
+
+      const previousSegment = draft.segments[currentIndex - 1];
+      if (previousSegment?.kind === "text") {
+        focusTextSegment(previousSegment.id, previousSegment.text.length);
+      }
+    },
+    [draft.segments, focusTextSegment],
+  );
+
   return {
     filteredSlashCommands,
     activeSlashIndex,
     showSlashMenu: supportsSlashCommands && slashMenuState !== null,
     registerTextSegmentRef,
     focusLastTextSegment,
+    focusSlashCommandSegment,
     selectSlashCommand,
     handleTextInput,
     handleTextFocus: syncSlashMenuFromElement,
-    handleTextKeyUp: syncSlashMenuFromElement,
+    handleTextClick: syncSlashMenuFromElement,
+    handleTextKeyUp,
     handleTextKeyDown,
   };
 };

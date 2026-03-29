@@ -10,6 +10,25 @@ import { EMPTY_TEXT_SEGMENT_SENTINEL } from "./agent-chat-composer-selection";
 import { AgentChatComposerSlashMenu } from "./agent-chat-composer-slash-menu";
 import { useAgentChatComposerEditor } from "./use-agent-chat-composer-editor";
 
+const shouldRedirectShellClickToComposer = (
+  target: EventTarget | null,
+  currentTarget: HTMLDivElement,
+): boolean => {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (!currentTarget.contains(target)) {
+    return false;
+  }
+
+  if (target.closest('[contenteditable="true"],button,a,input,textarea,select,[role="button"]')) {
+    return false;
+  }
+
+  return true;
+};
+
 type AgentChatComposerEditorProps = {
   draft: AgentChatComposerDraft;
   onDraftChange: (draft: AgentChatComposerDraft) => void;
@@ -43,9 +62,11 @@ export function AgentChatComposerEditor({
     showSlashMenu,
     registerTextSegmentRef,
     focusLastTextSegment,
+    focusSlashCommandSegment,
     selectSlashCommand,
     handleTextInput,
     handleTextFocus,
+    handleTextClick,
     handleTextKeyUp,
     handleTextKeyDown,
   } = useAgentChatComposerEditor({
@@ -78,8 +99,8 @@ export function AgentChatComposerEditor({
           disabled ? "cursor-not-allowed opacity-60" : "cursor-text",
         )}
         aria-disabled={disabled}
-        onMouseDown={(event) => {
-          if (disabled || event.target !== event.currentTarget) {
+        onMouseDownCapture={(event) => {
+          if (disabled || !shouldRedirectShellClickToComposer(event.target, event.currentTarget)) {
             return;
           }
           event.preventDefault();
@@ -96,16 +117,20 @@ export function AgentChatComposerEditor({
           {draft.segments.map((segment) => {
             if (segment.kind === "slash_command") {
               return (
-                <span
+                <button
                   key={segment.id}
+                  type="button"
                   contentEditable={false}
+                  aria-label={`Slash command /${segment.command.trigger}. Press Backspace immediately after the chip to remove it.`}
                   className={cn(
                     badgeVariants({ variant: "secondary" }),
                     "h-7 rounded-full border border-border px-2.5 text-xs font-medium",
                   )}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => focusSlashCommandSegment(segment.id)}
                 >
                   /{segment.command.trigger}
-                </span>
+                </button>
               );
             }
 
@@ -121,7 +146,8 @@ export function AgentChatComposerEditor({
                   className="min-w-[1px] flex-1 whitespace-pre-wrap break-words outline-none"
                   onInput={(event) => handleTextInput(segment.id, event.currentTarget)}
                   onFocus={(event) => handleTextFocus(segment.id, event.currentTarget)}
-                  onKeyUp={(event) => handleTextKeyUp(segment.id, event.currentTarget)}
+                  onClick={(event) => handleTextClick(segment.id, event.currentTarget)}
+                  onKeyUp={(event) => handleTextKeyUp(segment.id, event)}
                   onKeyDown={(event) => handleTextKeyDown(segment.id, event)}
                 >
                   {segment.text.length > 0 ? segment.text : EMPTY_TEXT_SEGMENT_SENTINEL}

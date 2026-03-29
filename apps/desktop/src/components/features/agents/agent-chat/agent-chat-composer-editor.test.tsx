@@ -5,6 +5,7 @@ import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
 import { createComposerDraft } from "./agent-chat-test-fixtures";
 
 let AgentChatComposerEditor: typeof import("./agent-chat-composer-editor").AgentChatComposerEditor;
+const setCaretOffsetWithinElementMock = mock(() => {});
 
 beforeAll(async () => {
   mock.module("./agent-chat-composer-selection", () => ({
@@ -13,7 +14,7 @@ beforeAll(async () => {
       (element.textContent ?? "").replace(/\u200B/g, ""),
     getCaretOffsetWithinElement: (element: HTMLElement): number =>
       (element.textContent ?? "").replace(/\u200B/g, "").length,
-    setCaretOffsetWithinElement: () => {},
+    setCaretOffsetWithinElement: setCaretOffsetWithinElementMock,
   }));
 
   ({ AgentChatComposerEditor } = await import("./agent-chat-composer-editor"));
@@ -36,9 +37,11 @@ const COMMANDS = [
 const EditorHarness = ({
   slashCommandsError,
   slashCommands,
+  onSend,
 }: {
   slashCommandsError: string | null;
   slashCommands: typeof COMMANDS;
+  onSend?: () => void;
 }): ReactElement => {
   const [draft, setDraft] = useState<AgentChatComposerDraft>(createComposerDraft(""));
   const editorRef = useRef<HTMLDivElement>(null);
@@ -51,7 +54,7 @@ const EditorHarness = ({
       disabled={false}
       editorRef={editorRef}
       onEditorInput={() => {}}
-      onSend={() => {}}
+      onSend={onSend ?? (() => {})}
       supportsSlashCommands={true}
       slashCommands={slashCommands}
       slashCommandsError={slashCommandsError}
@@ -68,6 +71,15 @@ const typeIntoEditor = (container: HTMLElement, value: string): HTMLDivElement =
   editable.textContent = value;
   fireEvent.input(editable);
   return editable;
+};
+
+const getEditorShell = (container: HTMLElement): HTMLDivElement => {
+  const editable = typeIntoEditor(container, "");
+  const shell = editable.closest('[aria-disabled="false"]');
+  if (!(shell instanceof HTMLDivElement)) {
+    throw new Error("Expected composer editor shell");
+  }
+  return shell;
 };
 
 describe("AgentChatComposerEditor", () => {
@@ -91,5 +103,32 @@ describe("AgentChatComposerEditor", () => {
     await waitFor(() => {
       expect(screen.getByText("No slash commands found.")).toBeDefined();
     });
+  });
+
+  test("keeps slash-menu keyboard selection from submitting the message", async () => {
+    const onSend = mock(() => {});
+    const rendered = render(
+      <EditorHarness slashCommands={COMMANDS} slashCommandsError={null} onSend={onSend} />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "/");
+    fireEvent.keyDown(editable, { key: "ArrowDown" });
+    fireEvent.keyUp(editable, { key: "ArrowDown" });
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /slash command \/compact/i })).toBeDefined();
+    });
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  test("redirects empty-shell clicks to the editable text segment", () => {
+    setCaretOffsetWithinElementMock.mockClear();
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const shell = getEditorShell(rendered.container);
+    fireEvent.mouseDown(shell);
+
+    expect(setCaretOffsetWithinElementMock).toHaveBeenCalled();
   });
 });
