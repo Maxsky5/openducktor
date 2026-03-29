@@ -90,7 +90,7 @@ const toArticleClassName = (
     "text-sm",
     isUserMessage &&
       (isQueuedUserMessage
-        ? "mb-4 w-full rounded-md border border-pending-border bg-pending-surface px-4 py-3 text-pending-surface-foreground shadow-md"
+        ? "mb-4 w-full rounded-none border-l-4 border-pending-border bg-card px-4 py-3 text-foreground shadow-md"
         : "mb-4 w-full rounded-none border-l-4 bg-card px-4 py-3 text-foreground shadow-md"),
     isToolMessage
       ? isWorkflowToolMessage

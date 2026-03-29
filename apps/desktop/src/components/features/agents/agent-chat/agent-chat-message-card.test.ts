@@ -603,8 +603,8 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).toContain("border-pending-border");
-    expect(html).toContain("bg-pending-surface");
+    expect(html).toContain("border-l-4");
+    expect(html).toContain("bg-card");
     expect(html).toContain("Queued");
-    expect(html).not.toContain("border-l-4");
   });
 });
