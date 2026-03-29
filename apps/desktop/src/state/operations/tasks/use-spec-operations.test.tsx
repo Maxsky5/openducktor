@@ -17,7 +17,9 @@ reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 type HookArgs = Parameters<typeof useSpecOperations>[0];
 type HookResult = ReturnType<typeof useSpecOperations>;
 
-const emptyDocument = { markdown: "", updatedAt: null as string | null };
+const createEmptyDocument = () => ({ markdown: "", updatedAt: null as string | null });
+
+type TaskDocumentSection = "spec" | "plan" | "qa";
 
 const createTaskDocumentHostReaders = (readers: {
   spec?: (
@@ -33,24 +35,29 @@ const createTaskDocumentHostReaders = (readers: {
     taskId: string,
   ) => Promise<{ markdown: string; updatedAt: string | null }>;
 }) => {
-  const resolveSection = async (repoPath: string, taskId: string, section: string) => {
+  const resolveSection = async (repoPath: string, taskId: string, section: TaskDocumentSection) => {
     if (section === "spec") {
-      return readers.spec ? readers.spec(repoPath, taskId) : emptyDocument;
+      return readers.spec ? readers.spec(repoPath, taskId) : createEmptyDocument();
     }
 
     if (section === "plan") {
-      return readers.plan ? readers.plan(repoPath, taskId) : emptyDocument;
+      return readers.plan ? readers.plan(repoPath, taskId) : createEmptyDocument();
     }
 
-    return readers.qa ? readers.qa(repoPath, taskId) : emptyDocument;
+    if (section === "qa") {
+      return readers.qa ? readers.qa(repoPath, taskId) : createEmptyDocument();
+    }
+
+    throw new Error(`Unexpected task document section: ${section satisfies never}`);
   };
 
   return {
-    taskDocumentGet: mock(async (repoPath: string, taskId: string, section: string) =>
+    taskDocumentGet: mock(async (repoPath: string, taskId: string, section: TaskDocumentSection) =>
       resolveSection(repoPath, taskId, section),
     ),
-    taskDocumentGetFresh: mock(async (repoPath: string, taskId: string, section: string) =>
-      resolveSection(repoPath, taskId, section),
+    taskDocumentGetFresh: mock(
+      async (repoPath: string, taskId: string, section: TaskDocumentSection) =>
+        resolveSection(repoPath, taskId, section),
     ),
   };
 };

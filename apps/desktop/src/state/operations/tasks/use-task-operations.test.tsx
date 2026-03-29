@@ -713,7 +713,7 @@ describe("use-task-operations", () => {
     let currentPlanUpdatedAt: string | null = null;
     const tasksList = mock(async () => [makeTask("A", currentStatus)]);
     const runsList = mock(async (): Promise<RunSummary[]> => []);
-    const taskDocumentGet = mock(async (_repoPath: string, _taskId: string, section: string) => {
+    const readTaskDocument = async (_repoPath: string, _taskId: string, section: string) => {
       if (section === "plan") {
         return {
           markdown: currentPlanMarkdown,
@@ -722,19 +722,9 @@ describe("use-task-operations", () => {
       }
 
       return { markdown: "", updatedAt: null };
-    });
-    const taskDocumentGetFresh = mock(
-      async (_repoPath: string, _taskId: string, section: string) => {
-        if (section === "plan") {
-          return {
-            markdown: currentPlanMarkdown,
-            updatedAt: currentPlanUpdatedAt,
-          };
-        }
-
-        return { markdown: "", updatedAt: null };
-      },
-    );
+    };
+    const taskDocumentGet = mock(readTaskDocument);
+    const taskDocumentGetFresh = mock(readTaskDocument);
 
     const original = {
       tasksList: host.tasksList,
