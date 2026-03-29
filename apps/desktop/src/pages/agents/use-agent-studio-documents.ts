@@ -137,6 +137,9 @@ export function useAgentStudioDocuments({
       if (!target) {
         continue;
       }
+      if (!activeRepo) {
+        continue;
+      }
 
       const completionInfo =
         extractCompletionTimestamp(meta.output) ?? extractCompletionTimestamp(message.content);
@@ -165,10 +168,20 @@ export function useAgentStudioDocuments({
         }
       }
 
-      reloadDocument(target.section);
-      processedDocumentToolEventsRef.current.add(eventKey);
+      if (reloadDocument(target.section)) {
+        processedDocumentToolEventsRef.current.add(eventKey);
+      }
     }
-  }, [activeSession, applyDocumentUpdate, planDoc, qaDoc, reloadDocument, specDoc, taskId]);
+  }, [
+    activeRepo,
+    activeSession,
+    applyDocumentUpdate,
+    planDoc,
+    qaDoc,
+    reloadDocument,
+    specDoc,
+    taskId,
+  ]);
 
   return {
     specDoc,

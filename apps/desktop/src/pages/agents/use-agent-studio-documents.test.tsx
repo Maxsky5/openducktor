@@ -397,6 +397,47 @@ describe("useAgentStudioDocuments", () => {
     }
   });
 
+  test("waits for repo context before processing completed workflow document events", async () => {
+    const toolMessage = createCompletedToolMessage({
+      id: "message-repo-hydration",
+      tool: "odt_set_plan",
+      input: { markdown: "# Hydrated plan" },
+      output: "completed 2026-02-22T09:15:00.000Z",
+    });
+    const baseArgs = {
+      ...createBaseArgs(),
+      selectedTask: null,
+      activeRepo: null,
+      activeSession: createAgentSessionFixture({
+        runtimeKind: "opencode",
+        sessionId: "session-repo-hydration",
+        messages: [toolMessage],
+      }),
+    };
+    const harness = createHookHarness(baseArgs);
+
+    try {
+      await harness.mount();
+      expect(applyDocumentUpdateMock).not.toHaveBeenCalled();
+      expect(reloadDocumentMock).not.toHaveBeenCalled();
+
+      await harness.update({
+        ...baseArgs,
+        activeRepo: "/repo",
+      });
+
+      expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
+      expect(applyDocumentUpdateMock).toHaveBeenCalledWith("plan", {
+        markdown: "# Hydrated plan",
+        updatedAt: "2026-02-22T09:15:00.000Z",
+      });
+      expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+      expect(reloadDocumentMock).toHaveBeenCalledWith("plan");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("resets processed tool-event context when switching sessions", async () => {
     setTaskDocumentsState({
       specDoc: createDocumentState({
