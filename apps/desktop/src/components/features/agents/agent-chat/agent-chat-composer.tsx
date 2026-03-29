@@ -14,6 +14,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     agentStudioReady,
     isReadOnly,
     readOnlyReason,
+    busySendBlockedReason,
     input,
     onInputChange,
     onSend,
@@ -44,8 +45,8 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
   const sendDisabled =
     isSending ||
     isStarting ||
-    isSessionWorking ||
     isWaitingInput ||
+    Boolean(busySendBlockedReason) ||
     isModelSelectionPending ||
     isReadOnly ||
     !taskId ||
@@ -70,12 +71,26 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
   };
   const isSubmitting = isSending || isStarting || isModelSelectionPending;
   const isComposerInputDisabled =
-    !agentStudioReady || isReadOnly || isModelSelectionPending || isWaitingInput;
-  const composerPlaceholder = isWaitingInput
-    ? (waitingInputPlaceholder ?? "Resolve the pending request above to continue")
-    : isReadOnly && readOnlyReason
-      ? readOnlyReason
-      : "@ for files/agents; / for commands; ! for shell";
+    !agentStudioReady ||
+    isReadOnly ||
+    isModelSelectionPending ||
+    isWaitingInput ||
+    Boolean(busySendBlockedReason);
+  let composerPlaceholder = "@ for files/agents; / for commands; ! for shell";
+  if (isReadOnly && readOnlyReason) {
+    composerPlaceholder = readOnlyReason;
+  }
+  if (busySendBlockedReason) {
+    composerPlaceholder = busySendBlockedReason;
+  }
+  if (isWaitingInput) {
+    composerPlaceholder =
+      waitingInputPlaceholder ?? "Resolve the pending request above to continue";
+  }
+  const composerHelperText =
+    isWaitingInput && waitingInputPlaceholder
+      ? waitingInputPlaceholder
+      : (busySendBlockedReason ?? readOnlyReason);
 
   return (
     <form ref={composerFormRef} className="px-4 pb-4" action={handleSubmit}>
@@ -118,6 +133,12 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
                 }
               }}
             />
+
+            {composerHelperText ? (
+              <div className="border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+                {composerHelperText}
+              </div>
+            ) : null}
 
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/80 px-2.5 py-2">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">

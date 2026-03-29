@@ -103,8 +103,39 @@ const mergeHydratedMessages = (
   currentMessages: AgentSessionState["messages"],
 ): AgentSessionState["messages"] => {
   const currentMessageById = new Map(currentMessages.map((message) => [message.id, message]));
-  const mergedMessages = hydratedMessages.map(
-    (message) => currentMessageById.get(message.id) ?? message,
+  const mergeSameMessageId = (
+    hydratedMessage: AgentSessionState["messages"][number],
+    currentMessage: AgentSessionState["messages"][number] | undefined,
+  ): AgentSessionState["messages"][number] => {
+    if (!currentMessage) {
+      return hydratedMessage;
+    }
+
+    const hydratedIsQueuedUser =
+      hydratedMessage.role === "user" &&
+      hydratedMessage.meta?.kind === "user" &&
+      hydratedMessage.meta.state === "queued";
+    const currentIsQueuedUser =
+      currentMessage.role === "user" &&
+      currentMessage.meta?.kind === "user" &&
+      currentMessage.meta.state === "queued";
+
+    if (currentIsQueuedUser && !hydratedIsQueuedUser) {
+      const mergedMeta =
+        currentMessage.meta && hydratedMessage.meta
+          ? { ...currentMessage.meta, ...hydratedMessage.meta }
+          : (hydratedMessage.meta ?? currentMessage.meta);
+      return {
+        ...currentMessage,
+        ...hydratedMessage,
+        ...(mergedMeta ? { meta: mergedMeta } : {}),
+      };
+    }
+
+    return currentMessage;
+  };
+  const mergedMessages = hydratedMessages.map((message) =>
+    mergeSameMessageId(message, currentMessageById.get(message.id)),
   );
   const hydratedMessageIds = new Set(hydratedMessages.map((message) => message.id));
 

@@ -51,7 +51,11 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   externalSessionId: "external-session-1",
   eventTransportKey: "http://127.0.0.1:12345",
   hasIdleSinceActivity: false,
-  emittedMessageIds: new Set<string>(),
+  activeAssistantMessageId: null,
+  emittedAssistantMessageIds: new Set<string>(),
+  emittedUserMessageSignatures: new Map<string, string>(),
+  emittedUserMessageStates: new Map(),
+  pendingQueuedUserMessages: [],
   partsById: new Map(),
   messageRoleById: new Map(),
   messageMetadataById: new Map(),
@@ -219,12 +223,322 @@ describe("event-stream", () => {
       messageId: "user-message-3",
       message: "Ship it",
       timestamp: "2026-02-22T12:00:05.000Z",
+      state: "read",
       model: {
         providerId: "openai",
         modelId: "gpt-5",
         profileId: "Hephaestus",
         variant: "high",
       },
+    });
+  });
+
+  test("re-emits user_message when later parts update the visible text", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "user-message-4",
+            role: "user",
+            sessionID: "external-session-1",
+            text: "Old text",
+            time: {
+              created: Date.parse("2026-02-22T12:00:06.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "user-part-4",
+            sessionID: "external-session-1",
+            messageID: "user-message-4",
+            type: "text",
+            text: "New text",
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages[0]).toMatchObject({
+      type: "user_message",
+      messageId: "user-message-4",
+      message: "Old text",
+      state: "read",
+    });
+    expect(userMessages[1]).toMatchObject({
+      type: "user_message",
+      messageId: "user-message-4",
+      message: "New text",
+      state: "read",
+    });
+  });
+
+  test("keeps queued follow-ups queued until the pending assistant clears", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "message-100",
+            role: "assistant",
+            sessionID: "external-session-1",
+            time: {
+              created: Date.parse("2026-02-22T12:00:01.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "message-200",
+            role: "user",
+            sessionID: "external-session-1",
+            text: "Ship it",
+            time: {
+              created: Date.parse("2026-02-22T12:00:02.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "session.idle",
+        properties: {
+          sessionID: "external-session-1",
+        },
+      } as unknown as Event,
+    ]);
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages[0]).toMatchObject({
+      type: "user_message",
+      messageId: "message-200",
+      message: "Ship it",
+      state: "queued",
+    });
+    expect(userMessages[1]).toMatchObject({
+      type: "user_message",
+      messageId: "message-200",
+      message: "Ship it",
+      state: "read",
+    });
+  });
+
+  test("does not leave a late queued-send acknowledgement stuck queued after idle", async () => {
+    const client = makeClientWithEvents([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "message-200",
+            role: "user",
+            sessionID: "external-session-1",
+            text: "Ship it",
+            time: {
+              created: Date.parse("2026-02-22T12:00:02.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+    const emitted: AgentEvent[] = [];
+    const sessionRecord = makeSessionRecord(client);
+    sessionRecord.pendingQueuedUserMessages.push({ content: "Ship it" });
+    sessionRecord.activeAssistantMessageId = null;
+
+    await subscribeOpencodeEvents({
+      context: {
+        sessionId: "local-session-1",
+        externalSessionId: "external-session-1",
+        input: makeSessionInput(),
+      },
+      client,
+      controller: new AbortController(),
+      now: () => "2026-02-22T12:00:00.000Z",
+      emit: (_sessionId, event) => {
+        emitted.push(event);
+      },
+      getSession: () => sessionRecord,
+    });
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]).toMatchObject({
+      type: "user_message",
+      messageId: "message-200",
+      message: "Ship it",
+      state: "read",
+    });
+    expect(sessionRecord.pendingQueuedUserMessages).toHaveLength(0);
+  });
+
+  test("ignores unrelated status fields when deriving explicit user message state", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "msg-100",
+            role: "assistant",
+            sessionID: "external-session-1",
+            time: {
+              created: Date.parse("2026-02-22T12:00:01.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "msg-200",
+            role: "user",
+            sessionID: "external-session-1",
+            text: "Ship it",
+            status: "read",
+            time: {
+              created: Date.parse("2026-02-22T12:00:02.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]).toMatchObject({
+      type: "user_message",
+      messageId: "msg-200",
+      state: "queued",
+    });
+  });
+
+  test("matches queued sends by exact model selection when content repeats", async () => {
+    const client = makeClientWithEvents([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "msg-200",
+            role: "user",
+            sessionID: "external-session-1",
+            providerID: "openai",
+            modelID: "gpt-5",
+            agent: "Hephaestus",
+            variant: "high",
+            text: "Ship it",
+            time: {
+              created: Date.parse("2026-02-22T12:00:02.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+    const emitted: AgentEvent[] = [];
+    const sessionRecord = makeSessionRecord(client);
+    sessionRecord.activeAssistantMessageId = "msg-100";
+    sessionRecord.pendingQueuedUserMessages.push(
+      { content: "Ship it" },
+      {
+        content: "Ship it",
+        model: {
+          providerId: "openai",
+          modelId: "gpt-5",
+          profileId: "Hephaestus",
+          variant: "high",
+        },
+      },
+    );
+
+    await subscribeOpencodeEvents({
+      context: {
+        sessionId: "local-session-1",
+        externalSessionId: "external-session-1",
+        input: makeSessionInput(),
+      },
+      client,
+      controller: new AbortController(),
+      now: () => "2026-02-22T12:00:00.000Z",
+      emit: (_sessionId, event) => {
+        emitted.push(event);
+      },
+      getSession: () => sessionRecord,
+    });
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]).toMatchObject({
+      type: "user_message",
+      messageId: "msg-200",
+      state: "queued",
+    });
+    expect(sessionRecord.pendingQueuedUserMessages).toEqual([{ content: "Ship it" }]);
+  });
+
+  test("reconciles queued follow-ups when a newer assistant becomes pending", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "msg-100",
+            role: "assistant",
+            sessionID: "external-session-1",
+            time: {
+              created: Date.parse("2026-02-22T12:00:01.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "msg-200",
+            role: "user",
+            sessionID: "external-session-1",
+            text: "Ship it",
+            time: {
+              created: Date.parse("2026-02-22T12:00:02.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "msg-300",
+            role: "assistant",
+            parentID: "msg-200",
+            sessionID: "external-session-1",
+            time: {
+              created: Date.parse("2026-02-22T12:00:03.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages[0]).toMatchObject({
+      type: "user_message",
+      messageId: "msg-200",
+      state: "queued",
+    });
+    expect(userMessages[1]).toMatchObject({
+      type: "user_message",
+      messageId: "msg-200",
+      state: "read",
     });
   });
 

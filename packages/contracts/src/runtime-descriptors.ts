@@ -17,6 +17,7 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
   supportsVariants: true,
   supportsOdtWorkflowTools: true,
   supportsSessionFork: true,
+  supportsQueuedUserMessages: true,
   supportsPermissionRequests: true,
   supportsQuestionRequests: true,
   supportsTodos: true,

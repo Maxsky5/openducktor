@@ -94,6 +94,8 @@ export type AgentSessionTodoItem = {
   priority: AgentSessionTodoPriority;
 };
 
+export type AgentUserMessageState = "queued" | "read";
+
 export type AgentPendingPermissionRequest = {
   requestId: string;
   permission: string;
@@ -304,6 +306,7 @@ export type AgentEvent =
       timestamp: string;
       messageId: string;
       message: string;
+      state: AgentUserMessageState;
       model?: AgentModelSelection;
     }
   | {

@@ -6,6 +6,7 @@ import type { SessionStartModalModel } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { SessionStartRequestReason } from "@/features/session-start";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
+import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import { SCENARIO_LABELS } from "./agents-page-constants";
@@ -94,6 +95,7 @@ export function useAgentStudioSessionActions({
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   isSessionWorking: boolean;
   isWaitingInput: boolean;
+  busySendBlockedReason: string | null;
   canKickoffNewSession: boolean;
   kickoffLabel: string;
   canStopSession: boolean;
@@ -111,6 +113,7 @@ export function useAgentStudioSessionActions({
     Record<string, boolean>
   >({});
   const latestInputRef = useRef(input);
+  const { runtimeDefinitions } = useRuntimeDefinitionsContext();
 
   const activeSessionId = activeSession?.sessionId ?? null;
   const activeComposerContextKey = buildAgentStudioAsyncActivityContextKey({
@@ -126,6 +129,16 @@ export function useAgentStudioSessionActions({
       (activeSession?.status ?? "stopped") === "starting" ||
       isSending);
   const isWaitingInput = Boolean(activeSession && isAgentSessionWaitingInput(activeSession));
+  const activeRuntimeDescriptor =
+    activeSession?.modelCatalog?.runtime ??
+    runtimeDefinitions.find((runtime) => runtime.kind === activeSession?.runtimeKind) ??
+    null;
+  const supportsQueuedUserMessages =
+    activeRuntimeDescriptor?.capabilities.supportsQueuedUserMessages !== false;
+  const busySendBlockedReason =
+    activeSession && isSessionWorking && !isWaitingInput && !supportsQueuedUserMessages
+      ? `${activeRuntimeDescriptor?.label ?? "Current runtime"} does not support queued messages while the session is working.`
+      : null;
 
   const {
     isStarting,
@@ -162,7 +175,7 @@ export function useAgentStudioSessionActions({
   }, [input]);
 
   const onSend = useCallback(async (): Promise<void> => {
-    if (isSending || isStarting || !agentStudioReady || isWaitingInput) {
+    if (isSending || isStarting || !agentStudioReady || isWaitingInput || busySendBlockedReason) {
       return;
     }
     if (!canStartSessionForRole(selectedTask, role)) {
@@ -238,6 +251,7 @@ export function useAgentStudioSessionActions({
     isSending,
     isStarting,
     isWaitingInput,
+    busySendBlockedReason,
     role,
     selectedTask,
     sendAgentMessage,
@@ -413,6 +427,7 @@ export function useAgentStudioSessionActions({
     isSubmittingQuestionByRequestId,
     isSessionWorking,
     isWaitingInput,
+    busySendBlockedReason,
     canKickoffNewSession,
     kickoffLabel,
     canStopSession,

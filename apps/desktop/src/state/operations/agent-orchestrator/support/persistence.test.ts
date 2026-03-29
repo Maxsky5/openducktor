@@ -178,6 +178,7 @@ describe("agent-orchestrator/support/persistence", () => {
         {
           messageId: "m-user",
           role: "user",
+          state: "read",
           timestamp: "2026-02-22T08:00:00.000Z",
           text: "Please implement this",
           model: {
@@ -288,6 +289,7 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(user.meta.modelId).toBe("gpt-5");
     expect(user.meta.profileId).toBe("Ares");
     expect(user.meta.variant).toBe("high");
+    expect(user.meta.state).toBe("read");
   });
 
   test("preserves session-selected agent when history model metadata is partial", () => {
@@ -336,6 +338,7 @@ describe("agent-orchestrator/support/persistence", () => {
         {
           messageId: "m-user",
           role: "user",
+          state: "read",
           timestamp: "2026-02-22T08:00:00.000Z",
           text: "Please implement this",
           parts: [
@@ -394,7 +397,12 @@ describe("agent-orchestrator/support/persistence", () => {
     if (!assistant || assistant.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
+    const user = messages.find((entry) => entry.role === "user");
+    if (!user || user.meta?.kind !== "user") {
+      throw new Error("Expected user message with user meta");
+    }
 
+    expect(user.meta.state).toBe("read");
     expect(assistant.meta.isFinal).toBe(false);
     expect(assistant.meta.totalTokens).toBeUndefined();
     expect(assistant.meta.durationMs).toBeUndefined();

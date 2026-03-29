@@ -3524,6 +3524,7 @@ describe("agent-orchestrator-load-sessions", () => {
       {
         messageId: "history-user-1",
         role: "user",
+        state: "read",
         timestamp: "2026-02-22T08:00:01.000Z",
         text: "Previous request",
         parts: [],
@@ -3554,7 +3555,22 @@ describe("agent-orchestrator-load-sessions", () => {
       runtimeEndpoint: "http://127.0.0.1:4444",
       workingDirectory: "/tmp/repo",
       historyHydrationState: "not_requested",
-      messages: [],
+      messages: [
+        {
+          id: "hydrated-user-1",
+          role: "user",
+          content: "Hydrated message",
+          timestamp: "2026-02-22T08:00:01.000Z",
+          meta: {
+            kind: "user",
+            state: "queued",
+            providerId: "openai",
+            modelId: "gpt-5",
+            profileId: "Hephaestus",
+            variant: "high",
+          },
+        },
+      ],
       draftAssistantText: "",
       draftAssistantMessageId: null,
       draftReasoningText: "",
@@ -3635,6 +3651,7 @@ describe("agent-orchestrator-load-sessions", () => {
           {
             messageId: "hydrated-user-1",
             role: "user",
+            state: "read",
             timestamp: "2026-02-22T08:00:01.000Z",
             text: "Hydrated message",
             parts: [],
@@ -3671,5 +3688,16 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(
       state["session-1"]?.messages.some((message) => message.content === "Hydrated message"),
     ).toBe(true);
+    const hydratedUser = state["session-1"]?.messages.find(
+      (message) => message.id === "hydrated-user-1",
+    );
+    if (!hydratedUser || hydratedUser.meta?.kind !== "user") {
+      throw new Error("Expected hydrated user message metadata");
+    }
+    expect(hydratedUser.meta.state).toBe("read");
+    expect(hydratedUser.meta.providerId).toBe("openai");
+    expect(hydratedUser.meta.modelId).toBe("gpt-5");
+    expect(hydratedUser.meta.profileId).toBe("Hephaestus");
+    expect(hydratedUser.meta.variant).toBe("high");
   });
 });

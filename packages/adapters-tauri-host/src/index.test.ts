@@ -1108,6 +1108,7 @@ describe("TauriHostClient", () => {
               supportsPermissionRequests: true,
               supportsQuestionRequests: true,
               supportsSessionFork: true,
+              supportsQueuedUserMessages: true,
               supportsTodos: true,
               supportsDiff: true,
               supportsFileStatus: true,

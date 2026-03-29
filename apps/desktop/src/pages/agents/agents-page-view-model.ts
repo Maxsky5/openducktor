@@ -139,6 +139,7 @@ type AgentChatComposerModelArgs = {
   agentStudioReady: boolean;
   isReadOnly: boolean;
   readOnlyReason: string | null;
+  busySendBlockedReason: string | null;
   input: string;
   onInputChange: (value: string) => void;
   onSend: () => void;
@@ -206,6 +207,7 @@ export const buildAgentChatComposerModel = (
   agentStudioReady: args.agentStudioReady,
   isReadOnly: args.isReadOnly,
   readOnlyReason: args.readOnlyReason,
+  busySendBlockedReason: args.busySendBlockedReason,
   input: args.input,
   onInputChange: args.onInputChange,
   onSend: args.onSend,

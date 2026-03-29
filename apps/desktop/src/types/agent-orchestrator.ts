@@ -5,6 +5,7 @@ import type {
   AgentRole,
   AgentScenario,
   AgentSessionTodoItem,
+  AgentUserMessageState,
 } from "@openducktor/core";
 
 export type AgentChatMessageMeta =
@@ -46,6 +47,7 @@ export type AgentChatMessageMeta =
     }
   | {
       kind: "user";
+      state: AgentUserMessageState;
       providerId?: string;
       modelId?: string;
       variant?: string;

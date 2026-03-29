@@ -57,6 +57,7 @@ Owns:
 - one runtime event transport per OpenCode runtime endpoint
 - fanout from runtime events to the relevant local session
 - transcript assembly, permission/question event application, and terminal state transitions
+- queued user-turn state application, including same-id transcript updates as the runtime's pending-assistant boundary changes
 
 Must not own:
 - request/response caching
@@ -90,6 +91,7 @@ Must not own:
 - Owns user-driven actions after a session exists.
 - Keeps stop semantics deterministic locally even when remote stop fails.
 - Persists only durable checkpoints, not transient runtime churn.
+- Busy queued follow-up sends must preserve the active assistant/reasoning draft state and turn timing instead of resetting the current turn.
 
 `handlers/start-session.ts`
 
@@ -155,6 +157,7 @@ Must not own:
 `events/session-lifecycle.ts`
 
 - Owns lifecycle transitions and pending permission/question state changes caused by runtime events.
+- User transcript rows are id-based upserts. Queued user turns must update the existing row in place when the runtime later marks the same message as read.
 
 `events/session-tool-parts.ts`
 
@@ -171,7 +174,7 @@ Must not own:
 ### `support/`
 
 - `core.ts`: stale-repo guards and shared invariants.
-- `persistence.ts`: persisted record mapping and history-to-chat conversion.
+- `persistence.ts`: persisted record mapping, history-to-chat conversion, and authoritative queued/read user-message projection.
 - `session-prompt.ts`: prompt construction and requested-session prompt context loading.
 - `models.ts`, `messages.ts`, `assistant-meta.ts`, `tool-messages.ts`, `question-messages.ts`: transcript/message normalization helpers.
 

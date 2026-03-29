@@ -247,13 +247,23 @@ export const MessageBody = ({
   }
 
   if (message.role === "user") {
+    const isQueuedUserMessage = meta?.kind === "user" && meta.state === "queued";
     return (
       <>
         <p className="whitespace-pre-wrap leading-6">{message.content}</p>
-        {timeLabel ? (
-          <p className="mt-2 text-right text-[11px] font-medium text-muted-foreground">
-            {timeLabel}
-          </p>
+        {isQueuedUserMessage || timeLabel ? (
+          <div className="mt-2 flex items-center justify-end gap-2">
+            {isQueuedUserMessage ? (
+              <span className="rounded-full border border-pending-border bg-pending-surface px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-pending-surface-foreground">
+                Queued
+              </span>
+            ) : null}
+            {timeLabel ? (
+              <p className="text-right text-[11px] font-medium text-muted-foreground">
+                {timeLabel}
+              </p>
+            ) : null}
+          </div>
         ) : null}
       </>
     );

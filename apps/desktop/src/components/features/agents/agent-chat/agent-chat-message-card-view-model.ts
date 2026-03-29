@@ -30,6 +30,7 @@ type AgentChatMessageCardViewModel = {
   isReasoningMessage: boolean;
   isAssistantMessage: boolean;
   isUserMessage: boolean;
+  isQueuedUserMessage: boolean;
   isToolMessage: boolean;
   isWorkflowToolMessage: boolean;
   isRegularToolMessage: boolean;
@@ -71,6 +72,7 @@ const toArticleClassName = (
   message: AgentChatMessage,
   isReasoningMessage: boolean,
   isUserMessage: boolean,
+  isQueuedUserMessage: boolean,
   isToolMessage: boolean,
   isWorkflowToolMessage: boolean,
   isSubtaskMessage: boolean,
@@ -87,7 +89,9 @@ const toArticleClassName = (
   return cn(
     "text-sm",
     isUserMessage &&
-      "w-full rounded-none border-l-4 bg-card px-4 py-3 mb-4 text-foreground shadow-md",
+      (isQueuedUserMessage
+        ? "mb-4 w-full rounded-none border-l-4 border-pending-border bg-card px-4 py-3 text-foreground shadow-md"
+        : "mb-4 w-full rounded-none border-l-4 bg-card px-4 py-3 text-foreground shadow-md"),
     isToolMessage
       ? isWorkflowToolMessage
         ? workflowToolPhase === "completed"
@@ -123,6 +127,7 @@ export const buildAgentChatMessageCardViewModel = ({
   const isReasoningMessage = meta?.kind === "reasoning";
   const isAssistantMessage = message.role === "assistant";
   const isUserMessage = message.role === "user";
+  const isQueuedUserMessage = isUserMessage && meta?.kind === "user" && meta.state === "queued";
   const isToolMessage = meta?.kind === "tool";
   const isWorkflowToolMessage = meta?.kind === "tool" && isOdtWorkflowMutationToolName(meta.tool);
   const isRegularToolMessage = isToolMessage && !isWorkflowToolMessage;
@@ -148,6 +153,7 @@ export const buildAgentChatMessageCardViewModel = ({
     isReasoningMessage,
     isAssistantMessage,
     isUserMessage,
+    isQueuedUserMessage,
     isToolMessage,
     isWorkflowToolMessage,
     isRegularToolMessage,
@@ -158,12 +164,15 @@ export const buildAgentChatMessageCardViewModel = ({
       message,
       isReasoningMessage,
       isUserMessage,
+      isQueuedUserMessage,
       isToolMessage,
       isWorkflowToolMessage,
       isSubtaskMessage,
       isSystemPromptMessage,
     ),
     articleStyle:
-      isUserMessage && userAccentColor ? { borderLeftColor: userAccentColor } : undefined,
+      isUserMessage && !isQueuedUserMessage && userAccentColor
+        ? { borderLeftColor: userAccentColor }
+        : undefined,
   };
 };

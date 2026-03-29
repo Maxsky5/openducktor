@@ -277,6 +277,101 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
+  test("onSend allows busy follow-ups when the runtime supports queued user messages", async () => {
+    const sendAgentMessage = mock(async () => {});
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createSession({
+        sessionId: "session-existing",
+        status: "running",
+        modelCatalog: {
+          runtime: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR,
+            capabilities: {
+              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+              supportsQueuedUserMessages: true,
+            },
+          },
+          models: [],
+          defaultModelsByProvider: {},
+        },
+      }),
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest().busySendBlockedReason).toBeNull();
+    await harness.run(async (state) => {
+      await state.onSend();
+    });
+
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", "hello world");
+
+    await harness.unmount();
+  });
+
+  test("onSend blocks busy follow-ups when the runtime does not support queued user messages", async () => {
+    const sendAgentMessage = mock(async () => {});
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createSession({
+        sessionId: "session-existing",
+        status: "running",
+        modelCatalog: {
+          runtime: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR,
+            capabilities: {
+              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+              supportsQueuedUserMessages: false,
+            },
+          },
+          models: [],
+          defaultModelsByProvider: {},
+        },
+      }),
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest().busySendBlockedReason).toContain(
+      "does not support queued messages while the session is working",
+    );
+    await harness.run(async (state) => {
+      await state.onSend();
+    });
+
+    expect(sendAgentMessage).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("onSend does not block busy follow-ups when runtime support must be resolved from definitions", async () => {
+    const sendAgentMessage = mock(async () => {});
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createSession({
+        sessionId: "session-existing",
+        status: "running",
+        runtimeKind: "opencode",
+        modelCatalog: null,
+      }),
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest().busySendBlockedReason).toBeNull();
+    await harness.run(async (state) => {
+      await state.onSend();
+    });
+
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", "hello world");
+
+    await harness.unmount();
+  });
+
   test("onSend does not send while the active session is waiting for answers", async () => {
     const sendAgentMessage = mock(async () => {});
     const startAgentSession = mock(async () => "session-new");

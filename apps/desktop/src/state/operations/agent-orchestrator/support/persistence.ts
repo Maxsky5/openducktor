@@ -165,18 +165,18 @@ const isFinalAssistantHistoryMessage = (message: AgentSessionHistoryMessage): bo
   );
 };
 
-const userMessageMeta = (messageModel: AgentModelSelection | undefined) => {
+const userMessageMeta = (
+  messageModel: AgentModelSelection | undefined,
+  state: Extract<AgentSessionHistoryMessage, { role: "user" }>["state"],
+) => {
   const effectiveModel = mergeModelSelection(null, messageModel);
-  if (!effectiveModel) {
-    return undefined;
-  }
-
   return {
     kind: "user",
-    ...(effectiveModel.providerId ? { providerId: effectiveModel.providerId } : {}),
-    ...(effectiveModel.modelId ? { modelId: effectiveModel.modelId } : {}),
-    ...(effectiveModel.variant ? { variant: effectiveModel.variant } : {}),
-    ...(effectiveModel.profileId ? { profileId: effectiveModel.profileId } : {}),
+    state,
+    ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
+    ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
+    ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),
+    ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : {}),
   } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }>;
 };
 
@@ -270,28 +270,26 @@ export const historyToChatMessages = (
     if (content.length > 0) {
       const isFinalAssistantMessage = isFinalAssistantHistoryMessage(message);
       const assistantDurationMs = assistantDurationFromHistory(message, previousUserTimestampMs);
+      let meta: AgentChatMessage["meta"] | undefined;
+      if (message.role === "assistant") {
+        meta = assistantMessageMeta(
+          sessionContext.role,
+          sessionContext.selectedModel,
+          message.model,
+          isFinalAssistantMessage,
+          isFinalAssistantMessage ? assistantDurationMs : undefined,
+          isFinalAssistantMessage ? message.totalTokens : undefined,
+        );
+      } else if (message.role === "user") {
+        meta = userMessageMeta(message.model, message.state);
+      }
+
       next.push({
         id: message.messageId,
         role: message.role,
         content,
         timestamp: message.timestamp,
-        ...(message.role === "assistant"
-          ? {
-              meta: assistantMessageMeta(
-                sessionContext.role,
-                sessionContext.selectedModel,
-                message.model,
-                isFinalAssistantMessage,
-                isFinalAssistantMessage ? assistantDurationMs : undefined,
-                isFinalAssistantMessage ? message.totalTokens : undefined,
-              ),
-            }
-          : message.role === "user"
-            ? (() => {
-                const meta = userMessageMeta(message.model);
-                return meta ? { meta } : {};
-              })()
-            : {}),
+        ...(meta ? { meta } : {}),
       });
     }
 

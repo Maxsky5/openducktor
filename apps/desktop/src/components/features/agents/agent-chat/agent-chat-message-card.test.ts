@@ -532,6 +532,7 @@ describe("AgentChatMessageCard tool duration", () => {
           timestamp: "2026-02-22T10:25:00.000Z",
           meta: {
             kind: "user",
+            state: "read",
             providerId: "openai",
             modelId: "gpt-5.3-codex",
             profileId: "Hephaestus (Deep Agent)",
@@ -580,5 +581,30 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).not.toContain("border-left-color:#f97316");
+  });
+
+  test("renders queued user messages with pending styling and label", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "user-queued",
+          role: "user",
+          content: "Queued follow-up",
+          timestamp: "2026-02-22T10:27:00.000Z",
+          meta: {
+            kind: "user",
+            state: "queued",
+          },
+        },
+        sessionRole: "build",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("border-pending-border");
+    expect(html).toContain("border-l-4");
+    expect(html).toContain("bg-card");
+    expect(html).toContain("Queued");
   });
 });

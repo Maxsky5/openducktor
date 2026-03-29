@@ -38,6 +38,7 @@ export const setSessionIdle = (session: SessionRecord | undefined): void => {
     return;
   }
   session.hasIdleSinceActivity = true;
+  session.activeAssistantMessageId = null;
 };
 
 type SessionIdleEmitter = {

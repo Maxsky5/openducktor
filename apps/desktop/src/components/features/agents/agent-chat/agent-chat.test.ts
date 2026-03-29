@@ -47,6 +47,7 @@ const buildModel = () => ({
     agentStudioReady: true,
     isReadOnly: false,
     readOnlyReason: null,
+    busySendBlockedReason: null,
     input: "Hi",
     onInputChange: () => {},
     onSend: () => {},

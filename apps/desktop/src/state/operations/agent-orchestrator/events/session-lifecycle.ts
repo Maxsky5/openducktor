@@ -78,17 +78,15 @@ const findExistingAssistantMessageIndex = (
   return -1;
 };
 
-const toUserMessageMeta = (model: Extract<SessionEvent, { type: "user_message" }>["model"]) => {
-  if (!model) {
-    return undefined;
-  }
-
+const toUserMessageMeta = (event: Extract<SessionEvent, { type: "user_message" }>) => {
+  const model = event.model;
   return {
     kind: "user" as const,
-    ...(model.providerId ? { providerId: model.providerId } : {}),
-    ...(model.modelId ? { modelId: model.modelId } : {}),
-    ...(model.variant ? { variant: model.variant } : {}),
-    ...(model.profileId ? { profileId: model.profileId } : {}),
+    state: event.state,
+    ...(model?.providerId ? { providerId: model.providerId } : {}),
+    ...(model?.modelId ? { modelId: model.modelId } : {}),
+    ...(model?.variant ? { variant: model.variant } : {}),
+    ...(model?.profileId ? { profileId: model.profileId } : {}),
   };
 };
 
@@ -248,7 +246,7 @@ export const handleUserMessage = (
   context.store.updateSession(
     context.store.sessionId,
     (current) => {
-      const userMessageMeta = toUserMessageMeta(event.model);
+      const userMessageMeta = toUserMessageMeta(event);
       return {
         ...current,
         messages: upsertMessage(current.messages, {
@@ -256,7 +254,7 @@ export const handleUserMessage = (
           role: "user",
           content: event.message,
           timestamp: event.timestamp,
-          ...(userMessageMeta ? { meta: userMessageMeta } : {}),
+          meta: userMessageMeta,
         }),
       };
     },
