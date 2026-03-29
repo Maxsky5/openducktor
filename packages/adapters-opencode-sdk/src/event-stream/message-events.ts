@@ -127,15 +127,9 @@ const emitKnownUserMessage = (
   },
 ): boolean => {
   const session = runtime.getSession(runtime.sessionId);
-  const authoritativeState =
-    resolveUserMessageStateFromAssistantProgress(session, input.messageId, input.state) ??
-    input.state;
   const existingState = session?.emittedUserMessageStates.get(input.messageId);
 
-  if (
-    existingState === authoritativeState &&
-    session?.emittedUserMessageSignatures.has(input.messageId)
-  ) {
+  if (existingState === input.state && session?.emittedUserMessageSignatures.has(input.messageId)) {
     const visible = readTextFromParts(getKnownMessageParts(runtime, input.messageId));
     if (visible.trim().length > 0) {
       return true;
@@ -154,7 +148,7 @@ const emitKnownUserMessage = (
     messageId: input.messageId,
     timestamp: input.timestamp,
     message: visible,
-    state: authoritativeState,
+    state: input.state,
     ...(input.model ? { model: input.model } : {}),
   });
 };
@@ -256,22 +250,16 @@ const takeQueuedUserSendMatch = (
   return true;
 };
 
-const resolveUserMessageStateFromAssistantProgress = (
+const resolveUserMessageStateFromPendingAssistant = (
   session: ReturnType<EventStreamRuntime["getSession"]>,
   messageId: string,
-  fallbackState: AgentUserMessageState,
 ): AgentUserMessageState => {
-  if (!session) {
-    return fallbackState;
+  const activeAssistantMessageId = session?.activeAssistantMessageId;
+  if (!session || !activeAssistantMessageId) {
+    return "read";
   }
 
-  for (const metadata of session.messageMetadataById.values()) {
-    if (metadata.parentId === messageId) {
-      return "read";
-    }
-  }
-
-  return session.emittedUserMessageStates.get(messageId) ?? fallbackState;
+  return messageId > activeAssistantMessageId ? "queued" : "read";
 };
 
 const resolveLiveUserMessageState = (
@@ -284,23 +272,46 @@ const resolveLiveUserMessageState = (
   },
 ): AgentUserMessageState => {
   const session = runtime.getSession(runtime.sessionId);
-  if (input.explicitState) {
-    return resolveUserMessageStateFromAssistantProgress(
-      session,
-      input.messageId,
-      input.explicitState,
-    );
-  }
+  const pendingAssistantState = resolveUserMessageStateFromPendingAssistant(
+    session,
+    input.messageId,
+  );
 
   if (takeQueuedUserSendMatch(runtime, input.visible, input.model)) {
     return "queued";
   }
 
-  if (session?.activeAssistantMessageId && session.activeAssistantMessageId < input.messageId) {
-    return "queued";
+  if (input.explicitState) {
+    return input.explicitState;
   }
 
-  return resolveUserMessageStateFromAssistantProgress(session, input.messageId, "read");
+  return pendingAssistantState;
+};
+
+export const reconcileUserMessageQueuedStates = (runtime: EventStreamRuntime): void => {
+  const session = runtime.getSession(runtime.sessionId);
+  if (!session) {
+    return;
+  }
+
+  for (const [messageId, emittedState] of session.emittedUserMessageStates.entries()) {
+    if (runtime.messageRoleById.get(messageId) !== "user") {
+      continue;
+    }
+
+    const nextState = resolveUserMessageStateFromPendingAssistant(session, messageId);
+    if (nextState === emittedState) {
+      continue;
+    }
+
+    const metadata = session.messageMetadataById.get(messageId);
+    emitKnownUserMessage(runtime, {
+      messageId,
+      timestamp: metadata?.timestamp ?? runtime.now(),
+      state: nextState,
+      ...(metadata?.model ? { model: metadata.model } : {}),
+    });
+  }
 };
 
 const readRawMessageParts = (properties: unknown, info: unknown): unknown[] => {
@@ -349,6 +360,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
   const messageCompletedAt = infoRecord ? readMessageCompletedAt(infoRecord) : undefined;
   const messageModel = readMessageModelSelection(infoRecord);
   const session = runtime.getSession(runtime.sessionId);
+  const previousActiveAssistantMessageId = session?.activeAssistantMessageId ?? null;
   const previousRole = messageId ? runtime.messageRoleById.get(messageId) : undefined;
   const parentId = infoRecord
     ? readStringProp(infoRecord, ["parentID", "parentId", "parent_id"])
@@ -363,8 +375,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
   }
 
   if (messageId && role === "assistant") {
-    const hasError = Boolean(infoRecord && readRecordProp(infoRecord, "error"));
-    if (messageCompletedAt === undefined && !hasError) {
+    if (messageCompletedAt === undefined) {
       if (session) {
         session.activeAssistantMessageId = messageId;
       }
@@ -372,14 +383,8 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
       session.activeAssistantMessageId = null;
     }
 
-    if (parentId) {
-      const parentMetadata = session?.messageMetadataById.get(parentId);
-      emitKnownUserMessage(runtime, {
-        messageId: parentId,
-        timestamp: parentMetadata?.timestamp ?? messageTimestamp,
-        state: "read",
-        ...(parentMetadata?.model ? { model: parentMetadata.model } : {}),
-      });
+    if (previousActiveAssistantMessageId !== (session?.activeAssistantMessageId ?? null)) {
+      reconcileUserMessageQueuedStates(runtime);
     }
   }
 
@@ -479,6 +484,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
   const visible = sanitizeAssistantMessage(text);
   if (visible.length === 0) {
     emitSessionIdle(runtime);
+    reconcileUserMessageQueuedStates(runtime);
     return true;
   }
 
@@ -501,6 +507,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
   emittedMessageIds?.add(messageId);
 
   emitSessionIdle(runtime);
+  reconcileUserMessageQueuedStates(runtime);
   return true;
 };
 
@@ -599,13 +606,11 @@ const handleMessagePartUpdatedEvent = (event: Event, runtime: EventStreamRuntime
     emitKnownUserMessage(runtime, {
       messageId,
       timestamp: metadata?.timestamp ?? runtime.now(),
-      state: resolveUserMessageStateFromAssistantProgress(
-        session,
+      state: resolveLiveUserMessageState(runtime, {
         messageId,
-        session?.activeAssistantMessageId && session.activeAssistantMessageId < messageId
-          ? "queued"
-          : "read",
-      ),
+        visible,
+        ...(metadata?.model ? { model: metadata.model } : {}),
+      }),
       ...(metadata?.model ? { model: metadata.model } : {}),
     });
   }

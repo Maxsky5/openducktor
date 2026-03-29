@@ -144,6 +144,12 @@ const readPendingSessionId = (value: unknown): string | undefined => {
   return readString(record, ["sessionID", "sessionId", "session_id"]);
 };
 
+const hasCompletedAssistantMessage = (value: unknown): boolean => {
+  const record = asRecord(value);
+  const time = record ? asRecord(record.time) : null;
+  return typeof time?.completed === "number";
+};
+
 export const loadSessionHistory = async (
   createClient: ClientFactory,
   now: () => string,
@@ -200,14 +206,12 @@ export const loadSessionHistory = async (
       return aTime - bTime;
     });
 
-  const assistantParentIds = new Set(
-    entries.flatMap((item) =>
-      item.entry.info.role === "assistant" && item.parentId ? [item.parentId] : [],
-    ),
-  );
-  const lastAssistantParentId = [...entries]
+  const pendingAssistantId = [...entries]
     .reverse()
-    .find((item) => item.entry.info.role === "assistant" && item.parentId)?.parentId;
+    .find(
+      (item) =>
+        item.entry.info.role === "assistant" && !hasCompletedAssistantMessage(item.entry.info),
+    )?.entry.info.id;
 
   const mapped: AgentSessionHistoryMessage[] = entries.map((item) => {
     if (item.entry.info.role === "assistant") {
@@ -227,12 +231,7 @@ export const loadSessionHistory = async (
       role: "user",
       timestamp: item.timestamp,
       text: item.text,
-      state:
-        assistantParentIds.has(item.entry.info.id) ||
-        !lastAssistantParentId ||
-        item.entry.info.id <= lastAssistantParentId
-          ? "read"
-          : "queued",
+      state: pendingAssistantId && item.entry.info.id > pendingAssistantId ? "queued" : "read",
       ...(item.model ? { model: item.model } : {}),
       parts: item.parts,
     };

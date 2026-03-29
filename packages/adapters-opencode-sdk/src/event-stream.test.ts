@@ -233,7 +233,7 @@ describe("event-stream", () => {
     });
   });
 
-  test("emits queued then read user_message updates for queued follow-ups", async () => {
+  test("keeps queued follow-ups queued until the pending assistant clears", async () => {
     const emitted = await runEventStream([
       {
         type: "message.updated",
@@ -263,17 +263,9 @@ describe("event-stream", () => {
         },
       } as unknown as Event,
       {
-        type: "message.updated",
+        type: "session.idle",
         properties: {
-          info: {
-            id: "message-300",
-            role: "assistant",
-            parentID: "message-200",
-            sessionID: "external-session-1",
-            time: {
-              created: Date.parse("2026-02-22T12:00:03.000Z"),
-            },
-          },
+          sessionID: "external-session-1",
         },
       } as unknown as Event,
     ]);
@@ -290,6 +282,65 @@ describe("event-stream", () => {
       type: "user_message",
       messageId: "message-200",
       message: "Ship it",
+      state: "read",
+    });
+  });
+
+  test("reconciles queued follow-ups when a newer assistant becomes pending", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "msg-100",
+            role: "assistant",
+            sessionID: "external-session-1",
+            time: {
+              created: Date.parse("2026-02-22T12:00:01.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "msg-200",
+            role: "user",
+            sessionID: "external-session-1",
+            text: "Ship it",
+            time: {
+              created: Date.parse("2026-02-22T12:00:02.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "msg-300",
+            role: "assistant",
+            parentID: "msg-200",
+            sessionID: "external-session-1",
+            time: {
+              created: Date.parse("2026-02-22T12:00:03.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages[0]).toMatchObject({
+      type: "user_message",
+      messageId: "msg-200",
+      state: "queued",
+    });
+    expect(userMessages[1]).toMatchObject({
+      type: "user_message",
+      messageId: "msg-200",
       state: "read",
     });
   });

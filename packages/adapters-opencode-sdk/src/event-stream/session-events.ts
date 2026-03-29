@@ -1,5 +1,6 @@
 import type { Event } from "@opencode-ai/sdk/v2/client";
 import { normalizeTodoList } from "../todo-normalizers";
+import { reconcileUserMessageQueuedStates } from "./message-events";
 import {
   parsePermissionAsked,
   parseQuestionAsked,
@@ -27,6 +28,7 @@ const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): bo
       markSessionActive(runtime);
     } else {
       markSessionIdle(runtime);
+      reconcileUserMessageQueuedStates(runtime);
     }
     runtime.emit(runtime.sessionId, {
       type: "session_status",
@@ -124,6 +126,7 @@ const handleSessionIdleEvent = (event: Event, runtime: EventStreamRuntime): bool
   }
 
   emitSessionIdle(runtime);
+  reconcileUserMessageQueuedStates(runtime);
   return true;
 };
 

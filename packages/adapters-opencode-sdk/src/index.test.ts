@@ -888,7 +888,7 @@ describe("OpencodeSdkAdapter", () => {
       messagesResponse: [
         {
           info: {
-            id: "user-1",
+            id: "msg-100",
             role: "user",
             agent: "Hephaestus",
             model: {
@@ -902,7 +902,7 @@ describe("OpencodeSdkAdapter", () => {
             {
               id: "text-user-1",
               sessionID: "session-opencode-1",
-              messageID: "user-1",
+              messageID: "msg-100",
               type: "text",
               text: "Use the selected agent",
               time: { start: Date.now(), end: Date.now() },
@@ -911,7 +911,7 @@ describe("OpencodeSdkAdapter", () => {
         },
         {
           info: {
-            id: "assistant-1",
+            id: "msg-200",
             role: "assistant",
             providerID: "openai",
             modelID: "gpt-5",
@@ -927,7 +927,7 @@ describe("OpencodeSdkAdapter", () => {
             {
               id: "reason-1",
               sessionID: "session-opencode-1",
-              messageID: "assistant-1",
+              messageID: "msg-200",
               type: "reasoning",
               text: "Reasoning block",
               time: { start: Date.now(), end: Date.now() },
@@ -935,7 +935,7 @@ describe("OpencodeSdkAdapter", () => {
             {
               id: "text-1",
               sessionID: "session-opencode-1",
-              messageID: "assistant-1",
+              messageID: "msg-200",
               type: "text",
               text: "Final answer",
               time: { start: Date.now(), end: Date.now() },
@@ -984,6 +984,85 @@ describe("OpencodeSdkAdapter", () => {
       kind: "reasoning",
       text: "Reasoning block",
     });
+  });
+
+  test("loadSessionHistory marks queued user messages using the last unfinished assistant boundary", async () => {
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-100",
+            role: "user",
+            time: { created: Date.parse("2026-02-17T11:59:00Z") },
+          },
+          parts: [
+            {
+              id: "text-user-read-z",
+              sessionID: "session-opencode-1",
+              messageID: "msg-100",
+              type: "text",
+              text: "Original request",
+              time: { start: Date.now(), end: Date.now() },
+            } as Part,
+          ],
+        },
+        {
+          info: {
+            id: "msg-200",
+            role: "assistant",
+            parentID: "msg-100",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+          },
+          parts: [
+            {
+              id: "text-assistant-parent-a",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              type: "text",
+              text: "Working on it",
+              time: { start: Date.now(), end: Date.now() },
+            } as Part,
+          ],
+        },
+        {
+          info: {
+            id: "msg-300",
+            role: "user",
+            time: { created: Date.parse("2026-02-17T12:01:00Z") },
+          },
+          parts: [
+            {
+              id: "text-user-queued-a",
+              sessionID: "session-opencode-1",
+              messageID: "msg-300",
+              type: "text",
+              text: "One more change",
+              time: { start: Date.now(), end: Date.now() },
+            } as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const history = await adapter.loadSessionHistory({
+      runtimeKind: "opencode",
+      runtimeConnection: defaultRuntimeConnection,
+      externalSessionId: "session-opencode-1",
+      limit: 100,
+    });
+
+    expect(history).toHaveLength(3);
+    if (history[0]?.role !== "user" || history[2]?.role !== "user") {
+      throw new Error("Expected first and last history entries to be user messages");
+    }
+    expect(history[0].messageId).toBe("msg-100");
+    expect(history[0].state).toBe("read");
+    expect(history[2].messageId).toBe("msg-300");
+    expect(history[2].state).toBe("queued");
   });
 
   test("maps message.updated events into assistant parts and assistant message", async () => {
