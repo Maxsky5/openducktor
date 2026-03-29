@@ -83,9 +83,11 @@ const triggerResizeObservers = (): void => {
 
 function ChatScrollRegressionHarness(): ReactElement {
   const [input, setInput] = useState("");
+  const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
   const { messagesContainerRef, composerTextareaRef, resizeComposerTextarea } = useAgentChatLayout({
     input,
     activeSessionId: "session-1",
+    syncBottomAfterComposerLayoutRef,
   });
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
   const { isNearBottom } = useAgentChatWindow({
@@ -94,6 +96,7 @@ function ChatScrollRegressionHarness(): ReactElement {
     isSessionViewLoading: false,
     messagesContainerRef,
     messagesContentRef,
+    syncBottomAfterComposerLayoutRef,
   });
 
   return (
