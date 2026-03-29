@@ -1,5 +1,5 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef } from "react";
-import type { NavigateToTask } from "./agent-studio-types";
+import type { NavigateToTaskIntent } from "./agent-studio-types";
 import { ensureActiveTaskTab, resolveFallbackTaskId } from "./agents-page-session-tabs";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
@@ -13,7 +13,7 @@ type UseTaskTabSelectionArgs = {
   tabsStorageHydratedRepo: string | null;
   clearComposerInput: () => void;
   onContextSwitchIntent: (() => void) | undefined;
-  navigateToTask: NavigateToTask;
+  navigateToTaskIntent: NavigateToTaskIntent;
   setOpenTaskTabs: SetState<string[]>;
   setPersistedActiveTaskId: SetState<string | null>;
   setIntentActiveTaskId: SetState<string | null>;
@@ -35,7 +35,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     tabsStorageHydratedRepo,
     clearComposerInput,
     onContextSwitchIntent,
-    navigateToTask,
+    navigateToTaskIntent,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
     setIntentActiveTaskId,
@@ -88,10 +88,10 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
       return;
     }
     appliedFallbackKeyRef.current = fallbackKey;
-    navigateToTask(fallbackTaskId);
+    navigateToTaskIntent(fallbackTaskId);
   }, [
     activeRepo,
-    navigateToTask,
+    navigateToTaskIntent,
     persistedActiveTaskId,
     tabTaskIds,
     tabsStorageHydratedRepo,
@@ -123,12 +123,12 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
         return [...current, nextTaskId];
       });
       setPersistedActiveTaskId(nextTaskId);
-      navigateToTask(nextTaskId);
+      navigateToTaskIntent(nextTaskId);
     },
     [
       activeTaskTabId,
       clearComposerInput,
-      navigateToTask,
+      navigateToTaskIntent,
       onContextSwitchIntent,
       setIntentActiveTaskId,
       setOpenTaskTabs,
