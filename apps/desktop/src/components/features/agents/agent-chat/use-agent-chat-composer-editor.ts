@@ -118,7 +118,6 @@ export const useAgentChatComposerEditor = ({
   const { registerTextSegmentRef, focusTextSegment, setPendingFocusTarget } = usePendingFocus();
   const [slashMenuState, setSlashMenuState] = useState<SlashMenuState | null>(null);
   const [activeSlashIndex, setActiveSlashIndex] = useState(0);
-  const lastKeyDownRef = useRef<{ key: string; shiftKey: boolean } | null>(null);
 
   const filteredSlashCommands = useMemo(() => {
     if (!slashMenuState) {
@@ -218,16 +217,14 @@ export const useAgentChatComposerEditor = ({
 
   const handleTextBeforeInput = useCallback(
     (segmentId: string, event: ReactFormEvent<HTMLElement>) => {
-      const nativeEvent = event.nativeEvent;
-      if (!(nativeEvent instanceof InputEvent)) {
+      const nativeEvent = event.nativeEvent as { inputType?: unknown };
+      const inputType = typeof nativeEvent.inputType === "string" ? nativeEvent.inputType : null;
+      if (!inputType) {
         return;
       }
 
       const shouldInsertLineBreak =
-        nativeEvent.inputType === "insertLineBreak" ||
-        (nativeEvent.inputType === "insertParagraph" &&
-          lastKeyDownRef.current?.key === "Enter" &&
-          lastKeyDownRef.current.shiftKey);
+        inputType === "insertLineBreak" || inputType === "insertParagraph";
       if (!shouldInsertLineBreak) {
         return;
       }
@@ -264,7 +261,6 @@ export const useAgentChatComposerEditor = ({
 
   const handleTextKeyDown = useCallback(
     (segmentId: string, event: ReactKeyboardEvent<HTMLElement>) => {
-      lastKeyDownRef.current = { key: event.key, shiftKey: event.shiftKey };
       const target = event.currentTarget;
       const caretOffset = getCaretOffsetWithinElement(target);
 

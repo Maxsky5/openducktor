@@ -455,6 +455,12 @@ export class OpencodeSdkAdapter
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
     const session = requireSession(this.sessions, input.sessionId);
     const tools = await this.resolveSessionToolSelection(session, input.model);
+    this.emit(input.sessionId, {
+      type: "session_status",
+      sessionId: input.sessionId,
+      timestamp: this.now(),
+      status: { type: "busy" },
+    });
     await sendUserMessage({
       session,
       request: input,

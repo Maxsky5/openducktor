@@ -775,6 +775,41 @@ describe("OpencodeSdkAdapter", () => {
     expect(mock.session.promptAsyncCalls).toHaveLength(0);
   });
 
+  test("sendUserMessage emits a busy status immediately for slash commands", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "build");
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => events.push(event));
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      parts: [
+        {
+          kind: "slash_command",
+          command: {
+            id: "compact",
+            trigger: "compact",
+            title: "compact",
+            hints: [],
+          },
+        },
+      ],
+    });
+
+    expect(events).toContainEqual({
+      type: "session_status",
+      sessionId: "session-1",
+      timestamp: "2026-02-17T12:00:00Z",
+      status: { type: "busy" },
+    });
+  });
+
   test("sendUserMessage rejects slash commands that are not the first meaningful segment", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({
