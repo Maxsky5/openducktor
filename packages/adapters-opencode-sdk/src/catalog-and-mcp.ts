@@ -1,3 +1,4 @@
+import { slashCommandCatalogSchema } from "@openducktor/contracts";
 import type {
   AgentDescriptor,
   AgentModelCatalog,
@@ -166,7 +167,7 @@ export const listAvailableSlashCommands = async (
       })
       .sort((left, right) => left.trigger.localeCompare(right.trigger));
 
-    return { commands };
+    return slashCommandCatalogSchema.parse({ commands });
   } catch (error) {
     throw toOpenCodeRequestError("list slash commands", error);
   }

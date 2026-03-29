@@ -100,4 +100,25 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
       ),
     ).rejects.toThrow("OpenCode request failed: list slash commands: boom");
   });
+
+  test("rejects duplicate slash command triggers at runtime", async () => {
+    await expect(
+      listAvailableSlashCommands(
+        (() => ({
+          command: {
+            list: async () => ({
+              data: [
+                { name: "review", hints: [] },
+                { name: "review", hints: [] },
+              ],
+            }),
+          },
+        })) as never,
+        {
+          runtimeEndpoint: "http://127.0.0.1:1234",
+          workingDirectory: "/repo",
+        },
+      ),
+    ).rejects.toThrow(/Duplicate slash command trigger: review/);
+  });
 });
