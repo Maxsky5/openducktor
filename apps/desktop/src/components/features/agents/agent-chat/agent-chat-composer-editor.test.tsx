@@ -179,6 +179,8 @@ describe("AgentChatComposerEditor", () => {
 
     const editable = typeIntoEditor(rendered.container, "hello");
     fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+    editable.textContent = "hello\n";
+    fireEvent.input(editable);
 
     await waitFor(() => {
       const updatedEditable = rendered.container.querySelector('[contenteditable="true"]');
@@ -201,6 +203,8 @@ describe("AgentChatComposerEditor", () => {
         data: null,
       }),
     );
+    editable.textContent = "hello\n";
+    fireEvent.input(editable);
 
     await waitFor(() => {
       const updatedEditable = rendered.container.querySelector('[contenteditable="true"]');
@@ -218,10 +222,27 @@ describe("AgentChatComposerEditor", () => {
       .mockImplementationOnce(() => null);
 
     fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+    editable.textContent = "hello\n";
+    fireEvent.input(editable);
 
     await waitFor(() => {
       const updatedEditable = rendered.container.querySelector('[contenteditable="true"]');
       expect(updatedEditable?.textContent).toBe("hello\n");
+    });
+  });
+
+  test("renders empty trailing text segments as inline blocks for caret placement after slash chips", async () => {
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "/");
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      const trailingEditable = Array.from(
+        rendered.container.querySelectorAll('[contenteditable="true"]'),
+      ).at(-1);
+      expect(trailingEditable?.className).toContain("inline-block");
+      expect(trailingEditable?.className).toContain("min-w-[1px]");
     });
   });
 });

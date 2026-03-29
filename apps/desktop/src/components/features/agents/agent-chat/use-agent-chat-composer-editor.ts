@@ -17,7 +17,6 @@ import {
 } from "./agent-chat-composer-draft";
 import {
   getCaretOffsetWithinElement,
-  insertTextAtCaretWithinElement,
   readEditableTextContent,
   setCaretOffsetWithinElement,
 } from "./agent-chat-composer-selection";
@@ -124,23 +123,6 @@ const useLastKnownCaretOffsets = () => {
   };
 };
 
-const usePendingSyntheticInputSuppression = () => {
-  const suppressedSegmentsRef = useRef<Record<string, boolean>>({});
-
-  return {
-    suppressNextInput: (segmentId: string) => {
-      suppressedSegmentsRef.current[segmentId] = true;
-    },
-    consumeSuppressedInput: (segmentId: string): boolean => {
-      if (!suppressedSegmentsRef.current[segmentId]) {
-        return false;
-      }
-      delete suppressedSegmentsRef.current[segmentId];
-      return true;
-    },
-  };
-};
-
 export const useAgentChatComposerEditor = ({
   draft,
   onDraftChange,
@@ -152,7 +134,6 @@ export const useAgentChatComposerEditor = ({
 }: UseAgentChatComposerEditorArgs): UseAgentChatComposerEditorResult => {
   const { registerTextSegmentRef, focusTextSegment, setPendingFocusTarget } = usePendingFocus();
   const { rememberCaretOffset, readCaretOffset } = useLastKnownCaretOffsets();
-  const { suppressNextInput, consumeSuppressedInput } = usePendingSyntheticInputSuppression();
   const [slashMenuState, setSlashMenuState] = useState<SlashMenuState | null>(null);
   const [activeSlashIndex, setActiveSlashIndex] = useState(0);
 
@@ -243,10 +224,6 @@ export const useAgentChatComposerEditor = ({
 
   const handleTextInput = useCallback(
     (segmentId: string, element: HTMLElement) => {
-      if (consumeSuppressedInput(segmentId)) {
-        return;
-      }
-
       const nextText = readEditableTextContent(element);
       const caretOffset = getCaretOffsetWithinElement(element);
       rememberCaretOffset(segmentId, caretOffset);
@@ -260,28 +237,7 @@ export const useAgentChatComposerEditor = ({
       );
       updateSlashMenuForText(segmentId, nextText, caretOffset);
     },
-    [applyEditResult, consumeSuppressedInput, draft, rememberCaretOffset, updateSlashMenuForText],
-  );
-
-  const applyNewlineInsertion = useCallback(
-    (segmentId: string, element: HTMLElement, caretOffset: number) => {
-      suppressNextInput(segmentId);
-      const nextCaretOffset = insertTextAtCaretWithinElement(element, "\n", caretOffset);
-      const nextText = readEditableTextContent(element);
-      rememberCaretOffset(segmentId, nextCaretOffset);
-      const result = applyComposerDraftEdit(draft, {
-        type: "update_text",
-        segmentId,
-        text: nextText,
-        caretOffset: nextCaretOffset ?? caretOffset + 1,
-      });
-      const didApply = applyEditResult(result);
-      if (didApply) {
-        setSlashMenuState(null);
-      }
-      return didApply;
-    },
-    [applyEditResult, draft, rememberCaretOffset, suppressNextInput],
+    [applyEditResult, draft, rememberCaretOffset, updateSlashMenuForText],
   );
 
   const handleTextBeforeInput = useCallback(
@@ -303,11 +259,10 @@ export const useAgentChatComposerEditor = ({
       if (caretOffset === null) {
         return;
       }
-
-      event.preventDefault();
-      applyNewlineInsertion(segmentId, event.currentTarget, caretOffset);
+      rememberCaretOffset(segmentId, caretOffset);
+      setSlashMenuState(null);
     },
-    [applyNewlineInsertion, readCaretOffset],
+    [readCaretOffset, rememberCaretOffset],
   );
 
   const handleTextKeyUp = useCallback(
@@ -364,8 +319,8 @@ export const useAgentChatComposerEditor = ({
       }
 
       if (event.key === "Enter" && event.shiftKey && caretOffset !== null) {
-        event.preventDefault();
-        applyNewlineInsertion(segmentId, target, caretOffset);
+        rememberCaretOffset(segmentId, caretOffset);
+        setSlashMenuState(null);
         return;
       }
 
@@ -388,7 +343,6 @@ export const useAgentChatComposerEditor = ({
     },
     [
       activeSlashIndex,
-      applyNewlineInsertion,
       applyEditResult,
       disabled,
       draft,

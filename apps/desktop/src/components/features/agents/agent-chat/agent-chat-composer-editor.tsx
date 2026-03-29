@@ -170,7 +170,10 @@ export function AgentChatComposerEditor({
                 suppressContentEditableWarning
                 spellCheck={false}
                 data-segment-id={segment.id}
-                className="inline whitespace-pre-wrap break-words align-baseline outline-none"
+                className={cn(
+                  "whitespace-pre-wrap break-words align-baseline outline-none",
+                  segment.text.length === 0 ? "inline-block min-w-[1px]" : "inline",
+                )}
                 onBeforeInput={(event) => handleTextBeforeInput(segment.id, event)}
                 onInput={(event) => handleTextInput(segment.id, event.currentTarget)}
                 onFocus={(event) => handleTextFocus(segment.id, event.currentTarget)}
