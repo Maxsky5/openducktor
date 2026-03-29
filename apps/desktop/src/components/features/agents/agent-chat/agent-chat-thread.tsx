@@ -95,8 +95,11 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const {
     windowedRows,
     windowStart,
+    windowEnd,
     isNearBottom,
     isNearTop,
+    topSentinelRef,
+    bottomSentinelRef,
     scrollToBottom,
     scrollToTop,
     scrollToBottomOnSend,
@@ -217,17 +220,25 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
           {session ? (
             rows.length > 0 ? (
               hideTranscriptWhileHydrating ? null : (
-                windowedRows.map((row) => (
-                  <AgentChatThreadMotionRow
-                    key={row.key}
-                    row={row}
-                    sessionRole={sessionRole}
-                    sessionSelectedModel={sessionSelectedModel}
-                    sessionAgentColors={sessionAgentColors}
-                    sessionWorkingDirectory={sessionWorkingDirectory}
-                    resolveRowRef={resolveRowRef}
-                  />
-                ))
+                <>
+                  {windowStart > 0 ? <div ref={topSentinelRef} className="h-px" /> : null}
+
+                  {windowedRows.map((row) => (
+                    <AgentChatThreadMotionRow
+                      key={row.key}
+                      row={row}
+                      sessionRole={sessionRole}
+                      sessionSelectedModel={sessionSelectedModel}
+                      sessionAgentColors={sessionAgentColors}
+                      sessionWorkingDirectory={sessionWorkingDirectory}
+                      resolveRowRef={resolveRowRef}
+                    />
+                  ))}
+
+                  {windowEnd < rows.length - 1 ? (
+                    <div ref={bottomSentinelRef} className="h-px" />
+                  ) : null}
+                </>
               )
             ) : session.messages.length === 0 && !hideTranscriptWhileHydrating ? (
               <div className="rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">

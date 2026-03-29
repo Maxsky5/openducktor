@@ -19,7 +19,6 @@ type UseAgentChatWindowRangeControllerInput = {
   isSessionViewLoading: boolean;
   isSessionWorking: boolean;
   isPinnedToBottomRef: MutableRefObject<boolean>;
-  isHistoryNavigationRef: MutableRefObject<boolean>;
   shouldAutoFollowLiveUpdatesRef: MutableRefObject<boolean>;
   suppressSentinelsRef: MutableRefObject<boolean>;
   isUpdatingRef: MutableRefObject<boolean>;
@@ -46,7 +45,6 @@ export function useAgentChatWindowRangeController({
   isSessionViewLoading,
   isSessionWorking,
   isPinnedToBottomRef,
-  isHistoryNavigationRef,
   shouldAutoFollowLiveUpdatesRef,
   suppressSentinelsRef,
   isUpdatingRef,
@@ -208,14 +206,12 @@ export function useAgentChatWindowRangeController({
         captureScrollAnchor(anchorRow.key);
       }
     }
-    isHistoryNavigationRef.current = true;
     suppressSentinelsForWindowShift();
     releaseWindowUpdateLock();
     setWindowRangeState(nextRange);
   }, [
     captureScrollAnchor,
     captureViewportAnchor,
-    isHistoryNavigationRef,
     isUpdatingRef,
     releaseWindowUpdateLock,
     rowCount,
@@ -259,7 +255,6 @@ export function useAgentChatWindowRangeController({
           captureScrollAnchor(anchorRow.key);
         }
       }
-      isHistoryNavigationRef.current = true;
     }
     suppressSentinelsForWindowShift();
     if (reachedBottom) {
@@ -275,7 +270,6 @@ export function useAgentChatWindowRangeController({
   }, [
     captureScrollAnchor,
     captureViewportAnchor,
-    isHistoryNavigationRef,
     isUpdatingRef,
     releaseWindowUpdateLock,
     rowCount,
