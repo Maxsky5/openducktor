@@ -142,11 +142,13 @@ export function useAgentStudioPageModels({
     isSessionHistoryHydrating: core.isSessionHistoryHydrating,
     contextSwitchVersion: core.contextSwitchVersion,
   });
+  const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
 
   const { messagesContainerRef, composerFormRef, composerTextareaRef, resizeComposerTextarea } =
     useAgentChatLayout({
       input: composer.input,
       activeSessionId: threadSession?.sessionId ?? null,
+      syncBottomAfterComposerLayoutRef,
     });
 
   const scrollToBottomOnSendRef = useRef<(() => void) | null>(null);
@@ -291,6 +293,7 @@ export function useAgentStudioPageModels({
     onToggleTodoPanel: handleToggleTodoPanel,
     messagesContainerRef,
     scrollToBottomOnSendRef,
+    syncBottomAfterComposerLayoutRef,
   });
 
   const agentChatComposerModel = useAgentStudioComposerModel({

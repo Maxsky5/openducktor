@@ -131,6 +131,7 @@ type AgentChatThreadModelArgs = {
   onToggleTodoPanel: () => void;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   scrollToBottomOnSendRef: React.MutableRefObject<(() => void) | null>;
+  syncBottomAfterComposerLayoutRef: React.MutableRefObject<(() => void) | null>;
 };
 
 type AgentChatComposerModelArgs = {
@@ -195,6 +196,7 @@ export const buildAgentChatThreadModel = (
   onToggleTodoPanel: args.onToggleTodoPanel,
   messagesContainerRef: args.messagesContainerRef,
   scrollToBottomOnSendRef: args.scrollToBottomOnSendRef,
+  syncBottomAfterComposerLayoutRef: args.syncBottomAfterComposerLayoutRef,
 });
 
 export const buildAgentChatComposerModel = (

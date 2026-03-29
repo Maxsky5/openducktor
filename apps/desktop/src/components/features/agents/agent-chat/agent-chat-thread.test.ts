@@ -44,6 +44,7 @@ const buildBaseModel = () => ({
   onToggleTodoPanel: () => {},
   messagesContainerRef: createRef<HTMLDivElement>(),
   scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
+  syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
 });
 
 const flush = async (): Promise<void> => {

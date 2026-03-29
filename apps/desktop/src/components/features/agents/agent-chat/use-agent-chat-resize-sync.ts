@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 type UseAgentChatResizeSyncInput = {
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
-  syncBottomIfPinned: () => void;
+  syncBottomIfPinned: (options?: { forcePinned?: boolean }) => void;
 };
 
 export function useAgentChatResizeSync({

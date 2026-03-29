@@ -16,11 +16,12 @@ type UseAgentChatScrollControllerResult = {
   isNearTop: boolean;
   isAutoFollowingToBottom: boolean;
   isPinnedToBottomRef: MutableRefObject<boolean>;
+  userScrollIntentVersionRef: MutableRefObject<number>;
   suppressSentinelsRef: MutableRefObject<boolean>;
   isUpdatingRef: MutableRefObject<boolean>;
   hasPendingScrollRequest: () => boolean;
   captureScrollAnchor: (rowKey: string) => void;
-  syncBottomIfPinned: () => void;
+  syncBottomIfPinned: (options?: { forcePinned?: boolean }) => void;
   scrollToBottomOnSend: () => void;
   requestWindowScroll: (request: PendingScrollRequest) => void;
   applyPendingScrollRequest: () => void;
@@ -36,6 +37,7 @@ export function useAgentChatScrollController({
   const [isNearTop, setIsNearTop] = useState(initialWindow.start === 0);
   const [isAutoFollowingToBottom, setIsAutoFollowingToBottom] = useState(false);
   const isPinnedToBottomRef = useRef(true);
+  const userScrollIntentVersionRef = useRef(0);
   const pendingScrollRequestRef = useRef<PendingScrollRequest | null>(null);
   const suppressSentinelsRef = useRef(false);
   const sentinelUnlockFrameRef = useRef<number | null>(null);
@@ -222,40 +224,44 @@ export function useAgentChatScrollController({
     });
   }, [animateScrollTo, cancelScrollAnimation, messagesContainerRef]);
 
-  const syncBottomIfPinned = useCallback(() => {
-    const container = messagesContainerRef.current;
-    if (!container) {
-      return;
-    }
+  const syncBottomIfPinned = useCallback(
+    (options?: { forcePinned?: boolean }) => {
+      const container = messagesContainerRef.current;
+      if (!container) {
+        return;
+      }
+      const forcePinned = options?.forcePinned === true;
 
-    if (pendingScrollRequestRef.current?.target === "bottom" || suppressSentinelsRef.current) {
-      return;
-    }
+      if (pendingScrollRequestRef.current?.target === "bottom" || suppressSentinelsRef.current) {
+        return;
+      }
 
-    if (isUpdatingRef.current && !isPinnedToBottomRef.current) {
-      return;
-    }
+      if (isUpdatingRef.current && !isPinnedToBottomRef.current && !forcePinned) {
+        return;
+      }
 
-    if (isBottomAutoFollowAnimationRef.current) {
+      if (isBottomAutoFollowAnimationRef.current) {
+        setIsNearBottom(true);
+        return;
+      }
+
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      const isWithinBottomThreshold = distanceFromBottom <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
+      if (!forcePinned && !isPinnedToBottomRef.current && !isWithinBottomThreshold) {
+        return;
+      }
+
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: "auto",
+      });
+      isPinnedToBottomRef.current = true;
       setIsNearBottom(true);
-      return;
-    }
-
-    const distanceFromBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight;
-    const isWithinBottomThreshold = distanceFromBottom <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
-    if (!isPinnedToBottomRef.current && !isWithinBottomThreshold) {
-      return;
-    }
-
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: "auto",
-    });
-    isPinnedToBottomRef.current = true;
-    setIsNearBottom(true);
-    setIsNearTop(false);
-  }, [messagesContainerRef]);
+      setIsNearTop(false);
+    },
+    [messagesContainerRef],
+  );
 
   const setBottomAnchoredState = useCallback((windowStart: number) => {
     setIsNearBottom(true);
@@ -317,6 +323,10 @@ export function useAgentChatScrollController({
       return;
     }
 
+    const registerUserScrollIntent = () => {
+      userScrollIntentVersionRef.current += 1;
+    };
+
     const handleScroll = () => {
       const previousScrollTop = lastScrollTopRef.current;
       const nextScrollTop = container.scrollTop;
@@ -343,8 +353,14 @@ export function useAgentChatScrollController({
     };
 
     handleScroll();
+    container.addEventListener("wheel", registerUserScrollIntent, { passive: true });
+    container.addEventListener("touchstart", registerUserScrollIntent, { passive: true });
+    container.addEventListener("pointerdown", registerUserScrollIntent, { passive: true });
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
+      container.removeEventListener("wheel", registerUserScrollIntent);
+      container.removeEventListener("touchstart", registerUserScrollIntent);
+      container.removeEventListener("pointerdown", registerUserScrollIntent);
       container.removeEventListener("scroll", handleScroll);
     };
   }, [messagesContainerRef]);
@@ -363,6 +379,7 @@ export function useAgentChatScrollController({
     isNearTop,
     isAutoFollowingToBottom,
     isPinnedToBottomRef,
+    userScrollIntentVersionRef,
     suppressSentinelsRef,
     isUpdatingRef,
     hasPendingScrollRequest: () => pendingScrollRequestRef.current !== null,

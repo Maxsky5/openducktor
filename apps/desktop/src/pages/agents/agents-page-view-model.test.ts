@@ -296,6 +296,7 @@ describe("agents-page-view-model", () => {
       onToggleTodoPanel,
       messagesContainerRef: { current: null },
       scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
+      syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
       input: "message",
       isReadOnly: false,
       readOnlyReason: null,
