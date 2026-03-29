@@ -3,7 +3,7 @@ import { createQueryClient } from "@/lib/query-client";
 import { host } from "@/state/operations/host";
 import {
   documentQueryKeys,
-  fetchTaskDocumentFromQuery,
+  fetchFreshTaskDocumentFromQuery,
   refreshCachedTaskDocumentQueries,
 } from "./documents";
 
@@ -17,13 +17,20 @@ describe("documents query helpers", () => {
     mock.restore();
   });
 
-  test("fetchTaskDocumentFromQuery performs a force-fresh authoritative read and updates the cache", async () => {
+  test("fetchFreshTaskDocumentFromQuery performs an authoritative read and updates the cache", async () => {
     const queryClient = createQueryClient();
-    const specGet = mock(async () =>
+    const taskDocumentGet = mock(async () =>
+      createDocumentPayload("# Spec V1", "2026-03-28T09:00:00.000Z"),
+    );
+    const taskDocumentGetFresh = mock(async () =>
       createDocumentPayload("# Spec V2", "2026-03-28T10:00:00.000Z"),
     );
-    const originalSpecGet = host.specGet;
-    host.specGet = specGet;
+    const original = {
+      taskDocumentGet: host.taskDocumentGet,
+      taskDocumentGetFresh: host.taskDocumentGetFresh,
+    };
+    host.taskDocumentGet = taskDocumentGet;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
 
     queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
       markdown: "# Spec V1",
@@ -31,33 +38,38 @@ describe("documents query helpers", () => {
     });
 
     try {
-      const document = await fetchTaskDocumentFromQuery(queryClient, "/repo", "task-1", "spec", {
-        forceFresh: true,
-      });
+      const document = await fetchFreshTaskDocumentFromQuery(
+        queryClient,
+        "/repo",
+        "task-1",
+        "spec",
+      );
 
       expect(document).toEqual({
         markdown: "# Spec V2",
         updatedAt: "2026-03-28T10:00:00.000Z",
       });
-      expect(specGet).toHaveBeenCalledWith("/repo", "task-1", { forceFresh: true });
+      expect(taskDocumentGet).not.toHaveBeenCalled();
+      expect(taskDocumentGetFresh).toHaveBeenCalledWith("/repo", "task-1", "spec");
       expect(
         queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
           documentQueryKeys.spec("/repo", "task-1"),
         ),
       ).toEqual({ markdown: "# Spec V2", updatedAt: "2026-03-28T10:00:00.000Z" });
     } finally {
-      host.specGet = originalSpecGet;
+      host.taskDocumentGet = original.taskDocumentGet;
+      host.taskDocumentGetFresh = original.taskDocumentGetFresh;
       queryClient.clear();
     }
   });
 
-  test("fetchTaskDocumentFromQuery preserves newer optimistic content when the incoming payload is older", async () => {
+  test("fetchFreshTaskDocumentFromQuery preserves newer optimistic content when the incoming payload is older", async () => {
     const queryClient = createQueryClient();
-    const specGet = mock(async () =>
+    const taskDocumentGetFresh = mock(async () =>
       createDocumentPayload("# Spec V1", "2026-03-28T09:00:00.000Z"),
     );
-    const originalSpecGet = host.specGet;
-    host.specGet = specGet;
+    const originalTaskDocumentGetFresh = host.taskDocumentGetFresh;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
 
     queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
       markdown: "# Optimistic spec",
@@ -65,9 +77,12 @@ describe("documents query helpers", () => {
     });
 
     try {
-      const document = await fetchTaskDocumentFromQuery(queryClient, "/repo", "task-1", "spec", {
-        forceFresh: true,
-      });
+      const document = await fetchFreshTaskDocumentFromQuery(
+        queryClient,
+        "/repo",
+        "task-1",
+        "spec",
+      );
 
       expect(document).toEqual({
         markdown: "# Optimistic spec",
@@ -79,30 +94,30 @@ describe("documents query helpers", () => {
         ),
       ).toEqual({ markdown: "# Optimistic spec", updatedAt: "2026-03-28T10:00:00.000Z" });
     } finally {
-      host.specGet = originalSpecGet;
+      host.taskDocumentGetFresh = originalTaskDocumentGetFresh;
       queryClient.clear();
     }
   });
 
   test("refreshCachedTaskDocumentQueries force-refreshes only cached sections", async () => {
     const queryClient = createQueryClient();
-    const specGet = mock(async () =>
-      createDocumentPayload("# Spec V2", "2026-03-28T10:00:00.000Z"),
+    const taskDocumentGet = mock(async () =>
+      createDocumentPayload("# Cached", "2026-03-28T09:00:00.000Z"),
     );
-    const planGet = mock(async () =>
-      createDocumentPayload("# Plan V2", "2026-03-28T10:05:00.000Z"),
-    );
-    const qaGetReport = mock(async () =>
-      createDocumentPayload("# QA V2", "2026-03-28T10:10:00.000Z"),
+    const taskDocumentGetFresh = mock(
+      async (_repoPath: string, _taskId: string, section: string) => {
+        if (section === "plan") {
+          return createDocumentPayload("# Plan V2", "2026-03-28T10:05:00.000Z");
+        }
+        return createDocumentPayload("# QA V2", "2026-03-28T10:10:00.000Z");
+      },
     );
     const original = {
-      specGet: host.specGet,
-      planGet: host.planGet,
-      qaGetReport: host.qaGetReport,
+      taskDocumentGet: host.taskDocumentGet,
+      taskDocumentGetFresh: host.taskDocumentGetFresh,
     };
-    host.specGet = specGet;
-    host.planGet = planGet;
-    host.qaGetReport = qaGetReport;
+    host.taskDocumentGet = taskDocumentGet;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
 
     queryClient.setQueryData(documentQueryKeys.plan("/repo", "task-1"), {
       markdown: "# Plan V1",
@@ -116,9 +131,9 @@ describe("documents query helpers", () => {
     try {
       await refreshCachedTaskDocumentQueries(queryClient, "/repo", "task-1");
 
-      expect(specGet).not.toHaveBeenCalled();
-      expect(planGet).toHaveBeenCalledWith("/repo", "task-1", { forceFresh: true });
-      expect(qaGetReport).toHaveBeenCalledWith("/repo", "task-1", { forceFresh: true });
+      expect(taskDocumentGet).not.toHaveBeenCalled();
+      expect(taskDocumentGetFresh).toHaveBeenCalledWith("/repo", "task-1", "plan");
+      expect(taskDocumentGetFresh).toHaveBeenCalledWith("/repo", "task-1", "qa");
       expect(
         queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
           documentQueryKeys.plan("/repo", "task-1"),
@@ -130,9 +145,8 @@ describe("documents query helpers", () => {
         ),
       ).toEqual({ markdown: "# QA V2", updatedAt: "2026-03-28T10:10:00.000Z" });
     } finally {
-      host.specGet = original.specGet;
-      host.planGet = original.planGet;
-      host.qaGetReport = original.qaGetReport;
+      host.taskDocumentGet = original.taskDocumentGet;
+      host.taskDocumentGetFresh = original.taskDocumentGetFresh;
       queryClient.clear();
     }
   });

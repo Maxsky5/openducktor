@@ -1,4 +1,3 @@
-import type { TaskMetadataReadOptions } from "@openducktor/adapters-tauri-host";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import type { TaskDocumentPayload } from "@/types/task-documents";
 import { host } from "../operations/host";
@@ -13,10 +12,7 @@ export type TaskDocument = {
 
 export type TaskDocumentSection = "spec" | "plan" | "qa";
 
-export type TaskDocumentLoader = (
-  taskId: string,
-  options?: TaskMetadataReadOptions,
-) => Promise<TaskDocumentPayload>;
+type TaskDocumentReadMode = "default" | "forceFresh";
 
 export const documentQueryKeys = {
   all: ["task-documents"] as const,
@@ -48,64 +44,37 @@ const loadTaskDocumentFromHost = async (
   repoPath: string,
   taskId: string,
   section: TaskDocumentSection,
-  options?: TaskMetadataReadOptions,
+  mode: TaskDocumentReadMode = "default",
 ): Promise<TaskDocument> => {
-  if (section === "spec") {
-    const spec = await host.specGet(repoPath, taskId, options);
-    return {
-      markdown: spec.markdown,
-      updatedAt: spec.updatedAt,
-    };
-  }
-
-  if (section === "plan") {
-    const plan = await host.planGet(repoPath, taskId, options);
-    return {
-      markdown: plan.markdown,
-      updatedAt: plan.updatedAt,
-    };
-  }
-
-  const report = await host.qaGetReport(repoPath, taskId, options);
-  return {
-    markdown: report.markdown,
-    updatedAt: report.updatedAt,
-  };
+  const readDocument = mode === "forceFresh" ? host.taskDocumentGetFresh : host.taskDocumentGet;
+  return readDocument(repoPath, taskId, section);
 };
 
 const taskDocumentQueryOptions = (repoPath: string, taskId: string, section: TaskDocumentSection) =>
   queryOptions({
     queryKey: documentQueryKeyForSection(repoPath, taskId, section),
-    queryFn: async (): Promise<TaskDocument> => loadTaskDocumentFromHost(repoPath, taskId, section),
+    queryFn: async (): Promise<TaskDocument> =>
+      loadTaskDocumentFromHost(repoPath, taskId, section, "default"),
     staleTime: TASK_DOCUMENT_STALE_TIME_MS,
   });
 
-const fetchTaskDocumentWithLoader = (
+const fetchTaskDocumentWithMode = (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
   section: TaskDocumentSection,
-  loader: TaskDocumentLoader,
-  options?: TaskMetadataReadOptions,
+  mode: TaskDocumentReadMode,
 ): Promise<TaskDocumentPayload> => {
   const queryKey = documentQueryKeyForSection(repoPath, taskId, section);
-  const forceFresh = options?.forceFresh === true;
   return queryClient.fetchQuery({
     queryKey,
     queryFn: async (): Promise<TaskDocumentPayload> => {
-      const incoming = await loader(taskId, options);
+      const incoming = await loadTaskDocumentFromHost(repoPath, taskId, section, mode);
       const current = queryClient.getQueryData<TaskDocumentPayload>(queryKey);
       return resolveLatestDocumentPayload(current, incoming);
     },
-    staleTime: forceFresh ? 0 : TASK_DOCUMENT_STALE_TIME_MS,
+    staleTime: mode === "forceFresh" ? 0 : TASK_DOCUMENT_STALE_TIME_MS,
   });
-};
-
-const hostDocumentLoaderForSection = (
-  repoPath: string,
-  section: TaskDocumentSection,
-): TaskDocumentLoader => {
-  return (taskId, options) => loadTaskDocumentFromHost(repoPath, taskId, section, options);
 };
 
 export const fetchTaskDocumentFromQuery = (
@@ -113,27 +82,17 @@ export const fetchTaskDocumentFromQuery = (
   repoPath: string,
   taskId: string,
   section: TaskDocumentSection,
-  options?: TaskMetadataReadOptions,
 ): Promise<TaskDocumentPayload> => {
-  return fetchTaskDocumentWithLoader(
-    queryClient,
-    repoPath,
-    taskId,
-    section,
-    hostDocumentLoaderForSection(repoPath, section),
-    options,
-  );
+  return fetchTaskDocumentWithMode(queryClient, repoPath, taskId, section, "default");
 };
 
-export const fetchTaskDocumentFromQueryWithLoader = (
+export const fetchFreshTaskDocumentFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
   section: TaskDocumentSection,
-  loader: TaskDocumentLoader,
-  options?: TaskMetadataReadOptions,
 ): Promise<TaskDocumentPayload> => {
-  return fetchTaskDocumentWithLoader(queryClient, repoPath, taskId, section, loader, options);
+  return fetchTaskDocumentWithMode(queryClient, repoPath, taskId, section, "forceFresh");
 };
 
 const cachedTaskDocumentSections = (
@@ -200,7 +159,7 @@ export const refreshCachedTaskDocumentQueries = async (
   const cachedSections = cachedTaskDocumentSections(queryClient, repoPath, taskId);
   await Promise.all(
     cachedSections.map((section) =>
-      fetchTaskDocumentFromQuery(queryClient, repoPath, taskId, section, { forceFresh: true }),
+      fetchFreshTaskDocumentFromQuery(queryClient, repoPath, taskId, section),
     ),
   );
 };
