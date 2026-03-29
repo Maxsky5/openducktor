@@ -68,6 +68,9 @@ import type {
   RuntimeInstanceSummary,
   RuntimeInstanceSummaryRole,
   SettingsSnapshot,
+  SlashCommandCatalog,
+  SlashCommandDescriptor,
+  SlashCommandSource,
   SoftGuardrails,
   SystemCheck,
   TaskAction,
@@ -226,6 +229,10 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeSupportedScopeValues",
   "runtimeSupportedScopesSchema",
   "runtimeTransportSchema",
+  "slashCommandCatalogSchema",
+  "slashCommandDescriptorSchema",
+  "slashCommandSourceSchema",
+  "slashCommandSourceValues",
   "mandatoryRuntimeCapabilityKeys",
   "optionalRuntimeCapabilityKeys",
   "softGuardrailsSchema",
@@ -323,6 +330,9 @@ type ExportedTypeContract = {
   RunEvent: RunEvent;
   RunState: RunState;
   RunSummary: RunSummary;
+  SlashCommandCatalog: SlashCommandCatalog;
+  SlashCommandDescriptor: SlashCommandDescriptor;
+  SlashCommandSource: SlashCommandSource;
   RuntimeCheck: RuntimeCheck;
   SoftGuardrails: SoftGuardrails;
   SettingsSnapshot: SettingsSnapshot;

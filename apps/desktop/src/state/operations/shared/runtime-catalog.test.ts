@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR, type RunSummary } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import type { AgentModelCatalog, AgentSlashCommandCatalog } from "@openducktor/core";
 import { createRuntimeCatalogOperations } from "./runtime-catalog";
 
 type CatalogDependencies = Parameters<typeof createRuntimeCatalogOperations>[0];
@@ -39,6 +39,19 @@ const catalogFixture: AgentModelCatalog = {
   profiles: [{ id: "build", label: "build", mode: "primary" }],
 };
 
+const slashCommandCatalogFixture: AgentSlashCommandCatalog = {
+  commands: [
+    {
+      id: "review",
+      trigger: "review",
+      title: "review",
+      description: "Review current changes",
+      source: "command",
+      hints: ["$ARGUMENTS"],
+    },
+  ],
+};
+
 const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDependencies => ({
   getRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
   ensureRuntime: async () => runtimeFixture,
@@ -46,6 +59,7 @@ const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDepend
   stopRuntime: async () => ({ ok: true }),
   listRuns: async () => [],
   listAvailableModels: async () => catalogFixture,
+  listAvailableSlashCommands: async () => slashCommandCatalogFixture,
   listAvailableToolIds: async () => ["odt_read_task"],
   getMcpStatus: async () => ({
     openducktor: {
@@ -76,6 +90,27 @@ describe("opencode-catalog", () => {
     );
     expect(ensureRuntime).toHaveBeenCalledWith("opencode", "/tmp/repo");
     expect(listAvailableModels).toHaveBeenCalledWith({
+      runtimeKind: "opencode",
+      runtimeEndpoint: "http://127.0.0.1:4444",
+      workingDirectory: "/tmp/repo/worktree",
+    });
+  });
+
+  test("loads repo slash command catalog from runtime coordinates", async () => {
+    const ensureRuntime = mock(async () => runtimeFixture);
+    const listAvailableSlashCommands = mock(async () => slashCommandCatalogFixture);
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        ensureRuntime,
+        listAvailableSlashCommands,
+      }),
+    );
+
+    await expect(operations.loadRepoRuntimeSlashCommands("/tmp/repo", "opencode")).resolves.toEqual(
+      slashCommandCatalogFixture,
+    );
+    expect(ensureRuntime).toHaveBeenCalledWith("opencode", "/tmp/repo");
+    expect(listAvailableSlashCommands).toHaveBeenCalledWith({
       runtimeKind: "opencode",
       runtimeEndpoint: "http://127.0.0.1:4444",
       workingDirectory: "/tmp/repo/worktree",

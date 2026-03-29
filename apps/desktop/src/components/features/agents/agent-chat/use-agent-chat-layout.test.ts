@@ -99,7 +99,7 @@ describe("use-agent-chat-layout helpers", () => {
     expect(assignedOverflowValues).toEqual([]);
   });
 
-  test("resizeComposerTextareaElement shrinks a non-empty multiline draft using hidden measurement", () => {
+  test("resizeComposerTextareaElement preserves height when the editor already reports the target size", () => {
     const styleState = {
       height: "120px",
       overflowY: "hidden" as "auto" | "hidden",
@@ -174,14 +174,11 @@ describe("use-agent-chat-layout helpers", () => {
     const result = resizeComposerTextareaElement(textarea);
 
     expect(result).toEqual({
-      didHeightChange: true,
+      didHeightChange: false,
       overflowY: "hidden",
     });
-    expect(assignedHeights).toEqual(["44px"]);
-    expect(styleState.height).toBe("44px");
-    expect(measurementClone.style.width).toBe("320px");
-    expect(measurementClone.style.paddingTop).toBe("8px");
-    expect(measurementClone.style.lineHeight).toBe("20px");
+    expect(assignedHeights).toEqual([]);
+    expect(styleState.height).toBe("120px");
   });
 
   test("resizeComposerTextareaElement skips no-op writes for single-line drafts already at min height", () => {

@@ -1,5 +1,5 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import type { AgentModelCatalog, AgentSlashCommandCatalog } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type PropsWithChildren, type ReactElement, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/errors";
@@ -16,11 +16,16 @@ type AppRuntimeProviderProps = PropsWithChildren<{
     repoPath: string,
     runtimeKind: RuntimeKind,
   ) => Promise<AgentModelCatalog>;
+  loadRepoRuntimeSlashCommands: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+  ) => Promise<AgentSlashCommandCatalog>;
 }>;
 
 export function AppRuntimeProvider({
   children,
   loadRepoRuntimeCatalog,
+  loadRepoRuntimeSlashCommands,
 }: AppRuntimeProviderProps): ReactElement {
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -57,9 +62,11 @@ export function AppRuntimeProvider({
         return refreshResult.data ?? [];
       },
       loadRepoRuntimeCatalog,
+      loadRepoRuntimeSlashCommands,
     }),
     [
       loadRepoRuntimeCatalog,
+      loadRepoRuntimeSlashCommands,
       isLoadingRuntimeDefinitions,
       queryClient,
       refetch,

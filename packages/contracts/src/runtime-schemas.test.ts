@@ -25,6 +25,7 @@ import {
   runEventSchema,
   runtimeInstanceSummaryRoleSchema,
   runtimeInstanceSummarySchema,
+  slashCommandCatalogSchema,
   taskCardSchema,
 } from "./index";
 
@@ -585,8 +586,35 @@ describe("runtime schemas", () => {
 
     expect(parsed.runtimeId).toBe("runtime-1");
     expect(parsed.runtimeRoute.endpoint).toBe("http://127.0.0.1:4100");
+    expect(parsed.descriptor.capabilities.supportsSlashCommands).toBe(true);
     expect(parsed.descriptor.readOnlyRoleBlockedTools).toContain("apply_patch");
     expect(parsed.descriptor.readOnlyRoleBlockedTools).not.toContain("bash");
+  });
+
+  test("slash command catalog parses runtime command metadata", () => {
+    const parsed = slashCommandCatalogSchema.parse({
+      commands: [
+        {
+          id: "review",
+          trigger: "review",
+          title: "review",
+          description: "Review changes",
+          source: "command",
+          hints: ["$ARGUMENTS"],
+        },
+      ],
+    });
+
+    expect(parsed.commands).toEqual([
+      {
+        id: "review",
+        trigger: "review",
+        title: "review",
+        description: "Review changes",
+        source: "command",
+        hints: ["$ARGUMENTS"],
+      },
+    ]);
   });
 
   test("agent runtime role and buildContinuationTarget schemas enforce boundaries", () => {

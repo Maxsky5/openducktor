@@ -121,6 +121,7 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
             runtimeDefinitionsError: null,
             refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
             loadRepoRuntimeCatalog: async () => createModalCatalog(),
+            loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
           },
           children,
         }),
@@ -649,10 +650,12 @@ describe("useAgentStudioSessionStartFlow", () => {
       },
       startMode: "fresh" as const,
     });
-    expect(sendAgentMessage).toHaveBeenCalledWith(
-      "session-build-rework",
-      kickoffPromptForScenario("build", "build_after_qa_rejected", "task-1"),
-    );
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-build-rework", [
+      {
+        kind: "text",
+        text: kickoffPromptForScenario("build", "build_after_qa_rejected", "task-1"),
+      },
+    ]);
     expect(updateCalls).toContainEqual({
       task: "task-1",
       session: "session-build-rework",
@@ -823,10 +826,9 @@ describe("useAgentStudioSessionStartFlow", () => {
       sessionId: "session-build-older",
     });
     expect(startAgentSession).not.toHaveBeenCalled();
-    expect(sendAgentMessage).toHaveBeenCalledWith(
-      "session-build-older",
-      "Apply the requested human changes.",
-    );
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-build-older", [
+      { kind: "text", text: "Apply the requested human changes." },
+    ]);
     expect(updateCalls).toContainEqual({
       task: "task-1",
       session: "session-build-older",

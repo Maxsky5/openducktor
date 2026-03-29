@@ -395,7 +395,7 @@ describe("use-agent-orchestrator-operations", () => {
         }
 
         await harness.run(async () => {
-          await harness.getLatest().sendAgentMessage(sessionId, "hello");
+          await harness.getLatest().sendAgentMessage(sessionId, [{ kind: "text", text: "hello" }]);
         });
 
         expect(subscribeCalls).toBeGreaterThan(0);
@@ -600,9 +600,9 @@ describe("use-agent-orchestrator-operations", () => {
         });
 
         await harness.run(async () => {
-          await expect(harness.getLatest().sendAgentMessage("session-1", "hello")).rejects.toThrow(
-            "Role 'build' is unavailable for task 'task-1' in status 'open'.",
-          );
+          await expect(
+            harness.getLatest().sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]),
+          ).rejects.toThrow("Role 'build' is unavailable for task 'task-1' in status 'open'.");
         });
 
         expect(sendCalls).toBe(0);
@@ -1326,7 +1326,9 @@ describe("use-agent-orchestrator-operations", () => {
         });
 
         await harness.run(async () => {
-          await harness.getLatest().sendAgentMessage("session-1", "prime");
+          await harness
+            .getLatest()
+            .sendAgentMessage("session-1", [{ kind: "text", text: "prime" }]);
         });
 
         if (!eventHandler) {
@@ -1378,7 +1380,9 @@ describe("use-agent-orchestrator-operations", () => {
         expect(pendingSession?.pendingQuestions).toHaveLength(1);
 
         await harness.run(async () => {
-          await harness.getLatest().sendAgentMessage("session-1", "hello");
+          await harness
+            .getLatest()
+            .sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
         });
 
         const recoveredSession = harness
@@ -1581,9 +1585,9 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.updateArgs({ tasks: [unavailableTask] });
 
         await harness.run(async () => {
-          await expect(harness.getLatest().sendAgentMessage("session-1", "hello")).rejects.toThrow(
-            "Role 'build' is unavailable for task 'task-1' in status 'open'.",
-          );
+          await expect(
+            harness.getLatest().sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]),
+          ).rejects.toThrow("Role 'build' is unavailable for task 'task-1' in status 'open'.");
         });
 
         expect(sendCalls).toBe(0);

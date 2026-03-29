@@ -1,4 +1,8 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
+import {
+  createComposerDraft,
+  createEmptyComposerDraft,
+} from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -135,6 +139,11 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     modelSelection: {
       selectedModelSelection: null,
       isSelectionCatalogLoading: false,
+      supportsSlashCommands: true,
+      slashCommandCatalog: { commands: [] },
+      slashCommands: [],
+      slashCommandsError: null,
+      isSlashCommandsLoading: false,
       agentOptions: [{ value: "spec", label: "Spec" }],
       modelOptions: [],
       modelGroups: [],
@@ -157,8 +166,8 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       ...overrides.chatSettings,
     },
     composer: {
-      input: "",
-      setInput: () => {},
+      composerDraft: createEmptyComposerDraft(),
+      setComposerDraft: () => {},
       ...overrides.composer,
     },
   };
@@ -180,7 +189,7 @@ describe("useAgentStudioPageModels", () => {
           activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
         },
         composer: {
-          input: "message",
+          composerDraft: createComposerDraft("message"),
         },
         readiness: {
           refreshChecks: onRefreshChecks,
@@ -469,7 +478,7 @@ describe("useAgentStudioPageModels", () => {
         sessionsForTask: [session],
       },
       composer: {
-        input: "",
+        composerDraft: createEmptyComposerDraft(),
       },
     });
     const harness = createHookHarness(baseProps);
@@ -483,14 +492,16 @@ describe("useAgentStudioPageModels", () => {
       ...baseProps,
       composer: {
         ...baseProps.composer,
-        input: "draft update",
+        composerDraft: createComposerDraft("draft update"),
       },
     });
 
     const nextState = harness.getLatest();
     expect(nextState.agentChatModel.thread).toBe(initialThreadModel);
     expect(nextState.agentChatModel.composer).not.toBe(initialComposerModel);
-    expect(nextState.agentChatModel.composer.input).toBe("draft update");
+    expect(nextState.agentChatModel.composer.draft.segments).toEqual([
+      expect.objectContaining({ kind: "text", text: "draft update" }),
+    ]);
 
     await harness.unmount();
   });
@@ -503,7 +514,7 @@ describe("useAgentStudioPageModels", () => {
         sessionsForTask: [session],
       },
       composer: {
-        input: "draft",
+        composerDraft: createComposerDraft("draft"),
       },
     });
     const harness = createHookHarness(baseProps);
@@ -533,7 +544,7 @@ describe("useAgentStudioPageModels", () => {
         sessionsForTask: [session],
       },
       composer: {
-        input: "draft",
+        composerDraft: createComposerDraft("draft"),
       },
       chatSettings: {
         showThinkingMessages: false,
@@ -569,7 +580,7 @@ describe("useAgentStudioPageModels", () => {
         sessionsForTask: [session],
       },
       composer: {
-        input: "draft",
+        composerDraft: createComposerDraft("draft"),
       },
     });
     const harness = createHookHarness(baseProps);
@@ -626,7 +637,7 @@ describe("useAgentStudioPageModels", () => {
         sessionsForTask: [initialSession],
       },
       composer: {
-        input: "draft",
+        composerDraft: createComposerDraft("draft"),
       },
       sessionActions: {
         isSessionWorking: true,
@@ -672,7 +683,7 @@ describe("useAgentStudioPageModels", () => {
         sessionsForTask: [initialSession],
       },
       composer: {
-        input: "draft",
+        composerDraft: createComposerDraft("draft"),
       },
       sessionActions: {
         isSessionWorking: true,

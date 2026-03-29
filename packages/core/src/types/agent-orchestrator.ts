@@ -5,6 +5,8 @@ import type {
   AgentSessionStartMode as ContractsAgentSessionStartMode,
   AgentToolName as ContractsAgentToolName,
   KnownGitProviderId as ContractsKnownGitProviderId,
+  SlashCommandCatalog as ContractsSlashCommandCatalog,
+  SlashCommandDescriptor as ContractsSlashCommandDescriptor,
   RuntimeCapabilities,
   RuntimeDescriptor,
   RuntimeKind,
@@ -83,6 +85,18 @@ export type AgentModelCatalog = {
 export type AgentRuntimeCapabilities = RuntimeCapabilities;
 export type AgentRuntimeConnection = RuntimeTransport;
 export type AgentRuntimeDefinition = RuntimeDescriptor;
+export type AgentSlashCommand = ContractsSlashCommandDescriptor;
+export type AgentSlashCommandCatalog = ContractsSlashCommandCatalog;
+
+export type AgentUserMessagePart =
+  | {
+      kind: "text";
+      text: string;
+    }
+  | {
+      kind: "slash_command";
+      command: AgentSlashCommand;
+    };
 
 export type AgentSessionTodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
 export type AgentSessionTodoPriority = "high" | "medium" | "low";

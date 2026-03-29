@@ -1,3 +1,4 @@
+import type { AgentUserMessagePart } from "@openducktor/core";
 import { toast } from "sonner";
 import { NEW_BUILDER_SESSION_TARGET } from "@/features/human-review-feedback/human-review-feedback-state";
 import type { HumanReviewFeedbackState } from "@/features/human-review-feedback/human-review-feedback-types";
@@ -14,7 +15,7 @@ type ConfirmHumanReviewFeedbackFlowInput = {
   }) => Promise<void>;
   openSessionStartModal: (intent: KanbanSessionStartIntent) => void;
   openAgentStudioSession: (taskId: string, session: AgentSessionState) => void;
-  sendAgentMessage: (sessionId: string, message: string) => Promise<void>;
+  sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
   onDismiss: () => void;
 };
 
@@ -79,7 +80,9 @@ export const confirmHumanReviewFeedbackFlow = async ({
   }
 
   try {
-    await sendAgentMessage(existingBuilderSession.sessionId, trimmedMessage);
+    await sendAgentMessage(existingBuilderSession.sessionId, [
+      { kind: "text", text: trimmedMessage },
+    ]);
   } catch {
     toast.error("Changes requested, but feedback message failed.");
   }

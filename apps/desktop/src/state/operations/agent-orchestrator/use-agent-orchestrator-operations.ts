@@ -11,6 +11,8 @@ import type {
   AgentModelSelection,
   AgentRuntimeConnection,
   AgentSessionTodoItem,
+  AgentSlashCommandCatalog,
+  AgentUserMessagePart,
 } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { appQueryClient } from "@/lib/query-client";
@@ -85,9 +87,13 @@ type UseAgentOrchestratorOperationsResult = {
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<AgentSessionTodoItem[]>;
+  readSessionSlashCommands: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+  ) => Promise<AgentSlashCommandCatalog>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
   startAgentSession: (input: StartAgentSessionInput) => Promise<string>;
-  sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
+  sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
   stopAgentSession: (sessionId: string) => Promise<void>;
   updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
   replyAgentPermission: (
@@ -231,6 +237,15 @@ export function useAgentOrchestratorOperations({
         runtimeKind,
         runtimeConnection,
         externalSessionId,
+      }),
+    [agentEngine],
+  );
+
+  const readSessionSlashCommands = useCallback(
+    (runtimeKind: RuntimeKind, runtimeConnection: AgentRuntimeConnection) =>
+      agentEngine.listAvailableSlashCommands({
+        runtimeKind,
+        runtimeConnection,
       }),
     [agentEngine],
   );
@@ -527,6 +542,7 @@ export function useAgentOrchestratorOperations({
         loadAgentSessions,
         readSessionModelCatalog,
         readSessionTodos,
+        readSessionSlashCommands,
         removeAgentSessions,
         sessionActions,
       }),
@@ -536,6 +552,7 @@ export function useAgentOrchestratorOperations({
       loadAgentSessions,
       readSessionModelCatalog,
       readSessionTodos,
+      readSessionSlashCommands,
       removeAgentSessions,
       sessionActions,
     ],

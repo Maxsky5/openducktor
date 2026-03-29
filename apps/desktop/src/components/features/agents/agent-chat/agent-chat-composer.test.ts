@@ -2,16 +2,19 @@ import { describe, expect, test } from "bun:test";
 import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AgentChatComposer } from "./agent-chat-composer";
-import { buildModelSelection } from "./agent-chat-test-fixtures";
+import {
+  buildModelSelection,
+  createComposerDraft,
+  createEmptyComposerDraft,
+} from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
   taskId: "task-1",
   agentStudioReady: true,
   isReadOnly: false,
   readOnlyReason: null,
-  busySendBlockedReason: null,
-  input: "hello",
-  onInputChange: () => {},
+  draft: createComposerDraft("hello"),
+  onDraftChange: () => {},
   onSend: () => {},
   isSending: false,
   isStarting: false,
@@ -21,6 +24,11 @@ const buildModel = () => ({
   isModelSelectionPending: false,
   selectedModelSelection: buildModelSelection(),
   isSelectionCatalogLoading: false,
+  supportsSlashCommands: true,
+  slashCommandCatalog: { commands: [] },
+  slashCommands: [],
+  slashCommandsError: null,
+  isSlashCommandsLoading: false,
   agentOptions: [{ value: "Hephaestus (Deep Agent)", label: "Hephaestus (Deep Agent)" }],
   modelOptions: [{ value: "openai/gpt-5.3-codex", label: "GPT-5.3 Codex" }],
   modelGroups: [
@@ -44,8 +52,8 @@ const buildModel = () => ({
   canStopSession: true,
   onStopSession: () => {},
   composerFormRef: createRef<HTMLFormElement>(),
-  composerTextareaRef: createRef<HTMLTextAreaElement>(),
-  onComposerTextareaInput: () => {},
+  composerEditorRef: createRef<HTMLDivElement>(),
+  onComposerEditorInput: () => {},
   scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
 });
 
@@ -57,7 +65,6 @@ describe("AgentChatComposer", () => {
       }),
     );
 
-    expect(html).toContain("@ for files/agents; / for commands; ! for shell");
     expect(html).toContain("Send message");
     expect(html).toContain("Stop session");
     expect(html).toContain("22.5%");
@@ -99,7 +106,7 @@ describe("AgentChatComposer", () => {
       createElement(AgentChatComposer, {
         model: {
           ...buildModel(),
-          input: "   ",
+          draft: createComposerDraft("   "),
         },
       }),
     );
@@ -143,6 +150,7 @@ describe("AgentChatComposer", () => {
           ...buildModel(),
           isSessionWorking: true,
           isWaitingInput: true,
+          draft: createEmptyComposerDraft(),
           waitingInputPlaceholder: "Answer the pending question above to continue",
         },
       }),
@@ -152,9 +160,6 @@ describe("AgentChatComposer", () => {
     expect(html).toContain("border-warning-border");
     expect(html).toContain("Answer the pending question above to continue");
     expect(html).toContain('aria-label="Send message" disabled');
-    expect(html).toContain(
-      'placeholder="Answer the pending question above to continue" disabled=""',
-    );
     expect(html).not.toContain('class="odt-border-ray"');
     expect(html).not.toContain("border-l-4");
     expect(html).not.toContain("border-left-color:#d97706");
@@ -166,6 +171,7 @@ describe("AgentChatComposer", () => {
         model: {
           ...buildModel(),
           isWaitingInput: true,
+          draft: createEmptyComposerDraft(),
           waitingInputPlaceholder: "Respond to the pending permission request above to continue",
         },
       }),
@@ -181,6 +187,7 @@ describe("AgentChatComposer", () => {
         model: {
           ...buildModel(),
           isReadOnly: true,
+          draft: createEmptyComposerDraft(),
           readOnlyReason: "Planner is unavailable for this task right now.",
         },
       }),

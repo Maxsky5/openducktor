@@ -32,6 +32,7 @@ const runtimeFixture: RuntimeInstanceSummary = {
       supportsQueuedUserMessages: true,
       supportsQuestionRequests: true,
       supportsSessionFork: true,
+      supportsSlashCommands: true,
       supportsTodos: true,
       supportsVariants: true,
     },

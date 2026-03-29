@@ -2,116 +2,53 @@ import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { CHAT_SCROLL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
 
-export const COMPOSER_TEXTAREA_MIN_HEIGHT_PX = 44;
-export const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 220;
+export const COMPOSER_EDITOR_MIN_HEIGHT_PX = 44;
+export const COMPOSER_EDITOR_MAX_HEIGHT_PX = 220;
+export const COMPOSER_TEXTAREA_MIN_HEIGHT_PX = COMPOSER_EDITOR_MIN_HEIGHT_PX;
+export const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = COMPOSER_EDITOR_MAX_HEIGHT_PX;
 
-export const computeComposerTextareaLayout = (
+export const computeComposerEditorLayout = (
   scrollHeight: number,
 ): {
   heightPx: number;
   overflowY: "auto" | "hidden";
 } => {
   const heightPx = Math.min(
-    COMPOSER_TEXTAREA_MAX_HEIGHT_PX,
-    Math.max(COMPOSER_TEXTAREA_MIN_HEIGHT_PX, scrollHeight),
+    COMPOSER_EDITOR_MAX_HEIGHT_PX,
+    Math.max(COMPOSER_EDITOR_MIN_HEIGHT_PX, scrollHeight),
   );
   return {
     heightPx,
-    overflowY: scrollHeight > COMPOSER_TEXTAREA_MAX_HEIGHT_PX ? "auto" : "hidden",
+    overflowY: scrollHeight > COMPOSER_EDITOR_MAX_HEIGHT_PX ? "auto" : "hidden",
   };
 };
 
-const readComposerTextareaHeight = (textarea: HTMLTextAreaElement): number => {
-  const inlineHeight = Number.parseFloat(textarea.style.height);
+export const computeComposerTextareaLayout = computeComposerEditorLayout;
+
+const readComposerEditorHeight = (editor: HTMLDivElement): number => {
+  const inlineHeight = Number.parseFloat(editor.style.height);
   if (Number.isFinite(inlineHeight) && inlineHeight > 0) {
     return inlineHeight;
   }
-  return textarea.getBoundingClientRect().height;
+  return editor.getBoundingClientRect().height;
 };
 
-const CLONE_MEASUREMENT_STYLE_PROPERTIES = [
-  "boxSizing",
-  "fontFamily",
-  "fontSize",
-  "fontStyle",
-  "fontWeight",
-  "letterSpacing",
-  "lineHeight",
-  "paddingTop",
-  "paddingRight",
-  "paddingBottom",
-  "paddingLeft",
-  "textIndent",
-  "textTransform",
-  "whiteSpace",
-  "wordBreak",
-  "wordSpacing",
-  "overflowWrap",
-  "borderTopWidth",
-  "borderRightWidth",
-  "borderBottomWidth",
-  "borderLeftWidth",
-] as const satisfies ReadonlyArray<keyof CSSStyleDeclaration>;
-
-const measureComposerTextareaScrollHeight = (textarea: HTMLTextAreaElement): number => {
-  const ownerDocument = textarea.ownerDocument;
-  const body = ownerDocument?.body;
-  if (!ownerDocument || !body || typeof textarea.cloneNode !== "function") {
-    return textarea.scrollHeight;
-  }
-
-  const clone = textarea.cloneNode(false) as HTMLTextAreaElement;
-  const getComputedStyleFn =
-    ownerDocument.defaultView?.getComputedStyle ?? globalThis.getComputedStyle;
-  if (typeof getComputedStyleFn === "function") {
-    const computedStyle = getComputedStyleFn(textarea);
-    for (const property of CLONE_MEASUREMENT_STYLE_PROPERTIES) {
-      clone.style[property] = computedStyle[property];
-    }
-  }
-
-  clone.value = textarea.value;
-  clone.rows = textarea.rows;
-  clone.setAttribute("aria-hidden", "true");
-  clone.setAttribute("tabindex", "-1");
-
-  const width = textarea.getBoundingClientRect().width;
-  clone.style.position = "absolute";
-  clone.style.top = "0";
-  clone.style.left = "-9999px";
-  clone.style.height = "0px";
-  clone.style.minHeight = "0px";
-  clone.style.maxHeight = "none";
-  clone.style.overflowY = "hidden";
-  clone.style.visibility = "hidden";
-  clone.style.pointerEvents = "none";
-  clone.style.zIndex = "-1";
-  if (width > 0) {
-    clone.style.width = `${width}px`;
-  }
-
-  body.appendChild(clone);
-  const measuredScrollHeight = clone.scrollHeight;
-  clone.remove();
-  return measuredScrollHeight;
-};
-
-export const resizeComposerTextareaElement = (
-  textarea: HTMLTextAreaElement,
+export const resizeComposerEditorElement = (
+  editor: HTMLDivElement,
+  serializedDraftText: string,
 ): {
   didHeightChange: boolean;
   overflowY: "auto" | "hidden";
 } => {
-  const currentHeight = readComposerTextareaHeight(textarea);
-  const isEmptyDraft = textarea.value.length === 0;
-  if (isEmptyDraft) {
-    const nextHeight = COMPOSER_TEXTAREA_MIN_HEIGHT_PX;
+  const currentHeight = readComposerEditorHeight(editor);
+  if (serializedDraftText.length === 0) {
+    const nextHeight = COMPOSER_EDITOR_MIN_HEIGHT_PX;
     const didHeightChange = Math.abs(currentHeight - nextHeight) > 0.5;
     if (didHeightChange) {
-      textarea.style.height = `${nextHeight}px`;
+      editor.style.height = `${nextHeight}px`;
     }
-    if (textarea.style.overflowY !== "hidden") {
-      textarea.style.overflowY = "hidden";
+    if (editor.style.overflowY !== "hidden") {
+      editor.style.overflowY = "hidden";
     }
     return {
       didHeightChange,
@@ -119,24 +56,39 @@ export const resizeComposerTextareaElement = (
     };
   }
 
-  const layout = computeComposerTextareaLayout(measureComposerTextareaScrollHeight(textarea));
-
+  const layout = computeComposerEditorLayout(editor.scrollHeight);
   const didHeightChange = Math.abs(currentHeight - layout.heightPx) > 0.5;
-  const nextInlineHeight = `${layout.heightPx}px`;
   if (didHeightChange) {
-    textarea.style.height = nextInlineHeight;
+    editor.style.height = `${layout.heightPx}px`;
   }
-  if (textarea.style.overflowY !== layout.overflowY) {
-    textarea.style.overflowY = layout.overflowY;
+  if (editor.style.overflowY !== layout.overflowY) {
+    editor.style.overflowY = layout.overflowY;
   }
+
   return {
     didHeightChange,
     overflowY: layout.overflowY,
   };
 };
 
+export const resizeComposerTextareaElement = (
+  editor: HTMLDivElement | HTMLTextAreaElement,
+  serializedDraftText?: string,
+): {
+  didHeightChange: boolean;
+  overflowY: "auto" | "hidden";
+} =>
+  resizeComposerEditorElement(
+    editor as HTMLDivElement,
+    serializedDraftText ??
+      (editor as unknown as { value?: string }).value ??
+      editor.textContent ??
+      "",
+  );
+
 type UseAgentChatLayoutInput = {
-  input: string;
+  serializedDraftText?: string;
+  input?: string;
   activeSessionId: string | null;
   syncBottomAfterComposerLayoutRef?: MutableRefObject<(() => void) | null>;
 };
@@ -144,25 +96,29 @@ type UseAgentChatLayoutInput = {
 type UseAgentChatLayoutResult = {
   messagesContainerRef: React.RefObject<HTMLDivElement | null>;
   composerFormRef: React.RefObject<HTMLFormElement | null>;
+  composerEditorRef: React.RefObject<HTMLDivElement | null>;
+  resizeComposerEditor: () => void;
   composerTextareaRef: React.RefObject<HTMLTextAreaElement | null>;
   resizeComposerTextarea: () => void;
 };
 
 export const useAgentChatLayout = ({
+  serializedDraftText,
   input,
   activeSessionId,
   syncBottomAfterComposerLayoutRef,
 }: UseAgentChatLayoutInput): UseAgentChatLayoutResult => {
+  const resolvedSerializedDraftText = serializedDraftText ?? input ?? "";
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
-  const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const composerEditorRef = useRef<HTMLDivElement | null>(null);
   const resizeFrameIdRef = useRef<number | null>(null);
-  const previousInputRef = useRef(input);
-  const didInitializeTextareaForSessionRef = useRef(false);
+  const previousDraftTextRef = useRef(resolvedSerializedDraftText);
+  const didInitializeComposerForSessionRef = useRef(false);
 
-  const flushComposerTextareaResize = useCallback((): void => {
-    const textarea = composerTextareaRef.current;
-    if (!textarea) {
+  const flushComposerEditorResize = useCallback((): void => {
+    const editor = composerEditorRef.current;
+    if (!editor) {
       return;
     }
 
@@ -172,16 +128,16 @@ export const useAgentChatLayout = ({
         ? container.scrollHeight - container.scrollTop - container.clientHeight <=
           CHAT_SCROLL_EDGE_THRESHOLD_PX
         : false;
-    const { didHeightChange } = resizeComposerTextareaElement(textarea);
+    const { didHeightChange } = resizeComposerEditorElement(editor, resolvedSerializedDraftText);
     if (wasNearBottom && didHeightChange) {
       syncBottomAfterComposerLayoutRef?.current?.();
     }
-  }, [syncBottomAfterComposerLayoutRef]);
+  }, [resolvedSerializedDraftText, syncBottomAfterComposerLayoutRef]);
 
-  const resizeComposerTextarea = useCallback((): void => {
+  const resizeComposerEditor = useCallback((): void => {
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
     if (typeof requestAnimationFrameFn !== "function") {
-      flushComposerTextareaResize();
+      flushComposerEditorResize();
       return;
     }
 
@@ -191,12 +147,12 @@ export const useAgentChatLayout = ({
 
     resizeFrameIdRef.current = requestAnimationFrameFn(() => {
       resizeFrameIdRef.current = null;
-      flushComposerTextareaResize();
+      flushComposerEditorResize();
     });
-  }, [flushComposerTextareaResize]);
+  }, [flushComposerEditorResize]);
 
   useLayoutEffect(() => {
-    didInitializeTextareaForSessionRef.current = false;
+    didInitializeComposerForSessionRef.current = false;
     const hasActiveSession = activeSessionId !== null;
     if (hasActiveSession && resizeFrameIdRef.current !== null) {
       const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;
@@ -206,30 +162,30 @@ export const useAgentChatLayout = ({
       resizeFrameIdRef.current = null;
     }
 
-    flushComposerTextareaResize();
-    resizeComposerTextarea();
-  }, [activeSessionId, flushComposerTextareaResize, resizeComposerTextarea]);
+    flushComposerEditorResize();
+    resizeComposerEditor();
+  }, [activeSessionId, flushComposerEditorResize, resizeComposerEditor]);
 
   useLayoutEffect(() => {
-    if (didInitializeTextareaForSessionRef.current) {
+    if (didInitializeComposerForSessionRef.current) {
       return;
     }
-    if (!composerTextareaRef.current) {
+    if (!composerEditorRef.current) {
       return;
     }
 
-    didInitializeTextareaForSessionRef.current = true;
-    flushComposerTextareaResize();
-    resizeComposerTextarea();
+    didInitializeComposerForSessionRef.current = true;
+    flushComposerEditorResize();
+    resizeComposerEditor();
   });
 
   useEffect(() => {
-    if (previousInputRef.current === input) {
+    if (previousDraftTextRef.current === resolvedSerializedDraftText) {
       return;
     }
-    previousInputRef.current = input;
-    resizeComposerTextarea();
-  }, [input, resizeComposerTextarea]);
+    previousDraftTextRef.current = resolvedSerializedDraftText;
+    resizeComposerEditor();
+  }, [resolvedSerializedDraftText, resizeComposerEditor]);
 
   useEffect(() => {
     return () => {
@@ -247,7 +203,10 @@ export const useAgentChatLayout = ({
   return {
     messagesContainerRef,
     composerFormRef,
-    composerTextareaRef,
-    resizeComposerTextarea,
+    composerEditorRef,
+    resizeComposerEditor,
+    composerTextareaRef:
+      composerEditorRef as unknown as React.RefObject<HTMLTextAreaElement | null>,
+    resizeComposerTextarea: resizeComposerEditor,
   };
 };

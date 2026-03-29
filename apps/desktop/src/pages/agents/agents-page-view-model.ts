@@ -11,6 +11,7 @@ import type {
   AgentStudioWorkspaceDocument,
   AgentStudioWorkspaceSidebarModel,
 } from "@/components/features/agents";
+import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -139,9 +140,8 @@ type AgentChatComposerModelArgs = {
   agentStudioReady: boolean;
   isReadOnly: boolean;
   readOnlyReason: string | null;
-  busySendBlockedReason: string | null;
-  input: string;
-  onInputChange: (value: string) => void;
+  draft: AgentChatComposerDraft;
+  onDraftChange: (draft: AgentChatComposerDraft) => void;
   onSend: () => void;
   isSending: boolean;
   isStarting: boolean;
@@ -151,6 +151,11 @@ type AgentChatComposerModelArgs = {
   isModelSelectionPending: boolean;
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;
+  supportsSlashCommands: boolean;
+  slashCommandCatalog: AgentChatModel["composer"]["slashCommandCatalog"];
+  slashCommands: AgentChatModel["composer"]["slashCommands"];
+  slashCommandsError: string | null;
+  isSlashCommandsLoading: boolean;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];
@@ -163,8 +168,8 @@ type AgentChatComposerModelArgs = {
   canStopSession: boolean;
   onStopSession: () => void;
   composerFormRef: RefObject<HTMLFormElement | null>;
-  composerTextareaRef: RefObject<HTMLTextAreaElement | null>;
-  onComposerTextareaInput: () => void;
+  composerEditorRef: RefObject<HTMLDivElement | null>;
+  onComposerEditorInput: () => void;
   scrollToBottomOnSendRef: AgentChatModel["composer"]["scrollToBottomOnSendRef"];
 };
 
@@ -207,9 +212,8 @@ export const buildAgentChatComposerModel = (
   agentStudioReady: args.agentStudioReady,
   isReadOnly: args.isReadOnly,
   readOnlyReason: args.readOnlyReason,
-  busySendBlockedReason: args.busySendBlockedReason,
-  input: args.input,
-  onInputChange: args.onInputChange,
+  draft: args.draft,
+  onDraftChange: args.onDraftChange,
   onSend: args.onSend,
   isSending: args.isSending,
   isStarting: args.isStarting,
@@ -219,6 +223,11 @@ export const buildAgentChatComposerModel = (
   isModelSelectionPending: args.isModelSelectionPending,
   selectedModelSelection: args.selectedModelSelection,
   isSelectionCatalogLoading: args.isSelectionCatalogLoading,
+  supportsSlashCommands: args.supportsSlashCommands,
+  slashCommandCatalog: args.slashCommandCatalog,
+  slashCommands: args.slashCommands,
+  slashCommandsError: args.slashCommandsError,
+  isSlashCommandsLoading: args.isSlashCommandsLoading,
   agentOptions: args.agentOptions,
   modelOptions: args.modelOptions,
   modelGroups: args.modelGroups,
@@ -231,8 +240,8 @@ export const buildAgentChatComposerModel = (
   canStopSession: args.canStopSession,
   onStopSession: args.onStopSession,
   composerFormRef: args.composerFormRef,
-  composerTextareaRef: args.composerTextareaRef,
-  onComposerTextareaInput: args.onComposerTextareaInput,
+  composerEditorRef: args.composerEditorRef,
+  onComposerEditorInput: args.onComposerEditorInput,
   scrollToBottomOnSendRef: args.scrollToBottomOnSendRef,
 });
 

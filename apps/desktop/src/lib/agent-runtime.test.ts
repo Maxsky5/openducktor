@@ -48,6 +48,7 @@ describe("agent-runtime capability policies", () => {
   test("accepts optional capability combinations without extra invariants", () => {
     const descriptor = withCapabilities({
       supportsProfiles: true,
+      supportsSlashCommands: true,
       supportsMcpStatus: false,
     });
 

@@ -1029,7 +1029,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.sendAgentMessage("session-1", " hello ");
+      await actions.sendAgentMessage("session-1", [{ kind: "text", text: " hello " }]);
       expect(sendCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.status).toBe("running");
       expect(sessionsRef.current["session-1"]?.messages).toHaveLength(0);
@@ -1117,7 +1117,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.sendAgentMessage("session-1", "hello");
+      await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
 
       expect(callOrder).toEqual(["hydrate", "send"]);
       expect(sessionsRef.current["session-1"]?.messages.map((message) => message.content)).toEqual([
@@ -1205,7 +1205,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.sendAgentMessage("session-1", "hello");
+      await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
 
       expect(sendCalls).toBe(0);
       expect(sessionsRef.current["session-1"]?.status).toBe("idle");
@@ -1278,7 +1278,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.sendAgentMessage("session-1", " hello ");
+      await actions.sendAgentMessage("session-1", [{ kind: "text", text: " hello " }]);
       expect(sendCalls).toBe(0);
       expect(sessionsRef.current["session-1"]?.messages).toHaveLength(0);
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(1);
@@ -1354,9 +1354,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await expect(actions.sendAgentMessage("session-1", "hello")).rejects.toThrow(
-        "Role 'build' is unavailable for task 'task-1' in status 'open'.",
-      );
+      await expect(
+        actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]),
+      ).rejects.toThrow("Role 'build' is unavailable for task 'task-1' in status 'open'.");
       expect(sendCalls).toBe(0);
     } finally {
       adapter.hasSession = originalHasSession;
@@ -1494,7 +1494,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.sendAgentMessage("session-1", "hello");
+      await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
       expect(sessionsRef.current["session-1"]?.status).toBe("error");
       expect(
         sessionsRef.current["session-1"]?.messages.some((message) =>

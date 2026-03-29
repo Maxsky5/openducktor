@@ -1,8 +1,14 @@
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type {
+  AgentModelSelection,
+  AgentRole,
+  AgentSlashCommand,
+  AgentSlashCommandCatalog,
+} from "@openducktor/core";
 import type { LucideIcon } from "lucide-react";
 import type { MutableRefObject, RefObject } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
 
 export type AgentRoleOption = {
   role: AgentRole;
@@ -46,9 +52,8 @@ export type AgentChatComposerModel = {
   agentStudioReady: boolean;
   isReadOnly: boolean;
   readOnlyReason: string | null;
-  busySendBlockedReason: string | null;
-  input: string;
-  onInputChange: (value: string) => void;
+  draft: AgentChatComposerDraft;
+  onDraftChange: (draft: AgentChatComposerDraft) => void;
   onSend: () => void;
   isSending: boolean;
   isStarting: boolean;
@@ -58,6 +63,11 @@ export type AgentChatComposerModel = {
   isModelSelectionPending: boolean;
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;
+  supportsSlashCommands: boolean;
+  slashCommandCatalog: AgentSlashCommandCatalog | null;
+  slashCommands: AgentSlashCommand[];
+  slashCommandsError: string | null;
+  isSlashCommandsLoading: boolean;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];
@@ -74,8 +84,8 @@ export type AgentChatComposerModel = {
   canStopSession: boolean;
   onStopSession: () => void;
   composerFormRef: RefObject<HTMLFormElement | null>;
-  composerTextareaRef: RefObject<HTMLTextAreaElement | null>;
-  onComposerTextareaInput: () => void;
+  composerEditorRef: RefObject<HTMLDivElement | null>;
+  onComposerEditorInput: () => void;
   scrollToBottomOnSendRef: MutableRefObject<(() => void) | null>;
 };
 

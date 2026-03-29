@@ -278,7 +278,9 @@ export function useAgentStudioHumanReviewFeedbackFlow({
       }
 
       try {
-        await sendAgentMessage(existingBuilderSession.sessionId, trimmedMessage);
+        await sendAgentMessage(existingBuilderSession.sessionId, [
+          { kind: "text", text: trimmedMessage },
+        ]);
       } catch {
         toast.error("Changes requested, but feedback message failed.");
       }

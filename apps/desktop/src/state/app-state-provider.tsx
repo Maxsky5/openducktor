@@ -47,7 +47,10 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
   );
 
   return (
-    <AppRuntimeProvider loadRepoRuntimeCatalog={runtimeCatalogOperations.loadRepoRuntimeCatalog}>
+    <AppRuntimeProvider
+      loadRepoRuntimeCatalog={runtimeCatalogOperations.loadRepoRuntimeCatalog}
+      loadRepoRuntimeSlashCommands={runtimeCatalogOperations.loadRepoRuntimeSlashCommands}
+    >
       <SpecStateProvider>
         <ChecksStateProvider checkRepoRuntimeHealth={checkRepoRuntimeHealth}>
           <TasksStateProvider>

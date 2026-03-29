@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import { buildAgentStudioPageModelsArgs } from "./use-agent-studio-orchestration-controller";
 
@@ -82,6 +83,11 @@ const baseArgs: BuildArgs = {
   modelSelection: {
     selectedModelSelection: null,
     isSelectionCatalogLoading: false,
+    supportsSlashCommands: true,
+    slashCommandCatalog: { commands: [] },
+    slashCommands: [],
+    slashCommandsError: null,
+    isSlashCommandsLoading: false,
     agentOptions: [],
     modelOptions: [],
     modelGroups: [],
@@ -101,8 +107,8 @@ const baseArgs: BuildArgs = {
     showThinkingMessages: true,
   },
   composer: {
-    input: "hello",
-    setInput: () => {},
+    composerDraft: createComposerDraft("hello"),
+    setComposerDraft: () => {},
   },
 };
 
@@ -120,7 +126,9 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.modelSelection.onSelectModel).toBe(handleSelectModel);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);
     expect(mapped.chatSettings.showThinkingMessages).toBe(true);
-    expect(mapped.composer.input).toBe("hello");
+    expect(mapped.composer.composerDraft.segments).toEqual([
+      expect.objectContaining({ kind: "text", text: "hello" }),
+    ]);
   });
 
   test("derives activeTabValue from tab id, task id, then empty sentinel", () => {

@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { Sparkles } from "lucide-react";
+import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -297,16 +298,20 @@ describe("agents-page-view-model", () => {
       messagesContainerRef: { current: null },
       scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
       syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
-      input: "message",
+      draft: createComposerDraft("message"),
       isReadOnly: false,
       readOnlyReason: null,
-      busySendBlockedReason: null,
-      onInputChange: () => {},
+      onDraftChange: () => {},
       onSend,
       isWaitingInput: false,
       isModelSelectionPending: false,
       selectedModelSelection: null,
       isSelectionCatalogLoading: false,
+      supportsSlashCommands: true,
+      slashCommandCatalog: { commands: [] },
+      slashCommands: [],
+      slashCommandsError: null,
+      isSlashCommandsLoading: false,
       agentOptions: [],
       modelOptions: [],
       modelGroups: [],
@@ -318,8 +323,8 @@ describe("agents-page-view-model", () => {
       canStopSession: true,
       onStopSession,
       composerFormRef: { current: null },
-      composerTextareaRef: { current: null },
-      onComposerTextareaInput: () => {},
+      composerEditorRef: { current: null },
+      onComposerEditorInput: () => {},
     });
 
     expect(model.thread.taskSelected).toBe(false);

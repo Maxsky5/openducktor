@@ -6,6 +6,7 @@ import {
   buildModelSelection,
   buildSession,
   buildTodoItem,
+  createComposerDraft,
   TEST_ROLE_OPTIONS,
 } from "./agent-chat-test-fixtures";
 
@@ -47,9 +48,8 @@ const buildModel = () => ({
     agentStudioReady: true,
     isReadOnly: false,
     readOnlyReason: null,
-    busySendBlockedReason: null,
-    input: "Hi",
-    onInputChange: () => {},
+    draft: createComposerDraft("Hi"),
+    onDraftChange: () => {},
     onSend: () => {},
     isSending: false,
     isStarting: false,
@@ -58,6 +58,11 @@ const buildModel = () => ({
     isModelSelectionPending: false,
     selectedModelSelection: buildModelSelection(),
     isSelectionCatalogLoading: false,
+    supportsSlashCommands: true,
+    slashCommandCatalog: { commands: [] },
+    slashCommands: [],
+    slashCommandsError: null,
+    isSlashCommandsLoading: false,
     agentOptions: [{ value: "Hephaestus (Deep Agent)", label: "Hephaestus (Deep Agent)" }],
     modelOptions: [{ value: "openai/gpt-5.3-codex", label: "GPT-5.3 Codex" }],
     modelGroups: [
@@ -74,8 +79,8 @@ const buildModel = () => ({
     canStopSession: false,
     onStopSession: () => {},
     composerFormRef: createRef<HTMLFormElement>(),
-    composerTextareaRef: createRef<HTMLTextAreaElement>(),
-    onComposerTextareaInput: () => {},
+    composerEditorRef: createRef<HTMLDivElement>(),
+    onComposerEditorInput: () => {},
     scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
   },
 });
@@ -114,7 +119,7 @@ describe("AgentChat", () => {
           },
           composer: {
             ...buildModel().composer,
-            input: "",
+            draft: createComposerDraft(""),
           },
         },
       }),

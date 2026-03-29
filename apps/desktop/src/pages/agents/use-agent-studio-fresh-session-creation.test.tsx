@@ -248,10 +248,9 @@ describe("useAgentStudioFreshSessionCreation", () => {
         sourceSessionId: "session-existing",
       }),
     );
-    expect(sendAgentMessage).toHaveBeenCalledWith(
-      "session-existing",
-      expect.stringContaining("task-1"),
-    );
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+      expect.objectContaining({ kind: "text", text: expect.stringContaining("task-1") }),
+    ]);
 
     await harness.unmount();
   });

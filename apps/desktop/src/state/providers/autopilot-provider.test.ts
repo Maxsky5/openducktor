@@ -105,6 +105,7 @@ const createExecuteArgs = (task: TaskCard) => ({
       profiles: [{ id: "planner", label: "Planner", mode: "primary" }],
     }),
   ),
+  loadRepoRuntimeSlashCommands: mock(async () => ({ commands: [] })),
   resolveBuildContinuationTarget: mock(
     async (): Promise<{ workingDirectory: string } | null> => null,
   ),

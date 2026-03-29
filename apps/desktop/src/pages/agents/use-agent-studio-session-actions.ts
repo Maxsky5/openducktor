@@ -3,6 +3,13 @@ import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor
 import { isAgentKickoffScenario } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
+import {
+  type AgentChatComposerDraft,
+  createEmptyComposerDraft,
+  draftHasMeaningfulContent,
+  draftToSerializedText,
+  draftToUserMessageParts,
+} from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { SessionStartRequestReason } from "@/features/session-start";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
@@ -36,8 +43,8 @@ type UseAgentStudioSessionActionsArgs = {
   isActiveTaskHydrated: boolean;
   selectionForNewSession: AgentModelSelection | null;
   repoSettings: RepoSettingsInput | null;
-  input: string;
-  setInput: (value: string) => void;
+  composerDraft: AgentChatComposerDraft;
+  setComposerDraft: (draft: AgentChatComposerDraft) => void;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
@@ -60,8 +67,8 @@ export function useAgentStudioSessionActions({
   isActiveTaskHydrated,
   selectionForNewSession,
   repoSettings,
-  input,
-  setInput,
+  composerDraft,
+  setComposerDraft,
   startAgentSession,
   sendAgentMessage,
   bootstrapTaskSessions,
@@ -112,8 +119,7 @@ export function useAgentStudioSessionActions({
   const [isSubmittingQuestionByRequestId, setIsSubmittingQuestionByRequestId] = useState<
     Record<string, boolean>
   >({});
-  const latestInputRef = useRef(input);
-  const { runtimeDefinitions } = useRuntimeDefinitionsContext();
+  const latestComposerDraftRef = useRef(composerDraft);
 
   const activeSessionId = activeSession?.sessionId ?? null;
   const activeComposerContextKey = buildAgentStudioAsyncActivityContextKey({
@@ -171,8 +177,8 @@ export function useAgentStudioSessionActions({
   });
 
   useEffect(() => {
-    latestInputRef.current = input;
-  }, [input]);
+    latestComposerDraftRef.current = composerDraft;
+  }, [composerDraft]);
 
   const onSend = useCallback(async (): Promise<void> => {
     if (isSending || isStarting || !agentStudioReady || isWaitingInput || busySendBlockedReason) {
@@ -185,18 +191,19 @@ export function useAgentStudioSessionActions({
       return;
     }
 
-    const message = input.trim();
-    if (!message || !taskId) {
+    const serializedDraft = draftToSerializedText(composerDraft).trim();
+    if (!draftHasMeaningfulContent(composerDraft) || !serializedDraft || !taskId) {
       return;
     }
 
-    latestInputRef.current = "";
-    setInput("");
+    const submittedDraft = composerDraft;
+    latestComposerDraftRef.current = createEmptyComposerDraft();
+    setComposerDraft(createEmptyComposerDraft());
     const restoreComposerInput = () => {
-      if (latestInputRef.current.trim().length > 0) {
+      if (draftHasMeaningfulContent(latestComposerDraftRef.current)) {
         return;
       }
-      setInput(message);
+      setComposerDraft(submittedDraft);
     };
     const sendContextKeys = new Set<string>();
 
@@ -227,7 +234,7 @@ export function useAgentStudioSessionActions({
         }
         return next;
       });
-      await sendAgentMessage(targetSessionId, message);
+      await sendAgentMessage(targetSessionId, draftToUserMessageParts(submittedDraft));
     } catch (error) {
       restoreComposerInput();
       throw error;
@@ -247,7 +254,7 @@ export function useAgentStudioSessionActions({
     activeComposerContextKey,
     activeSession,
     agentStudioReady,
-    input,
+    composerDraft,
     isSending,
     isStarting,
     isWaitingInput,
@@ -255,7 +262,7 @@ export function useAgentStudioSessionActions({
     role,
     selectedTask,
     sendAgentMessage,
-    setInput,
+    setComposerDraft,
     startSession,
     taskId,
   ]);

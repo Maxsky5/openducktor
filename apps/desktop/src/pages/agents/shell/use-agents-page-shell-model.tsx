@@ -2,6 +2,7 @@ import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import { SessionStartModal } from "@/components/features/agents";
+import { createEmptyComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type {
   ActiveTaskSessionContextByTaskId,
   KanbanTaskSession,
@@ -92,6 +93,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
     readSessionModelCatalog,
+    readSessionSlashCommands,
     readSessionTodos,
     startAgentSession,
     sendAgentMessage,
@@ -103,7 +105,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const navigationType = useNavigationType();
-  const [input, setInput] = useState("");
+  const [composerDraft, setComposerDraft] = useState(createEmptyComposerDraft);
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
   const { runCompletionSignal } = useDelegationEventsContext();
@@ -132,7 +134,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   );
 
   const clearComposerInput = useCallback((): void => {
-    setInput("");
+    setComposerDraft(createEmptyComposerDraft());
   }, []);
 
   const signalContextSwitchIntent = useCallback((): void => {
@@ -238,8 +240,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       contextSwitchVersion,
     },
     readiness,
-    input,
-    setInput,
+    composerDraft,
+    setComposerDraft,
     actions: {
       updateQuery: scheduleQueryUpdate,
       onContextSwitchIntent: signalContextSwitchIntent,
@@ -248,6 +250,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       sendAgentMessage,
       stopAgentSession,
       updateAgentSessionModel,
+      readSessionSlashCommands,
       bootstrapTaskSessions,
       hydrateRequestedTaskSessionHistory,
       humanRequestChangesTask,

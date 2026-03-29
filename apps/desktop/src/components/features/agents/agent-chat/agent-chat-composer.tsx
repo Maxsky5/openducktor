@@ -3,9 +3,10 @@ import { type ReactElement, useMemo } from "react";
 import { BorderRay } from "@/components/ui/border-ray";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
-import { Textarea } from "@/components/ui/textarea";
 import { resolveAgentAccentColor } from "../agent-accent-color";
 import type { AgentChatComposerModel } from "./agent-chat.types";
+import { draftHasMeaningfulContent } from "./agent-chat-composer-draft";
+import { AgentChatComposerEditor } from "./agent-chat-composer-editor";
 import { AgentContextUsageIndicator } from "./agent-context-usage-indicator";
 
 export function AgentChatComposer({ model }: { model: AgentChatComposerModel }): ReactElement {
@@ -14,9 +15,8 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     agentStudioReady,
     isReadOnly,
     readOnlyReason,
-    busySendBlockedReason,
-    input,
-    onInputChange,
+    draft,
+    onDraftChange,
     onSend,
     isSending,
     isStarting,
@@ -26,6 +26,10 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     isModelSelectionPending,
     selectedModelSelection,
     isSelectionCatalogLoading,
+    supportsSlashCommands,
+    slashCommands,
+    slashCommandsError,
+    isSlashCommandsLoading,
     agentOptions,
     modelOptions,
     modelGroups,
@@ -38,8 +42,8 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     canStopSession,
     onStopSession,
     composerFormRef,
-    composerTextareaRef,
-    onComposerTextareaInput,
+    composerEditorRef,
+    onComposerEditorInput,
   } = model;
 
   const sendDisabled =
@@ -50,7 +54,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     isModelSelectionPending ||
     isReadOnly ||
     !taskId ||
-    input.trim().length === 0 ||
+    !draftHasMeaningfulContent(draft) ||
     !agentStudioReady;
 
   const selectorDisabled =
@@ -117,21 +121,18 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
                 : undefined
             }
           >
-            <Textarea
-              ref={composerTextareaRef}
-              rows={1}
+            <AgentChatComposerEditor
+              draft={draft}
+              onDraftChange={onDraftChange}
               placeholder={composerPlaceholder}
-              value={input}
-              className="!min-h-0 h-11 max-h-[220px] resize-none overflow-y-hidden border-0 bg-transparent px-3 py-2.5 text-[15px] leading-6 shadow-none focus-visible:ring-0"
               disabled={isComposerInputDisabled}
-              onChange={(event) => onInputChange(event.currentTarget.value)}
-              onInput={onComposerTextareaInput}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  handleSubmit();
-                }
-              }}
+              editorRef={composerEditorRef}
+              onEditorInput={onComposerEditorInput}
+              onSend={handleSubmit}
+              supportsSlashCommands={supportsSlashCommands}
+              slashCommands={slashCommands}
+              slashCommandsError={slashCommandsError}
+              isSlashCommandsLoading={isSlashCommandsLoading}
             />
 
             {composerHelperText ? (

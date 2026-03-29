@@ -2,6 +2,10 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
+import {
+  type AgentChatComposerDraft,
+  draftToSerializedText,
+} from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { useAgentChatLayout } from "@/components/features/agents/agent-chat/use-agent-chat-layout";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
@@ -79,6 +83,11 @@ type AgentStudioReadinessContext = {
 type AgentStudioModelSelectionContext = {
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;
+  supportsSlashCommands: boolean;
+  slashCommandCatalog: AgentChatModel["composer"]["slashCommandCatalog"];
+  slashCommands: AgentChatModel["composer"]["slashCommands"];
+  slashCommandsError: string | null;
+  isSlashCommandsLoading: boolean;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];
@@ -97,8 +106,8 @@ type AgentStudioPermissionContext = {
 };
 
 type AgentStudioComposerContext = {
-  input: string;
-  setInput: (value: string) => void;
+  composerDraft: AgentChatComposerDraft;
+  setComposerDraft: (draft: AgentChatComposerDraft) => void;
 };
 
 type AgentStudioChatSettingsContext = {
@@ -145,9 +154,14 @@ export function useAgentStudioPageModels({
   });
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
 
-  const { messagesContainerRef, composerFormRef, composerTextareaRef, resizeComposerTextarea } =
+  const serializedComposerDraft = useMemo(
+    () => draftToSerializedText(composer.composerDraft),
+    [composer.composerDraft],
+  );
+
+  const { messagesContainerRef, composerFormRef, composerEditorRef, resizeComposerEditor } =
     useAgentChatLayout({
-      input: composer.input,
+      serializedDraftText: serializedComposerDraft,
       activeSessionId: threadSession?.sessionId ?? null,
       syncBottomAfterComposerLayoutRef,
     });
@@ -308,14 +322,19 @@ export function useAgentStudioPageModels({
     agentStudioReady: readiness.agentStudioReady,
     selectedRoleAvailable,
     selectedRoleReadOnlyReason,
-    input: composer.input,
-    setInput: composer.setInput,
+    draft: composer.composerDraft,
+    setDraft: composer.setComposerDraft,
     onSend: sessionActions.onSend,
     isSending: sessionActions.isSending,
     isStarting: sessionActions.isStarting,
     chatContextUsage,
     selectedModelSelection: modelSelection.selectedModelSelection,
     isSelectionCatalogLoading: modelSelection.isSelectionCatalogLoading,
+    supportsSlashCommands: modelSelection.supportsSlashCommands,
+    slashCommandCatalog: modelSelection.slashCommandCatalog,
+    slashCommands: modelSelection.slashCommands,
+    slashCommandsError: modelSelection.slashCommandsError,
+    isSlashCommandsLoading: modelSelection.isSlashCommandsLoading,
     agentOptions: modelSelection.agentOptions,
     modelOptions: modelSelection.modelOptions,
     modelGroups: modelSelection.modelGroups,
@@ -325,8 +344,8 @@ export function useAgentStudioPageModels({
     onSelectVariant: modelSelection.onSelectVariant,
     activeSessionAgentColors: modelSelection.activeSessionAgentColors,
     composerFormRef,
-    composerTextareaRef,
-    resizeComposerTextarea,
+    composerEditorRef,
+    resizeComposerEditor,
     scrollToBottomOnSendRef,
   });
 

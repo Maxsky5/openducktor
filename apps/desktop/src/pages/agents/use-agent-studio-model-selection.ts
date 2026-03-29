@@ -1,5 +1,11 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentModelSelection,
+  AgentRole,
+  AgentRuntimeConnection,
+  AgentSlashCommandCatalog,
+} from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -11,7 +17,11 @@ import {
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
+import { sessionSlashCommandsQueryOptions } from "@/state/queries/agent-session-runtime";
+import {
+  repoRuntimeCatalogQueryOptions,
+  repoRuntimeSlashCommandsQueryOptions,
+} from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -36,12 +46,25 @@ type UseAgentStudioModelSelectionArgs = {
   repoSettings: RepoSettingsInput | null;
   updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
   loadCatalog?: (repoPath: string, runtimeKind: RuntimeKind) => Promise<AgentModelCatalog>;
+  loadSlashCommands?: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+  ) => Promise<AgentSlashCommandCatalog>;
+  readSessionSlashCommands?: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+  ) => Promise<AgentSlashCommandCatalog>;
 };
 
 type AgentStudioModelSelectionState = {
   selectionForNewSession: AgentModelSelection | null;
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;
+  supportsSlashCommands: boolean;
+  slashCommandCatalog: AgentSlashCommandCatalog | null;
+  slashCommands: AgentSlashCommandCatalog["commands"];
+  slashCommandsError: string | null;
+  isSlashCommandsLoading: boolean;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ReturnType<typeof toModelGroupsByProvider>;
@@ -60,6 +83,29 @@ const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
   qa: false,
 });
 
+const toRuntimeQueryInput = (
+  session: AgentSessionState | null,
+  fallbackRuntimeKind: RuntimeKind,
+): {
+  runtimeKind: RuntimeKind;
+  runtimeConnection: AgentRuntimeConnection;
+} | null => {
+  const runtimeKind =
+    session?.runtimeKind ?? session?.selectedModel?.runtimeKind ?? fallbackRuntimeKind;
+  const runtimeEndpoint = session?.runtimeEndpoint.trim() ?? "";
+  const workingDirectory = session?.workingDirectory.trim() ?? "";
+  if (!session || runtimeEndpoint.length === 0 || workingDirectory.length === 0) {
+    return null;
+  }
+  return {
+    runtimeKind,
+    runtimeConnection: {
+      endpoint: runtimeEndpoint,
+      workingDirectory,
+    },
+  };
+};
+
 export function useAgentStudioModelSelection({
   activeRepo,
   activeSession,
@@ -67,9 +113,13 @@ export function useAgentStudioModelSelection({
   repoSettings,
   updateAgentSessionModel,
   loadCatalog,
+  loadSlashCommands,
+  readSessionSlashCommands,
 }: UseAgentStudioModelSelectionArgs): AgentStudioModelSelectionState {
-  const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
+  const { runtimeDefinitions, loadRepoRuntimeCatalog, loadRepoRuntimeSlashCommands } =
+    useRuntimeDefinitionsContext();
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
+  const loadSlashCommandsForRepo = loadSlashCommands ?? loadRepoRuntimeSlashCommands;
   const previousActiveRepoRef = useRef<string | null>(activeRepo);
   const previousRepoForDefaultsRef = useRef<string | null>(activeRepo);
   const previousRepoSettingsRef = useRef<RepoSettingsInput | null>(repoSettings);
@@ -98,6 +148,16 @@ export function useAgentStudioModelSelection({
     role,
     roleDefaultSelection?.runtimeKind,
   ]);
+  const activeSessionRuntimeQueryInput = useMemo(
+    () => toRuntimeQueryInput(activeSession, composerRuntimeKind),
+    [activeSession, composerRuntimeKind],
+  );
+  const supportsSlashCommands = useMemo(() => {
+    return (
+      runtimeDefinitions.find((definition) => definition.kind === composerRuntimeKind)?.capabilities
+        .supportsSlashCommands ?? false
+    );
+  }, [composerRuntimeKind, runtimeDefinitions]);
 
   useEffect(() => {
     if (previousActiveRepoRef.current === activeRepo) {
@@ -139,6 +199,40 @@ export function useAgentStudioModelSelection({
   });
   const composerCatalog = composerCatalogQuery.data ?? null;
   const isLoadingComposerCatalog = composerCatalogQuery.isLoading;
+  const activeSessionSlashCommandsQuery = useQuery({
+    ...(activeSessionRuntimeQueryInput && readSessionSlashCommands
+      ? sessionSlashCommandsQueryOptions(
+          activeSessionRuntimeQueryInput.runtimeKind,
+          activeSessionRuntimeQueryInput.runtimeConnection,
+          readSessionSlashCommands,
+        )
+      : {
+          queryKey: ["agent-session-runtime", "slash-commands", "", "", ""] as const,
+          queryFn: async (): Promise<AgentSlashCommandCatalog> => {
+            throw new Error("Session slash commands query is disabled.");
+          },
+        }),
+    enabled:
+      supportsSlashCommands &&
+      activeSession != null &&
+      activeSession.status !== "starting" &&
+      activeSessionRuntimeQueryInput !== null &&
+      readSessionSlashCommands !== undefined,
+  });
+  const repoSlashCommandsQuery = useQuery({
+    ...repoRuntimeSlashCommandsQueryOptions(
+      activeRepo ?? "",
+      composerRuntimeKind,
+      loadSlashCommandsForRepo,
+    ),
+    enabled: supportsSlashCommands && activeRepo !== null && activeSession == null,
+    queryFn: async (): Promise<AgentSlashCommandCatalog> => {
+      if (!activeRepo) {
+        throw new Error("No repository selected.");
+      }
+      return loadSlashCommandsForRepo(activeRepo, composerRuntimeKind);
+    },
+  });
   const hasDraftSelectionForActiveRepo = previousActiveRepoRef.current === activeRepo;
   const isDraftSelectionTouched = hasDraftSelectionForActiveRepo
     ? draftSelectionTouchedByRole[role]
@@ -212,6 +306,24 @@ export function useAgentStudioModelSelection({
     return coerceVisibleSelectionToCatalog(composerCatalog, roleDefaultSelection);
   }, [activeSession, composerCatalog, isAwaitingRepoSettingsForActiveRepo, roleDefaultSelection]);
   const selectionCatalog = activeSession?.modelCatalog ?? composerCatalog;
+  const slashCommandCatalog = activeSession
+    ? (activeSessionSlashCommandsQuery.data ?? null)
+    : (repoSlashCommandsQuery.data ?? null);
+  const slashCommands = slashCommandCatalog?.commands ?? [];
+  const slashCommandsError = supportsSlashCommands
+    ? activeSession
+      ? activeSessionSlashCommandsQuery.error instanceof Error
+        ? activeSessionSlashCommandsQuery.error.message
+        : null
+      : repoSlashCommandsQuery.error instanceof Error
+        ? repoSlashCommandsQuery.error.message
+        : null
+    : null;
+  const isSlashCommandsLoading = supportsSlashCommands
+    ? activeSession
+      ? activeSessionSlashCommandsQuery.isLoading
+      : repoSlashCommandsQuery.isLoading
+    : false;
   const isSelectionCatalogLoading = activeSession
     ? activeSession.isLoadingModelCatalog && !activeSession.modelCatalog && !composerCatalog
     : isLoadingComposerCatalog;
@@ -443,6 +555,11 @@ export function useAgentStudioModelSelection({
     selectionForNewSession,
     selectedModelSelection,
     isSelectionCatalogLoading,
+    supportsSlashCommands,
+    slashCommandCatalog,
+    slashCommands,
+    slashCommandsError,
+    isSlashCommandsLoading,
     agentOptions,
     modelOptions,
     modelGroups,

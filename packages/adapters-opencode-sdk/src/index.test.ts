@@ -632,7 +632,7 @@ describe("OpencodeSdkAdapter", () => {
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "Write and persist spec",
+      parts: [{ kind: "text", text: "Write and persist spec" }],
       model: {
         providerId: "openai",
         modelId: "gpt-5",
@@ -690,7 +690,7 @@ describe("OpencodeSdkAdapter", () => {
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "Recover ids",
+      parts: [{ kind: "text", text: "Recover ids" }],
     });
 
     expect(events.some((event) => event.type === "assistant_part")).toBe(false);
@@ -721,7 +721,7 @@ describe("OpencodeSdkAdapter", () => {
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "Second turn",
+      parts: [{ kind: "text", text: "Second turn" }],
     });
 
     expect(session.hasIdleSinceActivity).toBe(false);
@@ -819,7 +819,7 @@ describe("OpencodeSdkAdapter", () => {
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "Continue",
+      parts: [{ kind: "text", text: "Continue" }],
     });
 
     expect(mock.session.promptCalls).toHaveLength(0);
@@ -851,12 +851,12 @@ describe("OpencodeSdkAdapter", () => {
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "First message",
+      parts: [{ kind: "text", text: "First message" }],
       model: selectedModel,
     });
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "Second message",
+      parts: [{ kind: "text", text: "Second message" }],
       model: selectedModel,
     });
 
@@ -884,7 +884,7 @@ describe("OpencodeSdkAdapter", () => {
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "Use the saved model",
+      parts: [{ kind: "text", text: "Use the saved model" }],
     });
 
     expect(mock.tool.listCalls).toEqual([
@@ -926,7 +926,7 @@ describe("OpencodeSdkAdapter", () => {
     await expect(
       adapter.sendUserMessage({
         sessionId: "session-1",
-        content: "Try again",
+        parts: [{ kind: "text", text: "Try again" }],
       }),
     ).rejects.toThrow(
       "OpenCode request failed: prompt session (429 Too Many Requests): quota exceeded",
@@ -950,7 +950,7 @@ describe("OpencodeSdkAdapter", () => {
     await expect(
       adapter.sendUserMessage({
         sessionId: "session-1",
-        content: "Try again",
+        parts: [{ kind: "text", text: "Try again" }],
       }),
     ).rejects.toThrow("OpenCode request failed: prompt session: socket closed");
   });

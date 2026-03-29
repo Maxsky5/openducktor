@@ -351,6 +351,7 @@ describe("KanbanPage session start modal flow", () => {
         runtimeDefinitionsError: null,
         refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
         loadRepoRuntimeCatalog: loadRepoRuntimeCatalogMock,
+        loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
       }),
     }));
 
@@ -986,10 +987,9 @@ describe("KanbanPage session start modal flow", () => {
       sessionId: "session-build-older",
     });
     expect(startAgentSessionMock).not.toHaveBeenCalled();
-    expect(sendAgentMessageMock).toHaveBeenCalledWith(
-      "session-build-older",
-      "Apply the requested human review changes.",
-    );
+    expect(sendAgentMessageMock).toHaveBeenCalledWith("session-build-older", [
+      { kind: "text", text: "Apply the requested human review changes." },
+    ]);
     expect(latestLocation).toContain("/agents?task=TASK-123");
     expect(latestLocation).toContain("session=session-build-older");
     expect(latestLocation).toContain("agent=build");

@@ -32,6 +32,7 @@ import {
   connectMcpServer,
   getMcpStatus,
   listAvailableModels,
+  listAvailableSlashCommands,
   listAvailableToolIds,
 } from "./catalog-and-mcp";
 import { buildDefaultFactory, nowIso } from "./client-factory";
@@ -412,6 +413,15 @@ export class OpencodeSdkAdapter
     return listAvailableModels(
       this.createClient,
       toRuntimeClientInput(input.runtimeConnection, "list available models"),
+    );
+  }
+
+  async listAvailableSlashCommands(
+    input: import("@openducktor/core").ListAgentSlashCommandsInput,
+  ): Promise<import("@openducktor/core").AgentSlashCommandCatalog> {
+    return listAvailableSlashCommands(
+      this.createClient,
+      toRuntimeClientInput(input.runtimeConnection, "list available slash commands"),
     );
   }
 

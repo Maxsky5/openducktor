@@ -1,12 +1,13 @@
-import type {
-  AgentPendingPermissionRequest,
-  AgentPendingQuestionRequest,
-  AgentSessionHistoryMessage,
-  AgentSessionTodoItem,
-  AgentStreamPart,
-  ReplyPermissionInput,
-  ReplyQuestionInput,
-  SendAgentUserMessageInput,
+import {
+  type AgentPendingPermissionRequest,
+  type AgentPendingQuestionRequest,
+  type AgentSessionHistoryMessage,
+  type AgentSessionTodoItem,
+  type AgentStreamPart,
+  type ReplyPermissionInput,
+  type ReplyQuestionInput,
+  type SendAgentUserMessageInput,
+  serializeAgentUserMessagePartsToText,
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { setSessionActive } from "./event-stream/shared";
@@ -354,6 +355,7 @@ export const sendUserMessage = async (input: {
     input.session.pendingQueuedUserMessages.push(queuedSend);
   }
   const modelInput = normalizeModelInput(model);
+  const serializedPromptText = serializeAgentUserMessagePartsToText(input.request.parts);
   const promptRequest = {
     sessionID: input.session.externalSessionId,
     directory: input.session.input.workingDirectory,
@@ -364,7 +366,7 @@ export const sendUserMessage = async (input: {
     ...(modelInput.variant ? { variant: modelInput.variant } : {}),
     ...(modelInput.agent ? { agent: modelInput.agent } : {}),
     tools: input.tools,
-    parts: [{ type: "text" as const, text: input.request.content }],
+    parts: [{ type: "text" as const, text: serializedPromptText }],
   };
 
   setSessionActive(input.session);

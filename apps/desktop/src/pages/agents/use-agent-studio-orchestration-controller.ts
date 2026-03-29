@@ -2,6 +2,7 @@ import type {
   AgentStudioTaskTabsModel,
   SessionStartModalModel,
 } from "@/components/features/agents";
+import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
@@ -27,8 +28,8 @@ export type AgentStudioOrchestrationReadinessContext = {
 };
 
 type AgentStudioOrchestrationComposerContext = {
-  input: string;
-  setInput: (value: string) => void;
+  composerDraft: AgentChatComposerDraft;
+  setComposerDraft: (draft: AgentChatComposerDraft) => void;
 };
 
 type AgentStudioOrchestrationActionsContext = {
@@ -39,6 +40,7 @@ type AgentStudioOrchestrationActionsContext = {
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   stopAgentSession: AgentStateContextValue["stopAgentSession"];
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
+  readSessionSlashCommands: AgentStateContextValue["readSessionSlashCommands"];
   bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
   hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
@@ -49,8 +51,8 @@ type UseAgentStudioOrchestrationControllerArgs = {
   activeRepo: string | null;
   selection: AgentStudioOrchestrationSelectionContext;
   readiness: AgentStudioOrchestrationReadinessContext;
-  input: string;
-  setInput: (value: string) => void;
+  composerDraft: AgentChatComposerDraft;
+  setComposerDraft: (draft: AgentChatComposerDraft) => void;
   actions: AgentStudioOrchestrationActionsContext;
 };
 
@@ -111,6 +113,11 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   ReturnType<typeof useAgentStudioModelSelection>,
   | "selectedModelSelection"
   | "isSelectionCatalogLoading"
+  | "supportsSlashCommands"
+  | "slashCommandCatalog"
+  | "slashCommands"
+  | "slashCommandsError"
+  | "isSlashCommandsLoading"
   | "agentOptions"
   | "modelOptions"
   | "modelGroups"
@@ -193,8 +200,8 @@ export function useAgentStudioOrchestrationController({
   activeRepo,
   selection,
   readiness,
-  input,
-  setInput,
+  composerDraft,
+  setComposerDraft,
   actions,
 }: UseAgentStudioOrchestrationControllerArgs): UseAgentStudioOrchestrationControllerResult {
   const {
@@ -221,6 +228,7 @@ export function useAgentStudioOrchestrationController({
     sendAgentMessage,
     stopAgentSession,
     updateAgentSessionModel,
+    readSessionSlashCommands,
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
     humanRequestChangesTask,
@@ -243,6 +251,11 @@ export function useAgentStudioOrchestrationController({
     selectionForNewSession,
     selectedModelSelection,
     isSelectionCatalogLoading,
+    supportsSlashCommands,
+    slashCommandCatalog,
+    slashCommands,
+    slashCommandsError,
+    isSlashCommandsLoading,
     agentOptions,
     modelOptions,
     modelGroups,
@@ -258,6 +271,7 @@ export function useAgentStudioOrchestrationController({
     role: viewRole,
     repoSettings,
     updateAgentSessionModel,
+    readSessionSlashCommands,
   });
 
   const {
@@ -291,8 +305,8 @@ export function useAgentStudioOrchestrationController({
     isActiveTaskHydrated,
     selectionForNewSession,
     repoSettings,
-    input,
-    setInput,
+    composerDraft,
+    setComposerDraft,
     startAgentSession,
     sendAgentMessage,
     bootstrapTaskSessions,
@@ -362,6 +376,11 @@ export function useAgentStudioOrchestrationController({
     modelSelection: {
       selectedModelSelection,
       isSelectionCatalogLoading,
+      supportsSlashCommands,
+      slashCommandCatalog,
+      slashCommands,
+      slashCommandsError,
+      isSlashCommandsLoading,
       agentOptions,
       modelOptions,
       modelGroups,
@@ -381,8 +400,8 @@ export function useAgentStudioOrchestrationController({
       showThinkingMessages,
     },
     composer: {
-      input,
-      setInput,
+      composerDraft,
+      setComposerDraft,
     },
   });
 
