@@ -3,7 +3,6 @@ import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import {
   type AgentChatComposerDraft,
-  createEmptyComposerDraft,
   createTextSegment,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { clearAppQueryClient } from "@/lib/query-client";

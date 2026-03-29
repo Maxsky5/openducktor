@@ -147,10 +147,6 @@ const hasCompletedAssistantMessage = (value: unknown): boolean => {
   return typeof time?.completed === "number";
 };
 
-const hasPendingAssistantBoundary = (session: SessionRecord): boolean => {
-  return session.activeAssistantMessageId !== null;
-};
-
 export const loadSessionHistory = async (
   createClient: ClientFactory,
   now: () => string,

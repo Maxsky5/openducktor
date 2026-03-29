@@ -105,7 +105,6 @@ export function AgentChatComposerEditor({
         />
       ) : null}
 
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: editor shell needs click-to-focus behavior for empty token content. */}
       <div
         ref={editorRef}
         className={cn(

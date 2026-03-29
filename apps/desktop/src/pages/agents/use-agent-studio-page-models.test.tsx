@@ -1,8 +1,5 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
-import {
-  createComposerDraft,
-  createEmptyComposerDraft,
-} from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
+import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {

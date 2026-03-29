@@ -306,11 +306,6 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     composerPlaceholder =
       waitingInputPlaceholder ?? "Resolve the pending request above to continue";
   }
-  const composerHelperText =
-    isWaitingInput && waitingInputPlaceholder
-      ? waitingInputPlaceholder
-      : (busySendBlockedReason ?? readOnlyReason);
-
   return (
     <form
       ref={composerFormRef}
