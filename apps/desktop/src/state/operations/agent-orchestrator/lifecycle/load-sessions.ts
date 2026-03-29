@@ -121,7 +121,15 @@ const mergeHydratedMessages = (
       currentMessage.meta.state === "queued";
 
     if (currentIsQueuedUser && !hydratedIsQueuedUser) {
-      return hydratedMessage;
+      const mergedMeta =
+        currentMessage.meta && hydratedMessage.meta
+          ? { ...currentMessage.meta, ...hydratedMessage.meta }
+          : (hydratedMessage.meta ?? currentMessage.meta);
+      return {
+        ...currentMessage,
+        ...hydratedMessage,
+        ...(mergedMeta ? { meta: mergedMeta } : {}),
+      };
     }
 
     return currentMessage;

@@ -270,25 +270,26 @@ export const historyToChatMessages = (
     if (content.length > 0) {
       const isFinalAssistantMessage = isFinalAssistantHistoryMessage(message);
       const assistantDurationMs = assistantDurationFromHistory(message, previousUserTimestampMs);
+      let meta: AgentChatMessage["meta"] | undefined;
+      if (message.role === "assistant") {
+        meta = assistantMessageMeta(
+          sessionContext.role,
+          sessionContext.selectedModel,
+          message.model,
+          isFinalAssistantMessage,
+          isFinalAssistantMessage ? assistantDurationMs : undefined,
+          isFinalAssistantMessage ? message.totalTokens : undefined,
+        );
+      } else if (message.role === "user") {
+        meta = userMessageMeta(message.model, message.state);
+      }
+
       next.push({
         id: message.messageId,
         role: message.role,
         content,
         timestamp: message.timestamp,
-        ...(message.role === "assistant"
-          ? {
-              meta: assistantMessageMeta(
-                sessionContext.role,
-                sessionContext.selectedModel,
-                message.model,
-                isFinalAssistantMessage,
-                isFinalAssistantMessage ? assistantDurationMs : undefined,
-                isFinalAssistantMessage ? message.totalTokens : undefined,
-              ),
-            }
-          : message.role === "user"
-            ? { meta: userMessageMeta(message.model, message.state) }
-            : {}),
+        ...(meta ? { meta } : {}),
       });
     }
 
