@@ -78,6 +78,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     onToggleTodoPanel,
     messagesContainerRef,
     scrollToBottomOnSendRef,
+    syncBottomAfterComposerLayoutRef,
   } = model;
   const isTranscriptLoading = isSessionViewLoading || isSessionHistoryLoading;
   const hideTranscriptWhileHydrating = isSessionHistoryLoading;
@@ -108,6 +109,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     isSessionViewLoading: isTranscriptLoading,
     messagesContainerRef,
     messagesContentRef,
+    syncBottomAfterComposerLayoutRef,
   });
 
   useLayoutEffect(() => {

@@ -116,6 +116,7 @@ type UseAgentStudioThreadModelArgs = {
   onToggleTodoPanel: () => void;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   scrollToBottomOnSendRef: React.MutableRefObject<(() => void) | null>;
+  syncBottomAfterComposerLayoutRef: React.MutableRefObject<(() => void) | null>;
 };
 
 export const useAgentStudioThreadModel = ({
@@ -145,6 +146,7 @@ export const useAgentStudioThreadModel = ({
   onToggleTodoPanel,
   messagesContainerRef,
   scrollToBottomOnSendRef,
+  syncBottomAfterComposerLayoutRef,
 }: UseAgentStudioThreadModelArgs): ReturnType<typeof buildAgentChatThreadModel> => {
   const handleRefreshChecks = useCallback((): void => {
     void refreshChecks();
@@ -190,6 +192,7 @@ export const useAgentStudioThreadModel = ({
         onToggleTodoPanel,
         messagesContainerRef,
         scrollToBottomOnSendRef,
+        syncBottomAfterComposerLayoutRef,
       }),
     [
       activeSessionAgentColors,
@@ -218,6 +221,7 @@ export const useAgentStudioThreadModel = ({
       threadSession,
       todoPanelCollapsed,
       onToggleTodoPanel,
+      syncBottomAfterComposerLayoutRef,
     ],
   );
 };

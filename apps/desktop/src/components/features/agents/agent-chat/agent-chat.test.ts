@@ -40,6 +40,7 @@ const buildModel = () => ({
     onToggleTodoPanel: () => {},
     messagesContainerRef: createRef<HTMLDivElement>(),
     scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
+    syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
   },
   composer: {
     taskId: "task-1",

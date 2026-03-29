@@ -37,6 +37,7 @@ const createHookArgs = (showThinkingMessages = false): HookArgs => ({
   onToggleTodoPanel: () => {},
   messagesContainerRef: createRef<HTMLDivElement>(),
   scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
+  syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
 });
 
 const createHookHarness = (initialProps: HookArgs) =>

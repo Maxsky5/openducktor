@@ -38,6 +38,7 @@ export type AgentChatThreadModel = {
   onToggleTodoPanel: () => void;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   scrollToBottomOnSendRef: MutableRefObject<(() => void) | null>;
+  syncBottomAfterComposerLayoutRef: MutableRefObject<(() => void) | null>;
 };
 
 export type AgentChatComposerModel = {
