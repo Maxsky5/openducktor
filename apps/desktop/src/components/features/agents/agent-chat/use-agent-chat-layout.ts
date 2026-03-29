@@ -29,6 +29,30 @@ const readComposerTextareaHeight = (textarea: HTMLTextAreaElement): number => {
   return textarea.getBoundingClientRect().height;
 };
 
+const CLONE_MEASUREMENT_STYLE_PROPERTIES = [
+  "boxSizing",
+  "fontFamily",
+  "fontSize",
+  "fontStyle",
+  "fontWeight",
+  "letterSpacing",
+  "lineHeight",
+  "paddingTop",
+  "paddingRight",
+  "paddingBottom",
+  "paddingLeft",
+  "textIndent",
+  "textTransform",
+  "whiteSpace",
+  "wordBreak",
+  "wordSpacing",
+  "overflowWrap",
+  "borderTopWidth",
+  "borderRightWidth",
+  "borderBottomWidth",
+  "borderLeftWidth",
+] as const satisfies ReadonlyArray<keyof CSSStyleDeclaration>;
+
 const measureComposerTextareaScrollHeight = (textarea: HTMLTextAreaElement): number => {
   const ownerDocument = textarea.ownerDocument;
   const body = ownerDocument?.body;
@@ -37,15 +61,24 @@ const measureComposerTextareaScrollHeight = (textarea: HTMLTextAreaElement): num
   }
 
   const clone = textarea.cloneNode(false) as HTMLTextAreaElement;
+  const getComputedStyleFn =
+    ownerDocument.defaultView?.getComputedStyle ?? globalThis.getComputedStyle;
+  if (typeof getComputedStyleFn === "function") {
+    const computedStyle = getComputedStyleFn(textarea);
+    for (const property of CLONE_MEASUREMENT_STYLE_PROPERTIES) {
+      clone.style[property] = computedStyle[property];
+    }
+  }
+
   clone.value = textarea.value;
   clone.rows = textarea.rows;
   clone.setAttribute("aria-hidden", "true");
   clone.setAttribute("tabindex", "-1");
 
-  const width = textarea.clientWidth || textarea.getBoundingClientRect().width;
+  const width = textarea.getBoundingClientRect().width;
   clone.style.position = "absolute";
   clone.style.top = "0";
-  clone.style.left = "0";
+  clone.style.left = "-9999px";
   clone.style.height = "0px";
   clone.style.minHeight = "0px";
   clone.style.maxHeight = "none";

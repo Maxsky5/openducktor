@@ -132,12 +132,37 @@ describe("use-agent-chat-layout helpers", () => {
     });
 
     const textarea = {
-      clientWidth: 320,
       cloneNode: () => measurementClone,
-      getBoundingClientRect: () => ({ height: 120 }),
+      getBoundingClientRect: () => ({ height: 120, width: 320 }),
       ownerDocument: {
         body: {
           appendChild: () => {},
+        },
+        defaultView: {
+          getComputedStyle: () =>
+            ({
+              boxSizing: "border-box",
+              fontFamily: "monospace",
+              fontSize: "14px",
+              fontStyle: "normal",
+              fontWeight: "400",
+              letterSpacing: "normal",
+              lineHeight: "20px",
+              paddingTop: "8px",
+              paddingRight: "12px",
+              paddingBottom: "8px",
+              paddingLeft: "12px",
+              textIndent: "0px",
+              textTransform: "none",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              wordSpacing: "0px",
+              overflowWrap: "break-word",
+              borderTopWidth: "1px",
+              borderRightWidth: "1px",
+              borderBottomWidth: "1px",
+              borderLeftWidth: "1px",
+            }) satisfies Partial<CSSStyleDeclaration>,
         },
       },
       style,
@@ -154,6 +179,9 @@ describe("use-agent-chat-layout helpers", () => {
     });
     expect(assignedHeights).toEqual(["44px"]);
     expect(styleState.height).toBe("44px");
+    expect(measurementClone.style.width).toBe("320px");
+    expect(measurementClone.style.paddingTop).toBe("8px");
+    expect(measurementClone.style.lineHeight).toBe("20px");
   });
 
   test("resizeComposerTextareaElement skips no-op writes for single-line drafts already at min height", () => {
@@ -247,145 +275,151 @@ describe("use-agent-chat-layout helpers", () => {
     const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
     const queuedFrameCallbacks: FrameRequestCallback[] = [];
 
-    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      queuedFrameCallbacks.push(callback);
-      return queuedFrameCallbacks.length;
-    }) as typeof requestAnimationFrame;
-    globalThis.cancelAnimationFrame = ((_id: number) => undefined) as typeof cancelAnimationFrame;
+    try {
+      globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+        queuedFrameCallbacks.push(callback);
+        return queuedFrameCallbacks.length;
+      }) as typeof requestAnimationFrame;
+      globalThis.cancelAnimationFrame = ((_id: number) => undefined) as typeof cancelAnimationFrame;
 
-    const harness = createSharedHookHarness(
-      ({ activeSessionId, input }: { activeSessionId: string | null; input: string }) => {
-        return useAgentChatLayout({ activeSessionId, input });
-      },
-      { activeSessionId: "session-1", input: "" },
-    );
+      const harness = createSharedHookHarness(
+        ({ activeSessionId, input }: { activeSessionId: string | null; input: string }) => {
+          return useAgentChatLayout({ activeSessionId, input });
+        },
+        { activeSessionId: "session-1", input: "" },
+      );
 
-    await harness.mount();
+      await harness.mount();
 
-    const state = harness.getLatest() as LayoutHookState;
-    const styleState = {
-      height: "44px",
-      overflowY: "hidden" as const,
-    };
-    const textarea = {
-      getBoundingClientRect: () => ({ height: 44 }),
-      scrollHeight: 120,
-      style: styleState,
-      value: "",
-    } as unknown as HTMLTextAreaElement;
-    state.composerTextareaRef.current = textarea;
+      const state = harness.getLatest() as LayoutHookState;
+      const styleState = {
+        height: "44px",
+        overflowY: "hidden" as const,
+      };
+      const textarea = {
+        getBoundingClientRect: () => ({ height: 44 }),
+        scrollHeight: 120,
+        style: styleState,
+        value: "",
+      } as unknown as HTMLTextAreaElement;
+      state.composerTextareaRef.current = textarea;
 
-    const pendingInitFrames = queuedFrameCallbacks.splice(0);
-    for (const callback of pendingInitFrames) {
-      callback(0);
+      const pendingInitFrames = queuedFrameCallbacks.splice(0);
+      for (const callback of pendingInitFrames) {
+        callback(0);
+      }
+
+      queuedFrameCallbacks.length = 0;
+      textarea.value = "line one\nline two";
+      await harness.update({ activeSessionId: "session-1", input: "line one\nline two" });
+
+      expect(queuedFrameCallbacks).toHaveLength(1);
+      const firstFrame = queuedFrameCallbacks.shift();
+      if (!firstFrame) {
+        throw new Error("Expected queued frame callback");
+      }
+      firstFrame(0);
+      expect(styleState.height).toBe("120px");
+
+      queuedFrameCallbacks.length = 0;
+      await harness.update({ activeSessionId: "session-1", input: "line one\nline two" });
+      expect(queuedFrameCallbacks).toHaveLength(0);
+
+      Object.assign(textarea, {
+        value: "",
+        scrollHeight: 20,
+      });
+      await harness.update({ activeSessionId: "session-1", input: "" });
+      expect(queuedFrameCallbacks).toHaveLength(1);
+
+      const secondFrame = queuedFrameCallbacks.shift();
+      if (!secondFrame) {
+        throw new Error("Expected queued frame callback");
+      }
+      secondFrame(16);
+      expect(styleState.height).toBe("44px");
+
+      await harness.unmount();
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
     }
-
-    queuedFrameCallbacks.length = 0;
-    textarea.value = "line one\nline two";
-    await harness.update({ activeSessionId: "session-1", input: "line one\nline two" });
-
-    expect(queuedFrameCallbacks).toHaveLength(1);
-    const firstFrame = queuedFrameCallbacks.shift();
-    if (!firstFrame) {
-      throw new Error("Expected queued frame callback");
-    }
-    firstFrame(0);
-    expect(styleState.height).toBe("120px");
-
-    queuedFrameCallbacks.length = 0;
-    await harness.update({ activeSessionId: "session-1", input: "line one\nline two" });
-    expect(queuedFrameCallbacks).toHaveLength(0);
-
-    Object.assign(textarea, {
-      value: "",
-      scrollHeight: 20,
-    });
-    await harness.update({ activeSessionId: "session-1", input: "" });
-    expect(queuedFrameCallbacks).toHaveLength(1);
-
-    const secondFrame = queuedFrameCallbacks.shift();
-    if (!secondFrame) {
-      throw new Error("Expected queued frame callback");
-    }
-    secondFrame(16);
-    expect(styleState.height).toBe("44px");
-
-    await harness.unmount();
-    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-    globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
   test("requests a bottom resync only when composer height changes while the transcript is near bottom", async () => {
     const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
     const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
 
-    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      callback(0);
-      return 1;
-    }) as typeof requestAnimationFrame;
-    globalThis.cancelAnimationFrame = ((_id: number) => undefined) as typeof cancelAnimationFrame;
+    try {
+      globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      }) as typeof requestAnimationFrame;
+      globalThis.cancelAnimationFrame = ((_id: number) => undefined) as typeof cancelAnimationFrame;
 
-    let syncBottomAfterComposerLayoutCallCount = 0;
-    const syncBottomAfterComposerLayoutRef = {
-      current: () => {
-        syncBottomAfterComposerLayoutCallCount += 1;
-      },
-    } as { current: (() => void) | null };
-    const harness = createSharedHookHarness(
-      ({ activeSessionId, input }: { activeSessionId: string | null; input: string }) => {
-        return useAgentChatLayout({
-          activeSessionId,
-          input,
-          syncBottomAfterComposerLayoutRef,
-        });
-      },
-      { activeSessionId: "session-1", input: "" },
-    );
+      let syncBottomAfterComposerLayoutCallCount = 0;
+      const syncBottomAfterComposerLayoutRef = {
+        current: () => {
+          syncBottomAfterComposerLayoutCallCount += 1;
+        },
+      } as { current: (() => void) | null };
+      const harness = createSharedHookHarness(
+        ({ activeSessionId, input }: { activeSessionId: string | null; input: string }) => {
+          return useAgentChatLayout({
+            activeSessionId,
+            input,
+            syncBottomAfterComposerLayoutRef,
+          });
+        },
+        { activeSessionId: "session-1", input: "" },
+      );
 
-    await harness.mount();
+      await harness.mount();
 
-    const state = harness.getLatest() as LayoutHookState;
-    state.messagesContainerRef.current = {
-      scrollHeight: 1000,
-      scrollTop: 700,
-      clientHeight: 300,
-    } as HTMLDivElement;
+      const state = harness.getLatest() as LayoutHookState;
+      state.messagesContainerRef.current = {
+        scrollHeight: 1000,
+        scrollTop: 700,
+        clientHeight: 300,
+      } as HTMLDivElement;
 
-    const styleState = {
-      height: "44px",
-      overflowY: "hidden" as const,
-    };
-    const textarea = {
-      getBoundingClientRect: () => ({ height: 44 }),
-      scrollHeight: 120,
-      style: styleState,
-      value: "line one\nline two",
-    } as unknown as HTMLTextAreaElement;
-    state.composerTextareaRef.current = textarea;
+      const styleState = {
+        height: "44px",
+        overflowY: "hidden" as const,
+      };
+      const textarea = {
+        getBoundingClientRect: () => ({ height: 44 }),
+        scrollHeight: 120,
+        style: styleState,
+        value: "line one\nline two",
+      } as unknown as HTMLTextAreaElement;
+      state.composerTextareaRef.current = textarea;
 
-    await harness.update({ activeSessionId: "session-1", input: "line one\nline two" });
+      await harness.update({ activeSessionId: "session-1", input: "line one\nline two" });
 
-    expect(styleState.height).toBe("120px");
-    expect(syncBottomAfterComposerLayoutCallCount).toBe(1);
+      expect(styleState.height).toBe("120px");
+      expect(syncBottomAfterComposerLayoutCallCount).toBe(1);
 
-    state.messagesContainerRef.current = {
-      scrollHeight: 1000,
-      scrollTop: 700,
-      clientHeight: 300,
-    } as HTMLDivElement;
-    Object.assign(textarea, {
-      scrollHeight: 120,
-      value: "line one\nline tw",
-    });
+      state.messagesContainerRef.current = {
+        scrollHeight: 1000,
+        scrollTop: 700,
+        clientHeight: 300,
+      } as HTMLDivElement;
+      Object.assign(textarea, {
+        scrollHeight: 120,
+        value: "line one\nline tw",
+      });
 
-    await harness.update({ activeSessionId: "session-1", input: "line one\nline tw" });
+      await harness.update({ activeSessionId: "session-1", input: "line one\nline tw" });
 
-    expect(styleState.height).toBe("120px");
-    expect(syncBottomAfterComposerLayoutCallCount).toBe(1);
+      expect(styleState.height).toBe("120px");
+      expect(syncBottomAfterComposerLayoutCallCount).toBe(1);
 
-    await harness.unmount();
-    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-    globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+      await harness.unmount();
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    }
   });
 
   test("initializes textarea height when ref becomes available after first mount", async () => {
