@@ -47,13 +47,13 @@ import {
   type SessionEventListeners,
   subscribeSessionEvents,
 } from "./event-emitter";
+import { sendUserMessage } from "./message-execution";
 import {
   listLiveAgentSessionPendingInput,
   loadSessionHistory,
   loadSessionTodos,
   replyPermission,
   replyQuestion,
-  sendUserMessage,
 } from "./message-ops";
 import {
   clearWorkflowToolCacheForDirectory,
