@@ -1,11 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { isAgentKickoffScenario } from "@openducktor/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import {
   type AgentChatComposerDraft,
-  createEmptyComposerDraft,
   draftHasMeaningfulContent,
   draftToSerializedText,
   draftToUserMessageParts,
@@ -43,8 +42,6 @@ type UseAgentStudioSessionActionsArgs = {
   isActiveTaskHydrated: boolean;
   selectionForNewSession: AgentModelSelection | null;
   repoSettings: RepoSettingsInput | null;
-  composerDraft: AgentChatComposerDraft;
-  setComposerDraft: (draft: AgentChatComposerDraft) => void;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
@@ -67,8 +64,6 @@ export function useAgentStudioSessionActions({
   isActiveTaskHydrated,
   selectionForNewSession,
   repoSettings,
-  composerDraft,
-  setComposerDraft,
   startAgentSession,
   sendAgentMessage,
   bootstrapTaskSessions,
@@ -107,7 +102,7 @@ export function useAgentStudioSessionActions({
   kickoffLabel: string;
   canStopSession: boolean;
   startScenarioKickoff: () => Promise<void>;
-  onSend: () => Promise<void>;
+  onSend: (draft: AgentChatComposerDraft) => Promise<void>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   handleWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
@@ -119,7 +114,6 @@ export function useAgentStudioSessionActions({
   const [isSubmittingQuestionByRequestId, setIsSubmittingQuestionByRequestId] = useState<
     Record<string, boolean>
   >({});
-  const latestComposerDraftRef = useRef(composerDraft);
 
   const activeSessionId = activeSession?.sessionId ?? null;
   const activeComposerContextKey = buildAgentStudioAsyncActivityContextKey({
@@ -176,96 +170,78 @@ export function useAgentStudioSessionActions({
     ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
   });
 
-  useEffect(() => {
-    latestComposerDraftRef.current = composerDraft;
-  }, [composerDraft]);
-
-  const onSend = useCallback(async (): Promise<void> => {
-    if (isSending || isStarting || !agentStudioReady || isWaitingInput || busySendBlockedReason) {
-      return;
-    }
-    if (!canStartSessionForRole(selectedTask, role)) {
-      return;
-    }
-    if (activeSession?.isLoadingModelCatalog && !activeSession.selectedModel) {
-      return;
-    }
-
-    const serializedDraft = draftToSerializedText(composerDraft).trim();
-    if (!draftHasMeaningfulContent(composerDraft) || !serializedDraft || !taskId) {
-      return;
-    }
-
-    const submittedDraft = composerDraft;
-    latestComposerDraftRef.current = createEmptyComposerDraft();
-    setComposerDraft(createEmptyComposerDraft());
-    const restoreComposerInput = () => {
-      if (draftHasMeaningfulContent(latestComposerDraftRef.current)) {
+  const onSend = useCallback(
+    async (draft: AgentChatComposerDraft): Promise<void> => {
+      if (isSending || isStarting || !agentStudioReady || isWaitingInput) {
         return;
       }
-      setComposerDraft(submittedDraft);
-    };
-    const sendContextKeys = new Set<string>();
-
-    try {
-      let targetSessionId = activeSession?.sessionId;
-      if (!targetSessionId) {
-        targetSessionId = await startSession("composer_send");
+      if (!canStartSessionForRole(selectedTask, role)) {
+        return;
       }
-
-      if (!targetSessionId) {
-        restoreComposerInput();
+      if (activeSession?.isLoadingModelCatalog && !activeSession.selectedModel) {
         return;
       }
 
-      const targetComposerContextKey = buildAgentStudioAsyncActivityContextKey({
-        activeRepo,
-        taskId,
-        role,
-        sessionId: targetSessionId,
-      });
-      sendContextKeys.add(activeComposerContextKey);
-      sendContextKeys.add(targetComposerContextKey);
+      const serializedDraft = draftToSerializedText(draft).trim();
+      if (!draftHasMeaningfulContent(draft) || !serializedDraft || !taskId) {
+        return;
+      }
+      const sendContextKeys = new Set<string>();
 
-      setSendingActivityCountByContext((current) => {
-        let next = current;
-        for (const contextKey of sendContextKeys) {
-          next = incrementActivityCountRecord(next, contextKey);
+      try {
+        let targetSessionId = activeSession?.sessionId;
+        if (!targetSessionId) {
+          targetSessionId = await startSession("composer_send");
         }
-        return next;
-      });
-      await sendAgentMessage(targetSessionId, draftToUserMessageParts(submittedDraft));
-    } catch (error) {
-      restoreComposerInput();
-      throw error;
-    } finally {
-      if (sendContextKeys.size > 0) {
+
+        if (!targetSessionId) {
+          return;
+        }
+
+        const targetComposerContextKey = buildAgentStudioAsyncActivityContextKey({
+          activeRepo,
+          taskId,
+          role,
+          sessionId: targetSessionId,
+        });
+        sendContextKeys.add(activeComposerContextKey);
+        sendContextKeys.add(targetComposerContextKey);
+
         setSendingActivityCountByContext((current) => {
           let next = current;
           for (const contextKey of sendContextKeys) {
-            next = decrementActivityCountRecord(next, contextKey);
+            next = incrementActivityCountRecord(next, contextKey);
           }
           return next;
         });
+        await sendAgentMessage(targetSessionId, draftToUserMessageParts(draft));
+      } finally {
+        if (sendContextKeys.size > 0) {
+          setSendingActivityCountByContext((current) => {
+            let next = current;
+            for (const contextKey of sendContextKeys) {
+              next = decrementActivityCountRecord(next, contextKey);
+            }
+            return next;
+          });
+        }
       }
-    }
-  }, [
-    activeRepo,
-    activeComposerContextKey,
-    activeSession,
-    agentStudioReady,
-    composerDraft,
-    isSending,
-    isStarting,
-    isWaitingInput,
-    busySendBlockedReason,
-    role,
-    selectedTask,
-    sendAgentMessage,
-    setComposerDraft,
-    startSession,
-    taskId,
-  ]);
+    },
+    [
+      activeRepo,
+      activeComposerContextKey,
+      activeSession,
+      agentStudioReady,
+      isSending,
+      isStarting,
+      isWaitingInput,
+      role,
+      selectedTask,
+      sendAgentMessage,
+      startSession,
+      taskId,
+    ],
+  );
 
   const onSubmitQuestionAnswers = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {

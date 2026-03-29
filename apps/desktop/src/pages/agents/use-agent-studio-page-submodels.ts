@@ -3,7 +3,6 @@ import type { AgentModelSelection } from "@openducktor/core";
 import type { RefObject } from "react";
 import { useCallback, useMemo } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
-import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -238,9 +237,8 @@ type UseAgentStudioComposerModelArgs = {
   agentStudioReady: boolean;
   selectedRoleAvailable: boolean;
   selectedRoleReadOnlyReason: string | null;
-  draft: AgentChatComposerDraft;
-  setDraft: (draft: AgentChatComposerDraft) => void;
-  onSend: () => Promise<void>;
+  draftStateKey: string;
+  onSend: AgentChatModel["composer"]["onSend"];
   isSending: boolean;
   isStarting: boolean;
   chatContextUsage: AgentChatModel["composer"]["contextUsage"];
@@ -276,8 +274,7 @@ export const useAgentStudioComposerModel = ({
   agentStudioReady,
   selectedRoleAvailable,
   selectedRoleReadOnlyReason,
-  draft,
-  setDraft,
+  draftStateKey,
   onSend,
   isSending,
   isStarting,
@@ -310,10 +307,13 @@ export const useAgentStudioComposerModel = ({
     ? getAgentSessionWaitingInputPlaceholder(activeSession)
     : null;
 
-  const handleSend = useCallback((): void => {
-    void onSend();
-    scrollToBottomOnSendRef.current?.();
-  }, [onSend, scrollToBottomOnSendRef]);
+  const handleSend = useCallback<AgentChatModel["composer"]["onSend"]>(
+    async (draft) => {
+      await onSend(draft);
+      scrollToBottomOnSendRef.current?.();
+    },
+    [onSend, scrollToBottomOnSendRef],
+  );
 
   const handleStopSession = useCallback((): void => {
     if (!activeSessionId) {
@@ -329,8 +329,7 @@ export const useAgentStudioComposerModel = ({
         agentStudioReady,
         isReadOnly: !selectedRoleAvailable,
         readOnlyReason: selectedRoleReadOnlyReason,
-        draft,
-        onDraftChange: setDraft,
+        draftStateKey,
         onSend: handleSend,
         isSending,
         isStarting,
@@ -369,7 +368,7 @@ export const useAgentStudioComposerModel = ({
       chatContextUsage,
       composerFormRef,
       composerEditorRef,
-      draft,
+      draftStateKey,
       handleSend,
       handleStopSession,
       isModelSelectionPending,
@@ -391,7 +390,6 @@ export const useAgentStudioComposerModel = ({
       selectedModelSelection,
       selectedRoleAvailable,
       selectedRoleReadOnlyReason,
-      setDraft,
       slashCommandCatalog,
       slashCommands,
       slashCommandsError,

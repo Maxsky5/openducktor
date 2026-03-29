@@ -6,7 +6,6 @@ import {
   buildModelSelection,
   buildSession,
   buildTodoItem,
-  createComposerDraft,
   TEST_ROLE_OPTIONS,
 } from "./agent-chat-test-fixtures";
 
@@ -48,9 +47,8 @@ const buildModel = () => ({
     agentStudioReady: true,
     isReadOnly: false,
     readOnlyReason: null,
-    draft: createComposerDraft("Hi"),
-    onDraftChange: () => {},
-    onSend: () => {},
+    draftStateKey: "draft-1",
+    onSend: async () => {},
     isSending: false,
     isStarting: false,
     isSessionWorking: false,
@@ -119,7 +117,6 @@ describe("AgentChat", () => {
           },
           composer: {
             ...buildModel().composer,
-            draft: createComposerDraft(""),
           },
         },
       }),

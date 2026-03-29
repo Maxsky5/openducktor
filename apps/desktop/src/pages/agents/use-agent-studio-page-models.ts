@@ -2,10 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
-import {
-  type AgentChatComposerDraft,
-  draftToSerializedText,
-} from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { useAgentChatLayout } from "@/components/features/agents/agent-chat/use-agent-chat-layout";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
@@ -67,7 +64,7 @@ type AgentStudioSessionActionsContext = {
   kickoffLabel: string;
   canStopSession: boolean;
   startScenarioKickoff: () => Promise<void>;
-  onSend: () => Promise<void>;
+  onSend: (draft: AgentChatComposerDraft) => Promise<void>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   stopAgentSession: (sessionId: string) => Promise<void>;
@@ -106,8 +103,7 @@ type AgentStudioPermissionContext = {
 };
 
 type AgentStudioComposerContext = {
-  composerDraft: AgentChatComposerDraft;
-  setComposerDraft: (draft: AgentChatComposerDraft) => void;
+  draftStateKey: string;
 };
 
 type AgentStudioChatSettingsContext = {
@@ -154,14 +150,8 @@ export function useAgentStudioPageModels({
   });
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
 
-  const serializedComposerDraft = useMemo(
-    () => draftToSerializedText(composer.composerDraft),
-    [composer.composerDraft],
-  );
-
   const { messagesContainerRef, composerFormRef, composerEditorRef, resizeComposerEditor } =
     useAgentChatLayout({
-      serializedDraftText: serializedComposerDraft,
       activeSessionId: threadSession?.sessionId ?? null,
       syncBottomAfterComposerLayoutRef,
     });
@@ -322,8 +312,7 @@ export function useAgentStudioPageModels({
     agentStudioReady: readiness.agentStudioReady,
     selectedRoleAvailable,
     selectedRoleReadOnlyReason,
-    draft: composer.composerDraft,
-    setDraft: composer.setComposerDraft,
+    draftStateKey: composer.draftStateKey,
     onSend: sessionActions.onSend,
     isSending: sessionActions.isSending,
     isStarting: sessionActions.isStarting,

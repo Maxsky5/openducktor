@@ -8,8 +8,6 @@ import type { LucideIcon } from "lucide-react";
 import type { MutableRefObject, RefObject } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
-
 export type AgentRoleOption = {
   role: AgentRole;
   label: string;
@@ -52,9 +50,8 @@ export type AgentChatComposerModel = {
   agentStudioReady: boolean;
   isReadOnly: boolean;
   readOnlyReason: string | null;
-  draft: AgentChatComposerDraft;
-  onDraftChange: (draft: AgentChatComposerDraft) => void;
-  onSend: () => void;
+  draftStateKey: string;
+  onSend: (draft: import("./agent-chat-composer-draft").AgentChatComposerDraft) => Promise<void>;
   isSending: boolean;
   isStarting: boolean;
   isSessionWorking: boolean;

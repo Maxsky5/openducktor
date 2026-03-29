@@ -2,7 +2,6 @@ import type {
   AgentStudioTaskTabsModel,
   SessionStartModalModel,
 } from "@/components/features/agents";
-import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
@@ -28,8 +27,7 @@ export type AgentStudioOrchestrationReadinessContext = {
 };
 
 type AgentStudioOrchestrationComposerContext = {
-  composerDraft: AgentChatComposerDraft;
-  setComposerDraft: (draft: AgentChatComposerDraft) => void;
+  draftStateKey: string;
 };
 
 type AgentStudioOrchestrationActionsContext = {
@@ -51,8 +49,7 @@ type UseAgentStudioOrchestrationControllerArgs = {
   activeRepo: string | null;
   selection: AgentStudioOrchestrationSelectionContext;
   readiness: AgentStudioOrchestrationReadinessContext;
-  composerDraft: AgentChatComposerDraft;
-  setComposerDraft: (draft: AgentChatComposerDraft) => void;
+  draftStateKey: string;
   actions: AgentStudioOrchestrationActionsContext;
 };
 
@@ -200,8 +197,7 @@ export function useAgentStudioOrchestrationController({
   activeRepo,
   selection,
   readiness,
-  composerDraft,
-  setComposerDraft,
+  draftStateKey,
   actions,
 }: UseAgentStudioOrchestrationControllerArgs): UseAgentStudioOrchestrationControllerResult {
   const {
@@ -305,8 +301,6 @@ export function useAgentStudioOrchestrationController({
     isActiveTaskHydrated,
     selectionForNewSession,
     repoSettings,
-    composerDraft,
-    setComposerDraft,
     startAgentSession,
     sendAgentMessage,
     bootstrapTaskSessions,
@@ -400,8 +394,7 @@ export function useAgentStudioOrchestrationController({
       showThinkingMessages,
     },
     composer: {
-      composerDraft,
-      setComposerDraft,
+      draftStateKey,
     },
   });
 

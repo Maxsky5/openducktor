@@ -267,7 +267,7 @@ describe("agents-page-view-model", () => {
     const onSubmitQuestionAnswers = mock(async () => {});
     const onReplyPermission = mock(async () => {});
     const onToggleTodoPanel = mock(() => {});
-    const onSend = mock(() => {});
+    const onSend = mock((_draft?: unknown) => {});
     const onStopSession = mock(() => {});
 
     const model = buildAgentChatModel({
@@ -298,11 +298,10 @@ describe("agents-page-view-model", () => {
       messagesContainerRef: { current: null },
       scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
       syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
-      draft: createComposerDraft("message"),
+      draftStateKey: "draft-1",
       isReadOnly: false,
       readOnlyReason: null,
-      onDraftChange: () => {},
-      onSend,
+      onSend: async (draft) => onSend(draft),
       isWaitingInput: false,
       isModelSelectionPending: false,
       selectedModelSelection: null,
@@ -337,7 +336,7 @@ describe("agents-page-view-model", () => {
     await model.thread.onSubmitQuestionAnswers("req-1", [["yes"]]);
     await model.thread.onReplyPermission("req-1", "reject");
     model.thread.onToggleTodoPanel();
-    model.composer.onSend();
+    await model.composer.onSend(createComposerDraft("message"));
     model.composer.onStopSession();
 
     expect(onRefreshChecks).toHaveBeenCalledTimes(1);

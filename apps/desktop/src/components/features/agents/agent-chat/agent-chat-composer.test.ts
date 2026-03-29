@@ -2,20 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AgentChatComposer } from "./agent-chat-composer";
-import {
-  buildModelSelection,
-  createComposerDraft,
-  createEmptyComposerDraft,
-} from "./agent-chat-test-fixtures";
+import { buildModelSelection } from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
   taskId: "task-1",
   agentStudioReady: true,
   isReadOnly: false,
   readOnlyReason: null,
-  draft: createComposerDraft("hello"),
-  onDraftChange: () => {},
-  onSend: () => {},
+  draftStateKey: "draft-1",
+  onSend: async () => {},
   isSending: false,
   isStarting: false,
   isSessionWorking: false,
@@ -106,7 +101,6 @@ describe("AgentChatComposer", () => {
       createElement(AgentChatComposer, {
         model: {
           ...buildModel(),
-          draft: createComposerDraft("   "),
         },
       }),
     );
@@ -150,7 +144,6 @@ describe("AgentChatComposer", () => {
           ...buildModel(),
           isSessionWorking: true,
           isWaitingInput: true,
-          draft: createEmptyComposerDraft(),
           waitingInputPlaceholder: "Answer the pending question above to continue",
         },
       }),
@@ -171,7 +164,6 @@ describe("AgentChatComposer", () => {
         model: {
           ...buildModel(),
           isWaitingInput: true,
-          draft: createEmptyComposerDraft(),
           waitingInputPlaceholder: "Respond to the pending permission request above to continue",
         },
       }),
@@ -187,7 +179,6 @@ describe("AgentChatComposer", () => {
         model: {
           ...buildModel(),
           isReadOnly: true,
-          draft: createEmptyComposerDraft(),
           readOnlyReason: "Planner is unavailable for this task right now.",
         },
       }),

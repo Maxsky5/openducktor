@@ -1,11 +1,15 @@
 import { Bot, Brain, BrainCog, LoaderCircle, SendHorizontal, Square } from "lucide-react";
-import { type ReactElement, useMemo } from "react";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BorderRay } from "@/components/ui/border-ray";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { resolveAgentAccentColor } from "../agent-accent-color";
 import type { AgentChatComposerModel } from "./agent-chat.types";
-import { draftHasMeaningfulContent } from "./agent-chat-composer-draft";
+import {
+  type AgentChatComposerDraft,
+  createEmptyComposerDraft,
+  draftHasMeaningfulContent,
+} from "./agent-chat-composer-draft";
 import { AgentChatComposerEditor } from "./agent-chat-composer-editor";
 import { AgentContextUsageIndicator } from "./agent-context-usage-indicator";
 
@@ -15,8 +19,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     agentStudioReady,
     isReadOnly,
     readOnlyReason,
-    draft,
-    onDraftChange,
+    draftStateKey,
     onSend,
     isSending,
     isStarting,
@@ -44,7 +47,26 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     composerFormRef,
     composerEditorRef,
     onComposerEditorInput,
+    scrollToBottomOnSendRef,
   } = model;
+
+  const [draft, setDraft] = useState(createEmptyComposerDraft);
+  const latestDraftRef = useRef<AgentChatComposerDraft>(draft);
+
+  useEffect(() => {
+    latestDraftRef.current = draft;
+  }, [draft]);
+
+  useEffect(() => {
+    void draftStateKey;
+    setDraft(createEmptyComposerDraft());
+    onComposerEditorInput();
+  }, [draftStateKey, onComposerEditorInput]);
+
+  const handleDraftChange = useCallback((nextDraft: AgentChatComposerDraft) => {
+    latestDraftRef.current = nextDraft;
+    setDraft(nextDraft);
+  }, []);
 
   const sendDisabled =
     isSending ||
@@ -67,11 +89,22 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     }
     return resolveAgentAccentColor(agentName, sessionAgentColors?.[agentName]);
   }, [selectedModelSelection?.profileId, sessionAgentColors]);
-  const handleSubmit = (): void => {
+  const handleSubmit = async (): Promise<void> => {
     if (sendDisabled) {
       return;
     }
-    onSend();
+    const submittedDraft = latestDraftRef.current;
+    setDraft(createEmptyComposerDraft());
+    onComposerEditorInput();
+    try {
+      await onSend(submittedDraft);
+      scrollToBottomOnSendRef.current?.();
+    } catch {
+      setDraft((currentDraft) =>
+        draftHasMeaningfulContent(currentDraft) ? currentDraft : submittedDraft,
+      );
+      onComposerEditorInput();
+    }
   };
   const isSubmitting = isSending || isStarting || isModelSelectionPending;
   const isComposerInputDisabled =
@@ -97,7 +130,14 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
       : (busySendBlockedReason ?? readOnlyReason);
 
   return (
-    <form ref={composerFormRef} className="px-4 pb-4" action={handleSubmit}>
+    <form
+      ref={composerFormRef}
+      className="px-4 pb-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void handleSubmit();
+      }}
+    >
       <fieldset className="contents" disabled={isSubmitting}>
         <div
           className={
@@ -123,7 +163,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
           >
             <AgentChatComposerEditor
               draft={draft}
-              onDraftChange={onDraftChange}
+              onDraftChange={handleDraftChange}
               placeholder={composerPlaceholder}
               disabled={isComposerInputDisabled}
               editorRef={composerEditorRef}

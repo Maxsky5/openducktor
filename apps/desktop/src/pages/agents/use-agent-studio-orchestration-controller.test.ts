@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import { buildAgentStudioPageModelsArgs } from "./use-agent-studio-orchestration-controller";
 
@@ -107,8 +106,7 @@ const baseArgs: BuildArgs = {
     showThinkingMessages: true,
   },
   composer: {
-    composerDraft: createComposerDraft("hello"),
-    setComposerDraft: () => {},
+    draftStateKey: "draft-1",
   },
 };
 
@@ -126,9 +124,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.modelSelection.onSelectModel).toBe(handleSelectModel);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);
     expect(mapped.chatSettings.showThinkingMessages).toBe(true);
-    expect(mapped.composer.composerDraft.segments).toEqual([
-      expect.objectContaining({ kind: "text", text: "hello" }),
-    ]);
+    expect(mapped.composer.draftStateKey).toBe("draft-1");
   });
 
   test("derives activeTabValue from tab id, task id, then empty sentinel", () => {

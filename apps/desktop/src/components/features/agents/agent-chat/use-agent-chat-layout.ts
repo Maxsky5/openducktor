@@ -35,13 +35,14 @@ const readComposerEditorHeight = (editor: HTMLDivElement): number => {
 
 export const resizeComposerEditorElement = (
   editor: HTMLDivElement,
-  serializedDraftText: string,
+  serializedDraftText?: string,
 ): {
   didHeightChange: boolean;
   overflowY: "auto" | "hidden";
 } => {
+  const resolvedSerializedDraftText = serializedDraftText ?? editor.textContent ?? "";
   const currentHeight = readComposerEditorHeight(editor);
-  if (serializedDraftText.length === 0) {
+  if (resolvedSerializedDraftText.length === 0) {
     const nextHeight = COMPOSER_EDITOR_MIN_HEIGHT_PX;
     const didHeightChange = Math.abs(currentHeight - nextHeight) > 0.5;
     if (didHeightChange) {
@@ -87,7 +88,6 @@ export const resizeComposerTextareaElement = (
   );
 
 type UseAgentChatLayoutInput = {
-  serializedDraftText?: string;
   input?: string;
   activeSessionId: string | null;
   syncBottomAfterComposerLayoutRef?: MutableRefObject<(() => void) | null>;
@@ -103,17 +103,16 @@ type UseAgentChatLayoutResult = {
 };
 
 export const useAgentChatLayout = ({
-  serializedDraftText,
-  input,
+  input: _input,
   activeSessionId,
   syncBottomAfterComposerLayoutRef,
 }: UseAgentChatLayoutInput): UseAgentChatLayoutResult => {
-  const resolvedSerializedDraftText = serializedDraftText ?? input ?? "";
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const composerEditorRef = useRef<HTMLDivElement | null>(null);
+  const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const resizeFrameIdRef = useRef<number | null>(null);
-  const previousDraftTextRef = useRef(resolvedSerializedDraftText);
+  const resizeTextareaFrameIdRef = useRef<number | null>(null);
   const didInitializeComposerForSessionRef = useRef(false);
 
   const flushComposerEditorResize = useCallback((): void => {
@@ -128,11 +127,11 @@ export const useAgentChatLayout = ({
         ? container.scrollHeight - container.scrollTop - container.clientHeight <=
           CHAT_SCROLL_EDGE_THRESHOLD_PX
         : false;
-    const { didHeightChange } = resizeComposerEditorElement(editor, resolvedSerializedDraftText);
+    const { didHeightChange } = resizeComposerEditorElement(editor);
     if (wasNearBottom && didHeightChange) {
       syncBottomAfterComposerLayoutRef?.current?.();
     }
-  }, [resolvedSerializedDraftText, syncBottomAfterComposerLayoutRef]);
+  }, [syncBottomAfterComposerLayoutRef]);
 
   const resizeComposerEditor = useCallback((): void => {
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
@@ -150,6 +149,41 @@ export const useAgentChatLayout = ({
       flushComposerEditorResize();
     });
   }, [flushComposerEditorResize]);
+
+  const flushComposerTextareaResize = useCallback((): void => {
+    const textarea = composerTextareaRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    const container = messagesContainerRef.current;
+    const wasNearBottom =
+      container !== null
+        ? container.scrollHeight - container.scrollTop - container.clientHeight <=
+          CHAT_SCROLL_EDGE_THRESHOLD_PX
+        : false;
+    const { didHeightChange } = resizeComposerTextareaElement(textarea);
+    if (wasNearBottom && didHeightChange) {
+      syncBottomAfterComposerLayoutRef?.current?.();
+    }
+  }, [syncBottomAfterComposerLayoutRef]);
+
+  const resizeComposerTextarea = useCallback((): void => {
+    const requestAnimationFrameFn = globalThis.requestAnimationFrame;
+    if (typeof requestAnimationFrameFn !== "function") {
+      flushComposerTextareaResize();
+      return;
+    }
+
+    if (resizeTextareaFrameIdRef.current !== null) {
+      return;
+    }
+
+    resizeTextareaFrameIdRef.current = requestAnimationFrameFn(() => {
+      resizeTextareaFrameIdRef.current = null;
+      flushComposerTextareaResize();
+    });
+  }, [flushComposerTextareaResize]);
 
   useLayoutEffect(() => {
     didInitializeComposerForSessionRef.current = false;
@@ -180,23 +214,19 @@ export const useAgentChatLayout = ({
   });
 
   useEffect(() => {
-    if (previousDraftTextRef.current === resolvedSerializedDraftText) {
-      return;
-    }
-    previousDraftTextRef.current = resolvedSerializedDraftText;
-    resizeComposerEditor();
-  }, [resolvedSerializedDraftText, resizeComposerEditor]);
-
-  useEffect(() => {
     return () => {
-      if (resizeFrameIdRef.current === null) {
-        return;
-      }
       const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;
-      if (typeof cancelAnimationFrameFn === "function") {
+      if (resizeFrameIdRef.current !== null && typeof cancelAnimationFrameFn === "function") {
         cancelAnimationFrameFn(resizeFrameIdRef.current);
       }
       resizeFrameIdRef.current = null;
+      if (
+        resizeTextareaFrameIdRef.current !== null &&
+        typeof cancelAnimationFrameFn === "function"
+      ) {
+        cancelAnimationFrameFn(resizeTextareaFrameIdRef.current);
+      }
+      resizeTextareaFrameIdRef.current = null;
     };
   }, []);
 
@@ -205,8 +235,7 @@ export const useAgentChatLayout = ({
     composerFormRef,
     composerEditorRef,
     resizeComposerEditor,
-    composerTextareaRef:
-      composerEditorRef as unknown as React.RefObject<HTMLTextAreaElement | null>,
-    resizeComposerTextarea: resizeComposerEditor,
+    composerTextareaRef,
+    resizeComposerTextarea,
   };
 };

@@ -174,8 +174,6 @@ const createBaseArgs = (): HookArgs => {
       profileId: "spec",
     },
     repoSettings: null,
-    composerDraft: createComposerDraft("  hello world  "),
-    setComposerDraft: () => {},
     startAgentSession: async () => "session-new",
     sendAgentMessage: async () => {},
     bootstrapTaskSessions: async () => {},
@@ -222,14 +220,13 @@ describe("useAgentStudioSessionActions", () => {
   test("onSend starts session and sends trimmed message", async () => {
     const startAgentSession = mock(async () => "session-new");
     const sendAgentMessage = mock(async () => {});
-    const setComposerDraft = mock(() => {});
     const updateCalls: Array<Record<string, string | undefined>> = [];
+    const draft = createComposerDraft("  hello world  ");
 
     const harness = createHookHarness({
       ...createBaseArgs(),
       startAgentSession,
       sendAgentMessage,
-      setComposerDraft,
       updateQuery: (updates) => {
         updateCalls.push(updates);
       },
@@ -238,7 +235,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.mount();
     let sendPromise: Promise<void> | undefined;
     await harness.run((state) => {
-      sendPromise = state.onSend();
+      sendPromise = state.onSend(draft);
     });
     await confirmSessionStartModal(harness);
     await harness.run(async () => {
@@ -258,11 +255,6 @@ describe("useAgentStudioSessionActions", () => {
       },
       startMode: "fresh" as const,
     });
-    expect(setComposerDraft).toHaveBeenCalledWith(
-      expect.objectContaining({
-        segments: [expect.objectContaining({ kind: "text", text: "" })],
-      }),
-    );
     expect(sendAgentMessage).toHaveBeenCalledWith("session-new", [
       { kind: "text", text: "  hello world  " },
     ]);
@@ -274,6 +266,7 @@ describe("useAgentStudioSessionActions", () => {
   test("onSend reuses active session when one exists", async () => {
     const sendAgentMessage = mock(async () => {});
     const startAgentSession = mock(async () => "session-new");
+    const draft = createComposerDraft("  hello world  ");
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -284,7 +277,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await state.onSend();
+      await state.onSend(draft);
     });
 
     expect(startAgentSession).not.toHaveBeenCalled();
@@ -393,6 +386,7 @@ describe("useAgentStudioSessionActions", () => {
   test("onSend does not send while the active session is waiting for answers", async () => {
     const sendAgentMessage = mock(async () => {});
     const startAgentSession = mock(async () => "session-new");
+    const draft = createComposerDraft("  hello world  ");
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -419,7 +413,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await state.onSend();
+      await state.onSend(draft);
     });
 
     expect(startAgentSession).not.toHaveBeenCalled();
@@ -429,31 +423,26 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("onSend clears composer input immediately before send settles", async () => {
+  test("onSend marks the context as sending until the send settles", async () => {
     const sendDeferred = createDeferred<void>();
     const sendAgentMessage = mock(() => sendDeferred.promise);
-    const setComposerDraft = mock(() => {});
+    const draft = createComposerDraft("  hello world  ");
 
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: createSession({ sessionId: "session-existing" }),
       sendAgentMessage,
-      setComposerDraft,
     });
 
     await harness.mount();
     let sendPromise: Promise<void> | undefined;
     await harness.run(async (state) => {
-      sendPromise = state.onSend();
-      expect(setComposerDraft).toHaveBeenCalledWith(
-        expect.objectContaining({
-          segments: [expect.objectContaining({ kind: "text", text: "" })],
-        }),
-      );
+      sendPromise = state.onSend(draft);
       expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
         { kind: "text", text: "  hello world  " },
       ]);
     });
+    expect(harness.getLatest().isSending).toBe(true);
 
     await harness.run(async () => {
       sendDeferred.resolve();
@@ -462,45 +451,37 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("onSend restores the cleared input when send fails", async () => {
+  test("onSend clears sending state when send fails", async () => {
     const sendDeferred = createDeferred<void>();
     const sendAgentMessage = mock(() => sendDeferred.promise);
-    const setComposerDraft = mock(() => {});
+    const draft = createComposerDraft("  hello world  ");
 
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: createSession({ sessionId: "session-existing" }),
       sendAgentMessage,
-      setComposerDraft,
     });
 
     await harness.mount();
     let sendPromise: Promise<void> | undefined;
     await harness.run(async (state) => {
-      sendPromise = state.onSend().catch(() => undefined);
-      expect(setComposerDraft).toHaveBeenCalledWith(
-        expect.objectContaining({
-          segments: [expect.objectContaining({ kind: "text", text: "" })],
-        }),
-      );
+      sendPromise = state.onSend(draft).catch(() => undefined);
     });
+    expect(harness.getLatest().isSending).toBe(true);
 
     await harness.run(async () => {
       sendDeferred.reject(new Error("send failed"));
       await sendPromise;
     });
 
-    expect(setComposerDraft).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        segments: [expect.objectContaining({ kind: "text", text: "  hello world  " })],
-      }),
-    );
+    expect(harness.getLatest().isSending).toBe(false);
     await harness.unmount();
   });
 
   test("resets transient sending state when switching task context", async () => {
     const sendDeferred = createDeferred<void>();
     const sendAgentMessage = mock(() => sendDeferred.promise);
+    const taskOneDraft = createComposerDraft("  hello world  ");
     const taskOneSession = createSession({
       taskId: "task-1",
       sessionId: "session-task-1",
@@ -523,7 +504,7 @@ describe("useAgentStudioSessionActions", () => {
 
     let sendPromise: Promise<void> | undefined;
     await harness.run((state) => {
-      sendPromise = state.onSend();
+      sendPromise = state.onSend(taskOneDraft);
     });
 
     await harness.waitFor((state) => state.isSending);
@@ -535,7 +516,6 @@ describe("useAgentStudioSessionActions", () => {
       activeSession: taskTwoSession,
       sessionsForTask: [taskTwoSession],
       sendAgentMessage,
-      composerDraft: createComposerDraft("follow up"),
     });
 
     const nextState = harness.getLatest();
@@ -552,6 +532,7 @@ describe("useAgentStudioSessionActions", () => {
   test("restores the in-flight send state after switching away and back", async () => {
     const firstSendDeferred = createDeferred<void>();
     const sendAgentMessage = mock(() => firstSendDeferred.promise);
+    const firstDraft = createComposerDraft("  hello world  ");
     const taskOneSession = createSession({
       taskId: "task-1",
       sessionId: "session-task-1",
@@ -574,7 +555,7 @@ describe("useAgentStudioSessionActions", () => {
 
     let firstSendPromise: Promise<void> | undefined;
     await harness.run((state) => {
-      firstSendPromise = state.onSend();
+      firstSendPromise = state.onSend(firstDraft);
     });
     await harness.waitFor((state) => state.isSending);
 
@@ -584,7 +565,6 @@ describe("useAgentStudioSessionActions", () => {
       activeSession: taskTwoSession,
       sessionsForTask: [taskTwoSession],
       sendAgentMessage,
-      composerDraft: createComposerDraft("other task"),
     });
     expect(harness.getLatest().isSending).toBe(false);
 
@@ -593,7 +573,6 @@ describe("useAgentStudioSessionActions", () => {
       activeSession: taskOneSession,
       sessionsForTask: [taskOneSession],
       sendAgentMessage,
-      composerDraft: createComposerDraft("second send"),
     });
 
     await harness.waitFor((state) => state.isSending);
@@ -610,6 +589,8 @@ describe("useAgentStudioSessionActions", () => {
   test("blocks overlapping sends after returning to an in-flight session", async () => {
     const firstSendDeferred = createDeferred<void>();
     const sendAgentMessage = mock(() => firstSendDeferred.promise);
+    const firstDraft = createComposerDraft("  hello world  ");
+    const secondDraft = createComposerDraft("second send");
     const taskOneSession = createSession({
       taskId: "task-1",
       sessionId: "session-task-1",
@@ -632,7 +613,7 @@ describe("useAgentStudioSessionActions", () => {
 
     let firstSendPromise: Promise<void> | undefined;
     await harness.run((state) => {
-      firstSendPromise = state.onSend();
+      firstSendPromise = state.onSend(firstDraft);
     });
     await harness.waitFor((state) => state.isSending);
 
@@ -642,7 +623,6 @@ describe("useAgentStudioSessionActions", () => {
       activeSession: taskTwoSession,
       sessionsForTask: [taskTwoSession],
       sendAgentMessage,
-      composerDraft: createComposerDraft("other task"),
     });
     expect(harness.getLatest().isSending).toBe(false);
 
@@ -651,12 +631,11 @@ describe("useAgentStudioSessionActions", () => {
       activeSession: taskOneSession,
       sessionsForTask: [taskOneSession],
       sendAgentMessage,
-      composerDraft: createComposerDraft("second send"),
     });
     await harness.waitFor((state) => state.isSending);
 
     await harness.run(async (state) => {
-      await state.onSend();
+      await state.onSend(secondDraft);
     });
     expect(sendAgentMessage).toHaveBeenCalledTimes(1);
     expect(harness.getLatest().isSending).toBe(true);
@@ -673,6 +652,7 @@ describe("useAgentStudioSessionActions", () => {
     const sendDeferred = createDeferred<void>();
     const sendAgentMessage = mock(() => sendDeferred.promise);
     const startAgentSession = mock(async () => "session-new");
+    const draft = createComposerDraft("  hello world  ");
     const nextSession = createSession({
       taskId: "task-1",
       sessionId: "session-new",
@@ -690,7 +670,7 @@ describe("useAgentStudioSessionActions", () => {
 
     let sendPromise: Promise<void> | undefined;
     await harness.run((state) => {
-      sendPromise = state.onSend();
+      sendPromise = state.onSend(draft);
     });
     await confirmSessionStartModal(harness);
 
@@ -717,6 +697,7 @@ describe("useAgentStudioSessionActions", () => {
   test("onSend reuses active session when available", async () => {
     const sendAgentMessage = mock(async () => {});
     const updateCalls: Array<Record<string, string | undefined>> = [];
+    const draft = createComposerDraft("  hello world  ");
     const existingSpecSession = createSession({
       runtimeKind: "opencode",
       sessionId: "session-existing",
@@ -736,7 +717,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await state.onSend();
+      await state.onSend(draft);
     });
 
     expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [

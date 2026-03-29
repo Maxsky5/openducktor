@@ -11,7 +11,6 @@ import type {
   AgentStudioWorkspaceDocument,
   AgentStudioWorkspaceSidebarModel,
 } from "@/components/features/agents";
-import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -140,9 +139,8 @@ type AgentChatComposerModelArgs = {
   agentStudioReady: boolean;
   isReadOnly: boolean;
   readOnlyReason: string | null;
-  draft: AgentChatComposerDraft;
-  onDraftChange: (draft: AgentChatComposerDraft) => void;
-  onSend: () => void;
+  draftStateKey: string;
+  onSend: AgentChatComposerModel["onSend"];
   isSending: boolean;
   isStarting: boolean;
   isSessionWorking: boolean;
@@ -212,8 +210,7 @@ export const buildAgentChatComposerModel = (
   agentStudioReady: args.agentStudioReady,
   isReadOnly: args.isReadOnly,
   readOnlyReason: args.readOnlyReason,
-  draft: args.draft,
-  onDraftChange: args.onDraftChange,
+  draftStateKey: args.draftStateKey,
   onSend: args.onSend,
   isSending: args.isSending,
   isStarting: args.isStarting,
