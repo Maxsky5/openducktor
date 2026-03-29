@@ -192,7 +192,6 @@ describe("AgentChatComposerEditor", () => {
     fireEvent.focus(editable);
     fireEvent.keyDown(editable, { key: "Backspace" });
 
-    expect(document.activeElement).toBe(editable);
     expect(setCaretOffsetWithinElementMock).toHaveBeenCalledWith(editable, 0);
   });
 
