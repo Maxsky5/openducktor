@@ -11,7 +11,7 @@ import { useTaskTabActions } from "./use-agent-studio-task-tabs-actions";
 import { useTaskTabPersistence } from "./use-agent-studio-task-tabs-persistence";
 import { useTaskTabSelection } from "./use-agent-studio-task-tabs-selection";
 
-const toTaskQueryUpdate = (taskId: string): QueryUpdate => {
+const toTaskIntentQueryUpdate = (taskId: string): QueryUpdate => {
   return {
     [AGENT_STUDIO_QUERY_KEYS.task]: taskId,
     [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
@@ -88,9 +88,9 @@ export function useAgentStudioTaskTabs(args: {
     [openTaskTabs, selectableTaskIds],
   );
 
-  const navigateToTask = useCallback(
+  const navigateToTaskIntent = useCallback(
     (nextTaskId: string) => {
-      deferQueryUpdate(toTaskQueryUpdate(nextTaskId));
+      deferQueryUpdate(toTaskIntentQueryUpdate(nextTaskId));
     },
     [deferQueryUpdate],
   );
@@ -108,7 +108,7 @@ export function useAgentStudioTaskTabs(args: {
     tabsStorageHydratedRepo,
     clearComposerInput,
     onContextSwitchIntent,
-    navigateToTask,
+    navigateToTaskIntent,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
     setIntentActiveTaskId,
@@ -151,7 +151,7 @@ export function useAgentStudioTaskTabs(args: {
     clearComposerInput,
     onContextSwitchIntent,
     clearTaskSelection,
-    navigateToTask,
+    navigateToTaskIntent,
     handleSelectTab,
     setOpenTaskTabs,
     setPersistedActiveTaskId,

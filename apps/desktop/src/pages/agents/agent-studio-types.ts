@@ -1,1 +1,1 @@
-export type NavigateToTask = (taskId: string) => void;
+export type NavigateToTaskIntent = (taskId: string) => void;
