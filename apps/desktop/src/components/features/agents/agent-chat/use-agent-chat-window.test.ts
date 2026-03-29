@@ -15,6 +15,7 @@ type HarnessProps = {
   rows: AgentChatWindowRow[];
   activeSessionId: string | null;
   isSessionViewLoading: boolean;
+  syncBottomAfterComposerLayoutRef?: { current: (() => void) | null };
 };
 
 type HookResult = ReturnType<typeof useAgentChatWindow>;
@@ -73,6 +74,11 @@ const createHarness = () => {
       ...props,
       messagesContainerRef,
       messagesContentRef,
+      ...(props.syncBottomAfterComposerLayoutRef
+        ? {
+            syncBottomAfterComposerLayoutRef: props.syncBottomAfterComposerLayoutRef,
+          }
+        : {}),
     });
     latestResultRef.current = result;
     return null;
@@ -186,6 +192,11 @@ const mountHarness = async (
       ...nextProps,
       messagesContainerRef,
       messagesContentRef,
+      ...(nextProps.syncBottomAfterComposerLayoutRef
+        ? {
+            syncBottomAfterComposerLayoutRef: nextProps.syncBottomAfterComposerLayoutRef,
+          }
+        : {}),
     });
     latestResultRef.current = result;
     return result;
@@ -834,6 +845,59 @@ describe("useAgentChatWindow", () => {
 
     await act(async () => {
       triggerResizeObservers();
+      await flush();
+    });
+
+    expect(container.scrollTo).toHaveBeenCalledWith({
+      top: container.scrollHeight,
+      behavior: "auto",
+    });
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("restores bottom pinning after a composer-layout sync when transient scroll drift breaks bottom threshold", async () => {
+    const syncBottomAfterComposerLayoutRef = { current: null } as { current: (() => void) | null };
+    const harness = await mountHarness(
+      {
+        rows: createRows(80),
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+        syncBottomAfterComposerLayoutRef,
+      },
+      { attachContainer: true },
+    );
+
+    const container = harness.messagesContainerRef.current as
+      | (MockMessagesContainer & { clientHeight: number })
+      | null;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    const latestScrollListenerCall = container.addEventListener.mock.calls
+      .filter(([eventName]) => eventName === "scroll")
+      .at(-1);
+    const latestScrollListener = latestScrollListenerCall?.[1];
+    if (typeof latestScrollListener !== "function") {
+      throw new Error("Expected scroll listener");
+    }
+
+    container.scrollTo.mockClear();
+    Object.assign(container, {
+      scrollTop: 660,
+      clientHeight: 220,
+    });
+
+    const syncBottomAfterComposerLayout = syncBottomAfterComposerLayoutRef.current;
+    if (typeof syncBottomAfterComposerLayout !== "function") {
+      throw new Error("Expected composer layout sync callback");
+    }
+
+    await act(async () => {
+      latestScrollListener(new Event("scroll"));
+      syncBottomAfterComposerLayout();
       await flush();
     });
 

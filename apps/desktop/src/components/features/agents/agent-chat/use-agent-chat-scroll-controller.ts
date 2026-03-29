@@ -20,7 +20,7 @@ type UseAgentChatScrollControllerResult = {
   isUpdatingRef: MutableRefObject<boolean>;
   hasPendingScrollRequest: () => boolean;
   captureScrollAnchor: (rowKey: string) => void;
-  syncBottomIfPinned: () => void;
+  syncBottomIfPinned: (options?: { forcePinned?: boolean }) => void;
   scrollToBottomOnSend: () => void;
   requestWindowScroll: (request: PendingScrollRequest) => void;
   applyPendingScrollRequest: () => void;
@@ -222,40 +222,44 @@ export function useAgentChatScrollController({
     });
   }, [animateScrollTo, cancelScrollAnimation, messagesContainerRef]);
 
-  const syncBottomIfPinned = useCallback(() => {
-    const container = messagesContainerRef.current;
-    if (!container) {
-      return;
-    }
+  const syncBottomIfPinned = useCallback(
+    (options?: { forcePinned?: boolean }) => {
+      const container = messagesContainerRef.current;
+      if (!container) {
+        return;
+      }
+      const forcePinned = options?.forcePinned === true;
 
-    if (pendingScrollRequestRef.current?.target === "bottom" || suppressSentinelsRef.current) {
-      return;
-    }
+      if (pendingScrollRequestRef.current?.target === "bottom" || suppressSentinelsRef.current) {
+        return;
+      }
 
-    if (isUpdatingRef.current && !isPinnedToBottomRef.current) {
-      return;
-    }
+      if (isUpdatingRef.current && !isPinnedToBottomRef.current && !forcePinned) {
+        return;
+      }
 
-    if (isBottomAutoFollowAnimationRef.current) {
+      if (isBottomAutoFollowAnimationRef.current) {
+        setIsNearBottom(true);
+        return;
+      }
+
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      const isWithinBottomThreshold = distanceFromBottom <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
+      if (!forcePinned && !isPinnedToBottomRef.current && !isWithinBottomThreshold) {
+        return;
+      }
+
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: "auto",
+      });
+      isPinnedToBottomRef.current = true;
       setIsNearBottom(true);
-      return;
-    }
-
-    const distanceFromBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight;
-    const isWithinBottomThreshold = distanceFromBottom <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
-    if (!isPinnedToBottomRef.current && !isWithinBottomThreshold) {
-      return;
-    }
-
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: "auto",
-    });
-    isPinnedToBottomRef.current = true;
-    setIsNearBottom(true);
-    setIsNearTop(false);
-  }, [messagesContainerRef]);
+      setIsNearTop(false);
+    },
+    [messagesContainerRef],
+  );
 
   const setBottomAnchoredState = useCallback((windowStart: number) => {
     setIsNearBottom(true);

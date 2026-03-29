@@ -1,5 +1,5 @@
-import type { RefCallback, RefObject } from "react";
-import { useLayoutEffect } from "react";
+import type { MutableRefObject, RefCallback, RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import { clampWindowRange, createBottomAnchoredWindow } from "./agent-chat-window-shared";
 import { useAgentChatResizeSync } from "./use-agent-chat-resize-sync";
@@ -13,6 +13,7 @@ type UseAgentChatWindowInput = {
   isSessionViewLoading: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
+  syncBottomAfterComposerLayoutRef?: MutableRefObject<(() => void) | null>;
 };
 
 type UseAgentChatWindowResult = {
@@ -35,7 +36,10 @@ export function useAgentChatWindow({
   isSessionViewLoading,
   messagesContainerRef,
   messagesContentRef,
+  syncBottomAfterComposerLayoutRef,
 }: UseAgentChatWindowInput): UseAgentChatWindowResult {
+  const composerLayoutSyncFrameRef = useRef<number | null>(null);
+  const composerLayoutSyncSettleFrameRef = useRef<number | null>(null);
   const rowCount = rows.length;
   const initialWindow = createBottomAnchoredWindow(rowCount);
   const {
@@ -67,6 +71,47 @@ export function useAgentChatWindow({
     messagesContentRef,
     syncBottomIfPinned,
   });
+
+  useEffect(() => {
+    if (!syncBottomAfterComposerLayoutRef) {
+      return;
+    }
+
+    const cancelScheduledComposerLayoutSync = () => {
+      if (composerLayoutSyncFrameRef.current !== null) {
+        globalThis.cancelAnimationFrame(composerLayoutSyncFrameRef.current);
+        composerLayoutSyncFrameRef.current = null;
+      }
+      if (composerLayoutSyncSettleFrameRef.current !== null) {
+        globalThis.cancelAnimationFrame(composerLayoutSyncSettleFrameRef.current);
+        composerLayoutSyncSettleFrameRef.current = null;
+      }
+    };
+
+    syncBottomAfterComposerLayoutRef.current = () => {
+      cancelScheduledComposerLayoutSync();
+      const requestAnimationFrameFn = globalThis.requestAnimationFrame;
+      if (typeof requestAnimationFrameFn !== "function") {
+        syncBottomIfPinned({ forcePinned: true });
+        return;
+      }
+
+      composerLayoutSyncFrameRef.current = requestAnimationFrameFn(() => {
+        composerLayoutSyncFrameRef.current = null;
+        composerLayoutSyncSettleFrameRef.current = requestAnimationFrameFn(() => {
+          composerLayoutSyncSettleFrameRef.current = null;
+          syncBottomIfPinned({ forcePinned: true });
+        });
+      });
+    };
+
+    return () => {
+      cancelScheduledComposerLayoutSync();
+      if (syncBottomAfterComposerLayoutRef.current) {
+        syncBottomAfterComposerLayoutRef.current = null;
+      }
+    };
+  }, [syncBottomAfterComposerLayoutRef, syncBottomIfPinned]);
   const { windowRange, scrollToBottom, scrollToTop, shiftWindowUp, shiftWindowDown } =
     useAgentChatWindowRangeController({
       rows,
