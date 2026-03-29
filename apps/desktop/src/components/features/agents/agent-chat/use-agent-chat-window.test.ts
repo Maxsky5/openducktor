@@ -1508,14 +1508,13 @@ describe("useAgentChatWindow", () => {
 
     result = harness.getLatestResult();
     expect(result.windowStart).toBe(0);
-    expect(result.windowEnd).toBe(CHAT_WINDOW_SIZE + CHAT_OVERSCAN - 1 + CHAT_SHIFT_SIZE);
+    expect(result.windowEnd).toBe(69);
 
     await harness.unmount();
   });
 
   test("upward window shifts ignore repeated top sentinel intersections until the sentinel exits", async () => {
     const rows = createRows(120);
-    const initialBottomAnchoredStart = rows.length - CHAT_WINDOW_SIZE - CHAT_OVERSCAN;
     const harness = await mountHarness(
       {
         rows,
@@ -1555,7 +1554,7 @@ describe("useAgentChatWindow", () => {
     });
 
     let result = harness.getLatestResult();
-    expect(result.windowStart).toBe(initialBottomAnchoredStart - CHAT_SHIFT_SIZE);
+    expect(result.windowStart).toBe(50);
 
     await act(async () => {
       observer.trigger([{ isIntersecting: false }]);
@@ -1568,7 +1567,7 @@ describe("useAgentChatWindow", () => {
     });
 
     result = harness.getLatestResult();
-    expect(result.windowStart).toBe(initialBottomAnchoredStart - CHAT_SHIFT_SIZE * 2);
+    expect(result.windowStart).toBe(40);
 
     await harness.unmount();
   });
@@ -1621,7 +1620,7 @@ describe("useAgentChatWindow", () => {
 
     let result = harness.getLatestResult();
     expect(result.windowStart).toBe(0);
-    expect(result.windowEnd).toBe(CHAT_WINDOW_SIZE + CHAT_OVERSCAN - 1 + CHAT_SHIFT_SIZE);
+    expect(result.windowEnd).toBe(69);
 
     await act(async () => {
       observer.trigger([{ isIntersecting: false }]);
@@ -1634,17 +1633,8 @@ describe("useAgentChatWindow", () => {
     });
 
     result = harness.getLatestResult();
-    expect(result.windowStart).toBe(
-      Math.max(
-        0,
-        CHAT_WINDOW_SIZE +
-          CHAT_OVERSCAN -
-          1 +
-          CHAT_SHIFT_SIZE * 2 -
-          (CHAT_WINDOW_SIZE + CHAT_OVERSCAN * 2 - 1),
-      ),
-    );
-    expect(result.windowEnd).toBe(CHAT_WINDOW_SIZE + CHAT_OVERSCAN - 1 + CHAT_SHIFT_SIZE * 2);
+    expect(result.windowStart).toBe(10);
+    expect(result.windowEnd).toBe(79);
 
     await harness.unmount();
   });
@@ -1766,20 +1756,20 @@ describe("useAgentChatWindow", () => {
       throw new Error("Expected bottom sentinel observer");
     }
 
-    const shiftsToReachBottom = Math.ceil((CHAT_OVERSCAN * 2) / CHAT_SHIFT_SIZE);
-    for (let shiftIndex = 0; shiftIndex < shiftsToReachBottom; shiftIndex += 1) {
-      await act(async () => {
-        observer.trigger([{ isIntersecting: true }]);
-        await flush();
-      });
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
 
-      if (shiftIndex < shiftsToReachBottom - 1) {
-        await act(async () => {
-          observer.trigger([{ isIntersecting: false }]);
-          await flush();
-        });
-      }
-    }
+    await act(async () => {
+      observer.trigger([{ isIntersecting: false }]);
+      await flush();
+    });
+
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
 
     await harness.update({
       rows: createRows(81),
@@ -1801,7 +1791,6 @@ describe("useAgentChatWindow", () => {
 
   test("preserves the viewport anchor when older history is prepended into the window", async () => {
     const rows = createRows(120);
-    const initialBottomAnchoredStart = rows.length - CHAT_WINDOW_SIZE - CHAT_OVERSCAN;
     const harness = await mountHarness(
       {
         rows,
@@ -1840,9 +1829,7 @@ describe("useAgentChatWindow", () => {
       await flush();
     });
 
-    expect(harness.getLatestResult().windowStart).toBe(
-      initialBottomAnchoredStart - CHAT_SHIFT_SIZE,
-    );
+    expect(harness.getLatestResult().windowStart).toBe(50);
     expect(container.scrollTop).toBe(160 + CHAT_SHIFT_SIZE * ROW_HEIGHT_PX);
 
     await harness.unmount();
@@ -1889,23 +1876,23 @@ describe("useAgentChatWindow", () => {
       throw new Error("Expected bottom sentinel observer");
     }
 
-    const shiftsToReplaceRowsAboveViewport = Math.floor(CHAT_OVERSCAN / CHAT_SHIFT_SIZE) + 1;
-    for (let shiftIndex = 0; shiftIndex < shiftsToReplaceRowsAboveViewport; shiftIndex += 1) {
-      await act(async () => {
-        observer.trigger([{ isIntersecting: true }]);
-        await flush();
-      });
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
 
-      if (shiftIndex < shiftsToReplaceRowsAboveViewport - 1) {
-        await act(async () => {
-          observer.trigger([{ isIntersecting: false }]);
-          await flush();
-        });
-      }
-    }
+    await act(async () => {
+      observer.trigger([{ isIntersecting: false }]);
+      await flush();
+    });
 
-    expect(harness.getLatestResult().windowStart).toBe(CHAT_SHIFT_SIZE);
-    expect(container.scrollTop).toBe(600 - CHAT_SHIFT_SIZE * ROW_HEIGHT_PX);
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(10);
+    expect(container.scrollTop).toBe(600 - 10 * ROW_HEIGHT_PX);
 
     await harness.unmount();
   });
@@ -1927,6 +1914,6 @@ describe("useAgentChatWindow", () => {
   test("exports the expected chat window constants", () => {
     expect(CHAT_WINDOW_SIZE).toBe(50);
     expect(CHAT_OVERSCAN).toBe(10);
-    expect(CHAT_SHIFT_SIZE).toBe(5);
+    expect(CHAT_SHIFT_SIZE).toBe(10);
   });
 });
