@@ -17,6 +17,16 @@ beforeAll(async () => {
     readEditableTextContent: (element: HTMLElement): string =>
       (element.textContent ?? "").replace(/\u200B/g, ""),
     getCaretOffsetWithinElement: getCaretOffsetWithinElementMock,
+    insertTextAtCaretWithinElement: (
+      element: HTMLElement,
+      text: string,
+      fallbackOffset: number,
+    ) => {
+      const currentText = (element.textContent ?? "").replace(/\u200B/g, "");
+      const nextText = `${currentText.slice(0, fallbackOffset)}${text}${currentText.slice(fallbackOffset)}`;
+      element.textContent = nextText;
+      return fallbackOffset + text.length;
+    },
     setCaretOffsetWithinElement: setCaretOffsetWithinElementMock,
   }));
 

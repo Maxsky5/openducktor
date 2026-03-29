@@ -16,8 +16,8 @@ import {
   readSlashTriggerMatch,
 } from "./agent-chat-composer-draft";
 import {
-  EMPTY_TEXT_SEGMENT_SENTINEL,
   getCaretOffsetWithinElement,
+  insertTextAtCaretWithinElement,
   readEditableTextContent,
   setCaretOffsetWithinElement,
 } from "./agent-chat-composer-selection";
@@ -163,6 +163,14 @@ export const useAgentChatComposerEditor = ({
     return filterSlashCommands(slashCommands, slashMenuState.query);
   }, [slashCommands, slashMenuState]);
 
+  const focusTextSegmentWithMemory = useCallback(
+    (segmentId: string, offset: number) => {
+      rememberCaretOffset(segmentId, offset);
+      focusTextSegment(segmentId, offset);
+    },
+    [focusTextSegment, rememberCaretOffset],
+  );
+
   const updateSlashMenuForText = useCallback(
     (segmentId: string, text: string, caretOffset: number | null) => {
       if (disabled || !supportsSlashCommands || caretOffset === null) {
@@ -255,6 +263,27 @@ export const useAgentChatComposerEditor = ({
     [applyEditResult, consumeSuppressedInput, draft, rememberCaretOffset, updateSlashMenuForText],
   );
 
+  const applyNewlineInsertion = useCallback(
+    (segmentId: string, element: HTMLElement, caretOffset: number) => {
+      suppressNextInput(segmentId);
+      const nextCaretOffset = insertTextAtCaretWithinElement(element, "\n", caretOffset);
+      const nextText = readEditableTextContent(element);
+      rememberCaretOffset(segmentId, nextCaretOffset);
+      const result = applyComposerDraftEdit(draft, {
+        type: "update_text",
+        segmentId,
+        text: nextText,
+        caretOffset: nextCaretOffset ?? caretOffset + 1,
+      });
+      const didApply = applyEditResult(result);
+      if (didApply) {
+        setSlashMenuState(null);
+      }
+      return didApply;
+    },
+    [applyEditResult, draft, rememberCaretOffset, suppressNextInput],
+  );
+
   const handleTextBeforeInput = useCallback(
     (segmentId: string, event: ReactFormEvent<HTMLElement>) => {
       const nativeEvent = event.nativeEvent as { inputType?: unknown };
@@ -276,28 +305,9 @@ export const useAgentChatComposerEditor = ({
       }
 
       event.preventDefault();
-      suppressNextInput(segmentId);
-      const result = applyComposerDraftEdit(draft, {
-        type: "insert_newline",
-        segmentId,
-        caretOffset,
-      });
-      const updatedSegment = result?.draft.segments.find(
-        (
-          segment,
-        ): segment is Extract<AgentChatComposerDraft["segments"][number], { kind: "text" }> =>
-          segment.id === segmentId && segment.kind === "text",
-      );
-      if (updatedSegment) {
-        event.currentTarget.textContent =
-          updatedSegment.text.length > 0 ? updatedSegment.text : EMPTY_TEXT_SEGMENT_SENTINEL;
-      }
-      const didApply = applyEditResult(result);
-      if (didApply) {
-        setSlashMenuState(null);
-      }
+      applyNewlineInsertion(segmentId, event.currentTarget, caretOffset);
     },
-    [applyEditResult, draft, readCaretOffset, suppressNextInput],
+    [applyNewlineInsertion, readCaretOffset],
   );
 
   const handleTextKeyUp = useCallback(
@@ -355,16 +365,7 @@ export const useAgentChatComposerEditor = ({
 
       if (event.key === "Enter" && event.shiftKey && caretOffset !== null) {
         event.preventDefault();
-        const didApply = applyEditResult(
-          applyComposerDraftEdit(draft, {
-            type: "insert_newline",
-            segmentId,
-            caretOffset,
-          }),
-        );
-        if (didApply) {
-          setSlashMenuState(null);
-        }
+        applyNewlineInsertion(segmentId, target, caretOffset);
         return;
       }
 
@@ -387,6 +388,7 @@ export const useAgentChatComposerEditor = ({
     },
     [
       activeSlashIndex,
+      applyNewlineInsertion,
       applyEditResult,
       disabled,
       draft,
@@ -405,10 +407,10 @@ export const useAgentChatComposerEditor = ({
       if (!segment || segment.kind !== "text") {
         continue;
       }
-      focusTextSegment(segment.id, segment.text.length);
+      focusTextSegmentWithMemory(segment.id, segment.text.length);
       return;
     }
-  }, [draft.segments, focusTextSegment]);
+  }, [draft.segments, focusTextSegmentWithMemory]);
 
   const focusSlashCommandSegment = useCallback(
     (segmentId: string) => {
@@ -419,16 +421,16 @@ export const useAgentChatComposerEditor = ({
 
       const nextSegment = draft.segments[currentIndex + 1];
       if (nextSegment?.kind === "text") {
-        focusTextSegment(nextSegment.id, 0);
+        focusTextSegmentWithMemory(nextSegment.id, 0);
         return;
       }
 
       const previousSegment = draft.segments[currentIndex - 1];
       if (previousSegment?.kind === "text") {
-        focusTextSegment(previousSegment.id, previousSegment.text.length);
+        focusTextSegmentWithMemory(previousSegment.id, previousSegment.text.length);
       }
     },
-    [draft.segments, focusTextSegment],
+    [draft.segments, focusTextSegmentWithMemory],
   );
 
   return {

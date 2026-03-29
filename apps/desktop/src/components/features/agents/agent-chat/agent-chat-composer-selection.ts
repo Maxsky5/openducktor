@@ -49,3 +49,48 @@ export const setCaretOffsetWithinElement = (element: HTMLElement, logicalOffset:
   selection.addRange(range);
   element.focus();
 };
+
+export const insertTextAtCaretWithinElement = (
+  element: HTMLElement,
+  text: string,
+  fallbackLogicalOffset: number,
+): number | null => {
+  const ownerDocument = element.ownerDocument;
+  const selection = ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
+  if (!selection) {
+    return null;
+  }
+
+  const normalizedElementText = (element.textContent ?? "")
+    .split(EMPTY_TEXT_SEGMENT_SENTINEL)
+    .join("");
+  if (normalizedElementText.length === 0) {
+    element.textContent = "";
+  }
+
+  if (
+    selection.rangeCount === 0 ||
+    !element.contains(selection.anchorNode) ||
+    !element.contains(selection.focusNode)
+  ) {
+    setCaretOffsetWithinElement(element, fallbackLogicalOffset);
+  }
+
+  if (selection.rangeCount === 0) {
+    return null;
+  }
+
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  const insertedNode = ownerDocument.createTextNode(text);
+  range.insertNode(insertedNode);
+
+  const nextRange = ownerDocument.createRange();
+  nextRange.setStart(insertedNode, insertedNode.textContent?.length ?? text.length);
+  nextRange.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(nextRange);
+  element.focus();
+
+  return getCaretOffsetWithinElement(element);
+};
