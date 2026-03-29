@@ -123,7 +123,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
         return [...current, nextTaskId];
       });
       setPersistedActiveTaskId(nextTaskId);
-      navigateToTask(nextTaskId, { pinSession: true });
+      navigateToTask(nextTaskId);
     },
     [
       activeTaskTabId,

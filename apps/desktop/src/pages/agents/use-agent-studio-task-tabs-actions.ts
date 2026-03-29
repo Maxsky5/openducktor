@@ -85,7 +85,7 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
       }
 
       focusTaskTabTrigger(nextActiveTaskId);
-      navigateToTask(nextActiveTaskId, { pinSession: true });
+      navigateToTask(nextActiveTaskId);
     },
     [
       activeTaskTabId,
