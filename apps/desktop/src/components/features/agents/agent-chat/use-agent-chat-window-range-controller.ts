@@ -61,6 +61,7 @@ export function useAgentChatWindowRangeController({
   const prevSessionIdRef = useRef<string | null>(null);
   const prevIsSessionViewLoadingRef = useRef(isSessionViewLoading);
   const prevRowCountRef = useRef(rowCount);
+  const sentinelUnlockFrameRef = useRef<number | null>(null);
 
   const setWindowRangeState = useCallback((nextRange: WindowRange) => {
     windowRangeRef.current = nextRange;
@@ -73,6 +74,17 @@ export function useAgentChatWindowRangeController({
       isUpdatingRef.current = false;
     });
   }, [isUpdatingRef]);
+
+  const suppressSentinelsForWindowShift = useCallback(() => {
+    suppressSentinelsRef.current = true;
+    if (sentinelUnlockFrameRef.current !== null) {
+      globalThis.cancelAnimationFrame(sentinelUnlockFrameRef.current);
+    }
+    sentinelUnlockFrameRef.current = globalThis.requestAnimationFrame(() => {
+      suppressSentinelsRef.current = false;
+      sentinelUnlockFrameRef.current = null;
+    });
+  }, [suppressSentinelsRef]);
 
   const applyBottomAnchoredWindow = useCallback(() => {
     const nextWindow = createBottomAnchoredWindow(rowCount);
@@ -194,6 +206,7 @@ export function useAgentChatWindowRangeController({
         captureScrollAnchor(anchorRow.key);
       }
     }
+    suppressSentinelsForWindowShift();
     releaseWindowUpdateLock();
     setWindowRangeState(nextRange);
   }, [
@@ -203,6 +216,7 @@ export function useAgentChatWindowRangeController({
     releaseWindowUpdateLock,
     rowCount,
     setWindowRangeState,
+    suppressSentinelsForWindowShift,
     suppressSentinelsRef,
     rows,
   ]);
@@ -242,6 +256,7 @@ export function useAgentChatWindowRangeController({
         }
       }
     }
+    suppressSentinelsForWindowShift();
     if (reachedBottom) {
       setBottomAnchoredState(nextRange.start);
       requestWindowScroll({
@@ -261,9 +276,18 @@ export function useAgentChatWindowRangeController({
     requestWindowScroll,
     setBottomAnchoredState,
     setWindowRangeState,
+    suppressSentinelsForWindowShift,
     suppressSentinelsRef,
     rows,
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (sentinelUnlockFrameRef.current !== null) {
+        globalThis.cancelAnimationFrame(sentinelUnlockFrameRef.current);
+      }
+    };
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     applyBottomAnchoredWindow();

@@ -1513,6 +1513,150 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("upward window shifts suppress repeated top sentinel triggers until the unlock frame", async () => {
+    const queuedFrameCallbacks: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      queuedFrameCallbacks.push(callback);
+      return queuedFrameCallbacks.length;
+    }) as typeof requestAnimationFrame;
+
+    const rows = createRows(120);
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachContainer: true },
+    );
+
+    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    attachWindowedRowGeometry({
+      container,
+      rows,
+      getWindowStart: () => harness.getLatestResult().windowStart,
+      getWindowEnd: () => harness.getLatestResult().windowEnd,
+    });
+    container.scrollTop = 160;
+
+    await act(async () => {
+      while (queuedFrameCallbacks.length > 0) {
+        const callback = queuedFrameCallbacks.shift();
+        callback?.(0);
+        await flush();
+      }
+    });
+
+    const sentinelElement = createMessagesContainer();
+    await act(async () => {
+      harness.getLatestResult().topSentinelRef(sentinelElement);
+      await flush();
+    });
+
+    const observer = mockIntersectionObservers.at(-1);
+    if (!observer) {
+      throw new Error("Expected top sentinel observer");
+    }
+
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    let result = harness.getLatestResult();
+    expect(result.windowStart).toBe(50);
+
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    result = harness.getLatestResult();
+    expect(result.windowStart).toBe(50);
+
+    await harness.unmount();
+  });
+
+  test("downward window shifts suppress repeated bottom sentinel triggers until the unlock frame", async () => {
+    const queuedFrameCallbacks: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      queuedFrameCallbacks.push(callback);
+      return queuedFrameCallbacks.length;
+    }) as typeof requestAnimationFrame;
+
+    const rows = createRows(120);
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachContainer: true },
+    );
+
+    const container = harness.messagesContainerRef.current as MockMessagesContainer | null;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    attachWindowedRowGeometry({
+      container,
+      rows,
+      getWindowStart: () => harness.getLatestResult().windowStart,
+      getWindowEnd: () => harness.getLatestResult().windowEnd,
+    });
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+
+    container.scrollTop = 600;
+
+    await act(async () => {
+      while (queuedFrameCallbacks.length > 0) {
+        const callback = queuedFrameCallbacks.shift();
+        callback?.(0);
+        await flush();
+      }
+    });
+
+    const sentinelElement = createMessagesContainer();
+    await act(async () => {
+      harness.getLatestResult().bottomSentinelRef(sentinelElement);
+      await flush();
+    });
+
+    const observer = mockIntersectionObservers.at(-1);
+    if (!observer) {
+      throw new Error("Expected bottom sentinel observer");
+    }
+
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    let result = harness.getLatestResult();
+    expect(result.windowStart).toBe(0);
+    expect(result.windowEnd).toBe(69);
+
+    await act(async () => {
+      observer.trigger([{ isIntersecting: true }]);
+      await flush();
+    });
+
+    result = harness.getLatestResult();
+    expect(result.windowStart).toBe(0);
+    expect(result.windowEnd).toBe(69);
+
+    await harness.unmount();
+  });
+
   test("scrollToBottom restores the bottom-anchored window", async () => {
     const harness = await mountHarness({
       rows: createRows(80),
