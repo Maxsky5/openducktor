@@ -617,6 +617,42 @@ describe("runtime schemas", () => {
     ]);
   });
 
+  test("slash command catalog rejects malformed triggers", () => {
+    expect(() =>
+      slashCommandCatalogSchema.parse({
+        commands: [
+          {
+            id: "review",
+            trigger: "/review now",
+            title: "review",
+            hints: [],
+          },
+        ],
+      }),
+    ).toThrow("Trigger must be a single token without a leading slash");
+  });
+
+  test("slash command catalog rejects duplicate ids and triggers", () => {
+    expect(() =>
+      slashCommandCatalogSchema.parse({
+        commands: [
+          {
+            id: "review",
+            trigger: "review",
+            title: "review",
+            hints: [],
+          },
+          {
+            id: "review",
+            trigger: "review",
+            title: "review again",
+            hints: [],
+          },
+        ],
+      }),
+    ).toThrow("Duplicate slash command id: review");
+  });
+
   test("agent runtime role and buildContinuationTarget schemas enforce boundaries", () => {
     expect(runtimeInstanceSummaryRoleSchema.parse("workspace")).toBe("workspace");
     expect(() => runtimeInstanceSummaryRoleSchema.parse("planner")).toThrow();
