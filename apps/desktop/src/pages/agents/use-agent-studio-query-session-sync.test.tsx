@@ -206,4 +206,33 @@ describe("useAgentStudioQuerySessionSync", () => {
       await harness.unmount();
     }
   });
+
+  test("does not repin build selection for review tasks during task-only navigation", async () => {
+    const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
+    const activeSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "session-build",
+      externalSessionId: "ext-session-build",
+      taskId: "task-1",
+      role: "build",
+      scenario: "build_implementation_start",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        taskIdParam: "task-1",
+        sessionParam: null,
+        taskId: "task-1",
+        activeSession,
+        roleFromQuery: "qa",
+        scheduleQueryUpdate,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      expect(scheduleQueryUpdate).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

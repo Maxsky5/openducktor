@@ -334,6 +334,31 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
+  test("keeps build workspace document selection aligned to the resolved active session", async () => {
+    const buildSession = createSession("session-build", "external-build", {
+      role: "build",
+      scenario: "build_implementation_start",
+    });
+    const harness = createHookHarness(
+      createHookArgs({
+        core: {
+          role: "qa",
+          activeSession: buildSession,
+          sessionsForTask: [buildSession],
+        },
+        documents: {
+          specDoc: createDocumentState("spec"),
+          planDoc: createDocumentState("plan"),
+          qaDoc: createDocumentState("qa"),
+        },
+      }),
+    );
+
+    await harness.mount();
+    expect(harness.getLatest().agentStudioWorkspaceSidebarModel.activeDocument).toBeNull();
+    await harness.unmount();
+  });
+
   test("includes pending permission count in header stats", async () => {
     const permissionSession = createSession("session-1", "external-1", {
       status: "running",
