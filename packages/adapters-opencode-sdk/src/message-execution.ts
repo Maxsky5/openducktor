@@ -160,12 +160,15 @@ export const sendUserMessage = async (input: {
   input.session.pendingQueuedUserMessages = pendingQueuedUserMessages;
   const shouldTrackAsQueued =
     input.session.activeAssistantMessageId !== null && queuedContent.length > 0;
+  const queuedEntry = shouldTrackAsQueued
+    ? {
+        content: queuedContent,
+        ...(model ? { model } : {}),
+      }
+    : null;
 
-  if (shouldTrackAsQueued) {
-    pendingQueuedUserMessages.push({
-      content: queuedContent,
-      ...(model ? { model } : {}),
-    });
+  if (queuedEntry) {
+    pendingQueuedUserMessages.push(queuedEntry);
   }
 
   setSessionActive(input.session);
@@ -179,12 +182,10 @@ export const sendUserMessage = async (input: {
       input.session.activeAssistantMessageId = assistantMessageId;
     }
   } catch (error) {
-    if (shouldTrackAsQueued) {
-      const matchIndex = pendingQueuedUserMessages.findIndex(
-        (entry) => entry.content === queuedContent,
-      );
-      if (matchIndex >= 0) {
-        pendingQueuedUserMessages.splice(matchIndex, 1);
+    if (queuedEntry) {
+      const queuedEntryIndex = pendingQueuedUserMessages.indexOf(queuedEntry);
+      if (queuedEntryIndex >= 0) {
+        pendingQueuedUserMessages.splice(queuedEntryIndex, 1);
       }
     }
     if (error instanceof Error && error.message.startsWith("OpenCode request failed:")) {

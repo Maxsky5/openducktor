@@ -110,6 +110,34 @@ describe("message-execution", () => {
     expect(promptAsync).not.toHaveBeenCalled();
   });
 
+  test("removes the exact queued slash follow-up entry when duplicate content send fails", async () => {
+    const { session } = createSession({
+      commandResult: {
+        error: new Error("boom"),
+        response: { status: 500, statusText: "Server Error" },
+      },
+    });
+    session.activeAssistantMessageId = "msg-200";
+    const preservedEntry = { content: "/compact summarize latest session" };
+    session.pendingQueuedUserMessages = [preservedEntry];
+
+    await expect(
+      sendUserMessage({
+        session,
+        request: {
+          sessionId: "session-1",
+          parts: [
+            { kind: "slash_command", command: COMMAND },
+            { kind: "text", text: " summarize latest session" },
+          ],
+        },
+        tools: {},
+      }),
+    ).rejects.toThrow();
+
+    expect(session.pendingQueuedUserMessages).toEqual([preservedEntry]);
+  });
+
   test("hydrates the pending assistant boundary from slash-command responses", async () => {
     const { session } = createSession({
       commandResult: {
