@@ -230,8 +230,9 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     latestSendDisabledRef.current = sendDisabled;
   }, [sendDisabled]);
 
+  const isSubmitting = isSending || isStarting || isModelSelectionPending;
   const selectorDisabled =
-    !taskId || isSelectionCatalogLoading || isStarting || !agentStudioReady || isReadOnly;
+    !taskId || isSelectionCatalogLoading || isSubmitting || !agentStudioReady || isReadOnly;
 
   const composerAccentColor = useMemo(() => {
     const agentName = selectedModelSelection?.profileId;
@@ -257,7 +258,6 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
       onComposerEditorInput();
     }
   }, [onComposerEditorInput, scrollToBottomOnSendRef]);
-  const isSubmitting = isSending || isStarting || isModelSelectionPending;
   const isComposerInputDisabled =
     !agentStudioReady ||
     isReadOnly ||
@@ -289,68 +289,66 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
         void handleSubmit();
       }}
     >
-      <fieldset className="contents" disabled={isSubmitting}>
+      <div
+        className={
+          isWaitingInput
+            ? "odt-waiting-input-card relative border border-warning-border bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl"
+            : "relative border border-input border-l-0 bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl"
+        }
+      >
+        {isSessionWorking && !isWaitingInput ? (
+          <BorderRay
+            strokeWidth={2.6}
+            rayLengthRatio={0.12}
+            {...(composerAccentColor ? { color: composerAccentColor } : {})}
+          />
+        ) : null}
         <div
-          className={
-            isWaitingInput
-              ? "odt-waiting-input-card relative border border-warning-border bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl"
-              : "relative border border-input border-l-0 bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl"
+          className={isWaitingInput ? "relative z-10" : "relative z-10 border-l-4"}
+          style={
+            composerAccentColor && !isWaitingInput
+              ? { borderLeftColor: composerAccentColor }
+              : undefined
           }
         >
-          {isSessionWorking && !isWaitingInput ? (
-            <BorderRay
-              strokeWidth={2.6}
-              rayLengthRatio={0.12}
-              {...(composerAccentColor ? { color: composerAccentColor } : {})}
-            />
-          ) : null}
-          <div
-            className={isWaitingInput ? "relative z-10" : "relative z-10 border-l-4"}
-            style={
-              composerAccentColor && !isWaitingInput
-                ? { borderLeftColor: composerAccentColor }
-                : undefined
-            }
-          >
-            <AgentChatComposerEditor
-              draft={draft}
-              onDraftChange={handleDraftChange}
-              placeholder={composerPlaceholder}
-              disabled={isComposerInputDisabled}
-              editorRef={composerEditorRef}
-              onEditorInput={onComposerEditorInput}
-              onSend={handleSubmit}
-              supportsSlashCommands={supportsSlashCommands}
-              slashCommands={slashCommands}
-              slashCommandsError={slashCommandsError}
-              isSlashCommandsLoading={isSlashCommandsLoading}
-            />
+          <AgentChatComposerEditor
+            draft={draft}
+            onDraftChange={handleDraftChange}
+            placeholder={composerPlaceholder}
+            disabled={isComposerInputDisabled || isSubmitting}
+            editorRef={composerEditorRef}
+            onEditorInput={onComposerEditorInput}
+            onSend={handleSubmit}
+            supportsSlashCommands={supportsSlashCommands}
+            slashCommands={slashCommands}
+            slashCommandsError={slashCommandsError}
+            isSlashCommandsLoading={isSlashCommandsLoading}
+          />
 
-            <AgentChatComposerControls
-              selectedModelSelection={selectedModelSelection}
-              agentOptions={agentOptions}
-              modelOptions={modelOptions}
-              modelGroups={modelGroups}
-              variantOptions={variantOptions}
-              isSelectionCatalogLoading={isSelectionCatalogLoading}
-              selectorDisabled={selectorDisabled}
-              taskId={taskId}
-              agentStudioReady={agentStudioReady}
-              isStarting={isStarting}
-              isReadOnly={isReadOnly}
-              onSelectAgent={onSelectAgent}
-              onSelectModel={onSelectModel}
-              onSelectVariant={onSelectVariant}
-              contextUsage={contextUsage}
-              canStopSession={canStopSession}
-              onStopSession={onStopSession}
-              isSending={isSending}
-              isModelSelectionPending={isModelSelectionPending}
-              sendDisabled={sendDisabled}
-            />
-          </div>
+          <AgentChatComposerControls
+            selectedModelSelection={selectedModelSelection}
+            agentOptions={agentOptions}
+            modelOptions={modelOptions}
+            modelGroups={modelGroups}
+            variantOptions={variantOptions}
+            isSelectionCatalogLoading={isSelectionCatalogLoading}
+            selectorDisabled={selectorDisabled}
+            taskId={taskId}
+            agentStudioReady={agentStudioReady}
+            isStarting={isStarting}
+            isReadOnly={isReadOnly}
+            onSelectAgent={onSelectAgent}
+            onSelectModel={onSelectModel}
+            onSelectVariant={onSelectVariant}
+            contextUsage={contextUsage}
+            canStopSession={canStopSession}
+            onStopSession={onStopSession}
+            isSending={isSending}
+            isModelSelectionPending={isModelSelectionPending}
+            sendDisabled={sendDisabled}
+          />
         </div>
-      </fieldset>
+      </div>
     </form>
   );
 }
