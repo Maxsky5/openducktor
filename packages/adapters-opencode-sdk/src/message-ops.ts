@@ -150,6 +150,10 @@ const hasCompletedAssistantMessage = (value: unknown): boolean => {
   return typeof time?.completed === "number";
 };
 
+const hasPendingAssistantBoundary = (session: SessionRecord): boolean => {
+  return session.activeAssistantMessageId !== null;
+};
+
 export const loadSessionHistory = async (
   createClient: ClientFactory,
   now: () => string,
@@ -213,7 +217,7 @@ export const loadSessionHistory = async (
         item.entry.info.role === "assistant" && !hasCompletedAssistantMessage(item.entry.info),
     )?.entry.info.id;
 
-  const mapped: AgentSessionHistoryMessage[] = entries.map((item) => {
+  return entries.map((item) => {
     if (item.entry.info.role === "assistant") {
       return {
         messageId: item.entry.info.id,
@@ -236,17 +240,6 @@ export const loadSessionHistory = async (
       parts: item.parts,
     };
   });
-
-  mapped.sort((a, b) => {
-    const aTime = Date.parse(a.timestamp);
-    const bTime = Date.parse(b.timestamp);
-    if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
-      return 0;
-    }
-    return aTime - bTime;
-  });
-
-  return mapped;
 };
 
 export const loadSessionTodos = async (
@@ -348,7 +341,7 @@ export const sendUserMessage = async (input: {
   tools: Record<string, boolean>;
 }): Promise<void> => {
   const model = input.request.model ?? input.session.input.model;
-  const wasBusy = input.session.hasIdleSinceActivity === false;
+  const wasBusy = hasPendingAssistantBoundary(input.session);
   const queuedSend = wasBusy
     ? {
         content: input.request.content.trim(),

@@ -286,6 +286,47 @@ describe("event-stream", () => {
     });
   });
 
+  test("ignores unrelated status fields when deriving explicit user message state", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "msg-100",
+            role: "assistant",
+            sessionID: "external-session-1",
+            time: {
+              created: Date.parse("2026-02-22T12:00:01.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "msg-200",
+            role: "user",
+            sessionID: "external-session-1",
+            text: "Ship it",
+            status: "read",
+            time: {
+              created: Date.parse("2026-02-22T12:00:02.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]).toMatchObject({
+      type: "user_message",
+      messageId: "msg-200",
+      state: "queued",
+    });
+  });
+
   test("reconciles queued follow-ups when a newer assistant becomes pending", async () => {
     const emitted = await runEventStream([
       {

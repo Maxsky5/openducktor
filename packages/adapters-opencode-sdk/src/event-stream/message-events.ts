@@ -205,7 +205,7 @@ const readExplicitUserMessageState = (
   ...sources: Array<unknown>
 ): AgentUserMessageState | undefined => {
   for (const source of sources) {
-    const rawState = readStringProp(source, ["state", "status"]);
+    const rawState = readStringProp(source, ["state"]);
     if (rawState === "queued" || rawState === "read") {
       return rawState;
     }

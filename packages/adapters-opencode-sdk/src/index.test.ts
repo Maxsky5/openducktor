@@ -727,6 +727,78 @@ describe("OpencodeSdkAdapter", () => {
     expect(session.hasIdleSinceActivity).toBe(false);
   });
 
+  test("sendUserMessage does not pre-queue the first turn without a pending assistant boundary", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+
+    const sessions = (
+      adapter as unknown as {
+        sessions: Map<
+          string,
+          {
+            activeAssistantMessageId: string | null;
+            pendingQueuedUserMessages: Array<{ content: string }>;
+          }
+        >;
+      }
+    ).sessions;
+    const session = sessions.get("session-1");
+    if (!session) {
+      throw new Error("Expected adapter session record");
+    }
+
+    session.activeAssistantMessageId = null;
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      content: "First turn",
+    });
+
+    expect(session.pendingQueuedUserMessages).toHaveLength(0);
+  });
+
+  test("sendUserMessage pre-queues busy follow-ups when an assistant boundary is active", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+
+    const sessions = (
+      adapter as unknown as {
+        sessions: Map<
+          string,
+          {
+            hasIdleSinceActivity: boolean;
+            activeAssistantMessageId: string | null;
+            pendingQueuedUserMessages: Array<{ content: string }>;
+          }
+        >;
+      }
+    ).sessions;
+    const session = sessions.get("session-1");
+    if (!session) {
+      throw new Error("Expected adapter session record");
+    }
+
+    session.hasIdleSinceActivity = true;
+    session.activeAssistantMessageId = "msg-200";
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      content: "Queued follow-up",
+    });
+
+    expect(session.pendingQueuedUserMessages).toEqual([{ content: "Queued follow-up" }]);
+  });
+
   test("updateSessionModel refreshes the adapter session model used for subsequent prompts", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({
