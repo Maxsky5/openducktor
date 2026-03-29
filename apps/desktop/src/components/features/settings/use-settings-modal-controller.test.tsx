@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createDefaultAutopilotSettings, type SettingsSnapshot } from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
@@ -72,7 +72,7 @@ const createHookHarness = (open: boolean, shouldLoadCatalog = false) =>
   );
 
 describe("useSettingsModalController", () => {
-  beforeAll(async () => {
+  const registerModuleMocks = (): void => {
     mock.module("@/state/app-state-provider", () => ({
       AppStateProvider: ({ children }: { children: unknown }) => children,
       useAgentState: () => {
@@ -127,11 +127,15 @@ describe("useSettingsModalController", () => {
     mock.module("./use-settings-modal-catalog-state", () => ({
       useSettingsModalCatalogState: useSettingsModalCatalogStateMock,
     }));
+  };
 
+  beforeEach(async () => {
+    mock.restore();
+    registerModuleMocks();
     ({ useSettingsModalController } = await import("./use-settings-modal-controller"));
   });
 
-  afterAll(() => {
+  afterEach(() => {
     mock.restore();
   });
 
