@@ -75,7 +75,16 @@ export const insertTextAtCaretWithinElement = (
     !element.contains(selection.anchorNode) ||
     !element.contains(selection.focusNode)
   ) {
-    setCaretOffsetWithinElement(element, fallbackLogicalOffset);
+    const clampedFallbackOffset = Math.max(
+      0,
+      Math.min(fallbackLogicalOffset, textNode.textContent?.length ?? 0),
+    );
+    const fallbackRange = ownerDocument.createRange();
+    fallbackRange.setStart(textNode, clampedFallbackOffset);
+    fallbackRange.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(fallbackRange);
+    element.focus();
   }
 
   if (selection.rangeCount === 0) {
