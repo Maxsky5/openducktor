@@ -291,7 +291,8 @@ describe("useAgentStudioDocuments", () => {
         markdown: "# Updated spec",
         updatedAt: "2026-02-22T09:00:00.000Z",
       });
-      expect(reloadDocumentMock).not.toHaveBeenCalled();
+      expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+      expect(reloadDocumentMock).toHaveBeenCalledWith("spec");
     } finally {
       await harness.unmount();
     }
@@ -357,70 +358,42 @@ describe("useAgentStudioDocuments", () => {
         markdown: "# Saved plan",
         updatedAt: null,
       });
-      expect(reloadDocumentMock).not.toHaveBeenCalled();
+      expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+      expect(reloadDocumentMock).toHaveBeenCalledWith("plan");
     } finally {
       await harness.unmount();
     }
   });
 
-  test("retries completed tool messages after loading clears for spec/plan/qa", async () => {
-    const scenarios = [
-      { tool: "odt_set_spec", section: "spec" as const, sessionId: "session-spec-loading" },
-      { tool: "odt_set_plan", section: "plan" as const, sessionId: "session-plan-loading" },
-      { tool: "odt_qa_rejected", section: "qa" as const, sessionId: "session-qa-loading" },
-    ] as const;
-
-    for (const scenario of scenarios) {
-      reloadDocumentMock.mockClear();
-      applyDocumentUpdateMock.mockClear();
-
-      setTaskDocumentsState({
-        specDoc: createDocumentState({
-          markdown: "",
-          updatedAt: null,
-          isLoading: scenario.section === "spec",
-        }),
-        planDoc: createDocumentState({
-          markdown: "",
-          updatedAt: null,
-          isLoading: scenario.section === "plan",
-        }),
-        qaDoc: createDocumentState({
-          markdown: "",
-          updatedAt: null,
-          isLoading: scenario.section === "qa",
-        }),
-      });
-
-      const activeSession = createAgentSessionFixture({
+  test("dedupes completed tool refreshes for the same message across rerenders", async () => {
+    const baseArgs = {
+      ...createBaseArgs(),
+      selectedTask: null,
+      activeSession: createAgentSessionFixture({
         runtimeKind: "opencode",
-        sessionId: scenario.sessionId,
-        messages: [createCompletedToolMessage({ tool: scenario.tool, input: {}, output: "done" })],
-      });
+        sessionId: "session-dedupe",
+        messages: [
+          createCompletedToolMessage({
+            id: "message-dedupe",
+            tool: "odt_set_plan",
+            input: { markdown: "# Saved plan" },
+            output: "done",
+          }),
+        ],
+      }),
+    };
+    const harness = createHookHarness(baseArgs);
 
-      const baseArgs = {
-        ...createBaseArgs(),
-        selectedTask: null,
-        activeSession,
-      };
-      const harness = createHookHarness(baseArgs);
+    try {
+      await harness.mount();
+      expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+      expect(reloadDocumentMock).toHaveBeenCalledWith("plan");
 
-      try {
-        await harness.mount();
-        expect(reloadDocumentMock).not.toHaveBeenCalled();
+      await harness.update(baseArgs);
 
-        setTaskDocumentsState({
-          specDoc: createDocumentState({ markdown: "", updatedAt: null, isLoading: false }),
-          planDoc: createDocumentState({ markdown: "", updatedAt: null, isLoading: false }),
-          qaDoc: createDocumentState({ markdown: "", updatedAt: null, isLoading: false }),
-        });
-        await harness.update(baseArgs);
-
-        expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
-        expect(reloadDocumentMock).toHaveBeenCalledWith(scenario.section);
-      } finally {
-        await harness.unmount();
-      }
+      expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
     }
   });
 
