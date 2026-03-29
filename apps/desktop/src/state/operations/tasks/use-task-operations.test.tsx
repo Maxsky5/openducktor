@@ -713,25 +713,39 @@ describe("use-task-operations", () => {
     let currentPlanUpdatedAt: string | null = null;
     const tasksList = mock(async () => [makeTask("A", currentStatus)]);
     const runsList = mock(async (): Promise<RunSummary[]> => []);
-    const specGet = mock(async () => ({ markdown: "", updatedAt: null }));
-    const planGet = mock(async () => ({
-      markdown: currentPlanMarkdown,
-      updatedAt: currentPlanUpdatedAt,
-    }));
-    const qaGetReport = mock(async () => ({ markdown: "", updatedAt: null }));
+    const taskDocumentGet = mock(async (_repoPath: string, _taskId: string, section: string) => {
+      if (section === "plan") {
+        return {
+          markdown: currentPlanMarkdown,
+          updatedAt: currentPlanUpdatedAt,
+        };
+      }
+
+      return { markdown: "", updatedAt: null };
+    });
+    const taskDocumentGetFresh = mock(
+      async (_repoPath: string, _taskId: string, section: string) => {
+        if (section === "plan") {
+          return {
+            markdown: currentPlanMarkdown,
+            updatedAt: currentPlanUpdatedAt,
+          };
+        }
+
+        return { markdown: "", updatedAt: null };
+      },
+    );
 
     const original = {
       tasksList: host.tasksList,
       runsList: host.runsList,
-      specGet: host.specGet,
-      planGet: host.planGet,
-      qaGetReport: host.qaGetReport,
+      taskDocumentGet: host.taskDocumentGet,
+      taskDocumentGetFresh: host.taskDocumentGetFresh,
     };
     host.tasksList = tasksList;
     host.runsList = runsList;
-    host.specGet = specGet;
-    host.planGet = planGet;
-    host.qaGetReport = qaGetReport;
+    host.taskDocumentGet = taskDocumentGet;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
 
     const queryClient = createQueryClient();
     let latest: {
@@ -790,7 +804,7 @@ describe("use-task-operations", () => {
 
       tasksList.mockClear();
       runsList.mockClear();
-      planGet.mockClear();
+      taskDocumentGetFresh.mockClear();
       currentStatus = "in_progress";
       currentPlanMarkdown = "# New plan";
       currentPlanUpdatedAt = "2026-03-28T00:00:00.000Z";
@@ -811,7 +825,7 @@ describe("use-task-operations", () => {
         3000,
       );
 
-      expect(planGet).toHaveBeenCalledWith("/repo", "A", { forceFresh: true });
+      expect(host.taskDocumentGetFresh).toHaveBeenCalledWith("/repo", "A", "plan");
       expect(tasksList).toHaveBeenCalledWith("/repo");
       expect(
         queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
@@ -822,9 +836,8 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.tasksList = original.tasksList;
       host.runsList = original.runsList;
-      host.specGet = original.specGet;
-      host.planGet = original.planGet;
-      host.qaGetReport = original.qaGetReport;
+      host.taskDocumentGet = original.taskDocumentGet;
+      host.taskDocumentGetFresh = original.taskDocumentGetFresh;
     }
   });
 

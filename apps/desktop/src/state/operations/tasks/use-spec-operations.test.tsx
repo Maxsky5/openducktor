@@ -17,6 +17,44 @@ reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 type HookArgs = Parameters<typeof useSpecOperations>[0];
 type HookResult = ReturnType<typeof useSpecOperations>;
 
+const emptyDocument = { markdown: "", updatedAt: null as string | null };
+
+const createTaskDocumentHostReaders = (readers: {
+  spec?: (
+    repoPath: string,
+    taskId: string,
+  ) => Promise<{ markdown: string; updatedAt: string | null }>;
+  plan?: (
+    repoPath: string,
+    taskId: string,
+  ) => Promise<{ markdown: string; updatedAt: string | null }>;
+  qa?: (
+    repoPath: string,
+    taskId: string,
+  ) => Promise<{ markdown: string; updatedAt: string | null }>;
+}) => {
+  const resolveSection = async (repoPath: string, taskId: string, section: string) => {
+    if (section === "spec") {
+      return readers.spec ? readers.spec(repoPath, taskId) : emptyDocument;
+    }
+
+    if (section === "plan") {
+      return readers.plan ? readers.plan(repoPath, taskId) : emptyDocument;
+    }
+
+    return readers.qa ? readers.qa(repoPath, taskId) : emptyDocument;
+  };
+
+  return {
+    taskDocumentGet: mock(async (repoPath: string, taskId: string, section: string) =>
+      resolveSection(repoPath, taskId, section),
+    ),
+    taskDocumentGetFresh: mock(async (repoPath: string, taskId: string, section: string) =>
+      resolveSection(repoPath, taskId, section),
+    ),
+  };
+};
+
 const createHookHarness = (initialArgs: HookArgs) => {
   let latest: HookResult | null = null;
   const currentArgs = initialArgs;
@@ -86,11 +124,18 @@ describe("use-spec-operations", () => {
       markdown: "",
       updatedAt: null,
     }));
+    const { taskDocumentGet, taskDocumentGetFresh } = createTaskDocumentHostReaders({
+      spec: specGet,
+    });
 
     const original = {
       specGet: host.specGet,
+      taskDocumentGet: host.taskDocumentGet,
+      taskDocumentGetFresh: host.taskDocumentGetFresh,
     };
     host.specGet = specGet;
+    host.taskDocumentGet = taskDocumentGet;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
 
     const harness = createHookHarness({ activeRepo: "/repo-a" });
 
@@ -98,11 +143,13 @@ describe("use-spec-operations", () => {
       await harness.mount();
       const spec = await harness.getLatest().loadSpec("task-1");
 
-      expect(specGet).toHaveBeenCalledWith("/repo-a", "task-1", undefined);
+      expect(specGet).toHaveBeenCalledWith("/repo-a", "task-1");
       expect(spec).toBe(defaultSpecTemplateMarkdown);
     } finally {
       await harness.unmount();
       host.specGet = original.specGet;
+      host.taskDocumentGet = original.taskDocumentGet;
+      host.taskDocumentGetFresh = original.taskDocumentGetFresh;
     }
   });
 
@@ -118,16 +165,23 @@ describe("use-spec-operations", () => {
       currentSpecUpdatedAt = "2026-02-22T10:30:00.000Z";
       return { updatedAt: "2026-02-22T10:30:00.000Z" };
     });
+    const { taskDocumentGet, taskDocumentGetFresh } = createTaskDocumentHostReaders({
+      spec: specGet,
+    });
     const tasksList = mock(async () => []);
     const runsList = mock(async () => []);
 
     const original = {
       specGet: host.specGet,
+      taskDocumentGet: host.taskDocumentGet,
+      taskDocumentGetFresh: host.taskDocumentGetFresh,
       setSpec: host.setSpec,
       tasksList: host.tasksList,
       runsList: host.runsList,
     };
     host.specGet = specGet;
+    host.taskDocumentGet = taskDocumentGet;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
     host.setSpec = setSpec;
     host.tasksList = tasksList;
     host.runsList = runsList;
@@ -151,6 +205,8 @@ describe("use-spec-operations", () => {
     } finally {
       await harness.unmount();
       host.specGet = original.specGet;
+      host.taskDocumentGet = original.taskDocumentGet;
+      host.taskDocumentGetFresh = original.taskDocumentGetFresh;
       host.setSpec = original.setSpec;
       host.tasksList = original.tasksList;
       host.runsList = original.runsList;
@@ -184,6 +240,11 @@ describe("use-spec-operations", () => {
       currentPlanUpdatedAt = "2026-02-22T10:04:00.000Z";
       return { updatedAt: "2026-02-22T10:04:00.000Z" };
     });
+    const { taskDocumentGet, taskDocumentGetFresh } = createTaskDocumentHostReaders({
+      spec: specGet,
+      plan: planGet,
+      qa: qaGetReport,
+    });
     const tasksList = mock(async () => []);
     const runsList = mock(async () => []);
 
@@ -191,6 +252,8 @@ describe("use-spec-operations", () => {
       specGet: host.specGet,
       planGet: host.planGet,
       qaGetReport: host.qaGetReport,
+      taskDocumentGet: host.taskDocumentGet,
+      taskDocumentGetFresh: host.taskDocumentGetFresh,
       saveSpecDocument: host.saveSpecDocument,
       savePlanDocument: host.savePlanDocument,
       tasksList: host.tasksList,
@@ -199,6 +262,8 @@ describe("use-spec-operations", () => {
     host.specGet = specGet;
     host.planGet = planGet;
     host.qaGetReport = qaGetReport;
+    host.taskDocumentGet = taskDocumentGet;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
     host.saveSpecDocument = saveSpecDocument;
     host.savePlanDocument = savePlanDocument;
     host.tasksList = tasksList;
@@ -230,9 +295,9 @@ describe("use-spec-operations", () => {
         updatedAt: "2026-02-22T10:04:00.000Z",
       });
 
-      expect(specGet).toHaveBeenCalledWith("/repo-a", "task-1", undefined);
-      expect(planGet).toHaveBeenCalledWith("/repo-a", "task-1", undefined);
-      expect(qaGetReport).toHaveBeenCalledWith("/repo-a", "task-1", undefined);
+      expect(specGet).toHaveBeenCalledWith("/repo-a", "task-1");
+      expect(planGet).toHaveBeenCalledWith("/repo-a", "task-1");
+      expect(qaGetReport).toHaveBeenCalledWith("/repo-a", "task-1");
       expect(saveSpecDocument).toHaveBeenCalledWith({
         repoPath: "/repo-a",
         taskId: "task-1",
@@ -248,6 +313,8 @@ describe("use-spec-operations", () => {
       host.specGet = original.specGet;
       host.planGet = original.planGet;
       host.qaGetReport = original.qaGetReport;
+      host.taskDocumentGet = original.taskDocumentGet;
+      host.taskDocumentGetFresh = original.taskDocumentGetFresh;
       host.saveSpecDocument = original.saveSpecDocument;
       host.savePlanDocument = original.savePlanDocument;
       host.tasksList = original.tasksList;
@@ -301,11 +368,17 @@ describe("use-spec-operations", () => {
       currentPlanUpdatedAt = "2026-02-22T10:04:00.000Z";
       return { updatedAt: "2026-02-22T10:04:00.000Z" };
     });
+    const { taskDocumentGet, taskDocumentGetFresh } = createTaskDocumentHostReaders({
+      spec: specGet,
+      plan: planGet,
+    });
     const tasksList = mock(async () => []);
     const runsList = mock(async () => []);
     const original = {
       specGet: host.specGet,
       planGet: host.planGet,
+      taskDocumentGet: host.taskDocumentGet,
+      taskDocumentGetFresh: host.taskDocumentGetFresh,
       saveSpecDocument: host.saveSpecDocument,
       savePlanDocument: host.savePlanDocument,
       tasksList: host.tasksList,
@@ -313,6 +386,8 @@ describe("use-spec-operations", () => {
     };
     host.specGet = specGet;
     host.planGet = planGet;
+    host.taskDocumentGet = taskDocumentGet;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
     host.saveSpecDocument = saveSpecDocument;
     host.savePlanDocument = savePlanDocument;
     host.tasksList = tasksList;
@@ -385,6 +460,8 @@ describe("use-spec-operations", () => {
       await harness.unmount();
       host.specGet = original.specGet;
       host.planGet = original.planGet;
+      host.taskDocumentGet = original.taskDocumentGet;
+      host.taskDocumentGetFresh = original.taskDocumentGetFresh;
       host.saveSpecDocument = original.saveSpecDocument;
       host.savePlanDocument = original.savePlanDocument;
       host.tasksList = original.tasksList;
@@ -428,15 +505,22 @@ describe("use-spec-operations", () => {
       currentSpecUpdatedAt = "2026-02-22T10:06:00.000Z";
       return { updatedAt: "2026-02-22T10:06:00.000Z" };
     });
+    const { taskDocumentGet, taskDocumentGetFresh } = createTaskDocumentHostReaders({
+      spec: specGet,
+    });
     const tasksList = mock(async () => []);
     const runsList = mock(async () => []);
     const original = {
       specGet: host.specGet,
+      taskDocumentGet: host.taskDocumentGet,
+      taskDocumentGetFresh: host.taskDocumentGetFresh,
       setSpec: host.setSpec,
       tasksList: host.tasksList,
       runsList: host.runsList,
     };
     host.specGet = specGet;
+    host.taskDocumentGet = taskDocumentGet;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
     host.setSpec = setSpec;
     host.tasksList = tasksList;
     host.runsList = runsList;
@@ -488,6 +572,8 @@ describe("use-spec-operations", () => {
     } finally {
       await harness.unmount();
       host.specGet = original.specGet;
+      host.taskDocumentGet = original.taskDocumentGet;
+      host.taskDocumentGetFresh = original.taskDocumentGetFresh;
       host.setSpec = original.setSpec;
       host.tasksList = original.tasksList;
       host.runsList = original.runsList;
@@ -533,11 +619,17 @@ describe("use-spec-operations", () => {
     }));
     const saveSpecDocument = mock(async () => ({ updatedAt: "2026-02-22T10:01:00.000Z" }));
     const savePlanDocument = mock(async () => ({ updatedAt: "2026-02-22T10:01:00.000Z" }));
+    const { taskDocumentGet, taskDocumentGetFresh } = createTaskDocumentHostReaders({
+      spec: specGet,
+      plan: planGet,
+    });
     const tasksList = mock(async () => []);
     const runsList = mock(async () => []);
     const original = {
       specGet: host.specGet,
       planGet: host.planGet,
+      taskDocumentGet: host.taskDocumentGet,
+      taskDocumentGetFresh: host.taskDocumentGetFresh,
       saveSpecDocument: host.saveSpecDocument,
       savePlanDocument: host.savePlanDocument,
       tasksList: host.tasksList,
@@ -545,6 +637,8 @@ describe("use-spec-operations", () => {
     };
     host.specGet = specGet;
     host.planGet = planGet;
+    host.taskDocumentGet = taskDocumentGet;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
     host.saveSpecDocument = saveSpecDocument;
     host.savePlanDocument = savePlanDocument;
     host.tasksList = tasksList;
@@ -591,6 +685,8 @@ describe("use-spec-operations", () => {
       await harness.unmount();
       host.specGet = original.specGet;
       host.planGet = original.planGet;
+      host.taskDocumentGet = original.taskDocumentGet;
+      host.taskDocumentGetFresh = original.taskDocumentGetFresh;
       host.saveSpecDocument = original.saveSpecDocument;
       host.savePlanDocument = original.savePlanDocument;
       host.tasksList = original.tasksList;
