@@ -78,6 +78,7 @@ export function AgentChatComposerEditor({
     focusSlashCommandSegment,
     selectSlashCommand,
     handleTextInput,
+    handleTextBeforeInput,
     handleTextFocus,
     handleTextClick,
     handleTextKeyUp,
@@ -170,6 +171,7 @@ export function AgentChatComposerEditor({
                 spellCheck={false}
                 data-segment-id={segment.id}
                 className="inline whitespace-pre-wrap break-words align-baseline outline-none"
+                onBeforeInput={(event) => handleTextBeforeInput(segment.id, event)}
                 onInput={(event) => handleTextInput(segment.id, event.currentTarget)}
                 onFocus={(event) => handleTextFocus(segment.id, event.currentTarget)}
                 onKeyUp={(event) => handleTextKeyUp(segment.id, event)}

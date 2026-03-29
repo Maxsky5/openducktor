@@ -163,4 +163,25 @@ describe("AgentChatComposerEditor", () => {
       expect(updatedEditable?.textContent).toBe("hello\n");
     });
   });
+
+  test("inserts a newline from beforeinput line-break events", async () => {
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "hello");
+    fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+    fireEvent(
+      editable,
+      new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: true,
+        inputType: "insertLineBreak",
+        data: null,
+      }),
+    );
+
+    await waitFor(() => {
+      const updatedEditable = rendered.container.querySelector('[contenteditable="true"]');
+      expect(updatedEditable?.textContent).toBe("hello\n");
+    });
+  });
 });

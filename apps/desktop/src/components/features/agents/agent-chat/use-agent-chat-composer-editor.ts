@@ -1,5 +1,6 @@
 import type { AgentSlashCommand } from "@openducktor/core";
 import {
+  type FormEvent as ReactFormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useLayoutEffect,
@@ -46,6 +47,7 @@ type UseAgentChatComposerEditorResult = {
   focusSlashCommandSegment: (segmentId: string) => void;
   selectSlashCommand: (command: AgentSlashCommand) => void;
   handleTextInput: (segmentId: string, element: HTMLElement) => void;
+  handleTextBeforeInput: (segmentId: string, event: ReactFormEvent<HTMLElement>) => void;
   handleTextFocus: (segmentId: string, element: HTMLElement) => void;
   handleTextClick: (segmentId: string, element: HTMLElement) => void;
   handleTextKeyUp: (segmentId: string, event: ReactKeyboardEvent<HTMLElement>) => void;
@@ -116,6 +118,7 @@ export const useAgentChatComposerEditor = ({
   const { registerTextSegmentRef, focusTextSegment, setPendingFocusTarget } = usePendingFocus();
   const [slashMenuState, setSlashMenuState] = useState<SlashMenuState | null>(null);
   const [activeSlashIndex, setActiveSlashIndex] = useState(0);
+  const lastKeyDownRef = useRef<{ key: string; shiftKey: boolean } | null>(null);
 
   const filteredSlashCommands = useMemo(() => {
     if (!slashMenuState) {
@@ -213,6 +216,42 @@ export const useAgentChatComposerEditor = ({
     [applyEditResult, draft, updateSlashMenuForText],
   );
 
+  const handleTextBeforeInput = useCallback(
+    (segmentId: string, event: ReactFormEvent<HTMLElement>) => {
+      const nativeEvent = event.nativeEvent;
+      if (!(nativeEvent instanceof InputEvent)) {
+        return;
+      }
+
+      const shouldInsertLineBreak =
+        nativeEvent.inputType === "insertLineBreak" ||
+        (nativeEvent.inputType === "insertParagraph" &&
+          lastKeyDownRef.current?.key === "Enter" &&
+          lastKeyDownRef.current.shiftKey);
+      if (!shouldInsertLineBreak) {
+        return;
+      }
+
+      const caretOffset = getCaretOffsetWithinElement(event.currentTarget);
+      if (caretOffset === null) {
+        return;
+      }
+
+      event.preventDefault();
+      const didApply = applyEditResult(
+        applyComposerDraftEdit(draft, {
+          type: "insert_newline",
+          segmentId,
+          caretOffset,
+        }),
+      );
+      if (didApply) {
+        setSlashMenuState(null);
+      }
+    },
+    [applyEditResult, draft],
+  );
+
   const handleTextKeyUp = useCallback(
     (segmentId: string, event: ReactKeyboardEvent<HTMLElement>) => {
       if (SLASH_MENU_NAVIGATION_KEYS.has(event.key)) {
@@ -225,6 +264,7 @@ export const useAgentChatComposerEditor = ({
 
   const handleTextKeyDown = useCallback(
     (segmentId: string, event: ReactKeyboardEvent<HTMLElement>) => {
+      lastKeyDownRef.current = { key: event.key, shiftKey: event.shiftKey };
       const target = event.currentTarget;
       const caretOffset = getCaretOffsetWithinElement(target);
 
@@ -350,6 +390,7 @@ export const useAgentChatComposerEditor = ({
     focusSlashCommandSegment,
     selectSlashCommand,
     handleTextInput,
+    handleTextBeforeInput,
     handleTextFocus: syncSlashMenuFromElement,
     handleTextClick: syncSlashMenuFromElement,
     handleTextKeyUp,
