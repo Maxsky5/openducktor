@@ -57,7 +57,7 @@ Owns:
 - one runtime event transport per OpenCode runtime endpoint
 - fanout from runtime events to the relevant local session
 - transcript assembly, permission/question event application, and terminal state transitions
-- queued user-turn state application, including same-id `queued -> read` transcript updates
+- queued user-turn state application, including same-id transcript updates as the runtime's pending-assistant boundary changes
 
 Must not own:
 - request/response caching
