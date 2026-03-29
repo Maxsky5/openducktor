@@ -4,6 +4,7 @@ import {
   type AgentSessionHistoryMessage,
   type AgentSessionTodoItem,
   type AgentStreamPart,
+  normalizeAgentUserMessageParts,
   type ReplyPermissionInput,
   type ReplyQuestionInput,
   type SendAgentUserMessageInput,
@@ -338,6 +339,47 @@ export const listLiveAgentSessionPendingInput = async (
   return bySession;
 };
 
+const toSlashCommandRequest = (
+  parts: SendAgentUserMessageInput["parts"],
+): {
+  command: string;
+  arguments: string;
+} | null => {
+  const normalizedParts = normalizeAgentUserMessageParts(parts);
+  const slashCommandIndexes = normalizedParts.flatMap((part, index) =>
+    part.kind === "slash_command" ? [index] : [],
+  );
+  if (slashCommandIndexes.length === 0) {
+    return null;
+  }
+  if (slashCommandIndexes.length > 1) {
+    throw new Error("OpenCode supports only one slash command token per message.");
+  }
+
+  const commandIndex = slashCommandIndexes[0];
+  if (commandIndex === undefined) {
+    return null;
+  }
+
+  const leadingText = serializeAgentUserMessagePartsToText(normalizedParts.slice(0, commandIndex));
+  if (leadingText.trim().length > 0) {
+    throw new Error("OpenCode slash commands must be the first meaningful message segment.");
+  }
+
+  const commandPart = normalizedParts[commandIndex];
+  if (!commandPart || commandPart.kind !== "slash_command") {
+    return null;
+  }
+
+  const trailingText = serializeAgentUserMessagePartsToText(
+    normalizedParts.slice(commandIndex + 1),
+  );
+  return {
+    command: commandPart.command.trigger,
+    arguments: trailingText.trim(),
+  };
+};
+
 export const sendUserMessage = async (input: {
   session: SessionRecord;
   request: SendAgentUserMessageInput;
@@ -355,22 +397,50 @@ export const sendUserMessage = async (input: {
     input.session.pendingQueuedUserMessages.push(queuedSend);
   }
   const modelInput = normalizeModelInput(model);
-  const serializedPromptText = serializeAgentUserMessagePartsToText(input.request.parts);
-  const promptRequest = {
-    sessionID: input.session.externalSessionId,
-    directory: input.session.input.workingDirectory,
-    ...(input.session.input.systemPrompt.trim().length > 0
-      ? { system: input.session.input.systemPrompt }
-      : {}),
-    ...(modelInput.model ? { model: modelInput.model } : {}),
-    ...(modelInput.variant ? { variant: modelInput.variant } : {}),
-    ...(modelInput.agent ? { agent: modelInput.agent } : {}),
-    tools: input.tools,
-    parts: [{ type: "text" as const, text: serializedPromptText }],
-  };
+  const slashCommandRequest = toSlashCommandRequest(input.request.parts);
 
   setSessionActive(input.session);
   try {
+    if (slashCommandRequest) {
+      const commandClient = input.session.client.session as unknown as {
+        command?: (input: unknown) => Promise<{ error?: unknown; response?: unknown }>;
+      };
+      if (typeof commandClient.command !== "function") {
+        throw new Error("OpenCode runtime client does not expose slash command execution.");
+      }
+
+      const response = await commandClient.command({
+        sessionID: input.session.externalSessionId,
+        directory: input.session.input.workingDirectory,
+        command: slashCommandRequest.command,
+        arguments: slashCommandRequest.arguments,
+        ...(modelInput.variant ? { variant: modelInput.variant } : {}),
+        ...(modelInput.agent ? { agent: modelInput.agent } : {}),
+      });
+      if (response.error) {
+        throw toOpenCodeRequestError(
+          "run slash command",
+          response.error,
+          response.response as { status?: unknown; statusText?: unknown } | undefined,
+        );
+      }
+      return;
+    }
+
+    const serializedPromptText = serializeAgentUserMessagePartsToText(input.request.parts);
+    const promptRequest = {
+      sessionID: input.session.externalSessionId,
+      directory: input.session.input.workingDirectory,
+      ...(input.session.input.systemPrompt.trim().length > 0
+        ? { system: input.session.input.systemPrompt }
+        : {}),
+      ...(modelInput.model ? { model: modelInput.model } : {}),
+      ...(modelInput.variant ? { variant: modelInput.variant } : {}),
+      ...(modelInput.agent ? { agent: modelInput.agent } : {}),
+      tools: input.tools,
+      parts: [{ type: "text" as const, text: serializedPromptText }],
+    };
+
     const response = await input.session.client.session.promptAsync(promptRequest);
     if (response.error) {
       throw toOpenCodeRequestError("prompt session", response.error, response.response);

@@ -40,6 +40,7 @@ type MockSession = {
   createCalls: unknown[];
   promptCalls: unknown[];
   promptAsyncCalls: unknown[];
+  commandCalls: unknown[];
   abortCalls: unknown[];
   getCalls: unknown[];
   messagesCalls: unknown[];
@@ -123,9 +124,25 @@ type PromptAsyncMockResult =
       error: Error;
     };
 
+type CommandMockResult =
+  | {
+      mode: "success";
+      data?: unknown;
+    }
+  | {
+      mode: "api_error";
+      error: unknown;
+      response?: { status?: number; statusText?: string };
+    }
+  | {
+      mode: "throw";
+      error: Error;
+    };
+
 type MakeMockClientInput = {
   sessionId?: string;
   promptAsyncResult?: PromptAsyncMockResult;
+  commandResult?: CommandMockResult;
   streamEvents?: Event[];
   messagesResponse?: Array<{
     info: {
@@ -148,6 +165,7 @@ type MakeMockClientInput = {
 const makeMockClient = ({
   sessionId = "session-opencode-1",
   promptAsyncResult = { mode: "success" },
+  commandResult = { mode: "success" },
   streamEvents = [],
   messagesResponse = [],
   todoResult = {
@@ -196,6 +214,7 @@ const makeMockClient = ({
     createCalls: [],
     promptCalls: [],
     promptAsyncCalls: [],
+    commandCalls: [],
     abortCalls: [],
     getCalls: [],
     messagesCalls: [],
@@ -240,6 +259,20 @@ const makeMockClient = ({
           };
         }
         return { data: promptAsyncResult.data, error: undefined };
+      },
+      command: async (input: unknown) => {
+        session.commandCalls.push(input);
+        if (commandResult.mode === "throw") {
+          throw commandResult.error;
+        }
+        if (commandResult.mode === "api_error") {
+          return {
+            data: undefined,
+            error: commandResult.error,
+            response: commandResult.response,
+          };
+        }
+        return { data: commandResult.data, error: undefined };
       },
       prompt: async (input: unknown) => {
         session.promptCalls.push(input);
@@ -696,6 +729,80 @@ describe("OpencodeSdkAdapter", () => {
     expect(events.some((event) => event.type === "assistant_part")).toBe(false);
     expect(events.some((event) => event.type === "assistant_message")).toBe(false);
     expect(events.some((event) => event.type === "session_idle")).toBe(false);
+  });
+
+  test("sendUserMessage uses the native session command endpoint for slash commands", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "build");
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      parts: [
+        {
+          kind: "slash_command",
+          command: {
+            id: "compact",
+            trigger: "compact",
+            title: "compact",
+            hints: [],
+          },
+        },
+        { kind: "text", text: " summarize the latest session" },
+      ],
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        profileId: "hephaestus",
+      },
+    });
+
+    expect(mock.session.commandCalls).toEqual([
+      {
+        sessionID: "session-opencode-1",
+        directory: "/repo",
+        command: "compact",
+        arguments: "summarize the latest session",
+        variant: "high",
+        agent: "hephaestus",
+      },
+    ]);
+    expect(mock.session.promptAsyncCalls).toHaveLength(0);
+  });
+
+  test("sendUserMessage rejects slash commands that are not the first meaningful segment", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "build");
+
+    await expect(
+      adapter.sendUserMessage({
+        sessionId: "session-1",
+        parts: [
+          { kind: "text", text: "before " },
+          {
+            kind: "slash_command",
+            command: {
+              id: "compact",
+              trigger: "compact",
+              title: "compact",
+              hints: [],
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow("OpenCode slash commands must be the first meaningful message segment.");
+    expect(mock.session.commandCalls).toHaveLength(0);
+    expect(mock.session.promptAsyncCalls).toHaveLength(0);
   });
 
   test("sendUserMessage resets session activity so the next stream idle can settle the turn", async () => {
