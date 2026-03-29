@@ -233,6 +233,52 @@ describe("event-stream", () => {
     });
   });
 
+  test("re-emits user_message when later parts update the visible text", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "user-message-4",
+            role: "user",
+            sessionID: "external-session-1",
+            text: "Old text",
+            time: {
+              created: Date.parse("2026-02-22T12:00:06.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "user-part-4",
+            sessionID: "external-session-1",
+            messageID: "user-message-4",
+            type: "text",
+            text: "New text",
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages[0]).toMatchObject({
+      type: "user_message",
+      messageId: "user-message-4",
+      message: "Old text",
+      state: "read",
+    });
+    expect(userMessages[1]).toMatchObject({
+      type: "user_message",
+      messageId: "user-message-4",
+      message: "New text",
+      state: "read",
+    });
+  });
+
   test("keeps queued follow-ups queued until the pending assistant clears", async () => {
     const emitted = await runEventStream([
       {

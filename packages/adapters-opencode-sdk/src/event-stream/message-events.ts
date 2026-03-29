@@ -127,14 +127,6 @@ const emitKnownUserMessage = (
   },
 ): boolean => {
   const session = runtime.getSession(runtime.sessionId);
-  const existingState = session?.emittedUserMessageStates.get(input.messageId);
-
-  if (existingState === input.state && session?.emittedUserMessageSignatures.has(input.messageId)) {
-    const visible = readTextFromParts(getKnownMessageParts(runtime, input.messageId));
-    if (visible.trim().length > 0) {
-      return true;
-    }
-  }
 
   const visible =
     readTextFromParts(getKnownMessageParts(runtime, input.messageId)) ||
