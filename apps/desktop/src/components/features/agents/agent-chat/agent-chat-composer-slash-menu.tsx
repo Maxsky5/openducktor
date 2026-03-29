@@ -1,6 +1,6 @@
 import type { AgentSlashCommand } from "@openducktor/core";
 import { ChevronRight, LoaderCircle, Terminal } from "lucide-react";
-import type { ReactElement } from "react";
+import { type ReactElement, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 type AgentChatComposerSlashMenuProps = {
@@ -18,6 +18,20 @@ export function AgentChatComposerSlashMenu({
   isSlashCommandsLoading,
   onSelectCommand,
 }: AgentChatComposerSlashMenuProps): ReactElement {
+  const commandButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  useEffect(() => {
+    const activeCommand = commands[activeIndex];
+    if (!activeCommand) {
+      return;
+    }
+
+    commandButtonRefs.current[activeCommand.id]?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [activeIndex, commands]);
+
   return (
     <div className="absolute inset-x-3 bottom-full z-20 mb-2 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
       {isSlashCommandsLoading ? (
@@ -36,9 +50,12 @@ export function AgentChatComposerSlashMenu({
             return (
               <button
                 key={command.id}
+                ref={(element) => {
+                  commandButtonRefs.current[command.id] = element;
+                }}
                 type="button"
                 className={cn(
-                  "flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition-colors",
+                  "flex w-full cursor-pointer items-start gap-3 rounded-lg px-3 py-2 text-left transition-colors",
                   isActive ? "bg-muted" : "hover:bg-muted/80",
                 )}
                 onMouseDown={(event) => event.preventDefault()}

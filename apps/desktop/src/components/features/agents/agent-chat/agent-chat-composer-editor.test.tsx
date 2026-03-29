@@ -63,9 +63,9 @@ const EditorHarness = ({
   );
 };
 
-const typeIntoEditor = (container: HTMLElement, value: string): HTMLDivElement => {
+const typeIntoEditor = (container: HTMLElement, value: string): HTMLElement => {
   const editable = container.querySelector('[contenteditable="true"]');
-  if (!(editable instanceof HTMLDivElement)) {
+  if (!(editable instanceof HTMLElement)) {
     throw new Error("Expected editable composer segment");
   }
   editable.textContent = value;
@@ -138,7 +138,7 @@ describe("AgentChatComposerEditor", () => {
 
     typeIntoEditor(rendered.container, "hello");
 
-    expect(setCaretOffsetWithinElementMock).toHaveBeenCalledWith(expect.any(HTMLDivElement), 5);
+    expect(setCaretOffsetWithinElementMock).toHaveBeenCalledWith(expect.any(HTMLElement), 5);
   });
 
   test("keeps slash autocomplete open through the keyup after typing slash", async () => {
@@ -149,6 +149,18 @@ describe("AgentChatComposerEditor", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /compact the current session/i })).toBeDefined();
+    });
+  });
+
+  test("inserts a newline on the first shift-enter", async () => {
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "hello");
+    fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+
+    await waitFor(() => {
+      const updatedEditable = rendered.container.querySelector('[contenteditable="true"]');
+      expect(updatedEditable?.textContent).toBe("hello\n");
     });
   });
 });

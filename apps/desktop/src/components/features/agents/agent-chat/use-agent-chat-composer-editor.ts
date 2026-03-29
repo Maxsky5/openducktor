@@ -41,15 +41,15 @@ type UseAgentChatComposerEditorResult = {
   filteredSlashCommands: AgentSlashCommand[];
   activeSlashIndex: number;
   showSlashMenu: boolean;
-  registerTextSegmentRef: (segmentId: string, element: HTMLDivElement | null) => void;
+  registerTextSegmentRef: (segmentId: string, element: HTMLElement | null) => void;
   focusLastTextSegment: () => void;
   focusSlashCommandSegment: (segmentId: string) => void;
   selectSlashCommand: (command: AgentSlashCommand) => void;
-  handleTextInput: (segmentId: string, element: HTMLDivElement) => void;
-  handleTextFocus: (segmentId: string, element: HTMLDivElement) => void;
-  handleTextClick: (segmentId: string, element: HTMLDivElement) => void;
-  handleTextKeyUp: (segmentId: string, event: ReactKeyboardEvent<HTMLDivElement>) => void;
-  handleTextKeyDown: (segmentId: string, event: ReactKeyboardEvent<HTMLDivElement>) => void;
+  handleTextInput: (segmentId: string, element: HTMLElement) => void;
+  handleTextFocus: (segmentId: string, element: HTMLElement) => void;
+  handleTextClick: (segmentId: string, element: HTMLElement) => void;
+  handleTextKeyUp: (segmentId: string, event: ReactKeyboardEvent<HTMLElement>) => void;
+  handleTextKeyDown: (segmentId: string, event: ReactKeyboardEvent<HTMLElement>) => void;
 };
 
 const SLASH_MENU_NAVIGATION_KEYS = new Set(["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"]);
@@ -67,7 +67,7 @@ const filterSlashCommands = (commands: AgentSlashCommand[], query: string): Agen
 };
 
 const usePendingFocus = () => {
-  const textSegmentRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const textSegmentRefs = useRef<Record<string, HTMLElement | null>>({});
   const pendingFocusRef = useRef<AgentChatComposerDraftEditResult["focusTarget"]>(null);
 
   useLayoutEffect(() => {
@@ -85,12 +85,9 @@ const usePendingFocus = () => {
     pendingFocusRef.current = null;
   });
 
-  const registerTextSegmentRef = useCallback(
-    (segmentId: string, element: HTMLDivElement | null) => {
-      textSegmentRefs.current[segmentId] = element;
-    },
-    [],
-  );
+  const registerTextSegmentRef = useCallback((segmentId: string, element: HTMLElement | null) => {
+    textSegmentRefs.current[segmentId] = element;
+  }, []);
 
   return {
     registerTextSegmentRef,
@@ -189,7 +186,7 @@ export const useAgentChatComposerEditor = ({
   );
 
   const syncSlashMenuFromElement = useCallback(
-    (segmentId: string, element: HTMLDivElement) => {
+    (segmentId: string, element: HTMLElement) => {
       updateSlashMenuForText(
         segmentId,
         readEditableTextContent(element),
@@ -200,7 +197,7 @@ export const useAgentChatComposerEditor = ({
   );
 
   const handleTextInput = useCallback(
-    (segmentId: string, element: HTMLDivElement) => {
+    (segmentId: string, element: HTMLElement) => {
       const nextText = readEditableTextContent(element);
       const caretOffset = getCaretOffsetWithinElement(element);
       applyEditResult(
@@ -217,7 +214,7 @@ export const useAgentChatComposerEditor = ({
   );
 
   const handleTextKeyUp = useCallback(
-    (segmentId: string, event: ReactKeyboardEvent<HTMLDivElement>) => {
+    (segmentId: string, event: ReactKeyboardEvent<HTMLElement>) => {
       if (SLASH_MENU_NAVIGATION_KEYS.has(event.key)) {
         return;
       }
@@ -227,7 +224,7 @@ export const useAgentChatComposerEditor = ({
   );
 
   const handleTextKeyDown = useCallback(
-    (segmentId: string, event: ReactKeyboardEvent<HTMLDivElement>) => {
+    (segmentId: string, event: ReactKeyboardEvent<HTMLElement>) => {
       const target = event.currentTarget;
       const caretOffset = getCaretOffsetWithinElement(target);
 

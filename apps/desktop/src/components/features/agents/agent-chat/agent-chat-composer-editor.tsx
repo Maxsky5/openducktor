@@ -29,6 +29,19 @@ const shouldRedirectShellClickToComposer = (
   return true;
 };
 
+const getTextSegmentElement = (target: EventTarget | null): HTMLElement | null => {
+  if (!(target instanceof HTMLElement)) {
+    return null;
+  }
+
+  const segmentElement = target.closest<HTMLElement>("[data-segment-id]");
+  if (!segmentElement?.isContentEditable) {
+    return null;
+  }
+
+  return segmentElement;
+};
+
 type AgentChatComposerEditorProps = {
   draft: AgentChatComposerDraft;
   onDraftChange: (draft: AgentChatComposerDraft) => void;
@@ -106,6 +119,19 @@ export function AgentChatComposerEditor({
           event.preventDefault();
           focusLastTextSegment();
         }}
+        onMouseUpCapture={(event) => {
+          const segmentElement = getTextSegmentElement(event.target);
+          if (!segmentElement) {
+            return;
+          }
+
+          const segmentId = segmentElement.dataset.segmentId;
+          if (!segmentId) {
+            return;
+          }
+
+          handleTextClick(segmentId, segmentElement);
+        }}
       >
         {!draftHasMeaningfulContent(draft) ? (
           <div className="pointer-events-none absolute left-3 top-2.5 text-[15px] leading-6 text-muted-foreground">
@@ -113,7 +139,7 @@ export function AgentChatComposerEditor({
           </div>
         ) : null}
 
-        <div className="relative z-10 flex flex-wrap items-center gap-x-1 gap-y-1 whitespace-pre-wrap break-words">
+        <div className="relative z-10 min-h-6 whitespace-pre-wrap break-words">
           {draft.segments.map((segment) => {
             if (segment.kind === "slash_command") {
               return (
@@ -124,7 +150,7 @@ export function AgentChatComposerEditor({
                   aria-label={`Slash command /${segment.command.trigger}. Press Backspace immediately after the chip to remove it.`}
                   className={cn(
                     badgeVariants({ variant: "secondary" }),
-                    "h-7 rounded-full border border-border px-2.5 text-xs font-medium",
+                    "mx-0.5 inline-flex h-7 align-baseline rounded-full border border-border px-2.5 text-xs font-medium",
                   )}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => focusSlashCommandSegment(segment.id)}
@@ -135,24 +161,22 @@ export function AgentChatComposerEditor({
             }
 
             return (
-              <div key={segment.id}>
-                {/* biome-ignore lint/a11y/noStaticElementInteractions: contenteditable token segments need custom caret behavior. */}
-                <div
-                  ref={(element) => registerTextSegmentRef(segment.id, element)}
-                  contentEditable={!disabled}
-                  suppressContentEditableWarning
-                  spellCheck={false}
-                  data-segment-id={segment.id}
-                  className="min-w-[1px] flex-1 whitespace-pre-wrap break-words outline-none"
-                  onInput={(event) => handleTextInput(segment.id, event.currentTarget)}
-                  onFocus={(event) => handleTextFocus(segment.id, event.currentTarget)}
-                  onClick={(event) => handleTextClick(segment.id, event.currentTarget)}
-                  onKeyUp={(event) => handleTextKeyUp(segment.id, event)}
-                  onKeyDown={(event) => handleTextKeyDown(segment.id, event)}
-                >
-                  {segment.text.length > 0 ? segment.text : EMPTY_TEXT_SEGMENT_SENTINEL}
-                </div>
-              </div>
+              /* biome-ignore lint/a11y/noStaticElementInteractions: inline contenteditable segments need custom caret and keyboard handling. */
+              <span
+                key={segment.id}
+                ref={(element) => registerTextSegmentRef(segment.id, element)}
+                contentEditable={!disabled}
+                suppressContentEditableWarning
+                spellCheck={false}
+                data-segment-id={segment.id}
+                className="inline whitespace-pre-wrap break-words align-baseline outline-none"
+                onInput={(event) => handleTextInput(segment.id, event.currentTarget)}
+                onFocus={(event) => handleTextFocus(segment.id, event.currentTarget)}
+                onKeyUp={(event) => handleTextKeyUp(segment.id, event)}
+                onKeyDown={(event) => handleTextKeyDown(segment.id, event)}
+              >
+                {segment.text.length > 0 ? segment.text : EMPTY_TEXT_SEGMENT_SENTINEL}
+              </span>
             );
           })}
         </div>
