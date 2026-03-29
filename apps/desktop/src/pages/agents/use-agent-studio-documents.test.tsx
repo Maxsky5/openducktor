@@ -366,20 +366,19 @@ describe("useAgentStudioDocuments", () => {
   });
 
   test("dedupes completed tool refreshes for the same message across rerenders", async () => {
+    const toolMessage = createCompletedToolMessage({
+      id: "message-dedupe",
+      tool: "odt_set_plan",
+      input: { markdown: "# Saved plan" },
+      output: "done",
+    });
     const baseArgs = {
       ...createBaseArgs(),
       selectedTask: null,
       activeSession: createAgentSessionFixture({
         runtimeKind: "opencode",
         sessionId: "session-dedupe",
-        messages: [
-          createCompletedToolMessage({
-            id: "message-dedupe",
-            tool: "odt_set_plan",
-            input: { markdown: "# Saved plan" },
-            output: "done",
-          }),
-        ],
+        messages: [toolMessage],
       }),
     };
     const harness = createHookHarness(baseArgs);
@@ -389,7 +388,14 @@ describe("useAgentStudioDocuments", () => {
       expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
       expect(reloadDocumentMock).toHaveBeenCalledWith("plan");
 
-      await harness.update(baseArgs);
+      await harness.update({
+        ...baseArgs,
+        activeSession: createAgentSessionFixture({
+          runtimeKind: "opencode",
+          sessionId: "session-dedupe",
+          messages: [toolMessage],
+        }),
+      });
 
       expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
     } finally {
