@@ -106,6 +106,8 @@ Examples:
 - document reads
 - worktree status reads
 
+Task documents keep their normal `60 sec` stale time for ordinary viewing, but workflow-driven refreshes use explicit force-fresh fetches in `apps/desktop/src/state/queries/documents.ts` so external ODT document writes bypass stale adapter metadata without adding polling or focus refetching.
+
 ## Mutation strategy
 
 We do not depend on background refetch heuristics for correctness.

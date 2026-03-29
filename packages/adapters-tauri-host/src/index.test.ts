@@ -1403,6 +1403,66 @@ describe("TauriHostClient", () => {
     ]);
   });
 
+  test("forceFresh metadata reads bypass stale cache and repopulate steady-state reads", async () => {
+    let metadataReadCount = 0;
+    const { client, calls } = createClient((command) => {
+      if (command === "task_metadata_get") {
+        metadataReadCount += 1;
+        return makeTaskMetadataPayload(metadataReadCount === 1 ? "Spec V1" : "Spec V2");
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
+    expect((await client.taskDocumentGetFresh("/repo", "task-1", "spec")).markdown).toBe("Spec V2");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V2");
+
+    expect(calls.map((entry) => entry.command)).toEqual(["task_metadata_get", "task_metadata_get"]);
+  });
+
+  test("forceFresh metadata reads do not get stuck behind older in-flight reads", async () => {
+    let metadataReadCount = 0;
+    const createDeferredMetadataRead = () => {
+      let resolve!: (value: ReturnType<typeof makeTaskMetadataPayload>) => void;
+      const promise = new Promise<ReturnType<typeof makeTaskMetadataPayload>>((nextResolve) => {
+        resolve = nextResolve;
+      });
+      return { promise, resolve };
+    };
+    const staleReadPromise = createDeferredMetadataRead();
+    const freshReadPromise = createDeferredMetadataRead();
+    const { client, calls } = createClient((command) => {
+      if (command === "task_metadata_get") {
+        metadataReadCount += 1;
+        if (metadataReadCount === 1) {
+          return staleReadPromise.promise;
+        }
+        if (metadataReadCount === 2) {
+          return freshReadPromise.promise;
+        }
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const staleRead = client.specGet("/repo", "task-1");
+    const freshSpecRead = client.taskDocumentGetFresh("/repo", "task-1", "spec");
+    const freshPlanRead = client.taskDocumentGetFresh("/repo", "task-1", "plan");
+
+    freshReadPromise.resolve(makeTaskMetadataPayload("Spec V2"));
+
+    expect((await freshSpecRead).markdown).toBe("Spec V2");
+    expect((await freshPlanRead).markdown).toBe("Plan Body");
+
+    staleReadPromise.resolve(makeTaskMetadataPayload("Spec V1"));
+
+    expect((await staleRead).markdown).toBe("Spec V1");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V2");
+    expect((await client.planGet("/repo", "task-1")).markdown).toBe("Plan Body");
+
+    expect(calls.map((entry) => entry.command)).toEqual(["task_metadata_get", "task_metadata_get"]);
+  });
+
   test("metadata cache invalidates after spec mutations", async () => {
     let metadataReadCount = 0;
     const { client, calls } = createClient((command) => {

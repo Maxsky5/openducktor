@@ -74,6 +74,7 @@ Owns:
 - request/response reads for the currently viewed session
 - TanStack Query caching for model catalog, todos, repo config, task docs, and other stable host reads
 - build-tools panel reads such as git diff state and dev-server state
+- authoritative task-document refreshes after workflow mutations; the event stream may request a refresh, but `apps/desktop/src/state/queries/documents.ts` owns the fresh read path
 
 Must not own:
 - session existence

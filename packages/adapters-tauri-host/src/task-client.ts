@@ -14,7 +14,11 @@ import {
 import type { SetPlanOutput, SetSpecOutput } from "@openducktor/core";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray, parseOkResult, parseUpdatedAtResult } from "./invoke-utils";
-import type { ParsedTaskMetadata, TaskMetadataCache } from "./task-metadata-cache";
+import type {
+  ParsedTaskMetadata,
+  TaskMetadataCache,
+  TaskMetadataReadOptions,
+} from "./task-metadata-cache";
 
 export type SetSpecInput = {
   taskId: string;
@@ -41,14 +45,49 @@ export type SavePlanDocumentInput = {
   markdown: string;
 };
 
+export type TaskDocumentSection = "spec" | "plan" | "qa";
+export type TaskDocumentReadResult = { markdown: string; updatedAt: string | null };
+
 export class TauriTaskClient {
   constructor(
     private readonly invokeFn: InvokeFn,
     private readonly metadataCache: TaskMetadataCache,
   ) {}
 
-  private readTaskMetadata(repoPath: string, taskId: string): Promise<ParsedTaskMetadata> {
-    return this.metadataCache.get(this.invokeFn, repoPath, taskId);
+  private readTaskMetadata(
+    repoPath: string,
+    taskId: string,
+    options?: TaskMetadataReadOptions,
+  ): Promise<ParsedTaskMetadata> {
+    return this.metadataCache.get(this.invokeFn, repoPath, taskId, options);
+  }
+
+  private async readTaskDocument(
+    repoPath: string,
+    taskId: string,
+    section: TaskDocumentSection,
+    options?: TaskMetadataReadOptions,
+  ): Promise<TaskDocumentReadResult> {
+    const payload = await this.readTaskMetadata(repoPath, taskId, options);
+
+    if (section === "spec") {
+      return {
+        markdown: payload.spec.markdown,
+        updatedAt: payload.spec.updatedAt ?? null,
+      };
+    }
+
+    if (section === "plan") {
+      return {
+        markdown: payload.plan.markdown,
+        updatedAt: payload.plan.updatedAt ?? null,
+      };
+    }
+
+    return {
+      markdown: payload.qaReport?.markdown ?? "",
+      updatedAt: payload.qaReport?.updatedAt ?? null,
+    };
   }
 
   private invalidateTaskMetadata(repoPath: string, taskId: string): void {
@@ -145,15 +184,8 @@ export class TauriTaskClient {
     return taskCardSchema.parse(payload);
   }
 
-  async specGet(
-    repoPath: string,
-    taskId: string,
-  ): Promise<{ markdown: string; updatedAt: string | null }> {
-    const payload = await this.readTaskMetadata(repoPath, taskId);
-    return {
-      markdown: payload.spec.markdown,
-      updatedAt: payload.spec.updatedAt ?? null,
-    };
+  async specGet(repoPath: string, taskId: string): Promise<TaskDocumentReadResult> {
+    return this.readTaskDocument(repoPath, taskId, "spec");
   }
 
   async setSpec(input: SetSpecInput): Promise<SetSpecOutput> {
@@ -205,30 +237,36 @@ export class TauriTaskClient {
     return parseUpdatedAtResult(payload, "plan_save_document");
   }
 
-  async planGet(
-    repoPath: string,
-    taskId: string,
-  ): Promise<{ markdown: string; updatedAt: string | null }> {
-    const payload = await this.readTaskMetadata(repoPath, taskId);
-    return {
-      markdown: payload.plan.markdown,
-      updatedAt: payload.plan.updatedAt ?? null,
-    };
+  async planGet(repoPath: string, taskId: string): Promise<TaskDocumentReadResult> {
+    return this.readTaskDocument(repoPath, taskId, "plan");
   }
 
   async taskMetadataGet(repoPath: string, taskId: string): Promise<ParsedTaskMetadata> {
     return this.readTaskMetadata(repoPath, taskId);
   }
 
-  async qaGetReport(
+  async taskMetadataGetFresh(repoPath: string, taskId: string): Promise<ParsedTaskMetadata> {
+    return this.readTaskMetadata(repoPath, taskId, { forceFresh: true });
+  }
+
+  async taskDocumentGet(
     repoPath: string,
     taskId: string,
-  ): Promise<{ markdown: string; updatedAt: string | null }> {
-    const payload = await this.readTaskMetadata(repoPath, taskId);
-    return {
-      markdown: payload.qaReport?.markdown ?? "",
-      updatedAt: payload.qaReport?.updatedAt ?? null,
-    };
+    section: TaskDocumentSection,
+  ): Promise<TaskDocumentReadResult> {
+    return this.readTaskDocument(repoPath, taskId, section);
+  }
+
+  async taskDocumentGetFresh(
+    repoPath: string,
+    taskId: string,
+    section: TaskDocumentSection,
+  ): Promise<TaskDocumentReadResult> {
+    return this.readTaskDocument(repoPath, taskId, section, { forceFresh: true });
+  }
+
+  async qaGetReport(repoPath: string, taskId: string): Promise<TaskDocumentReadResult> {
+    return this.readTaskDocument(repoPath, taskId, "qa");
   }
 
   async qaApproved(repoPath: string, taskId: string, markdown: string): Promise<TaskCard> {

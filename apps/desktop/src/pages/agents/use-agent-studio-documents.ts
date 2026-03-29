@@ -71,7 +71,6 @@ export function useAgentStudioDocuments({
 
   const documentContextKey = `${taskId}:${activeSession?.sessionId ?? ""}`;
   const processedDocumentToolEventsRef = useRef(new Set<string>());
-  const documentReloadAttemptsRef = useRef(new Map<string, number>());
   const refreshedTaskVersionsRef = useRef(new Set<string>());
   const taskDocumentVersionKey =
     taskId && selectedTask
@@ -92,7 +91,6 @@ export function useAgentStudioDocuments({
   // biome-ignore lint/correctness/useExhaustiveDependencies: Context key intentionally controls reset boundary.
   useEffect(() => {
     processedDocumentToolEventsRef.current.clear();
-    documentReloadAttemptsRef.current.clear();
     refreshedTaskVersionsRef.current.clear();
   }, [documentContextKey]);
 
@@ -139,6 +137,9 @@ export function useAgentStudioDocuments({
       if (!target) {
         continue;
       }
+      if (!activeRepo) {
+        continue;
+      }
 
       const completionInfo =
         extractCompletionTimestamp(meta.output) ?? extractCompletionTimestamp(message.content);
@@ -167,39 +168,20 @@ export function useAgentStudioDocuments({
         }
       }
 
-      if (
-        completionInfo !== null &&
-        effectiveUpdatedAtTimestamp !== null &&
-        effectiveUpdatedAtTimestamp >= completionInfo.timestamp
-      ) {
+      if (reloadDocument(target.section)) {
         processedDocumentToolEventsRef.current.add(eventKey);
-        documentReloadAttemptsRef.current.delete(eventKey);
-        continue;
-      }
-
-      if (hasInputMarkdown) {
-        processedDocumentToolEventsRef.current.add(eventKey);
-        documentReloadAttemptsRef.current.delete(eventKey);
-        continue;
-      }
-
-      if (target.state.isLoading) {
-        continue;
-      }
-
-      const attempts = documentReloadAttemptsRef.current.get(eventKey) ?? 0;
-      if (attempts >= 6) {
-        processedDocumentToolEventsRef.current.add(eventKey);
-        documentReloadAttemptsRef.current.delete(eventKey);
-        continue;
-      }
-
-      const triggered = reloadDocument(target.section);
-      if (triggered) {
-        documentReloadAttemptsRef.current.set(eventKey, attempts + 1);
       }
     }
-  }, [activeSession, applyDocumentUpdate, planDoc, qaDoc, reloadDocument, specDoc, taskId]);
+  }, [
+    activeRepo,
+    activeSession,
+    applyDocumentUpdate,
+    planDoc,
+    qaDoc,
+    reloadDocument,
+    specDoc,
+    taskId,
+  ]);
 
   return {
     specDoc,

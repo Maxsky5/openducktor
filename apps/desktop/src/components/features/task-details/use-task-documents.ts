@@ -2,7 +2,11 @@ import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { host } from "@/state/operations/host";
 import { resolveLatestDocumentPayload } from "@/state/queries/document-utils";
-import { documentQueryKeyForSection, TASK_DOCUMENT_STALE_TIME_MS } from "@/state/queries/documents";
+import {
+  documentQueryKeyForSection,
+  fetchFreshTaskDocumentFromQuery,
+  TASK_DOCUMENT_STALE_TIME_MS,
+} from "@/state/queries/documents";
 import type { TaskDocumentPayload } from "@/types/task-documents";
 
 export type DocumentSectionKey = "spec" | "plan" | "qa";
@@ -209,22 +213,13 @@ export function useTaskDocuments(
       }
 
       const options = queryOptionsBySection[section];
-      const loadDocument = sectionLoaders[section];
       void queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
-      void queryClient
-        .fetchQuery({
-          ...options,
-          queryFn: async (): Promise<TaskDocumentPayload> => {
-            const incoming = await loadDocument(taskId);
-            const current = queryClient.getQueryData<TaskDocumentPayload>(options.queryKey);
-            return resolveLatestDocumentPayload(current, incoming);
-          },
-          staleTime: 0,
-        })
-        .catch(() => undefined);
+      void fetchFreshTaskDocumentFromQuery(queryClient, cacheScope, taskId, section).catch(
+        () => undefined,
+      );
       return true;
     },
-    [enabled, queryClient, queryOptionsBySection, sectionLoaders, taskId],
+    [cacheScope, enabled, queryClient, queryOptionsBySection, taskId],
   );
 
   const applyDocumentUpdate = useCallback(
