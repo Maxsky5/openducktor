@@ -114,32 +114,28 @@ const createMessagesContent = (): MockMessagesContent => {
   } as unknown as MockMessagesContent;
 };
 
-const ROW_HEIGHT_PX = 96;
+const ROW_HEIGHT_PX = 40;
 
 const attachWindowedRowGeometry = ({
   container,
   rows,
   getWindowStart,
   getWindowEnd,
-  getTopSpacerHeight,
 }: {
   container: MockMessagesContainer;
   rows: AgentChatWindowRow[];
   getWindowStart: () => number;
   getWindowEnd: () => number;
-  getTopSpacerHeight?: () => number;
 }): void => {
   container.querySelectorAll.mockImplementation(() => {
     const windowStart = getWindowStart();
     const windowEnd = getWindowEnd();
-    const topSpacerHeight = getTopSpacerHeight?.() ?? 0;
     const rowElements = rows.slice(windowStart, windowEnd + 1).map((row, index) => {
       return {
         dataset: { rowKey: row.key },
         getBoundingClientRect: () =>
           ({
-            top: topSpacerHeight + index * ROW_HEIGHT_PX - container.scrollTop,
-            bottom: topSpacerHeight + (index + 1) * ROW_HEIGHT_PX - container.scrollTop,
+            top: index * ROW_HEIGHT_PX,
           }) as DOMRect,
       } as unknown as HTMLElement;
     });
@@ -154,19 +150,17 @@ const attachScrollableWindowedRowGeometry = ({
   getWindowStart,
   getWindowEnd,
   getRowHeight,
-  getTopSpacerHeight,
 }: {
   container: MockMessagesContainer;
   rows: AgentChatWindowRow[];
   getWindowStart: () => number;
   getWindowEnd: () => number;
   getRowHeight: (row: AgentChatWindowRow, index: number) => number;
-  getTopSpacerHeight?: () => number;
 }): void => {
   container.querySelectorAll.mockImplementation(() => {
     const windowStart = getWindowStart();
     const windowEnd = getWindowEnd();
-    let accumulatedTop = getTopSpacerHeight?.() ?? 0;
+    let accumulatedTop = 0;
     const rowElements = rows.slice(windowStart, windowEnd + 1).map((row, index) => {
       const rowHeight = getRowHeight(row, windowStart + index);
       const top = accumulatedTop - container.scrollTop;
@@ -214,69 +208,9 @@ const syncWindowedScrollHeight = (
   container: MockMessagesContainer,
   getWindowStart: () => number,
   getWindowEnd: () => number,
-  options?: {
-    getTopSpacerHeight?: () => number;
-    getBottomSpacerHeight?: () => number;
-    getRenderedContentHeight?: () => number;
-  },
 ): void => {
   const renderedRowCount = Math.max(0, getWindowEnd() - getWindowStart() + 1);
-  const topSpacerHeight = options?.getTopSpacerHeight?.() ?? 0;
-  const bottomSpacerHeight = options?.getBottomSpacerHeight?.() ?? 0;
-  const renderedContentHeight =
-    options?.getRenderedContentHeight?.() ?? renderedRowCount * ROW_HEIGHT_PX;
-  Object.assign(container, {
-    scrollHeight: topSpacerHeight + renderedContentHeight + bottomSpacerHeight,
-  });
-};
-
-const setScrollNearRenderedBottom = (
-  container: MockMessagesContainer,
-  result: {
-    topSpacerHeight: number;
-    renderedContentHeight: number;
-  },
-): void => {
-  container.scrollTop =
-    result.topSpacerHeight + result.renderedContentHeight - container.clientHeight - 40;
-};
-
-const setScrollNearRenderedTop = (
-  container: MockMessagesContainer,
-  result: {
-    topSpacerHeight: number;
-  },
-  offsetPx = 80,
-): void => {
-  container.scrollTop = result.topSpacerHeight + offsetPx;
-};
-
-const getFirstVisibleRowAnchor = (
-  container: MockMessagesContainer,
-): { rowKey: string; top: number } => {
-  const rowElements = Array.from(container.querySelectorAll("[data-row-key]"));
-  for (const rowElement of rowElements) {
-    if (!(rowElement instanceof Object) || typeof rowElement.getBoundingClientRect !== "function") {
-      continue;
-    }
-
-    const rowRect = rowElement.getBoundingClientRect();
-    if (rowRect.bottom <= 0) {
-      continue;
-    }
-
-    const rowKey = (rowElement as HTMLElement).dataset.rowKey;
-    if (!rowKey) {
-      continue;
-    }
-
-    return {
-      rowKey,
-      top: rowRect.top,
-    };
-  }
-
-  throw new Error("Expected at least one visible row");
+  Object.assign(container, { scrollHeight: renderedRowCount * ROW_HEIGHT_PX });
 };
 
 const getLatestResult = (latestResultRef: { current: HookResult | null }): HookResult => {
@@ -830,50 +764,25 @@ describe("useAgentChatWindow", () => {
       getWindowStart: () => harness.getLatestResult().windowStart,
       getWindowEnd: () => harness.getLatestResult().windowEnd,
       getRowHeight: (_row, index) => rowHeights.get(index) ?? ROW_HEIGHT_PX,
-      getTopSpacerHeight: () => harness.getLatestResult().topSpacerHeight,
     });
-    const getRenderedContentHeight = () => {
-      let totalHeight = 0;
-      const { windowStart, windowEnd } = harness.getLatestResult();
-      for (let rowIndex = windowStart; rowIndex <= windowEnd; rowIndex += 1) {
-        totalHeight += rowHeights.get(rowIndex) ?? ROW_HEIGHT_PX;
-      }
-      return totalHeight;
-    };
-    syncWindowedScrollHeight(
-      container,
-      () => harness.getLatestResult().windowStart,
-      () => harness.getLatestResult().windowEnd,
-      {
-        getTopSpacerHeight: () => harness.getLatestResult().topSpacerHeight,
-        getBottomSpacerHeight: () => harness.getLatestResult().bottomSpacerHeight,
-        getRenderedContentHeight,
-      },
-    );
 
-    const initialScrollTop = harness.getLatestResult().topSpacerHeight + 300;
-    container.scrollTop = initialScrollTop;
+    container.scrollTop = 300;
     await act(async () => {
       dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
     });
-    const anchorBefore = getFirstVisibleRowAnchor(container);
 
     container.scrollTo.mockClear();
     rowHeights.set(20, 320);
-    const nextScrollHeight =
-      harness.getLatestResult().topSpacerHeight +
-      getRenderedContentHeight() +
-      harness.getLatestResult().bottomSpacerHeight;
-    Object.assign(content, { scrollHeight: nextScrollHeight });
-    Object.assign(container, { scrollHeight: nextScrollHeight });
+    Object.assign(content, { scrollHeight: 1200 });
+    Object.assign(container, { scrollHeight: 1200 });
 
     await act(async () => {
       triggerResizeObservers();
       await flush();
     });
 
-    expect(getFirstVisibleRowAnchor(container)).toEqual(anchorBefore);
+    expect(container.scrollTop).toBe(500);
     expect(container.scrollTo).not.toHaveBeenCalled();
 
     await harness.unmount();
@@ -1490,19 +1399,14 @@ describe("useAgentChatWindow", () => {
       rows: createRows(80),
       getWindowStart: () => harness.getLatestResult().windowStart,
       getWindowEnd: () => harness.getLatestResult().windowEnd,
-      getTopSpacerHeight: () => harness.getLatestResult().topSpacerHeight,
     });
     syncWindowedScrollHeight(
       container,
       () => harness.getLatestResult().windowStart,
       () => harness.getLatestResult().windowEnd,
-      {
-        getTopSpacerHeight: () => harness.getLatestResult().topSpacerHeight,
-        getBottomSpacerHeight: () => harness.getLatestResult().bottomSpacerHeight,
-      },
     );
 
-    setScrollNearRenderedBottom(container, harness.getLatestResult());
+    container.scrollTop = container.scrollHeight - container.clientHeight - 40;
 
     await act(async () => {
       dispatchContainerEvent(container, "scroll", new Event("scroll"));
@@ -1528,12 +1432,8 @@ describe("useAgentChatWindow", () => {
         container,
         () => harness.getLatestResult().windowStart,
         () => harness.getLatestResult().windowEnd,
-        {
-          getTopSpacerHeight: () => harness.getLatestResult().topSpacerHeight,
-          getBottomSpacerHeight: () => harness.getLatestResult().bottomSpacerHeight,
-        },
       );
-      setScrollNearRenderedBottom(container, harness.getLatestResult());
+      container.scrollTop = container.scrollHeight - container.clientHeight - 40;
       dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
     });
@@ -1566,9 +1466,8 @@ describe("useAgentChatWindow", () => {
       rows,
       getWindowStart: () => harness.getLatestResult().windowStart,
       getWindowEnd: () => harness.getLatestResult().windowEnd,
-      getTopSpacerHeight: () => harness.getLatestResult().topSpacerHeight,
     });
-    setScrollNearRenderedTop(container, harness.getLatestResult());
+    container.scrollTop = 80;
 
     await act(async () => {
       dispatchContainerEvent(container, "scroll", new Event("scroll"));
@@ -1578,7 +1477,7 @@ describe("useAgentChatWindow", () => {
     let result = harness.getLatestResult();
     expect(result.windowStart).toBe(50);
 
-    setScrollNearRenderedTop(container, harness.getLatestResult());
+    container.scrollTop = 80;
     await act(async () => {
       dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
@@ -1611,7 +1510,6 @@ describe("useAgentChatWindow", () => {
       rows,
       getWindowStart: () => harness.getLatestResult().windowStart,
       getWindowEnd: () => harness.getLatestResult().windowEnd,
-      getTopSpacerHeight: () => harness.getLatestResult().topSpacerHeight,
     });
 
     await act(async () => {
@@ -1623,12 +1521,8 @@ describe("useAgentChatWindow", () => {
       container,
       () => harness.getLatestResult().windowStart,
       () => harness.getLatestResult().windowEnd,
-      {
-        getTopSpacerHeight: () => harness.getLatestResult().topSpacerHeight,
-        getBottomSpacerHeight: () => harness.getLatestResult().bottomSpacerHeight,
-      },
     );
-    setScrollNearRenderedBottom(container, harness.getLatestResult());
+    container.scrollTop = container.scrollHeight - container.clientHeight - 40;
 
     await act(async () => {
       dispatchContainerEvent(container, "scroll", new Event("scroll"));
@@ -1643,12 +1537,8 @@ describe("useAgentChatWindow", () => {
       container,
       () => harness.getLatestResult().windowStart,
       () => harness.getLatestResult().windowEnd,
-      {
-        getTopSpacerHeight: () => harness.getLatestResult().topSpacerHeight,
-        getBottomSpacerHeight: () => harness.getLatestResult().bottomSpacerHeight,
-      },
     );
-    setScrollNearRenderedBottom(container, harness.getLatestResult());
+    container.scrollTop = container.scrollHeight - container.clientHeight - 40;
     await act(async () => {
       dispatchContainerEvent(container, "scroll", new Event("scroll"));
       await flush();
@@ -1780,19 +1670,14 @@ describe("useAgentChatWindow", () => {
       rows: createRows(80),
       getWindowStart: () => harness.getLatestResult().windowStart,
       getWindowEnd: () => harness.getLatestResult().windowEnd,
-      getTopSpacerHeight: () => harness.getLatestResult().topSpacerHeight,
     });
     for (let shiftIndex = 0; shiftIndex < 2; shiftIndex += 1) {
       syncWindowedScrollHeight(
         container,
         () => harness.getLatestResult().windowStart,
         () => harness.getLatestResult().windowEnd,
-        {
-          getTopSpacerHeight: () => harness.getLatestResult().topSpacerHeight,
-          getBottomSpacerHeight: () => harness.getLatestResult().bottomSpacerHeight,
-        },
       );
-      setScrollNearRenderedBottom(container, harness.getLatestResult());
+      container.scrollTop = container.scrollHeight - container.clientHeight - 40;
       await act(async () => {
         dispatchContainerEvent(container, "scroll", new Event("scroll"));
         await flush();
@@ -1850,11 +1735,8 @@ describe("useAgentChatWindow", () => {
       getWindowStart: () => harness.getLatestResult().windowStart,
       getWindowEnd: () => harness.getLatestResult().windowEnd,
       getRowHeight: () => ROW_HEIGHT_PX,
-      getTopSpacerHeight: () => harness.getLatestResult().topSpacerHeight,
     });
-    const initialScrollTop = harness.getLatestResult().topSpacerHeight + 80;
-    container.scrollTop = initialScrollTop;
-    const anchorBefore = getFirstVisibleRowAnchor(container);
+    container.scrollTop = 80;
 
     await act(async () => {
       dispatchContainerEvent(container, "scroll", new Event("scroll"));
@@ -1862,7 +1744,7 @@ describe("useAgentChatWindow", () => {
     });
 
     expect(harness.getLatestResult().windowStart).toBe(50);
-    expect(getFirstVisibleRowAnchor(container)).toEqual(anchorBefore);
+    expect(container.scrollTop).toBe(80 + CHAT_SHIFT_SIZE * ROW_HEIGHT_PX);
 
     await harness.unmount();
   });
@@ -1888,7 +1770,6 @@ describe("useAgentChatWindow", () => {
       rows,
       getWindowStart: () => harness.getLatestResult().windowStart,
       getWindowEnd: () => harness.getLatestResult().windowEnd,
-      getTopSpacerHeight: () => harness.getLatestResult().topSpacerHeight,
     });
 
     await act(async () => {
@@ -1896,40 +1777,17 @@ describe("useAgentChatWindow", () => {
       await flush();
     });
 
-    syncWindowedScrollHeight(
-      container,
-      () => harness.getLatestResult().windowStart,
-      () => harness.getLatestResult().windowEnd,
-      {
-        getTopSpacerHeight: () => harness.getLatestResult().topSpacerHeight,
-        getBottomSpacerHeight: () => harness.getLatestResult().bottomSpacerHeight,
-      },
-    );
-    setScrollNearRenderedBottom(container, harness.getLatestResult());
-    await act(async () => {
-      dispatchContainerEvent(container, "scroll", new Event("scroll"));
-      await flush();
-    });
+    for (let shiftIndex = 0; shiftIndex < 2; shiftIndex += 1) {
+      Object.assign(container, { scrollHeight: 1000 });
+      container.scrollTop = 660;
+      await act(async () => {
+        dispatchContainerEvent(container, "scroll", new Event("scroll"));
+        await flush();
+      });
+    }
 
-    syncWindowedScrollHeight(
-      container,
-      () => harness.getLatestResult().windowStart,
-      () => harness.getLatestResult().windowEnd,
-      {
-        getTopSpacerHeight: () => harness.getLatestResult().topSpacerHeight,
-        getBottomSpacerHeight: () => harness.getLatestResult().bottomSpacerHeight,
-      },
-    );
-    setScrollNearRenderedBottom(container, harness.getLatestResult());
-    const anchorBefore = getFirstVisibleRowAnchor(container);
-    await act(async () => {
-      dispatchContainerEvent(container, "scroll", new Event("scroll"));
-      await flush();
-    });
-
-    const result = harness.getLatestResult();
-    expect(result.windowStart).toBe(10);
-    expect(getFirstVisibleRowAnchor(container)).toEqual(anchorBefore);
+    expect(harness.getLatestResult().windowStart).toBe(10);
+    expect(container.scrollTop).toBe(260);
 
     await harness.unmount();
   });

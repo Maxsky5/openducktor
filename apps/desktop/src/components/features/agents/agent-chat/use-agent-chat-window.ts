@@ -6,7 +6,6 @@ import { useAgentChatResizeSync } from "./use-agent-chat-resize-sync";
 import { useAgentChatScrollController } from "./use-agent-chat-scroll-controller";
 import { useAgentChatScrollEdgeShifts } from "./use-agent-chat-scroll-edge-shifts";
 import { useAgentChatWindowRangeController } from "./use-agent-chat-window-range-controller";
-import { useAgentChatWindowVirtualizer } from "./use-agent-chat-window-virtualizer";
 
 type UseAgentChatWindowInput = {
   rows: AgentChatWindowRow[];
@@ -22,13 +21,9 @@ type UseAgentChatWindowResult = {
   windowedRows: AgentChatWindowRow[];
   windowStart: number;
   windowEnd: number;
-  topSpacerHeight: number;
-  bottomSpacerHeight: number;
-  renderedContentHeight: number;
   isNearBottom: boolean;
   isNearTop: boolean;
   isAutoFollowingToBottom: boolean;
-  registerMeasuredRowElement: (rowKey: string) => (element: HTMLDivElement | null) => void;
   scrollToBottom: () => void;
   scrollToTop: () => void;
   scrollToBottomOnSend: () => void;
@@ -157,27 +152,11 @@ export function useAgentChatWindow({
       setTopAnchoredState,
     });
 
-  const effectiveIsNearTop = isNearTop && windowRange.start === 0;
-
-  const effectiveWindow = clampWindowRange(windowRange, rowCount);
-  const hasVisibleRows = effectiveWindow.end >= effectiveWindow.start;
-  const windowedRows = hasVisibleRows
-    ? rows.slice(effectiveWindow.start, effectiveWindow.end + 1)
-    : [];
-  const { topSpacerHeight, bottomSpacerHeight, renderedContentHeight, registerMeasuredRowElement } =
-    useAgentChatWindowVirtualizer({
-      rows,
-      windowStart: effectiveWindow.start,
-      windowEnd: effectiveWindow.end,
-    });
-
   useAgentChatScrollEdgeShifts({
     messagesContainerRef,
     rowCount,
-    windowStart: effectiveWindow.start,
-    windowEnd: effectiveWindow.end,
-    topSpacerHeight,
-    renderedContentHeight,
+    windowStart: windowRange.start,
+    windowEnd: windowRange.end,
     isHistoryNavigationRef,
     isUpdatingRef,
     suppressSentinelsRef,
@@ -185,17 +164,21 @@ export function useAgentChatWindow({
     shiftWindowDown,
   });
 
+  const effectiveIsNearTop = isNearTop && windowRange.start === 0;
+
+  const effectiveWindow = clampWindowRange(windowRange, rowCount);
+  const hasVisibleRows = effectiveWindow.end >= effectiveWindow.start;
+  const windowedRows = hasVisibleRows
+    ? rows.slice(effectiveWindow.start, effectiveWindow.end + 1)
+    : [];
+
   return {
     windowedRows,
     windowStart: effectiveWindow.start,
     windowEnd: effectiveWindow.end,
-    topSpacerHeight,
-    bottomSpacerHeight,
-    renderedContentHeight,
     isNearBottom,
     isNearTop: effectiveIsNearTop,
     isAutoFollowingToBottom,
-    registerMeasuredRowElement,
     scrollToBottom,
     scrollToTop,
     scrollToBottomOnSend,
