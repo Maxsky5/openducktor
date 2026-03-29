@@ -768,6 +768,7 @@ describe("OpencodeSdkAdapter", () => {
         directory: "/repo",
         command: "compact",
         arguments: "summarize the latest session",
+        model: "openai/gpt-5",
         variant: "high",
         agent: "hephaestus",
       },
@@ -932,6 +933,65 @@ describe("OpencodeSdkAdapter", () => {
 
     session.hasIdleSinceActivity = true;
     session.activeAssistantMessageId = "msg-200";
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      parts: [{ kind: "text", text: "Queued follow-up" }],
+    });
+
+    expect(session.pendingQueuedUserMessages).toEqual([{ content: "Queued follow-up" }]);
+  });
+
+  test("sendUserMessage pre-queues follow-ups after a slash command establishes an assistant boundary", async () => {
+    const mock = makeMockClient({
+      commandResult: {
+        mode: "success",
+        data: {
+          info: {
+            id: "msg-command-assistant-1",
+          },
+        },
+      },
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "build");
+
+    const sessions = (
+      adapter as unknown as {
+        sessions: Map<
+          string,
+          {
+            activeAssistantMessageId: string | null;
+            pendingQueuedUserMessages: Array<{ content: string }>;
+          }
+        >;
+      }
+    ).sessions;
+    const session = sessions.get("session-1");
+    if (!session) {
+      throw new Error("Expected adapter session record");
+    }
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      parts: [
+        {
+          kind: "slash_command",
+          command: {
+            id: "compact",
+            trigger: "compact",
+            title: "compact",
+            hints: [],
+          },
+        },
+      ],
+    });
+
+    expect(session.activeAssistantMessageId).toBe("msg-command-assistant-1");
 
     await adapter.sendUserMessage({
       sessionId: "session-1",

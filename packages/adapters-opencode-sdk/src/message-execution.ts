@@ -4,7 +4,7 @@ import {
   serializeAgentUserMessagePartsToText,
 } from "@openducktor/core";
 import { setSessionActive } from "./event-stream/shared";
-import { normalizeModelInput } from "./payload-mappers";
+import { normalizeModelInput, resolveAssistantResponseMessageId } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
 import type { SessionRecord } from "./types";
 
@@ -15,6 +15,24 @@ type SlashCommandExecutionRequest = {
 
 type SessionCommandClient = {
   command?: (input: unknown) => Promise<{ error?: unknown; response?: unknown }>;
+};
+
+type PreparedUserSend = {
+  queuedContent: string;
+  execute: (args: {
+    session: SessionRecord;
+    modelInput: ReturnType<typeof normalizeModelInput>;
+    tools: Record<string, boolean>;
+  }) => Promise<{ assistantMessageId: string | null }>;
+};
+
+const toCommandModelInput = (
+  modelInput: ReturnType<typeof normalizeModelInput>,
+): string | undefined => {
+  if (!modelInput.model) {
+    return undefined;
+  }
+  return `${modelInput.model.providerID}/${modelInput.model.modelID}`;
 };
 
 const toSlashCommandExecutionRequest = (
@@ -55,57 +73,75 @@ const toSlashCommandExecutionRequest = (
   };
 };
 
-const executeSlashCommand = async (args: {
-  session: SessionRecord;
-  slashCommandRequest: SlashCommandExecutionRequest;
-  modelInput: ReturnType<typeof normalizeModelInput>;
-}): Promise<void> => {
-  const commandClient = args.session.client.session as SessionCommandClient;
-  if (typeof commandClient.command !== "function") {
-    throw new Error("OpenCode runtime client does not expose slash command execution.");
-  }
+const preparePromptSend = (request: SendAgentUserMessageInput): PreparedUserSend => {
+  const queuedContent = serializeAgentUserMessagePartsToText(request.parts).trim();
 
-  const response = await commandClient.command({
-    sessionID: args.session.externalSessionId,
-    directory: args.session.input.workingDirectory,
-    command: args.slashCommandRequest.command,
-    arguments: args.slashCommandRequest.arguments,
-    ...(args.modelInput.variant ? { variant: args.modelInput.variant } : {}),
-    ...(args.modelInput.agent ? { agent: args.modelInput.agent } : {}),
-  });
-  if (response.error) {
-    throw toOpenCodeRequestError(
-      "run slash command",
-      response.error,
-      response.response as { status?: unknown; statusText?: unknown } | undefined,
-    );
-  }
+  return {
+    queuedContent,
+    execute: async ({ session, modelInput, tools }) => {
+      const promptRequest = {
+        sessionID: session.externalSessionId,
+        directory: session.input.workingDirectory,
+        ...(session.input.systemPrompt.trim().length > 0
+          ? { system: session.input.systemPrompt }
+          : {}),
+        ...(modelInput.model ? { model: modelInput.model } : {}),
+        ...(modelInput.variant ? { variant: modelInput.variant } : {}),
+        ...(modelInput.agent ? { agent: modelInput.agent } : {}),
+        tools,
+        parts: [{ type: "text" as const, text: queuedContent }],
+      };
+
+      const response = await session.client.session.promptAsync(promptRequest);
+      if (response.error) {
+        throw toOpenCodeRequestError("prompt session", response.error, response.response);
+      }
+      return {
+        assistantMessageId: resolveAssistantResponseMessageId(response.data),
+      };
+    },
+  };
 };
 
-const executePromptMessage = async (args: {
-  session: SessionRecord;
-  request: SendAgentUserMessageInput;
-  tools: Record<string, boolean>;
-  modelInput: ReturnType<typeof normalizeModelInput>;
-}): Promise<void> => {
-  const serializedPromptText = serializeAgentUserMessagePartsToText(args.request.parts);
-  const promptRequest = {
-    sessionID: args.session.externalSessionId,
-    directory: args.session.input.workingDirectory,
-    ...(args.session.input.systemPrompt.trim().length > 0
-      ? { system: args.session.input.systemPrompt }
-      : {}),
-    ...(args.modelInput.model ? { model: args.modelInput.model } : {}),
-    ...(args.modelInput.variant ? { variant: args.modelInput.variant } : {}),
-    ...(args.modelInput.agent ? { agent: args.modelInput.agent } : {}),
-    tools: args.tools,
-    parts: [{ type: "text" as const, text: serializedPromptText }],
-  };
+const prepareSlashCommandSend = (
+  request: SendAgentUserMessageInput,
+  slashCommandRequest: SlashCommandExecutionRequest,
+): PreparedUserSend => {
+  const queuedContent = serializeAgentUserMessagePartsToText(request.parts).trim();
 
-  const response = await args.session.client.session.promptAsync(promptRequest);
-  if (response.error) {
-    throw toOpenCodeRequestError("prompt session", response.error, response.response);
-  }
+  return {
+    queuedContent,
+    execute: async ({ session, modelInput }) => {
+      const commandClient = session.client.session as SessionCommandClient;
+      if (typeof commandClient.command !== "function") {
+        throw new Error("OpenCode runtime client does not expose slash command execution.");
+      }
+
+      const commandModel = toCommandModelInput(modelInput);
+
+      const response = await commandClient.command({
+        sessionID: session.externalSessionId,
+        directory: session.input.workingDirectory,
+        command: slashCommandRequest.command,
+        arguments: slashCommandRequest.arguments,
+        ...(commandModel ? { model: commandModel } : {}),
+        ...(modelInput.variant ? { variant: modelInput.variant } : {}),
+        ...(modelInput.agent ? { agent: modelInput.agent } : {}),
+      });
+      if (response.error) {
+        throw toOpenCodeRequestError(
+          "run slash command",
+          response.error,
+          response.response as { status?: unknown; statusText?: unknown } | undefined,
+        );
+      }
+      return {
+        assistantMessageId: resolveAssistantResponseMessageId(
+          (response as { data?: unknown }).data,
+        ),
+      };
+    },
+  };
 };
 
 export const sendUserMessage = async (input: {
@@ -116,7 +152,10 @@ export const sendUserMessage = async (input: {
   const model = input.request.model ?? input.session.input.model;
   const modelInput = normalizeModelInput(model);
   const slashCommandRequest = toSlashCommandExecutionRequest(input.request.parts);
-  const queuedContent = serializeAgentUserMessagePartsToText(input.request.parts).trim();
+  const preparedSend = slashCommandRequest
+    ? prepareSlashCommandSend(input.request, slashCommandRequest)
+    : preparePromptSend(input.request);
+  const queuedContent = preparedSend.queuedContent;
   const pendingQueuedUserMessages = input.session.pendingQueuedUserMessages ?? [];
   input.session.pendingQueuedUserMessages = pendingQueuedUserMessages;
   const shouldTrackAsQueued =
@@ -131,21 +170,14 @@ export const sendUserMessage = async (input: {
 
   setSessionActive(input.session);
   try {
-    if (slashCommandRequest) {
-      await executeSlashCommand({
-        session: input.session,
-        slashCommandRequest,
-        modelInput,
-      });
-      return;
-    }
-
-    await executePromptMessage({
+    const { assistantMessageId } = await preparedSend.execute({
       session: input.session,
-      request: input.request,
       tools: input.tools,
       modelInput,
     });
+    if (assistantMessageId) {
+      input.session.activeAssistantMessageId = assistantMessageId;
+    }
   } catch (error) {
     if (shouldTrackAsQueued) {
       const matchIndex = pendingQueuedUserMessages.findIndex(
@@ -154,6 +186,9 @@ export const sendUserMessage = async (input: {
       if (matchIndex >= 0) {
         pendingQueuedUserMessages.splice(matchIndex, 1);
       }
+    }
+    if (error instanceof Error && error.message.startsWith("OpenCode request failed:")) {
+      throw error;
     }
     throw toOpenCodeRequestError("prompt session", error);
   }
