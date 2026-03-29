@@ -1,8 +1,13 @@
+import type { TaskMetadataReadOptions } from "@openducktor/adapters-tauri-host";
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { host } from "@/state/operations/host";
 import { resolveLatestDocumentPayload } from "@/state/queries/document-utils";
-import { documentQueryKeyForSection, TASK_DOCUMENT_STALE_TIME_MS } from "@/state/queries/documents";
+import {
+  documentQueryKeyForSection,
+  fetchTaskDocumentFromQueryWithLoader,
+  TASK_DOCUMENT_STALE_TIME_MS,
+} from "@/state/queries/documents";
 import type { TaskDocumentPayload } from "@/types/task-documents";
 
 export type DocumentSectionKey = "spec" | "plan" | "qa";
@@ -16,12 +21,24 @@ export type TaskDocumentState = {
 };
 
 type TaskDocumentLoaders = {
-  loadSpecDocument: (taskId: string) => Promise<TaskDocumentPayload>;
-  loadPlanDocument: (taskId: string) => Promise<TaskDocumentPayload>;
-  loadQaReportDocument: (taskId: string) => Promise<TaskDocumentPayload>;
+  loadSpecDocument: (
+    taskId: string,
+    options?: TaskMetadataReadOptions,
+  ) => Promise<TaskDocumentPayload>;
+  loadPlanDocument: (
+    taskId: string,
+    options?: TaskMetadataReadOptions,
+  ) => Promise<TaskDocumentPayload>;
+  loadQaReportDocument: (
+    taskId: string,
+    options?: TaskMetadataReadOptions,
+  ) => Promise<TaskDocumentPayload>;
 };
 
-type SectionLoaders = Record<DocumentSectionKey, (taskId: string) => Promise<TaskDocumentPayload>>;
+type SectionLoaders = Record<
+  DocumentSectionKey,
+  (taskId: string, options?: TaskMetadataReadOptions) => Promise<TaskDocumentPayload>
+>;
 
 const DISABLED_TASK_ID = "__disabled__";
 
@@ -44,14 +61,21 @@ const toErrorMessage = (error: unknown): string =>
 
 const createHostDocumentLoader = <TResult extends { markdown: string; updatedAt: string | null }>(
   cacheScope: string,
-  readDocument: (repoPath: string, taskId: string) => Promise<TResult>,
-): ((taskId: string) => Promise<TaskDocumentPayload>) => {
-  return async (nextTaskId: string): Promise<TaskDocumentPayload> => {
+  readDocument: (
+    repoPath: string,
+    taskId: string,
+    options?: TaskMetadataReadOptions,
+  ) => Promise<TResult>,
+): ((taskId: string, options?: TaskMetadataReadOptions) => Promise<TaskDocumentPayload>) => {
+  return async (
+    nextTaskId: string,
+    options?: TaskMetadataReadOptions,
+  ): Promise<TaskDocumentPayload> => {
     if (!cacheScope) {
       throw new Error("Select a repository before loading task documents.");
     }
 
-    const document = await readDocument(cacheScope, nextTaskId);
+    const document = await readDocument(cacheScope, nextTaskId, options);
     return {
       markdown: document.markdown,
       updatedAt: document.updatedAt,
@@ -70,7 +94,7 @@ const createDocumentQueryOptions = ({
   cacheScope: string;
   taskId: string;
   section: DocumentSectionKey;
-  loader: (taskId: string) => Promise<TaskDocumentPayload>;
+  loader: (taskId: string, options?: TaskMetadataReadOptions) => Promise<TaskDocumentPayload>;
 }) => {
   const queryKey = documentQueryKeyForSection(cacheScope, taskId, section);
   return queryOptions({
@@ -211,20 +235,17 @@ export function useTaskDocuments(
       const options = queryOptionsBySection[section];
       const loadDocument = sectionLoaders[section];
       void queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
-      void queryClient
-        .fetchQuery({
-          ...options,
-          queryFn: async (): Promise<TaskDocumentPayload> => {
-            const incoming = await loadDocument(taskId);
-            const current = queryClient.getQueryData<TaskDocumentPayload>(options.queryKey);
-            return resolveLatestDocumentPayload(current, incoming);
-          },
-          staleTime: 0,
-        })
-        .catch(() => undefined);
+      void fetchTaskDocumentFromQueryWithLoader(
+        queryClient,
+        cacheScope,
+        taskId,
+        section,
+        loadDocument,
+        { forceFresh: true },
+      ).catch(() => undefined);
       return true;
     },
-    [enabled, queryClient, queryOptionsBySection, sectionLoaders, taskId],
+    [cacheScope, enabled, queryClient, queryOptionsBySection, sectionLoaders, taskId],
   );
 
   const applyDocumentUpdate = useCallback(

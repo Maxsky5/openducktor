@@ -811,7 +811,7 @@ describe("use-task-operations", () => {
         3000,
       );
 
-      expect(planGet).toHaveBeenCalledWith("/repo", "A");
+      expect(planGet).toHaveBeenCalledWith("/repo", "A", { forceFresh: true });
       expect(tasksList).toHaveBeenCalledWith("/repo");
       expect(
         queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(

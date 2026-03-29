@@ -98,7 +98,7 @@ describe("use-spec-operations", () => {
       await harness.mount();
       const spec = await harness.getLatest().loadSpec("task-1");
 
-      expect(specGet).toHaveBeenCalledWith("/repo-a", "task-1");
+      expect(specGet).toHaveBeenCalledWith("/repo-a", "task-1", undefined);
       expect(spec).toBe(defaultSpecTemplateMarkdown);
     } finally {
       await harness.unmount();
@@ -230,9 +230,9 @@ describe("use-spec-operations", () => {
         updatedAt: "2026-02-22T10:04:00.000Z",
       });
 
-      expect(specGet).toHaveBeenCalledWith("/repo-a", "task-1");
-      expect(planGet).toHaveBeenCalledWith("/repo-a", "task-1");
-      expect(qaGetReport).toHaveBeenCalledWith("/repo-a", "task-1");
+      expect(specGet).toHaveBeenCalledWith("/repo-a", "task-1", undefined);
+      expect(planGet).toHaveBeenCalledWith("/repo-a", "task-1", undefined);
+      expect(qaGetReport).toHaveBeenCalledWith("/repo-a", "task-1", undefined);
       expect(saveSpecDocument).toHaveBeenCalledWith({
         repoPath: "/repo-a",
         taskId: "task-1",
