@@ -1,0 +1,302 @@
+import type { AgentSlashCommand } from "@openducktor/core";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  type AgentChatComposerDraft,
+  type AgentChatComposerDraftEditResult,
+  applyComposerDraftEdit,
+  draftHasMeaningfulContent,
+  readSlashTriggerMatch,
+} from "./agent-chat-composer-draft";
+import {
+  getCaretOffsetWithinElement,
+  readEditableTextContent,
+  setCaretOffsetWithinElement,
+} from "./agent-chat-composer-selection";
+
+type SlashMenuState = {
+  textSegmentId: string;
+  query: string;
+  rangeStart: number;
+  rangeEnd: number;
+};
+
+type UseAgentChatComposerEditorArgs = {
+  draft: AgentChatComposerDraft;
+  onDraftChange: (draft: AgentChatComposerDraft) => void;
+  disabled: boolean;
+  onEditorInput: () => void;
+  onSend: () => void;
+  supportsSlashCommands: boolean;
+  slashCommands: AgentSlashCommand[];
+};
+
+type UseAgentChatComposerEditorResult = {
+  filteredSlashCommands: AgentSlashCommand[];
+  activeSlashIndex: number;
+  showSlashMenu: boolean;
+  registerTextSegmentRef: (segmentId: string, element: HTMLDivElement | null) => void;
+  selectSlashCommand: (command: AgentSlashCommand) => void;
+  handleTextInput: (segmentId: string, element: HTMLDivElement) => void;
+  handleTextFocus: (segmentId: string, element: HTMLDivElement) => void;
+  handleTextKeyUp: (segmentId: string, element: HTMLDivElement) => void;
+  handleTextKeyDown: (segmentId: string, event: ReactKeyboardEvent<HTMLDivElement>) => void;
+};
+
+const filterSlashCommands = (commands: AgentSlashCommand[], query: string): AgentSlashCommand[] => {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (normalizedQuery.length === 0) {
+    return commands;
+  }
+
+  return commands.filter((command) => {
+    const haystacks = [command.trigger, command.title, command.description ?? "", ...command.hints];
+    return haystacks.some((value) => value.toLowerCase().includes(normalizedQuery));
+  });
+};
+
+const usePendingFocus = () => {
+  const textSegmentRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const pendingFocusRef = useRef<AgentChatComposerDraftEditResult["focusTarget"]>(null);
+
+  useLayoutEffect(() => {
+    const pendingFocus = pendingFocusRef.current;
+    if (!pendingFocus) {
+      return;
+    }
+
+    const target = textSegmentRefs.current[pendingFocus.segmentId];
+    if (!target) {
+      return;
+    }
+
+    setCaretOffsetWithinElement(target, pendingFocus.offset);
+    pendingFocusRef.current = null;
+  });
+
+  const registerTextSegmentRef = useCallback(
+    (segmentId: string, element: HTMLDivElement | null) => {
+      textSegmentRefs.current[segmentId] = element;
+    },
+    [],
+  );
+
+  return {
+    registerTextSegmentRef,
+    setPendingFocusTarget: (focusTarget: AgentChatComposerDraftEditResult["focusTarget"]) => {
+      pendingFocusRef.current = focusTarget;
+    },
+  };
+};
+
+export const useAgentChatComposerEditor = ({
+  draft,
+  onDraftChange,
+  disabled,
+  onEditorInput,
+  onSend,
+  supportsSlashCommands,
+  slashCommands,
+}: UseAgentChatComposerEditorArgs): UseAgentChatComposerEditorResult => {
+  const { registerTextSegmentRef, setPendingFocusTarget } = usePendingFocus();
+  const [slashMenuState, setSlashMenuState] = useState<SlashMenuState | null>(null);
+  const [activeSlashIndex, setActiveSlashIndex] = useState(0);
+
+  const filteredSlashCommands = useMemo(() => {
+    if (!slashMenuState) {
+      return [];
+    }
+    return filterSlashCommands(slashCommands, slashMenuState.query);
+  }, [slashCommands, slashMenuState]);
+
+  const updateSlashMenuForText = useCallback(
+    (segmentId: string, text: string, caretOffset: number | null) => {
+      if (disabled || !supportsSlashCommands || caretOffset === null) {
+        setActiveSlashIndex(0);
+        setSlashMenuState(null);
+        return;
+      }
+
+      const match = readSlashTriggerMatch(text, caretOffset);
+      if (!match) {
+        setActiveSlashIndex(0);
+        setSlashMenuState(null);
+        return;
+      }
+
+      setActiveSlashIndex(0);
+      setSlashMenuState({
+        textSegmentId: segmentId,
+        query: match.query,
+        rangeStart: match.rangeStart,
+        rangeEnd: match.rangeEnd,
+      });
+    },
+    [disabled, supportsSlashCommands],
+  );
+
+  const applyEditResult = useCallback(
+    (result: AgentChatComposerDraftEditResult | null) => {
+      if (!result) {
+        return false;
+      }
+      setPendingFocusTarget(result.focusTarget);
+      onDraftChange(result.draft);
+      onEditorInput();
+      return true;
+    },
+    [onDraftChange, onEditorInput, setPendingFocusTarget],
+  );
+
+  const selectSlashCommand = useCallback(
+    (command: AgentSlashCommand) => {
+      if (!slashMenuState) {
+        return;
+      }
+
+      const didApply = applyEditResult(
+        applyComposerDraftEdit(draft, {
+          type: "insert_slash_command",
+          textSegmentId: slashMenuState.textSegmentId,
+          rangeStart: slashMenuState.rangeStart,
+          rangeEnd: slashMenuState.rangeEnd,
+          command,
+        }),
+      );
+      if (didApply) {
+        setSlashMenuState(null);
+      }
+    },
+    [applyEditResult, draft, slashMenuState],
+  );
+
+  const syncSlashMenuFromElement = useCallback(
+    (segmentId: string, element: HTMLDivElement) => {
+      updateSlashMenuForText(
+        segmentId,
+        readEditableTextContent(element),
+        getCaretOffsetWithinElement(element),
+      );
+    },
+    [updateSlashMenuForText],
+  );
+
+  const handleTextInput = useCallback(
+    (segmentId: string, element: HTMLDivElement) => {
+      const nextText = readEditableTextContent(element);
+      applyEditResult(
+        applyComposerDraftEdit(draft, {
+          type: "update_text",
+          segmentId,
+          text: nextText,
+        }),
+      );
+      updateSlashMenuForText(segmentId, nextText, getCaretOffsetWithinElement(element));
+    },
+    [applyEditResult, draft, updateSlashMenuForText],
+  );
+
+  const handleTextKeyDown = useCallback(
+    (segmentId: string, event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const target = event.currentTarget;
+      const caretOffset = getCaretOffsetWithinElement(target);
+
+      if (slashMenuState && filteredSlashCommands.length > 0) {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          setActiveSlashIndex((current) => (current + 1) % filteredSlashCommands.length);
+          return;
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          setActiveSlashIndex((current) =>
+            current === 0 ? filteredSlashCommands.length - 1 : current - 1,
+          );
+          return;
+        }
+        if ((event.key === "Enter" || event.key === "Tab") && !event.shiftKey) {
+          event.preventDefault();
+          const command = filteredSlashCommands[activeSlashIndex] ?? filteredSlashCommands[0];
+          if (command) {
+            selectSlashCommand(command);
+          }
+          return;
+        }
+      }
+
+      if (event.key === "Escape" && slashMenuState) {
+        event.preventDefault();
+        setSlashMenuState(null);
+        return;
+      }
+
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        if (!disabled && draftHasMeaningfulContent(draft)) {
+          onSend();
+        }
+        return;
+      }
+
+      if (event.key === "Enter" && event.shiftKey && caretOffset !== null) {
+        event.preventDefault();
+        const didApply = applyEditResult(
+          applyComposerDraftEdit(draft, {
+            type: "insert_newline",
+            segmentId,
+            caretOffset,
+          }),
+        );
+        if (didApply) {
+          setSlashMenuState(null);
+        }
+        return;
+      }
+
+      if (event.key === "Backspace" && caretOffset === 0) {
+        const currentIndex = draft.segments.findIndex((segment) => segment.id === segmentId);
+        const previousSegment = currentIndex > 0 ? draft.segments[currentIndex - 1] : null;
+        if (previousSegment?.kind === "slash_command") {
+          event.preventDefault();
+          const didApply = applyEditResult(
+            applyComposerDraftEdit(draft, {
+              type: "remove_slash_command",
+              segmentId: previousSegment.id,
+            }),
+          );
+          if (didApply) {
+            setSlashMenuState(null);
+          }
+        }
+      }
+    },
+    [
+      activeSlashIndex,
+      applyEditResult,
+      disabled,
+      draft,
+      filteredSlashCommands,
+      onSend,
+      selectSlashCommand,
+      slashMenuState,
+    ],
+  );
+
+  return {
+    filteredSlashCommands,
+    activeSlashIndex,
+    showSlashMenu: supportsSlashCommands && slashMenuState !== null,
+    registerTextSegmentRef,
+    selectSlashCommand,
+    handleTextInput,
+    handleTextFocus: syncSlashMenuFromElement,
+    handleTextKeyUp: syncSlashMenuFromElement,
+    handleTextKeyDown,
+  };
+};

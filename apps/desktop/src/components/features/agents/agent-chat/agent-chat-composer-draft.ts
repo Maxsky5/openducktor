@@ -26,6 +26,39 @@ export type AgentChatSlashTriggerMatch = {
   rangeEnd: number;
 };
 
+export type AgentChatComposerFocusTarget = {
+  segmentId: string;
+  offset: number;
+};
+
+export type AgentChatComposerDraftEdit =
+  | {
+      type: "update_text";
+      segmentId: string;
+      text: string;
+    }
+  | {
+      type: "insert_newline";
+      segmentId: string;
+      caretOffset: number;
+    }
+  | {
+      type: "insert_slash_command";
+      textSegmentId: string;
+      rangeStart: number;
+      rangeEnd: number;
+      command: AgentSlashCommand;
+    }
+  | {
+      type: "remove_slash_command";
+      segmentId: string;
+    };
+
+export type AgentChatComposerDraftEditResult = {
+  draft: AgentChatComposerDraft;
+  focusTarget: AgentChatComposerFocusTarget | null;
+};
+
 const createSegmentId = (): string => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -109,14 +142,31 @@ export const updateTextSegmentInDraft = (
   ),
 });
 
+const insertNewlineInTextSegment = (
+  draft: AgentChatComposerDraft,
+  segmentId: string,
+  caretOffset: number,
+): AgentChatComposerDraftEditResult | null => {
+  const segment = draft.segments.find((entry) => entry.id === segmentId);
+  if (!segment || segment.kind !== "text") {
+    return null;
+  }
+
+  const boundedOffset = Math.max(0, Math.min(caretOffset, segment.text.length));
+  const nextText = `${segment.text.slice(0, boundedOffset)}\n${segment.text.slice(boundedOffset)}`;
+  return {
+    draft: updateTextSegmentInDraft(draft, segmentId, nextText),
+    focusTarget: {
+      segmentId,
+      offset: boundedOffset + 1,
+    },
+  };
+};
+
 export const removeSlashCommandSegmentFromDraft = (
   draft: AgentChatComposerDraft,
   segmentId: string,
-): {
-  draft: AgentChatComposerDraft;
-  focusSegmentId: string;
-  focusOffset: number;
-} | null => {
+): AgentChatComposerDraftEditResult | null => {
   const index = draft.segments.findIndex((segment) => segment.id === segmentId);
   if (index < 0 || draft.segments[index]?.kind !== "slash_command") {
     return null;
@@ -133,11 +183,11 @@ export const removeSlashCommandSegmentFromDraft = (
   segments.splice(index - 1, 3, createTextSegment(mergedText, previous.id));
 
   return {
-    draft: {
-      segments,
+    draft: { segments },
+    focusTarget: {
+      segmentId: previous.id,
+      offset: previous.text.length,
     },
-    focusSegmentId: previous.id,
-    focusOffset: previous.text.length,
   };
 };
 
@@ -147,11 +197,7 @@ export const replaceTextRangeWithSlashCommand = (
   rangeStart: number,
   rangeEnd: number,
   command: AgentSlashCommand,
-): {
-  draft: AgentChatComposerDraft;
-  focusSegmentId: string;
-  focusOffset: number;
-} | null => {
+): AgentChatComposerDraftEditResult | null => {
   const index = draft.segments.findIndex((segment) => segment.id === textSegmentId);
   const segment = draft.segments[index];
   if (index < 0 || !segment || segment.kind !== "text") {
@@ -170,12 +216,38 @@ export const replaceTextRangeWithSlashCommand = (
   segments.splice(index, 1, ...replacement);
 
   return {
-    draft: {
-      segments,
+    draft: { segments },
+    focusTarget: {
+      segmentId: afterSegment.id,
+      offset: 0,
     },
-    focusSegmentId: afterSegment.id,
-    focusOffset: 0,
   };
+};
+
+export const applyComposerDraftEdit = (
+  draft: AgentChatComposerDraft,
+  edit: AgentChatComposerDraftEdit,
+): AgentChatComposerDraftEditResult | null => {
+  switch (edit.type) {
+    case "update_text": {
+      return {
+        draft: updateTextSegmentInDraft(draft, edit.segmentId, edit.text),
+        focusTarget: null,
+      };
+    }
+    case "insert_newline":
+      return insertNewlineInTextSegment(draft, edit.segmentId, edit.caretOffset);
+    case "insert_slash_command":
+      return replaceTextRangeWithSlashCommand(
+        draft,
+        edit.textSegmentId,
+        edit.rangeStart,
+        edit.rangeEnd,
+        edit.command,
+      );
+    case "remove_slash_command":
+      return removeSlashCommandSegmentFromDraft(draft, edit.segmentId);
+  }
 };
 
 export const draftToUserMessageParts = (draft: AgentChatComposerDraft): AgentUserMessagePart[] => {
