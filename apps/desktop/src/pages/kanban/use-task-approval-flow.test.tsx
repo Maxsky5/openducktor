@@ -5,7 +5,6 @@ import { waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { act } from "react";
 import { toast } from "sonner";
-import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
@@ -215,7 +214,6 @@ const waitForTaskApprovalModalClosed = async (timeoutMs = 1000): Promise<void> =
 
 describe("useTaskApprovalFlow", () => {
   beforeEach(async () => {
-    await clearAppQueryClient();
     await applyHostMocks();
     latestHarnessValue = null;
     (toast as { loading: typeof toast.loading }).loading =

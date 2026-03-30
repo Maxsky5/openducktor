@@ -27,8 +27,7 @@ export type AgentStudioOrchestrationReadinessContext = {
 };
 
 type AgentStudioOrchestrationComposerContext = {
-  input: string;
-  setInput: (value: string) => void;
+  draftStateKey: string;
 };
 
 type AgentStudioOrchestrationActionsContext = {
@@ -39,6 +38,7 @@ type AgentStudioOrchestrationActionsContext = {
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   stopAgentSession: AgentStateContextValue["stopAgentSession"];
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
+  readSessionSlashCommands: AgentStateContextValue["readSessionSlashCommands"];
   bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
   hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
@@ -49,8 +49,7 @@ type UseAgentStudioOrchestrationControllerArgs = {
   activeRepo: string | null;
   selection: AgentStudioOrchestrationSelectionContext;
   readiness: AgentStudioOrchestrationReadinessContext;
-  input: string;
-  setInput: (value: string) => void;
+  draftStateKey: string;
   actions: AgentStudioOrchestrationActionsContext;
 };
 
@@ -111,6 +110,11 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   ReturnType<typeof useAgentStudioModelSelection>,
   | "selectedModelSelection"
   | "isSelectionCatalogLoading"
+  | "supportsSlashCommands"
+  | "slashCommandCatalog"
+  | "slashCommands"
+  | "slashCommandsError"
+  | "isSlashCommandsLoading"
   | "agentOptions"
   | "modelOptions"
   | "modelGroups"
@@ -193,8 +197,7 @@ export function useAgentStudioOrchestrationController({
   activeRepo,
   selection,
   readiness,
-  input,
-  setInput,
+  draftStateKey,
   actions,
 }: UseAgentStudioOrchestrationControllerArgs): UseAgentStudioOrchestrationControllerResult {
   const {
@@ -221,6 +224,7 @@ export function useAgentStudioOrchestrationController({
     sendAgentMessage,
     stopAgentSession,
     updateAgentSessionModel,
+    readSessionSlashCommands,
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
     humanRequestChangesTask,
@@ -243,6 +247,11 @@ export function useAgentStudioOrchestrationController({
     selectionForNewSession,
     selectedModelSelection,
     isSelectionCatalogLoading,
+    supportsSlashCommands,
+    slashCommandCatalog,
+    slashCommands,
+    slashCommandsError,
+    isSlashCommandsLoading,
     agentOptions,
     modelOptions,
     modelGroups,
@@ -258,6 +267,7 @@ export function useAgentStudioOrchestrationController({
     role: viewRole,
     repoSettings,
     updateAgentSessionModel,
+    readSessionSlashCommands,
   });
 
   const {
@@ -285,14 +295,13 @@ export function useAgentStudioOrchestrationController({
     role: viewRole,
     scenario: viewScenario,
     activeSession: viewActiveSession,
+    selectedModelSelection,
     sessionsForTask: viewSessionsForTask,
     selectedTask: viewSelectedTask,
     agentStudioReady,
     isActiveTaskHydrated,
     selectionForNewSession,
     repoSettings,
-    input,
-    setInput,
     startAgentSession,
     sendAgentMessage,
     bootstrapTaskSessions,
@@ -362,6 +371,11 @@ export function useAgentStudioOrchestrationController({
     modelSelection: {
       selectedModelSelection,
       isSelectionCatalogLoading,
+      supportsSlashCommands,
+      slashCommandCatalog,
+      slashCommands,
+      slashCommandsError,
+      isSlashCommandsLoading,
       agentOptions,
       modelOptions,
       modelGroups,
@@ -381,8 +395,7 @@ export function useAgentStudioOrchestrationController({
       showThinkingMessages,
     },
     composer: {
-      input,
-      setInput,
+      draftStateKey,
     },
   });
 

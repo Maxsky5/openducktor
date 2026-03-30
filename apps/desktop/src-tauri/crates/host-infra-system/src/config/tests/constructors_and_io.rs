@@ -1,6 +1,6 @@
 use super::{
-    touch_recent, unique_temp_path, AppConfigStore, GlobalConfig, RuntimeConfigStore,
-    TestStoreHarness,
+    lock_env, touch_recent, unique_temp_path, AppConfigStore, EnvVarGuard, GlobalConfig,
+    RuntimeConfigStore, TestStoreHarness,
 };
 use std::fs;
 #[cfg(unix)]
@@ -38,6 +38,9 @@ fn save_and_load_report_io_and_parse_errors() {
 
 #[test]
 fn config_store_constructors_expose_expected_paths() {
+    let _env_lock = lock_env();
+    let _override_guard = EnvVarGuard::remove("OPENDUCKTOR_CONFIG_DIR");
+
     let user_store = AppConfigStore::new().expect("new store should resolve home path");
     let resolved = user_store.path().to_string_lossy().to_string();
     assert!(

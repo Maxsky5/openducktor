@@ -40,6 +40,7 @@ type MockSession = {
   createCalls: unknown[];
   promptCalls: unknown[];
   promptAsyncCalls: unknown[];
+  commandCalls: unknown[];
   abortCalls: unknown[];
   getCalls: unknown[];
   messagesCalls: unknown[];
@@ -123,9 +124,25 @@ type PromptAsyncMockResult =
       error: Error;
     };
 
+type CommandMockResult =
+  | {
+      mode: "success";
+      data?: unknown;
+    }
+  | {
+      mode: "api_error";
+      error: unknown;
+      response?: { status?: number; statusText?: string };
+    }
+  | {
+      mode: "throw";
+      error: Error;
+    };
+
 type MakeMockClientInput = {
   sessionId?: string;
   promptAsyncResult?: PromptAsyncMockResult;
+  commandResult?: CommandMockResult;
   streamEvents?: Event[];
   messagesResponse?: Array<{
     info: {
@@ -148,6 +165,7 @@ type MakeMockClientInput = {
 const makeMockClient = ({
   sessionId = "session-opencode-1",
   promptAsyncResult = { mode: "success" },
+  commandResult = { mode: "success" },
   streamEvents = [],
   messagesResponse = [],
   todoResult = {
@@ -196,6 +214,7 @@ const makeMockClient = ({
     createCalls: [],
     promptCalls: [],
     promptAsyncCalls: [],
+    commandCalls: [],
     abortCalls: [],
     getCalls: [],
     messagesCalls: [],
@@ -240,6 +259,20 @@ const makeMockClient = ({
           };
         }
         return { data: promptAsyncResult.data, error: undefined };
+      },
+      command: async (input: unknown) => {
+        session.commandCalls.push(input);
+        if (commandResult.mode === "throw") {
+          throw commandResult.error;
+        }
+        if (commandResult.mode === "api_error") {
+          return {
+            data: undefined,
+            error: commandResult.error,
+            response: commandResult.response,
+          };
+        }
+        return { data: commandResult.data, error: undefined };
       },
       prompt: async (input: unknown) => {
         session.promptCalls.push(input);
@@ -632,7 +665,7 @@ describe("OpencodeSdkAdapter", () => {
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "Write and persist spec",
+      parts: [{ kind: "text", text: "Write and persist spec" }],
       model: {
         providerId: "openai",
         modelId: "gpt-5",
@@ -690,12 +723,170 @@ describe("OpencodeSdkAdapter", () => {
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "Recover ids",
+      parts: [{ kind: "text", text: "Recover ids" }],
     });
 
     expect(events.some((event) => event.type === "assistant_part")).toBe(false);
     expect(events.some((event) => event.type === "assistant_message")).toBe(false);
     expect(events.some((event) => event.type === "session_idle")).toBe(false);
+  });
+
+  test("sendUserMessage uses the native session command endpoint for slash commands", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "build");
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      parts: [
+        {
+          kind: "slash_command",
+          command: {
+            id: "compact",
+            trigger: "compact",
+            title: "compact",
+            hints: [],
+          },
+        },
+        { kind: "text", text: " summarize the latest session" },
+      ],
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        profileId: "hephaestus",
+      },
+    });
+
+    expect(mock.session.commandCalls).toEqual([
+      {
+        sessionID: "session-opencode-1",
+        directory: "/repo",
+        command: "compact",
+        arguments: "summarize the latest session",
+        model: "openai/gpt-5",
+        variant: "high",
+        agent: "hephaestus",
+      },
+    ]);
+    expect(mock.session.promptAsyncCalls).toHaveLength(0);
+  });
+
+  test("sendUserMessage emits a busy status immediately for slash commands", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "build");
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => events.push(event));
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      parts: [
+        {
+          kind: "slash_command",
+          command: {
+            id: "compact",
+            trigger: "compact",
+            title: "compact",
+            hints: [],
+          },
+        },
+      ],
+    });
+
+    expect(events).toContainEqual({
+      type: "session_status",
+      sessionId: "session-1",
+      timestamp: "2026-02-17T12:00:00Z",
+      status: { type: "busy" },
+    });
+  });
+
+  test("sendUserMessage rejects slash commands that are not the first meaningful segment", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "build");
+
+    await expect(
+      adapter.sendUserMessage({
+        sessionId: "session-1",
+        parts: [
+          { kind: "text", text: "before " },
+          {
+            kind: "slash_command",
+            command: {
+              id: "compact",
+              trigger: "compact",
+              title: "compact",
+              hints: [],
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow("OpenCode slash commands must be the first meaningful message segment.");
+    expect(mock.session.commandCalls).toHaveLength(0);
+    expect(mock.session.promptAsyncCalls).toHaveLength(0);
+  });
+
+  test("sendUserMessage emits session_idle when the send fails after reporting busy", async () => {
+    const mock = makeMockClient({
+      commandResult: {
+        mode: "api_error",
+        error: new Error("bad command payload"),
+        response: { status: 400, statusText: "Bad Request" },
+      },
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "build");
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => events.push(event));
+
+    await expect(
+      adapter.sendUserMessage({
+        sessionId: "session-1",
+        parts: [
+          {
+            kind: "slash_command",
+            command: {
+              id: "compact",
+              trigger: "compact",
+              title: "compact",
+              hints: [],
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow("OpenCode request failed: run slash command (400 Bad Request)");
+
+    expect(events).toContainEqual({
+      type: "session_status",
+      sessionId: "session-1",
+      timestamp: "2026-02-17T12:00:00Z",
+      status: { type: "busy" },
+    });
+    expect(events).toContainEqual({
+      type: "session_idle",
+      sessionId: "session-1",
+      timestamp: "2026-02-17T12:00:00Z",
+    });
   });
 
   test("sendUserMessage resets session activity so the next stream idle can settle the turn", async () => {
@@ -721,7 +912,7 @@ describe("OpencodeSdkAdapter", () => {
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "Second turn",
+      parts: [{ kind: "text", text: "Second turn" }],
     });
 
     expect(session.hasIdleSinceActivity).toBe(false);
@@ -756,7 +947,7 @@ describe("OpencodeSdkAdapter", () => {
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "First turn",
+      parts: [{ kind: "text", text: "First turn" }],
     });
 
     expect(session.pendingQueuedUserMessages).toHaveLength(0);
@@ -793,7 +984,66 @@ describe("OpencodeSdkAdapter", () => {
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "Queued follow-up",
+      parts: [{ kind: "text", text: "Queued follow-up" }],
+    });
+
+    expect(session.pendingQueuedUserMessages).toEqual([{ content: "Queued follow-up" }]);
+  });
+
+  test("sendUserMessage pre-queues follow-ups after a slash command establishes an assistant boundary", async () => {
+    const mock = makeMockClient({
+      commandResult: {
+        mode: "success",
+        data: {
+          info: {
+            id: "msg-command-assistant-1",
+          },
+        },
+      },
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "build");
+
+    const sessions = (
+      adapter as unknown as {
+        sessions: Map<
+          string,
+          {
+            activeAssistantMessageId: string | null;
+            pendingQueuedUserMessages: Array<{ content: string }>;
+          }
+        >;
+      }
+    ).sessions;
+    const session = sessions.get("session-1");
+    if (!session) {
+      throw new Error("Expected adapter session record");
+    }
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      parts: [
+        {
+          kind: "slash_command",
+          command: {
+            id: "compact",
+            trigger: "compact",
+            title: "compact",
+            hints: [],
+          },
+        },
+      ],
+    });
+
+    expect(session.activeAssistantMessageId).toBe("msg-command-assistant-1");
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      parts: [{ kind: "text", text: "Queued follow-up" }],
     });
 
     expect(session.pendingQueuedUserMessages).toEqual([{ content: "Queued follow-up" }]);
@@ -819,7 +1069,7 @@ describe("OpencodeSdkAdapter", () => {
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "Continue",
+      parts: [{ kind: "text", text: "Continue" }],
     });
 
     expect(mock.session.promptCalls).toHaveLength(0);
@@ -851,12 +1101,12 @@ describe("OpencodeSdkAdapter", () => {
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "First message",
+      parts: [{ kind: "text", text: "First message" }],
       model: selectedModel,
     });
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "Second message",
+      parts: [{ kind: "text", text: "Second message" }],
       model: selectedModel,
     });
 
@@ -884,7 +1134,7 @@ describe("OpencodeSdkAdapter", () => {
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "Use the saved model",
+      parts: [{ kind: "text", text: "Use the saved model" }],
     });
 
     expect(mock.tool.listCalls).toEqual([
@@ -926,7 +1176,7 @@ describe("OpencodeSdkAdapter", () => {
     await expect(
       adapter.sendUserMessage({
         sessionId: "session-1",
-        content: "Try again",
+        parts: [{ kind: "text", text: "Try again" }],
       }),
     ).rejects.toThrow(
       "OpenCode request failed: prompt session (429 Too Many Requests): quota exceeded",
@@ -950,7 +1200,7 @@ describe("OpencodeSdkAdapter", () => {
     await expect(
       adapter.sendUserMessage({
         sessionId: "session-1",
-        content: "Try again",
+        parts: [{ kind: "text", text: "Try again" }],
       }),
     ).rejects.toThrow("OpenCode request failed: prompt session: socket closed");
   });

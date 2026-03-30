@@ -258,6 +258,35 @@ describe("useAgentStudioModelSelection", () => {
     await harness.unmount();
   });
 
+  test("does not query session slash commands until the active session exposes its runtime kind", async () => {
+    const readSessionSlashCommands = mock(async () => ({
+      commands: [{ id: "review", trigger: "review", title: "review", hints: [] }],
+    }));
+
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession: createActiveSession({
+          runtimeKind: null,
+          selectedModel: {
+            runtimeKind: "queued-runtime",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "default",
+            profileId: "spec-agent",
+          },
+        }),
+        readSessionSlashCommands,
+      }),
+    );
+
+    await harness.mount();
+    await harness.waitFor((state) => state.isSlashCommandsLoading === false);
+
+    expect(readSessionSlashCommands).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
   test("updates draft selections through model and variant handlers", async () => {
     const harness = createHookHarness(createBaseProps());
 

@@ -32,6 +32,7 @@ import {
   connectMcpServer,
   getMcpStatus,
   listAvailableModels,
+  listAvailableSlashCommands,
   listAvailableToolIds,
 } from "./catalog-and-mcp";
 import { buildDefaultFactory, nowIso } from "./client-factory";
@@ -46,13 +47,14 @@ import {
   type SessionEventListeners,
   subscribeSessionEvents,
 } from "./event-emitter";
+import { setSessionIdle } from "./event-stream/shared";
+import { sendUserMessage } from "./message-execution";
 import {
   listLiveAgentSessionPendingInput,
   loadSessionHistory,
   loadSessionTodos,
   replyPermission,
   replyQuestion,
-  sendUserMessage,
 } from "./message-ops";
 import {
   clearWorkflowToolCacheForDirectory,
@@ -415,6 +417,15 @@ export class OpencodeSdkAdapter
     );
   }
 
+  async listAvailableSlashCommands(
+    input: import("@openducktor/core").ListAgentSlashCommandsInput,
+  ): Promise<import("@openducktor/core").AgentSlashCommandCatalog> {
+    return listAvailableSlashCommands(
+      this.createClient,
+      toRuntimeClientInput(input.runtimeConnection, "list available slash commands"),
+    );
+  }
+
   async listAvailableToolIds(input: {
     runtimeEndpoint: string;
     workingDirectory: string;
@@ -445,11 +456,27 @@ export class OpencodeSdkAdapter
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
     const session = requireSession(this.sessions, input.sessionId);
     const tools = await this.resolveSessionToolSelection(session, input.model);
-    await sendUserMessage({
-      session,
-      request: input,
-      tools,
+    this.emit(input.sessionId, {
+      type: "session_status",
+      sessionId: input.sessionId,
+      timestamp: this.now(),
+      status: { type: "busy" },
     });
+    try {
+      await sendUserMessage({
+        session,
+        request: input,
+        tools,
+      });
+    } catch (error) {
+      setSessionIdle(session);
+      this.emit(input.sessionId, {
+        type: "session_idle",
+        sessionId: input.sessionId,
+        timestamp: this.now(),
+      });
+      throw error;
+    }
   }
 
   updateSessionModel(input: UpdateAgentSessionModelInput): void {

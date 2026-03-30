@@ -237,14 +237,18 @@ type UseAgentStudioComposerModelArgs = {
   agentStudioReady: boolean;
   selectedRoleAvailable: boolean;
   selectedRoleReadOnlyReason: string | null;
-  input: string;
-  setInput: (value: string) => void;
-  onSend: () => Promise<void>;
+  draftStateKey: string;
+  onSend: AgentChatModel["composer"]["onSend"];
   isSending: boolean;
   isStarting: boolean;
   chatContextUsage: AgentChatModel["composer"]["contextUsage"];
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;
+  supportsSlashCommands: boolean;
+  slashCommandCatalog: AgentChatModel["composer"]["slashCommandCatalog"];
+  slashCommands: AgentChatModel["composer"]["slashCommands"];
+  slashCommandsError: string | null;
+  isSlashCommandsLoading: boolean;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];
@@ -254,8 +258,8 @@ type UseAgentStudioComposerModelArgs = {
   onSelectVariant: (variant: string) => void;
   activeSessionAgentColors: Record<string, string>;
   composerFormRef: RefObject<HTMLFormElement | null>;
-  composerTextareaRef: RefObject<HTMLTextAreaElement | null>;
-  resizeComposerTextarea: () => void;
+  composerEditorRef: RefObject<HTMLDivElement | null>;
+  resizeComposerEditor: () => void;
   scrollToBottomOnSendRef: AgentChatModel["composer"]["scrollToBottomOnSendRef"];
 };
 
@@ -270,14 +274,18 @@ export const useAgentStudioComposerModel = ({
   agentStudioReady,
   selectedRoleAvailable,
   selectedRoleReadOnlyReason,
-  input,
-  setInput,
+  draftStateKey,
   onSend,
   isSending,
   isStarting,
   chatContextUsage,
   selectedModelSelection,
   isSelectionCatalogLoading,
+  supportsSlashCommands,
+  slashCommandCatalog,
+  slashCommands,
+  slashCommandsError,
+  isSlashCommandsLoading,
   agentOptions,
   modelOptions,
   modelGroups,
@@ -287,8 +295,8 @@ export const useAgentStudioComposerModel = ({
   onSelectVariant,
   activeSessionAgentColors,
   composerFormRef,
-  composerTextareaRef,
-  resizeComposerTextarea,
+  composerEditorRef,
+  resizeComposerEditor,
   scrollToBottomOnSendRef,
 }: UseAgentStudioComposerModelArgs): ReturnType<typeof buildAgentChatComposerModel> => {
   const isModelSelectionPending = Boolean(
@@ -299,10 +307,16 @@ export const useAgentStudioComposerModel = ({
     ? getAgentSessionWaitingInputPlaceholder(activeSession)
     : null;
 
-  const handleSend = useCallback((): void => {
-    void onSend();
-    scrollToBottomOnSendRef.current?.();
-  }, [onSend, scrollToBottomOnSendRef]);
+  const handleSend = useCallback<AgentChatModel["composer"]["onSend"]>(
+    async (draft) => {
+      const didSend = await onSend(draft);
+      if (didSend) {
+        scrollToBottomOnSendRef.current?.();
+      }
+      return didSend;
+    },
+    [onSend, scrollToBottomOnSendRef],
+  );
 
   const handleStopSession = useCallback((): void => {
     if (!activeSessionId) {
@@ -319,8 +333,7 @@ export const useAgentStudioComposerModel = ({
         isReadOnly: !selectedRoleAvailable,
         readOnlyReason: selectedRoleReadOnlyReason,
         busySendBlockedReason,
-        input,
-        onInputChange: setInput,
+        draftStateKey,
         onSend: handleSend,
         isSending,
         isStarting,
@@ -330,6 +343,11 @@ export const useAgentStudioComposerModel = ({
         isModelSelectionPending,
         selectedModelSelection,
         isSelectionCatalogLoading,
+        supportsSlashCommands,
+        slashCommandCatalog,
+        slashCommands,
+        slashCommandsError,
+        isSlashCommandsLoading,
         agentOptions,
         modelOptions,
         modelGroups,
@@ -342,8 +360,8 @@ export const useAgentStudioComposerModel = ({
         canStopSession,
         onStopSession: handleStopSession,
         composerFormRef,
-        composerTextareaRef,
-        onComposerTextareaInput: resizeComposerTextarea,
+        composerEditorRef,
+        onComposerEditorInput: resizeComposerEditor,
         scrollToBottomOnSendRef,
       }),
     [
@@ -353,12 +371,13 @@ export const useAgentStudioComposerModel = ({
       canStopSession,
       chatContextUsage,
       composerFormRef,
-      composerTextareaRef,
+      composerEditorRef,
+      draftStateKey,
       handleSend,
       handleStopSession,
-      input,
       isModelSelectionPending,
       isSelectionCatalogLoading,
+      isSlashCommandsLoading,
       isSending,
       isSessionWorking,
       isWaitingInput,
@@ -370,12 +389,15 @@ export const useAgentStudioComposerModel = ({
       onSelectAgent,
       onSelectModel,
       onSelectVariant,
-      resizeComposerTextarea,
+      resizeComposerEditor,
       scrollToBottomOnSendRef,
       selectedModelSelection,
       selectedRoleAvailable,
       selectedRoleReadOnlyReason,
-      setInput,
+      slashCommandCatalog,
+      slashCommands,
+      slashCommandsError,
+      supportsSlashCommands,
       taskId,
       variantOptions,
     ],

@@ -15,6 +15,7 @@ const OPENCODE_READ_ONLY_ROLE_BLOCKED_TOOLS = [
 export const OPENCODE_RUNTIME_CAPABILITIES = {
   supportsProfiles: true,
   supportsVariants: true,
+  supportsSlashCommands: true,
   supportsOdtWorkflowTools: true,
   supportsSessionFork: true,
   supportsQueuedUserMessages: true,

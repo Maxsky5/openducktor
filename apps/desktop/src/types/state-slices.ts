@@ -26,6 +26,8 @@ import type {
   AgentRuntimeConnection,
   AgentScenario,
   AgentSessionTodoItem,
+  AgentSlashCommandCatalog,
+  AgentUserMessagePart,
 } from "@openducktor/core";
 import type { AgentSessionLoadOptions, AgentSessionState } from "./agent-orchestrator";
 import type { RepoRuntimeHealthMap } from "./diagnostics";
@@ -172,6 +174,10 @@ export type AgentStateContextValue = {
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<AgentSessionTodoItem[]>;
+  readSessionSlashCommands: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+  ) => Promise<AgentSlashCommandCatalog>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => void;
   startAgentSession: (
     input:
@@ -205,7 +211,7 @@ export type AgentStateContextValue = {
           sourceSessionId: string;
         },
   ) => Promise<string>;
-  sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
+  sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
   stopAgentSession: (sessionId: string) => Promise<void>;
   updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
   replyAgentPermission: (

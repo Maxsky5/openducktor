@@ -10,7 +10,9 @@ import type {
   AgentScenario,
   AgentSessionContext,
   AgentSessionTodoItem,
+  AgentSlashCommandCatalog,
   AgentStreamPart,
+  AgentUserMessagePart,
   AgentUserMessageState,
   RuntimeKind,
 } from "../types/agent-orchestrator";
@@ -32,7 +34,7 @@ export type ForkAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
 
 export type SendAgentUserMessageInput = {
   sessionId: string;
-  content: string;
+  parts: AgentUserMessagePart[];
   model?: AgentModelSelection;
 };
 
@@ -68,6 +70,11 @@ export type LiveAgentSessionPendingInputBySession = Record<
 >;
 
 export type ListAgentModelsInput = {
+  runtimeKind: RuntimeKind;
+  runtimeConnection: AgentRuntimeConnection;
+};
+
+export type ListAgentSlashCommandsInput = {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
 };
@@ -168,6 +175,7 @@ export interface AgentRuntimeRegistryPort {
 
 export interface AgentCatalogPort {
   listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog>;
+  listAvailableSlashCommands(input: ListAgentSlashCommandsInput): Promise<AgentSlashCommandCatalog>;
 }
 
 export interface AgentSessionPort {

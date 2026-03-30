@@ -82,6 +82,7 @@ const createHookHarness = (initialProps: HookArgs) => {
                 },
               ],
             }),
+            loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
           },
           children,
         }),

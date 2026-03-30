@@ -5,7 +5,11 @@ import type {
   RuntimeKind,
   RuntimeRoute,
 } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentModelCatalog } from "@openducktor/core";
+import type {
+  AgentEnginePort,
+  AgentModelCatalog,
+  AgentSlashCommandCatalog,
+} from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import { appQueryClient } from "@/lib/query-client";
@@ -24,7 +28,10 @@ type ListCatalogInput = {
   workingDirectory: string;
 };
 
-export type RuntimeCatalogAdapter = Pick<AgentEnginePort, "listAvailableModels"> & {
+export type RuntimeCatalogAdapter = Pick<
+  AgentEnginePort,
+  "listAvailableModels" | "listAvailableSlashCommands"
+> & {
   listAvailableToolIds: (input: ListCatalogInput) => Promise<string[]>;
   getMcpStatus: (input: ListCatalogInput) => Promise<Record<string, RuntimeMcpServerStatus>>;
   connectMcpServer: (input: ListCatalogInput & { name: string }) => Promise<void>;
@@ -41,6 +48,7 @@ type RuntimeCatalogDependencies = {
   stopRuntime: (runtimeId: string) => Promise<{ ok: boolean }>;
   listRuns: (repoPath: string) => Promise<RunSummary[]>;
   listAvailableModels: (input: ListCatalogInput) => Promise<AgentModelCatalog>;
+  listAvailableSlashCommands: (input: ListCatalogInput) => Promise<AgentSlashCommandCatalog>;
   listAvailableToolIds: (input: ListCatalogInput) => Promise<string[]>;
   getMcpStatus: (input: ListCatalogInput) => Promise<Record<string, RuntimeMcpServerStatus>>;
   connectMcpServer: (input: ListCatalogInput & { name: string }) => Promise<void>;
@@ -352,6 +360,20 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
     runtimeKind: RuntimeKind,
   ): Promise<AgentModelCatalog> => fetchCatalog(repoPath, runtimeKind);
 
+  const loadRepoRuntimeSlashCommands = async (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+  ): Promise<AgentSlashCommandCatalog> => {
+    const existingRuntime =
+      selectCatalogRuntime(await deps.listRuntimesForRepo(runtimeKind, repoPath), repoPath) ?? null;
+    const runtime = existingRuntime ?? (await deps.ensureRuntime(runtimeKind, repoPath));
+    return deps.listAvailableSlashCommands({
+      runtimeKind,
+      runtimeEndpoint: resolveRuntimeEndpoint(runtime.runtimeRoute),
+      workingDirectory: runtime.workingDirectory,
+    });
+  };
+
   const checkRepoRuntimeHealth = async (
     repoPath: string,
     runtimeKind: RuntimeKind,
@@ -397,6 +419,7 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
 
   return {
     loadRepoRuntimeCatalog,
+    loadRepoRuntimeSlashCommands,
     checkRepoRuntimeHealth,
   };
 };
@@ -416,6 +439,14 @@ export const createHostRuntimeCatalogOperations = (
     listRuns: (repoPath) => host.runsList(repoPath),
     listAvailableModels: (input) =>
       getAdapter(input.runtimeKind).listAvailableModels({
+        runtimeKind: input.runtimeKind,
+        runtimeConnection: {
+          endpoint: input.runtimeEndpoint,
+          workingDirectory: input.workingDirectory,
+        },
+      }),
+    listAvailableSlashCommands: (input) =>
+      getAdapter(input.runtimeKind).listAvailableSlashCommands({
         runtimeKind: input.runtimeKind,
         runtimeConnection: {
           endpoint: input.runtimeEndpoint,

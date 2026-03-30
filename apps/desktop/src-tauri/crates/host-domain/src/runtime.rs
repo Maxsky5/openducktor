@@ -43,6 +43,7 @@ impl AgentRuntimeKind {
                 capabilities: RuntimeCapabilities {
                     supports_profiles: true,
                     supports_variants: true,
+                    supports_slash_commands: true,
                     supports_odt_workflow_tools: true,
                     supports_session_fork: true,
                     supports_queued_user_messages: true,
@@ -125,6 +126,7 @@ pub const REQUIRED_RUNTIME_SUPPORTED_SCOPES: [RuntimeSupportedScope; 3] = [
 pub struct RuntimeCapabilities {
     pub supports_profiles: bool,
     pub supports_variants: bool,
+    pub supports_slash_commands: bool,
     pub supports_odt_workflow_tools: bool,
     pub supports_session_fork: bool,
     pub supports_queued_user_messages: bool,
@@ -428,6 +430,7 @@ mod tests {
         RuntimeCapabilities {
             supports_profiles: true,
             supports_variants: true,
+            supports_slash_commands: true,
             supports_odt_workflow_tools: true,
             supports_session_fork: true,
             supports_queued_user_messages: true,
@@ -469,6 +472,7 @@ mod tests {
             descriptor.capabilities.supported_scopes,
             REQUIRED_RUNTIME_SUPPORTED_SCOPES.to_vec()
         );
+        assert!(descriptor.capabilities.supports_slash_commands);
         assert!(descriptor
             .read_only_role_blocked_tools
             .contains(&"apply_patch".to_string()));
@@ -488,6 +492,7 @@ mod tests {
             capabilities: RuntimeCapabilities {
                 supports_profiles: true,
                 supports_variants: true,
+                supports_slash_commands: true,
                 supports_odt_workflow_tools: false,
                 supports_session_fork: false,
                 supports_queued_user_messages: true,

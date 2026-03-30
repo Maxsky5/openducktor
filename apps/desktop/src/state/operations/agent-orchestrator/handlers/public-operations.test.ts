@@ -72,6 +72,7 @@ describe("agent-orchestrator-public-operations", () => {
         profiles: [],
         defaultModelsByProvider: {},
       }),
+      readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       sessionActions: createSessionActions(),
@@ -100,6 +101,7 @@ describe("agent-orchestrator-public-operations", () => {
         profiles: [],
         defaultModelsByProvider: {},
       }),
+      readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       sessionActions: createSessionActions(),
@@ -133,6 +135,7 @@ describe("agent-orchestrator-public-operations", () => {
         profiles: [],
         defaultModelsByProvider: {},
       }),
+      readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       sessionActions: createSessionActions({
@@ -177,6 +180,7 @@ describe("agent-orchestrator-public-operations", () => {
         profiles: [],
         defaultModelsByProvider: {},
       }),
+      readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       sessionActions: createSessionActions({
@@ -187,9 +191,9 @@ describe("agent-orchestrator-public-operations", () => {
     });
 
     try {
-      await expect(operations.sendAgentMessage("session-1", "hello")).rejects.toThrow(
-        "send failed",
-      );
+      await expect(
+        operations.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]),
+      ).rejects.toThrow("send failed");
       expect(toastError).toHaveBeenCalledWith("Failed to send message", {
         description: "send failed",
       });
@@ -216,6 +220,7 @@ describe("agent-orchestrator-public-operations", () => {
         profiles: [],
         defaultModelsByProvider: {},
       }),
+      readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       sessionActions: createSessionActions({
@@ -250,6 +255,7 @@ describe("agent-orchestrator-public-operations", () => {
         profiles: [],
         defaultModelsByProvider: {},
       }),
+      readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionTodos: async () => [],
       removeAgentSessions,
       sessionActions: createSessionActions(),

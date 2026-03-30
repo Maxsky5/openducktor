@@ -1,8 +1,7 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { agentPromptTemplateIdValues, type SettingsSnapshot } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
-import { clearAppQueryClient } from "@/lib/query-client";
-import { QueryProvider } from "@/lib/query-provider";
+import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { host } from "../shared/host";
@@ -26,7 +25,7 @@ const createHookHarness = (initialArgs: HookArgs) => {
   };
 
   const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-    <QueryProvider>{children}</QueryProvider>
+    <IsolatedQueryWrapper>{children}</IsolatedQueryWrapper>
   );
 
   const sharedHarness = createSharedHookHarness(Harness, { args: currentArgs }, { wrapper });
@@ -89,10 +88,6 @@ const inputFixture: RepoSettingsInput = {
 };
 
 describe("use-repo-settings-operations", () => {
-  beforeEach(async () => {
-    await clearAppQueryClient();
-  });
-
   test("caches settings snapshot reads across repeated calls", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
@@ -165,7 +160,6 @@ describe("use-repo-settings-operations", () => {
     } finally {
       await harness.unmount();
       host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
-      await clearAppQueryClient();
     }
   });
 
@@ -401,7 +395,6 @@ describe("use-repo-settings-operations", () => {
       await harness.unmount();
       host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
       host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
-      await clearAppQueryClient();
     }
   });
 
@@ -532,7 +525,6 @@ describe("use-repo-settings-operations", () => {
   });
 
   test("loads settings snapshot through atomic IPC route", async () => {
-    await clearAppQueryClient();
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const workspaceGetSettingsSnapshot = mock(async () => ({
@@ -587,12 +579,10 @@ describe("use-repo-settings-operations", () => {
     } finally {
       await harness.unmount();
       host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
-      await clearAppQueryClient();
     }
   });
 
   test("saves settings snapshot atomically and applies returned workspaces", async () => {
-    await clearAppQueryClient();
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const workspaceSaveSettingsSnapshot = mock(async () => [createWorkspaceRecord()]);
@@ -655,7 +645,6 @@ describe("use-repo-settings-operations", () => {
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
       host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
-      await clearAppQueryClient();
     }
   });
 

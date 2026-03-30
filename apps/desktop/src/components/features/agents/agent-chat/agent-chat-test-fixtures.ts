@@ -13,6 +13,7 @@ import type {
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import type { AgentRoleOption } from "./agent-chat.types";
+import { createEmptyComposerDraft, createTextSegment } from "./agent-chat-composer-draft";
 
 const baseTask: TaskCard = {
   id: "task-1",
@@ -145,6 +146,12 @@ export const buildModelSelection = (
   ...baseSelection,
   ...overrides,
 });
+
+export const createComposerDraft = (text: string) => ({
+  segments: [createTextSegment(text)],
+});
+
+export { createEmptyComposerDraft };
 
 export const buildQuestionRequest = (
   overrides: Partial<AgentQuestionRequest> = {},

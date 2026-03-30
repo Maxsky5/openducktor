@@ -1,6 +1,7 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createElement, type ReactElement } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
+import * as appStateContexts from "@/state/app-state-contexts";
 import type { TasksStateContextValue } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
@@ -108,11 +109,6 @@ type AgentsPageShellModelState = {
 let workspaceState = {
   activeRepo: "/repo",
   activeBranch: "main",
-};
-let runtimeDefinitionsContext = {
-  runtimeDefinitions: [],
-  isLoadingRuntimeDefinitions: false,
-  runtimeDefinitionsError: null,
 };
 let checksState = {
   runtimeHealthByRuntime: {},
@@ -244,7 +240,7 @@ let rightPanelState: RightPanelState = {
 
 let useAgentsPageShellModel: () => AgentsPageShellModelState;
 
-beforeAll(async () => {
+const registerModuleMocks = (): void => {
   mock.module("react-router-dom", () => ({
     useNavigationType: () => "PUSH",
     useSearchParams: () => [new URLSearchParams(), mock(() => {})],
@@ -262,11 +258,11 @@ beforeAll(async () => {
   }));
 
   mock.module("@/state/app-state-contexts", () => ({
-    useDelegationEventsContext: () => ({ runCompletionSignal: null }),
-    useRuntimeDefinitionsContext: () => runtimeDefinitionsContext,
-    useChecksOperationsContext: () => ({
-      refreshRepoRuntimeHealthForRepo: mock(async () => undefined),
-      hasCachedRepoRuntimeHealth: mock(() => false),
+    ...appStateContexts,
+    useDelegationEventsContext: () => ({
+      setEvents: mock(() => {}),
+      runCompletionSignal: null,
+      setRunCompletionSignal: mock(() => {}),
     }),
   }));
 
@@ -320,15 +316,12 @@ beforeAll(async () => {
     MergedPullRequestConfirmDialog: (props: Record<string, unknown>): ReactElement =>
       createElement("mock-merged-pr-dialog", props),
   }));
+};
 
-  ({ useAgentsPageShellModel } = await import("./use-agents-page-shell-model"));
-});
-
-afterAll(() => {
+beforeEach(async () => {
   mock.restore();
-});
-
-beforeEach(() => {
+  registerModuleMocks();
+  ({ useAgentsPageShellModel } = await import("./use-agents-page-shell-model"));
   const sessionStartModal = orchestrationState.sessionStartModal;
   if (!sessionStartModal) {
     throw new Error("Expected base session start modal fixture.");
@@ -336,11 +329,6 @@ beforeEach(() => {
   workspaceState = {
     activeRepo: "/repo",
     activeBranch: "main",
-  };
-  runtimeDefinitionsContext = {
-    runtimeDefinitions: [],
-    isLoadingRuntimeDefinitions: false,
-    runtimeDefinitionsError: null,
   };
   checksState = {
     runtimeHealthByRuntime: {},
@@ -441,6 +429,10 @@ beforeEach(() => {
     isRightPanelVisible: true,
     rightPanelModel,
   };
+});
+
+afterEach(() => {
+  mock.restore();
 });
 
 const createHookHarness = () =>

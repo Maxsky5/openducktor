@@ -9,6 +9,7 @@ import type {
   AgentModelSelection,
   AgentRole,
   AgentScenario,
+  AgentUserMessagePart,
 } from "@openducktor/core";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
@@ -77,7 +78,7 @@ export type TaskDependencies = {
   taskRef: { current: TaskCard[] };
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
-  sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
+  sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
 };
 
 export type ModelDependencies = {

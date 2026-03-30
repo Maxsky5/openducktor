@@ -6,10 +6,8 @@ import type {
   AgentStreamPart,
   ReplyPermissionInput,
   ReplyQuestionInput,
-  SendAgentUserMessageInput,
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
-import { setSessionActive } from "./event-stream/shared";
 import {
   extractMessageTotalTokens,
   readMessageModelSelection,
@@ -17,7 +15,6 @@ import {
   readTextFromParts,
   sanitizeAssistantMessage,
 } from "./message-normalizers";
-import { normalizeModelInput } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
@@ -148,10 +145,6 @@ const hasCompletedAssistantMessage = (value: unknown): boolean => {
   const record = asRecord(value);
   const time = record ? asRecord(record.time) : null;
   return typeof time?.completed === "number";
-};
-
-const hasPendingAssistantBoundary = (session: SessionRecord): boolean => {
-  return session.activeAssistantMessageId !== null;
 };
 
 export const loadSessionHistory = async (
@@ -335,52 +328,6 @@ export const listLiveAgentSessionPendingInput = async (
   }
 
   return bySession;
-};
-
-export const sendUserMessage = async (input: {
-  session: SessionRecord;
-  request: SendAgentUserMessageInput;
-  tools: Record<string, boolean>;
-}): Promise<void> => {
-  const model = input.request.model ?? input.session.input.model;
-  const wasBusy = hasPendingAssistantBoundary(input.session);
-  const queuedSend = wasBusy
-    ? {
-        content: input.request.content.trim(),
-        ...(model ? { model } : {}),
-      }
-    : null;
-  if (queuedSend) {
-    input.session.pendingQueuedUserMessages.push(queuedSend);
-  }
-  const modelInput = normalizeModelInput(model);
-  const promptRequest = {
-    sessionID: input.session.externalSessionId,
-    directory: input.session.input.workingDirectory,
-    ...(input.session.input.systemPrompt.trim().length > 0
-      ? { system: input.session.input.systemPrompt }
-      : {}),
-    ...(modelInput.model ? { model: modelInput.model } : {}),
-    ...(modelInput.variant ? { variant: modelInput.variant } : {}),
-    ...(modelInput.agent ? { agent: modelInput.agent } : {}),
-    tools: input.tools,
-    parts: [{ type: "text" as const, text: input.request.content }],
-  };
-
-  setSessionActive(input.session);
-  try {
-    const response = await input.session.client.session.promptAsync(promptRequest);
-    if (response.error) {
-      throw toOpenCodeRequestError("prompt session", response.error, response.response);
-    }
-  } catch (error) {
-    if (queuedSend) {
-      input.session.pendingQueuedUserMessages = input.session.pendingQueuedUserMessages.filter(
-        (entry) => entry !== queuedSend,
-      );
-    }
-    throw toOpenCodeRequestError("prompt session", error);
-  }
 };
 
 export const replyPermission = async (

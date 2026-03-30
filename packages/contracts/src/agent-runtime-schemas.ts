@@ -25,6 +25,7 @@ export const runtimeSupportedScopesSchema = z
 export const runtimeCapabilitiesSchema = z.object({
   supportsProfiles: z.boolean(),
   supportsVariants: z.boolean(),
+  supportsSlashCommands: z.boolean(),
   supportsOdtWorkflowTools: z.boolean(),
   supportsSessionFork: z.boolean(),
   supportsQueuedUserMessages: z.boolean(),
@@ -42,6 +43,7 @@ export type RuntimeCapabilities = z.infer<typeof runtimeCapabilitiesSchema>;
 export const runtimeCapabilityKeyValues = [
   "supportsProfiles",
   "supportsVariants",
+  "supportsSlashCommands",
   "supportsOdtWorkflowTools",
   "supportsSessionFork",
   "supportsQueuedUserMessages",
@@ -63,7 +65,7 @@ export const mandatoryRuntimeCapabilityKeys = [
 export const optionalRuntimeCapabilityKeys = [
   "supportsProfiles",
   "supportsVariants",
-  "supportsQueuedUserMessages",
+  "supportsSlashCommands",
   "supportsPermissionRequests",
   "supportsQuestionRequests",
   "supportsTodos",
@@ -99,6 +101,7 @@ export type RuntimeCapabilityClass = "mandatory" | "optional" | "role_scoped";
 export const runtimeCapabilityClasses = {
   supportsProfiles: "optional",
   supportsVariants: "optional",
+  supportsSlashCommands: "optional",
   supportsOdtWorkflowTools: "mandatory",
   supportsSessionFork: "mandatory",
   supportsQueuedUserMessages: "optional",

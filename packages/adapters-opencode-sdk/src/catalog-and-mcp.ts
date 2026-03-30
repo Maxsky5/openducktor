@@ -1,7 +1,13 @@
-import type { AgentDescriptor, AgentModelCatalog } from "@openducktor/core";
+import { slashCommandCatalogSchema } from "@openducktor/contracts";
+import type {
+  AgentDescriptor,
+  AgentModelCatalog,
+  AgentSlashCommandCatalog,
+} from "@openducktor/core";
 import { unwrapData } from "./data-utils";
-import { asUnknownRecord, readStringProp } from "./guards";
+import { asUnknownRecord, readStringArrayProp, readStringProp } from "./guards";
 import { mapProviderListToCatalog, toToolIdList } from "./payload-mappers";
+import { toOpenCodeRequestError } from "./request-errors";
 import type { ClientFactory, McpServerStatus } from "./types";
 
 const OPENCODE_DEFAULT_AGENT_COLORS: Record<string, string> = {
@@ -98,6 +104,73 @@ export const listAvailableModels = async (
     ...baseCatalog,
     profiles: rawAgents,
   };
+};
+
+export const listAvailableSlashCommands = async (
+  createClient: ClientFactory,
+  input: {
+    runtimeEndpoint: string;
+    workingDirectory: string;
+  },
+): Promise<AgentSlashCommandCatalog> => {
+  try {
+    const client = createClient({
+      runtimeEndpoint: input.runtimeEndpoint,
+      workingDirectory: input.workingDirectory,
+    });
+    const commandClient = (
+      client as {
+        command?: {
+          list?: (input: { directory: string }) => Promise<{
+            data?: unknown;
+            error?: { message?: string } | unknown;
+          }>;
+        };
+      }
+    ).command;
+    if (!commandClient || typeof commandClient.list !== "function") {
+      throw new Error("OpenCode runtime does not expose the command listing API.");
+    }
+
+    const payload = unwrapData(
+      await commandClient.list({ directory: input.workingDirectory }),
+      "list slash commands",
+    );
+    if (!Array.isArray(payload)) {
+      throw new Error("Invalid slash command payload: expected an array.");
+    }
+
+    const commands = payload
+      .flatMap((rawEntry) => {
+        const entry = asUnknownRecord(rawEntry);
+        const name = entry ? readStringProp(entry, ["name"]) : undefined;
+        if (!entry || !name || name.trim().length === 0) {
+          return [];
+        }
+
+        const description = readStringProp(entry, ["description"]);
+        const source = readStringProp(entry, ["source"]);
+        const normalizedSource: AgentSlashCommandCatalog["commands"][number]["source"] =
+          source === "command" || source === "mcp" || source === "skill" ? source : undefined;
+        const hints = readStringArrayProp(entry, "hints") ?? [];
+
+        return [
+          {
+            id: name,
+            trigger: name,
+            title: name,
+            ...(description ? { description } : {}),
+            ...(normalizedSource ? { source: normalizedSource } : {}),
+            hints,
+          },
+        ];
+      })
+      .sort((left, right) => left.trigger.localeCompare(right.trigger));
+
+    return slashCommandCatalogSchema.parse({ commands });
+  } catch (error) {
+    throw toOpenCodeRequestError("list slash commands", error);
+  }
 };
 
 export const listAvailableToolIds = async (

@@ -10,9 +10,8 @@ const buildModel = () => ({
   isReadOnly: false,
   readOnlyReason: null,
   busySendBlockedReason: null,
-  input: "hello",
-  onInputChange: () => {},
-  onSend: () => {},
+  draftStateKey: "draft-1",
+  onSend: async () => true,
   isSending: false,
   isStarting: false,
   isSessionWorking: false,
@@ -21,6 +20,11 @@ const buildModel = () => ({
   isModelSelectionPending: false,
   selectedModelSelection: buildModelSelection(),
   isSelectionCatalogLoading: false,
+  supportsSlashCommands: true,
+  slashCommandCatalog: { commands: [] },
+  slashCommands: [],
+  slashCommandsError: null,
+  isSlashCommandsLoading: false,
   agentOptions: [{ value: "Hephaestus (Deep Agent)", label: "Hephaestus (Deep Agent)" }],
   modelOptions: [{ value: "openai/gpt-5.3-codex", label: "GPT-5.3 Codex" }],
   modelGroups: [
@@ -44,8 +48,8 @@ const buildModel = () => ({
   canStopSession: true,
   onStopSession: () => {},
   composerFormRef: createRef<HTMLFormElement>(),
-  composerTextareaRef: createRef<HTMLTextAreaElement>(),
-  onComposerTextareaInput: () => {},
+  composerEditorRef: createRef<HTMLDivElement>(),
+  onComposerEditorInput: () => {},
   scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
 });
 
@@ -57,7 +61,6 @@ describe("AgentChatComposer", () => {
       }),
     );
 
-    expect(html).toContain("@ for files/agents; / for commands; ! for shell");
     expect(html).toContain("Send message");
     expect(html).toContain("Stop session");
     expect(html).toContain("22.5%");
@@ -94,12 +97,44 @@ describe("AgentChatComposer", () => {
     expect(html).not.toContain('aria-label="Stop session" disabled');
   });
 
+  test("stop button stays enabled while a non-queueable message is submitting", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          canStopSession: true,
+          isSending: true,
+          isSessionWorking: false,
+        },
+      }),
+    );
+
+    expect(html).toContain("Stop session");
+    expect(html).not.toContain('aria-label="Stop session" disabled');
+    expect(html).toContain('aria-label="Preparing message" disabled');
+  });
+
+  test("keeps send enabled while a queueable session is working", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          isSending: true,
+          isSessionWorking: true,
+          draftStateKey: "queued-followup-ready",
+        },
+      }),
+    );
+
+    expect(html).toContain('aria-label="Send message"');
+    expect(html).not.toContain('aria-label="Preparing message"');
+  });
+
   test("disables send when input is blank", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {
         model: {
           ...buildModel(),
-          input: "   ",
         },
       }),
     );
@@ -152,9 +187,6 @@ describe("AgentChatComposer", () => {
     expect(html).toContain("border-warning-border");
     expect(html).toContain("Answer the pending question above to continue");
     expect(html).toContain('aria-label="Send message" disabled');
-    expect(html).toContain(
-      'placeholder="Answer the pending question above to continue" disabled=""',
-    );
     expect(html).not.toContain('class="odt-border-ray"');
     expect(html).not.toContain("border-l-4");
     expect(html).not.toContain("border-left-color:#d97706");
@@ -195,10 +227,10 @@ describe("AgentChatComposer", () => {
       createElement(AgentChatComposer, {
         model: {
           ...buildModel(),
-          input: "draft follow-up",
-          isSessionWorking: true,
           busySendBlockedReason:
             "Current runtime does not support queued messages while the session is working.",
+          draftStateKey: "busy-send-visible",
+          isSessionWorking: true,
         },
       }),
     );
@@ -206,7 +238,6 @@ describe("AgentChatComposer", () => {
     expect(html).toContain(
       "Current runtime does not support queued messages while the session is working.",
     );
-    expect(html).toContain("draft follow-up");
     expect(html).toContain('aria-label="Send message" disabled');
   });
 

@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
-import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
@@ -17,10 +16,6 @@ import { kickoffPromptForScenario } from "./agents-page-constants";
 import { useAgentStudioSessionStartFlow as useSessionStartFlow } from "./use-agent-studio-session-start-flow";
 
 enableReactActEnvironment();
-
-beforeEach(async () => {
-  await clearAppQueryClient();
-});
 
 type HookArgs = Parameters<typeof useSessionStartFlow>[0];
 
@@ -121,6 +116,7 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
             runtimeDefinitionsError: null,
             refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
             loadRepoRuntimeCatalog: async () => createModalCatalog(),
+            loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
           },
           children,
         }),
@@ -649,10 +645,12 @@ describe("useAgentStudioSessionStartFlow", () => {
       },
       startMode: "fresh" as const,
     });
-    expect(sendAgentMessage).toHaveBeenCalledWith(
-      "session-build-rework",
-      kickoffPromptForScenario("build", "build_after_qa_rejected", "task-1"),
-    );
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-build-rework", [
+      {
+        kind: "text",
+        text: kickoffPromptForScenario("build", "build_after_qa_rejected", "task-1"),
+      },
+    ]);
     expect(updateCalls).toContainEqual({
       task: "task-1",
       session: "session-build-rework",
@@ -823,10 +821,9 @@ describe("useAgentStudioSessionStartFlow", () => {
       sessionId: "session-build-older",
     });
     expect(startAgentSession).not.toHaveBeenCalled();
-    expect(sendAgentMessage).toHaveBeenCalledWith(
-      "session-build-older",
-      "Apply the requested human changes.",
-    );
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-build-older", [
+      { kind: "text", text: "Apply the requested human changes." },
+    ]);
     expect(updateCalls).toContainEqual({
       task: "task-1",
       session: "session-build-older",

@@ -116,6 +116,12 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     ).listAvailableModels(input);
   }
 
+  listAvailableSlashCommands(input: Parameters<AgentEnginePort["listAvailableSlashCommands"]>[0]) {
+    return this.getAdapter(
+      this.requireInputRuntimeKind(input.runtimeKind, "slash command catalog"),
+    ).listAvailableSlashCommands(input);
+  }
+
   listLiveAgentSessions(input: Parameters<AgentEnginePort["listLiveAgentSessions"]>[0]) {
     return this.getAdapter(
       this.requireInputRuntimeKind(input.runtimeKind, "live agent session discovery"),

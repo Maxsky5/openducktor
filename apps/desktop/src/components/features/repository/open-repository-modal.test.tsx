@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -28,7 +28,7 @@ describe("OpenRepositoryModal", () => {
     onOpenChange: () => void;
   }) => ReactNode;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     mock.module("@/lib/repo-directory", () => ({
       pickRepositoryDirectory: pickRepositoryDirectoryMock,
     }));
@@ -86,7 +86,7 @@ describe("OpenRepositoryModal", () => {
     ({ OpenRepositoryModal } = await import("./open-repository-modal"));
   });
 
-  afterAll(() => {
+  afterEach(() => {
     mock.restore();
   });
 

@@ -74,7 +74,7 @@ const baseArgs: BuildArgs = {
     kickoffLabel: "Kickoff",
     canStopSession: false,
     startScenarioKickoff: async () => {},
-    onSend: async () => {},
+    onSend: async () => true,
     onSubmitQuestionAnswers: async () => {},
     isSubmittingQuestionByRequestId: {},
     stopAgentSession: async () => {},
@@ -82,6 +82,11 @@ const baseArgs: BuildArgs = {
   modelSelection: {
     selectedModelSelection: null,
     isSelectionCatalogLoading: false,
+    supportsSlashCommands: true,
+    slashCommandCatalog: { commands: [] },
+    slashCommands: [],
+    slashCommandsError: null,
+    isSlashCommandsLoading: false,
     agentOptions: [],
     modelOptions: [],
     modelGroups: [],
@@ -101,8 +106,7 @@ const baseArgs: BuildArgs = {
     showThinkingMessages: true,
   },
   composer: {
-    input: "hello",
-    setInput: () => {},
+    draftStateKey: "draft-1",
   },
 };
 
@@ -120,7 +124,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.modelSelection.onSelectModel).toBe(handleSelectModel);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);
     expect(mapped.chatSettings.showThinkingMessages).toBe(true);
-    expect(mapped.composer.input).toBe("hello");
+    expect(mapped.composer.draftStateKey).toBe("draft-1");
   });
 
   test("derives activeTabValue from tab id, task id, then empty sentinel", () => {

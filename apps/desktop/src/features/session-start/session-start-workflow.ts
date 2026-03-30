@@ -191,15 +191,17 @@ export const startSessionWorkflow = async ({
 
   const runPostStartAction = async (): Promise<Error | null> => {
     try {
-      await sendAgentMessage(
-        sessionId,
-        await buildPostStartMessage({
-          activeRepo,
-          queryClient,
-          intent,
-          task,
-        }),
-      );
+      await sendAgentMessage(sessionId, [
+        {
+          kind: "text",
+          text: await buildPostStartMessage({
+            activeRepo,
+            queryClient,
+            intent,
+            task,
+          }),
+        },
+      ]);
       return null;
     } catch (error) {
       return toError(error);

@@ -114,6 +114,7 @@ Canonical capability schema: `packages/contracts/src/agent-runtime-schemas.ts`
 |---|---|---|---|---|
 | `supportsProfiles` | Optional enhancement | Runtime supports named profiles or agents | Session start flow and repo settings | Profile selectors read this before showing profile choices |
 | `supportsVariants` | Optional enhancement | Runtime supports model variants | Session start flow and repo settings | Variant selectors read this before showing variant choices |
+| `supportsSlashCommands` | Optional enhancement | Runtime exposes startup-loaded slash command metadata and can execute slash commands from the chat composer | Agent Studio composer and runtime catalog queries | The composer only opens slash autocomplete when this flag is true, loads commands through the same query-owned startup path as runtime catalogs, and keeps unsupported runtimes on plain-text `/` behavior |
 | `supportsOdtWorkflowTools` | Product-required capability | Runtime can execute ODT workflow tools | Workflow roles and tool policy | Built-in OpenDucktor roles rely on this when the runtime runs ODT tools |
 | `supportsSessionFork` | Product-required capability | Runtime can fork or branch an existing session | Session controls and workflow continuity | Runtime validation rejects integrations that cannot support OpenDucktor's fork-capable session model |
 | `supportsQueuedUserMessages` | Optional enhancement | Runtime can accept follow-up user messages while the current turn is still running and expose enough transcript state to mirror its queued badge behavior | Agent Studio composer, transcript rendering, and history hydration | Busy-session sends stay enabled only when this flag is true; queued user turns must flow through the standard `user_message` event/history path and update in place as the runtime's pending-assistant boundary moves |
@@ -132,7 +133,15 @@ The current codebase treats runtime integration in three layers:
 - `Required workflow scope coverage`: `supportedScopes` must include `workspace`, `task`, and `build`. OpenDucktor does not support runtimes that cover only a subset of roles.
 - `Optional enhancement`: the application can work without these. The UI and runtime-health flow gate these features explicitly instead of assuming support.
 
-The current schema does not yet model runtime-specific custom slash commands. If that surface is added later, it belongs in the `Optional enhancement` category: the app can function without it, and the UI should treat it as additive capability rather than a baseline runtime requirement.
+Slash commands now belong in the `Optional enhancement` category: the app can function without them, and the UI treats them as additive capability rather than a baseline runtime requirement.
+
+When `supportsSlashCommands` is true, OpenDucktor loads a slash-command catalog through the same request/response ownership model used for stable runtime catalog data:
+
+- repo-scoped composer warmup uses runtime-kind keyed query data before a session exists,
+- active-session warmup uses the session runtime connection instead of falling back to the repo default runtime,
+- filtering stays local in the composer, so typing after `/` does not trigger a runtime round-trip per keystroke.
+
+The shared/core boundary keeps slash commands as structured message parts. The OpenCode adapter converts a leading slash-command token plus trailing text into the runtime's native `session.command` request, where the trailing text becomes the command `arguments`. If the draft cannot be represented faithfully by the runtime-specific command endpoint, the adapter fails explicitly instead of flattening the structured command back into plain text.
 
 ## Read-Only Tool Policy
 
@@ -259,6 +268,7 @@ The runtime adapter implements the `AgentEnginePort` surface used by session orc
 - history,
 - todos,
 - model catalog,
+- slash-command catalog,
 - diff,
 - file status.
 
@@ -339,7 +349,7 @@ Update capability-driven UI surfaces:
 Concrete consumers to keep in mind:
 
 - `supportsProfiles` and `supportsVariants` drive session-start and repo-settings controls,
-- `supportsQueuedUserMessages` drives whether Agent Studio allows busy-session follow-up sends and whether queued user-turn rendering is expected,
+- `supportsSlashCommands` drives slash autocomplete/chip behavior in the Agent Studio composer,
 - `supportsMcpStatus` drives diagnostics sections and MCP health checks.
 
 `apps/desktop/src/state/operations/runtime-catalog.ts` is the main optional-capability gate for runtime diagnostics. It now skips MCP probing when `supportsMcpStatus` is false.

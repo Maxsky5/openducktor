@@ -5,7 +5,14 @@ import type {
   RuntimeKind,
   TaskCard,
 } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentModelSelection, AgentRole } from "@openducktor/core";
+import {
+  type AgentEnginePort,
+  type AgentModelSelection,
+  type AgentRole,
+  type AgentUserMessagePart,
+  hasMeaningfulAgentUserMessageParts,
+  normalizeAgentUserMessageParts,
+} from "@openducktor/core";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
@@ -151,9 +158,12 @@ export const createAgentSessionActions = ({
     loadRepoPromptOverrides,
   });
 
-  const sendAgentMessage = async (sessionId: string, content: string): Promise<void> => {
-    const trimmed = content.trim();
-    if (!trimmed) {
+  const sendAgentMessage = async (
+    sessionId: string,
+    parts: AgentUserMessagePart[],
+  ): Promise<void> => {
+    const normalizedParts = normalizeAgentUserMessageParts(parts);
+    if (!hasMeaningfulAgentUserMessageParts(normalizedParts)) {
       return;
     }
 
@@ -209,7 +219,7 @@ export const createAgentSessionActions = ({
     try {
       await adapter.sendUserMessage({
         sessionId,
-        content: trimmed,
+        parts: normalizedParts,
         ...(selectedModel ? { model: selectedModel } : {}),
       });
     } catch (error) {

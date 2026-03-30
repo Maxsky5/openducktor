@@ -1,5 +1,5 @@
 import type { AgentRole, AgentScenario } from "@openducktor/core";
-import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import { SessionStartModal } from "@/components/features/agents";
 import type {
@@ -92,6 +92,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
     readSessionModelCatalog,
+    readSessionSlashCommands,
     readSessionTodos,
     startAgentSession,
     sendAgentMessage,
@@ -103,7 +104,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const navigationType = useNavigationType();
-  const [input, setInput] = useState("");
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
   const { runCompletionSignal } = useDelegationEventsContext();
@@ -131,13 +131,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     [updateQuery],
   );
 
-  const clearComposerInput = useCallback((): void => {
-    setInput("");
-  }, []);
-
   const signalContextSwitchIntent = useCallback((): void => {
     setContextSwitchVersion((current) => current + 1);
   }, []);
+
+  const clearComposerInput = signalContextSwitchIntent;
 
   const selection = useAgentStudioSelectionController({
     activeRepo,
@@ -185,6 +183,22 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const handleCancelLinkMergedPullRequest = useCallback((): void => {
     cancelLinkMergedPullRequest();
   }, [cancelLinkMergedPullRequest]);
+
+  const draftStateKey = useMemo(
+    () =>
+      [
+        selection.viewTaskId,
+        selection.viewRole,
+        selection.viewActiveSession?.sessionId ?? "new",
+        contextSwitchVersion,
+      ].join(":"),
+    [
+      contextSwitchVersion,
+      selection.viewActiveSession?.sessionId,
+      selection.viewRole,
+      selection.viewTaskId,
+    ],
+  );
 
   const runCompletionRecoverySignal = useRunCompletionRecoverySignal({
     activeSession: selection.viewActiveSession,
@@ -238,8 +252,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       contextSwitchVersion,
     },
     readiness,
-    input,
-    setInput,
+    draftStateKey,
     actions: {
       updateQuery: scheduleQueryUpdate,
       onContextSwitchIntent: signalContextSwitchIntent,
@@ -248,6 +261,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       sendAgentMessage,
       stopAgentSession,
       updateAgentSessionModel,
+      readSessionSlashCommands,
       bootstrapTaskSessions,
       hydrateRequestedTaskSessionHistory,
       humanRequestChangesTask,

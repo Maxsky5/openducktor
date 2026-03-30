@@ -9,6 +9,8 @@ import type {
   AgentModelSelection,
   AgentRuntimeConnection,
   AgentSessionTodoItem,
+  AgentSlashCommandCatalog,
+  AgentUserMessagePart,
   LiveAgentSessionSnapshot,
 } from "@openducktor/core";
 import { toast } from "sonner";
@@ -18,7 +20,7 @@ import type { StartAgentSessionInput } from "./start-session";
 
 type SessionActions = {
   startAgentSession: (input: StartAgentSessionInput) => Promise<string>;
-  sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
+  sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
   stopAgentSession: (sessionId: string) => Promise<void>;
   updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
   replyAgentPermission: (
@@ -57,6 +59,10 @@ type CreatePublicOperationsArgs = {
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<AgentSessionTodoItem[]>;
+  readSessionSlashCommands: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+  ) => Promise<AgentSlashCommandCatalog>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
   sessionActions: SessionActions;
 };
@@ -88,9 +94,13 @@ type OrchestratorPublicOperations = {
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<AgentSessionTodoItem[]>;
+  readSessionSlashCommands: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+  ) => Promise<AgentSlashCommandCatalog>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
   startAgentSession: (input: StartAgentSessionInput) => Promise<string>;
-  sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
+  sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
   stopAgentSession: (sessionId: string) => Promise<void>;
   updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
   replyAgentPermission: (
@@ -124,6 +134,7 @@ export const createOrchestratorPublicOperations = ({
   loadAgentSessions,
   readSessionModelCatalog,
   readSessionTodos,
+  readSessionSlashCommands,
   removeAgentSessions,
   sessionActions,
 }: CreatePublicOperationsArgs): OrchestratorPublicOperations => ({
@@ -142,12 +153,13 @@ export const createOrchestratorPublicOperations = ({
     withErrorToast("Failed to load agent sessions", () => loadAgentSessions(taskId, options)),
   readSessionModelCatalog,
   readSessionTodos,
+  readSessionSlashCommands,
   removeAgentSessions,
   startAgentSession: (input: StartAgentSessionInput): Promise<string> =>
     withErrorToast("Failed to start agent session", () => sessionActions.startAgentSession(input)),
-  sendAgentMessage: (sessionId: string, content: string): Promise<void> =>
+  sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]): Promise<void> =>
     withErrorToast("Failed to send message", () =>
-      sessionActions.sendAgentMessage(sessionId, content),
+      sessionActions.sendAgentMessage(sessionId, parts),
     ),
   stopAgentSession: (sessionId: string): Promise<void> =>
     withErrorToast("Failed to stop agent session", () =>

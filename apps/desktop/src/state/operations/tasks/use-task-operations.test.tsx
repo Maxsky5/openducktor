@@ -4,7 +4,7 @@ import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
 import { toast } from "sonner";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
-import { clearAppQueryClient, createQueryClient } from "@/lib/query-client";
+import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -216,7 +216,6 @@ const createTaskAndKanbanHarness = (initialArgs: HookArgs, doneVisibleDays = 1) 
 
 describe("use-task-operations", () => {
   beforeEach(async () => {
-    await clearAppQueryClient();
     console.error = (...args: Parameters<typeof console.error>): void => {
       const [firstArg] = args;
       if (typeof firstArg === "string" && firstArg.startsWith(TASK_REFRESH_WARNING)) {

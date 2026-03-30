@@ -105,22 +105,24 @@ const maybeSendKickoff = async ({
   const kickoffScenario = assertAgentKickoffScenario(startedCtx.resolvedScenario);
 
   throwIfRepoStale(startedCtx.isStaleRepoOperation, STALE_START_ERROR);
-  await task.sendAgentMessage(
-    startedCtx.summary.sessionId,
-    kickoffPromptWithTaskContext(
-      startedCtx.role,
-      kickoffScenario,
-      {
-        taskId: startedCtx.taskId,
-        title: taskCard.title,
-        issueType: taskCard.issueType,
-        status: taskCard.status,
-        qaRequired: taskCard.aiReviewEnabled,
-        description: taskCard.description,
-      },
-      promptOverrides,
-    ),
-  );
+  await task.sendAgentMessage(startedCtx.summary.sessionId, [
+    {
+      kind: "text",
+      text: kickoffPromptWithTaskContext(
+        startedCtx.role,
+        kickoffScenario,
+        {
+          taskId: startedCtx.taskId,
+          title: taskCard.title,
+          issueType: taskCard.issueType,
+          status: taskCard.status,
+          qaRequired: taskCard.aiReviewEnabled,
+          description: taskCard.description,
+        },
+        promptOverrides,
+      ),
+    },
+  ]);
   throwIfRepoStale(startedCtx.isStaleRepoOperation, STALE_START_ERROR);
   runOrchestratorSideEffect(
     "start-session-refresh-task-data-after-kickoff",

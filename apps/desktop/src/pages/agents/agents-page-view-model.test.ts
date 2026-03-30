@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { Sparkles } from "lucide-react";
+import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -266,7 +267,7 @@ describe("agents-page-view-model", () => {
     const onSubmitQuestionAnswers = mock(async () => {});
     const onReplyPermission = mock(async () => {});
     const onToggleTodoPanel = mock(() => {});
-    const onSend = mock(() => {});
+    const onSend = mock((_draft?: unknown) => true);
     const onStopSession = mock(() => {});
 
     const model = buildAgentChatModel({
@@ -297,16 +298,20 @@ describe("agents-page-view-model", () => {
       messagesContainerRef: { current: null },
       scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
       syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
-      input: "message",
+      draftStateKey: "draft-1",
       isReadOnly: false,
       readOnlyReason: null,
       busySendBlockedReason: null,
-      onInputChange: () => {},
-      onSend,
+      onSend: async (draft) => onSend(draft),
       isWaitingInput: false,
       isModelSelectionPending: false,
       selectedModelSelection: null,
       isSelectionCatalogLoading: false,
+      supportsSlashCommands: true,
+      slashCommandCatalog: { commands: [] },
+      slashCommands: [],
+      slashCommandsError: null,
+      isSlashCommandsLoading: false,
       agentOptions: [],
       modelOptions: [],
       modelGroups: [],
@@ -318,8 +323,8 @@ describe("agents-page-view-model", () => {
       canStopSession: true,
       onStopSession,
       composerFormRef: { current: null },
-      composerTextareaRef: { current: null },
-      onComposerTextareaInput: () => {},
+      composerEditorRef: { current: null },
+      onComposerEditorInput: () => {},
     });
 
     expect(model.thread.taskSelected).toBe(false);
@@ -332,7 +337,7 @@ describe("agents-page-view-model", () => {
     await model.thread.onSubmitQuestionAnswers("req-1", [["yes"]]);
     await model.thread.onReplyPermission("req-1", "reject");
     model.thread.onToggleTodoPanel();
-    model.composer.onSend();
+    await model.composer.onSend(createComposerDraft("message"));
     model.composer.onStopSession();
 
     expect(onRefreshChecks).toHaveBeenCalledTimes(1);

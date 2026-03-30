@@ -1,8 +1,14 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { isAgentKickoffScenario } from "@openducktor/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
+import {
+  type AgentChatComposerDraft,
+  draftHasMeaningfulContent,
+  draftToSerializedText,
+  draftToUserMessageParts,
+} from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { SessionStartRequestReason } from "@/features/session-start";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
@@ -30,14 +36,13 @@ type UseAgentStudioSessionActionsArgs = {
   role: AgentRole;
   scenario: AgentScenario;
   activeSession: AgentSessionState | null;
+  selectedModelSelection: AgentModelSelection | null;
   sessionsForTask: AgentSessionState[];
   selectedTask: TaskCard | null;
   agentStudioReady: boolean;
   isActiveTaskHydrated: boolean;
   selectionForNewSession: AgentModelSelection | null;
   repoSettings: RepoSettingsInput | null;
-  input: string;
-  setInput: (value: string) => void;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
@@ -54,14 +59,13 @@ export function useAgentStudioSessionActions({
   role,
   scenario,
   activeSession,
+  selectedModelSelection,
   sessionsForTask,
   selectedTask,
   agentStudioReady,
   isActiveTaskHydrated,
   selectionForNewSession,
   repoSettings,
-  input,
-  setInput,
   startAgentSession,
   sendAgentMessage,
   bootstrapTaskSessions,
@@ -100,7 +104,7 @@ export function useAgentStudioSessionActions({
   kickoffLabel: string;
   canStopSession: boolean;
   startScenarioKickoff: () => Promise<void>;
-  onSend: () => Promise<void>;
+  onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   handleWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
@@ -112,7 +116,6 @@ export function useAgentStudioSessionActions({
   const [isSubmittingQuestionByRequestId, setIsSubmittingQuestionByRequestId] = useState<
     Record<string, boolean>
   >({});
-  const latestInputRef = useRef(input);
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
 
   const activeSessionId = activeSession?.sessionId ?? null;
@@ -129,12 +132,19 @@ export function useAgentStudioSessionActions({
       (activeSession?.status ?? "stopped") === "starting" ||
       isSending);
   const isWaitingInput = Boolean(activeSession && isAgentSessionWaitingInput(activeSession));
+  const selectedRuntimeKind =
+    selectedModelSelection?.runtimeKind ?? activeSession?.selectedModel?.runtimeKind ?? null;
   const activeRuntimeDescriptor =
+    (selectedRuntimeKind
+      ? runtimeDefinitions.find((runtime) => runtime.kind === selectedRuntimeKind)
+      : null) ??
     activeSession?.modelCatalog?.runtime ??
     runtimeDefinitions.find((runtime) => runtime.kind === activeSession?.runtimeKind) ??
     null;
   const supportsQueuedUserMessages =
     activeRuntimeDescriptor?.capabilities.supportsQueuedUserMessages !== false;
+  const canQueueBusyFollowups =
+    activeSession?.status === "running" && !isWaitingInput && supportsQueuedUserMessages;
   const busySendBlockedReason =
     activeSession && isSessionWorking && !isWaitingInput && !supportsQueuedUserMessages
       ? `${activeRuntimeDescriptor?.label ?? "Current runtime"} does not support queued messages while the session is working.`
@@ -170,95 +180,87 @@ export function useAgentStudioSessionActions({
     ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
   });
 
-  useEffect(() => {
-    latestInputRef.current = input;
-  }, [input]);
-
-  const onSend = useCallback(async (): Promise<void> => {
-    if (isSending || isStarting || !agentStudioReady || isWaitingInput || busySendBlockedReason) {
-      return;
-    }
-    if (!canStartSessionForRole(selectedTask, role)) {
-      return;
-    }
-    if (activeSession?.isLoadingModelCatalog && !activeSession.selectedModel) {
-      return;
-    }
-
-    const message = input.trim();
-    if (!message || !taskId) {
-      return;
-    }
-
-    latestInputRef.current = "";
-    setInput("");
-    const restoreComposerInput = () => {
-      if (latestInputRef.current.trim().length > 0) {
-        return;
+  const onSend = useCallback(
+    async (draft: AgentChatComposerDraft): Promise<boolean> => {
+      if (
+        (!canQueueBusyFollowups && isSending) ||
+        isStarting ||
+        !agentStudioReady ||
+        isWaitingInput ||
+        busySendBlockedReason
+      ) {
+        return false;
       }
-      setInput(message);
-    };
-    const sendContextKeys = new Set<string>();
-
-    try {
-      let targetSessionId = activeSession?.sessionId;
-      if (!targetSessionId) {
-        targetSessionId = await startSession("composer_send");
+      if (!canStartSessionForRole(selectedTask, role)) {
+        return false;
+      }
+      if (activeSession?.isLoadingModelCatalog && !activeSession.selectedModel) {
+        return false;
       }
 
-      if (!targetSessionId) {
-        restoreComposerInput();
-        return;
+      const serializedDraft = draftToSerializedText(draft).trim();
+      if (!draftHasMeaningfulContent(draft) || !serializedDraft || !taskId) {
+        return false;
       }
+      const sendContextKeys = new Set<string>();
 
-      const targetComposerContextKey = buildAgentStudioAsyncActivityContextKey({
-        activeRepo,
-        taskId,
-        role,
-        sessionId: targetSessionId,
-      });
-      sendContextKeys.add(activeComposerContextKey);
-      sendContextKeys.add(targetComposerContextKey);
-
-      setSendingActivityCountByContext((current) => {
-        let next = current;
-        for (const contextKey of sendContextKeys) {
-          next = incrementActivityCountRecord(next, contextKey);
+      try {
+        let targetSessionId = activeSession?.sessionId;
+        if (!targetSessionId) {
+          targetSessionId = await startSession("composer_send");
         }
-        return next;
-      });
-      await sendAgentMessage(targetSessionId, message);
-    } catch (error) {
-      restoreComposerInput();
-      throw error;
-    } finally {
-      if (sendContextKeys.size > 0) {
+
+        if (!targetSessionId) {
+          return false;
+        }
+
+        const targetComposerContextKey = buildAgentStudioAsyncActivityContextKey({
+          activeRepo,
+          taskId,
+          role,
+          sessionId: targetSessionId,
+        });
+        sendContextKeys.add(activeComposerContextKey);
+        sendContextKeys.add(targetComposerContextKey);
+
         setSendingActivityCountByContext((current) => {
           let next = current;
           for (const contextKey of sendContextKeys) {
-            next = decrementActivityCountRecord(next, contextKey);
+            next = incrementActivityCountRecord(next, contextKey);
           }
           return next;
         });
+        await sendAgentMessage(targetSessionId, draftToUserMessageParts(draft));
+        return true;
+      } finally {
+        if (sendContextKeys.size > 0) {
+          setSendingActivityCountByContext((current) => {
+            let next = current;
+            for (const contextKey of sendContextKeys) {
+              next = decrementActivityCountRecord(next, contextKey);
+            }
+            return next;
+          });
+        }
       }
-    }
-  }, [
-    activeRepo,
-    activeComposerContextKey,
-    activeSession,
-    agentStudioReady,
-    input,
-    isSending,
-    isStarting,
-    isWaitingInput,
-    busySendBlockedReason,
-    role,
-    selectedTask,
-    sendAgentMessage,
-    setInput,
-    startSession,
-    taskId,
-  ]);
+    },
+    [
+      activeRepo,
+      activeComposerContextKey,
+      activeSession,
+      agentStudioReady,
+      canQueueBusyFollowups,
+      isSending,
+      isStarting,
+      isWaitingInput,
+      busySendBlockedReason,
+      role,
+      selectedTask,
+      sendAgentMessage,
+      startSession,
+      taskId,
+    ],
+  );
 
   const onSubmitQuestionAnswers = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {

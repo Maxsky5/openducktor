@@ -10,6 +10,7 @@ import { act, isValidElement, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
+import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
 import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -245,10 +246,21 @@ const renderPage = async (options?: { waitForKanbanReady?: boolean }): Promise<R
 
   const renderer = render(
     <QueryProvider useIsolatedClient>
-      <MemoryRouter initialEntries={["/"]}>
-        <LocationProbe />
-        <KanbanPage />
-      </MemoryRouter>
+      <RuntimeDefinitionsContext.Provider
+        value={{
+          runtimeDefinitions: [...RUNTIME_DEFINITIONS],
+          isLoadingRuntimeDefinitions: false,
+          runtimeDefinitionsError: null,
+          refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
+          loadRepoRuntimeCatalog: loadRepoRuntimeCatalogMock,
+          loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+        }}
+      >
+        <MemoryRouter initialEntries={["/"]}>
+          <LocationProbe />
+          <KanbanPage />
+        </MemoryRouter>
+      </RuntimeDefinitionsContext.Provider>
     </QueryProvider>,
   );
 
@@ -342,16 +354,6 @@ describe("KanbanPage session start modal flow", () => {
         success: toastSuccessMock,
         error: toastErrorMock,
       },
-    }));
-
-    mock.module("@/state/app-state-contexts", () => ({
-      useRuntimeDefinitionsContext: () => ({
-        runtimeDefinitions: RUNTIME_DEFINITIONS,
-        isLoadingRuntimeDefinitions: false,
-        runtimeDefinitionsError: null,
-        refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
-        loadRepoRuntimeCatalog: loadRepoRuntimeCatalogMock,
-      }),
     }));
 
     mock.module("@/components/features/kanban/kanban-column", () => ({
@@ -986,10 +988,9 @@ describe("KanbanPage session start modal flow", () => {
       sessionId: "session-build-older",
     });
     expect(startAgentSessionMock).not.toHaveBeenCalled();
-    expect(sendAgentMessageMock).toHaveBeenCalledWith(
-      "session-build-older",
-      "Apply the requested human review changes.",
-    );
+    expect(sendAgentMessageMock).toHaveBeenCalledWith("session-build-older", [
+      { kind: "text", text: "Apply the requested human review changes." },
+    ]);
     expect(latestLocation).toContain("/agents?task=TASK-123");
     expect(latestLocation).toContain("session=session-build-older");
     expect(latestLocation).toContain("agent=build");

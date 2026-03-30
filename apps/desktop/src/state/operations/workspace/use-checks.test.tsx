@@ -7,7 +7,6 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
-import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
@@ -165,7 +164,6 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   Object.assign(host, originalHostMethods);
-  await clearAppQueryClient();
   toastError.mockClear();
   toastSuccess.mockClear();
   checkRepoRuntimeHealthMock.mockClear();
