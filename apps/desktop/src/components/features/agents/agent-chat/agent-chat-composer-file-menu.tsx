@@ -1,5 +1,5 @@
 import type { AgentFileSearchResult } from "@openducktor/core";
-import { ChevronRight, LoaderCircle } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { type ReactElement, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { AgentChatFileReferenceIcon } from "./agent-chat-file-reference-icon";
@@ -35,16 +35,11 @@ export function AgentChatComposerFileMenu({
 
   return (
     <div className="absolute bottom-full z-20 mb-2 rounded-xl border border-border bg-popover shadow-lg">
-      {isFileSearchLoading ? (
-        <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground">
-          <LoaderCircle className="size-4 animate-spin" />
-          <span>Searching files...</span>
-        </div>
-      ) : fileSearchError ? (
+      {fileSearchError ? (
         <div className="px-3 py-2 text-sm text-destructive">{fileSearchError}</div>
-      ) : results.length === 0 ? (
+      ) : !isFileSearchLoading && results.length === 0 ? (
         <div className="px-3 py-2 text-sm text-muted-foreground">No files found.</div>
-      ) : (
+      ) : results.length > 0 ? (
         <div className="hide-scrollbar flex max-h-64 flex-col overflow-y-auto rounded-xl">
           {results.map((result, index) => {
             const isActive = index === activeIndex;
@@ -81,7 +76,7 @@ export function AgentChatComposerFileMenu({
             );
           })}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

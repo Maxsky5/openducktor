@@ -25,24 +25,15 @@ const shouldRedirectShellClickToComposer = (
     return false;
   }
 
-  if (target.closest('[contenteditable="true"],button,a,input,textarea,select,[role="button"]')) {
+  if (
+    target.closest(
+      '[contenteditable="true"],[data-chip-segment-id],button,a,input,textarea,select,[role="button"]',
+    )
+  ) {
     return false;
   }
 
   return true;
-};
-
-const getTextSegmentElement = (target: EventTarget | null): HTMLElement | null => {
-  if (!(target instanceof HTMLElement)) {
-    return null;
-  }
-
-  const segmentElement = target.closest<HTMLElement>("[data-segment-id]");
-  if (!segmentElement?.isContentEditable) {
-    return null;
-  }
-
-  return segmentElement;
 };
 
 type AgentChatComposerEditorProps = {
@@ -87,16 +78,14 @@ export function AgentChatComposerEditor({
     isFileSearchLoading,
     registerTextSegmentRef,
     focusLastTextSegment,
-    focusSlashCommandSegment,
-    focusFileReferenceSegment,
     selectSlashCommand,
     selectFileSearchResult,
-    handleTextInput,
-    handleTextBeforeInput,
-    handleTextFocus,
-    handleTextClick,
-    handleTextKeyUp,
-    handleTextKeyDown,
+    handleEditorInput,
+    handleEditorBeforeInput,
+    handleEditorFocus,
+    handleEditorClick,
+    handleEditorKeyUp,
+    handleEditorKeyDown,
   } = useAgentChatComposerEditor({
     draft,
     onDraftChange,
@@ -120,7 +109,6 @@ export function AgentChatComposerEditor({
           onSelectFile={selectFileSearchResult}
         />
       ) : null}
-
       {showSlashMenu ? (
         <AgentChatComposerSlashMenu
           commands={filteredSlashCommands}
@@ -130,33 +118,31 @@ export function AgentChatComposerEditor({
           onSelectCommand={selectSlashCommand}
         />
       ) : null}
-
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: the contenteditable root is the editor surface. */}
       <div
         ref={editorRef}
+        contentEditable={!disabled}
+        suppressContentEditableWarning
+        spellCheck={false}
         className={cn(
           "min-h-11 max-h-[220px] overflow-y-auto px-3 py-2.5 text-[15px] leading-6 outline-none",
+          !draftHasMeaningfulContent(draft) &&
+            "selection:bg-transparent [&_*::selection]:bg-transparent",
           disabled ? "cursor-not-allowed opacity-60" : "cursor-text",
         )}
         aria-disabled={disabled}
+        onBeforeInput={handleEditorBeforeInput}
+        onInput={(event) => handleEditorInput(event.currentTarget)}
+        onFocus={handleEditorFocus}
+        onClick={handleEditorClick}
+        onKeyUp={handleEditorKeyUp}
+        onKeyDown={handleEditorKeyDown}
         onMouseDownCapture={(event) => {
           if (disabled || !shouldRedirectShellClickToComposer(event.target, event.currentTarget)) {
             return;
           }
           event.preventDefault();
           focusLastTextSegment();
-        }}
-        onMouseUpCapture={(event) => {
-          const segmentElement = getTextSegmentElement(event.target);
-          if (!segmentElement) {
-            return;
-          }
-
-          const segmentId = segmentElement.dataset.segmentId;
-          if (!segmentId) {
-            return;
-          }
-
-          handleTextClick(segmentId, segmentElement);
         }}
       >
         {!draftHasMeaningfulContent(draft) ? (
@@ -165,7 +151,14 @@ export function AgentChatComposerEditor({
           </div>
         ) : null}
 
-        <div className="relative z-10 min-h-7 whitespace-pre-wrap break-words">
+        <div
+          className={cn(
+            "relative z-10 min-h-6 whitespace-pre-wrap break-words",
+            !draftHasMeaningfulContent(draft) &&
+              "selection:bg-transparent [&_*::selection]:bg-transparent",
+          )}
+          data-composer-content-root
+        >
           {draft.segments.map((segment, index) => {
             const nextSegment = draft.segments[index + 1];
 
@@ -174,21 +167,19 @@ export function AgentChatComposerEditor({
                 <TooltipProvider key={segment.id}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button
-                        type="button"
+                      <span
                         contentEditable={false}
+                        data-chip-segment-id={segment.id}
+                        data-segment-id={segment.id}
                         title={segment.file.path}
-                        aria-label={`File reference ${segment.file.path}. Press Backspace immediately after the chip to remove it.`}
                         className={cn(
                           badgeVariants({ variant: "secondary" }),
-                          "mr-2 inline-flex h-6 items-center gap-1.5 rounded-full border border-border px-2.5 text-xs font-medium align-baseline",
+                          "mr-2 inline-flex h-6 bg-sky-300 dark:bg-sky-800 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium align-middle",
                         )}
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => focusFileReferenceSegment(segment.id)}
                       >
                         <AgentChatFileReferenceIcon kind={segment.file.kind} />
                         <span className="truncate">{segment.file.name}</span>
-                      </button>
+                      </span>
                     </TooltipTrigger>
                     <TooltipContent sideOffset={6}>{segment.file.path}</TooltipContent>
                   </Tooltip>
@@ -198,20 +189,18 @@ export function AgentChatComposerEditor({
 
             if (segment.kind === "slash_command") {
               return (
-                <button
+                <span
                   key={segment.id}
-                  type="button"
                   contentEditable={false}
-                  aria-label={`Slash command /${segment.command.trigger}. Press Backspace immediately after the chip to remove it.`}
+                  data-chip-segment-id={segment.id}
+                  data-segment-id={segment.id}
                   className={cn(
                     badgeVariants({ variant: "secondary" }),
-                    "mx-0.5 inline-flex h-6 align-baseline rounded-full border border-border px-2.5 text-xs font-medium mr-2",
+                    "mx-0.5 mr-2 inline-flex h-6 bg-yellow-300 dark:bg-yellow-600 items-center rounded-full px-2.5 text-xs font-medium align-middle",
                   )}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => focusSlashCommandSegment(segment.id)}
                 >
                   /{segment.command.trigger}
-                </button>
+                </span>
               );
             }
 
@@ -228,21 +217,14 @@ export function AgentChatComposerEditor({
               <span
                 key={segment.id}
                 ref={(element) => registerTextSegmentRef(segment.id, element)}
-                contentEditable={!disabled}
-                suppressContentEditableWarning
-                spellCheck={false}
                 data-segment-id={segment.id}
+                data-text-segment-id={segment.id}
                 className={cn(
-                  "whitespace-pre-wrap break-words align-baseline outline-none",
+                  "whitespace-pre-wrap break-words align-middle leading-6 outline-none",
                   segmentText.length === 0 && draft.segments[index - 1]?.kind !== "text"
                     ? "inline-block min-w-[1px]"
                     : "inline",
                 )}
-                onBeforeInput={(event) => handleTextBeforeInput(segment.id, event)}
-                onInput={(event) => handleTextInput(segment.id, event.currentTarget)}
-                onFocus={(event) => handleTextFocus(segment.id, event.currentTarget)}
-                onKeyUp={(event) => handleTextKeyUp(segment.id, event)}
-                onKeyDown={(event) => handleTextKeyDown(segment.id, event)}
               >
                 {segment.text.length > 0 ? segment.text : EMPTY_TEXT_SEGMENT_SENTINEL}
               </span>

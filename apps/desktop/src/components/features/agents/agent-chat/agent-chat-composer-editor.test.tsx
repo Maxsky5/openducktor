@@ -1,7 +1,13 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import type { AgentFileSearchResult } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { type ReactElement, useRef, useState } from "react";
 import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
+import {
+  createFileReferenceSegment,
+  createSlashCommandSegment,
+  createTextSegment,
+} from "./agent-chat-composer-draft";
 import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fixtures";
 
 let AgentChatComposerEditor: typeof import("./agent-chat-composer-editor").AgentChatComposerEditor;
@@ -61,14 +67,16 @@ const EditorHarness = ({
   supportsFileSearch = true,
   searchFiles = async () => [],
   onSend,
+  initialDraft = createComposerDraft(""),
 }: {
   slashCommandsError: string | null;
   slashCommands: typeof COMMANDS;
   supportsFileSearch?: boolean;
   searchFiles?: (query: string) => Promise<ReturnType<typeof buildFileSearchResult>[]>;
   onSend?: () => void;
+  initialDraft?: AgentChatComposerDraft;
 }): ReactElement => {
-  const [draft, setDraft] = useState<AgentChatComposerDraft>(createComposerDraft(""));
+  const [draft, setDraft] = useState<AgentChatComposerDraft>(initialDraft);
   const editorRef = useRef<HTMLDivElement>(null);
 
   return (
@@ -91,12 +99,26 @@ const EditorHarness = ({
 };
 
 const typeIntoEditor = (container: HTMLElement, value: string): HTMLElement => {
-  const editable = container.querySelector('[contenteditable="true"]');
+  const editable = container.querySelector("[data-text-segment-id]");
   if (!(editable instanceof HTMLElement)) {
-    throw new Error("Expected editable composer segment");
+    throw new Error("Expected editable composer text segment");
   }
   editable.textContent = value;
-  fireEvent.input(editable);
+  const textNode = editable.firstChild;
+  if (textNode) {
+    const range = document.createRange();
+    range.setStart(textNode, value.length);
+    range.collapse(true);
+    const selection = globalThis.getSelection?.();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+
+  const editorRoot = editable.closest('[contenteditable="true"]');
+  if (!(editorRoot instanceof HTMLElement)) {
+    throw new Error("Expected editable composer root");
+  }
+  fireEvent.input(editorRoot);
   return editable;
 };
 
@@ -144,28 +166,9 @@ describe("AgentChatComposerEditor", () => {
     fireEvent.keyDown(editable, { key: "Enter" });
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /slash command \/compact/i })).toBeDefined();
+      expect(screen.getByText("/compact")).toBeDefined();
     });
     expect(onSend).not.toHaveBeenCalled();
-  });
-
-  test("redirects empty-shell clicks to the editable text segment", () => {
-    resetSelectionMocks();
-    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
-
-    const shell = getEditorShell(rendered.container);
-    fireEvent.mouseDown(shell);
-
-    expect(setCaretOffsetWithinElementMock).toHaveBeenCalled();
-  });
-
-  test("preserves caret position after text input rerenders", () => {
-    resetSelectionMocks();
-    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
-
-    typeIntoEditor(rendered.container, "hello");
-
-    expect(setCaretOffsetWithinElementMock).toHaveBeenCalledWith(expect.any(HTMLElement), 5);
   });
 
   test("keeps slash autocomplete open through the keyup after typing slash", async () => {
@@ -226,6 +229,48 @@ describe("AgentChatComposerEditor", () => {
     });
   });
 
+  test("keeps previous file-search results visible while the next query loads", async () => {
+    let resolveSecondSearch: ((results: AgentFileSearchResult[]) => void) | null = null;
+    const searchFiles = mock((query: string) => {
+      if (query === "a") {
+        return Promise.resolve([buildFileSearchResult({ path: "src/alpha.ts", name: "alpha.ts" })]);
+      }
+      if (query === "ab") {
+        return new Promise<AgentFileSearchResult[]>((resolve) => {
+          resolveSecondSearch = resolve;
+        });
+      }
+      return Promise.resolve([]);
+    });
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={searchFiles}
+      />,
+    );
+
+    typeIntoEditor(rendered.container, "@a");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /alpha.ts/i })).toBeDefined();
+    });
+
+    typeIntoEditor(rendered.container, "@ab");
+
+    expect(screen.getByRole("button", { name: /alpha.ts/i })).toBeDefined();
+    expect(screen.queryByText("Searching files...")).toBeNull();
+
+    if (!resolveSecondSearch) {
+      throw new Error("Expected second file search to be pending");
+    }
+    const finishSecondSearch = resolveSecondSearch as (results: AgentFileSearchResult[]) => void;
+    finishSecondSearch([buildFileSearchResult({ path: "src/ab.ts", name: "ab.ts" })]);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /ab.ts/i })).toBeDefined();
+    });
+  });
+
   test("selects a file reference without submitting the message", async () => {
     const onSend = mock(() => {});
     const searchFiles = mock(async () => [buildFileSearchResult()]);
@@ -245,7 +290,7 @@ describe("AgentChatComposerEditor", () => {
     fireEvent.keyDown(editable, { key: "Enter" });
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /file reference src\/main.ts/i })).toBeDefined();
+      expect(screen.getByText("main.ts")).toBeDefined();
     });
     expect(onSend).not.toHaveBeenCalled();
     expect(searchFiles).toHaveBeenCalledWith("");
@@ -343,10 +388,15 @@ describe("AgentChatComposerEditor", () => {
     const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
 
     const editable = typeIntoEditor(rendered.container, "/");
+    fireEvent.keyUp(editable, { key: "/" });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /compact the current session/i })).toBeDefined();
+    });
     fireEvent.keyDown(editable, { key: "Enter" });
 
     await waitFor(() => {
-      const editables = Array.from(rendered.container.querySelectorAll('[contenteditable="true"]'));
+      expect(rendered.container.querySelector("[data-chip-segment-id]")).toBeTruthy();
+      const editables = Array.from(rendered.container.querySelectorAll("[data-text-segment-id]"));
       expect(editables).toHaveLength(1);
       const trailingEditable = editables[0];
       expect(trailingEditable?.className).toContain("inline-block");
@@ -370,7 +420,7 @@ describe("AgentChatComposerEditor", () => {
     fireEvent.keyDown(editable, { key: "Enter" });
 
     await waitFor(() => {
-      const editables = Array.from(rendered.container.querySelectorAll('[contenteditable="true"]'));
+      const editables = Array.from(rendered.container.querySelectorAll("[data-text-segment-id]"));
       expect(editables).toHaveLength(1);
       const trailingEditable = editables[0];
       expect(trailingEditable?.className).toContain("inline-block");
