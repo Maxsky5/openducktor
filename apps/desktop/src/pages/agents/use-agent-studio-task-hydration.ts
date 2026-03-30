@@ -4,13 +4,16 @@ import {
   requiresHydratedAgentSessionHistory,
 } from "@/state/operations/agent-orchestrator/support/history-hydration";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { getAgentStudioTaskHydrationDecision } from "./agent-studio-task-hydration-state";
+import {
+  type AgentStudioReadinessState,
+  getAgentStudioTaskHydrationDecision,
+} from "./agent-studio-task-hydration-state";
 
 type UseAgentStudioTaskHydrationParams = {
   activeRepo: string | null;
   activeTaskId: string;
   activeSession: AgentSessionState | null;
-  agentStudioReadinessState: "ready" | "checking" | "blocked";
+  agentStudioReadinessState: AgentStudioReadinessState;
   hydrateRequestedTaskSessionHistory: (input: {
     taskId: string;
     sessionId: string;
@@ -46,7 +49,6 @@ export function useAgentStudioTaskHydration({
   const sessionNeedsHydration = requiresHydratedAgentSessionHistory(activeSession);
   const {
     activeRecoveryKey,
-    blockedFromAutomaticRecovery,
     shouldWaitForSessionRuntime,
     isWaitingForRuntimeReadiness,
     isRecoveringWaitingSession,
@@ -81,10 +83,6 @@ export function useAgentStudioTaskHydration({
 
     if (isWaitingForRuntimeReadiness) {
       setWaitingRecoveryKey((current) => {
-        if (blockedFromAutomaticRecovery) {
-          return current === activeRecoveryKey ? null : current;
-        }
-
         if (historyHydrationState === "failed") {
           return activeRecoveryKey;
         }
@@ -104,7 +102,6 @@ export function useAgentStudioTaskHydration({
   }, [
     activeRecoveryKey,
     activeRepo,
-    blockedFromAutomaticRecovery,
     historyHydrationState,
     isWaitingForRuntimeReadiness,
     shouldWaitForSessionRuntime,

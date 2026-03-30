@@ -13,10 +13,11 @@ import {
 } from "@/state/queries/agent-session-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { hasAttachedSessionRuntime } from "./agent-studio-session-runtime";
+import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 
 type UseAgentStudioActiveSessionRuntimeDataArgs = {
   session: AgentSessionState | null;
-  agentStudioReadinessState: "ready" | "checking" | "blocked";
+  agentStudioReadinessState: AgentStudioReadinessState;
   readSessionModelCatalog: (
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
     runtimeConnection: AgentRuntimeConnection,

@@ -302,6 +302,26 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Cached transcript");
   });
 
+  test("renders the runtime-starting overlay while waiting for a worktree runtime after page readiness succeeds", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          readinessState: "ready",
+          agentStudioReady: true,
+          isWaitingForRuntimeReadiness: true,
+          session: buildSession({
+            messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],
+          }),
+        },
+      }),
+    );
+
+    expect(html).toContain("Runtime is starting");
+    expect(html).toContain("Waiting for runtime and MCP health before loading this session.");
+    expect(html).toContain("Cached transcript");
+  });
+
   test("does not show the runtime-starting overlay for generic readiness checks without a waiting session", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {

@@ -5,6 +5,7 @@ import type {
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
+import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
 import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
@@ -20,7 +21,7 @@ export type AgentStudioOrchestrationSelectionContext = AgentStudioSelectionContr
 };
 
 export type AgentStudioOrchestrationReadinessContext = {
-  agentStudioReadinessState: "ready" | "checking" | "blocked";
+  agentStudioReadinessState: AgentStudioReadinessState;
   agentStudioReady: boolean;
   agentStudioBlockedReason: string | null;
   isLoadingChecks: boolean;

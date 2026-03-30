@@ -9,6 +9,7 @@ import type {
 import { useMemo, useRef } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
+import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import {
   resolveAgentStudioSessionSelection,
   resolveAgentStudioTaskId,
@@ -19,7 +20,7 @@ import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 type UseAgentStudioSelectionControllerArgs = {
   activeRepo: string | null;
-  agentStudioReadinessState: "ready" | "checking" | "blocked";
+  agentStudioReadinessState: AgentStudioReadinessState;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
   sessions: AgentSessionState[];

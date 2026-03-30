@@ -15,6 +15,7 @@ import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
+import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 
 export const buildRoleLabelByRole = (roleOptions: AgentRoleOption[]): Record<AgentRole, string> => {
@@ -112,7 +113,7 @@ type AgentChatThreadModelArgs = {
   isSessionHistoryLoading: boolean;
   isWaitingForRuntimeReadiness: boolean;
   roleOptions: AgentRoleOption[];
-  agentStudioReadinessState: "ready" | "checking" | "blocked";
+  agentStudioReadinessState: AgentStudioReadinessState;
   agentStudioReady: boolean;
   agentStudioBlockedReason: string | null;
   isLoadingChecks: boolean;

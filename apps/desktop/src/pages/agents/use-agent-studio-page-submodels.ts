@@ -6,6 +6,7 @@ import type { AgentChatModel } from "@/components/features/agents/agent-chat/age
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
@@ -98,7 +99,7 @@ type UseAgentStudioThreadModelArgs = {
   isWaitingForRuntimeReadiness: boolean;
   taskId: string;
   activeSessionAgentColors: Record<string, string>;
-  agentStudioReadinessState: "ready" | "checking" | "blocked";
+  agentStudioReadinessState: AgentStudioReadinessState;
   agentStudioReady: boolean;
   agentStudioBlockedReason: string | null;
   isLoadingChecks: boolean;

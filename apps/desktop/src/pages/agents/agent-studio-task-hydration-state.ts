@@ -4,7 +4,7 @@ import type {
 } from "@/types/agent-orchestrator";
 import { isWaitingForAttachedWorktreeRuntime } from "./agent-studio-session-runtime";
 
-type AgentStudioReadinessState = "ready" | "checking" | "blocked";
+export type AgentStudioReadinessState = "ready" | "checking" | "blocked";
 
 type TaskHydrationSessionState = Pick<
   AgentSessionState,

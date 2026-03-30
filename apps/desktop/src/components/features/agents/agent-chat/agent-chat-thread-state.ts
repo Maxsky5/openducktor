@@ -33,7 +33,8 @@ export const getAgentChatThreadState = ({
   return {
     isTranscriptLoading,
     hideTranscriptWhileHydrating,
-    showRuntimeCheckingOverlay: isWaitingForRuntimeReadiness && readinessState === "checking",
+    showRuntimeCheckingOverlay:
+      isWaitingForRuntimeReadiness && (readinessState === "checking" || readinessState === "ready"),
     showRuntimeBlockedCard: readinessState === "blocked" && Boolean(blockedReason),
   };
 };
