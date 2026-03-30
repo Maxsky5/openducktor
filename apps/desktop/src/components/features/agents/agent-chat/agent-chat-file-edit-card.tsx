@@ -1,9 +1,6 @@
 import { ChevronDown, ChevronRight, FilePlus, FileText, FileX } from "lucide-react";
 import { memo, type ReactElement, useState } from "react";
-import {
-  PierreDiffPreloader,
-  PierreDiffViewer,
-} from "@/components/features/agents/pierre-diff-viewer";
+import { PierreDiffViewer } from "@/components/features/agents/pierre-diff-viewer";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { FileEditData } from "./agent-chat-message-card-model";
@@ -55,8 +52,6 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
       className="my-1.5 overflow-hidden rounded-lg border border-border bg-card text-xs"
       data-testid="agent-chat-file-edit-card"
     >
-      {data.diff ? <PierreDiffPreloader patch={data.diff} filePath={data.filePath} /> : null}
-
       {/* Header */}
       <button
         type="button"
