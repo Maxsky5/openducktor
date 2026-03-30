@@ -20,7 +20,7 @@
     "@openducktor/adapters-tauri-host": "workspace:*",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
-    "@pierre/diffs": "^1.1.3",
+    "@pierre/diffs": "^1.1.7",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-popover": "^1.1.15",
@@ -29,7 +29,7 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@tanstack/react-query": "^5.95.0",
+    "@tanstack/react-query": "^5.95.2",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "class-variance-authority": "^0.7.1",
@@ -40,7 +40,7 @@
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4",
-    "react-router-dom": "^7.13.1",
+    "react-router-dom": "^7.13.2",
     "react-syntax-highlighter": "^16.1.1",
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
@@ -60,6 +60,6 @@
     "@vitejs/plugin-react": "^6.0.1",
     "bun-types": "^1.3.11",
     "tailwindcss": "^4.1.12",
-    "vite": "^8.0.2"
+    "vite": "^8.0.3"
   }
 }
