@@ -1,8 +1,9 @@
-import type { AgentSlashCommand } from "@openducktor/core";
+import type { AgentFileSearchResult, AgentSlashCommand } from "@openducktor/core";
 import {
   type FormEvent as ReactFormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -13,6 +14,7 @@ import {
   type AgentChatComposerDraftEditResult,
   applyComposerDraftEdit,
   draftHasMeaningfulContent,
+  readFileTriggerMatchForDraft,
   readSlashTriggerMatchForDraft,
 } from "./agent-chat-composer-draft";
 import {
@@ -28,6 +30,16 @@ type SlashMenuState = {
   rangeEnd: number;
 };
 
+type FileMenuState = {
+  textSegmentId: string;
+  query: string;
+  rangeStart: number;
+  rangeEnd: number;
+  results: AgentFileSearchResult[];
+  isLoading: boolean;
+  error: string | null;
+};
+
 type UseAgentChatComposerEditorArgs = {
   draft: AgentChatComposerDraft;
   onDraftChange: (draft: AgentChatComposerDraft) => void;
@@ -35,17 +47,26 @@ type UseAgentChatComposerEditorArgs = {
   onEditorInput: () => void;
   onSend: () => void;
   supportsSlashCommands: boolean;
+  supportsFileSearch: boolean;
   slashCommands: AgentSlashCommand[];
+  searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
 };
 
 type UseAgentChatComposerEditorResult = {
   filteredSlashCommands: AgentSlashCommand[];
   activeSlashIndex: number;
   showSlashMenu: boolean;
+  fileSearchResults: AgentFileSearchResult[];
+  activeFileIndex: number;
+  showFileMenu: boolean;
+  fileSearchError: string | null;
+  isFileSearchLoading: boolean;
   registerTextSegmentRef: (segmentId: string, element: HTMLElement | null) => void;
   focusLastTextSegment: () => void;
   focusSlashCommandSegment: (segmentId: string) => void;
+  focusFileReferenceSegment: (segmentId: string) => void;
   selectSlashCommand: (command: AgentSlashCommand) => void;
+  selectFileSearchResult: (result: AgentFileSearchResult) => void;
   handleTextInput: (segmentId: string, element: HTMLElement) => void;
   handleTextBeforeInput: (segmentId: string, event: ReactFormEvent<HTMLElement>) => void;
   handleTextFocus: (segmentId: string, element: HTMLElement) => void;
@@ -54,7 +75,7 @@ type UseAgentChatComposerEditorResult = {
   handleTextKeyDown: (segmentId: string, event: ReactKeyboardEvent<HTMLElement>) => void;
 };
 
-const SLASH_MENU_NAVIGATION_KEYS = new Set(["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"]);
+const AUTOCOMPLETE_NAVIGATION_KEYS = new Set(["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"]);
 
 const filterSlashCommands = (commands: AgentSlashCommand[], query: string): AgentSlashCommand[] => {
   const normalizedQuery = query.trim().toLowerCase();
@@ -153,12 +174,17 @@ export const useAgentChatComposerEditor = ({
   onEditorInput,
   onSend,
   supportsSlashCommands,
+  supportsFileSearch,
   slashCommands,
+  searchFiles,
 }: UseAgentChatComposerEditorArgs): UseAgentChatComposerEditorResult => {
   const { registerTextSegmentRef, focusTextSegment, setPendingFocusTarget } = usePendingFocus();
   const { rememberCaretOffset, readCaretOffset } = useLastKnownCaretOffsets();
   const [slashMenuState, setSlashMenuState] = useState<SlashMenuState | null>(null);
   const [activeSlashIndex, setActiveSlashIndex] = useState(0);
+  const [fileMenuState, setFileMenuState] = useState<FileMenuState | null>(null);
+  const [activeFileIndex, setActiveFileIndex] = useState(0);
+  const fileSearchRequestIdRef = useRef(0);
 
   const filteredSlashCommands = useMemo(() => {
     if (!slashMenuState) {
@@ -166,6 +192,12 @@ export const useAgentChatComposerEditor = ({
     }
     return filterSlashCommands(slashCommands, slashMenuState.query);
   }, [slashCommands, slashMenuState]);
+
+  const closeFileMenu = useCallback(() => {
+    fileSearchRequestIdRef.current += 1;
+    setActiveFileIndex(0);
+    setFileMenuState(null);
+  }, []);
 
   const focusTextSegmentWithMemory = useCallback(
     (segmentId: string, offset: number) => {
@@ -200,6 +232,79 @@ export const useAgentChatComposerEditor = ({
     },
     [disabled, draft, supportsSlashCommands],
   );
+
+  const updateFileMenuForText = useCallback(
+    (segmentId: string, text: string, caretOffset: number | null) => {
+      if (disabled || !supportsFileSearch || caretOffset === null) {
+        closeFileMenu();
+        return;
+      }
+
+      const match = readFileTriggerMatchForDraft(draft, segmentId, caretOffset, text);
+      if (!match) {
+        closeFileMenu();
+        return;
+      }
+
+      const requestId = fileSearchRequestIdRef.current + 1;
+      fileSearchRequestIdRef.current = requestId;
+      setActiveFileIndex(0);
+      setFileMenuState({
+        textSegmentId: segmentId,
+        query: match.query,
+        rangeStart: match.rangeStart,
+        rangeEnd: match.rangeEnd,
+        results: [],
+        isLoading: true,
+        error: null,
+      });
+
+      void searchFiles(match.query)
+        .then((results) => {
+          if (fileSearchRequestIdRef.current !== requestId) {
+            return;
+          }
+          setFileMenuState({
+            textSegmentId: segmentId,
+            query: match.query,
+            rangeStart: match.rangeStart,
+            rangeEnd: match.rangeEnd,
+            results,
+            isLoading: false,
+            error: null,
+          });
+        })
+        .catch((error) => {
+          if (fileSearchRequestIdRef.current !== requestId) {
+            return;
+          }
+          setFileMenuState({
+            textSegmentId: segmentId,
+            query: match.query,
+            rangeStart: match.rangeStart,
+            rangeEnd: match.rangeEnd,
+            results: [],
+            isLoading: false,
+            error: error instanceof Error ? error.message : "Failed to search files.",
+          });
+        });
+    },
+    [closeFileMenu, disabled, draft, searchFiles, supportsFileSearch],
+  );
+
+  useEffect(() => {
+    if (!disabled && supportsSlashCommands) {
+      return;
+    }
+    setSlashMenuState(null);
+  }, [disabled, supportsSlashCommands]);
+
+  useEffect(() => {
+    if (!disabled && supportsFileSearch) {
+      return;
+    }
+    closeFileMenu();
+  }, [closeFileMenu, disabled, supportsFileSearch]);
 
   const applyEditResult = useCallback(
     (result: AgentChatComposerDraftEditResult | null) => {
@@ -236,13 +341,36 @@ export const useAgentChatComposerEditor = ({
     [applyEditResult, draft, slashMenuState],
   );
 
+  const selectFileSearchResult = useCallback(
+    (result: AgentFileSearchResult) => {
+      if (!fileMenuState) {
+        return;
+      }
+
+      const didApply = applyEditResult(
+        applyComposerDraftEdit(draft, {
+          type: "insert_file_reference",
+          textSegmentId: fileMenuState.textSegmentId,
+          rangeStart: fileMenuState.rangeStart,
+          rangeEnd: fileMenuState.rangeEnd,
+          file: result,
+        }),
+      );
+      if (didApply) {
+        closeFileMenu();
+      }
+    },
+    [applyEditResult, closeFileMenu, draft, fileMenuState],
+  );
+
   const syncSlashMenuFromElement = useCallback(
     (segmentId: string, element: HTMLElement) => {
       const caretOffset = getCaretOffsetWithinElement(element);
       rememberCaretOffset(segmentId, caretOffset);
       updateSlashMenuForText(segmentId, readEditableTextContent(element), caretOffset);
+      updateFileMenuForText(segmentId, readEditableTextContent(element), caretOffset);
     },
-    [rememberCaretOffset, updateSlashMenuForText],
+    [rememberCaretOffset, updateFileMenuForText, updateSlashMenuForText],
   );
 
   const handleTextInput = useCallback(
@@ -259,8 +387,9 @@ export const useAgentChatComposerEditor = ({
         }),
       );
       updateSlashMenuForText(segmentId, nextText, caretOffset);
+      updateFileMenuForText(segmentId, nextText, caretOffset);
     },
-    [applyEditResult, draft, rememberCaretOffset, updateSlashMenuForText],
+    [applyEditResult, draft, rememberCaretOffset, updateFileMenuForText, updateSlashMenuForText],
   );
 
   const handleTextBeforeInput = useCallback(
@@ -284,13 +413,14 @@ export const useAgentChatComposerEditor = ({
       }
       rememberCaretOffset(segmentId, caretOffset);
       setSlashMenuState(null);
+      closeFileMenu();
     },
-    [readCaretOffset, rememberCaretOffset],
+    [closeFileMenu, readCaretOffset, rememberCaretOffset],
   );
 
   const handleTextKeyUp = useCallback(
     (segmentId: string, event: ReactKeyboardEvent<HTMLElement>) => {
-      if (SLASH_MENU_NAVIGATION_KEYS.has(event.key)) {
+      if (AUTOCOMPLETE_NAVIGATION_KEYS.has(event.key)) {
         return;
       }
       syncSlashMenuFromElement(segmentId, event.currentTarget);
@@ -304,13 +434,36 @@ export const useAgentChatComposerEditor = ({
       const caretOffset = getCaretOffsetWithinElement(target) ?? readCaretOffset(segmentId);
       rememberCaretOffset(segmentId, caretOffset);
 
-      if (slashMenuState && filteredSlashCommands.length > 0) {
-        if (event.key === "ArrowDown") {
+      if (fileMenuState) {
+        if (fileMenuState.results.length > 0 && event.key === "ArrowDown") {
+          event.preventDefault();
+          setActiveFileIndex((current) => (current + 1) % fileMenuState.results.length);
+          return;
+        }
+        if (fileMenuState.results.length > 0 && event.key === "ArrowUp") {
+          event.preventDefault();
+          setActiveFileIndex((current) =>
+            current === 0 ? fileMenuState.results.length - 1 : current - 1,
+          );
+          return;
+        }
+        if ((event.key === "Enter" || event.key === "Tab") && !event.shiftKey) {
+          event.preventDefault();
+          const result = fileMenuState.results[activeFileIndex] ?? fileMenuState.results[0];
+          if (result) {
+            selectFileSearchResult(result);
+          }
+          return;
+        }
+      }
+
+      if (slashMenuState) {
+        if (filteredSlashCommands.length > 0 && event.key === "ArrowDown") {
           event.preventDefault();
           setActiveSlashIndex((current) => (current + 1) % filteredSlashCommands.length);
           return;
         }
-        if (event.key === "ArrowUp") {
+        if (filteredSlashCommands.length > 0 && event.key === "ArrowUp") {
           event.preventDefault();
           setActiveSlashIndex((current) =>
             current === 0 ? filteredSlashCommands.length - 1 : current - 1,
@@ -325,6 +478,12 @@ export const useAgentChatComposerEditor = ({
           }
           return;
         }
+      }
+
+      if (event.key === "Escape" && fileMenuState) {
+        event.preventDefault();
+        closeFileMenu();
+        return;
       }
 
       if (event.key === "Escape" && slashMenuState) {
@@ -344,6 +503,7 @@ export const useAgentChatComposerEditor = ({
       if (event.key === "Enter" && event.shiftKey && caretOffset !== null) {
         rememberCaretOffset(segmentId, caretOffset);
         setSlashMenuState(null);
+        closeFileMenu();
         return;
       }
 
@@ -359,30 +519,41 @@ export const useAgentChatComposerEditor = ({
       if (event.key === "Backspace" && caretOffset === 0) {
         const currentIndex = draft.segments.findIndex((segment) => segment.id === segmentId);
         const previousSegment = currentIndex > 0 ? draft.segments[currentIndex - 1] : null;
-        if (previousSegment?.kind === "slash_command") {
+        if (
+          previousSegment?.kind === "slash_command" ||
+          previousSegment?.kind === "file_reference"
+        ) {
           event.preventDefault();
           const didApply = applyEditResult(
             applyComposerDraftEdit(draft, {
-              type: "remove_slash_command",
+              type:
+                previousSegment.kind === "slash_command"
+                  ? "remove_slash_command"
+                  : "remove_file_reference",
               segmentId: previousSegment.id,
             }),
           );
           if (didApply) {
             setSlashMenuState(null);
+            closeFileMenu();
           }
         }
       }
     },
     [
+      activeFileIndex,
       activeSlashIndex,
       applyEditResult,
       disabled,
       draft,
       filteredSlashCommands,
+      fileMenuState,
       focusTextSegmentWithMemory,
       onSend,
+      closeFileMenu,
       readCaretOffset,
       rememberCaretOffset,
+      selectFileSearchResult,
       selectSlashCommand,
       slashMenuState,
     ],
@@ -420,14 +591,42 @@ export const useAgentChatComposerEditor = ({
     [draft.segments, focusTextSegmentWithMemory],
   );
 
+  const focusFileReferenceSegment = useCallback(
+    (segmentId: string) => {
+      const currentIndex = draft.segments.findIndex((segment) => segment.id === segmentId);
+      if (currentIndex < 0) {
+        return;
+      }
+
+      const nextSegment = draft.segments[currentIndex + 1];
+      if (nextSegment?.kind === "text") {
+        focusTextSegmentWithMemory(nextSegment.id, 0);
+        return;
+      }
+
+      const previousSegment = draft.segments[currentIndex - 1];
+      if (previousSegment?.kind === "text") {
+        focusTextSegmentWithMemory(previousSegment.id, previousSegment.text.length);
+      }
+    },
+    [draft.segments, focusTextSegmentWithMemory],
+  );
+
   return {
     filteredSlashCommands,
     activeSlashIndex,
     showSlashMenu: supportsSlashCommands && slashMenuState !== null,
+    fileSearchResults: fileMenuState?.results ?? [],
+    activeFileIndex,
+    showFileMenu: supportsFileSearch && fileMenuState !== null,
+    fileSearchError: fileMenuState?.error ?? null,
+    isFileSearchLoading: fileMenuState?.isLoading ?? false,
     registerTextSegmentRef,
     focusLastTextSegment,
     focusSlashCommandSegment,
+    focusFileReferenceSegment,
     selectSlashCommand,
+    selectFileSearchResult,
     handleTextInput,
     handleTextBeforeInput,
     handleTextFocus: syncSlashMenuFromElement,

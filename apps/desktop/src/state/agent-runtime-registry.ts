@@ -122,6 +122,12 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     ).listAvailableSlashCommands(input);
   }
 
+  searchFiles(input: Parameters<AgentEnginePort["searchFiles"]>[0]) {
+    return this.getAdapter(
+      this.requireInputRuntimeKind(input.runtimeKind, "file search"),
+    ).searchFiles(input);
+  }
+
   listLiveAgentSessions(input: Parameters<AgentEnginePort["listLiveAgentSessions"]>[0]) {
     return this.getAdapter(
       this.requireInputRuntimeKind(input.runtimeKind, "live agent session discovery"),

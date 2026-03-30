@@ -1,11 +1,15 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentModelCatalog } from "@openducktor/core";
+import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
+import type { AgentFileSearchResult, AgentModelCatalog } from "@openducktor/core";
+import { createElement, type PropsWithChildren, type ReactElement } from "react";
+import { QueryProvider } from "@/lib/query-provider";
+import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
   createDeferred,
-  createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { useAgentStudioModelSelection } from "./use-agent-studio-model-selection";
@@ -85,6 +89,15 @@ const CATALOG_WITHOUT_PROFILES: AgentModelCatalog = {
   profiles: [],
 };
 
+const FILE_SEARCH_RESULTS: AgentFileSearchResult[] = [
+  {
+    id: "src/main.ts",
+    path: "src/main.ts",
+    name: "main.ts",
+    kind: "ts",
+  },
+];
+
 const createRepoSettings = (
   specDefault: RepoSettingsInput["agentDefaults"]["spec"] | null,
 ): RepoSettingsInput => ({
@@ -118,8 +131,35 @@ const createActiveSession = (overrides = {}) =>
     ...overrides,
   });
 
-const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useAgentStudioModelSelection, initialProps);
+const createHookHarness = (
+  initialProps: HookArgs,
+  options: { runtimeDefinitions?: RuntimeDescriptor[] } = {},
+) => {
+  const runtimeDefinitions = options.runtimeDefinitions ?? [];
+  const runtimeDefinitionsContext = {
+    runtimeDefinitions,
+    isLoadingRuntimeDefinitions: false,
+    runtimeDefinitionsError: null,
+    refreshRuntimeDefinitions: async () => runtimeDefinitions,
+    loadRepoRuntimeCatalog: async () => {
+      throw new Error("Test runtime catalog loader was not configured.");
+    },
+    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+    loadRepoRuntimeFileSearch: async () => [],
+  } satisfies React.ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
+
+  const wrapper = ({ children }: PropsWithChildren): ReactElement =>
+    createElement(
+      QueryProvider,
+      { useIsolatedClient: true },
+      createElement(RuntimeDefinitionsContext.Provider, {
+        value: runtimeDefinitionsContext,
+        children,
+      }),
+    );
+
+  return createSharedHookHarness(useAgentStudioModelSelection, initialProps, { wrapper });
+};
 
 const createAssistantMessage = (
   overrides: Partial<Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }>> = {},
@@ -285,6 +325,105 @@ describe("useAgentStudioModelSelection", () => {
     expect(readSessionSlashCommands).not.toHaveBeenCalled();
 
     await harness.unmount();
+  });
+
+  test("searches repo files through the repo runtime before a session starts", async () => {
+    const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
+    const harness = createHookHarness(
+      createBaseProps({
+        loadFileSearch,
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().supportsFileSearch).toBe(true);
+
+      let results: AgentFileSearchResult[] = [];
+      await harness.run(async (state) => {
+        results = await state.searchFiles("src");
+      });
+
+      expect(results).toEqual(FILE_SEARCH_RESULTS);
+      expect(loadFileSearch).toHaveBeenCalledWith("/repo", "opencode", "src");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses the active session runtime for file search", async () => {
+    const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
+    const activeSession = createActiveSession({
+      runtimeKind: "opencode",
+      runtimeEndpoint: "http://127.0.0.1:4444",
+      workingDirectory: "/repo/session-worktree",
+    });
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession,
+        readSessionFileSearch,
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().supportsFileSearch).toBe(true);
+
+      let results: AgentFileSearchResult[] = [];
+      await harness.run(async (state) => {
+        results = await state.searchFiles("");
+      });
+
+      expect(results).toEqual(FILE_SEARCH_RESULTS);
+      expect(readSessionFileSearch).toHaveBeenCalledWith(
+        "opencode",
+        {
+          endpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/repo/session-worktree",
+        },
+        "",
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("fails fast when active session file search is requested before runtime connection is ready", async () => {
+    const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession: createActiveSession({
+          runtimeKind: null,
+          selectedModel: {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "default",
+            profileId: "spec-agent",
+          },
+        }),
+        readSessionFileSearch,
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+      await expect(harness.getLatest().searchFiles("src")).rejects.toThrow(
+        "Active session file search is unavailable until the session runtime connection is ready.",
+      );
+      expect(readSessionFileSearch).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("updates draft selections through model and variant handlers", async () => {

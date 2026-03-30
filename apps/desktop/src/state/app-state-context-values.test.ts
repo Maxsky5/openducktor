@@ -147,6 +147,7 @@ describe("app-state-context-values", () => {
         defaultModelsByProvider: {},
       }),
       readSessionSlashCommands: async () => ({ commands: [] }),
+      readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       startAgentSession: async () => "session",

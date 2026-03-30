@@ -106,6 +106,7 @@ const createExecuteArgs = (task: TaskCard) => ({
     }),
   ),
   loadRepoRuntimeSlashCommands: mock(async () => ({ commands: [] })),
+  loadRepoRuntimeFileSearch: mock(async () => []),
   resolveBuildContinuationTarget: mock(
     async (): Promise<{ workingDirectory: string } | null> => null,
   ),

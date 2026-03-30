@@ -1,4 +1,8 @@
-import type { AgentSlashCommand, AgentUserMessagePart } from "@openducktor/core";
+import type {
+  AgentFileReference,
+  AgentSlashCommand,
+  AgentUserMessagePart,
+} from "@openducktor/core";
 
 export type AgentChatComposerTextSegment = {
   id: string;
@@ -12,15 +16,28 @@ export type AgentChatComposerSlashCommandSegment = {
   command: AgentSlashCommand;
 };
 
+export type AgentChatComposerFileReferenceSegment = {
+  id: string;
+  kind: "file_reference";
+  file: AgentFileReference;
+};
+
 export type AgentChatComposerSegment =
   | AgentChatComposerTextSegment
-  | AgentChatComposerSlashCommandSegment;
+  | AgentChatComposerSlashCommandSegment
+  | AgentChatComposerFileReferenceSegment;
 
 export type AgentChatComposerDraft = {
   segments: AgentChatComposerSegment[];
 };
 
 export type AgentChatSlashTriggerMatch = {
+  query: string;
+  rangeStart: number;
+  rangeEnd: number;
+};
+
+export type AgentChatFileTriggerMatch = {
   query: string;
   rangeStart: number;
   rangeEnd: number;
@@ -64,7 +81,18 @@ export type AgentChatComposerDraftEdit =
       command: AgentSlashCommand;
     }
   | {
+      type: "insert_file_reference";
+      textSegmentId: string;
+      rangeStart: number;
+      rangeEnd: number;
+      file: AgentFileReference;
+    }
+  | {
       type: "remove_slash_command";
+      segmentId: string;
+    }
+  | {
+      type: "remove_file_reference";
       segmentId: string;
     };
 
@@ -96,6 +124,15 @@ export const createSlashCommandSegment = (
   id,
   kind: "slash_command",
   command,
+});
+
+export const createFileReferenceSegment = (
+  file: AgentFileReference,
+  id = createSegmentId(),
+): AgentChatComposerFileReferenceSegment => ({
+  id,
+  kind: "file_reference",
+  file,
 });
 
 export const createEmptyComposerDraft = (): AgentChatComposerDraft => ({
@@ -177,12 +214,13 @@ const insertNewlineInTextSegment = (
   };
 };
 
-export const removeSlashCommandSegmentFromDraft = (
+const removeNonTextSegmentFromDraft = (
   draft: AgentChatComposerDraft,
   segmentId: string,
+  expectedKind: AgentChatComposerSegment["kind"],
 ): AgentChatComposerDraftEditResult | null => {
   const index = draft.segments.findIndex((segment) => segment.id === segmentId);
-  if (index < 0 || draft.segments[index]?.kind !== "slash_command") {
+  if (index < 0 || draft.segments[index]?.kind !== expectedKind) {
     return null;
   }
 
@@ -203,6 +241,20 @@ export const removeSlashCommandSegmentFromDraft = (
       offset: previous.text.length,
     },
   };
+};
+
+export const removeSlashCommandSegmentFromDraft = (
+  draft: AgentChatComposerDraft,
+  segmentId: string,
+): AgentChatComposerDraftEditResult | null => {
+  return removeNonTextSegmentFromDraft(draft, segmentId, "slash_command");
+};
+
+export const removeFileReferenceSegmentFromDraft = (
+  draft: AgentChatComposerDraft,
+  segmentId: string,
+): AgentChatComposerDraftEditResult | null => {
+  return removeNonTextSegmentFromDraft(draft, segmentId, "file_reference");
 };
 
 export const replaceTextRangeWithSlashCommand = (
@@ -247,6 +299,39 @@ export const replaceTextRangeWithSlashCommand = (
   };
 };
 
+export const replaceTextRangeWithFileReference = (
+  draft: AgentChatComposerDraft,
+  textSegmentId: string,
+  rangeStart: number,
+  rangeEnd: number,
+  file: AgentFileReference,
+): AgentChatComposerDraftEditResult | null => {
+  const index = draft.segments.findIndex((segment) => segment.id === textSegmentId);
+  const segment = draft.segments[index];
+  if (index < 0 || !segment || segment.kind !== "text") {
+    return null;
+  }
+
+  const beforeText = segment.text.slice(0, rangeStart);
+  const afterText = segment.text.slice(rangeEnd);
+  const afterSegment = createTextSegment(afterText);
+  const replacement: AgentChatComposerSegment[] = [
+    createTextSegment(beforeText, segment.id),
+    createFileReferenceSegment(file),
+    afterSegment,
+  ];
+  const segments = draft.segments.slice();
+  segments.splice(index, 1, ...replacement);
+
+  return {
+    draft: { segments },
+    focusTarget: {
+      segmentId: afterSegment.id,
+      offset: 0,
+    },
+  };
+};
+
 export const applyComposerDraftEdit = (
   draft: AgentChatComposerDraft,
   edit: AgentChatComposerDraftEdit,
@@ -274,8 +359,18 @@ export const applyComposerDraftEdit = (
         edit.rangeEnd,
         edit.command,
       );
+    case "insert_file_reference":
+      return replaceTextRangeWithFileReference(
+        draft,
+        edit.textSegmentId,
+        edit.rangeStart,
+        edit.rangeEnd,
+        edit.file,
+      );
     case "remove_slash_command":
       return removeSlashCommandSegmentFromDraft(draft, edit.segmentId);
+    case "remove_file_reference":
+      return removeFileReferenceSegmentFromDraft(draft, edit.segmentId);
   }
 };
 
@@ -285,20 +380,35 @@ export const draftToUserMessageParts = (draft: AgentChatComposerDraft): AgentUse
       return segment.text.length > 0 ? [{ kind: "text", text: segment.text }] : [];
     }
 
+    if (segment.kind === "file_reference") {
+      return [{ kind: "file_reference", file: segment.file }];
+    }
+
     return [{ kind: "slash_command", command: segment.command }];
   });
 };
 
 export const draftToSerializedText = (draft: AgentChatComposerDraft): string => {
   return draftToUserMessageParts(draft)
-    .map((part) => (part.kind === "text" ? part.text : `/${part.command.trigger}`))
+    .map((part) => {
+      if (part.kind === "text") {
+        return part.text;
+      }
+      if (part.kind === "file_reference") {
+        return `@${part.file.path}`;
+      }
+      return `/${part.command.trigger}`;
+    })
     .join("");
 };
 
 export const draftHasMeaningfulContent = (draft: AgentChatComposerDraft): boolean => {
-  return draftToUserMessageParts(draft).some(
-    (part) => part.kind === "slash_command" || part.text.trim().length > 0,
-  );
+  return draftToUserMessageParts(draft).some((part) => {
+    if (part.kind === "text") {
+      return part.text.trim().length > 0;
+    }
+    return true;
+  });
 };
 
 export const readSlashTriggerMatchForDraft = (
@@ -335,7 +445,9 @@ export const readSlashTriggerMatchForDraft = (
 };
 
 const SLASH_QUERY_ALLOWED_PATTERN = /^[a-zA-Z0-9._:-]*$/;
-const isSlashBoundaryCharacter = (value: string | undefined): boolean => {
+const FILE_QUERY_ALLOWED_PATTERN = /^[^\s)\]}",'`:;!?]*$/;
+
+const isTriggerBoundaryCharacter = (value: string | undefined): boolean => {
   return value === undefined || /[\s([{"'`]/.test(value);
 };
 
@@ -352,7 +464,7 @@ export const readSlashTriggerMatch = (
 
   const beforeSlash = prefix.slice(0, slashIndex);
   const previousCharacter = beforeSlash.length > 0 ? beforeSlash.at(-1) : undefined;
-  if (!isSlashBoundaryCharacter(previousCharacter ?? undefined)) {
+  if (!isTriggerBoundaryCharacter(previousCharacter ?? undefined)) {
     return null;
   }
 
@@ -364,6 +476,49 @@ export const readSlashTriggerMatch = (
   return {
     query,
     rangeStart: slashIndex,
+    rangeEnd: boundedOffset,
+  };
+};
+
+export const readFileTriggerMatchForDraft = (
+  draft: AgentChatComposerDraft,
+  textSegmentId: string,
+  caretOffset: number,
+  textOverride?: string,
+): AgentChatFileTriggerMatch | null => {
+  const segment = draft.segments.find((entry) => entry.id === textSegmentId);
+  if (!segment || segment.kind !== "text") {
+    return null;
+  }
+
+  return readFileTriggerMatch(textOverride ?? segment.text, caretOffset);
+};
+
+export const readFileTriggerMatch = (
+  text: string,
+  caretOffset: number,
+): AgentChatFileTriggerMatch | null => {
+  const boundedOffset = Math.max(0, Math.min(text.length, caretOffset));
+  const prefix = text.slice(0, boundedOffset);
+  const atIndex = prefix.lastIndexOf("@");
+  if (atIndex < 0) {
+    return null;
+  }
+
+  const beforeTrigger = prefix.slice(0, atIndex);
+  const previousCharacter = beforeTrigger.length > 0 ? beforeTrigger.at(-1) : undefined;
+  if (!isTriggerBoundaryCharacter(previousCharacter ?? undefined)) {
+    return null;
+  }
+
+  const query = prefix.slice(atIndex + 1);
+  if (!FILE_QUERY_ALLOWED_PATTERN.test(query)) {
+    return null;
+  }
+
+  return {
+    query,
+    rangeStart: atIndex,
     rangeEnd: boundedOffset,
   };
 };

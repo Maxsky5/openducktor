@@ -20,6 +20,7 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type {
+  AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
@@ -178,6 +179,11 @@ export type AgentStateContextValue = {
     runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
   ) => Promise<AgentSlashCommandCatalog>;
+  readSessionFileSearch: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+    query: string,
+  ) => Promise<AgentFileSearchResult[]>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => void;
   startAgentSession: (
     input:

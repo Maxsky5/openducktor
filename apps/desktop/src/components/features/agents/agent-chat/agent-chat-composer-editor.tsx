@@ -1,13 +1,16 @@
-import type { AgentSlashCommand } from "@openducktor/core";
+import type { AgentFileSearchResult, AgentSlashCommand } from "@openducktor/core";
 import type { ReactElement } from "react";
 import { badgeVariants } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   type AgentChatComposerDraft,
   draftHasMeaningfulContent,
 } from "./agent-chat-composer-draft";
+import { AgentChatComposerFileMenu } from "./agent-chat-composer-file-menu";
 import { EMPTY_TEXT_SEGMENT_SENTINEL } from "./agent-chat-composer-selection";
 import { AgentChatComposerSlashMenu } from "./agent-chat-composer-slash-menu";
+import { AgentChatFileReferenceIcon } from "./agent-chat-file-reference-icon";
 import { useAgentChatComposerEditor } from "./use-agent-chat-composer-editor";
 
 const shouldRedirectShellClickToComposer = (
@@ -51,9 +54,11 @@ type AgentChatComposerEditorProps = {
   onEditorInput: () => void;
   onSend: () => void;
   supportsSlashCommands: boolean;
+  supportsFileSearch: boolean;
   slashCommands: AgentSlashCommand[];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
 };
 
 export function AgentChatComposerEditor({
@@ -65,18 +70,27 @@ export function AgentChatComposerEditor({
   onEditorInput,
   onSend,
   supportsSlashCommands,
+  supportsFileSearch,
   slashCommands,
   slashCommandsError,
   isSlashCommandsLoading,
+  searchFiles,
 }: AgentChatComposerEditorProps): ReactElement {
   const {
     filteredSlashCommands,
     activeSlashIndex,
     showSlashMenu,
+    fileSearchResults,
+    activeFileIndex,
+    showFileMenu,
+    fileSearchError,
+    isFileSearchLoading,
     registerTextSegmentRef,
     focusLastTextSegment,
     focusSlashCommandSegment,
+    focusFileReferenceSegment,
     selectSlashCommand,
+    selectFileSearchResult,
     handleTextInput,
     handleTextBeforeInput,
     handleTextFocus,
@@ -90,11 +104,23 @@ export function AgentChatComposerEditor({
     onEditorInput,
     onSend,
     supportsSlashCommands,
+    supportsFileSearch,
     slashCommands,
+    searchFiles,
   });
 
   return (
     <div className="relative">
+      {showFileMenu ? (
+        <AgentChatComposerFileMenu
+          results={fileSearchResults}
+          activeIndex={activeFileIndex}
+          fileSearchError={fileSearchError}
+          isFileSearchLoading={isFileSearchLoading}
+          onSelectFile={selectFileSearchResult}
+        />
+      ) : null}
+
       {showSlashMenu ? (
         <AgentChatComposerSlashMenu
           commands={filteredSlashCommands}
@@ -143,6 +169,33 @@ export function AgentChatComposerEditor({
           {draft.segments.map((segment, index) => {
             const nextSegment = draft.segments[index + 1];
 
+            if (segment.kind === "file_reference") {
+              return (
+                <TooltipProvider key={segment.id}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        contentEditable={false}
+                        title={segment.file.path}
+                        aria-label={`File reference ${segment.file.path}. Press Backspace immediately after the chip to remove it.`}
+                        className={cn(
+                          badgeVariants({ variant: "secondary" }),
+                          "mr-2 inline-flex h-6 items-center gap-1.5 rounded-full border border-border px-2.5 text-xs font-medium align-baseline",
+                        )}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => focusFileReferenceSegment(segment.id)}
+                      >
+                        <AgentChatFileReferenceIcon kind={segment.file.kind} />
+                        <span className="truncate">{segment.file.name}</span>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent sideOffset={6}>{segment.file.path}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              );
+            }
+
             if (segment.kind === "slash_command") {
               return (
                 <button
@@ -164,9 +217,9 @@ export function AgentChatComposerEditor({
 
             const segmentText = segment.text.trim();
 
-            const isLeadingEmptySlashHost =
-              segmentText.length === 0 && nextSegment?.kind === "slash_command";
-            if (isLeadingEmptySlashHost) {
+            const isLeadingEmptyChipHost =
+              segmentText.length === 0 && nextSegment != null && nextSegment.kind !== "text";
+            if (isLeadingEmptyChipHost) {
               return null;
             }
 
@@ -181,7 +234,7 @@ export function AgentChatComposerEditor({
                 data-segment-id={segment.id}
                 className={cn(
                   "whitespace-pre-wrap break-words align-baseline outline-none",
-                  segmentText.length === 0 && draft.segments[index - 1]?.kind === "slash_command"
+                  segmentText.length === 0 && draft.segments[index - 1]?.kind !== "text"
                     ? "inline-block min-w-[1px]"
                     : "inline",
                 )}

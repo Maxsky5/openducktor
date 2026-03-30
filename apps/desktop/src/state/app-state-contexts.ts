@@ -7,7 +7,11 @@ import type {
   RuntimeKind,
   TaskCard,
 } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentSlashCommandCatalog } from "@openducktor/core";
+import type {
+  AgentFileSearchResult,
+  AgentModelCatalog,
+  AgentSlashCommandCatalog,
+} from "@openducktor/core";
 import { type Context, createContext, type Dispatch, type SetStateAction, useContext } from "react";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type {
@@ -44,6 +48,11 @@ export type RuntimeDefinitionsContextValue = {
     repoPath: string,
     runtimeKind: RuntimeKind,
   ) => Promise<AgentSlashCommandCatalog>;
+  loadRepoRuntimeFileSearch: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+    query: string,
+  ) => Promise<AgentFileSearchResult[]>;
 };
 
 export type ChecksOperationsContextValue = {

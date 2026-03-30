@@ -5,6 +5,7 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import type {
+  AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
   AgentRuntimeConnection,
@@ -63,6 +64,11 @@ type CreatePublicOperationsArgs = {
     runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
   ) => Promise<AgentSlashCommandCatalog>;
+  readSessionFileSearch: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+    query: string,
+  ) => Promise<AgentFileSearchResult[]>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
   sessionActions: SessionActions;
 };
@@ -98,6 +104,11 @@ type OrchestratorPublicOperations = {
     runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
   ) => Promise<AgentSlashCommandCatalog>;
+  readSessionFileSearch: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+    query: string,
+  ) => Promise<AgentFileSearchResult[]>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
   startAgentSession: (input: StartAgentSessionInput) => Promise<string>;
   sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
@@ -135,6 +146,7 @@ export const createOrchestratorPublicOperations = ({
   readSessionModelCatalog,
   readSessionTodos,
   readSessionSlashCommands,
+  readSessionFileSearch,
   removeAgentSessions,
   sessionActions,
 }: CreatePublicOperationsArgs): OrchestratorPublicOperations => ({
@@ -154,6 +166,7 @@ export const createOrchestratorPublicOperations = ({
   readSessionModelCatalog,
   readSessionTodos,
   readSessionSlashCommands,
+  readSessionFileSearch,
   removeAgentSessions,
   startAgentSession: (input: StartAgentSessionInput): Promise<string> =>
     withErrorToast("Failed to start agent session", () => sessionActions.startAgentSession(input)),
