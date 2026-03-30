@@ -389,7 +389,7 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.mount();
-    await harness.waitFor((state) => state.busySendBlockedReason === null);
+    await harness.waitFor((state) => state.busySendBlockedReason === null, 1_000);
     expect(harness.getLatest().busySendBlockedReason).toBeNull();
     await harness.run(async (state) => {
       await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
@@ -485,7 +485,7 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.mount();
-    await harness.waitFor((state) => state.busySendBlockedReason === null);
+    await harness.waitFor((state) => state.busySendBlockedReason === null, 1_000);
     await harness.run(async (state) => {
       await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
     });
