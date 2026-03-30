@@ -1,8 +1,4 @@
-import {
-  type AgentModelSelection,
-  type AgentRole,
-  isOdtWorkflowMutationToolName,
-} from "@openducktor/core";
+import { type AgentRole, isOdtWorkflowMutationToolName } from "@openducktor/core";
 import { Brain, Hammer, MessageSquareQuote } from "lucide-react";
 import { lazy, type ReactElement, Suspense } from "react";
 import type { MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
@@ -150,16 +146,14 @@ const ReasoningMessage = ({ content }: ReasoningMessageProps): ReactElement => {
 
 type AssistantMessageProps = {
   message: AgentChatMessage;
-  sessionSelectedModel: AgentModelSelection | null;
   assistantAccentColor: string | undefined;
 };
 
 const AssistantMessage = ({
   message,
-  sessionSelectedModel,
   assistantAccentColor,
 }: AssistantMessageProps): ReactElement => {
-  const footer = getAssistantFooterData(message, sessionSelectedModel);
+  const footer = getAssistantFooterData(message);
   return (
     <div className="space-y-2">
       <DeferredMarkdownRenderer markdown={message.content} variant="document" />
@@ -178,7 +172,6 @@ const AssistantMessage = ({
 
 type MessageBodyProps = {
   message: AgentChatMessage;
-  sessionSelectedModel: AgentModelSelection | null;
   assistantAccentColor: string | undefined;
   timeLabel: string;
   systemPromptBody: string;
@@ -187,7 +180,6 @@ type MessageBodyProps = {
 
 export const MessageBody = ({
   message,
-  sessionSelectedModel,
   assistantAccentColor,
   timeLabel,
   systemPromptBody,
@@ -274,13 +266,7 @@ export const MessageBody = ({
   }
 
   if (message.role === "assistant") {
-    return (
-      <AssistantMessage
-        message={message}
-        sessionSelectedModel={sessionSelectedModel}
-        assistantAccentColor={assistantAccentColor}
-      />
-    );
+    return <AssistantMessage message={message} assistantAccentColor={assistantAccentColor} />;
   }
 
   return <DeferredMarkdownRenderer markdown={message.content} variant="document" />;
