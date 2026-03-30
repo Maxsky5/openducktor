@@ -6,6 +6,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { resolveAgentAccentColor } from "../agent-accent-color";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
+import { getAgentChatThreadState } from "./agent-chat-thread-state";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import { buildAgentChatWindowRows } from "./agent-chat-thread-windowing";
 import { AgentSessionPermissionCard } from "./agent-session-permission-card";
@@ -87,11 +88,19 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const { isTranscriptRenderDeferred } = useAgentChatDeferredTranscript({
     activeSessionId,
   });
-  const isTranscriptLoading =
-    isSessionViewLoading || isSessionHistoryLoading || isTranscriptRenderDeferred;
-  const hideTranscriptWhileHydrating = isSessionHistoryLoading || isTranscriptRenderDeferred;
-  const showRuntimeCheckingOverlay = isWaitingForRuntimeReadiness && readinessState === "checking";
-  const showRuntimeBlockedCard = readinessState === "blocked" && blockedReason;
+  const {
+    isTranscriptLoading,
+    hideTranscriptWhileHydrating,
+    showRuntimeCheckingOverlay,
+    showRuntimeBlockedCard,
+  } = getAgentChatThreadState({
+    isSessionViewLoading,
+    isSessionHistoryLoading,
+    isWaitingForRuntimeReadiness,
+    readinessState,
+    blockedReason,
+    isTranscriptRenderDeferred,
+  });
 
   const rows = useMemo(() => {
     if (!session || hideTranscriptWhileHydrating) {

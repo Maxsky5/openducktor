@@ -12,6 +12,7 @@ import {
   sessionTodosQueryOptions,
 } from "@/state/queries/agent-session-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { hasAttachedSessionRuntime } from "./agent-studio-session-runtime";
 
 type UseAgentStudioActiveSessionRuntimeDataArgs = {
   session: AgentSessionState | null;
@@ -29,9 +30,16 @@ type UseAgentStudioActiveSessionRuntimeDataArgs = {
 
 const toRuntimeQueryInput = (session: AgentSessionState | null) => {
   const runtimeKind = session?.runtimeKind ?? session?.selectedModel?.runtimeKind;
+  const hasRuntimeAttachment = hasAttachedSessionRuntime(session);
   const runtimeEndpoint = session?.runtimeEndpoint.trim() ?? "";
   const workingDirectory = session?.workingDirectory.trim() ?? "";
-  if (!session || !runtimeKind || runtimeEndpoint.length === 0 || workingDirectory.length === 0) {
+  if (
+    !session ||
+    !runtimeKind ||
+    !hasRuntimeAttachment ||
+    runtimeEndpoint.length === 0 ||
+    workingDirectory.length === 0
+  ) {
     return null;
   }
   return {

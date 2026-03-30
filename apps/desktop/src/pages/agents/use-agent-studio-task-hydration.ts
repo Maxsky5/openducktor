@@ -4,8 +4,7 @@ import {
   requiresHydratedAgentSessionHistory,
 } from "@/state/operations/agent-orchestrator/support/history-hydration";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-
-const WORKTREE_RUNTIME_ROLES = new Set<AgentSessionState["role"]>(["build", "qa"]);
+import { getAgentStudioTaskHydrationDecision } from "./agent-studio-task-hydration-state";
 
 type UseAgentStudioTaskHydrationParams = {
   activeRepo: string | null;
@@ -27,22 +26,6 @@ type UseAgentStudioTaskHydrationResult = {
   isWaitingForRuntimeReadiness: boolean;
 };
 
-const toRecoverySelectionKey = ({
-  activeRepo,
-  activeTaskId,
-  activeSessionId,
-}: {
-  activeRepo: string | null;
-  activeTaskId: string;
-  activeSessionId: string | null;
-}): string | null => {
-  if (!activeRepo || !activeTaskId || !activeSessionId) {
-    return null;
-  }
-
-  return `${activeRepo}::${activeTaskId}::${activeSessionId}`;
-};
-
 export function useAgentStudioTaskHydration({
   activeRepo,
   activeTaskId,
@@ -51,7 +34,6 @@ export function useAgentStudioTaskHydration({
   hydrateRequestedTaskSessionHistory,
 }: UseAgentStudioTaskHydrationParams): UseAgentStudioTaskHydrationResult {
   const activeSessionId = activeSession?.sessionId ?? null;
-  const activeSessionRole = activeSession?.role ?? null;
   const [requestState, setRequestState] = useState<{
     sessionId: string | null;
     status: "idle" | "pending" | "failed";
@@ -62,46 +44,23 @@ export function useAgentStudioTaskHydration({
   );
   const historyHydrationState = getAgentSessionHistoryHydrationState(activeSession);
   const sessionNeedsHydration = requiresHydratedAgentSessionHistory(activeSession);
-  const isReadinessReady = agentStudioReadinessState === "ready";
-  const activeRecoveryKey = toRecoverySelectionKey({
+  const {
+    activeRecoveryKey,
+    blockedFromAutomaticRecovery,
+    shouldWaitForSessionRuntime,
+    isWaitingForRuntimeReadiness,
+    isRecoveringWaitingSession,
+    shouldHydrateSessionHistory,
+  } = getAgentStudioTaskHydrationDecision({
     activeRepo,
     activeTaskId,
-    activeSessionId,
+    activeSession,
+    historyHydrationState,
+    sessionNeedsHydration,
+    agentStudioReadinessState,
+    waitingRecoveryKey,
+    postReadyFailureRecoveryKey,
   });
-  const blockedFromAutomaticRecovery =
-    Boolean(activeRecoveryKey) && postReadyFailureRecoveryKey === activeRecoveryKey;
-  const requiresLiveWorktreeRuntime =
-    activeSessionRole !== null && WORKTREE_RUNTIME_ROLES.has(activeSessionRole);
-  const isMissingAttachedRuntime =
-    requiresLiveWorktreeRuntime &&
-    activeSession !== null &&
-    activeSession.runId === null &&
-    activeSession.runtimeId === null &&
-    activeSession.runtimeEndpoint.trim().length === 0;
-  const shouldWaitForSessionRuntime =
-    Boolean(activeRecoveryKey) &&
-    isReadinessReady &&
-    sessionNeedsHydration &&
-    isMissingAttachedRuntime &&
-    !blockedFromAutomaticRecovery;
-  const isWaitingForReadiness =
-    Boolean(activeRecoveryKey) &&
-    (!isReadinessReady || shouldWaitForSessionRuntime) &&
-    sessionNeedsHydration &&
-    !blockedFromAutomaticRecovery;
-  const isRecoveringWaitingSession =
-    Boolean(activeRecoveryKey) &&
-    isReadinessReady &&
-    !shouldWaitForSessionRuntime &&
-    waitingRecoveryKey === activeRecoveryKey &&
-    sessionNeedsHydration;
-  const shouldHydrateSessionHistory =
-    Boolean(activeRecoveryKey) &&
-    isReadinessReady &&
-    !shouldWaitForSessionRuntime &&
-    sessionNeedsHydration &&
-    !blockedFromAutomaticRecovery &&
-    (historyHydrationState === "not_requested" || waitingRecoveryKey === activeRecoveryKey);
 
   useEffect(() => {
     if (!activeRepo) {
@@ -120,7 +79,7 @@ export function useAgentStudioTaskHydration({
       return;
     }
 
-    if (!isReadinessReady || shouldWaitForSessionRuntime) {
+    if (isWaitingForRuntimeReadiness) {
       setWaitingRecoveryKey((current) => {
         if (blockedFromAutomaticRecovery) {
           return current === activeRecoveryKey ? null : current;
@@ -147,7 +106,7 @@ export function useAgentStudioTaskHydration({
     activeRepo,
     blockedFromAutomaticRecovery,
     historyHydrationState,
-    isReadinessReady,
+    isWaitingForRuntimeReadiness,
     shouldWaitForSessionRuntime,
     sessionNeedsHydration,
     waitingRecoveryKey,
@@ -215,13 +174,13 @@ export function useAgentStudioTaskHydration({
     isActiveSessionHistoryHydrated: activeSessionId ? historyHydrationState === "hydrated" : false,
     isActiveSessionHistoryHydrationFailed: activeSessionId
       ? (historyHydrationState === "failed" &&
-          !isWaitingForReadiness &&
+          !isWaitingForRuntimeReadiness &&
           !isRecoveringWaitingSession) ||
         isRequestFailed
       : false,
     isActiveSessionHistoryHydrating: activeSessionId
       ? shouldShowPendingHydrationState || historyHydrationState === "hydrating" || isRequestPending
       : false,
-    isWaitingForRuntimeReadiness: activeSessionId ? isWaitingForReadiness : false,
+    isWaitingForRuntimeReadiness: activeSessionId ? isWaitingForRuntimeReadiness : false,
   };
 }
