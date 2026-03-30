@@ -38,7 +38,6 @@ export function AgentChatMessageCard({
       />
       <MessageBody
         message={message}
-        sessionSelectedModel={sessionSelectedModel}
         assistantAccentColor={vm.assistantAccentColor}
         timeLabel={vm.timeLabel}
         systemPromptBody={vm.systemPromptBody}

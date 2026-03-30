@@ -1,4 +1,4 @@
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import { toOdtWorkflowToolDisplayName } from "@openducktor/core";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
@@ -77,10 +77,7 @@ export const roleLabel = (
   return "System";
 };
 
-export const getAssistantFooterData = (
-  message: AgentChatMessage,
-  sessionSelectedModel: AgentModelSelection | null,
-): { infoParts: string[] } => {
+export const getAssistantFooterData = (message: AgentChatMessage): { infoParts: string[] } => {
   if (message.role !== "assistant") {
     return { infoParts: [] };
   }
@@ -91,14 +88,24 @@ export const getAssistantFooterData = (
   }
   const parts: string[] = [];
 
-  const agentLabel = assistantMeta.profileId ?? sessionSelectedModel?.profileId;
+  const agentLabel = assistantMeta.profileId;
   if (typeof agentLabel === "string" && agentLabel.trim().length > 0) {
     parts.push(agentLabel.trim());
   }
 
-  const modelLabel = assistantMeta.modelId ?? sessionSelectedModel?.modelId;
-  if (typeof modelLabel === "string" && modelLabel.trim().length > 0) {
-    parts.push(modelLabel.trim());
+  const providerLabel = assistantMeta.providerId;
+  const modelLabel = assistantMeta.modelId;
+  const providerModelLabel = [providerLabel, modelLabel]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.trim())
+    .join("/");
+  if (providerModelLabel.length > 0) {
+    parts.push(providerModelLabel);
+  }
+
+  const variantLabel = assistantMeta.variant;
+  if (typeof variantLabel === "string" && variantLabel.trim().length > 0) {
+    parts.push(variantLabel.trim());
   }
 
   return { infoParts: parts };

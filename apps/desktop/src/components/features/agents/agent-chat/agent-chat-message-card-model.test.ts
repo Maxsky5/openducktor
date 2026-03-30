@@ -775,27 +775,36 @@ describe("agent-chat-message-card-model", () => {
             kind: "assistant",
             agentRole: "build",
             isFinal: true,
+            providerId: "openai",
             modelId: "gpt-5",
+            variant: "high",
             profileId: "builder",
           },
         }),
-        {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-4",
-          profileId: "fallback",
-        },
       );
-      expect(footer.infoParts).toEqual(["builder", "gpt-5"]);
+      expect(footer.infoParts).toEqual(["builder", "openai/gpt-5", "high"]);
+    });
+
+    test("omits blank variant and missing provider or model segments", () => {
+      const footer = getAssistantFooterData(
+        createMessage({
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+            providerId: "openai",
+            modelId: " ",
+            variant: "   ",
+            profileId: "builder",
+          },
+        }),
+      );
+
+      expect(footer.infoParts).toEqual(["builder", "openai"]);
     });
 
     test("does not show footer for assistant messages without final metadata", () => {
-      const footer = getAssistantFooterData(createMessage(), {
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-4o-mini",
-        profileId: "planner-agent",
-      });
+      const footer = getAssistantFooterData(createMessage());
       expect(footer.infoParts).toEqual([]);
     });
 
@@ -806,27 +815,17 @@ describe("agent-chat-message-card-model", () => {
             kind: "assistant",
             agentRole: "spec",
             isFinal: false,
+            providerId: "openai",
             modelId: "gpt-5",
             profileId: "hephaestus",
           },
         }),
-        {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-4o-mini",
-          profileId: "planner-agent",
-        },
       );
       expect(footer.infoParts).toEqual([]);
     });
 
     test("returns empty parts for non-assistant messages and blank metadata", () => {
-      const nonAssistant = getAssistantFooterData(createMessage({ role: "tool" }), {
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-4o-mini",
-        profileId: "planner-agent",
-      });
+      const nonAssistant = getAssistantFooterData(createMessage({ role: "tool" }));
       expect(nonAssistant.infoParts).toEqual([]);
 
       const blankMeta = getAssistantFooterData(
@@ -839,12 +838,6 @@ describe("agent-chat-message-card-model", () => {
             profileId: " ",
           },
         }),
-        {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "fallback-model",
-          profileId: "fallback-agent",
-        },
       );
       expect(blankMeta.infoParts).toEqual([]);
     });

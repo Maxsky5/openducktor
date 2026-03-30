@@ -438,7 +438,7 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("tracking-wide");
   });
 
-  test("renders assistant footer with agent and model labels", () => {
+  test("renders assistant footer with agent, provider/model, and variant labels", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: {
@@ -451,7 +451,9 @@ describe("AgentChatMessageCard tool duration", () => {
             agentRole: "planner",
             isFinal: true,
             profileId: "planner-main",
+            providerId: "openai",
             modelId: "gpt-5.3-codex",
+            variant: "high",
           },
         },
         sessionRole: "planner",
@@ -461,7 +463,9 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).toContain("planner-main");
+    expect(html).toContain("openai/gpt-5.3-codex");
     expect(html).toContain("gpt-5.3-codex");
+    expect(html).toContain("high");
   });
 
   test("hides assistant header and left border in final assistant messages", () => {
