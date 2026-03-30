@@ -1,6 +1,8 @@
+import { basename, isAbsolute, relative } from "node:path";
 import { slashCommandCatalogSchema } from "@openducktor/contracts";
 import type {
   AgentDescriptor,
+  AgentFileSearchResult,
   AgentModelCatalog,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
@@ -13,6 +15,23 @@ import type { ClientFactory, McpServerStatus } from "./types";
 const OPENCODE_DEFAULT_AGENT_COLORS: Record<string, string> = {
   build: "var(--icon-agent-build-base)",
   plan: "var(--icon-agent-plan-base)",
+};
+
+const FILE_SEARCH_LIMIT = 20;
+
+type FindFilesClient = {
+  find?: {
+    files?: (input: {
+      directory: string;
+      query: string;
+      dirs?: "true" | "false";
+      type?: "file" | "directory";
+      limit?: number;
+    }) => Promise<{
+      data?: unknown;
+      error?: { message?: string } | unknown;
+    }>;
+  };
 };
 
 const isAgentMode = (value: string | undefined): value is AgentDescriptor["mode"] =>
@@ -33,6 +52,75 @@ const resolveAgentColor = (
 
   const normalizedName = agentName.trim().toLowerCase();
   return OPENCODE_DEFAULT_AGENT_COLORS[normalizedName];
+};
+
+const normalizeFileSearchPath = (rawPath: string, workingDirectory: string): string => {
+  const trimmedPath = rawPath.trim();
+  if (trimmedPath.length === 0) {
+    throw new Error("Invalid file search payload: expected non-empty file paths.");
+  }
+
+  const withoutTrailingSlash = trimmedPath.replace(/[\\/]+$/, "");
+  const normalizedPath = withoutTrailingSlash.length > 0 ? withoutTrailingSlash : trimmedPath;
+  if (isAbsolute(normalizedPath)) {
+    const relativePath = relative(workingDirectory, normalizedPath);
+    if (relativePath.length === 0 || relativePath.startsWith("..")) {
+      return normalizedPath;
+    }
+    return relativePath;
+  }
+
+  return normalizedPath;
+};
+
+const detectFileSearchResultKind = (
+  path: string,
+  sourceType: "file" | "directory",
+): AgentFileSearchResult["kind"] => {
+  if (sourceType === "directory") {
+    return "directory";
+  }
+
+  const lowerPath = path.toLowerCase();
+  if (/\.(css|scss|sass|less)$/.test(lowerPath)) {
+    return "css";
+  }
+  if (/\.(ts|tsx|mts|cts)$/.test(lowerPath)) {
+    return "ts";
+  }
+  return "default";
+};
+
+const toFileSearchResult = (
+  rawPath: string,
+  sourceType: "file" | "directory",
+  workingDirectory: string,
+): AgentFileSearchResult => {
+  const path = normalizeFileSearchPath(rawPath, workingDirectory);
+  const name = basename(path);
+  return {
+    id: path,
+    path,
+    name: name.length > 0 ? name : path,
+    kind: detectFileSearchResultKind(path, sourceType),
+  };
+};
+
+const toFileSearchResults = (
+  payload: unknown,
+  sourceType: "file" | "directory",
+  workingDirectory: string,
+): AgentFileSearchResult[] => {
+  if (!Array.isArray(payload)) {
+    throw new Error("Invalid file search payload: expected an array of file paths.");
+  }
+
+  return payload.map((entry) => {
+    if (typeof entry !== "string") {
+      throw new Error("Invalid file search payload: expected an array of file paths.");
+    }
+    return toFileSearchResult(entry, sourceType, workingDirectory);
+  });
 };
 
 export const listAvailableModels = async (
@@ -170,6 +258,65 @@ export const listAvailableSlashCommands = async (
     return slashCommandCatalogSchema.parse({ commands });
   } catch (error) {
     throw toOpenCodeRequestError("list slash commands", error);
+  }
+};
+
+export const searchFiles = async (
+  createClient: ClientFactory,
+  input: {
+    runtimeEndpoint: string;
+    workingDirectory: string;
+    query: string;
+  },
+): Promise<AgentFileSearchResult[]> => {
+  try {
+    const client = createClient({
+      runtimeEndpoint: input.runtimeEndpoint,
+      workingDirectory: input.workingDirectory,
+    });
+    const findClient = (client as FindFilesClient).find;
+    if (!findClient || typeof findClient.files !== "function") {
+      throw new Error("OpenCode runtime does not expose the file search API.");
+    }
+
+    const [directoryPayload, filePayload] = await Promise.all([
+      findClient.files({
+        directory: input.workingDirectory,
+        query: input.query,
+        dirs: "true",
+        type: "directory",
+        limit: FILE_SEARCH_LIMIT,
+      }),
+      findClient.files({
+        directory: input.workingDirectory,
+        query: input.query,
+        dirs: "false",
+        type: "file",
+        limit: FILE_SEARCH_LIMIT,
+      }),
+    ]);
+
+    const mergedResults = new Map<string, AgentFileSearchResult>();
+    for (const result of toFileSearchResults(
+      unwrapData(directoryPayload, "search files"),
+      "directory",
+      input.workingDirectory,
+    )) {
+      mergedResults.set(result.id, result);
+    }
+    for (const result of toFileSearchResults(
+      unwrapData(filePayload, "search files"),
+      "file",
+      input.workingDirectory,
+    )) {
+      mergedResults.set(result.id, result);
+    }
+
+    return Array.from(mergedResults.values()).sort((left, right) =>
+      left.path.localeCompare(right.path),
+    );
+  } catch (error) {
+    throw toOpenCodeRequestError("search files", error);
   }
 };
 

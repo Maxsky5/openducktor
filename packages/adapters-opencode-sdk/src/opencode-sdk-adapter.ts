@@ -34,6 +34,7 @@ import {
   listAvailableModels,
   listAvailableSlashCommands,
   listAvailableToolIds,
+  searchFiles,
 } from "./catalog-and-mcp";
 import { buildDefaultFactory, nowIso } from "./client-factory";
 import { unwrapData } from "./data-utils";
@@ -424,6 +425,15 @@ export class OpencodeSdkAdapter
       this.createClient,
       toRuntimeClientInput(input.runtimeConnection, "list available slash commands"),
     );
+  }
+
+  async searchFiles(
+    input: import("@openducktor/core").SearchAgentFilesInput,
+  ): Promise<import("@openducktor/core").AgentFileSearchResult[]> {
+    return searchFiles(this.createClient, {
+      ...toRuntimeClientInput(input.runtimeConnection, "search files"),
+      query: input.query,
+    });
   }
 
   async listAvailableToolIds(input: {
