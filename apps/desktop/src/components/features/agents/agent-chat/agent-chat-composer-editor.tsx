@@ -141,6 +141,8 @@ export function AgentChatComposerEditor({
 
         <div className="relative z-10 min-h-6 whitespace-pre-wrap break-words">
           {draft.segments.map((segment, index) => {
+            const nextSegment = draft.segments[index + 1];
+
             if (segment.kind === "slash_command") {
               return (
                 <button
@@ -160,6 +162,14 @@ export function AgentChatComposerEditor({
               );
             }
 
+            const segmentText = segment.text.trim();
+
+            const isLeadingEmptySlashHost =
+              segmentText.length === 0 && nextSegment?.kind === "slash_command";
+            if (isLeadingEmptySlashHost) {
+              return null;
+            }
+
             return (
               /* biome-ignore lint/a11y/noStaticElementInteractions: inline contenteditable segments need custom caret and keyboard handling. */
               <span
@@ -171,7 +181,7 @@ export function AgentChatComposerEditor({
                 data-segment-id={segment.id}
                 className={cn(
                   "whitespace-pre-wrap break-words align-baseline outline-none",
-                  segment.text.length === 0 && draft.segments[index - 1]?.kind === "slash_command"
+                  segmentText.length === 0 && draft.segments[index - 1]?.kind === "slash_command"
                     ? "inline-block min-w-[1px]"
                     : "inline",
                 )}
