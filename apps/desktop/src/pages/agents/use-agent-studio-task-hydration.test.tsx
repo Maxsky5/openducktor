@@ -268,6 +268,62 @@ describe("useAgentStudioTaskHydration", () => {
     }
   });
 
+  test("only auto-recovers the currently selected failed session after selection changes while waiting", async () => {
+    const hydrateRequestedTaskSessionHistory = mock(async (): Promise<void> => {});
+    const firstFailedSession = createSession({
+      sessionId: "session-1",
+      externalSessionId: "external-1",
+      historyHydrationState: "failed",
+    });
+    const secondFailedSession = createSession({
+      sessionId: "session-2",
+      externalSessionId: "external-2",
+      historyHydrationState: "failed",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeSession: firstFailedSession,
+        agentStudioReadinessState: "checking",
+        hydrateRequestedTaskSessionHistory,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(hydrateRequestedTaskSessionHistory).not.toHaveBeenCalled();
+      expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(true);
+
+      await harness.update(
+        createBaseArgs({
+          activeSession: secondFailedSession,
+          agentStudioReadinessState: "checking",
+          hydrateRequestedTaskSessionHistory,
+        }),
+      );
+
+      expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(true);
+      expect(hydrateRequestedTaskSessionHistory).not.toHaveBeenCalled();
+
+      await harness.update(
+        createBaseArgs({
+          activeSession: secondFailedSession,
+          agentStudioReadinessState: "ready",
+          hydrateRequestedTaskSessionHistory,
+        }),
+      );
+      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 1);
+
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledTimes(1);
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledWith({
+        taskId: "task-1",
+        sessionId: "session-2",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("skips requested history hydration for a live session that already has local messages", async () => {
     const hydrateRequestedTaskSessionHistory = mock(async (): Promise<void> => {});
     const harness = createHookHarness(

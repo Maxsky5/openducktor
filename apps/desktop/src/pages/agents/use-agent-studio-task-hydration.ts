@@ -82,7 +82,7 @@ export function useAgentStudioTaskHydration({
           return current;
         }
 
-        return current ?? activeSessionId;
+        return activeSessionId;
       });
       return;
     }
