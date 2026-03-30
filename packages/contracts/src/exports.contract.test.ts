@@ -64,9 +64,16 @@ import type {
   RunEvent,
   RunState,
   RunSummary,
+  RuntimeCapabilities,
+  RuntimeCapabilityClass,
+  RuntimeCapabilityKey,
   RuntimeCheck,
   RuntimeInstanceSummary,
   RuntimeInstanceSummaryRole,
+  RuntimeKind,
+  RuntimeProvisioningMode,
+  RuntimeRef,
+  RuntimeSupportedScope,
   SettingsSnapshot,
   SlashCommandCatalog,
   SlashCommandDescriptor,
@@ -334,7 +341,14 @@ type ExportedTypeContract = {
   SlashCommandDescriptor: SlashCommandDescriptor;
   SlashCommandSource: SlashCommandSource;
   RuntimeCheck: RuntimeCheck;
+  RuntimeCapabilities: RuntimeCapabilities;
+  RuntimeCapabilityClass: RuntimeCapabilityClass;
+  RuntimeCapabilityKey: RuntimeCapabilityKey;
   SoftGuardrails: SoftGuardrails;
+  RuntimeKind: RuntimeKind;
+  RuntimeProvisioningMode: RuntimeProvisioningMode;
+  RuntimeRef: RuntimeRef;
+  RuntimeSupportedScope: RuntimeSupportedScope;
   SettingsSnapshot: SettingsSnapshot;
   SystemCheck: SystemCheck;
   TaskAction: TaskAction;
