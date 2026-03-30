@@ -1,6 +1,7 @@
 import type { FileDiff, FileStatus, RuntimeDescriptor } from "@openducktor/contracts";
 import type {
   AgentEvent,
+  AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
   AgentPendingPermissionRequest,
@@ -77,6 +78,12 @@ export type ListAgentModelsInput = {
 export type ListAgentSlashCommandsInput = {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
+};
+
+export type SearchAgentFilesInput = {
+  runtimeKind: RuntimeKind;
+  runtimeConnection: AgentRuntimeConnection;
+  query: string;
 };
 
 export type ListLiveAgentSessionsInput = {
@@ -176,6 +183,7 @@ export interface AgentRuntimeRegistryPort {
 export interface AgentCatalogPort {
   listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog>;
   listAvailableSlashCommands(input: ListAgentSlashCommandsInput): Promise<AgentSlashCommandCatalog>;
+  searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]>;
 }
 
 export interface AgentSessionPort {

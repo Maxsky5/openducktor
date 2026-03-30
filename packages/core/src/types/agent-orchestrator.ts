@@ -88,6 +88,17 @@ export type AgentRuntimeDefinition = RuntimeDescriptor;
 export type AgentSlashCommand = ContractsSlashCommandDescriptor;
 export type AgentSlashCommandCatalog = ContractsSlashCommandCatalog;
 
+export type AgentFileSearchResultKind = "directory" | "css" | "ts" | "default";
+
+export type AgentFileReference = {
+  id: string;
+  path: string;
+  name: string;
+  kind: AgentFileSearchResultKind;
+};
+
+export type AgentFileSearchResult = AgentFileReference;
+
 export type AgentUserMessagePart =
   | {
       kind: "text";
@@ -96,6 +107,10 @@ export type AgentUserMessagePart =
   | {
       kind: "slash_command";
       command: AgentSlashCommand;
+    }
+  | {
+      kind: "file_reference";
+      file: AgentFileReference;
     };
 
 export type AgentSessionTodoStatus = "pending" | "in_progress" | "completed" | "cancelled";

@@ -16,6 +16,7 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
   supportsProfiles: true,
   supportsVariants: true,
   supportsSlashCommands: true,
+  supportsFileSearch: true,
   supportsOdtWorkflowTools: true,
   supportsSessionFork: true,
   supportsQueuedUserMessages: true,

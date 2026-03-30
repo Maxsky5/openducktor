@@ -52,6 +52,14 @@ export const hasMeaningfulAgentUserMessageParts = (parts: AgentUserMessagePart[]
 
 export const serializeAgentUserMessagePartsToText = (parts: AgentUserMessagePart[]): string => {
   return normalizeAgentUserMessageParts(parts)
-    .map((part) => (part.kind === "text" ? part.text : `/${part.command.trigger}`))
+    .map((part) => {
+      if (part.kind === "text") {
+        return part.text;
+      }
+      if (part.kind === "slash_command") {
+        return `/${part.command.trigger}`;
+      }
+      return `@${part.file.path}`;
+    })
     .join("");
 };
