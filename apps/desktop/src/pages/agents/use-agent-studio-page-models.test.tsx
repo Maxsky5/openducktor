@@ -82,6 +82,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     selectedTask: createTask(),
     isTaskHydrating: false,
     isSessionHistoryHydrating: false,
+    isWaitingForRuntimeReadiness: false,
     isSessionHistoryHydrationFailed: false,
     contextSwitchVersion: 0,
     ...overrides.core,
@@ -222,6 +223,43 @@ describe("useAgentStudioPageModels", () => {
     expect(onKickoff).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onStopSession).toHaveBeenCalledTimes(1);
+
+    await harness.unmount();
+  });
+
+  test("keeps transcript visible while waiting for runtime readiness", async () => {
+    const cachedSession = createSession("session-waiting", "external-waiting", {
+      messages: [
+        {
+          id: "assistant-cached",
+          role: "assistant",
+          content: "Cached transcript",
+          timestamp: "2026-02-22T08:00:05.000Z",
+        },
+      ],
+    });
+    const harness = createHookHarness(
+      createHookArgs({
+        core: {
+          activeSession: cachedSession,
+          sessionsForTask: [cachedSession],
+          isSessionHistoryHydrating: false,
+          isWaitingForRuntimeReadiness: true,
+        },
+        readiness: {
+          agentStudioReadinessState: "checking",
+          agentStudioReady: false,
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    const thread = harness.getLatest().agentChatModel.thread;
+    expect(thread.isSessionHistoryLoading).toBe(false);
+    expect(thread.isWaitingForRuntimeReadiness).toBe(true);
+    expect(thread.readinessState).toBe("checking");
+    expect(thread.session?.messages[0]?.content).toBe("Cached transcript");
 
     await harness.unmount();
   });

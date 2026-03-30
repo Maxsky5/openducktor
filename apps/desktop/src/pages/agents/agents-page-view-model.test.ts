@@ -276,6 +276,7 @@ describe("agents-page-view-model", () => {
       showThinkingMessages: true,
       isSessionViewLoading: false,
       isSessionHistoryLoading: false,
+      isWaitingForRuntimeReadiness: false,
       roleOptions: [{ role: "spec", label: "Spec", icon: Sparkles }],
       agentStudioReadinessState: "ready",
       agentStudioReady: true,

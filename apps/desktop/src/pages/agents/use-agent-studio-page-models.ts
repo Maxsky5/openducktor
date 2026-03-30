@@ -38,6 +38,7 @@ type AgentStudioCoreContext = {
   activeSession: AgentSessionState | null;
   isTaskHydrating: boolean;
   isSessionHistoryHydrating: boolean;
+  isWaitingForRuntimeReadiness: boolean;
   isSessionHistoryHydrationFailed: boolean;
   contextSwitchVersion: number;
 };
@@ -278,6 +279,7 @@ export function useAgentStudioPageModels({
     showThinkingMessages: chatSettings.showThinkingMessages,
     isContextSwitching,
     isSessionHistoryLoading: core.isSessionHistoryHydrating,
+    isWaitingForRuntimeReadiness: core.isWaitingForRuntimeReadiness,
     taskId: core.taskId,
     activeSessionAgentColors: modelSelection.activeSessionAgentColors,
     agentStudioReadinessState: readiness.agentStudioReadinessState,

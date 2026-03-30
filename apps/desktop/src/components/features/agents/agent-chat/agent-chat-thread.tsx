@@ -58,6 +58,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     showThinkingMessages,
     isSessionViewLoading,
     isSessionHistoryLoading,
+    isWaitingForRuntimeReadiness,
     readinessState,
     agentStudioReady,
     blockedReason,
@@ -89,7 +90,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const isTranscriptLoading =
     isSessionViewLoading || isSessionHistoryLoading || isTranscriptRenderDeferred;
   const hideTranscriptWhileHydrating = isSessionHistoryLoading || isTranscriptRenderDeferred;
-  const showRuntimeCheckingOverlay = readinessState === "checking";
+  const showRuntimeCheckingOverlay = isWaitingForRuntimeReadiness && readinessState === "checking";
   const showRuntimeBlockedCard = readinessState === "blocked" && blockedReason;
 
   const rows = useMemo(() => {

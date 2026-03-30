@@ -19,6 +19,7 @@ const buildModel = () => ({
     showThinkingMessages: false,
     isSessionViewLoading: false,
     isSessionHistoryLoading: false,
+    isWaitingForRuntimeReadiness: false,
     roleOptions: TEST_ROLE_OPTIONS,
     readinessState: "ready" as const,
     agentStudioReady: true,

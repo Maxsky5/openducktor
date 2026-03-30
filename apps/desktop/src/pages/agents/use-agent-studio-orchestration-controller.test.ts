@@ -36,6 +36,7 @@ const baseArgs: BuildArgs = {
     isActiveTaskHydrationFailed: false,
     isViewSessionHistoryHydrationFailed: false,
     isViewSessionHistoryHydrating: false,
+    isViewSessionWaitingForRuntimeReadiness: false,
   },
   sessions: {
     viewSessionsForTask: [session],
@@ -118,6 +119,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.core.role).toBe("planner");
     expect(mapped.core.contextSwitchVersion).toBe(4);
     expect(mapped.core.isSessionHistoryHydrationFailed).toBe(false);
+    expect(mapped.core.isWaitingForRuntimeReadiness).toBe(false);
     expect(mapped.taskTabs.onCreateTab).toBe(onCreateTab);
     expect(mapped.taskTabs.onCloseTab).toBe(onCloseTab);
     expect(mapped.documents.planDoc.markdown).toBe("# doc");

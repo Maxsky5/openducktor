@@ -152,7 +152,8 @@ describe("useAgentStudioTaskHydration", () => {
       await harness.mount();
 
       expect(hydrateRequestedTaskSessionHistory).not.toHaveBeenCalled();
-      expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(true);
+      expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(true);
+      expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(false);
       expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(false);
 
       await harness.update(
@@ -201,6 +202,7 @@ describe("useAgentStudioTaskHydration", () => {
       await harness.mount();
 
       expect(hydrateRequestedTaskSessionHistory).not.toHaveBeenCalled();
+      expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(true);
       expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(false);
 
       await harness.update(
@@ -214,6 +216,53 @@ describe("useAgentStudioTaskHydration", () => {
 
       expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledTimes(1);
       expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not auto-retry a real post-ready hydration failure after readiness flaps", async () => {
+    const hydrateRequestedTaskSessionHistory = mock(async () => {
+      throw new Error("post-ready failure");
+    });
+    const failedSession = createSession({ historyHydrationState: "not_requested" });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeSession: failedSession,
+        agentStudioReadinessState: "ready",
+        hydrateRequestedTaskSessionHistory,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isActiveSessionHistoryHydrationFailed);
+
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(false);
+
+      await harness.update(
+        createBaseArgs({
+          activeSession: createSession({ historyHydrationState: "failed" }),
+          agentStudioReadinessState: "checking",
+          hydrateRequestedTaskSessionHistory,
+        }),
+      );
+
+      expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(false);
+      expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(true);
+
+      await harness.update(
+        createBaseArgs({
+          activeSession: createSession({ historyHydrationState: "failed" }),
+          agentStudioReadinessState: "ready",
+          hydrateRequestedTaskSessionHistory,
+        }),
+      );
+
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(true);
+      expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(false);
     } finally {
       await harness.unmount();
     }

@@ -70,6 +70,7 @@ export type AgentStudioSelectionControllerResult = {
   isViewSessionHistoryHydrated: boolean;
   isViewSessionHistoryHydrationFailed: boolean;
   isViewSessionHistoryHydrating: boolean;
+  isViewSessionWaitingForRuntimeReadiness: boolean;
 };
 
 const ACTIVE_SESSION_STATUS = new Set<AgentSessionState["status"]>(["starting", "running"]);
@@ -334,6 +335,7 @@ export function useAgentStudioSelectionController({
     isActiveSessionHistoryHydrated,
     isActiveSessionHistoryHydrationFailed,
     isActiveSessionHistoryHydrating,
+    isWaitingForRuntimeReadiness,
   } = useAgentStudioTaskHydration({
     activeRepo,
     activeTaskId: viewTaskId,
@@ -366,5 +368,6 @@ export function useAgentStudioSelectionController({
     isViewSessionHistoryHydrated: isActiveSessionHistoryHydrated,
     isViewSessionHistoryHydrationFailed: isActiveSessionHistoryHydrationFailed,
     isViewSessionHistoryHydrating: isActiveSessionHistoryHydrating,
+    isViewSessionWaitingForRuntimeReadiness: isWaitingForRuntimeReadiness,
   };
 }

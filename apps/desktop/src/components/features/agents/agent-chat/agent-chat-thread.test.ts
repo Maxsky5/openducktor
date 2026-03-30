@@ -23,6 +23,7 @@ const buildBaseModel = () => ({
   showThinkingMessages: false,
   isSessionViewLoading: false,
   isSessionHistoryLoading: false,
+  isWaitingForRuntimeReadiness: false,
   roleOptions: TEST_ROLE_OPTIONS,
   readinessState: "ready" as const,
   agentStudioReady: true,
@@ -287,6 +288,7 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           readinessState: "checking",
           agentStudioReady: false,
+          isWaitingForRuntimeReadiness: true,
           session: buildSession({
             messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],
           }),
@@ -296,6 +298,25 @@ describe("AgentChatThread", () => {
 
     expect(html).toContain("Runtime is starting");
     expect(html).toContain("Waiting for runtime and MCP health before loading this session.");
+    expect(html).toContain("Cached transcript");
+  });
+
+  test("does not show the runtime-starting overlay for generic readiness checks without a waiting session", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          readinessState: "checking",
+          agentStudioReady: false,
+          isWaitingForRuntimeReadiness: false,
+          session: buildSession({
+            messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],
+          }),
+        },
+      }),
+    );
+
+    expect(html).not.toContain("Runtime is starting");
     expect(html).toContain("Cached transcript");
   });
 

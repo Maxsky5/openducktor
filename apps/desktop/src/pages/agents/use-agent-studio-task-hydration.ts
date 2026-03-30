@@ -22,6 +22,7 @@ type UseAgentStudioTaskHydrationResult = {
   isActiveSessionHistoryHydrated: boolean;
   isActiveSessionHistoryHydrationFailed: boolean;
   isActiveSessionHistoryHydrating: boolean;
+  isWaitingForRuntimeReadiness: boolean;
 };
 
 export function useAgentStudioTaskHydration({
@@ -37,13 +38,17 @@ export function useAgentStudioTaskHydration({
     status: "idle" | "pending" | "failed";
   }>({ sessionId: null, status: "idle" });
   const [waitingSessionId, setWaitingSessionId] = useState<string | null>(null);
+  const [postReadyFailureSessionId, setPostReadyFailureSessionId] = useState<string | null>(null);
   const historyHydrationState = getAgentSessionHistoryHydrationState(activeSession);
   const sessionNeedsHydration = requiresHydratedAgentSessionHistory(activeSession);
   const isReadinessReady = agentStudioReadinessState === "ready";
+  const blockedFromAutomaticRecovery =
+    Boolean(activeSessionId) && postReadyFailureSessionId === activeSessionId;
   const isWaitingForReadiness =
     Boolean(activeRepo && activeTaskId && activeSessionId) &&
     !isReadinessReady &&
-    sessionNeedsHydration;
+    sessionNeedsHydration &&
+    !blockedFromAutomaticRecovery;
   const isRecoveringWaitingSession =
     Boolean(activeSessionId && activeRepo && activeTaskId) &&
     isReadinessReady &&
@@ -53,16 +58,32 @@ export function useAgentStudioTaskHydration({
     Boolean(activeRepo && activeTaskId && activeSessionId) &&
     isReadinessReady &&
     sessionNeedsHydration &&
+    !blockedFromAutomaticRecovery &&
     (historyHydrationState === "not_requested" || waitingSessionId === activeSessionId);
 
   useEffect(() => {
     if (!activeSessionId || !sessionNeedsHydration) {
       setWaitingSessionId((current) => (current === null ? current : null));
+      setPostReadyFailureSessionId((current) => (current === null ? current : null));
       return;
     }
 
+    if (historyHydrationState === "hydrated") {
+      setPostReadyFailureSessionId((current) => (current === activeSessionId ? null : current));
+    }
+
     if (!isReadinessReady) {
-      setWaitingSessionId(activeSessionId);
+      setWaitingSessionId((current) => {
+        if (blockedFromAutomaticRecovery) {
+          return current === activeSessionId ? null : current;
+        }
+
+        if (historyHydrationState !== "failed") {
+          return current;
+        }
+
+        return current ?? activeSessionId;
+      });
       return;
     }
 
@@ -71,6 +92,7 @@ export function useAgentStudioTaskHydration({
     }
   }, [
     activeSessionId,
+    blockedFromAutomaticRecovery,
     historyHydrationState,
     isReadinessReady,
     sessionNeedsHydration,
@@ -85,7 +107,7 @@ export function useAgentStudioTaskHydration({
 
     if (!shouldHydrateSessionHistory) {
       setRequestState((current) =>
-        current.sessionId === activeSessionId && current.status !== "idle"
+        current.sessionId === activeSessionId && current.status === "pending"
           ? { sessionId: activeSessionId, status: "idle" }
           : current,
       );
@@ -104,6 +126,7 @@ export function useAgentStudioTaskHydration({
             : current,
         );
         setWaitingSessionId((current) => (current === activeSessionId ? null : current));
+        setPostReadyFailureSessionId((current) => (current === activeSessionId ? null : current));
       })
       .catch(() => {
         setRequestState((current) =>
@@ -111,6 +134,9 @@ export function useAgentStudioTaskHydration({
             ? { sessionId: activeSessionId, status: "failed" }
             : current,
         );
+        if (waitingSessionId !== activeSessionId) {
+          setPostReadyFailureSessionId(activeSessionId);
+        }
         setWaitingSessionId((current) => (current === activeSessionId ? null : current));
       });
   }, [
@@ -118,6 +144,7 @@ export function useAgentStudioTaskHydration({
     activeTaskId,
     hydrateRequestedTaskSessionHistory,
     shouldHydrateSessionHistory,
+    waitingSessionId,
   ]);
 
   const isRequestPending =
@@ -137,10 +164,8 @@ export function useAgentStudioTaskHydration({
         isRequestFailed
       : false,
     isActiveSessionHistoryHydrating: activeSessionId
-      ? isWaitingForReadiness ||
-        shouldShowPendingHydrationState ||
-        historyHydrationState === "hydrating" ||
-        isRequestPending
+      ? shouldShowPendingHydrationState || historyHydrationState === "hydrating" || isRequestPending
       : false,
+    isWaitingForRuntimeReadiness: activeSessionId ? isWaitingForReadiness : false,
   };
 }
