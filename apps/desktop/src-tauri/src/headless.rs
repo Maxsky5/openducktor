@@ -42,8 +42,11 @@ use tokio_stream::StreamExt;
 use tower_http::cors::CorsLayer;
 
 const DEFAULT_BROWSER_BACKEND_HOST: &str = "127.0.0.1";
-const DEFAULT_BROWSER_FRONTEND_ORIGINS: [&str; 2] =
-    ["http://localhost:1420", "http://127.0.0.1:1420"];
+const DEFAULT_BROWSER_FRONTEND_ORIGINS: [&str; 3] = [
+    "http://localhost:1420",
+    "http://127.0.0.1:1420",
+    "http://[::1]:1420",
+];
 const BROWSER_FRONTEND_ORIGIN_ENV: &str = "ODT_BROWSER_FRONTEND_ORIGIN";
 const EVENT_BUFFER_CAPACITY: usize = 256;
 
