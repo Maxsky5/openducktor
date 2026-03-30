@@ -139,7 +139,7 @@ export function AgentChatComposerEditor({
           </div>
         ) : null}
 
-        <div className="relative z-10 min-h-6 whitespace-pre-wrap break-words">
+        <div className="relative z-10 min-h-7 whitespace-pre-wrap break-words">
           {draft.segments.map((segment, index) => {
             const nextSegment = draft.segments[index + 1];
 
@@ -152,7 +152,7 @@ export function AgentChatComposerEditor({
                   aria-label={`Slash command /${segment.command.trigger}. Press Backspace immediately after the chip to remove it.`}
                   className={cn(
                     badgeVariants({ variant: "secondary" }),
-                    "mx-0.5 inline-flex h-7 align-baseline rounded-full border border-border px-2.5 text-xs font-medium",
+                    "mx-0.5 inline-flex h-6 align-baseline rounded-full border border-border px-2.5 text-xs font-medium mr-2",
                   )}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => focusSlashCommandSegment(segment.id)}
