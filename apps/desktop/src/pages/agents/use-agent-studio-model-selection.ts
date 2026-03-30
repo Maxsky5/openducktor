@@ -1,12 +1,13 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type {
+  AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
   AgentRuntimeConnection,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   resolveAgentAccentColor,
@@ -17,9 +18,13 @@ import {
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { sessionSlashCommandsQueryOptions } from "@/state/queries/agent-session-runtime";
+import {
+  sessionFileSearchQueryOptions,
+  sessionSlashCommandsQueryOptions,
+} from "@/state/queries/agent-session-runtime";
 import {
   repoRuntimeCatalogQueryOptions,
+  repoRuntimeFileSearchQueryOptions,
   repoRuntimeSlashCommandsQueryOptions,
 } from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -50,10 +55,20 @@ type UseAgentStudioModelSelectionArgs = {
     repoPath: string,
     runtimeKind: RuntimeKind,
   ) => Promise<AgentSlashCommandCatalog>;
+  loadFileSearch?: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+    query: string,
+  ) => Promise<AgentFileSearchResult[]>;
   readSessionSlashCommands?: (
     runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
   ) => Promise<AgentSlashCommandCatalog>;
+  readSessionFileSearch?: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+    query: string,
+  ) => Promise<AgentFileSearchResult[]>;
 };
 
 type AgentStudioModelSelectionState = {
@@ -61,10 +76,12 @@ type AgentStudioModelSelectionState = {
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;
   supportsSlashCommands: boolean;
+  supportsFileSearch: boolean;
   slashCommandCatalog: AgentSlashCommandCatalog | null;
   slashCommands: AgentSlashCommandCatalog["commands"];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ReturnType<typeof toModelGroupsByProvider>;
@@ -117,12 +134,20 @@ export function useAgentStudioModelSelection({
   updateAgentSessionModel,
   loadCatalog,
   loadSlashCommands,
+  loadFileSearch,
   readSessionSlashCommands,
+  readSessionFileSearch,
 }: UseAgentStudioModelSelectionArgs): AgentStudioModelSelectionState {
-  const { runtimeDefinitions, loadRepoRuntimeCatalog, loadRepoRuntimeSlashCommands } =
-    useRuntimeDefinitionsContext();
+  const {
+    runtimeDefinitions,
+    loadRepoRuntimeCatalog,
+    loadRepoRuntimeSlashCommands,
+    loadRepoRuntimeFileSearch,
+  } = useRuntimeDefinitionsContext();
+  const queryClient = useQueryClient();
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const loadSlashCommandsForRepo = loadSlashCommands ?? loadRepoRuntimeSlashCommands;
+  const loadFileSearchForRepo = loadFileSearch ?? loadRepoRuntimeFileSearch;
   const previousActiveRepoRef = useRef<string | null>(activeRepo);
   const previousRepoForDefaultsRef = useRef<string | null>(activeRepo);
   const previousRepoSettingsRef = useRef<RepoSettingsInput | null>(repoSettings);
@@ -163,6 +188,13 @@ export function useAgentStudioModelSelection({
         ?.capabilities.supportsSlashCommands ?? false
     );
   }, [runtimeDefinitions, slashCommandRuntimeKind]);
+  const fileSearchRuntimeKind = activeSessionRuntimeQueryInput?.runtimeKind ?? composerRuntimeKind;
+  const supportsFileSearch = useMemo(() => {
+    return (
+      runtimeDefinitions.find((definition) => definition.kind === fileSearchRuntimeKind)
+        ?.capabilities.supportsFileSearch ?? false
+    );
+  }, [fileSearchRuntimeKind, runtimeDefinitions]);
 
   useEffect(() => {
     if (previousActiveRepoRef.current === activeRepo) {
@@ -323,6 +355,49 @@ export function useAgentStudioModelSelection({
       ? activeSessionSlashCommandsQuery.isLoading
       : repoSlashCommandsQuery.isLoading
     : false;
+  const searchFiles = useCallback(
+    async (query: string): Promise<AgentFileSearchResult[]> => {
+      if (!supportsFileSearch) {
+        return [];
+      }
+      if (activeSession) {
+        if (activeSessionRuntimeQueryInput == null || readSessionFileSearch == null) {
+          throw new Error(
+            "Active session file search is unavailable until the session runtime connection is ready.",
+          );
+        }
+        return queryClient.fetchQuery(
+          sessionFileSearchQueryOptions(
+            activeSessionRuntimeQueryInput.runtimeKind,
+            activeSessionRuntimeQueryInput.runtimeConnection,
+            query,
+            readSessionFileSearch,
+          ),
+        );
+      }
+      if (!activeRepo) {
+        throw new Error("No repository selected.");
+      }
+      return queryClient.fetchQuery(
+        repoRuntimeFileSearchQueryOptions(
+          activeRepo,
+          composerRuntimeKind,
+          query,
+          loadFileSearchForRepo,
+        ),
+      );
+    },
+    [
+      activeRepo,
+      activeSession,
+      activeSessionRuntimeQueryInput,
+      composerRuntimeKind,
+      loadFileSearchForRepo,
+      queryClient,
+      readSessionFileSearch,
+      supportsFileSearch,
+    ],
+  );
   const isSelectionCatalogLoading = activeSession
     ? activeSession.isLoadingModelCatalog && !activeSession.modelCatalog && !composerCatalog
     : isLoadingComposerCatalog;
@@ -555,10 +630,12 @@ export function useAgentStudioModelSelection({
     selectedModelSelection,
     isSelectionCatalogLoading,
     supportsSlashCommands,
+    supportsFileSearch,
     slashCommandCatalog,
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
+    searchFiles,
     agentOptions,
     modelOptions,
     modelGroups,

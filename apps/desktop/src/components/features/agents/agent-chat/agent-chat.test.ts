@@ -60,10 +60,12 @@ const buildModel = () => ({
     selectedModelSelection: buildModelSelection(),
     isSelectionCatalogLoading: false,
     supportsSlashCommands: true,
+    supportsFileSearch: true,
     slashCommandCatalog: { commands: [] },
     slashCommands: [],
     slashCommandsError: null,
     isSlashCommandsLoading: false,
+    searchFiles: async () => [],
     agentOptions: [{ value: "Hephaestus (Deep Agent)", label: "Hephaestus (Deep Agent)" }],
     modelOptions: [{ value: "openai/gpt-5.3-codex", label: "GPT-5.3 Codex" }],
     modelGroups: [

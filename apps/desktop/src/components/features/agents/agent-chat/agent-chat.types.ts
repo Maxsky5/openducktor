@@ -1,4 +1,5 @@
 import type {
+  AgentFileSearchResult,
   AgentModelSelection,
   AgentRole,
   AgentSlashCommand,
@@ -64,10 +65,12 @@ export type AgentChatComposerModel = {
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;
   supportsSlashCommands: boolean;
+  supportsFileSearch: boolean;
   slashCommandCatalog: AgentSlashCommandCatalog | null;
   slashCommands: AgentSlashCommand[];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];

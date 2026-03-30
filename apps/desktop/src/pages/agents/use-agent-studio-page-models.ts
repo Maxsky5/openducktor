@@ -84,10 +84,12 @@ type AgentStudioModelSelectionContext = {
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;
   supportsSlashCommands: boolean;
+  supportsFileSearch: boolean;
   slashCommandCatalog: AgentChatModel["composer"]["slashCommandCatalog"];
   slashCommands: AgentChatModel["composer"]["slashCommands"];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  searchFiles: AgentChatModel["composer"]["searchFiles"];
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];
@@ -325,10 +327,12 @@ export function useAgentStudioPageModels({
     selectedModelSelection: modelSelection.selectedModelSelection,
     isSelectionCatalogLoading: modelSelection.isSelectionCatalogLoading,
     supportsSlashCommands: modelSelection.supportsSlashCommands,
+    supportsFileSearch: modelSelection.supportsFileSearch,
     slashCommandCatalog: modelSelection.slashCommandCatalog,
     slashCommands: modelSelection.slashCommands,
     slashCommandsError: modelSelection.slashCommandsError,
     isSlashCommandsLoading: modelSelection.isSlashCommandsLoading,
+    searchFiles: modelSelection.searchFiles,
     agentOptions: modelSelection.agentOptions,
     modelOptions: modelSelection.modelOptions,
     modelGroups: modelSelection.modelGroups,

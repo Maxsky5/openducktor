@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { type ReactElement, useRef, useState } from "react";
 import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
-import { createComposerDraft } from "./agent-chat-test-fixtures";
+import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fixtures";
 
 let AgentChatComposerEditor: typeof import("./agent-chat-composer-editor").AgentChatComposerEditor;
 const setCaretOffsetWithinElementMock = mock(() => {});
@@ -58,10 +58,14 @@ const COMMANDS = [
 const EditorHarness = ({
   slashCommandsError,
   slashCommands,
+  supportsFileSearch = true,
+  searchFiles = async () => [],
   onSend,
 }: {
   slashCommandsError: string | null;
   slashCommands: typeof COMMANDS;
+  supportsFileSearch?: boolean;
+  searchFiles?: (query: string) => Promise<ReturnType<typeof buildFileSearchResult>[]>;
   onSend?: () => void;
 }): ReactElement => {
   const [draft, setDraft] = useState<AgentChatComposerDraft>(createComposerDraft(""));
@@ -77,9 +81,11 @@ const EditorHarness = ({
       onEditorInput={() => {}}
       onSend={onSend ?? (() => {})}
       supportsSlashCommands={true}
+      supportsFileSearch={supportsFileSearch}
       slashCommands={slashCommands}
       slashCommandsError={slashCommandsError}
       isSlashCommandsLoading={false}
+      searchFiles={searchFiles}
     />
   );
 };
@@ -184,6 +190,86 @@ describe("AgentChatComposerEditor", () => {
     });
   });
 
+  test("shows the file-search error state after typing an @ trigger", async () => {
+    const searchFiles = mock(async () => {
+      throw new Error("File search unavailable.");
+    });
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={searchFiles}
+      />,
+    );
+
+    typeIntoEditor(rendered.container, "@");
+
+    await waitFor(() => {
+      expect(screen.getByText("File search unavailable.")).toBeDefined();
+    });
+  });
+
+  test("shows a file-search empty state when no matches are returned", async () => {
+    const searchFiles = mock(async () => []);
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={searchFiles}
+      />,
+    );
+
+    typeIntoEditor(rendered.container, "@missing");
+
+    await waitFor(() => {
+      expect(screen.getByText("No files found.")).toBeDefined();
+    });
+  });
+
+  test("selects a file reference without submitting the message", async () => {
+    const onSend = mock(() => {});
+    const searchFiles = mock(async () => [buildFileSearchResult()]);
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={searchFiles}
+        onSend={onSend}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "check @");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+    });
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /file reference src\/main.ts/i })).toBeDefined();
+    });
+    expect(onSend).not.toHaveBeenCalled();
+    expect(searchFiles).toHaveBeenCalledWith("");
+  });
+
+  test("does not open file autocomplete when the runtime does not support file search", async () => {
+    const searchFiles = mock(async () => [buildFileSearchResult()]);
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsFileSearch={false}
+        searchFiles={searchFiles}
+      />,
+    );
+
+    typeIntoEditor(rendered.container, "@");
+
+    await waitFor(() => {
+      expect(screen.queryByText("main.ts")).toBeNull();
+    });
+    expect(searchFiles).not.toHaveBeenCalled();
+  });
+
   test("keeps focus when backspace is pressed on an empty composer", () => {
     resetSelectionMocks();
     const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
@@ -257,6 +343,30 @@ describe("AgentChatComposerEditor", () => {
     const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
 
     const editable = typeIntoEditor(rendered.container, "/");
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      const editables = Array.from(rendered.container.querySelectorAll('[contenteditable="true"]'));
+      expect(editables).toHaveLength(1);
+      const trailingEditable = editables[0];
+      expect(trailingEditable?.className).toContain("inline-block");
+      expect(trailingEditable?.className).toContain("min-w-[1px]");
+    });
+  });
+
+  test("renders empty trailing text segments as inline blocks for caret placement after file chips", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={async () => [buildFileSearchResult()]}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "@");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+    });
     fireEvent.keyDown(editable, { key: "Enter" });
 
     await waitFor(() => {

@@ -154,10 +154,12 @@ type AgentChatComposerModelArgs = {
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;
   supportsSlashCommands: boolean;
+  supportsFileSearch: boolean;
   slashCommandCatalog: AgentChatModel["composer"]["slashCommandCatalog"];
   slashCommands: AgentChatModel["composer"]["slashCommands"];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  searchFiles: AgentChatModel["composer"]["searchFiles"];
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];
@@ -228,10 +230,12 @@ export const buildAgentChatComposerModel = (
   selectedModelSelection: args.selectedModelSelection,
   isSelectionCatalogLoading: args.isSelectionCatalogLoading,
   supportsSlashCommands: args.supportsSlashCommands,
+  supportsFileSearch: args.supportsFileSearch,
   slashCommandCatalog: args.slashCommandCatalog,
   slashCommands: args.slashCommands,
   slashCommandsError: args.slashCommandsError,
   isSlashCommandsLoading: args.isSlashCommandsLoading,
+  searchFiles: args.searchFiles,
   agentOptions: args.agentOptions,
   modelOptions: args.modelOptions,
   modelGroups: args.modelGroups,

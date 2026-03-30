@@ -254,10 +254,12 @@ type UseAgentStudioComposerModelArgs = {
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;
   supportsSlashCommands: boolean;
+  supportsFileSearch: boolean;
   slashCommandCatalog: AgentChatModel["composer"]["slashCommandCatalog"];
   slashCommands: AgentChatModel["composer"]["slashCommands"];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  searchFiles: AgentChatModel["composer"]["searchFiles"];
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];
@@ -291,10 +293,12 @@ export const useAgentStudioComposerModel = ({
   selectedModelSelection,
   isSelectionCatalogLoading,
   supportsSlashCommands,
+  supportsFileSearch,
   slashCommandCatalog,
   slashCommands,
   slashCommandsError,
   isSlashCommandsLoading,
+  searchFiles,
   agentOptions,
   modelOptions,
   modelGroups,
@@ -353,10 +357,12 @@ export const useAgentStudioComposerModel = ({
         selectedModelSelection,
         isSelectionCatalogLoading,
         supportsSlashCommands,
+        supportsFileSearch,
         slashCommandCatalog,
         slashCommands,
         slashCommandsError,
         isSlashCommandsLoading,
+        searchFiles,
         agentOptions,
         modelOptions,
         modelGroups,
@@ -407,8 +413,10 @@ export const useAgentStudioComposerModel = ({
       slashCommands,
       slashCommandsError,
       supportsSlashCommands,
+      supportsFileSearch,
       taskId,
       variantOptions,
+      searchFiles,
     ],
   );
 };
