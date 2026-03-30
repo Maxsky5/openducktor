@@ -485,7 +485,7 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.mount();
-    expect(harness.getLatest().busySendBlockedReason).toBeNull();
+    await harness.waitFor((state) => state.busySendBlockedReason === null);
     await harness.run(async (state) => {
       await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
     });
