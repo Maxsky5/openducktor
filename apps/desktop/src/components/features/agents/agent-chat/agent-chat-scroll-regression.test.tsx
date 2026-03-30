@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { act, type ReactElement, useRef, useState } from "react";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
@@ -37,6 +37,8 @@ const createRows = (count: number): AgentChatWindowRow[] =>
   }));
 
 const mockResizeObserverControllers = new Set<MockResizeObserverController>();
+const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
+let nextAnimationFrameId = 1;
 
 class MockResizeObserver implements ResizeObserver {
   private readonly observedElements = new Set<Element>();
@@ -78,6 +80,20 @@ const triggerResizeObservers = (): void => {
       })),
       controller.observer,
     );
+  }
+};
+
+const flushAnimationFrames = async (): Promise<void> => {
+  while (animationFrameCallbacks.size > 0) {
+    const queuedCallbacks = Array.from(animationFrameCallbacks.values());
+    animationFrameCallbacks.clear();
+
+    await act(async () => {
+      for (const callback of queuedCallbacks) {
+        callback(16);
+      }
+      await Promise.resolve();
+    });
   }
 };
 
@@ -132,12 +148,18 @@ describe("agent chat scroll regression", () => {
 
   beforeEach(() => {
     mockResizeObserverControllers.clear();
+    animationFrameCallbacks.clear();
+    nextAnimationFrameId = 1;
     globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
     globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      callback(16);
-      return 1;
+      const frameId = nextAnimationFrameId;
+      nextAnimationFrameId += 1;
+      animationFrameCallbacks.set(frameId, callback);
+      return frameId;
     }) as typeof requestAnimationFrame;
-    globalThis.cancelAnimationFrame = mock(() => undefined) as typeof cancelAnimationFrame;
+    globalThis.cancelAnimationFrame = ((frameId: number) => {
+      animationFrameCallbacks.delete(frameId);
+    }) as typeof cancelAnimationFrame;
   });
 
   afterEach(() => {
@@ -150,7 +172,7 @@ describe("agent chat scroll regression", () => {
     render(<ChatScrollRegressionHarness />);
 
     const container = screen.getByTestId("messages-container") as HTMLDivElement & {
-      scrollTo: ReturnType<typeof mock>;
+      scrollTo: (options: ScrollToOptions) => void;
       scrollTop: number;
       scrollHeight: number;
       clientHeight: number;
@@ -159,12 +181,6 @@ describe("agent chat scroll regression", () => {
       scrollHeight: number;
     };
     const textarea = screen.getByTestId("composer") as HTMLTextAreaElement;
-    const scrollTo = mock(() => undefined);
-
-    Object.defineProperty(container, "scrollTo", {
-      configurable: true,
-      value: scrollTo,
-    });
     Object.defineProperty(container, "scrollHeight", {
       configurable: true,
       writable: true,
@@ -206,8 +222,6 @@ describe("agent chat scroll regression", () => {
     });
     expect(screen.getByTestId("is-near-bottom").textContent).toBe("true");
 
-    scrollTo.mockClear();
-
     await act(async () => {
       fireEvent.click(screen.getByTestId("grow-composer"));
     });
@@ -218,15 +232,13 @@ describe("agent chat scroll regression", () => {
     expect(textarea.dataset.multiline).toBe("true");
 
     container.clientHeight = 220;
+    await flushAnimationFrames();
     await act(async () => {
-      fireEvent.scroll(container);
       triggerResizeObservers();
     });
+    await flushAnimationFrames();
 
-    expect(scrollTo).toHaveBeenCalledWith({
-      top: 1000,
-      behavior: "auto",
-    });
+    expect(container.scrollTop).toBe(1000);
     expect(screen.getByTestId("is-near-bottom").textContent).toBe("true");
   });
 });

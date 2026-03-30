@@ -24,6 +24,7 @@ export function useAgentChatRowMotion({
   const seenRowKeysBySessionRef = useRef<Record<string, Set<string>>>({});
   const animationByRowKeyRef = useRef<Map<string, Animation>>(new Map());
   const previousWindowStartBySessionRef = useRef<Record<string, number>>({});
+  const previousRowCountBySessionRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     return () => {
@@ -35,6 +36,7 @@ export function useAgentChatRowMotion({
       refCallbackByKeyRef.current.clear();
       seenRowKeysBySessionRef.current = {};
       previousWindowStartBySessionRef.current = {};
+      previousRowCountBySessionRef.current = {};
     };
   }, []);
 
@@ -103,13 +105,17 @@ export function useAgentChatRowMotion({
     if (!seenRowKeys) {
       seenRowKeysBySessionRef.current[activeSessionId] = new Set(rowKeys);
       previousWindowStartBySessionRef.current[activeSessionId] = windowStart;
+      previousRowCountBySessionRef.current[activeSessionId] = rowKeys.length;
       return;
     }
 
     const previousWindowStart =
       previousWindowStartBySessionRef.current[activeSessionId] ?? windowStart;
     const isPrependingHistory = windowStart < previousWindowStart;
+    const previousRowCount = previousRowCountBySessionRef.current[activeSessionId] ?? 0;
     previousWindowStartBySessionRef.current[activeSessionId] = windowStart;
+    previousRowCountBySessionRef.current[activeSessionId] = rowKeys.length;
+    const isInitialSessionPopulation = previousRowCount === 0;
 
     const activeRowKeySet = new Set(rowKeys);
     for (const rowKey of animationByRowKeyRef.current.keys()) {
@@ -132,7 +138,7 @@ export function useAgentChatRowMotion({
       }
 
       seenRowKeys.add(rowKey);
-      if (reduceMotion || isPrependingHistory) {
+      if (reduceMotion || isPrependingHistory || isInitialSessionPopulation) {
         continue;
       }
 

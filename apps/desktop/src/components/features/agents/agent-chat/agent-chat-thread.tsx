@@ -17,6 +17,7 @@ import {
 } from "./agent-session-todo-panel";
 import { ScrollToBottomButton } from "./scroll-to-bottom-button";
 import { ScrollToTopButton } from "./scroll-to-top-button";
+import { useAgentChatDeferredTranscript } from "./use-agent-chat-deferred-transcript";
 import { useAgentChatLoadingOverlay } from "./use-agent-chat-loading-overlay";
 import { useAgentChatRowMotion } from "./use-agent-chat-row-motion";
 import { useAgentChatWindow } from "./use-agent-chat-window";
@@ -80,8 +81,13 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     scrollToBottomOnSendRef,
     syncBottomAfterComposerLayoutRef,
   } = model;
-  const isTranscriptLoading = isSessionViewLoading || isSessionHistoryLoading;
-  const hideTranscriptWhileHydrating = isSessionHistoryLoading;
+  const activeSessionId = session?.sessionId ?? null;
+  const { isTranscriptRenderDeferred } = useAgentChatDeferredTranscript({
+    activeSessionId,
+  });
+  const isTranscriptLoading =
+    isSessionViewLoading || isSessionHistoryLoading || isTranscriptRenderDeferred;
+  const hideTranscriptWhileHydrating = isSessionHistoryLoading || isTranscriptRenderDeferred;
 
   const rows = useMemo(() => {
     if (!session || hideTranscriptWhileHydrating) {
@@ -91,15 +97,11 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     return buildAgentChatWindowRows(session, { showThinkingMessages });
   }, [hideTranscriptWhileHydrating, session, showThinkingMessages]);
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
-  const activeSessionId = session?.sessionId ?? null;
   const {
     windowedRows,
     windowStart,
-    windowEnd,
     isNearBottom,
     isNearTop,
-    topSentinelRef,
-    bottomSentinelRef,
     scrollToBottom,
     scrollToTop,
     scrollToBottomOnSend,
@@ -107,6 +109,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     rows,
     activeSessionId,
     isSessionViewLoading: isTranscriptLoading,
+    isSessionWorking,
     messagesContainerRef,
     messagesContentRef,
     syncBottomAfterComposerLayoutRef,
@@ -218,25 +221,17 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
           {session ? (
             rows.length > 0 ? (
               hideTranscriptWhileHydrating ? null : (
-                <>
-                  {windowStart > 0 ? <div ref={topSentinelRef} className="h-px" /> : null}
-
-                  {windowedRows.map((row) => (
-                    <AgentChatThreadMotionRow
-                      key={row.key}
-                      row={row}
-                      sessionRole={sessionRole}
-                      sessionSelectedModel={sessionSelectedModel}
-                      sessionAgentColors={sessionAgentColors}
-                      sessionWorkingDirectory={sessionWorkingDirectory}
-                      resolveRowRef={resolveRowRef}
-                    />
-                  ))}
-
-                  {windowEnd < rows.length - 1 ? (
-                    <div ref={bottomSentinelRef} className="h-px" />
-                  ) : null}
-                </>
+                windowedRows.map((row) => (
+                  <AgentChatThreadMotionRow
+                    key={row.key}
+                    row={row}
+                    sessionRole={sessionRole}
+                    sessionSelectedModel={sessionSelectedModel}
+                    sessionAgentColors={sessionAgentColors}
+                    sessionWorkingDirectory={sessionWorkingDirectory}
+                    resolveRowRef={resolveRowRef}
+                  />
+                ))
               )
             ) : session.messages.length === 0 && !hideTranscriptWhileHydrating ? (
               <div className="rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">

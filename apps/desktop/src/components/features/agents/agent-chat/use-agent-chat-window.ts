@@ -1,16 +1,14 @@
-import type { MutableRefObject, RefCallback, RefObject } from "react";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import type { MutableRefObject, RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
-import { clampWindowRange, createBottomAnchoredWindow } from "./agent-chat-window-shared";
-import { useAgentChatResizeSync } from "./use-agent-chat-resize-sync";
+import { useAgentChatHistoryWindow } from "./use-agent-chat-history-window";
 import { useAgentChatScrollController } from "./use-agent-chat-scroll-controller";
-import { useAgentChatSentinelObservers } from "./use-agent-chat-sentinel-observers";
-import { useAgentChatWindowRangeController } from "./use-agent-chat-window-range-controller";
 
 type UseAgentChatWindowInput = {
   rows: AgentChatWindowRow[];
   activeSessionId: string | null;
   isSessionViewLoading: boolean;
+  isSessionWorking?: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
   syncBottomAfterComposerLayoutRef?: MutableRefObject<(() => void) | null>;
@@ -19,12 +17,8 @@ type UseAgentChatWindowInput = {
 type UseAgentChatWindowResult = {
   windowedRows: AgentChatWindowRow[];
   windowStart: number;
-  windowEnd: number;
   isNearBottom: boolean;
   isNearTop: boolean;
-  isAutoFollowingToBottom: boolean;
-  topSentinelRef: RefCallback<HTMLDivElement>;
-  bottomSentinelRef: RefCallback<HTMLDivElement>;
   scrollToBottom: () => void;
   scrollToTop: () => void;
   scrollToBottomOnSend: () => void;
@@ -34,6 +28,7 @@ export function useAgentChatWindow({
   rows,
   activeSessionId,
   isSessionViewLoading,
+  isSessionWorking = false,
   messagesContainerRef,
   messagesContentRef,
   syncBottomAfterComposerLayoutRef,
@@ -41,38 +36,62 @@ export function useAgentChatWindow({
   const composerLayoutSyncFrameRef = useRef<number | null>(null);
   const composerLayoutSyncSettleFrameRef = useRef<number | null>(null);
   const composerLayoutSyncTokenRef = useRef(0);
-  const rowCount = rows.length;
-  const initialWindow = createBottomAnchoredWindow(rowCount);
+  const prevSessionIdRef = useRef<string | null>(null);
+  const prevIsSessionViewLoadingRef = useRef(isSessionViewLoading);
   const {
     isNearBottom,
     isNearTop,
-    isAutoFollowingToBottom,
-    isPinnedToBottomRef,
+    userScrolledRef,
     userScrollIntentVersionRef,
-    suppressSentinelsRef,
-    isUpdatingRef,
-    hasPendingScrollRequest,
-    captureScrollAnchor,
-    syncBottomIfPinned,
-    scrollToBottomOnSend,
-    requestWindowScroll,
-    applyPendingScrollRequest,
-    setBottomAnchoredState,
-    setTopAnchoredState,
+    forceScrollToBottom,
   } = useAgentChatScrollController({
     messagesContainerRef,
-    initialWindow,
-  });
-
-  useLayoutEffect(() => {
-    applyPendingScrollRequest();
-  });
-
-  useAgentChatResizeSync({
-    messagesContainerRef,
     messagesContentRef,
-    syncBottomIfPinned,
+    isSessionWorking,
   });
+  const {
+    latestTurnStart,
+    turnStart,
+    windowStart,
+    windowedRows,
+    resetToLatestTurns,
+    revealAllHistory,
+  } = useAgentChatHistoryWindow({
+    rows,
+    isSessionViewLoading,
+    messagesContainerRef,
+    userScrolledRef,
+  });
+  const pendingBottomResetRef = useRef(false);
+
+  const resetLatestTurnsAndPinBottom = useCallback(() => {
+    if (turnStart === latestTurnStart) {
+      forceScrollToBottom();
+      return;
+    }
+
+    pendingBottomResetRef.current = true;
+    resetToLatestTurns();
+  }, [forceScrollToBottom, latestTurnStart, resetToLatestTurns, turnStart]);
+
+  useEffect(() => {
+    if (prevSessionIdRef.current === activeSessionId) {
+      return;
+    }
+
+    prevSessionIdRef.current = activeSessionId;
+    resetLatestTurnsAndPinBottom();
+  }, [activeSessionId, resetLatestTurnsAndPinBottom]);
+
+  useEffect(() => {
+    const finishedLoading = prevIsSessionViewLoadingRef.current && !isSessionViewLoading;
+    prevIsSessionViewLoadingRef.current = isSessionViewLoading;
+    if (!finishedLoading) {
+      return;
+    }
+
+    resetLatestTurnsAndPinBottom();
+  }, [isSessionViewLoading, resetLatestTurnsAndPinBottom]);
 
   useEffect(() => {
     if (!syncBottomAfterComposerLayoutRef) {
@@ -95,7 +114,7 @@ export function useAgentChatWindow({
       cancelScheduledComposerLayoutSync();
       const requestAnimationFrameFn = globalThis.requestAnimationFrame;
       if (typeof requestAnimationFrameFn !== "function") {
-        syncBottomIfPinned({ forcePinned: true });
+        forceScrollToBottom();
         return;
       }
 
@@ -113,7 +132,8 @@ export function useAgentChatWindow({
           if (userScrollIntentVersionRef.current !== scheduledUserScrollIntentVersion) {
             return;
           }
-          syncBottomIfPinned({ forcePinned: true });
+
+          forceScrollToBottom();
         });
       });
     };
@@ -124,53 +144,39 @@ export function useAgentChatWindow({
         syncBottomAfterComposerLayoutRef.current = null;
       }
     };
-  }, [syncBottomAfterComposerLayoutRef, syncBottomIfPinned, userScrollIntentVersionRef]);
+  }, [forceScrollToBottom, syncBottomAfterComposerLayoutRef, userScrollIntentVersionRef]);
 
-  const { windowRange, scrollToBottom, scrollToTop, shiftWindowUp, shiftWindowDown } =
-    useAgentChatWindowRangeController({
-      rows,
-      rowCount,
-      activeSessionId,
-      isSessionViewLoading,
-      isPinnedToBottomRef,
-      suppressSentinelsRef,
-      isUpdatingRef,
-      hasPendingScrollRequest,
-      captureScrollAnchor,
-      requestWindowScroll,
-      setBottomAnchoredState,
-      setTopAnchoredState,
-    });
+  useLayoutEffect(() => {
+    if (!pendingBottomResetRef.current) {
+      return;
+    }
 
-  const { topSentinelRef, bottomSentinelRef } = useAgentChatSentinelObservers({
-    messagesContainerRef,
-    rowCount,
-    windowStart: windowRange.start,
-    windowEnd: windowRange.end,
-    suppressSentinelsRef,
-    shiftWindowUp,
-    shiftWindowDown,
+    pendingBottomResetRef.current = false;
+    forceScrollToBottom();
   });
-
-  const effectiveIsNearTop = isNearTop && windowRange.start === 0;
-
-  const effectiveWindow = clampWindowRange(windowRange, rowCount);
-  const hasVisibleRows = effectiveWindow.end >= effectiveWindow.start;
-  const windowedRows = hasVisibleRows
-    ? rows.slice(effectiveWindow.start, effectiveWindow.end + 1)
-    : [];
 
   return {
     windowedRows,
-    windowStart: effectiveWindow.start,
-    windowEnd: effectiveWindow.end,
+    windowStart,
     isNearBottom,
-    isNearTop: effectiveIsNearTop,
-    isAutoFollowingToBottom,
-    topSentinelRef,
-    bottomSentinelRef,
-    scrollToBottom,
-    scrollToTop,
-    scrollToBottomOnSend,
+    isNearTop: isNearTop && turnStart === 0,
+    scrollToBottom: () => {
+      resetLatestTurnsAndPinBottom();
+    },
+    scrollToTop: () => {
+      revealAllHistory();
+      const container = messagesContainerRef.current;
+      if (!container) {
+        return;
+      }
+
+      container.scrollTo({
+        top: 0,
+        behavior: "auto",
+      });
+    },
+    scrollToBottomOnSend: () => {
+      resetLatestTurnsAndPinBottom();
+    },
   };
 }

@@ -174,4 +174,34 @@ describe("useAgentChatRowMotion", () => {
       await flush();
     });
   });
+
+  test("does not animate the first populated render after a deferred empty session frame", async () => {
+    const rendered = render(
+      createElement(Harness, {
+        activeSessionId: "session-2",
+        rowKeys: [],
+        windowStart: 0,
+      }),
+    );
+    await act(flush);
+
+    await act(async () => {
+      rendered.rerender(
+        createElement(Harness, {
+          activeSessionId: "session-2",
+          rowKeys: ["row-a", "row-b"],
+          windowStart: 20,
+        }),
+      );
+      await flush();
+    });
+
+    expect(elementByKey.has("row-a")).toBe(false);
+    expect(elementByKey.has("row-b")).toBe(false);
+
+    await act(async () => {
+      rendered.unmount();
+      await flush();
+    });
+  });
 });

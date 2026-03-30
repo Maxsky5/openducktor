@@ -1,11 +1,9 @@
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 
-/** Maximum messages in the rendered sliding window. */
-export const CHAT_WINDOW_SIZE = 50;
-/** Extra messages rendered above/below the viewport for smooth scrolling. */
-export const CHAT_OVERSCAN = 10;
-/** Number of messages shifted when a sentinel is triggered. */
-export const CHAT_SHIFT_SIZE = 20;
+/** Initial number of user turns rendered from the bottom of the transcript. */
+export const CHAT_TURN_WINDOW_INIT = 10;
+/** Number of older user turns revealed per upward backfill step. */
+export const CHAT_TURN_WINDOW_BATCH = 8;
 
 export type AgentChatWindowRow =
   | {
@@ -60,6 +58,39 @@ export function buildAgentChatWindowRows(
   }
 
   return rows;
+}
+
+export type AgentChatWindowTurn = {
+  key: string;
+  start: number;
+  end: number;
+};
+
+export function buildAgentChatWindowTurns(rows: AgentChatWindowRow[]): AgentChatWindowTurn[] {
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const turnStartIndices: number[] = [0];
+
+  for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex];
+    if (row?.kind !== "message" || row.message.role !== "user") {
+      continue;
+    }
+
+    turnStartIndices.push(rowIndex);
+  }
+
+  return turnStartIndices.map((start, index) => ({
+    key: rows[start]?.key ?? `turn-${index}`,
+    start,
+    end: (turnStartIndices[index + 1] ?? rows.length) - 1,
+  }));
+}
+
+export function getAgentChatInitialTurnStart(turnCount: number): number {
+  return turnCount > CHAT_TURN_WINDOW_INIT ? turnCount - CHAT_TURN_WINDOW_INIT : 0;
 }
 
 export function getAgentChatWindowRowsKey(
