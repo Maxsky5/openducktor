@@ -1,4 +1,7 @@
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
+  type AgentFileReference,
   normalizeAgentUserMessageParts,
   type SendAgentUserMessageInput,
   serializeAgentUserMessagePartsToText,
@@ -26,6 +29,18 @@ type PreparedUserSend = {
   }) => Promise<{ assistantMessageId: string | null }>;
 };
 
+type OpenCodePromptPart =
+  | {
+      type: "text";
+      text: string;
+    }
+  | {
+      type: "file";
+      mime: string;
+      url: string;
+      filename: string;
+    };
+
 const toCommandModelInput = (
   modelInput: ReturnType<typeof normalizeModelInput>,
 ): string | undefined => {
@@ -33,6 +48,58 @@ const toCommandModelInput = (
     return undefined;
   }
   return `${modelInput.model.providerID}/${modelInput.model.modelID}`;
+};
+
+const toFileReferenceMime = (file: AgentFileReference): string => {
+  switch (file.kind) {
+    case "directory":
+      return "inode/directory";
+    case "css":
+      return "text/css";
+    case "ts":
+      return "text/typescript";
+    default:
+      return "text/plain";
+  }
+};
+
+const toPromptFilePart = (
+  file: AgentFileReference,
+  workingDirectory: string,
+): Extract<OpenCodePromptPart, { type: "file" }> => {
+  const normalizedPath = file.path.trim();
+  if (normalizedPath.length === 0) {
+    throw new Error("OpenCode file references require a non-empty path.");
+  }
+
+  return {
+    type: "file",
+    mime: toFileReferenceMime(file),
+    url: pathToFileURL(resolve(workingDirectory, normalizedPath)).href,
+    filename: file.name,
+  };
+};
+
+const toPromptParts = (
+  parts: SendAgentUserMessageInput["parts"],
+  workingDirectory: string,
+): OpenCodePromptPart[] => {
+  const promptParts: OpenCodePromptPart[] = [];
+
+  for (const part of normalizeAgentUserMessageParts(parts)) {
+    if (part.kind === "text") {
+      if (part.text.length === 0) {
+        continue;
+      }
+      promptParts.push({ type: "text", text: part.text });
+      continue;
+    }
+    if (part.kind === "file_reference") {
+      promptParts.push(toPromptFilePart(part.file, workingDirectory));
+    }
+  }
+
+  return promptParts;
 };
 
 const toSlashCommandExecutionRequest = (
@@ -44,6 +111,12 @@ const toSlashCommandExecutionRequest = (
   );
   if (slashCommandIndexes.length === 0) {
     return null;
+  }
+  if (normalizedParts.some((part) => part.kind === "file_reference")) {
+    throw toOpenCodeRequestError(
+      "run slash command",
+      new Error("OpenCode slash commands do not support structured file references."),
+    );
   }
   if (slashCommandIndexes.length > 1) {
     throw new Error("OpenCode supports only one slash command token per message.");
@@ -79,6 +152,7 @@ const preparePromptSend = (request: SendAgentUserMessageInput): PreparedUserSend
   return {
     queuedContent,
     execute: async ({ session, modelInput, tools }) => {
+      const promptParts = toPromptParts(request.parts, session.input.workingDirectory);
       const promptRequest = {
         sessionID: session.externalSessionId,
         directory: session.input.workingDirectory,
@@ -89,7 +163,7 @@ const preparePromptSend = (request: SendAgentUserMessageInput): PreparedUserSend
         ...(modelInput.variant ? { variant: modelInput.variant } : {}),
         ...(modelInput.agent ? { agent: modelInput.agent } : {}),
         tools,
-        parts: [{ type: "text" as const, text: queuedContent }],
+        parts: promptParts,
       };
 
       const response = await session.client.session.promptAsync(promptRequest);

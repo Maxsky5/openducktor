@@ -9,6 +9,13 @@ const COMMAND = {
   hints: ["compact"],
 };
 
+const FILE_REFERENCE = {
+  id: "file-src-main",
+  path: "src/main.ts",
+  name: "main.ts",
+  kind: "ts" as const,
+};
+
 const createSession = (overrides?: {
   commandResult?: { data?: unknown; error?: unknown; response?: unknown };
   promptAsyncResult?: { data?: unknown; error?: unknown; response?: unknown };
@@ -181,6 +188,60 @@ describe("message-execution", () => {
       parts: [{ type: "text", text: "plain follow-up" }],
     });
     expect(command).not.toHaveBeenCalled();
+  });
+
+  test("routes file references through native prompt file parts", async () => {
+    const { session, command, promptAsync } = createSession();
+
+    await sendUserMessage({
+      session,
+      request: {
+        sessionId: "session-1",
+        parts: [
+          { kind: "text", text: "check " },
+          { kind: "file_reference", file: FILE_REFERENCE },
+          { kind: "text", text: " please" },
+        ],
+      },
+      tools: {},
+    });
+
+    expect(promptAsync).toHaveBeenCalledWith({
+      sessionID: "session-opencode-1",
+      directory: "/repo",
+      tools: {},
+      parts: [
+        { type: "text", text: "check " },
+        {
+          type: "file",
+          mime: "text/typescript",
+          url: "file:///repo/src/main.ts",
+          filename: "main.ts",
+        },
+        { type: "text", text: " please" },
+      ],
+    });
+    expect(command).not.toHaveBeenCalled();
+  });
+
+  test("fails explicitly when a slash command message also contains a file reference", async () => {
+    const { session } = createSession();
+
+    await expect(
+      sendUserMessage({
+        session,
+        request: {
+          sessionId: "session-1",
+          parts: [
+            { kind: "slash_command", command: COMMAND },
+            { kind: "file_reference", file: FILE_REFERENCE },
+          ],
+        },
+        tools: {},
+      }),
+    ).rejects.toThrow(
+      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured file references.",
+    );
   });
 
   test("preserves slash-command error context without wrapping it as a prompt failure", async () => {
