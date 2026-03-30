@@ -20,10 +20,6 @@ import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions
 
 enableReactActEnvironment();
 
-beforeEach(async () => {
-  await clearAppQueryClient();
-});
-
 type HookArgs = Parameters<typeof useAgentStudioSessionActions>[0];
 
 const createTask = (overrides = {}) => createTaskCardFixture(overrides);
@@ -201,7 +197,8 @@ describe("useAgentStudioSessionActions", () => {
   const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
   const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await clearAppQueryClient();
     host.workspaceGetRepoConfig = async () =>
       ({
         promptOverrides: {},

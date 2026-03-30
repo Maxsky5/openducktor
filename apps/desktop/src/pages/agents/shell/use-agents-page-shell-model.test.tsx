@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createElement, type ReactElement } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
+import * as appStateContexts from "@/state/app-state-contexts";
 import type { TasksStateContextValue } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
@@ -108,11 +109,6 @@ type AgentsPageShellModelState = {
 let workspaceState = {
   activeRepo: "/repo",
   activeBranch: "main",
-};
-let runtimeDefinitionsContext = {
-  runtimeDefinitions: [],
-  isLoadingRuntimeDefinitions: false,
-  runtimeDefinitionsError: null,
 };
 let checksState = {
   runtimeHealthByRuntime: {},
@@ -262,11 +258,11 @@ const registerModuleMocks = (): void => {
   }));
 
   mock.module("@/state/app-state-contexts", () => ({
-    useDelegationEventsContext: () => ({ runCompletionSignal: null }),
-    useRuntimeDefinitionsContext: () => runtimeDefinitionsContext,
-    useChecksOperationsContext: () => ({
-      refreshRepoRuntimeHealthForRepo: mock(async () => undefined),
-      hasCachedRepoRuntimeHealth: mock(() => false),
+    ...appStateContexts,
+    useDelegationEventsContext: () => ({
+      setEvents: mock(() => {}),
+      runCompletionSignal: null,
+      setRunCompletionSignal: mock(() => {}),
     }),
   }));
 
@@ -333,11 +329,6 @@ beforeEach(async () => {
   workspaceState = {
     activeRepo: "/repo",
     activeBranch: "main",
-  };
-  runtimeDefinitionsContext = {
-    runtimeDefinitions: [],
-    isLoadingRuntimeDefinitions: false,
-    runtimeDefinitionsError: null,
   };
   checksState = {
     runtimeHealthByRuntime: {},

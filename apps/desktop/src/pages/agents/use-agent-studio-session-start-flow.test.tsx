@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
-import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
@@ -17,10 +16,6 @@ import { kickoffPromptForScenario } from "./agents-page-constants";
 import { useAgentStudioSessionStartFlow as useSessionStartFlow } from "./use-agent-studio-session-start-flow";
 
 enableReactActEnvironment();
-
-beforeEach(async () => {
-  await clearAppQueryClient();
-});
 
 type HookArgs = Parameters<typeof useSessionStartFlow>[0];
 

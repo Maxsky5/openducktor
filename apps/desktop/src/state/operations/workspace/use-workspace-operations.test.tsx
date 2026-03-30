@@ -5,7 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 import { render, waitFor } from "@testing-library/react";
 import { act, createElement, type PropsWithChildren, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { settingsSnapshotQueryOptions } from "../../queries/workspace";
@@ -175,7 +174,6 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<
 
 beforeEach(async () => {
   workspaceHost = createWorkspaceHostClient();
-  await clearAppQueryClient();
 });
 
 afterAll(() => {

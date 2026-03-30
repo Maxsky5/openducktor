@@ -107,14 +107,6 @@ describe("useSettingsModalController", () => {
       },
     }));
 
-    mock.module("@/state/app-state-contexts", () => ({
-      useRuntimeDefinitionsContext: () => ({
-        runtimeDefinitions: [],
-        isLoadingRuntimeDefinitions: false,
-        runtimeDefinitionsError: null,
-      }),
-    }));
-
     mock.module("./use-settings-modal-branches-state", () => ({
       useSettingsModalBranchesState: () => ({
         selectedRepoBranches: [],
