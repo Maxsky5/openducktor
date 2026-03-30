@@ -25,6 +25,22 @@ type UseAgentStudioTaskHydrationResult = {
   isWaitingForRuntimeReadiness: boolean;
 };
 
+const toRecoverySelectionKey = ({
+  activeRepo,
+  activeTaskId,
+  activeSessionId,
+}: {
+  activeRepo: string | null;
+  activeTaskId: string;
+  activeSessionId: string | null;
+}): string | null => {
+  if (!activeRepo || !activeTaskId || !activeSessionId) {
+    return null;
+  }
+
+  return `${activeRepo}::${activeTaskId}::${activeSessionId}`;
+};
+
 export function useAgentStudioTaskHydration({
   activeRepo,
   activeTaskId,
@@ -37,66 +53,80 @@ export function useAgentStudioTaskHydration({
     sessionId: string | null;
     status: "idle" | "pending" | "failed";
   }>({ sessionId: null, status: "idle" });
-  const [waitingSessionId, setWaitingSessionId] = useState<string | null>(null);
-  const [postReadyFailureSessionId, setPostReadyFailureSessionId] = useState<string | null>(null);
+  const [waitingRecoveryKey, setWaitingRecoveryKey] = useState<string | null>(null);
+  const [postReadyFailureRecoveryKey, setPostReadyFailureRecoveryKey] = useState<string | null>(
+    null,
+  );
   const historyHydrationState = getAgentSessionHistoryHydrationState(activeSession);
   const sessionNeedsHydration = requiresHydratedAgentSessionHistory(activeSession);
   const isReadinessReady = agentStudioReadinessState === "ready";
+  const activeRecoveryKey = toRecoverySelectionKey({
+    activeRepo,
+    activeTaskId,
+    activeSessionId,
+  });
   const blockedFromAutomaticRecovery =
-    Boolean(activeSessionId) && postReadyFailureSessionId === activeSessionId;
+    Boolean(activeRecoveryKey) && postReadyFailureRecoveryKey === activeRecoveryKey;
   const isWaitingForReadiness =
-    Boolean(activeRepo && activeTaskId && activeSessionId) &&
+    Boolean(activeRecoveryKey) &&
     !isReadinessReady &&
     sessionNeedsHydration &&
     !blockedFromAutomaticRecovery;
   const isRecoveringWaitingSession =
-    Boolean(activeSessionId && activeRepo && activeTaskId) &&
+    Boolean(activeRecoveryKey) &&
     isReadinessReady &&
-    waitingSessionId === activeSessionId &&
+    waitingRecoveryKey === activeRecoveryKey &&
     sessionNeedsHydration;
   const shouldHydrateSessionHistory =
-    Boolean(activeRepo && activeTaskId && activeSessionId) &&
+    Boolean(activeRecoveryKey) &&
     isReadinessReady &&
     sessionNeedsHydration &&
     !blockedFromAutomaticRecovery &&
-    (historyHydrationState === "not_requested" || waitingSessionId === activeSessionId);
+    (historyHydrationState === "not_requested" || waitingRecoveryKey === activeRecoveryKey);
 
   useEffect(() => {
-    if (!activeSessionId || !sessionNeedsHydration) {
-      setWaitingSessionId((current) => (current === null ? current : null));
-      setPostReadyFailureSessionId((current) => (current === null ? current : null));
+    if (!activeRepo) {
+      setWaitingRecoveryKey(null);
+      setPostReadyFailureRecoveryKey(null);
       return;
     }
 
-    if (historyHydrationState === "hydrated") {
-      setPostReadyFailureSessionId((current) => (current === activeSessionId ? null : current));
+    if (!activeRecoveryKey) {
+      return;
+    }
+
+    if (!sessionNeedsHydration) {
+      setWaitingRecoveryKey((current) => (current === activeRecoveryKey ? null : current));
+      setPostReadyFailureRecoveryKey((current) => (current === activeRecoveryKey ? null : current));
+      return;
     }
 
     if (!isReadinessReady) {
-      setWaitingSessionId((current) => {
+      setWaitingRecoveryKey((current) => {
         if (blockedFromAutomaticRecovery) {
-          return current === activeSessionId ? null : current;
+          return current === activeRecoveryKey ? null : current;
         }
 
         if (historyHydrationState !== "failed") {
           return current;
         }
 
-        return activeSessionId;
+        return activeRecoveryKey;
       });
       return;
     }
 
-    if (waitingSessionId === activeSessionId && historyHydrationState === "hydrated") {
-      setWaitingSessionId(null);
+    if (waitingRecoveryKey === activeRecoveryKey && historyHydrationState === "hydrated") {
+      setWaitingRecoveryKey(null);
     }
   }, [
-    activeSessionId,
+    activeRecoveryKey,
+    activeRepo,
     blockedFromAutomaticRecovery,
     historyHydrationState,
     isReadinessReady,
     sessionNeedsHydration,
-    waitingSessionId,
+    waitingRecoveryKey,
   ]);
 
   useEffect(() => {
@@ -125,8 +155,10 @@ export function useAgentStudioTaskHydration({
             ? { sessionId: activeSessionId, status: "idle" }
             : current,
         );
-        setWaitingSessionId((current) => (current === activeSessionId ? null : current));
-        setPostReadyFailureSessionId((current) => (current === activeSessionId ? null : current));
+        setWaitingRecoveryKey((current) => (current === activeRecoveryKey ? null : current));
+        setPostReadyFailureRecoveryKey((current) =>
+          current === activeRecoveryKey ? null : current,
+        );
       })
       .catch(() => {
         setRequestState((current) =>
@@ -134,17 +166,18 @@ export function useAgentStudioTaskHydration({
             ? { sessionId: activeSessionId, status: "failed" }
             : current,
         );
-        if (waitingSessionId !== activeSessionId) {
-          setPostReadyFailureSessionId(activeSessionId);
+        if (waitingRecoveryKey !== activeRecoveryKey) {
+          setPostReadyFailureRecoveryKey(activeRecoveryKey);
         }
-        setWaitingSessionId((current) => (current === activeSessionId ? null : current));
+        setWaitingRecoveryKey((current) => (current === activeRecoveryKey ? null : current));
       });
   }, [
+    activeRecoveryKey,
     activeSessionId,
     activeTaskId,
     hydrateRequestedTaskSessionHistory,
     shouldHydrateSessionHistory,
-    waitingSessionId,
+    waitingRecoveryKey,
   ]);
 
   const isRequestPending =

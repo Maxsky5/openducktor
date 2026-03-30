@@ -324,6 +324,72 @@ describe("useAgentStudioTaskHydration", () => {
     }
   });
 
+  test("recovers a waiting failed session after navigating away and back once readiness is healthy", async () => {
+    const hydrateRequestedTaskSessionHistory = mock(async (): Promise<void> => {});
+    const failedSession = createSession({
+      sessionId: "session-1",
+      externalSessionId: "external-1",
+      taskId: "task-1",
+      historyHydrationState: "failed",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeTaskId: "task-1",
+        activeSession: failedSession,
+        agentStudioReadinessState: "checking",
+        hydrateRequestedTaskSessionHistory,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(hydrateRequestedTaskSessionHistory).not.toHaveBeenCalled();
+      expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(true);
+
+      await harness.update(
+        createBaseArgs({
+          activeTaskId: "task-2",
+          activeSession: null,
+          agentStudioReadinessState: "checking",
+          hydrateRequestedTaskSessionHistory,
+        }),
+      );
+
+      expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(false);
+      expect(hydrateRequestedTaskSessionHistory).not.toHaveBeenCalled();
+
+      await harness.update(
+        createBaseArgs({
+          activeTaskId: "task-2",
+          activeSession: null,
+          agentStudioReadinessState: "ready",
+          hydrateRequestedTaskSessionHistory,
+        }),
+      );
+
+      expect(hydrateRequestedTaskSessionHistory).not.toHaveBeenCalled();
+
+      await harness.update(
+        createBaseArgs({
+          activeTaskId: "task-1",
+          activeSession: failedSession,
+          agentStudioReadinessState: "ready",
+          hydrateRequestedTaskSessionHistory,
+        }),
+      );
+      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 1);
+
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledTimes(1);
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledWith({
+        taskId: "task-1",
+        sessionId: "session-1",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("skips requested history hydration for a live session that already has local messages", async () => {
     const hydrateRequestedTaskSessionHistory = mock(async (): Promise<void> => {});
     const harness = createHookHarness(
