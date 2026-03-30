@@ -3,16 +3,28 @@ import { act } from "react";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { useAgentChatDeferredTranscript } from "./use-agent-chat-deferred-transcript";
 
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
-
 const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
 const timeoutCallbacks = new Map<number, () => void>();
 let nextAnimationFrameId = 1;
 let nextTimeoutId = 1;
+const previousActEnvironment = (
+  globalThis as typeof globalThis & {
+    IS_REACT_ACT_ENVIRONMENT?: boolean;
+  }
+).IS_REACT_ACT_ENVIRONMENT;
+
+const setActEnvironment = (value: boolean | undefined): void => {
+  const target = globalThis as typeof globalThis & {
+    IS_REACT_ACT_ENVIRONMENT?: boolean;
+  };
+
+  if (typeof value === "undefined") {
+    delete target.IS_REACT_ACT_ENVIRONMENT;
+    return;
+  }
+
+  target.IS_REACT_ACT_ENVIRONMENT = value;
+};
 
 const flush = async (): Promise<void> => {
   await Promise.resolve();
@@ -54,6 +66,8 @@ describe("useAgentChatDeferredTranscript", () => {
   const originalClearTimeout = globalThis.clearTimeout;
 
   beforeEach(() => {
+    setActEnvironment(true);
+
     animationFrameCallbacks.clear();
     timeoutCallbacks.clear();
     nextAnimationFrameId = 1;
@@ -87,6 +101,8 @@ describe("useAgentChatDeferredTranscript", () => {
   });
 
   afterEach(() => {
+    setActEnvironment(previousActEnvironment);
+
     globalThis.requestAnimationFrame = originalRequestAnimationFrame;
     globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
     globalThis.setTimeout = originalSetTimeout;
