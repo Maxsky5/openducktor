@@ -20,6 +20,7 @@ export type AgentStudioOrchestrationSelectionContext = AgentStudioSelectionContr
 };
 
 export type AgentStudioOrchestrationReadinessContext = {
+  agentStudioReadinessState: "ready" | "checking" | "blocked";
   agentStudioReady: boolean;
   agentStudioBlockedReason: string | null;
   isLoadingChecks: boolean;

@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
+  createDeferred,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
@@ -17,6 +18,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeRepo: "/repo-a",
   activeTaskId: "task-1",
   activeSession: null,
+  agentStudioReadinessState: "ready",
   hydrateRequestedTaskSessionHistory: async () => {},
   ...overrides,
 });
@@ -129,6 +131,89 @@ describe("useAgentStudioTaskHydration", () => {
       expect(harness.getLatest().isActiveTaskHydrationFailed).toBe(false);
       expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(false);
       expect(harness.getLatest().isActiveSessionHistoryHydrated).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("waits for readiness before hydrating and retries the same waiting session once ready", async () => {
+    const hydrationRequest = createDeferred<void>();
+    const hydrateRequestedTaskSessionHistory = mock(() => hydrationRequest.promise);
+    const waitingSession = createSession({ historyHydrationState: "failed" });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeSession: waitingSession,
+        agentStudioReadinessState: "checking",
+        hydrateRequestedTaskSessionHistory,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(hydrateRequestedTaskSessionHistory).not.toHaveBeenCalled();
+      expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(true);
+      expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(false);
+
+      await harness.update(
+        createBaseArgs({
+          activeSession: waitingSession,
+          agentStudioReadinessState: "ready",
+          hydrateRequestedTaskSessionHistory,
+        }),
+      );
+      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 1);
+
+      expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(true);
+      expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(false);
+
+      await harness.update(
+        createBaseArgs({
+          activeSession: createSession({ historyHydrationState: "hydrated" }),
+          agentStudioReadinessState: "ready",
+          hydrateRequestedTaskSessionHistory,
+        }),
+      );
+      hydrationRequest.resolve();
+
+      expect(harness.getLatest().isActiveSessionHistoryHydrated).toBe(true);
+      expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(false);
+    } finally {
+      hydrationRequest.resolve();
+      await harness.unmount();
+    }
+  });
+
+  test("surfaces a real failure if readiness-triggered recovery also fails", async () => {
+    const hydrateRequestedTaskSessionHistory = mock(async () => {
+      throw new Error("recovery failed");
+    });
+    const waitingSession = createSession({ historyHydrationState: "failed" });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeSession: waitingSession,
+        agentStudioReadinessState: "checking",
+        hydrateRequestedTaskSessionHistory,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(hydrateRequestedTaskSessionHistory).not.toHaveBeenCalled();
+      expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(false);
+
+      await harness.update(
+        createBaseArgs({
+          activeSession: waitingSession,
+          agentStudioReadinessState: "ready",
+          hydrateRequestedTaskSessionHistory,
+        }),
+      );
+      await harness.waitFor((state) => state.isActiveSessionHistoryHydrationFailed);
+
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(false);
     } finally {
       await harness.unmount();
     }

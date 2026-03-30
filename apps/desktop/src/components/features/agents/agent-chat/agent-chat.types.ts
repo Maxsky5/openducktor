@@ -22,6 +22,7 @@ export type AgentChatThreadModel = {
   isSessionViewLoading: boolean;
   isSessionHistoryLoading: boolean;
   roleOptions: AgentRoleOption[];
+  readinessState: "ready" | "checking" | "blocked";
   agentStudioReady: boolean;
   blockedReason: string | null;
   isLoadingChecks: boolean;

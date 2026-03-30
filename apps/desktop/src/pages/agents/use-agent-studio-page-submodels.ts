@@ -97,6 +97,7 @@ type UseAgentStudioThreadModelArgs = {
   isSessionHistoryLoading: boolean;
   taskId: string;
   activeSessionAgentColors: Record<string, string>;
+  agentStudioReadinessState: "ready" | "checking" | "blocked";
   agentStudioReady: boolean;
   agentStudioBlockedReason: string | null;
   isLoadingChecks: boolean;
@@ -127,6 +128,7 @@ export const useAgentStudioThreadModel = ({
   isSessionHistoryLoading,
   taskId,
   activeSessionAgentColors,
+  agentStudioReadinessState,
   agentStudioReady,
   agentStudioBlockedReason,
   isLoadingChecks,
@@ -172,6 +174,7 @@ export const useAgentStudioThreadModel = ({
         isSessionViewLoading: isContextSwitching,
         isSessionHistoryLoading,
         roleOptions: ROLE_OPTIONS,
+        agentStudioReadinessState,
         agentStudioReady,
         agentStudioBlockedReason,
         isLoadingChecks,
@@ -196,6 +199,7 @@ export const useAgentStudioThreadModel = ({
       }),
     [
       activeSessionAgentColors,
+      agentStudioReadinessState,
       agentStudioBlockedReason,
       agentStudioReady,
       canKickoffNewSession,

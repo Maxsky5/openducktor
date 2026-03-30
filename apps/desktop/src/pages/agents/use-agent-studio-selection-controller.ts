@@ -19,6 +19,7 @@ import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 type UseAgentStudioSelectionControllerArgs = {
   activeRepo: string | null;
+  agentStudioReadinessState: "ready" | "checking" | "blocked";
   tasks: TaskCard[];
   isLoadingTasks: boolean;
   sessions: AgentSessionState[];
@@ -144,6 +145,7 @@ export const buildSessionsByTaskIdWithCache = (
 
 export function useAgentStudioSelectionController({
   activeRepo,
+  agentStudioReadinessState,
   tasks,
   isLoadingTasks,
   sessions,
@@ -220,6 +222,7 @@ export function useAgentStudioSelectionController({
   ]);
   const hydratedActiveSession = useAgentStudioActiveSessionRuntimeData({
     session: activeSession,
+    agentStudioReadinessState,
     readSessionModelCatalog,
     readSessionTodos,
   });
@@ -318,6 +321,7 @@ export function useAgentStudioSelectionController({
   const viewActiveSession = viewSelection.activeSession;
   const hydratedViewActiveSession = useAgentStudioActiveSessionRuntimeData({
     session: viewActiveSession,
+    agentStudioReadinessState,
     readSessionModelCatalog,
     readSessionTodos,
   });
@@ -334,6 +338,7 @@ export function useAgentStudioSelectionController({
     activeRepo,
     activeTaskId: viewTaskId,
     activeSession: hydratedViewActiveSession,
+    agentStudioReadinessState,
     hydrateRequestedTaskSessionHistory,
   });
 

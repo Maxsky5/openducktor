@@ -107,6 +107,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       ...overrides.documents,
     },
     readiness: {
+      agentStudioReadinessState: "ready",
       agentStudioReady: true,
       agentStudioBlockedReason: "",
       isLoadingChecks: false,
@@ -208,6 +209,7 @@ describe("useAgentStudioPageModels", () => {
       totalTokens: 12,
       contextWindow: 100,
     });
+    expect(state.agentChatModel.thread.readinessState).toBe("ready");
     expect(state.agentChatModel.thread.isSessionWorking).toBe(true);
     expect(state.agentChatModel.thread.showThinkingMessages).toBe(false);
 

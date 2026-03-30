@@ -71,6 +71,7 @@ type AgentStudioSessionActionsContext = {
 };
 
 type AgentStudioReadinessContext = {
+  agentStudioReadinessState: "ready" | "checking" | "blocked";
   agentStudioReady: boolean;
   agentStudioBlockedReason: string | null;
   isLoadingChecks: boolean;
@@ -279,6 +280,7 @@ export function useAgentStudioPageModels({
     isSessionHistoryLoading: core.isSessionHistoryHydrating,
     taskId: core.taskId,
     activeSessionAgentColors: modelSelection.activeSessionAgentColors,
+    agentStudioReadinessState: readiness.agentStudioReadinessState,
     agentStudioReady: readiness.agentStudioReady,
     agentStudioBlockedReason: readiness.agentStudioBlockedReason,
     isLoadingChecks: readiness.isLoadingChecks,

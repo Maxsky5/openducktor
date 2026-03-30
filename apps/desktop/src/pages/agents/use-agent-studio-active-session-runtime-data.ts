@@ -15,6 +15,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 type UseAgentStudioActiveSessionRuntimeDataArgs = {
   session: AgentSessionState | null;
+  agentStudioReadinessState: "ready" | "checking" | "blocked";
   readSessionModelCatalog: (
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
     runtimeConnection: AgentRuntimeConnection,
@@ -44,11 +45,15 @@ const toRuntimeQueryInput = (session: AgentSessionState | null) => {
 
 export const useAgentStudioActiveSessionRuntimeData = ({
   session,
+  agentStudioReadinessState,
   readSessionModelCatalog,
   readSessionTodos,
 }: UseAgentStudioActiveSessionRuntimeDataArgs): AgentSessionState | null => {
   const runtimeQueryInput = toRuntimeQueryInput(session);
-  const shouldHydrateRuntimeData = runtimeQueryInput !== null && session?.status !== "starting";
+  const shouldHydrateRuntimeData =
+    agentStudioReadinessState === "ready" &&
+    runtimeQueryInput !== null &&
+    session?.status !== "starting";
   const catalogQuery = useQuery({
     queryKey:
       shouldHydrateRuntimeData && runtimeQueryInput

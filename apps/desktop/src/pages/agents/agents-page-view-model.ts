@@ -111,6 +111,7 @@ type AgentChatThreadModelArgs = {
   isSessionViewLoading: boolean;
   isSessionHistoryLoading: boolean;
   roleOptions: AgentRoleOption[];
+  agentStudioReadinessState: "ready" | "checking" | "blocked";
   agentStudioReady: boolean;
   agentStudioBlockedReason: string | null;
   isLoadingChecks: boolean;
@@ -181,6 +182,7 @@ export const buildAgentChatThreadModel = (
   isSessionViewLoading: args.isSessionViewLoading,
   isSessionHistoryLoading: args.isSessionHistoryLoading,
   roleOptions: args.roleOptions,
+  readinessState: args.agentStudioReadinessState,
   agentStudioReady: args.agentStudioReady,
   blockedReason: args.agentStudioBlockedReason,
   isLoadingChecks: args.isLoadingChecks,
