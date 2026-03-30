@@ -1,4 +1,3 @@
-import { basename, isAbsolute, relative } from "node:path";
 import { slashCommandCatalogSchema } from "@openducktor/contracts";
 import type {
   AgentDescriptor,
@@ -8,6 +7,7 @@ import type {
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { asUnknownRecord, readStringArrayProp, readStringProp } from "./guards";
+import { basename, isAbsolutePath, toProjectRelativePath } from "./path-utils";
 import { mapProviderListToCatalog, toToolIdList } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
 import type { ClientFactory, McpServerStatus } from "./types";
@@ -62,12 +62,8 @@ const normalizeFileSearchPath = (rawPath: string, workingDirectory: string): str
 
   const withoutTrailingSlash = trimmedPath.replace(/[\\/]+$/, "");
   const normalizedPath = withoutTrailingSlash.length > 0 ? withoutTrailingSlash : trimmedPath;
-  if (isAbsolute(normalizedPath)) {
-    const relativePath = relative(workingDirectory, normalizedPath);
-    if (relativePath.length === 0 || relativePath.startsWith("..")) {
-      return normalizedPath;
-    }
-    return relativePath;
+  if (isAbsolutePath(normalizedPath)) {
+    return toProjectRelativePath(normalizedPath, workingDirectory);
   }
 
   return normalizedPath;
@@ -75,9 +71,9 @@ const normalizeFileSearchPath = (rawPath: string, workingDirectory: string): str
 
 const detectFileSearchResultKind = (
   path: string,
-  sourceType: "file" | "directory",
+  rawPath: string,
 ): AgentFileSearchResult["kind"] => {
-  if (sourceType === "directory") {
+  if (/[\\/]\s*$/.test(rawPath)) {
     return "directory";
   }
 
@@ -91,24 +87,19 @@ const detectFileSearchResultKind = (
   return "default";
 };
 
-const toFileSearchResult = (
-  rawPath: string,
-  sourceType: "file" | "directory",
-  workingDirectory: string,
-): AgentFileSearchResult => {
+const toFileSearchResult = (rawPath: string, workingDirectory: string): AgentFileSearchResult => {
   const path = normalizeFileSearchPath(rawPath, workingDirectory);
   const name = basename(path);
   return {
     id: path,
     path,
     name: name.length > 0 ? name : path,
-    kind: detectFileSearchResultKind(path, sourceType),
+    kind: detectFileSearchResultKind(path, rawPath),
   };
 };
 
 const toFileSearchResults = (
   payload: unknown,
-  sourceType: "file" | "directory",
   workingDirectory: string,
 ): AgentFileSearchResult[] => {
   if (!Array.isArray(payload)) {
@@ -119,7 +110,7 @@ const toFileSearchResults = (
     if (typeof entry !== "string") {
       throw new Error("Invalid file search payload: expected an array of file paths.");
     }
-    return toFileSearchResult(entry, sourceType, workingDirectory);
+    return toFileSearchResult(entry, workingDirectory);
   });
 };
 
@@ -279,42 +270,13 @@ export const searchFiles = async (
       throw new Error("OpenCode runtime does not expose the file search API.");
     }
 
-    const [directoryPayload, filePayload] = await Promise.all([
-      findClient.files({
-        directory: input.workingDirectory,
-        query: input.query,
-        dirs: "true",
-        type: "directory",
-        limit: FILE_SEARCH_LIMIT,
-      }),
-      findClient.files({
-        directory: input.workingDirectory,
-        query: input.query,
-        dirs: "false",
-        type: "file",
-        limit: FILE_SEARCH_LIMIT,
-      }),
-    ]);
+    const payload = await findClient.files({
+      directory: input.workingDirectory,
+      query: input.query,
+      limit: FILE_SEARCH_LIMIT,
+    });
 
-    const mergedResults = new Map<string, AgentFileSearchResult>();
-    for (const result of toFileSearchResults(
-      unwrapData(directoryPayload, "search files"),
-      "directory",
-      input.workingDirectory,
-    )) {
-      mergedResults.set(result.id, result);
-    }
-    for (const result of toFileSearchResults(
-      unwrapData(filePayload, "search files"),
-      "file",
-      input.workingDirectory,
-    )) {
-      mergedResults.set(result.id, result);
-    }
-
-    return Array.from(mergedResults.values()).sort((left, right) =>
-      left.path.localeCompare(right.path),
-    );
+    return toFileSearchResults(unwrapData(payload, "search files"), input.workingDirectory);
   } catch (error) {
     throw toOpenCodeRequestError("search files", error);
   }
