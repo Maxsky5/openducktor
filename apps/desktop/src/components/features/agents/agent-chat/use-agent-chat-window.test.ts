@@ -192,7 +192,11 @@ const mountHarness = async (
     const content = document.createElement("div");
     let scrollTopValue = 0;
     const scrollTo = mock((options: ScrollToOptions) => {
-      container.scrollTop = Number(options.top ?? 0);
+      if (typeof options.top !== "number") {
+        throw new Error("scrollTo called without explicit top value");
+      }
+
+      container.scrollTop = Number(options.top);
     });
 
     Object.defineProperty(container, "scrollTo", {
@@ -411,6 +415,30 @@ describe("useAgentChatWindow", () => {
 
     expect(harness.getLatestResult().windowStart).toBe(0);
     expect(container.scrollTop).toBe(0);
+    expect(container.style.overflowAnchor).toBe("none");
+
+    await harness.unmount();
+  });
+
+  test("keeps the latest turn window on the first populated render after a deferred empty frame", async () => {
+    const rows = createTurnRows(12);
+    const harness = await mountHarness({
+      rows: [],
+      activeSessionId: "session-1",
+      isSessionViewLoading: true,
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(0);
+
+    await harness.update({
+      rows,
+      activeSessionId: "session-1",
+      isSessionViewLoading: false,
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(
+      buildAgentChatWindowTurns(rows)[2]?.start ?? 0,
+    );
 
     await harness.unmount();
   });

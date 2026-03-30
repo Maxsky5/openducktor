@@ -164,8 +164,13 @@ export function useAgentChatWindow({
       resetLatestTurnsAndPinBottom();
     },
     scrollToTop: () => {
-      revealAllHistory();
       const container = messagesContainerRef.current;
+      if (container) {
+        // Prevent browser anchor compensation from undoing the explicit jump to top.
+        container.style.overflowAnchor = "none";
+      }
+
+      revealAllHistory();
       if (!container) {
         return;
       }

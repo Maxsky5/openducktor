@@ -13,9 +13,7 @@ type UseAgentChatScrollControllerResult = {
   isNearTop: boolean;
   userScrolledRef: MutableRefObject<boolean>;
   userScrollIntentVersionRef: MutableRefObject<number>;
-  scrollToBottom: () => void;
   forceScrollToBottom: () => void;
-  scrollToBottomOnSend: () => void;
 };
 
 const AUTO_SCROLL_MARK_TTL_MS = 1500;
@@ -264,8 +262,6 @@ export function useAgentChatScrollController({
     isNearTop,
     userScrolledRef,
     userScrollIntentVersionRef,
-    scrollToBottom: () => scrollToBottomNow(false),
     forceScrollToBottom: () => scrollToBottomNow(true),
-    scrollToBottomOnSend: () => scrollToBottomNow(true),
   };
 }

@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 
 type UseAgentChatDeferredTranscriptArgs = {
   activeSessionId: string | null;
@@ -15,18 +15,22 @@ export function useAgentChatDeferredTranscript({
   const frameRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    if (renderedSessionId === activeSessionId) {
-      return;
-    }
-
-    if (frameRef.current !== null && typeof globalThis.cancelAnimationFrame === "function") {
+  const cancelPendingDeferral = useCallback((): void => {
+    if (frameRef.current !== null) {
       globalThis.cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
     }
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    cancelPendingDeferral();
+
+    if (renderedSessionId === activeSessionId) {
+      return;
     }
 
     if (activeSessionId === null) {
@@ -36,16 +40,8 @@ export function useAgentChatDeferredTranscript({
       return;
     }
 
-    const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-    if (typeof requestAnimationFrameFn !== "function") {
-      startTransition(() => {
-        setRenderedSessionId(activeSessionId);
-      });
-      return;
-    }
-
     const nextSessionId = activeSessionId;
-    frameRef.current = requestAnimationFrameFn(() => {
+    frameRef.current = globalThis.requestAnimationFrame(() => {
       frameRef.current = null;
       timerRef.current = setTimeout(() => {
         timerRef.current = null;
@@ -54,18 +50,13 @@ export function useAgentChatDeferredTranscript({
         });
       }, 0);
     });
-  }, [activeSessionId, renderedSessionId]);
+  }, [activeSessionId, cancelPendingDeferral, renderedSessionId]);
 
   useEffect(() => {
     return () => {
-      if (frameRef.current !== null && typeof globalThis.cancelAnimationFrame === "function") {
-        globalThis.cancelAnimationFrame(frameRef.current);
-      }
-      if (timerRef.current !== null) {
-        clearTimeout(timerRef.current);
-      }
+      cancelPendingDeferral();
     };
-  }, []);
+  }, [cancelPendingDeferral]);
 
   return {
     isTranscriptRenderDeferred: renderedSessionId !== activeSessionId,
