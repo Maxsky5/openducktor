@@ -124,12 +124,9 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
 });
 
 describe("catalog-and-mcp searchFiles", () => {
-  test("merges directory and file hits into normalized file search results", async () => {
-    const files = mock(async (input: { type?: string }) => ({
-      data:
-        input.type === "directory"
-          ? ["src/components", "/repo/src/styles"]
-          : ["src/components/button.tsx", "src/styles.css"],
+  test("preserves runtime ordering when normalizing file search results", async () => {
+    const files = mock(async () => ({
+      data: ["src/components/", "src/components/button.tsx", "src/styles.css"],
       error: undefined,
     }));
     const createClient = mock(() => ({ find: { files } }));
@@ -144,19 +141,10 @@ describe("catalog-and-mcp searchFiles", () => {
       runtimeEndpoint: "http://127.0.0.1:1234",
       workingDirectory: "/repo",
     });
-    expect(files).toHaveBeenCalledTimes(2);
-    expect(files).toHaveBeenNthCalledWith(1, {
+    expect(files).toHaveBeenCalledTimes(1);
+    expect(files).toHaveBeenCalledWith({
       directory: "/repo",
       query: "src",
-      dirs: "true",
-      type: "directory",
-      limit: 20,
-    });
-    expect(files).toHaveBeenNthCalledWith(2, {
-      directory: "/repo",
-      query: "src",
-      dirs: "false",
-      type: "file",
       limit: 20,
     });
     expect(results).toEqual([
@@ -171,12 +159,6 @@ describe("catalog-and-mcp searchFiles", () => {
         path: "src/components/button.tsx",
         name: "button.tsx",
         kind: "ts",
-      },
-      {
-        id: "src/styles",
-        path: "src/styles",
-        name: "styles",
-        kind: "directory",
       },
       {
         id: "src/styles.css",

@@ -1,5 +1,3 @@
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import {
   type AgentFileReference,
   normalizeAgentUserMessageParts,
@@ -7,6 +5,7 @@ import {
   serializeAgentUserMessagePartsToText,
 } from "@openducktor/core";
 import { setSessionActive } from "./event-stream/shared";
+import { resolveAgainstWorkingDirectory, toFileUrl } from "./path-utils";
 import { normalizeModelInput, resolveAssistantResponseMessageId } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
 import type { SessionRecord } from "./types";
@@ -75,7 +74,7 @@ const toPromptFilePart = (
   return {
     type: "file",
     mime: toFileReferenceMime(file),
-    url: pathToFileURL(resolve(workingDirectory, normalizedPath)).href,
+    url: toFileUrl(resolveAgainstWorkingDirectory(workingDirectory, normalizedPath)),
     filename: file.name,
   };
 };

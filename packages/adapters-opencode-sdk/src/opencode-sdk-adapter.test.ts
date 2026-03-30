@@ -326,8 +326,8 @@ describe("opencode-sdk-adapter", () => {
   });
 
   test("searchFiles forwards runtime inputs to the catalog loader", async () => {
-    const files = mock(async (input: { type?: string }) => ({
-      data: input.type === "directory" ? ["src"] : ["src/index.ts"],
+    const files = mock(async () => ({
+      data: ["src/", "src/index.ts"],
       error: undefined,
     }));
     const createClient = mock(() => ({ find: { files } })) as () => OpencodeClient;
@@ -346,7 +346,7 @@ describe("opencode-sdk-adapter", () => {
       runtimeEndpoint: "http://127.0.0.1:12345",
       workingDirectory: "/repo",
     });
-    expect(files).toHaveBeenCalledTimes(2);
+    expect(files).toHaveBeenCalledTimes(1);
     expect(results).toEqual([
       {
         id: "src",
