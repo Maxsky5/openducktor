@@ -3,9 +3,9 @@ import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { buildMessage, buildModelSelection, buildSession } from "./agent-chat-test-fixtures";
 import {
   buildAgentChatWindowRows,
-  CHAT_OVERSCAN,
-  CHAT_SHIFT_SIZE,
-  CHAT_WINDOW_SIZE,
+  buildAgentChatWindowTurns,
+  CHAT_TURN_WINDOW_BATCH,
+  CHAT_TURN_WINDOW_INIT,
   getAgentChatWindowRowsKey,
 } from "./agent-chat-thread-windowing";
 
@@ -27,10 +27,9 @@ const createMessageIdentityResolver = (): ((message: AgentChatMessage) => number
 };
 
 describe("agent-chat-thread windowing helpers", () => {
-  test("exports the native windowing constants", () => {
-    expect(CHAT_WINDOW_SIZE).toBe(50);
-    expect(CHAT_OVERSCAN).toBe(10);
-    expect(CHAT_SHIFT_SIZE).toBe(20);
+  test("exports the turn window constants", () => {
+    expect(CHAT_TURN_WINDOW_INIT).toBe(10);
+    expect(CHAT_TURN_WINDOW_BATCH).toBe(8);
   });
 
   test("buildAgentChatWindowRows keeps message order without synthetic draft rows", () => {
@@ -59,6 +58,40 @@ describe("agent-chat-thread windowing helpers", () => {
       "session-1:user-1",
     ]);
     expect(rows.map((row) => row.kind)).toEqual(["turn_duration", "message", "message"]);
+  });
+
+  test("buildAgentChatWindowTurns groups transcript rows by user turns", () => {
+    const session = buildSession({
+      messages: [
+        buildMessage("assistant", "Prelude", { id: "assistant-0" }),
+        buildMessage("user", "Question 1", { id: "user-1" }),
+        buildMessage("assistant", "Answer 1", { id: "assistant-1" }),
+        buildMessage("user", "Question 2", { id: "user-2" }),
+        buildMessage("assistant", "Answer 2", { id: "assistant-2" }),
+      ],
+      pendingQuestions: [],
+    });
+
+    const rows = buildAgentChatWindowRows(session, { showThinkingMessages: true });
+    const turns = buildAgentChatWindowTurns(rows);
+
+    expect(turns).toEqual([
+      {
+        key: "session-1:assistant-0:duration",
+        start: 0,
+        end: 1,
+      },
+      {
+        key: "session-1:user-1",
+        start: 2,
+        end: 4,
+      },
+      {
+        key: "session-1:user-2",
+        start: 5,
+        end: 7,
+      },
+    ]);
   });
 
   test("buildAgentChatWindowRows keeps row keys distinct across sessions with repeated message ids", () => {
