@@ -184,7 +184,7 @@ describe("AgentChatThread", () => {
     expect(html).not.toContain("Agent is thinking...");
   });
 
-  test("renders loading state when active session has no renderable rows yet", () => {
+  test("keeps the transcript area blank when active session has no renderable rows yet", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
@@ -200,7 +200,8 @@ describe("AgentChatThread", () => {
       }),
     );
 
-    expect(html).toContain("Loading session history...");
+    expect(html).not.toContain("Loading session history...");
+    expect(html).not.toContain("Loading session...");
   });
 
   test("renders blank transcript area when session has messages but all were filtered", () => {

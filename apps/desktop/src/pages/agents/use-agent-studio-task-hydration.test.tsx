@@ -412,6 +412,59 @@ describe("useAgentStudioTaskHydration", () => {
     }
   });
 
+  test("waits for a build session runtime attachment before hydrating restored session history", async () => {
+    const hydrateRequestedTaskSessionHistory = mock(async (): Promise<void> => {});
+    const buildSessionWaitingForRuntime = createSession({
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "stopped",
+      runId: null,
+      runtimeId: null,
+      runtimeEndpoint: "",
+      historyHydrationState: "not_requested",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeSession: buildSessionWaitingForRuntime,
+        agentStudioReadinessState: "ready",
+        hydrateRequestedTaskSessionHistory,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(hydrateRequestedTaskSessionHistory).not.toHaveBeenCalled();
+      expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(true);
+      expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(false);
+      expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(false);
+
+      await harness.update(
+        createBaseArgs({
+          activeSession: createSession({
+            role: "build",
+            scenario: "build_implementation_start",
+            status: "stopped",
+            runId: "run-1",
+            runtimeId: null,
+            runtimeEndpoint: "http://127.0.0.1:4444",
+            historyHydrationState: "not_requested",
+          }),
+          agentStudioReadinessState: "ready",
+          hydrateRequestedTaskSessionHistory,
+        }),
+      );
+
+      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 1);
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledWith({
+        taskId: "task-1",
+        sessionId: "session-1",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("skips requested history hydration for a live session that already has local messages", async () => {
     const hydrateRequestedTaskSessionHistory = mock(async (): Promise<void> => {});
     const harness = createHookHarness(

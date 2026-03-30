@@ -238,10 +238,9 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
             </div>
           ) : null}
 
-          {session ? (
-            rows.length > 0 ? (
-              hideTranscriptWhileHydrating ? null : (
-                windowedRows.map((row) => (
+          {session
+            ? rows.length > 0 && !hideTranscriptWhileHydrating
+              ? windowedRows.map((row) => (
                   <AgentChatThreadMotionRow
                     key={row.key}
                     row={row}
@@ -252,13 +251,8 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
                     resolveRowRef={resolveRowRef}
                   />
                 ))
-              )
-            ) : session.messages.length === 0 && !hideTranscriptWhileHydrating ? (
-              <div className="rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
-                Loading session history...
-              </div>
-            ) : null
-          ) : null}
+              : null
+            : null}
         </div>
         {showLoadingOverlay ? (
           <div className="absolute inset-0 z-30 flex items-center justify-center bg-muted/85">
