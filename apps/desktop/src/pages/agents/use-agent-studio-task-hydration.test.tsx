@@ -216,6 +216,28 @@ describe("useAgentStudioTaskHydration", () => {
 
       expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledTimes(1);
       expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(false);
+
+      await harness.update(
+        createBaseArgs({
+          activeSession: createSession({ historyHydrationState: "failed" }),
+          agentStudioReadinessState: "checking",
+          hydrateRequestedTaskSessionHistory,
+        }),
+      );
+
+      expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(false);
+      expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(true);
+
+      await harness.update(
+        createBaseArgs({
+          activeSession: createSession({ historyHydrationState: "failed" }),
+          agentStudioReadinessState: "ready",
+          hydrateRequestedTaskSessionHistory,
+        }),
+      );
+
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(true);
     } finally {
       await harness.unmount();
     }

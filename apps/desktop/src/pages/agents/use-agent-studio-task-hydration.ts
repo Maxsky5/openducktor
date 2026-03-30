@@ -166,7 +166,7 @@ export function useAgentStudioTaskHydration({
             ? { sessionId: activeSessionId, status: "failed" }
             : current,
         );
-        if (waitingRecoveryKey !== activeRecoveryKey) {
+        if (activeRecoveryKey) {
           setPostReadyFailureRecoveryKey(activeRecoveryKey);
         }
         setWaitingRecoveryKey((current) => (current === activeRecoveryKey ? null : current));
@@ -177,7 +177,6 @@ export function useAgentStudioTaskHydration({
     activeTaskId,
     hydrateRequestedTaskSessionHistory,
     shouldHydrateSessionHistory,
-    waitingRecoveryKey,
   ]);
 
   const isRequestPending =
