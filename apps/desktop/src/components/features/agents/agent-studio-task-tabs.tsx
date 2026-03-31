@@ -106,7 +106,7 @@ export function AgentStudioTaskTabs({
   return (
     <div className="bg-studio-chrome px-2 pt-1.5 pb-0">
       <div className="flex min-w-0 items-center gap-1">
-        <div className="min-w-0 flex-1 overflow-x-auto">
+        <div className="hide-scrollbar min-w-0 flex-1 overflow-x-auto">
           <div className="inline-flex h-10 min-w-max items-center gap-1 px-2">
             {hasAnyTab ? (
               <TabsList
@@ -170,20 +170,20 @@ export function AgentStudioTaskTabs({
                 Open a task tab to start working with an agent.
               </p>
             )}
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              aria-label="Open new task tab"
-              className="h-10 w-10 shrink-0 rounded-md border-none border-transparent bg-transparent p-0 text-studio-chrome-foreground shadow-none hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              disabled={!canOpenCreateDialog}
-              onClick={() => setIsCreateDialogOpen(true)}
-            >
-              <Plus className="size-[1.4rem]" />
-              <span className="sr-only">New Tab</span>
-            </Button>
           </div>
         </div>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          aria-label="Open new task tab"
+          className="h-10 w-10 shrink-0 rounded-md border-none border-transparent bg-transparent p-0 text-studio-chrome-foreground shadow-none hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          disabled={!canOpenCreateDialog}
+          onClick={() => setIsCreateDialogOpen(true)}
+        >
+          <Plus className="size-[1.4rem]" />
+          <span className="sr-only">New Tab</span>
+        </Button>
         {rightPanelToggleModel ? (
           <div className="flex shrink-0 items-center pl-0.5">
             <AgentStudioRightPanelToggleButton model={rightPanelToggleModel} />

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Tabs } from "@/components/ui/tabs";
@@ -48,6 +49,7 @@ describe("AgentStudioTaskTabs", () => {
     expect(html).toContain("border-b-transparent");
     expect(html).toContain("after:bg-card");
     expect(html).toContain("overflow-x-auto");
+    expect(html).toContain("hide-scrollbar");
     expect(html).not.toContain("overflow-y-visible");
     expect(html).not.toContain("rounded-full border");
     expect(html).not.toContain("bg-card/80");
@@ -95,6 +97,11 @@ describe("AgentStudioTaskTabs", () => {
     );
 
     expect(html).toContain("Hide documents panel");
+
+    const newTabButtonIndex = html.indexOf('aria-label="Open new task tab"');
+    const rightPanelToggleIndex = html.indexOf('aria-label="Hide documents panel"');
+    expect(newTabButtonIndex).toBeGreaterThan(-1);
+    expect(rightPanelToggleIndex).toBeGreaterThan(newTabButtonIndex);
   });
 
   test("keeps new-tab button enabled while tab tasks are loading", () => {
@@ -115,5 +122,32 @@ describe("AgentStudioTaskTabs", () => {
 
     expect(html).toMatch(/aria-label="Open new task tab"/);
     expect(html).not.toMatch(/aria-label="Open new task tab"[^>]*disabled/);
+  });
+
+  test("keeps the new-tab button outside the horizontal scroll region", () => {
+    const { container } = render(
+      createElement(
+        Tabs,
+        { value: "task-1" },
+        createElement(AgentStudioTaskTabs, {
+          model: buildModel(),
+          rightPanelToggleModel: {
+            kind: "documents",
+            isOpen: true,
+            onToggle: () => {},
+          },
+        }),
+      ),
+    );
+
+    const scrollRegion = container.querySelector(".hide-scrollbar.overflow-x-auto");
+    const newTabButton = screen.getByRole("button", { name: "Open new task tab" });
+    const rightPanelToggle = screen.getByRole("button", { name: "Hide documents panel" });
+
+    expect(scrollRegion).not.toBeNull();
+    expect(scrollRegion?.contains(newTabButton)).toBeFalse();
+    expect(
+      newTabButton.compareDocumentPosition(rightPanelToggle) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });
