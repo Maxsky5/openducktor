@@ -712,9 +712,6 @@ describe("event-stream", () => {
       } as unknown as Event,
     ]);
 
-    const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
-    expect(assistantMessages).toHaveLength(1);
-    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(0);
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
     expect(idleEvents).toHaveLength(1);
   });
@@ -855,6 +852,9 @@ describe("event-stream", () => {
       } as unknown as Event,
     ]);
 
+    const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
+    expect(assistantMessages).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(0);
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
     expect(idleEvents).toHaveLength(1);
   });
