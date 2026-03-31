@@ -288,6 +288,26 @@ const renderUserMessageInlineContent = (
   return <p className="whitespace-pre-wrap leading-6">{nodes}</p>;
 };
 
+type SessionNoticeMessageProps = {
+  message: AgentChatMessage;
+  timeLabel: string;
+};
+
+const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps): ReactElement => {
+  const meta = message.meta?.kind === "session_notice" ? message.meta : null;
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0 space-y-1">
+        <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
+          {meta?.title ?? "Notice"}
+        </p>
+        <p className="whitespace-pre-wrap leading-6 text-inherit">{message.content}</p>
+      </div>
+      {timeLabel ? <span className="shrink-0 text-[11px] opacity-70">{timeLabel}</span> : null}
+    </div>
+  );
+};
+
 type MessageBodyProps = {
   message: AgentChatMessage;
   assistantAccentColor: string | undefined;
@@ -341,6 +361,10 @@ export const MessageBody = ({
         ) : null}
       </div>
     );
+  }
+
+  if (meta?.kind === "session_notice") {
+    return <SessionNoticeMessage message={message} timeLabel={timeLabel} />;
   }
 
   if (message.role === "system" && message.content.startsWith(SYSTEM_PROMPT_PREFIX)) {
