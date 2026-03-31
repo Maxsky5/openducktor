@@ -712,6 +712,9 @@ describe("event-stream", () => {
       } as unknown as Event,
     ]);
 
+    const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
+    expect(assistantMessages).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(0);
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
     expect(idleEvents).toHaveLength(1);
   });
@@ -929,6 +932,142 @@ describe("event-stream", () => {
     expect(statusEvents).toHaveLength(1);
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
     expect(idleEvents).toHaveLength(0);
+  });
+
+  test("keeps late terminal part updates out of assistant_part emission once idle", async () => {
+    const client = makeClientWithEvents([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-message-late-part-update",
+            role: "assistant",
+            sessionID: "external-session-1",
+            finish: "stop",
+            time: {
+              completed: 1,
+            },
+          },
+          parts: [
+            {
+              id: "text-late-part-update-1",
+              sessionID: "external-session-1",
+              messageID: "assistant-message-late-part-update",
+              type: "text",
+              text: "Done",
+              time: { start: 1, end: 1 },
+            },
+          ],
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "text-late-part-update-1",
+            sessionID: "external-session-1",
+            messageID: "assistant-message-late-part-update",
+            type: "text",
+            text: "Done later",
+            time: { start: 1, end: 2 },
+          },
+        },
+      } as unknown as Event,
+    ]);
+    const emitted: AgentEvent[] = [];
+    const sessionRecord = makeSessionRecord(client);
+
+    await subscribeOpencodeEvents({
+      context: {
+        sessionId: "local-session-1",
+        externalSessionId: "external-session-1",
+        input: makeSessionInput(),
+      },
+      client,
+      controller: new AbortController(),
+      now: () => "2026-02-22T12:00:00.000Z",
+      emit: (_sessionId, event) => {
+        emitted.push(event);
+      },
+      getSession: () => sessionRecord,
+    });
+
+    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "assistant_message")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
+
+    const updatedPart = sessionRecord.partsById.get("text-late-part-update-1");
+    if (!updatedPart || updatedPart.type !== "text") {
+      throw new Error("Expected cached assistant text part");
+    }
+    expect(updatedPart.text).toBe("Done later");
+  });
+
+  test("keeps late terminal part deltas out of assistant events once idle", async () => {
+    const client = makeClientWithEvents([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-message-late-delta",
+            role: "assistant",
+            sessionID: "external-session-1",
+            finish: "stop",
+            time: {
+              completed: 1,
+            },
+          },
+          parts: [
+            {
+              id: "text-late-delta-1",
+              sessionID: "external-session-1",
+              messageID: "assistant-message-late-delta",
+              type: "text",
+              text: "Done",
+              time: { start: 1, end: 1 },
+            },
+          ],
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "external-session-1",
+          partID: "text-late-delta-1",
+          messageID: "assistant-message-late-delta",
+          field: "text",
+          delta: " later",
+        },
+      } as unknown as Event,
+    ]);
+    const emitted: AgentEvent[] = [];
+    const sessionRecord = makeSessionRecord(client);
+
+    await subscribeOpencodeEvents({
+      context: {
+        sessionId: "local-session-1",
+        externalSessionId: "external-session-1",
+        input: makeSessionInput(),
+      },
+      client,
+      controller: new AbortController(),
+      now: () => "2026-02-22T12:00:00.000Z",
+      emit: (_sessionId, event) => {
+        emitted.push(event);
+      },
+      getSession: () => sessionRecord,
+    });
+
+    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "assistant_delta")).toHaveLength(0);
+    expect(emitted.filter((event) => event.type === "assistant_message")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
+
+    const updatedPart = sessionRecord.partsById.get("text-late-delta-1");
+    if (!updatedPart || updatedPart.type !== "text") {
+      throw new Error("Expected cached assistant text part");
+    }
+    expect(updatedPart.text).toBe("Done later");
   });
 
   test("replays known assistant parts when the assistant role becomes known later", async () => {
