@@ -251,7 +251,10 @@ const maybeEmitCompletedAssistantMessage = (
     input.info !== undefined
       ? (readMessageModelSelection(input.info) ?? existingMetadata?.model)
       : existingMetadata?.model;
-  const hasStopSignal = input.hasStopSignal ?? existingMetadata?.hasStopSignal ?? false;
+  const hasStopSignal =
+    input.hasStopSignal === true ||
+    existingMetadata?.hasStopSignal === true ||
+    hasTerminalStopSignalInParts(assistantParts, undefined);
   const timestamp = input.timestamp ?? existingMetadata?.timestamp ?? runtime.now();
 
   updateMessageMetadata(runtime, input.messageId, {

@@ -198,6 +198,24 @@ const makeMessagePartUpdatedEvent = (input: {
     },
   }) as unknown as Event;
 
+const makeAssistantStepFinishPartUpdatedEvent = (input: {
+  messageId: string;
+  partId: string;
+  reason?: string;
+}): Event =>
+  ({
+    type: "message.part.updated",
+    properties: {
+      part: {
+        id: input.partId,
+        sessionID: "external-session-1",
+        messageID: input.messageId,
+        type: "step-finish",
+        reason: input.reason ?? "stop",
+      },
+    },
+  }) as unknown as Event;
+
 const makeMessagePartDeltaEvent = (input: {
   messageId: string;
   partId: string;
@@ -1039,6 +1057,34 @@ describe("event-stream", () => {
       throw new Error("Expected assistant_message event");
     }
     expect(assistantMessages[0].message).toBe("Recovered");
+  });
+
+  test("emits a final assistant message when a later step-finish part carries the stop signal", async () => {
+    const emitted = await runEventStream([
+      makeMessagePartUpdatedEvent({
+        messageId: "assistant-message-late-stop-part",
+        partId: "text-late-stop-part-1",
+        text: "Recovered after late stop",
+      }),
+      makeAssistantMessageUpdatedEvent({
+        messageId: "assistant-message-late-stop-part",
+        completedAt: 1,
+      }),
+      makeAssistantStepFinishPartUpdatedEvent({
+        messageId: "assistant-message-late-stop-part",
+        partId: "step-finish-late-stop-part-1",
+      }),
+    ]);
+
+    const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
+    expect(assistantMessages).toHaveLength(1);
+    if (assistantMessages[0]?.type !== "assistant_message") {
+      throw new Error("Expected assistant_message event");
+    }
+    expect(assistantMessages[0].message).toBe("Recovered after late stop");
+
+    const idleEvents = emitted.filter((event) => event.type === "session_idle");
+    expect(idleEvents).toHaveLength(1);
   });
 
   test("keeps assistant completion monotonic when stale non-terminal updates arrive later", async () => {
