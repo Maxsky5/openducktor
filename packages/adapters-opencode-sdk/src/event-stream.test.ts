@@ -63,10 +63,14 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   pendingDeltasByPartId: new Map(),
 });
 
-const runEventStream = async (events: Event[]): Promise<AgentEvent[]> => {
+const runEventStreamWithSession = async (
+  events: Event[],
+  configureSession?: (sessionRecord: SessionRecord) => void,
+): Promise<{ emitted: AgentEvent[]; sessionRecord: SessionRecord }> => {
   const client = makeClientWithEvents(events);
   const emitted: AgentEvent[] = [];
   const sessionRecord = makeSessionRecord(client);
+  configureSession?.(sessionRecord);
 
   await subscribeOpencodeEvents({
     context: {
@@ -83,7 +87,11 @@ const runEventStream = async (events: Event[]): Promise<AgentEvent[]> => {
     getSession: () => sessionRecord,
   });
 
-  return emitted;
+  return { emitted, sessionRecord };
+};
+
+const runEventStream = async (events: Event[]): Promise<AgentEvent[]> => {
+  return (await runEventStreamWithSession(events)).emitted;
 };
 
 const assistantRoleEvent = (messageId: string): Event =>
@@ -95,6 +103,115 @@ const assistantRoleEvent = (messageId: string): Event =>
         role: "assistant",
         sessionID: "external-session-1",
       },
+    },
+  }) as unknown as Event;
+
+const makeSessionIdleEvent = (): Event =>
+  ({
+    type: "session.idle",
+    properties: {
+      sessionID: "external-session-1",
+    },
+  }) as unknown as Event;
+
+const makeSessionStatusIdleEvent = (): Event =>
+  ({
+    type: "session.status",
+    properties: {
+      sessionID: "external-session-1",
+      status: {
+        type: "idle",
+      },
+    },
+  }) as unknown as Event;
+
+const makeAssistantTextPart = (input: {
+  messageId: string;
+  text: string;
+  partId?: string;
+  start?: number;
+  end?: number;
+}): Record<string, unknown> => ({
+  id: input.partId ?? `${input.messageId}-text-1`,
+  sessionID: "external-session-1",
+  messageID: input.messageId,
+  type: "text",
+  text: input.text,
+  time: {
+    start: input.start ?? 1,
+    end: input.end ?? 1,
+  },
+});
+
+const makeAssistantMessageUpdatedEvent = (input: {
+  messageId: string;
+  text?: string;
+  partId?: string;
+  finish?: string;
+  completedAt?: number;
+  parts?: unknown[];
+  info?: Record<string, unknown>;
+}): Event => {
+  const parts =
+    input.parts ??
+    (input.text !== undefined
+      ? [
+          makeAssistantTextPart({
+            messageId: input.messageId,
+            partId: input.partId,
+            text: input.text,
+          }),
+        ]
+      : undefined);
+
+  return {
+    type: "message.updated",
+    properties: {
+      info: {
+        id: input.messageId,
+        role: "assistant",
+        sessionID: "external-session-1",
+        ...(input.finish ? { finish: input.finish } : {}),
+        ...(input.completedAt !== undefined ? { time: { completed: input.completedAt } } : {}),
+        ...input.info,
+      },
+      ...(parts ? { parts } : {}),
+    },
+  } as unknown as Event;
+};
+
+const makeMessagePartUpdatedEvent = (input: {
+  messageId: string;
+  partId: string;
+  text: string;
+  end?: number;
+}): Event =>
+  ({
+    type: "message.part.updated",
+    properties: {
+      part: makeAssistantTextPart({
+        messageId: input.messageId,
+        partId: input.partId,
+        text: input.text,
+        end: input.end,
+      }),
+    },
+  }) as unknown as Event;
+
+const makeMessagePartDeltaEvent = (input: {
+  messageId: string;
+  partId: string;
+  field: string;
+  delta: string;
+}): Event =>
+  ({
+    type: "message.part.delta",
+    properties: {
+      sessionID: "external-session-1",
+      partID: input.partId,
+      messageID: input.messageId,
+      field: input.field,
+      delta: input.delta,
     },
   }) as unknown as Event;
 
@@ -334,41 +451,28 @@ describe("event-stream", () => {
   });
 
   test("does not leave a late queued-send acknowledgement stuck queued after idle", async () => {
-    const client = makeClientWithEvents([
-      {
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "message-200",
-            role: "user",
-            sessionID: "external-session-1",
-            text: "Ship it",
-            time: {
-              created: Date.parse("2026-02-22T12:00:02.000Z"),
+    const { emitted, sessionRecord } = await runEventStreamWithSession(
+      [
+        {
+          type: "message.updated",
+          properties: {
+            info: {
+              id: "message-200",
+              role: "user",
+              sessionID: "external-session-1",
+              text: "Ship it",
+              time: {
+                created: Date.parse("2026-02-22T12:00:02.000Z"),
+              },
             },
           },
-        },
-      } as unknown as Event,
-    ]);
-    const emitted: AgentEvent[] = [];
-    const sessionRecord = makeSessionRecord(client);
-    sessionRecord.pendingQueuedUserMessages.push({ content: "Ship it" });
-    sessionRecord.activeAssistantMessageId = null;
-
-    await subscribeOpencodeEvents({
-      context: {
-        sessionId: "local-session-1",
-        externalSessionId: "external-session-1",
-        input: makeSessionInput(),
+        } as unknown as Event,
+      ],
+      (nextSessionRecord) => {
+        nextSessionRecord.pendingQueuedUserMessages.push({ content: "Ship it" });
+        nextSessionRecord.activeAssistantMessageId = null;
       },
-      client,
-      controller: new AbortController(),
-      now: () => "2026-02-22T12:00:00.000Z",
-      emit: (_sessionId, event) => {
-        emitted.push(event);
-      },
-      getSession: () => sessionRecord,
-    });
+    );
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
     expect(userMessages).toHaveLength(1);
@@ -423,56 +527,43 @@ describe("event-stream", () => {
   });
 
   test("matches queued sends by exact model selection when content repeats", async () => {
-    const client = makeClientWithEvents([
-      {
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "msg-200",
-            role: "user",
-            sessionID: "external-session-1",
-            providerID: "openai",
-            modelID: "gpt-5",
-            agent: "Hephaestus",
-            variant: "high",
-            text: "Ship it",
-            time: {
-              created: Date.parse("2026-02-22T12:00:02.000Z"),
+    const { emitted, sessionRecord } = await runEventStreamWithSession(
+      [
+        {
+          type: "message.updated",
+          properties: {
+            info: {
+              id: "msg-200",
+              role: "user",
+              sessionID: "external-session-1",
+              providerID: "openai",
+              modelID: "gpt-5",
+              agent: "Hephaestus",
+              variant: "high",
+              text: "Ship it",
+              time: {
+                created: Date.parse("2026-02-22T12:00:02.000Z"),
+              },
             },
           },
-        },
-      } as unknown as Event,
-    ]);
-    const emitted: AgentEvent[] = [];
-    const sessionRecord = makeSessionRecord(client);
-    sessionRecord.activeAssistantMessageId = "msg-100";
-    sessionRecord.pendingQueuedUserMessages.push(
-      { content: "Ship it" },
-      {
-        content: "Ship it",
-        model: {
-          providerId: "openai",
-          modelId: "gpt-5",
-          profileId: "Hephaestus",
-          variant: "high",
-        },
+        } as unknown as Event,
+      ],
+      (nextSessionRecord) => {
+        nextSessionRecord.activeAssistantMessageId = "msg-100";
+        nextSessionRecord.pendingQueuedUserMessages.push(
+          { content: "Ship it" },
+          {
+            content: "Ship it",
+            model: {
+              providerId: "openai",
+              modelId: "gpt-5",
+              profileId: "Hephaestus",
+              variant: "high",
+            },
+          },
+        );
       },
     );
-
-    await subscribeOpencodeEvents({
-      context: {
-        sessionId: "local-session-1",
-        externalSessionId: "external-session-1",
-        input: makeSessionInput(),
-      },
-      client,
-      controller: new AbortController(),
-      now: () => "2026-02-22T12:00:00.000Z",
-      emit: (_sessionId, event) => {
-        emitted.push(event);
-      },
-      getSession: () => sessionRecord,
-    });
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
     expect(userMessages).toHaveLength(1);
@@ -544,65 +635,39 @@ describe("event-stream", () => {
   });
 
   test("deduplicates assistant_message across repeated message.updated events", async () => {
-    const assistantEvent = {
-      type: "message.updated",
-      properties: {
-        info: {
-          id: "assistant-message-1",
-          role: "assistant",
-          sessionID: "external-session-1",
-          providerID: "openai",
-          modelID: "gpt-5",
-          agent: "Hephaestus",
-          variant: "high",
-          tokens: {
-            input: 100,
-            output: 20,
-          },
-          time: {
-            completed: 1,
-          },
-          finish: "stop",
+    const assistantEvent = makeAssistantMessageUpdatedEvent({
+      messageId: "assistant-message-1",
+      finish: "stop",
+      completedAt: 1,
+      info: {
+        providerID: "openai",
+        modelID: "gpt-5",
+        agent: "Hephaestus",
+        variant: "high",
+        tokens: {
+          input: 100,
+          output: 20,
         },
-        parts: [
-          {
-            id: "reasoning-1",
-            sessionID: "external-session-1",
-            messageID: "assistant-message-1",
-            type: "reasoning",
-            text: "Plan",
-            time: { start: 1, end: 2 },
-          },
-          {
-            id: "text-1",
-            sessionID: "external-session-1",
-            messageID: "assistant-message-1",
-            type: "text",
-            text: "Done",
-            time: { start: 1, end: 2 },
-          },
-        ],
       },
-    } as unknown as Event;
-
-    const client = makeClientWithEvents([assistantEvent, assistantEvent]);
-    const emitted: AgentEvent[] = [];
-    const sessionRecord = makeSessionRecord(client);
-
-    await subscribeOpencodeEvents({
-      context: {
-        sessionId: "local-session-1",
-        externalSessionId: "external-session-1",
-        input: makeSessionInput(),
-      },
-      client,
-      controller: new AbortController(),
-      now: () => "2026-02-22T12:00:00.000Z",
-      emit: (_sessionId, event) => {
-        emitted.push(event);
-      },
-      getSession: () => sessionRecord,
+      parts: [
+        {
+          id: "reasoning-1",
+          sessionID: "external-session-1",
+          messageID: "assistant-message-1",
+          type: "reasoning",
+          text: "Plan",
+          time: { start: 1, end: 2 },
+        },
+        makeAssistantTextPart({
+          messageId: "assistant-message-1",
+          partId: "text-1",
+          text: "Done",
+          end: 2,
+        }),
+      ],
     });
+
+    const { emitted } = await runEventStreamWithSession([assistantEvent, assistantEvent]);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
     expect(assistantMessages).toHaveLength(1);
@@ -683,33 +748,13 @@ describe("event-stream", () => {
 
   test("deduplicates upstream session.idle after a terminal assistant update", async () => {
     const emitted = await runEventStream([
-      {
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "assistant-message-terminal-idle",
-            role: "assistant",
-            sessionID: "external-session-1",
-            finish: "stop",
-          },
-          parts: [
-            {
-              id: "text-terminal-idle-1",
-              sessionID: "external-session-1",
-              messageID: "assistant-message-terminal-idle",
-              type: "text",
-              text: "Done once",
-              time: { start: 1, end: 1 },
-            },
-          ],
-        },
-      } as unknown as Event,
-      {
-        type: "session.idle",
-        properties: {
-          sessionID: "external-session-1",
-        },
-      } as unknown as Event,
+      makeAssistantMessageUpdatedEvent({
+        messageId: "assistant-message-terminal-idle",
+        finish: "stop",
+        text: "Done once",
+        partId: "text-terminal-idle-1",
+      }),
+      makeSessionIdleEvent(),
     ]);
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
@@ -823,33 +868,13 @@ describe("event-stream", () => {
 
   test("preserves existing idle state when session.idle arrives before a terminal assistant update", async () => {
     const emitted = await runEventStream([
-      {
-        type: "session.idle",
-        properties: {
-          sessionID: "external-session-1",
-        },
-      } as unknown as Event,
-      {
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "assistant-message-idle-first",
-            role: "assistant",
-            sessionID: "external-session-1",
-            finish: "stop",
-          },
-          parts: [
-            {
-              id: "text-idle-first-1",
-              sessionID: "external-session-1",
-              messageID: "assistant-message-idle-first",
-              type: "text",
-              text: "Done after idle",
-              time: { start: 1, end: 1 },
-            },
-          ],
-        },
-      } as unknown as Event,
+      makeSessionIdleEvent(),
+      makeAssistantMessageUpdatedEvent({
+        messageId: "assistant-message-idle-first",
+        finish: "stop",
+        text: "Done after idle",
+        partId: "text-idle-first-1",
+      }),
     ]);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
@@ -860,30 +885,13 @@ describe("event-stream", () => {
   });
 
   test("does not emit duplicate session_idle across repeated terminal message updates", async () => {
-    const terminalEvent = {
-      type: "message.updated",
-      properties: {
-        info: {
-          id: "assistant-message-duplicate-terminal",
-          role: "assistant",
-          sessionID: "external-session-1",
-          finish: "stop",
-          time: {
-            completed: 1,
-          },
-        },
-        parts: [
-          {
-            id: "text-duplicate-terminal-1",
-            sessionID: "external-session-1",
-            messageID: "assistant-message-duplicate-terminal",
-            type: "text",
-            text: "Done twice",
-            time: { start: 1, end: 1 },
-          },
-        ],
-      },
-    } as unknown as Event;
+    const terminalEvent = makeAssistantMessageUpdatedEvent({
+      messageId: "assistant-message-duplicate-terminal",
+      finish: "stop",
+      completedAt: 1,
+      text: "Done twice",
+      partId: "text-duplicate-terminal-1",
+    });
 
     const emitted = await runEventStream([terminalEvent, terminalEvent]);
 
@@ -893,39 +901,14 @@ describe("event-stream", () => {
 
   test("marks session idle on session.status idle so later terminal updates do not duplicate it", async () => {
     const emitted = await runEventStream([
-      {
-        type: "session.status",
-        properties: {
-          sessionID: "external-session-1",
-          status: {
-            type: "idle",
-          },
-        },
-      } as unknown as Event,
-      {
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "assistant-message-status-idle",
-            role: "assistant",
-            sessionID: "external-session-1",
-            time: {
-              completed: 1,
-            },
-            finish: "stop",
-          },
-          parts: [
-            {
-              id: "text-status-idle-1",
-              sessionID: "external-session-1",
-              messageID: "assistant-message-status-idle",
-              type: "text",
-              text: "Done after idle status",
-              time: { start: 1, end: 1 },
-            },
-          ],
-        },
-      } as unknown as Event,
+      makeSessionStatusIdleEvent(),
+      makeAssistantMessageUpdatedEvent({
+        messageId: "assistant-message-status-idle",
+        finish: "stop",
+        completedAt: 1,
+        text: "Done after idle status",
+        partId: "text-status-idle-1",
+      }),
     ]);
 
     const statusEvents = emitted.filter((event) => event.type === "session_status");
@@ -935,62 +918,21 @@ describe("event-stream", () => {
   });
 
   test("keeps late terminal part updates out of assistant_part emission once idle", async () => {
-    const client = makeClientWithEvents([
-      {
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "assistant-message-late-part-update",
-            role: "assistant",
-            sessionID: "external-session-1",
-            finish: "stop",
-            time: {
-              completed: 1,
-            },
-          },
-          parts: [
-            {
-              id: "text-late-part-update-1",
-              sessionID: "external-session-1",
-              messageID: "assistant-message-late-part-update",
-              type: "text",
-              text: "Done",
-              time: { start: 1, end: 1 },
-            },
-          ],
-        },
-      } as unknown as Event,
-      {
-        type: "message.part.updated",
-        properties: {
-          part: {
-            id: "text-late-part-update-1",
-            sessionID: "external-session-1",
-            messageID: "assistant-message-late-part-update",
-            type: "text",
-            text: "Done later",
-            time: { start: 1, end: 2 },
-          },
-        },
-      } as unknown as Event,
+    const { emitted, sessionRecord } = await runEventStreamWithSession([
+      makeAssistantMessageUpdatedEvent({
+        messageId: "assistant-message-late-part-update",
+        finish: "stop",
+        completedAt: 1,
+        text: "Done",
+        partId: "text-late-part-update-1",
+      }),
+      makeMessagePartUpdatedEvent({
+        messageId: "assistant-message-late-part-update",
+        partId: "text-late-part-update-1",
+        text: "Done later",
+        end: 2,
+      }),
     ]);
-    const emitted: AgentEvent[] = [];
-    const sessionRecord = makeSessionRecord(client);
-
-    await subscribeOpencodeEvents({
-      context: {
-        sessionId: "local-session-1",
-        externalSessionId: "external-session-1",
-        input: makeSessionInput(),
-      },
-      client,
-      controller: new AbortController(),
-      now: () => "2026-02-22T12:00:00.000Z",
-      emit: (_sessionId, event) => {
-        emitted.push(event);
-      },
-      getSession: () => sessionRecord,
-    });
 
     expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(1);
     expect(emitted.filter((event) => event.type === "assistant_message")).toHaveLength(1);
@@ -1004,59 +946,21 @@ describe("event-stream", () => {
   });
 
   test("keeps late terminal part deltas out of assistant events once idle", async () => {
-    const client = makeClientWithEvents([
-      {
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "assistant-message-late-delta",
-            role: "assistant",
-            sessionID: "external-session-1",
-            finish: "stop",
-            time: {
-              completed: 1,
-            },
-          },
-          parts: [
-            {
-              id: "text-late-delta-1",
-              sessionID: "external-session-1",
-              messageID: "assistant-message-late-delta",
-              type: "text",
-              text: "Done",
-              time: { start: 1, end: 1 },
-            },
-          ],
-        },
-      } as unknown as Event,
-      {
-        type: "message.part.delta",
-        properties: {
-          sessionID: "external-session-1",
-          partID: "text-late-delta-1",
-          messageID: "assistant-message-late-delta",
-          field: "text",
-          delta: " later",
-        },
-      } as unknown as Event,
+    const { emitted, sessionRecord } = await runEventStreamWithSession([
+      makeAssistantMessageUpdatedEvent({
+        messageId: "assistant-message-late-delta",
+        finish: "stop",
+        completedAt: 1,
+        text: "Done",
+        partId: "text-late-delta-1",
+      }),
+      makeMessagePartDeltaEvent({
+        messageId: "assistant-message-late-delta",
+        partId: "text-late-delta-1",
+        field: "text",
+        delta: " later",
+      }),
     ]);
-    const emitted: AgentEvent[] = [];
-    const sessionRecord = makeSessionRecord(client);
-
-    await subscribeOpencodeEvents({
-      context: {
-        sessionId: "local-session-1",
-        externalSessionId: "external-session-1",
-        input: makeSessionInput(),
-      },
-      client,
-      controller: new AbortController(),
-      now: () => "2026-02-22T12:00:00.000Z",
-      emit: (_sessionId, event) => {
-        emitted.push(event);
-      },
-      getSession: () => sessionRecord,
-    });
 
     expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(1);
     expect(emitted.filter((event) => event.type === "assistant_delta")).toHaveLength(0);
@@ -1096,7 +1000,7 @@ describe("event-stream", () => {
   });
 
   test("normalizes todo.updated and ignores unrelated sessions", async () => {
-    const client = makeClientWithEvents([
+    const { emitted } = await runEventStreamWithSession([
       {
         type: "todo.updated",
         properties: {
@@ -1117,24 +1021,6 @@ describe("event-stream", () => {
         },
       } as unknown as Event,
     ]);
-
-    const emitted: AgentEvent[] = [];
-    const sessionRecord = makeSessionRecord(client);
-
-    await subscribeOpencodeEvents({
-      context: {
-        sessionId: "local-session-1",
-        externalSessionId: "external-session-1",
-        input: makeSessionInput(),
-      },
-      client,
-      controller: new AbortController(),
-      now: () => "2026-02-22T12:00:00.000Z",
-      emit: (_sessionId, event) => {
-        emitted.push(event);
-      },
-      getSession: () => sessionRecord,
-    });
 
     const todoEvents = emitted.filter((event) => event.type === "session_todos_updated");
     expect(todoEvents).toHaveLength(1);
