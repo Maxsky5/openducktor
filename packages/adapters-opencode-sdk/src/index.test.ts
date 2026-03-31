@@ -1661,6 +1661,78 @@ describe("OpencodeSdkAdapter", () => {
     expect(events.filter((entry) => entry.type === "session_idle")).toHaveLength(0);
   });
 
+  test("emits the final assistant message when idle-preserved parts arrive after terminal metadata", async () => {
+    const streamEvents: Event[] = [
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "session-opencode-1",
+          status: {
+            type: "idle",
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-idle-late-part-1",
+            role: "assistant",
+            sessionID: "session-opencode-1",
+            providerID: "openai",
+            modelID: "gpt-5",
+            agent: "Hephaestus",
+            variant: "high",
+            finish: "stop",
+            time: {
+              created: Date.parse("2026-02-17T12:00:06Z"),
+              completed: Date.parse("2026-02-17T12:00:08Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "text-idle-late-part-1",
+            sessionID: "session-opencode-1",
+            messageID: "assistant-idle-late-part-1",
+            type: "text",
+            text: "Recovered final output",
+            time: { start: 1, end: 1 },
+          },
+        },
+      } as unknown as Event,
+    ];
+
+    const mock = makeMockClient({ streamEvents });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event);
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+    await flushAsync();
+
+    expect(events.filter((entry) => entry.type === "session_status")).toHaveLength(1);
+    expect(events.filter((entry) => entry.type === "assistant_part")).toHaveLength(0);
+    expect(events.filter((entry) => entry.type === "assistant_delta")).toHaveLength(0);
+
+    const assistantMessages = events.filter((entry) => entry.type === "assistant_message");
+    expect(assistantMessages).toHaveLength(1);
+    if (assistantMessages[0]?.type !== "assistant_message") {
+      throw new Error("Expected assistant_message event");
+    }
+    expect(assistantMessages[0].message).toBe("Recovered final output");
+    expect(events.filter((entry) => entry.type === "session_idle")).toHaveLength(0);
+  });
+
   test("does not finalize previously streamed assistant text without a stop signal", async () => {
     const streamEvents: Event[] = [
       {

@@ -974,6 +974,109 @@ describe("event-stream", () => {
     expect(updatedPart.text).toBe("Done later");
   });
 
+  test("emits a final assistant message when terminal metadata arrives before idle-preserved parts", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession([
+      makeSessionIdleEvent(),
+      makeAssistantMessageUpdatedEvent({
+        messageId: "assistant-message-idle-late-part",
+        finish: "stop",
+        completedAt: 1,
+      }),
+      makeMessagePartUpdatedEvent({
+        messageId: "assistant-message-idle-late-part",
+        partId: "text-idle-late-part-1",
+        text: "Recovered final output",
+      }),
+    ]);
+
+    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(0);
+    expect(emitted.filter((event) => event.type === "assistant_delta")).toHaveLength(0);
+
+    const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
+    expect(assistantMessages).toHaveLength(1);
+    if (assistantMessages[0]?.type !== "assistant_message") {
+      throw new Error("Expected assistant_message event");
+    }
+    expect(assistantMessages[0].message).toBe("Recovered final output");
+
+    const idleEvents = emitted.filter((event) => event.type === "session_idle");
+    expect(idleEvents).toHaveLength(1);
+
+    const updatedPart = sessionRecord.partsById.get("text-idle-late-part-1");
+    if (!updatedPart || updatedPart.type !== "text") {
+      throw new Error("Expected cached assistant text part");
+    }
+    expect(updatedPart.text).toBe("Recovered final output");
+  });
+
+  test("emits a final assistant message after pending deltas are applied to idle-preserved parts", async () => {
+    const emitted = await runEventStream([
+      makeSessionIdleEvent(),
+      makeAssistantMessageUpdatedEvent({
+        messageId: "assistant-message-idle-late-delta",
+        finish: "stop",
+        completedAt: 1,
+      }),
+      makeMessagePartDeltaEvent({
+        messageId: "assistant-message-idle-late-delta",
+        partId: "text-idle-late-delta-1",
+        field: "text",
+        delta: "Recovered",
+      }),
+      makeMessagePartUpdatedEvent({
+        messageId: "assistant-message-idle-late-delta",
+        partId: "text-idle-late-delta-1",
+        text: "",
+      }),
+    ]);
+
+    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(0);
+    expect(emitted.filter((event) => event.type === "assistant_delta")).toHaveLength(0);
+
+    const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
+    expect(assistantMessages).toHaveLength(1);
+    if (assistantMessages[0]?.type !== "assistant_message") {
+      throw new Error("Expected assistant_message event");
+    }
+    expect(assistantMessages[0].message).toBe("Recovered");
+  });
+
+  test("keeps assistant completion monotonic when stale non-terminal updates arrive later", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession([
+      makeAssistantMessageUpdatedEvent({
+        messageId: "assistant-message-stale-update",
+        finish: "stop",
+        completedAt: 1,
+        text: "Done",
+        partId: "text-stale-update-1",
+      }),
+      makeAssistantMessageUpdatedEvent({
+        messageId: "assistant-message-stale-update",
+      }),
+      makeMessagePartDeltaEvent({
+        messageId: "assistant-message-stale-update",
+        partId: "text-stale-update-1",
+        field: "text",
+        delta: " later",
+      }),
+    ]);
+
+    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "assistant_delta")).toHaveLength(0);
+    expect(emitted.filter((event) => event.type === "assistant_message")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
+    expect(sessionRecord.completedAssistantMessageIds.has("assistant-message-stale-update")).toBe(
+      true,
+    );
+    expect(sessionRecord.activeAssistantMessageId).toBeNull();
+
+    const updatedPart = sessionRecord.partsById.get("text-stale-update-1");
+    if (!updatedPart || updatedPart.type !== "text") {
+      throw new Error("Expected cached assistant text part");
+    }
+    expect(updatedPart.text).toBe("Done later");
+  });
+
   test("replays known assistant parts when the assistant role becomes known later", async () => {
     const emitted = await runEventStream([
       {
