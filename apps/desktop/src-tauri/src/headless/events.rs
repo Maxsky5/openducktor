@@ -5,11 +5,13 @@ use axum::response::IntoResponse;
 use host_application::{DevServerEmitter, RunEmitter};
 use std::collections::VecDeque;
 use std::convert::Infallible;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::Stream;
 use tokio_stream::StreamExt;
 
 #[derive(Clone, Debug)]
@@ -82,16 +84,12 @@ pub(super) fn build_sse_response(
             .into_iter()
             .map(|event| to_sse_event(&event)),
     );
-    let live_stream = BroadcastStream::new(bus.subscribe()).map(move |message| match message {
-        Ok(event) => to_sse_event(&event),
-        Err(BroadcastStreamRecvError::Lagged(skipped)) => {
-            Ok(Event::default().event("stream-warning").data(format!(
-                "{stream_name} skipped {skipped} events; reconnect will replay buffered events."
-            )))
-        }
-    });
+    let live_stream = BroadcastStream::new(bus.subscribe())
+        .map(move |message| live_event_to_sse(message, stream_name));
+    let stream: Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>> =
+        Box::pin(replay_stream.chain(live_stream));
 
-    Sse::new(replay_stream.chain(live_stream)).keep_alive(KeepAlive::default())
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
 pub(super) fn parse_last_event_id(
@@ -142,6 +140,24 @@ fn to_sse_event(event: &HeadlessEvent) -> Result<Event, Infallible> {
     Ok(Event::default()
         .id(event.id.to_string())
         .data(event.payload.clone()))
+}
+
+fn live_event_to_sse(
+    message: Result<HeadlessEvent, BroadcastStreamRecvError>,
+    stream_name: &'static str,
+) -> Result<Event, Infallible> {
+    match message {
+        Ok(event) => to_sse_event(&event),
+        Err(BroadcastStreamRecvError::Lagged(skipped)) => {
+            Ok(stream_warning_event(stream_name, skipped))
+        }
+    }
+}
+
+fn stream_warning_event(stream_name: &'static str, skipped: u64) -> Event {
+    Event::default().event("stream-warning").data(format!(
+        "{stream_name} skipped {skipped} events; reconnect will replay buffered events."
+    ))
 }
 
 #[cfg(test)]
@@ -203,6 +219,25 @@ mod tests {
         assert!(
             debug.contains("7"),
             "expected event debug output to contain id value: {debug}"
+        );
+    }
+
+    #[test]
+    fn lagged_receivers_emit_stream_warning_event() {
+        let event = live_event_to_sse(
+            Err(BroadcastStreamRecvError::Lagged(3)),
+            "Browser event stream",
+        )
+        .expect("lagged warnings should serialize");
+
+        let debug = format!("{event:?}");
+        assert!(
+            debug.contains("stream-warning"),
+            "expected lagged event to include stream-warning: {debug}"
+        );
+        assert!(
+            debug.contains("skipped 3 events"),
+            "expected lagged event to mention skipped count: {debug}"
         );
     }
 }
