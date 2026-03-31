@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { attachAgentSessionListener } from "../events/session-events";
 import { createDeferred, createTaskCardFixture } from "../test-utils";
 import { createAgentSessionActions } from "./session-actions";
 
@@ -314,6 +315,116 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
     } finally {
       adapter.hasSession = originalHasSession;
+    }
+  });
+
+  test("preserves the user-stopped notice when local stop emits session_finished", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalSubscribeEvents = adapter.subscribeEvents;
+    const originalStopSession = adapter.stopSession;
+    let sessionEventListener: ((event: { type: string; [key: string]: unknown }) => void) | null =
+      null;
+
+    adapter.hasSession = () => true;
+    adapter.subscribeEvents = (_sessionId, listener) => {
+      sessionEventListener = listener as (event: { type: string; [key: string]: unknown }) => void;
+      return () => {
+        sessionEventListener = null;
+      };
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          role: "build",
+          runId: null,
+          pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: ["*"] }],
+        }),
+      },
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current[sessionId] = updater(current);
+    };
+
+    const unsubscribe = attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    adapter.stopSession = async (sessionId) => {
+      sessionEventListener?.({
+        type: "session_finished",
+        sessionId,
+        timestamp: "2026-02-22T08:00:10.000Z",
+        message: "Session stopped",
+      });
+    };
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map([["session-1", unsubscribe]]) },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      attachSessionListener: () => unsubscribe,
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+    });
+
+    try {
+      await actions.stopAgentSession("session-1");
+
+      const lastMessage = sessionsRef.current["session-1"]?.messages.at(-1);
+      expect(lastMessage?.content).toBe("Session stopped at your request.");
+      expect(lastMessage?.meta).toEqual({
+        kind: "session_notice",
+        tone: "cancelled",
+        reason: "user_stopped",
+        title: "Stopped",
+      });
+      expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+      expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.subscribeEvents = originalSubscribeEvents;
+      adapter.stopSession = originalStopSession;
+      unsubscribe();
     }
   });
 

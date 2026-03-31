@@ -380,6 +380,19 @@ export const handleSessionTodosUpdated = (
   );
 };
 
+const buildUserStoppedNoticeMessage = (timestamp: string) => ({
+  id: crypto.randomUUID(),
+  role: "system" as const,
+  content: "Session stopped at your request.",
+  timestamp,
+  meta: {
+    kind: "session_notice" as const,
+    tone: "cancelled" as const,
+    reason: "user_stopped" as const,
+    title: "Stopped",
+  },
+});
+
 export const handleSessionError = (
   context: SessionLifecycleEventContext,
   event: Extract<SessionEvent, { type: "session_error" }>,
@@ -414,18 +427,7 @@ export const handleSessionError = (
         messages: [
           ...settledMessages,
           appendUserStoppedNotice
-            ? {
-                id: crypto.randomUUID(),
-                role: "system" as const,
-                content: "Session stopped at your request.",
-                timestamp: event.timestamp,
-                meta: {
-                  kind: "session_notice" as const,
-                  tone: "cancelled" as const,
-                  reason: "user_stopped" as const,
-                  title: "Stopped",
-                },
-              }
+            ? buildUserStoppedNoticeMessage(event.timestamp)
             : {
                 id: crypto.randomUUID(),
                 role: "system" as const,
@@ -471,12 +473,17 @@ export const handleSessionFinished = (
           current.messages,
         ),
       );
+      const appendUserStoppedNotice = Boolean(current.stopRequestedAt);
       return {
         ...finalized,
-        messages: settleDanglingTodoToolMessages(finalized.messages, event.timestamp),
+        messages: [
+          ...settleDanglingTodoToolMessages(finalized.messages, event.timestamp),
+          ...(appendUserStoppedNotice ? [buildUserStoppedNoticeMessage(event.timestamp)] : []),
+        ],
         pendingPermissions: [],
         pendingQuestions: [],
         status: "stopped",
+        stopRequestedAt: null,
       };
     },
     { persist: true },
