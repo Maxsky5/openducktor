@@ -173,6 +173,10 @@ const updateAssistantMessageCompletionState = (
     return;
   }
 
+  if (!isCompleted && session.completedAssistantMessageIds.has(messageId)) {
+    return;
+  }
+
   const previousActiveAssistantMessageId = session.activeAssistantMessageId;
   if (isCompleted) {
     if (session.activeAssistantMessageId === messageId) {
@@ -181,12 +185,112 @@ const updateAssistantMessageCompletionState = (
     session.completedAssistantMessageIds.add(messageId);
   } else {
     session.activeAssistantMessageId = messageId;
-    session.completedAssistantMessageIds.delete(messageId);
   }
 
   if (previousActiveAssistantMessageId !== session.activeAssistantMessageId) {
     reconcileUserMessageQueuedStates(runtime);
   }
+};
+
+const updateMessageMetadata = (
+  runtime: EventStreamRuntime,
+  messageId: string,
+  updates: {
+    timestamp?: string;
+    model?: ReturnType<typeof readMessageModelSelection>;
+    parentId?: string;
+    text?: string;
+    hasStopSignal?: boolean;
+    totalTokens?: number;
+  },
+): void => {
+  const session = runtime.getSession(runtime.sessionId);
+  if (!session) {
+    return;
+  }
+
+  const previous = session.messageMetadataById.get(messageId);
+  const timestamp = updates.timestamp ?? previous?.timestamp ?? runtime.now();
+  const model = updates.model ?? previous?.model;
+  const parentId = updates.parentId ?? previous?.parentId;
+  const text = updates.text ?? previous?.text;
+  const hasStopSignal = updates.hasStopSignal ?? previous?.hasStopSignal;
+  const totalTokens = updates.totalTokens ?? previous?.totalTokens;
+
+  session.messageMetadataById.set(messageId, {
+    timestamp,
+    ...(model ? { model } : {}),
+    ...(parentId ? { parentId } : {}),
+    ...(text ? { text } : {}),
+    ...(hasStopSignal !== undefined ? { hasStopSignal } : {}),
+    ...(totalTokens !== undefined ? { totalTokens } : {}),
+  });
+};
+
+const maybeEmitCompletedAssistantMessage = (
+  runtime: EventStreamRuntime,
+  input: {
+    messageId: string;
+    timestamp?: string;
+    info?: unknown;
+    hasStopSignal?: boolean;
+  },
+): boolean => {
+  const session = runtime.getSession(runtime.sessionId);
+  if (!session || !isAssistantMessage(runtime, input.messageId)) {
+    return false;
+  }
+
+  const assistantParts = getKnownMessageParts(runtime, input.messageId);
+  const existingMetadata = session.messageMetadataById.get(input.messageId);
+  const totalTokens =
+    input.info !== undefined
+      ? (extractMessageTotalTokens(input.info, assistantParts) ?? existingMetadata?.totalTokens)
+      : existingMetadata?.totalTokens;
+  const assistantModel =
+    input.info !== undefined
+      ? (readMessageModelSelection(input.info) ?? existingMetadata?.model)
+      : existingMetadata?.model;
+  const hasStopSignal = input.hasStopSignal ?? existingMetadata?.hasStopSignal ?? false;
+  const timestamp = input.timestamp ?? existingMetadata?.timestamp ?? runtime.now();
+
+  updateMessageMetadata(runtime, input.messageId, {
+    timestamp,
+    ...(assistantModel ? { model: assistantModel } : {}),
+    hasStopSignal,
+    ...(totalTokens !== undefined ? { totalTokens } : {}),
+  });
+
+  if (!hasStopSignal || assistantParts.length === 0) {
+    return false;
+  }
+
+  const text = readTextFromParts(assistantParts);
+  const visible = sanitizeAssistantMessage(text);
+  if (visible.length === 0) {
+    emitSessionIdle(runtime);
+    reconcileUserMessageQueuedStates(runtime);
+    return true;
+  }
+
+  if (session.emittedAssistantMessageIds.has(input.messageId)) {
+    return true;
+  }
+
+  runtime.emit(runtime.sessionId, {
+    type: "assistant_message",
+    sessionId: runtime.sessionId,
+    timestamp,
+    messageId: input.messageId,
+    message: visible,
+    ...(typeof totalTokens === "number" ? { totalTokens } : {}),
+    ...(assistantModel ? { model: assistantModel } : {}),
+  });
+  session.emittedAssistantMessageIds.add(input.messageId);
+
+  emitSessionIdle(runtime);
+  reconcileUserMessageQueuedStates(runtime);
+  return true;
 };
 
 const emitKnownUserMessage = (
@@ -436,7 +540,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     : undefined;
   if (messageId && role) {
     runtime.messageRoleById.set(messageId, role);
-    session?.messageMetadataById.set(messageId, {
+    updateMessageMetadata(runtime, messageId, {
       timestamp: messageTimestamp,
       ...(messageModel ? { model: messageModel } : {}),
       ...(parentId ? { parentId } : {}),
@@ -531,49 +635,16 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     });
   }
 
-  const assistantParts =
-    messageId && isAssistantRole
-      ? normalizedParts.length > 0
-        ? normalizedParts
-        : getKnownMessageParts(runtime, messageId)
-      : [];
-  const shouldEmitCompletedMessage =
-    messageId !== undefined &&
-    isAssistantRole &&
-    assistantParts.length > 0 &&
-    assistantMessageHasStopSignal;
-  if (!shouldEmitCompletedMessage || !messageId) {
+  if (!messageId || !isAssistantRole) {
     return true;
   }
 
-  const text = readTextFromParts(assistantParts);
-  const visible = sanitizeAssistantMessage(text);
-  if (visible.length === 0) {
-    emitSessionIdle(runtime);
-    reconcileUserMessageQueuedStates(runtime);
-    return true;
-  }
-
-  const totalTokens = extractMessageTotalTokens(infoRecord, assistantParts);
-  const assistantModel = readMessageModelSelection(infoRecord);
-  const emittedMessageIds = session?.emittedAssistantMessageIds;
-  if (emittedMessageIds?.has(messageId)) {
-    return true;
-  }
-
-  runtime.emit(runtime.sessionId, {
-    type: "assistant_message",
-    sessionId: runtime.sessionId,
-    timestamp: messageTimestamp,
+  maybeEmitCompletedAssistantMessage(runtime, {
     messageId,
-    message: visible,
-    ...(typeof totalTokens === "number" ? { totalTokens } : {}),
-    ...(assistantModel ? { model: assistantModel } : {}),
+    timestamp: messageTimestamp,
+    info: infoRecord,
+    hasStopSignal: assistantMessageHasStopSignal,
   });
-  emittedMessageIds?.add(messageId);
-
-  emitSessionIdle(runtime);
-  reconcileUserMessageQueuedStates(runtime);
   return true;
 };
 
@@ -598,6 +669,9 @@ const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRuntime):
     if (updatedPart) {
       runtime.partsById.set(partId, updatedPart);
       emitAssistantPart(runtime, updatedPart);
+      maybeEmitCompletedAssistantMessage(runtime, {
+        messageId: updatedPart.messageID,
+      });
       return true;
     }
   }
@@ -659,6 +733,12 @@ const handleMessagePartUpdatedEvent = (event: Event, runtime: EventStreamRuntime
   emitAssistantPart(runtime, nextPart);
   const messageId = nextPart.messageID;
   const role = runtime.messageRoleById.get(messageId);
+  if (role === "assistant") {
+    maybeEmitCompletedAssistantMessage(runtime, {
+      messageId,
+    });
+    return true;
+  }
   if (role === "user") {
     const session = runtime.getSession(runtime.sessionId);
     const metadata = session?.messageMetadataById.get(messageId);

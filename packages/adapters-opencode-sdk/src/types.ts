@@ -43,6 +43,8 @@ export type SessionRecord = {
       model?: AgentModelSelection;
       parentId?: string;
       text?: string;
+      hasStopSignal?: boolean;
+      totalTokens?: number;
     }
   >;
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
