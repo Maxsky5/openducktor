@@ -12,6 +12,7 @@ import { isDuplicateAssistantMessage, READ_ONLY_ROLES } from "../support/core";
 import { upsertMessage } from "../support/messages";
 import { mergeTodoListPreservingOrder } from "../support/todos";
 import {
+  isStopAbortSessionErrorMessage,
   normalizeRetryStatusMessage,
   normalizeSessionErrorMessage,
 } from "../support/tool-messages";
@@ -402,19 +403,35 @@ export const handleSessionError = (
         outcome: "error",
         errorMessage: sessionErrorMessage,
       });
+      const appendUserStoppedNotice =
+        Boolean(current.stopRequestedAt) && isStopAbortSessionErrorMessage(sessionErrorMessage);
       return {
         ...finalized,
         status: "error",
+        stopRequestedAt: null,
         pendingPermissions: [],
         pendingQuestions: [],
         messages: [
           ...settledMessages,
-          {
-            id: crypto.randomUUID(),
-            role: "system",
-            content: `Session error: ${sessionErrorMessage}`,
-            timestamp: event.timestamp,
-          },
+          appendUserStoppedNotice
+            ? {
+                id: crypto.randomUUID(),
+                role: "system" as const,
+                content: "Session stopped at your request.",
+                timestamp: event.timestamp,
+                meta: {
+                  kind: "session_notice" as const,
+                  tone: "cancelled" as const,
+                  reason: "user_stopped" as const,
+                  title: "Stopped",
+                },
+              }
+            : {
+                id: crypto.randomUUID(),
+                role: "system" as const,
+                content: `Session error: ${sessionErrorMessage}`,
+                timestamp: event.timestamp,
+              },
         ],
       };
     },
