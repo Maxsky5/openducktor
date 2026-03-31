@@ -6,6 +6,7 @@ import type { AgentChatModel } from "@/components/features/agents/agent-chat/age
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
@@ -95,8 +96,10 @@ type UseAgentStudioThreadModelArgs = {
   showThinkingMessages: boolean;
   isContextSwitching: boolean;
   isSessionHistoryLoading: boolean;
+  isWaitingForRuntimeReadiness: boolean;
   taskId: string;
   activeSessionAgentColors: Record<string, string>;
+  agentStudioReadinessState: AgentStudioReadinessState;
   agentStudioReady: boolean;
   agentStudioBlockedReason: string | null;
   isLoadingChecks: boolean;
@@ -125,8 +128,10 @@ export const useAgentStudioThreadModel = ({
   showThinkingMessages,
   isContextSwitching,
   isSessionHistoryLoading,
+  isWaitingForRuntimeReadiness,
   taskId,
   activeSessionAgentColors,
+  agentStudioReadinessState,
   agentStudioReady,
   agentStudioBlockedReason,
   isLoadingChecks,
@@ -171,7 +176,9 @@ export const useAgentStudioThreadModel = ({
         showThinkingMessages,
         isSessionViewLoading: isContextSwitching,
         isSessionHistoryLoading,
+        isWaitingForRuntimeReadiness,
         roleOptions: ROLE_OPTIONS,
+        agentStudioReadinessState,
         agentStudioReady,
         agentStudioBlockedReason,
         isLoadingChecks,
@@ -196,6 +203,7 @@ export const useAgentStudioThreadModel = ({
       }),
     [
       activeSessionAgentColors,
+      agentStudioReadinessState,
       agentStudioBlockedReason,
       agentStudioReady,
       canKickoffNewSession,
@@ -204,6 +212,7 @@ export const useAgentStudioThreadModel = ({
       handleRefreshChecks,
       isContextSwitching,
       isSessionHistoryLoading,
+      isWaitingForRuntimeReadiness,
       isLoadingChecks,
       isSessionWorking,
       isSending,

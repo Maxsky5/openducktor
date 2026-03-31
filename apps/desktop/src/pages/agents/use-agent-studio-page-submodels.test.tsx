@@ -16,8 +16,10 @@ const createHookArgs = (showThinkingMessages = false): HookArgs => ({
   showThinkingMessages,
   isContextSwitching: false,
   isSessionHistoryLoading: false,
+  isWaitingForRuntimeReadiness: false,
   taskId: "task-1",
   activeSessionAgentColors: {},
+  agentStudioReadinessState: "ready",
   agentStudioReady: true,
   agentStudioBlockedReason: "",
   isLoadingChecks: false,
@@ -64,6 +66,37 @@ describe("useAgentStudioThreadModel", () => {
 
     await harness.mount();
     expect(harness.getLatest().isSessionWorking).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("forwards readiness state into the thread model", async () => {
+    const harness = createHookHarness({
+      ...createHookArgs(false),
+      agentStudioReadinessState: "blocked",
+      agentStudioReady: false,
+      agentStudioBlockedReason: "Runtime unavailable",
+    });
+
+    await harness.mount();
+    expect(harness.getLatest().readinessState).toBe("blocked");
+    expect(harness.getLatest().blockedReason).toBe("Runtime unavailable");
+
+    await harness.unmount();
+  });
+
+  test("forwards runtime-waiting separately from history loading", async () => {
+    const harness = createHookHarness({
+      ...createHookArgs(false),
+      agentStudioReadinessState: "checking",
+      agentStudioReady: false,
+      isWaitingForRuntimeReadiness: true,
+      isSessionHistoryLoading: false,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(true);
+    expect(harness.getLatest().isSessionHistoryLoading).toBe(false);
 
     await harness.unmount();
   });

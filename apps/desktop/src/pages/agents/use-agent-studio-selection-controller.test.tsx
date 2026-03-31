@@ -40,6 +40,7 @@ const createHookHarness = (initialProps: HookArgs) =>
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeRepo: null,
+  agentStudioReadinessState: "ready",
   tasks: [createTask("task-1"), createTask("task-2")],
   isLoadingTasks: false,
   sessions: [],

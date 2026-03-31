@@ -98,6 +98,16 @@ export function useAgentStudioReadiness({
     : null;
 
   const agentStudioReady = Boolean(activeRepo && healthyRuntimeDefinition);
+  const agentStudioReadinessState = (() => {
+    if (agentStudioReady) {
+      return "ready";
+    }
+    if (activeRepo && (isLoadingRuntimeDefinitions || isLoadingChecks || isRuntimeHealthPending)) {
+      return "checking";
+    }
+
+    return "blocked";
+  })();
   const agentStudioBlockedReason = (() => {
     if (agentStudioReady) {
       return null;
@@ -128,6 +138,7 @@ export function useAgentStudioReadiness({
   })();
 
   return {
+    agentStudioReadinessState,
     agentStudioReady,
     agentStudioBlockedReason,
     isLoadingChecks,

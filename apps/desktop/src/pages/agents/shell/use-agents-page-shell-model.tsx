@@ -137,6 +137,16 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
 
   const clearComposerInput = signalContextSwitchIntent;
 
+  const readiness = useAgentStudioReadiness({
+    activeRepo,
+    runtimeDefinitions,
+    isLoadingRuntimeDefinitions,
+    runtimeDefinitionsError,
+    runtimeHealthByRuntime,
+    isLoadingChecks,
+    refreshChecks,
+  });
+
   const selection = useAgentStudioSelectionController({
     activeRepo,
     tasks,
@@ -148,6 +158,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     roleFromQuery,
     scenarioFromQuery,
     updateQuery: scheduleQueryUpdate,
+    agentStudioReadinessState: readiness.agentStudioReadinessState,
     hydrateRequestedTaskSessionHistory,
     readSessionModelCatalog,
     readSessionTodos,
@@ -233,16 +244,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     roleFromQuery,
     isActiveTaskHydrated: selection.isActiveTaskHydrated,
     scheduleQueryUpdate,
-  });
-
-  const readiness = useAgentStudioReadiness({
-    activeRepo,
-    runtimeDefinitions,
-    isLoadingRuntimeDefinitions,
-    runtimeDefinitionsError,
-    runtimeHealthByRuntime,
-    isLoadingChecks,
-    refreshChecks,
   });
 
   const orchestration = useAgentStudioOrchestrationController({

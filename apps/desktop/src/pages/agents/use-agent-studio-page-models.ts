@@ -7,6 +7,7 @@ import { useAgentChatLayout } from "@/components/features/agents/agent-chat/use-
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
@@ -38,6 +39,7 @@ type AgentStudioCoreContext = {
   activeSession: AgentSessionState | null;
   isTaskHydrating: boolean;
   isSessionHistoryHydrating: boolean;
+  isWaitingForRuntimeReadiness: boolean;
   isSessionHistoryHydrationFailed: boolean;
   contextSwitchVersion: number;
 };
@@ -71,6 +73,7 @@ type AgentStudioSessionActionsContext = {
 };
 
 type AgentStudioReadinessContext = {
+  agentStudioReadinessState: AgentStudioReadinessState;
   agentStudioReady: boolean;
   agentStudioBlockedReason: string | null;
   isLoadingChecks: boolean;
@@ -277,8 +280,10 @@ export function useAgentStudioPageModels({
     showThinkingMessages: chatSettings.showThinkingMessages,
     isContextSwitching,
     isSessionHistoryLoading: core.isSessionHistoryHydrating,
+    isWaitingForRuntimeReadiness: core.isWaitingForRuntimeReadiness,
     taskId: core.taskId,
     activeSessionAgentColors: modelSelection.activeSessionAgentColors,
+    agentStudioReadinessState: readiness.agentStudioReadinessState,
     agentStudioReady: readiness.agentStudioReady,
     agentStudioBlockedReason: readiness.agentStudioBlockedReason,
     isLoadingChecks: readiness.isLoadingChecks,

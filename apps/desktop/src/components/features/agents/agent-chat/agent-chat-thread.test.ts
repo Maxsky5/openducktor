@@ -23,7 +23,9 @@ const buildBaseModel = () => ({
   showThinkingMessages: false,
   isSessionViewLoading: false,
   isSessionHistoryLoading: false,
+  isWaitingForRuntimeReadiness: false,
   roleOptions: TEST_ROLE_OPTIONS,
+  readinessState: "ready" as const,
   agentStudioReady: true,
   blockedReason: "",
   isLoadingChecks: false,
@@ -182,7 +184,7 @@ describe("AgentChatThread", () => {
     expect(html).not.toContain("Agent is thinking...");
   });
 
-  test("renders loading state when active session has no renderable rows yet", () => {
+  test("keeps the transcript area blank when active session has no renderable rows yet", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
@@ -198,7 +200,8 @@ describe("AgentChatThread", () => {
       }),
     );
 
-    expect(html).toContain("Loading session history...");
+    expect(html).not.toContain("Loading session history...");
+    expect(html).not.toContain("Loading session...");
   });
 
   test("renders blank transcript area when session has messages but all were filtered", () => {
@@ -267,6 +270,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
+          readinessState: "blocked",
           agentStudioReady: false,
           blockedReason: "OpenCode runtime is unavailable",
           session: null,
@@ -276,6 +280,65 @@ describe("AgentChatThread", () => {
 
     expect(html).toContain("OpenCode runtime is unavailable");
     expect(html).toContain("Recheck");
+  });
+
+  test("renders the runtime-starting overlay without unmounting transcript content", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          readinessState: "checking",
+          agentStudioReady: false,
+          isWaitingForRuntimeReadiness: true,
+          session: buildSession({
+            messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],
+          }),
+        },
+      }),
+    );
+
+    expect(html).toContain("Runtime is starting");
+    expect(html).toContain("Waiting for runtime and MCP health before loading this session.");
+    expect(html).toContain("Cached transcript");
+  });
+
+  test("renders the runtime-starting overlay while waiting for a worktree runtime after page readiness succeeds", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          readinessState: "ready",
+          agentStudioReady: true,
+          isWaitingForRuntimeReadiness: true,
+          session: buildSession({
+            messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],
+          }),
+        },
+      }),
+    );
+
+    expect(html).toContain("Runtime is starting");
+    expect(html).toContain("Waiting for runtime and MCP health before loading this session.");
+    expect(html).toContain("Cached transcript");
+  });
+
+  test("does not show the runtime-starting overlay for generic readiness checks without a waiting session", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          readinessState: "checking",
+          agentStudioReady: false,
+          isWaitingForRuntimeReadiness: false,
+          session: buildSession({
+            messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],
+          }),
+        },
+      }),
+    );
+
+    expect(html).not.toContain("Runtime is starting");
+    expect(html).toContain("Cached transcript");
   });
 
   test("renders transcript messages and question cards without synthetic draft rows", () => {

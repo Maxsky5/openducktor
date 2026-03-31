@@ -5,6 +5,7 @@ import type {
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
+import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
 import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
@@ -20,6 +21,7 @@ export type AgentStudioOrchestrationSelectionContext = AgentStudioSelectionContr
 };
 
 export type AgentStudioOrchestrationReadinessContext = {
+  agentStudioReadinessState: AgentStudioReadinessState;
   agentStudioReady: boolean;
   agentStudioBlockedReason: string | null;
   isLoadingChecks: boolean;
@@ -80,6 +82,7 @@ type AgentStudioPageModelsViewContext = Pick<
   | "isActiveTaskHydrationFailed"
   | "isViewSessionHistoryHydrationFailed"
   | "isViewSessionHistoryHydrating"
+  | "isViewSessionWaitingForRuntimeReadiness"
 >;
 
 type AgentStudioPageModelsSessionsContext = Pick<
@@ -170,6 +173,7 @@ export const buildAgentStudioPageModelsArgs = ({
         view.viewTaskId && !view.isActiveTaskHydrated && !view.isActiveTaskHydrationFailed,
       ),
       isSessionHistoryHydrating: view.isViewSessionHistoryHydrating,
+      isWaitingForRuntimeReadiness: view.isViewSessionWaitingForRuntimeReadiness,
       isSessionHistoryHydrationFailed: view.isViewSessionHistoryHydrationFailed,
       contextSwitchVersion: view.contextSwitchVersion,
     },
@@ -330,6 +334,7 @@ export function useAgentStudioOrchestrationController({
       isActiveTaskHydrationFailed: selection.isActiveTaskHydrationFailed,
       isViewSessionHistoryHydrationFailed: selection.isViewSessionHistoryHydrationFailed,
       isViewSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
+      isViewSessionWaitingForRuntimeReadiness: selection.isViewSessionWaitingForRuntimeReadiness,
     },
     sessions: {
       viewSessionsForTask,

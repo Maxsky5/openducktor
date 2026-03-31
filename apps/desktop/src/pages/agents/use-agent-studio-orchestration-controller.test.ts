@@ -36,6 +36,7 @@ const baseArgs: BuildArgs = {
     isActiveTaskHydrationFailed: false,
     isViewSessionHistoryHydrationFailed: false,
     isViewSessionHistoryHydrating: false,
+    isViewSessionWaitingForRuntimeReadiness: false,
   },
   sessions: {
     viewSessionsForTask: [session],
@@ -55,6 +56,7 @@ const baseArgs: BuildArgs = {
     qaDoc: taskDocument,
   },
   readiness: {
+    agentStudioReadinessState: "ready",
     agentStudioReady: true,
     agentStudioBlockedReason: "",
     isLoadingChecks: false,
@@ -117,9 +119,11 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.core.role).toBe("planner");
     expect(mapped.core.contextSwitchVersion).toBe(4);
     expect(mapped.core.isSessionHistoryHydrationFailed).toBe(false);
+    expect(mapped.core.isWaitingForRuntimeReadiness).toBe(false);
     expect(mapped.taskTabs.onCreateTab).toBe(onCreateTab);
     expect(mapped.taskTabs.onCloseTab).toBe(onCloseTab);
     expect(mapped.documents.planDoc.markdown).toBe("# doc");
+    expect(mapped.readiness.agentStudioReadinessState).toBe("ready");
     expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgent);
     expect(mapped.modelSelection.onSelectModel).toBe(handleSelectModel);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);

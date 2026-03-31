@@ -276,7 +276,9 @@ describe("agents-page-view-model", () => {
       showThinkingMessages: true,
       isSessionViewLoading: false,
       isSessionHistoryLoading: false,
+      isWaitingForRuntimeReadiness: false,
       roleOptions: [{ role: "spec", label: "Spec", icon: Sparkles }],
+      agentStudioReadinessState: "ready",
       agentStudioReady: true,
       agentStudioBlockedReason: "",
       isLoadingChecks: false,
@@ -330,6 +332,7 @@ describe("agents-page-view-model", () => {
     expect(model.thread.taskSelected).toBe(false);
     expect(model.thread.isSessionWorking).toBe(true);
     expect(model.thread.showThinkingMessages).toBe(true);
+    expect(model.thread.readinessState).toBe("ready");
     expect(model.composer.contextUsage).toEqual({ totalTokens: 10, contextWindow: 100 });
 
     model.thread.onRefreshChecks();

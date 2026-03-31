@@ -32,6 +32,7 @@ type QuerySyncState = {
   sessionParam: string;
   hasExplicitRoleParam: boolean;
   roleFromQuery: "planner";
+  scenarioFromQuery: "planner_initial";
   navigationPersistenceError: Error | null;
   retryNavigationPersistence: typeof retryNavigationPersistence;
   updateQuery: typeof updateQuery;
@@ -61,6 +62,7 @@ type SelectionState = {
 };
 
 type ReadinessState = {
+  agentStudioReadinessState: "ready" | "checking" | "blocked";
   agentStudioReady: boolean;
   agentStudioBlockedReason: string | null;
   isLoadingChecks: boolean;
@@ -153,6 +155,7 @@ let querySyncState: QuerySyncState = {
   sessionParam: "session-1",
   hasExplicitRoleParam: false,
   roleFromQuery: "planner" as const,
+  scenarioFromQuery: "planner_initial" as const,
   navigationPersistenceError: new Error("navigation failed"),
   retryNavigationPersistence,
   updateQuery,
@@ -180,6 +183,7 @@ let selectionState: SelectionState = {
   handleSelectTab,
 };
 let readinessState: ReadinessState = {
+  agentStudioReadinessState: "ready",
   agentStudioReady: true,
   agentStudioBlockedReason: null,
   isLoadingChecks: false,
@@ -373,6 +377,7 @@ beforeEach(async () => {
     sessionParam: "session-1",
     hasExplicitRoleParam: false,
     roleFromQuery: "planner",
+    scenarioFromQuery: "planner_initial",
     navigationPersistenceError: new Error("navigation failed"),
     retryNavigationPersistence,
     updateQuery,
@@ -400,6 +405,7 @@ beforeEach(async () => {
     handleSelectTab,
   };
   readinessState = {
+    agentStudioReadinessState: "ready",
     agentStudioReady: true,
     agentStudioBlockedReason: null,
     isLoadingChecks: false,
