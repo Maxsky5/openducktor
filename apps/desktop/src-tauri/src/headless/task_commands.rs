@@ -2,15 +2,118 @@ use super::command_registry::CommandRegistry;
 use super::command_support::{
     deserialize_args, handle_repo_task_operation, handle_repo_task_operation_blocking,
     handle_repo_task_reason_operation, handle_repo_task_reason_operation_blocking, request_error,
-    serialize_value, service_error, CommandResult, BuildCompletedArgs, HeadlessState,
-    HumanRequestChangesArgs, MarkdownInputArgs, RepoPathArgs, RepoTaskArgs, SetPlanArgs,
-    SetSpecArgs, TaskCreateArgs, TaskDeleteArgs, TaskDirectMergeArgs, TaskPullRequestUpsertArgs,
-    TaskResetImplementationArgs, TaskTransitionArgs, TaskUpdateArgs,
+    serialize_value, service_error, CommandResult, HeadlessState, RepoPathArgs, RepoTaskArgs,
 };
 use crate::commands::documents::map_plan_subtasks;
 use crate::commands::tasks::{map_task_create_payload, map_task_update_payload};
+use crate::{
+    BuildCompletePayload, MarkdownPayload, PlanPayload, PullRequestContentPayload,
+    TaskCreatePayload, TaskDirectMergePayload, TaskUpdatePayload,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskCreateArgs {
+    repo_path: String,
+    input: TaskCreatePayload,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskListArgs {
+    repo_path: String,
+    done_visible_days: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskUpdateArgs {
+    repo_path: String,
+    task_id: String,
+    patch: TaskUpdatePayload,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskDeleteArgs {
+    repo_path: String,
+    task_id: String,
+    delete_subtasks: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskResetImplementationArgs {
+    repo_path: String,
+    task_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskTransitionArgs {
+    repo_path: String,
+    task_id: String,
+    status: host_domain::TaskStatus,
+    reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetSpecArgs {
+    repo_path: String,
+    task_id: String,
+    markdown: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetPlanArgs {
+    repo_path: String,
+    task_id: String,
+    input: PlanPayload,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MarkdownInputArgs {
+    repo_path: String,
+    task_id: String,
+    input: MarkdownPayload,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BuildCompletedArgs {
+    repo_path: String,
+    task_id: String,
+    input: Option<BuildCompletePayload>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskDirectMergeArgs {
+    repo_path: String,
+    task_id: String,
+    input: TaskDirectMergePayload,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskPullRequestUpsertArgs {
+    repo_path: String,
+    task_id: String,
+    input: PullRequestContentPayload,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HumanRequestChangesArgs {
+    repo_path: String,
+    task_id: String,
+    note: Option<String>,
+}
 
 pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), String> {
     registry.register("tasks_list", |state, args| Box::pin(handle_tasks_list(state, args)))?;
@@ -88,7 +191,7 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
 }
 
 async fn handle_tasks_list(state: &HeadlessState, args: Value) -> CommandResult {
-    let super::command_support::TaskListArgs {
+    let TaskListArgs {
         repo_path,
         done_visible_days,
     } = deserialize_args(args)?;

@@ -1,21 +1,185 @@
 use super::command_registry::CommandRegistry;
 use super::command_support::{
-    build_worktree_snapshot_metadata, deserialize_args, handle_repo_path_operation_blocking,
-    invalidate_repo_worktree_cache, request_error, require_git_commit_message,
-    require_git_rebase_target_branch, resolve_authorized_working_dir, run_headless_blocking,
-    serialize_value, CommandResult, GitAheadBehindArgs, GitConflictAbortArgs,
-    GitCreateWorktreeArgs, GitCurrentBranchArgs, GitDiffArgs, GitPullBranchArgs,
-    GitPushBranchArgs, GitRebaseAbortArgs, GitRemoveWorktreeArgs,
-    GitResetWorktreeSelectionArgs, GitStatusArgs, GitSwitchBranchArgs, GitWorktreeStatusArgs,
-    HeadlessState,
+    deserialize_args, handle_repo_path_operation_blocking, invalidate_repo_worktree_cache,
+    request_error, run_headless_blocking, serialize_value, CommandResult, HeadlessState,
 };
 use crate::commands::git::{
     build_worktree_status_summary_with_snapshot, build_worktree_status_with_snapshot,
     hash_worktree_diff_payload, hash_worktree_diff_summary_payload, hash_worktree_status_payload,
-    parse_diff_scope, require_target_branch,
+    parse_diff_scope, require_target_branch, resolve_working_dir, WorktreeSnapshotMetadata,
+    GIT_WORKTREE_HASH_VERSION,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitCurrentBranchArgs {
+    repo_path: String,
+    working_dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitSwitchBranchArgs {
+    repo_path: String,
+    branch: String,
+    create: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitCreateWorktreeArgs {
+    repo_path: String,
+    worktree_path: String,
+    branch: String,
+    create_branch: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitRemoveWorktreeArgs {
+    repo_path: String,
+    worktree_path: String,
+    force: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitPushBranchArgs {
+    repo_path: String,
+    branch: String,
+    working_dir: Option<String>,
+    remote: Option<String>,
+    set_upstream: Option<bool>,
+    force_with_lease: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitStatusArgs {
+    repo_path: String,
+    working_dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitDiffArgs {
+    repo_path: String,
+    target_branch: Option<String>,
+    working_dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitAheadBehindArgs {
+    repo_path: String,
+    target_branch: String,
+    working_dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitPullBranchArgs {
+    repo_path: String,
+    working_dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitResetWorktreeSelectionArgs {
+    repo_path: String,
+    target_branch: String,
+    snapshot: host_domain::GitResetSnapshot,
+    selection: host_domain::GitResetWorktreeSelection,
+    working_dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitRebaseAbortArgs {
+    repo_path: String,
+    working_dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitConflictAbortArgs {
+    repo_path: String,
+    operation: host_domain::GitConflictOperation,
+    working_dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitWorktreeStatusArgs {
+    repo_path: String,
+    target_branch: String,
+    diff_scope: Option<String>,
+    working_dir: Option<String>,
+}
+
+fn current_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+fn resolve_authorized_working_dir(
+    state: &HeadlessState,
+    repo_path: &str,
+    working_dir: Option<&str>,
+) -> Result<String, super::command_support::HeadlessCommandError> {
+    state
+        .service
+        .resolve_authorized_repo_path(repo_path)
+        .map_err(request_error)?;
+    resolve_working_dir(repo_path, working_dir).map_err(request_error)
+}
+
+fn require_git_commit_message(
+    message: &str,
+) -> Result<String, super::command_support::HeadlessCommandError> {
+    let trimmed = message.trim();
+    if trimmed.is_empty() {
+        return Err(super::command_support::HeadlessCommandError::bad_request(
+            "message is required",
+        ));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn require_git_rebase_target_branch(
+    target_branch: &str,
+) -> Result<String, super::command_support::HeadlessCommandError> {
+    let trimmed = target_branch.trim();
+    if trimmed.is_empty() {
+        return Err(super::command_support::HeadlessCommandError::bad_request(
+            "targetBranch is required",
+        ));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn build_worktree_snapshot_metadata(
+    effective_working_dir: String,
+    target_branch: &str,
+    diff_scope: host_domain::GitDiffScope,
+    status_hash: String,
+    diff_hash: String,
+) -> WorktreeSnapshotMetadata {
+    WorktreeSnapshotMetadata {
+        effective_working_dir,
+        target_branch: target_branch.to_string(),
+        diff_scope,
+        observed_at_ms: current_timestamp_ms(),
+        hash_version: GIT_WORKTREE_HASH_VERSION,
+        status_hash,
+        diff_hash,
+    }
+}
 
 pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), String> {
     registry.register("git_get_branches", |state, args| {
@@ -451,4 +615,28 @@ async fn handle_git_abort_conflict(state: &HeadlessState, args: Value) -> Comman
         })
         .await?,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::StatusCode;
+
+    #[test]
+    fn require_git_commit_message_rejects_blank_values() {
+        let error =
+            require_git_commit_message("   ").expect_err("blank commit message should fail");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.message, "message is required");
+    }
+
+    #[test]
+    fn require_git_rebase_target_branch_rejects_blank_values() {
+        let error = require_git_rebase_target_branch("   ")
+            .expect_err("blank target branch should fail");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.message, "targetBranch is required");
+    }
 }

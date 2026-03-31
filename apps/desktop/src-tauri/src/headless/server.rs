@@ -1,4 +1,4 @@
-use super::command_registry::dispatch_command;
+use super::command_registry::{build_registry, dispatch_command};
 use super::command_support::{HeadlessCommandError, HeadlessState};
 use super::events::{build_sse_response, parse_last_event_id, HeadlessEventBus};
 use crate::{
@@ -12,6 +12,7 @@ use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde_json::{json, Value};
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
@@ -28,6 +29,9 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
     startup_phase_tracing();
     let service = startup_phase_service_bootstrap()?;
     startup_phase_shutdown_hooks(service.clone());
+    let registry = Arc::new(
+        build_registry().context("failed to build browser backend command registry")?,
+    );
     let events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let dev_server_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let app = Router::new()
@@ -40,6 +44,7 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
             service,
             events,
             dev_server_events,
+            registry,
         });
 
     let listener = TcpListener::bind((DEFAULT_BROWSER_BACKEND_HOST, port))

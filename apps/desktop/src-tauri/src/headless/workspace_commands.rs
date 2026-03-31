@@ -2,16 +2,64 @@ use super::command_registry::CommandRegistry;
 use super::command_support::{
     deserialize_args, handle_repo_path_operation, handle_repo_path_operation_blocking,
     serialize_value, service_error, CommandResult, HeadlessHookTrustConfirmationPort,
-    HeadlessState, RepoPathArgs, RuntimeCheckArgs, WorkspaceSaveRepoSettingsArgs,
-    WorkspaceSaveSettingsSnapshotArgs, WorkspaceSetTrustedHooksArgs,
-    WorkspaceUpdateGlobalGitConfigArgs, WorkspaceUpdateRepoConfigArgs,
-    WorkspaceUpdateRepoHooksArgs,
+    HeadlessState, RepoPathArgs,
 };
 use crate::run_service_blocking_tokio;
-use crate::SettingsSnapshotResponsePayload;
+use crate::{
+    RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload,
+    SettingsSnapshotResponsePayload,
+};
 use host_application::{RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate};
 use serde::Deserialize;
 use serde_json::Value;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimeCheckArgs {
+    force: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceUpdateRepoConfigArgs {
+    repo_path: String,
+    config: RepoConfigPayload,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceSaveRepoSettingsArgs {
+    repo_path: String,
+    settings: RepoSettingsPayload,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceUpdateRepoHooksArgs {
+    repo_path: String,
+    hooks: host_infra_system::HookSet,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceSaveSettingsSnapshotArgs {
+    snapshot: SettingsSnapshotPayload,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceUpdateGlobalGitConfigArgs {
+    git: host_infra_system::GlobalGitConfig,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceSetTrustedHooksArgs {
+    repo_path: String,
+    trusted: bool,
+    challenge_nonce: Option<String>,
+    challenge_fingerprint: Option<String>,
+}
 
 pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), String> {
     registry.register("system_check", |state, args| {

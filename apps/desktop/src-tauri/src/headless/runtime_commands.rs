@@ -1,12 +1,83 @@
 use super::command_registry::CommandRegistry;
 use super::command_support::{
     deserialize_args, handle_repo_task_operation, run_headless_blocking,
-    serialize_value, service_error, AgentSessionUpsertArgs, AgentSessionsListBulkArgs,
-    BuildRespondArgs, BuildStartArgs, BuildStopArgs, CommandResult, HeadlessState,
-    OptionalRepoPathArgs, RepoTaskArgs, RuntimeEnsureArgs, RuntimeListArgs, RuntimeStopArgs,
+    serialize_value, service_error, CommandResult, HeadlessState, RepoTaskArgs,
 };
 use super::events::{make_dev_server_emitter, make_emitter};
+use host_application::{BuildResponseAction, CleanupMode};
+use host_domain::AgentRuntimeKind;
+use serde::Deserialize;
 use serde_json::{json, Value};
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OptionalRepoPathArgs {
+    repo_path: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimeListArgs {
+    runtime_kind: String,
+    repo_path: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimeEnsureArgs {
+    runtime_kind: String,
+    repo_path: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimeStopArgs {
+    runtime_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BuildStartArgs {
+    repo_path: String,
+    task_id: String,
+    runtime_kind: AgentRuntimeKind,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BuildRespondArgs {
+    run_id: String,
+    action: BuildResponseAction,
+    payload: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BuildStopArgs {
+    run_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BuildCleanupArgs {
+    run_id: String,
+    mode: CleanupMode,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentSessionUpsertArgs {
+    repo_path: String,
+    task_id: String,
+    session: host_domain::AgentSessionDocument,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentSessionsListBulkArgs {
+    repo_path: String,
+    task_ids: Vec<String>,
+}
 
 pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), String> {
     registry.register("build_start", |state, args| Box::pin(handle_build_start(state, args)))?;
@@ -154,7 +225,7 @@ fn handle_build_stop(state: &HeadlessState, args: Value) -> CommandResult {
 }
 
 fn handle_build_cleanup(state: &HeadlessState, args: Value) -> CommandResult {
-    let super::command_support::BuildCleanupArgs { run_id, mode } = deserialize_args(args)?;
+    let BuildCleanupArgs { run_id, mode } = deserialize_args(args)?;
     Ok(json!({
         "ok": state
             .service
