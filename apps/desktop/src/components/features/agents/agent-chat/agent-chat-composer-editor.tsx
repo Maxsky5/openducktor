@@ -1,5 +1,5 @@
 import type { AgentFileSearchResult, AgentSlashCommand } from "@openducktor/core";
-import { type ReactElement, useLayoutEffect } from "react";
+import { type ReactElement, useLayoutEffect, useState } from "react";
 import { badgeVariants } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
@@ -12,8 +12,7 @@ import {
   readEditableTextContent,
 } from "./agent-chat-composer-selection";
 import { AgentChatComposerSlashMenu } from "./agent-chat-composer-slash-menu";
-import { AGENT_CHAT_FILE_REFERENCE_CHIP_BASE_CLASS_NAME } from "./agent-chat-file-reference-chip";
-import { getAgentChatFileReferenceIconMarkup } from "./agent-chat-file-reference-icon";
+import { getAgentChatInlineFileReferenceChipMarkup } from "./agent-chat-file-reference-chip";
 import { useAgentChatComposerEditor } from "./use-agent-chat-composer-editor";
 
 const escapeHtml = (value: string): string => {
@@ -25,15 +24,62 @@ const escapeHtml = (value: string): string => {
     .replaceAll("'", "&#39;");
 };
 
+const COMPOSER_FILE_REFERENCE_TOOLTIP_OFFSET = 8;
+const COMPOSER_FILE_REFERENCE_TOOLTIP_TOP_MINIMUM = 40;
+
+type ComposerFileReferenceTooltipState = {
+  path: string;
+  left: number;
+  top: number;
+  side: "top" | "bottom";
+};
+
+const readComposerFileReferenceChipElement = (target: EventTarget | null): HTMLElement | null => {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+
+  const chip = target.closest("[data-file-reference-path]");
+  return chip instanceof HTMLElement ? chip : null;
+};
+
+const readComposerFileReferenceTooltipState = (
+  target: EventTarget | null,
+): ComposerFileReferenceTooltipState | null => {
+  const chip = readComposerFileReferenceChipElement(target);
+  const path = chip?.dataset.fileReferencePath;
+  if (!chip || !path) {
+    return null;
+  }
+
+  const chipBounds = chip.getBoundingClientRect();
+  const side = chipBounds.top >= COMPOSER_FILE_REFERENCE_TOOLTIP_TOP_MINIMUM ? "top" : "bottom";
+
+  return {
+    path,
+    left: chipBounds.left + chipBounds.width / 2,
+    top:
+      side === "top"
+        ? chipBounds.top - COMPOSER_FILE_REFERENCE_TOOLTIP_OFFSET
+        : chipBounds.bottom + COMPOSER_FILE_REFERENCE_TOOLTIP_OFFSET,
+    side,
+  };
+};
+
 const buildComposerContentMarkup = (draft: AgentChatComposerDraft): string => {
   return draft.segments
     .map((segment, index) => {
       const nextSegment = draft.segments[index + 1];
 
       if (segment.kind === "file_reference") {
-        return `<span contenteditable="false" data-chip-segment-id="${escapeHtml(segment.id)}" data-segment-id="${escapeHtml(segment.id)}" title="${escapeHtml(segment.file.path)}" class="${escapeHtml(
-          cn(AGENT_CHAT_FILE_REFERENCE_CHIP_BASE_CLASS_NAME, "mr-2 align-middle"),
-        )}"><span class="inline-flex shrink-0">${getAgentChatFileReferenceIconMarkup(segment.file.kind)}</span><span class="truncate">${escapeHtml(segment.file.name)}</span></span>`;
+        return getAgentChatInlineFileReferenceChipMarkup({
+          file: segment.file,
+          className: "mr-2 align-middle",
+          "data-chip-segment-id": segment.id,
+          "data-segment-id": segment.id,
+          "data-file-reference-path": segment.file.path,
+          contentEditable: "false",
+        });
       }
 
       if (segment.kind === "slash_command") {
@@ -142,7 +188,7 @@ const syncComposerDomInPlace = (root: HTMLDivElement, draft: AgentChatComposerDr
 
     return (
       node.dataset.chipSegmentId === segment.id &&
-      node.getAttribute("title") === segment.file.path &&
+      node.dataset.fileReferencePath === segment.file.path &&
       (node.textContent ?? "").includes(segment.file.name)
     );
   });
@@ -202,6 +248,8 @@ export function AgentChatComposerEditor({
   isSlashCommandsLoading,
   searchFiles,
 }: AgentChatComposerEditorProps): ReactElement {
+  const [composerFileReferenceTooltip, setComposerFileReferenceTooltip] =
+    useState<ComposerFileReferenceTooltipState | null>(null);
   const {
     filteredSlashCommands,
     activeSlashIndex,
@@ -242,8 +290,49 @@ export function AgentChatComposerEditor({
     editor.innerHTML = composerContentMarkup;
   }, [composerContentMarkup, draft, editorRef]);
 
+  useLayoutEffect(() => {
+    if (!composerFileReferenceTooltip) {
+      return;
+    }
+
+    const hideTooltip = (): void => {
+      setComposerFileReferenceTooltip(null);
+    };
+
+    window.addEventListener("resize", hideTooltip);
+    window.addEventListener("scroll", hideTooltip, true);
+    return () => {
+      window.removeEventListener("resize", hideTooltip);
+      window.removeEventListener("scroll", hideTooltip, true);
+    };
+  }, [composerFileReferenceTooltip]);
+
   return (
     <div className="relative">
+      {composerFileReferenceTooltip ? (
+        <div
+          className={cn(
+            "pointer-events-none fixed z-50 max-w-80 rounded-md bg-foreground px-3 py-1.5 text-xs text-background text-balance shadow-sm",
+            composerFileReferenceTooltip.side === "top"
+              ? "-translate-x-1/2 -translate-y-full"
+              : "-translate-x-1/2",
+          )}
+          style={{
+            left: `${composerFileReferenceTooltip.left}px`,
+            top: `${composerFileReferenceTooltip.top}px`,
+          }}
+        >
+          <div>{composerFileReferenceTooltip.path}</div>
+          <div
+            className={cn(
+              "absolute left-1/2 size-2.5 -translate-x-1/2 rotate-45 bg-foreground",
+              composerFileReferenceTooltip.side === "top"
+                ? "bottom-0 translate-y-1/2"
+                : "top-0 -translate-y-1/2",
+            )}
+          />
+        </div>
+      ) : null}
       {showFileMenu ? (
         <AgentChatComposerFileMenu
           results={fileSearchResults}
@@ -281,6 +370,41 @@ export function AgentChatComposerEditor({
         onClick={handleEditorClick}
         onKeyUp={handleEditorKeyUp}
         onKeyDown={handleEditorKeyDown}
+        onMouseOver={(event) => {
+          const nextTooltip = readComposerFileReferenceTooltipState(event.target);
+          if (!nextTooltip) {
+            return;
+          }
+
+          setComposerFileReferenceTooltip((current) => {
+            if (
+              current?.path === nextTooltip.path &&
+              current.left === nextTooltip.left &&
+              current.top === nextTooltip.top &&
+              current.side === nextTooltip.side
+            ) {
+              return current;
+            }
+
+            return nextTooltip;
+          });
+        }}
+        onMouseOut={(event) => {
+          const currentChip = readComposerFileReferenceChipElement(event.target);
+          if (!currentChip) {
+            return;
+          }
+
+          const nextChip = readComposerFileReferenceChipElement(event.relatedTarget);
+          if (currentChip === nextChip) {
+            return;
+          }
+
+          setComposerFileReferenceTooltip(null);
+        }}
+        onBlur={() => {
+          setComposerFileReferenceTooltip(null);
+        }}
         onMouseDownCapture={(event) => {
           if (disabled || !shouldRedirectShellClickToComposer(event.target, event.currentTarget)) {
             return;

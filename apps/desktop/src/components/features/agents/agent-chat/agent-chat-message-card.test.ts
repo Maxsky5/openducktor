@@ -612,7 +612,7 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("Queued");
   });
 
-  test("renders user file references inline as backticked full paths and as filename chips", () => {
+  test("renders user file references as inline chips inside the user message text", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: {
@@ -652,17 +652,16 @@ describe("AgentChatMessageCard tool duration", () => {
       }),
     );
 
-    expect(html).toContain("check `src/main.ts` please");
+    expect(html).toContain("check ");
     expect(html).toContain('title="src/main.ts"');
     expect(html).toContain(">main.ts<");
     expect(html).toContain("bg-sky-200");
     expect(html).toContain("lucide-file-code-corner");
-    expect(html).toContain("mt-2 flex items-end gap-2");
-    expect(html).toContain("flex min-w-0 flex-1 flex-wrap justify-start gap-2");
-    expect(html).toContain("flex shrink-0 items-center justify-end gap-2 self-end");
+    expect(html).toContain("please");
+    expect(html).not.toContain("flex min-w-0 flex-1 flex-wrap justify-start gap-2");
   });
 
-  test("keeps fallback inline file text as backticked full paths while rendering filename chips", () => {
+  test("renders fallback user file reference text as an inline chip", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: {
@@ -698,8 +697,54 @@ describe("AgentChatMessageCard tool duration", () => {
       }),
     );
 
-    expect(html).toContain("check `src/main.ts` please");
+    expect(html).toContain("check ");
     expect(html).toContain('title="src/main.ts"');
     expect(html).toContain(">main.ts<");
+    expect(html).toContain("please");
+  });
+
+  test("keeps the user footer row for queued metadata without rendering a separate file chip strip", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "user-file-ref-queued",
+          role: "user",
+          content: "check @src/main.ts please",
+          timestamp: "2026-02-22T10:30:00.000Z",
+          meta: {
+            kind: "user",
+            state: "queued",
+            parts: [
+              {
+                kind: "text",
+                text: "check @src/main.ts please",
+              },
+              {
+                kind: "file_reference",
+                file: {
+                  id: "file-queued",
+                  path: "src/main.ts",
+                  name: "main.ts",
+                  kind: "code",
+                },
+                sourceText: {
+                  value: "@src/main.ts",
+                  start: 6,
+                  end: 18,
+                },
+              },
+            ],
+          },
+        },
+        sessionRole: "build",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("Queued");
+    expect(html).toContain("mt-2 flex items-end justify-end gap-2");
+    expect(html).toContain("flex shrink-0 items-center justify-end gap-2 self-end");
+    expect(html).not.toContain("flex min-w-0 flex-1 flex-wrap justify-start gap-2");
   });
 });

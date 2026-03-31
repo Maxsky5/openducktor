@@ -56,7 +56,7 @@ export function useRepoSettingsOperations({
   );
 
   const toConfigDefault = useCallback((entry: RepoAgentDefaultInput | null) => {
-    if (!entry || !entry.providerId.trim() || !entry.modelId.trim()) {
+    if (!entry?.providerId.trim() || !entry.modelId.trim()) {
       return undefined;
     }
 

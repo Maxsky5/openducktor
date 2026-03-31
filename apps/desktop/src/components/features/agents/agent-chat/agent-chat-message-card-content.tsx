@@ -4,7 +4,7 @@ import {
   isOdtWorkflowMutationToolName,
 } from "@openducktor/core";
 import { Brain, Hammer, MessageSquareQuote } from "lucide-react";
-import { lazy, type ReactElement, Suspense } from "react";
+import { Fragment, lazy, type ReactElement, type ReactNode, Suspense } from "react";
 import type { MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
@@ -175,61 +175,140 @@ const AssistantMessage = ({
   );
 };
 
-const replaceInlineUserFileReferenceText = (
-  rawText: string,
-  parts: AgentUserMessageDisplayPart[],
-): string => {
-  if (rawText.trim().length === 0) {
-    return "";
-  }
-
-  const replacements = parts
-    .flatMap((part) =>
-      part.kind === "file_reference" && part.sourceText
-        ? [
-            {
-              start: part.sourceText.start,
-              end: part.sourceText.end,
-              replacement: `\`${part.file.path}\``,
-            },
-          ]
-        : [],
-    )
-    .filter((range) => range.start >= 0 && range.end >= range.start)
-    .sort((left, right) => left.start - right.start);
-  if (replacements.length === 0) {
-    return rawText.trim();
-  }
-
-  let text = "";
-  let cursor = 0;
-  for (const range of replacements) {
-    if (range.start < cursor || range.start > rawText.length || range.end > rawText.length) {
-      continue;
-    }
-    text += rawText.slice(cursor, range.start);
-    text += range.replacement;
-    cursor = range.end;
-  }
-  text += rawText.slice(cursor);
-  return text.trim();
+type UserMessageInlineFileReferenceRange = {
+  part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" }>;
+  start: number;
+  end: number;
 };
 
-const readUserMessageText = (parts: AgentUserMessageDisplayPart[]): string => {
-  const rawText = parts
+const readVisibleUserMessageText = (parts: AgentUserMessageDisplayPart[]): string => {
+  return parts
     .filter(
       (part): part is Extract<AgentUserMessageDisplayPart, { kind: "text" }> =>
         part.kind === "text" && !part.synthetic,
     )
     .map((part) => part.text)
     .join("");
-  return replaceInlineUserFileReferenceText(rawText, parts);
 };
 
-const hasVisibleUserMessageText = (parts: AgentUserMessageDisplayPart[]): boolean => {
-  return parts.some(
-    (part) => part.kind === "text" && !part.synthetic && part.text.trim().length > 0,
-  );
+const readRenderableUserMessageText = (
+  parts: AgentUserMessageDisplayPart[],
+  fallbackText: string,
+): string => {
+  const visibleText = readVisibleUserMessageText(parts);
+  if (visibleText.trim().length > 0) {
+    return visibleText;
+  }
+  return fallbackText;
+};
+
+const readInlineUserFileReferenceRanges = (
+  rawText: string,
+  parts: AgentUserMessageDisplayPart[],
+): UserMessageInlineFileReferenceRange[] => {
+  return parts
+    .flatMap((part) => {
+      if (part.kind !== "file_reference" || !part.sourceText) {
+        return [];
+      }
+
+      return [
+        {
+          part,
+          start: part.sourceText.start,
+          end: part.sourceText.end,
+        } satisfies UserMessageInlineFileReferenceRange,
+      ];
+    })
+    .filter((range) => range.start >= 0 && range.end >= range.start && range.end <= rawText.length)
+    .sort((left, right) => left.start - right.start);
+};
+
+const pushUserMessageTextNode = (
+  nodes: ReactNode[],
+  text: string,
+  key: string,
+  options?: {
+    trimStart?: boolean;
+    trimEnd?: boolean;
+  },
+): void => {
+  let value = text;
+  if (options?.trimStart) {
+    value = value.trimStart();
+  }
+  if (options?.trimEnd) {
+    value = value.trimEnd();
+  }
+  if (value.length === 0) {
+    return;
+  }
+
+  nodes.push(<Fragment key={key}>{value}</Fragment>);
+};
+
+const renderUserMessageInlineContent = (
+  rawText: string,
+  parts: AgentUserMessageDisplayPart[],
+): ReactElement | null => {
+  const nodes: ReactNode[] = [];
+  const inlineRanges = readInlineUserFileReferenceRanges(rawText, parts);
+  const renderedInlineFileReferences = new Set<AgentUserMessageDisplayPart>();
+
+  if (inlineRanges.length === 0) {
+    pushUserMessageTextNode(nodes, rawText, "text", { trimStart: true, trimEnd: true });
+  } else {
+    let cursor = 0;
+
+    for (const range of inlineRanges) {
+      if (range.start < cursor || range.start > rawText.length || range.end > rawText.length) {
+        continue;
+      }
+
+      pushUserMessageTextNode(nodes, rawText.slice(cursor, range.start), `text-${cursor}`, {
+        trimStart: nodes.length === 0,
+      });
+      nodes.push(
+        <AgentChatFileReferenceChip
+          key={`file-${range.part.file.id}-${range.start}`}
+          file={range.part.file}
+          className="max-w-full align-middle"
+          tooltip
+        />,
+      );
+      renderedInlineFileReferences.add(range.part);
+      cursor = range.end;
+    }
+
+    pushUserMessageTextNode(nodes, rawText.slice(cursor), `text-${cursor}`, {
+      trimStart: nodes.length === 0,
+      trimEnd: true,
+    });
+  }
+
+  for (const part of parts) {
+    if (part.kind !== "file_reference" || renderedInlineFileReferences.has(part)) {
+      continue;
+    }
+
+    if (nodes.length > 0) {
+      nodes.push(<Fragment key={`space-${part.file.id}`}> </Fragment>);
+    }
+    nodes.push(
+      <AgentChatFileReferenceChip
+        key={`file-${part.file.id}-unanchored`}
+        file={part.file}
+        className="max-w-full align-middle"
+        tooltip
+      />,
+    );
+  }
+
+  if (nodes.length === 0) {
+    return null;
+  }
+
+  return <p className="whitespace-pre-wrap leading-6">{nodes}</p>;
 };
 
 type MessageBodyProps = {
@@ -303,52 +382,26 @@ export const MessageBody = ({
   if (message.role === "user") {
     const isQueuedUserMessage = meta?.kind === "user" && meta.state === "queued";
     const userParts = meta?.kind === "user" ? (meta.parts ?? []) : [];
-    const userFileReferences = userParts.filter(
-      (part): part is Extract<AgentUserMessageDisplayPart, { kind: "file_reference" }> =>
-        part.kind === "file_reference",
-    );
-    const userText = hasVisibleUserMessageText(userParts)
-      ? readUserMessageText(userParts)
-      : replaceInlineUserFileReferenceText(message.content, userParts);
+    const userText = readRenderableUserMessageText(userParts, message.content);
+    const userContent = renderUserMessageInlineContent(userText, userParts);
+
     return (
       <>
-        {userText.length > 0 ? <p className="whitespace-pre-wrap leading-6">{userText}</p> : null}
-        {userFileReferences.length > 0 || isQueuedUserMessage || timeLabel ? (
-          <div
-            className={cn(
-              "mt-2 flex items-end gap-2",
-              userFileReferences.length > 0 ? "" : "justify-end",
-            )}
-          >
-            {userFileReferences.length > 0 ? (
-              <div className="flex min-w-0 flex-1 flex-wrap justify-start gap-2">
-                {userFileReferences.map((part) => {
-                  return (
-                    <AgentChatFileReferenceChip
-                      key={part.file.id}
-                      file={part.file}
-                      label={part.file.name}
-                      className="max-w-full"
-                      tooltip
-                    />
-                  );
-                })}
-              </div>
-            ) : null}
-            {isQueuedUserMessage || timeLabel ? (
-              <div className="flex shrink-0 items-center justify-end gap-2 self-end">
-                {isQueuedUserMessage ? (
-                  <span className="rounded-full border border-pending-border bg-pending-surface px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-pending-surface-foreground">
-                    Queued
-                  </span>
-                ) : null}
-                {timeLabel ? (
-                  <p className="text-right text-[11px] font-medium text-muted-foreground">
-                    {timeLabel}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
+        {userContent}
+        {isQueuedUserMessage || timeLabel ? (
+          <div className="mt-2 flex items-end justify-end gap-2">
+            <div className="flex shrink-0 items-center justify-end gap-2 self-end">
+              {isQueuedUserMessage ? (
+                <span className="rounded-full border border-pending-border bg-pending-surface px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-pending-surface-foreground">
+                  Queued
+                </span>
+              ) : null}
+              {timeLabel ? (
+                <p className="text-right text-[11px] font-medium text-muted-foreground">
+                  {timeLabel}
+                </p>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </>

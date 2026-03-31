@@ -15,7 +15,7 @@ export const roleDefaultSelectionFor = (
   role: AgentRole,
 ): AgentModelSelection | null => {
   const roleDefault = repoSettings?.agentDefaults[role];
-  if (!roleDefault || !roleDefault.providerId || !roleDefault.modelId) {
+  if (!roleDefault?.providerId || !roleDefault.modelId) {
     return null;
   }
 

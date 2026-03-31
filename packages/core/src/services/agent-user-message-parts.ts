@@ -3,6 +3,34 @@ import type {
   AgentUserMessagePromptFileReference,
 } from "../types/agent-orchestrator";
 
+const WORDLIKE_TEXT_START_PATTERN = /[\p{L}\p{N}_]/u;
+
+const serializeAgentUserMessagePart = (part: AgentUserMessagePart): string => {
+  if (part.kind === "text") {
+    return part.text;
+  }
+  if (part.kind === "slash_command") {
+    return `/${part.command.trigger}`;
+  }
+  return `@${part.file.path}`;
+};
+
+const shouldInsertSyntheticSpaceBeforePart = (
+  previousPart: AgentUserMessagePart | null,
+  part: AgentUserMessagePart,
+): boolean => {
+  if (!previousPart || previousPart.kind === "text") {
+    return false;
+  }
+
+  if (part.kind !== "text") {
+    return true;
+  }
+
+  const firstCharacter = part.text.at(0);
+  return firstCharacter !== undefined && WORDLIKE_TEXT_START_PATTERN.test(firstCharacter);
+};
+
 const trimBoundaryTextPart = (
   part: AgentUserMessagePart,
   edge: "start" | "end",
@@ -54,17 +82,19 @@ export const hasMeaningfulAgentUserMessageParts = (parts: AgentUserMessagePart[]
 };
 
 export const serializeAgentUserMessagePartsToText = (parts: AgentUserMessagePart[]): string => {
-  return normalizeAgentUserMessageParts(parts)
-    .map((part) => {
-      if (part.kind === "text") {
-        return part.text;
-      }
-      if (part.kind === "slash_command") {
-        return `/${part.command.trigger}`;
-      }
-      return `@${part.file.path}`;
-    })
-    .join("");
+  const normalized = normalizeAgentUserMessageParts(parts);
+  let text = "";
+  let previousPart: AgentUserMessagePart | null = null;
+
+  for (const part of normalized) {
+    if (shouldInsertSyntheticSpaceBeforePart(previousPart, part)) {
+      text += " ";
+    }
+    text += serializeAgentUserMessagePart(part);
+    previousPart = part;
+  }
+
+  return text;
 };
 
 export const buildAgentUserMessagePromptText = (
@@ -76,29 +106,32 @@ export const buildAgentUserMessagePromptText = (
   const normalized = normalizeAgentUserMessageParts(parts);
   let text = "";
   const fileReferences: AgentUserMessagePromptFileReference[] = [];
+  let previousPart: AgentUserMessagePart | null = null;
 
   for (const part of normalized) {
-    if (part.kind === "text") {
-      text += part.text;
+    if (shouldInsertSyntheticSpaceBeforePart(previousPart, part)) {
+      text += " ";
+    }
+
+    const serializedPart = serializeAgentUserMessagePart(part);
+
+    if (part.kind === "text" || part.kind === "slash_command") {
+      text += serializedPart;
+      previousPart = part;
       continue;
     }
 
-    if (part.kind === "slash_command") {
-      text += `/${part.command.trigger}`;
-      continue;
-    }
-
-    const sourceValue = `@${part.file.path}`;
     const start = text.length;
-    text += sourceValue;
+    text += serializedPart;
     fileReferences.push({
       file: part.file,
       sourceText: {
-        value: sourceValue,
+        value: serializedPart,
         start,
         end: text.length,
       },
     });
+    previousPart = part;
   }
 
   return { text, fileReferences };

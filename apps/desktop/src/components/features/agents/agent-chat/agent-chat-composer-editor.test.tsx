@@ -3,11 +3,6 @@ import type { AgentFileSearchResult } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useRef, useState } from "react";
 import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
-import {
-  createFileReferenceSegment,
-  createSlashCommandSegment,
-  createTextSegment,
-} from "./agent-chat-composer-draft";
 import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fixtures";
 
 let AgentChatComposerEditor: typeof import("./agent-chat-composer-editor").AgentChatComposerEditor;
@@ -138,15 +133,6 @@ const typeIntoEditor = (container: HTMLElement, value: string): HTMLElement => {
 
   fireEvent.input(editable);
   return getLastTextSegment(container);
-};
-
-const getEditorShell = (container: HTMLElement): HTMLDivElement => {
-  typeIntoEditor(container, "");
-  const shell = getEditorRoot(container).closest('[aria-disabled="false"]');
-  if (!(shell instanceof HTMLDivElement)) {
-    throw new Error("Expected composer editor shell");
-  }
-  return shell;
 };
 
 describe("AgentChatComposerEditor", () => {
@@ -414,6 +400,45 @@ describe("AgentChatComposerEditor", () => {
     });
     expect(onSend).not.toHaveBeenCalled();
     expect(searchFiles).toHaveBeenCalledWith("");
+  });
+
+  test("shows the full file path in a hover tooltip for composer file chips", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={async () => [buildFileSearchResult()]}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "check @");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+    });
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      const chip = rendered.container.querySelector("[data-chip-segment-id]");
+      expect(chip?.textContent).toContain("main.ts");
+      expect(chip?.getAttribute("data-file-reference-path")).toBe("src/main.ts");
+    });
+
+    const chip = rendered.container.querySelector("[data-chip-segment-id]");
+    if (!(chip instanceof HTMLElement)) {
+      throw new Error("Expected composer file chip");
+    }
+
+    fireEvent.mouseOver(chip);
+
+    await waitFor(() => {
+      expect(screen.getByText("src/main.ts")).toBeDefined();
+    });
+
+    fireEvent.mouseOut(chip, { relatedTarget: getEditorRoot(rendered.container) });
+
+    await waitFor(() => {
+      expect(screen.queryByText("src/main.ts")).toBeNull();
+    });
   });
 
   test("does not open file autocomplete when the runtime does not support file search", async () => {
@@ -796,7 +821,7 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    const editable = typeIntoEditor(rendered.container, "check @");
+    typeIntoEditor(rendered.container, "check @");
     const fileButton = await screen.findByRole("button", { name: /main.ts/i });
     fireEvent.pointerDown(fileButton);
 
