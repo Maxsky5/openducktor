@@ -18,7 +18,7 @@ type CatalogModelDescriptor = AgentModelCatalog["models"][number];
 export const toRoleDefaultSelection = (
   roleDefault: RepoSettingsInput["agentDefaults"][AgentRole] | null | undefined,
 ): AgentModelSelection | null => {
-  if (!roleDefault || !roleDefault.providerId || !roleDefault.modelId) {
+  if (!roleDefault?.providerId || !roleDefault.modelId) {
     return null;
   }
   return {

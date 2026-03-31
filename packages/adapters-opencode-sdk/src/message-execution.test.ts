@@ -16,6 +16,20 @@ const FILE_REFERENCE = {
   kind: "code" as const,
 };
 
+const IMAGE_FILE_REFERENCE = {
+  id: "file-assets-diagram",
+  path: "assets/diagram.svg",
+  name: "diagram.svg",
+  kind: "image" as const,
+};
+
+const VIDEO_FILE_REFERENCE = {
+  id: "file-recordings-demo",
+  path: "recordings/demo.mov",
+  name: "demo.mov",
+  kind: "video" as const,
+};
+
 const createSession = (overrides?: {
   commandResult?: { data?: unknown; error?: unknown; response?: unknown };
   promptAsyncResult?: { data?: unknown; error?: unknown; response?: unknown };
@@ -230,6 +244,62 @@ describe("message-execution", () => {
       ],
     });
     expect(command).not.toHaveBeenCalled();
+  });
+
+  test("uses media mime types for image and video file references", async () => {
+    const { session, promptAsync } = createSession();
+
+    await sendUserMessage({
+      session,
+      request: {
+        sessionId: "session-1",
+        parts: [
+          { kind: "file_reference", file: IMAGE_FILE_REFERENCE },
+          { kind: "text", text: " and " },
+          { kind: "file_reference", file: VIDEO_FILE_REFERENCE },
+        ],
+      },
+      tools: {},
+    });
+
+    expect(promptAsync).toHaveBeenCalledWith({
+      sessionID: "session-opencode-1",
+      directory: "/repo",
+      tools: {},
+      parts: [
+        { type: "text", text: "@assets/diagram.svg and @recordings/demo.mov" },
+        {
+          type: "file",
+          mime: "image/svg+xml",
+          url: "file:///repo/assets/diagram.svg",
+          filename: "diagram.svg",
+          source: {
+            type: "file",
+            path: "assets/diagram.svg",
+            text: {
+              value: "@assets/diagram.svg",
+              start: 0,
+              end: 19,
+            },
+          },
+        },
+        {
+          type: "file",
+          mime: "video/quicktime",
+          url: "file:///repo/recordings/demo.mov",
+          filename: "demo.mov",
+          source: {
+            type: "file",
+            path: "recordings/demo.mov",
+            text: {
+              value: "@recordings/demo.mov",
+              start: 24,
+              end: 44,
+            },
+          },
+        },
+      ],
+    });
   });
 
   test("fails explicitly when a slash command message also contains a file reference", async () => {

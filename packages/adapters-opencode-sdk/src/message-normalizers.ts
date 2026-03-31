@@ -1,10 +1,10 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type {
-  AgentFileSearchResultKind,
   AgentModelSelection,
   AgentUserMessageDisplayPart,
   AgentUserMessageSourceText,
 } from "@openducktor/core";
+import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import { asUnknownRecord, readRecordProp, readUnknownProp } from "./guards";
 
 export const readTextFromParts = (parts: Part[]): string => {
@@ -35,95 +35,6 @@ const readFilePathFromUrl = (url: string): string | null => {
   } catch {
     return null;
   }
-};
-
-const toFileReferenceKind = (
-  filePath: string,
-  mime: string | undefined,
-): AgentFileSearchResultKind => {
-  if (mime === "inode/directory") {
-    return "directory";
-  }
-
-  if (mime?.startsWith("image/")) {
-    return "image";
-  }
-
-  if (mime?.startsWith("video/")) {
-    return "video";
-  }
-
-  const normalizedPath = filePath.trim().toLowerCase();
-  if (normalizedPath.endsWith(".css")) {
-    return "css";
-  }
-  if (
-    normalizedPath.endsWith(".ts") ||
-    normalizedPath.endsWith(".tsx") ||
-    normalizedPath.endsWith(".mts") ||
-    normalizedPath.endsWith(".cts") ||
-    normalizedPath.endsWith(".js") ||
-    normalizedPath.endsWith(".jsx") ||
-    normalizedPath.endsWith(".mjs") ||
-    normalizedPath.endsWith(".cjs") ||
-    normalizedPath.endsWith(".java") ||
-    normalizedPath.endsWith(".kt") ||
-    normalizedPath.endsWith(".kts") ||
-    normalizedPath.endsWith(".php") ||
-    normalizedPath.endsWith(".phtml") ||
-    normalizedPath.endsWith(".html") ||
-    normalizedPath.endsWith(".htm") ||
-    normalizedPath.endsWith(".rs") ||
-    normalizedPath.endsWith(".py") ||
-    normalizedPath.endsWith(".rb") ||
-    normalizedPath.endsWith(".go") ||
-    normalizedPath.endsWith(".c") ||
-    normalizedPath.endsWith(".h") ||
-    normalizedPath.endsWith(".cpp") ||
-    normalizedPath.endsWith(".cc") ||
-    normalizedPath.endsWith(".cxx") ||
-    normalizedPath.endsWith(".hpp") ||
-    normalizedPath.endsWith(".cs") ||
-    normalizedPath.endsWith(".swift") ||
-    normalizedPath.endsWith(".scala") ||
-    normalizedPath.endsWith(".sh") ||
-    normalizedPath.endsWith(".bash") ||
-    normalizedPath.endsWith(".zsh") ||
-    normalizedPath.endsWith(".sql") ||
-    normalizedPath.endsWith(".json") ||
-    normalizedPath.endsWith(".yaml") ||
-    normalizedPath.endsWith(".yml") ||
-    normalizedPath.endsWith(".toml") ||
-    normalizedPath.endsWith(".xml")
-  ) {
-    return "code";
-  }
-
-  if (
-    normalizedPath.endsWith(".png") ||
-    normalizedPath.endsWith(".jpg") ||
-    normalizedPath.endsWith(".jpeg") ||
-    normalizedPath.endsWith(".gif") ||
-    normalizedPath.endsWith(".webp") ||
-    normalizedPath.endsWith(".svg") ||
-    normalizedPath.endsWith(".bmp") ||
-    normalizedPath.endsWith(".ico") ||
-    normalizedPath.endsWith(".avif")
-  ) {
-    return "image";
-  }
-
-  if (
-    normalizedPath.endsWith(".mp4") ||
-    normalizedPath.endsWith(".mov") ||
-    normalizedPath.endsWith(".webm") ||
-    normalizedPath.endsWith(".mkv") ||
-    normalizedPath.endsWith(".avi") ||
-    normalizedPath.endsWith(".m4v")
-  ) {
-    return "video";
-  }
-  return "default";
 };
 
 const normalizeSourceText = (value: unknown): AgentUserMessageSourceText | undefined => {
@@ -166,7 +77,7 @@ const normalizeFileReferencePart = (
       id: part.id,
       path: filePath,
       name,
-      kind: toFileReferenceKind(filePath, part.mime),
+      kind: detectAgentFileReferenceKind({ filePath, mime: part.mime }),
     },
     ...(sourceText ? { sourceText } : {}),
   };

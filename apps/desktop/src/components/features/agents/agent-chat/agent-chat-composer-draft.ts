@@ -3,6 +3,7 @@ import type {
   AgentSlashCommand,
   AgentUserMessagePart,
 } from "@openducktor/core";
+import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
 
 export type AgentChatComposerTextSegment = {
   id: string;
@@ -397,17 +398,7 @@ export const draftToUserMessageParts = (draft: AgentChatComposerDraft): AgentUse
 };
 
 export const draftToSerializedText = (draft: AgentChatComposerDraft): string => {
-  return draftToUserMessageParts(draft)
-    .map((part) => {
-      if (part.kind === "text") {
-        return part.text;
-      }
-      if (part.kind === "file_reference") {
-        return `@${part.file.path}`;
-      }
-      return `/${part.command.trigger}`;
-    })
-    .join("");
+  return serializeAgentUserMessagePartsToText(draftToUserMessageParts(draft));
 };
 
 export const draftHasMeaningfulContent = (draft: AgentChatComposerDraft): boolean => {

@@ -5,6 +5,7 @@ import {
   createFileReferenceSegment,
   createSlashCommandSegment,
   createTextSegment,
+  draftToSerializedText,
   normalizeComposerDraft,
   readFileTriggerMatchForDraft,
   readSlashTriggerMatchForDraft,
@@ -197,6 +198,38 @@ describe("applyComposerDraftEdit", () => {
         expect.objectContaining({ id: "text-after", kind: "text", text: " after" }),
       ],
     });
+  });
+
+  test("serializes resumed typing after file chips with synthetic word spacing", () => {
+    const draft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("And now tell me if ", "text-before"),
+        createFileReferenceSegment(
+          {
+            ...FILE,
+            id: "members-file",
+            path: "apps/api/src/routes/members.ts",
+            name: "members.ts",
+          },
+          "file-members",
+        ),
+        createTextSegment("and ", "text-middle"),
+        createFileReferenceSegment(
+          {
+            ...FILE,
+            id: "account-file",
+            path: "apps/web/src/routes/_authenticated/account.tsx",
+            name: "account.tsx",
+          },
+          "file-account",
+        ),
+        createTextSegment("are consistents?", "text-after"),
+      ],
+    };
+
+    expect(draftToSerializedText(draft)).toBe(
+      "And now tell me if @apps/api/src/routes/members.ts and @apps/web/src/routes/_authenticated/account.tsx are consistents?",
+    );
   });
 
   test("exposes file autocomplete in the middle of draft text", () => {

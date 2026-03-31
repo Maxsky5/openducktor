@@ -126,7 +126,13 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
 describe("catalog-and-mcp searchFiles", () => {
   test("preserves runtime ordering when normalizing file search results", async () => {
     const files = mock(async () => ({
-      data: ["src/components/", "src/components/button.tsx", "src/styles.css"],
+      data: [
+        "src/components/",
+        "src/components/button.tsx",
+        "src/styles.scss",
+        "assets/preview.webp",
+        "recordings/demo.webm",
+      ],
       error: undefined,
     }));
     const createClient = mock(() => ({ find: { files } }));
@@ -161,10 +167,22 @@ describe("catalog-and-mcp searchFiles", () => {
         kind: "code",
       },
       {
-        id: "src/styles.css",
-        path: "src/styles.css",
-        name: "styles.css",
+        id: "src/styles.scss",
+        path: "src/styles.scss",
+        name: "styles.scss",
         kind: "css",
+      },
+      {
+        id: "assets/preview.webp",
+        path: "assets/preview.webp",
+        name: "preview.webp",
+        kind: "image",
+      },
+      {
+        id: "recordings/demo.webm",
+        path: "recordings/demo.webm",
+        name: "demo.webm",
+        kind: "video",
       },
     ]);
   });

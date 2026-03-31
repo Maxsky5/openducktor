@@ -105,6 +105,80 @@ describe("message-normalizers", () => {
     ]);
   });
 
+  test("normalizes css and media file reference kinds consistently", () => {
+    const parts: Part[] = [
+      {
+        id: "file-1",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "file",
+        mime: "text/plain",
+        filename: "styles.scss",
+        url: "file:///repo/src/styles.scss",
+        source: {
+          type: "file",
+          path: "src/styles.scss",
+        },
+      } as Part,
+      {
+        id: "file-2",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "file",
+        mime: "image/webp",
+        filename: "preview.webp",
+        url: "file:///repo/assets/preview.webp",
+        source: {
+          type: "file",
+          path: "assets/preview.webp",
+        },
+      } as Part,
+      {
+        id: "file-3",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "file",
+        mime: "video/webm",
+        filename: "demo.webm",
+        url: "file:///repo/recordings/demo.webm",
+        source: {
+          type: "file",
+          path: "recordings/demo.webm",
+        },
+      } as Part,
+    ];
+
+    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+      {
+        kind: "file_reference",
+        file: {
+          id: "file-1",
+          path: "src/styles.scss",
+          name: "styles.scss",
+          kind: "css",
+        },
+      },
+      {
+        kind: "file_reference",
+        file: {
+          id: "file-2",
+          path: "assets/preview.webp",
+          name: "preview.webp",
+          kind: "image",
+        },
+      },
+      {
+        kind: "file_reference",
+        file: {
+          id: "file-3",
+          path: "recordings/demo.webm",
+          name: "demo.webm",
+          kind: "video",
+        },
+      },
+    ]);
+  });
+
   test("reads visible user text from display parts without synthetic runtime text", () => {
     expect(
       readVisibleUserTextFromDisplayParts([

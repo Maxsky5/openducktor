@@ -485,33 +485,6 @@ export const useAgentChatComposerEditor = ({
     [focusTextSegment, rememberSelectionTarget, setPendingFocusTarget],
   );
 
-  const focusNearestTextSegment = useCallback(
-    (segmentId: string, direction: "left" | "right") => {
-      const currentIndex = draft.segments.findIndex((segment) => segment.id === segmentId);
-      if (currentIndex < 0) {
-        return false;
-      }
-
-      const step = direction === "left" ? -1 : 1;
-      for (
-        let index = currentIndex + step;
-        index >= 0 && index < draft.segments.length;
-        index += step
-      ) {
-        const segment = draft.segments[index];
-        if (!segment || segment.kind !== "text") {
-          continue;
-        }
-
-        focusTextSegmentWithMemory(segment.id, direction === "left" ? segment.text.length : 0);
-        return true;
-      }
-
-      return false;
-    },
-    [draft.segments, focusTextSegmentWithMemory],
-  );
-
   const updateSlashMenuForText = useCallback(
     (
       sourceDraft: AgentChatComposerDraft,

@@ -6,6 +6,7 @@ import type {
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
+import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import { asUnknownRecord, readStringArrayProp, readStringProp } from "./guards";
 import { basename, isAbsolutePath, toProjectRelativePath } from "./path-utils";
 import { mapProviderListToCatalog, toToolIdList } from "./payload-mappers";
@@ -69,34 +70,6 @@ const normalizeFileSearchPath = (rawPath: string, workingDirectory: string): str
   return normalizedPath;
 };
 
-const detectFileSearchResultKind = (
-  path: string,
-  rawPath: string,
-): AgentFileSearchResult["kind"] => {
-  if (/[\\/]\s*$/.test(rawPath)) {
-    return "directory";
-  }
-
-  const lowerPath = path.toLowerCase();
-  if (/\.(css|scss|sass|less)$/.test(lowerPath)) {
-    return "css";
-  }
-  if (
-    /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|java|kt|kts|php|phtml|html|htm|rs|py|rb|go|c|h|cpp|cc|cxx|hpp|cs|swift|scala|sh|bash|zsh|sql|json|yaml|yml|toml|xml)$/.test(
-      lowerPath,
-    )
-  ) {
-    return "code";
-  }
-  if (/\.(png|jpg|jpeg|gif|webp|svg|bmp|ico|avif)$/.test(lowerPath)) {
-    return "image";
-  }
-  if (/\.(mp4|mov|webm|mkv|avi|m4v)$/.test(lowerPath)) {
-    return "video";
-  }
-  return "default";
-};
-
 const toFileSearchResult = (rawPath: string, workingDirectory: string): AgentFileSearchResult => {
   const path = normalizeFileSearchPath(rawPath, workingDirectory);
   const name = basename(path);
@@ -104,7 +77,10 @@ const toFileSearchResult = (rawPath: string, workingDirectory: string): AgentFil
     id: path,
     path,
     name: name.length > 0 ? name : path,
-    kind: detectFileSearchResultKind(path, rawPath),
+    kind: detectAgentFileReferenceKind({
+      filePath: path,
+      isDirectory: /[\\/]\s*$/.test(rawPath),
+    }),
   };
 };
 

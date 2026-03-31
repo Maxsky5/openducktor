@@ -1,11 +1,11 @@
 import {
-  type AgentFileReference,
   buildAgentUserMessagePromptText,
   normalizeAgentUserMessageParts,
   type SendAgentUserMessageInput,
   serializeAgentUserMessagePartsToText,
 } from "@openducktor/core";
 import { setSessionActive } from "./event-stream/shared";
+import { detectAgentFileReferenceMime } from "./file-reference-utils";
 import { resolveAgainstWorkingDirectory, toFileUrl } from "./path-utils";
 import { normalizeModelInput, resolveAssistantResponseMessageId } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
@@ -59,10 +59,6 @@ const toCommandModelInput = (
   return `${modelInput.model.providerID}/${modelInput.model.modelID}`;
 };
 
-const toFileReferenceMime = (file: AgentFileReference): string => {
-  return file.kind === "directory" ? "inode/directory" : "text/plain";
-};
-
 const toPromptFilePart = (
   fileReference: ReturnType<typeof buildAgentUserMessagePromptText>["fileReferences"][number],
   workingDirectory: string,
@@ -74,7 +70,7 @@ const toPromptFilePart = (
 
   return {
     type: "file",
-    mime: toFileReferenceMime(fileReference.file),
+    mime: detectAgentFileReferenceMime(fileReference.file),
     url: toFileUrl(resolveAgainstWorkingDirectory(workingDirectory, normalizedPath)),
     filename: fileReference.file.name,
     source: {
