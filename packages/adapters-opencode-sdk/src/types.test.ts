@@ -46,6 +46,7 @@ describe("types", () => {
       eventTransportKey: "http://127.0.0.1:12345",
       hasIdleSinceActivity: false,
       activeAssistantMessageId: null,
+      completedAssistantMessageIds: new Set<string>(),
       emittedAssistantMessageIds: new Set<string>(),
       emittedUserMessageSignatures: new Map<string, string>(),
       emittedUserMessageStates: new Map(),

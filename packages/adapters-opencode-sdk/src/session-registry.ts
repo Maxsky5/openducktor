@@ -129,6 +129,7 @@ export const registerSession = (input: {
     eventTransportKey,
     hasIdleSinceActivity: false,
     activeAssistantMessageId: null,
+    completedAssistantMessageIds: new Set<string>(),
     emittedAssistantMessageIds: new Set<string>(),
     emittedUserMessageSignatures: new Map<string, string>(),
     emittedUserMessageStates: new Map(),

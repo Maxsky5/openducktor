@@ -29,6 +29,7 @@ export type SessionRecord = {
   eventTransportKey: string;
   hasIdleSinceActivity: boolean;
   activeAssistantMessageId: string | null;
+  completedAssistantMessageIds: Set<string>;
   emittedAssistantMessageIds: Set<string>;
   emittedUserMessageSignatures: Map<string, string>;
   emittedUserMessageStates: Map<string, import("@openducktor/core").AgentUserMessageState>;
