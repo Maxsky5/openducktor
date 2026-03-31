@@ -42,12 +42,14 @@ const defaultGitPushBranch = async () => ({
   branch: "main",
   output: "",
 });
+const defaultGitAbortConflict = async () => {};
 
 const taskApprovalContextGetMock = mock(defaultTaskApprovalContextGet);
 const taskDirectMergeMock = mock(defaultTaskDirectMerge);
 const taskDirectMergeCompleteMock = mock(defaultTaskDirectMergeComplete);
 const taskPullRequestUpsertMock = mock(defaultTaskPullRequestUpsert);
 const gitPushBranchMock = mock(defaultGitPushBranch);
+const gitAbortConflictMock = mock(defaultGitAbortConflict);
 const toastLoadingMock = mock(() => "toast-id");
 const toastSuccessMock = mock(() => {});
 const toastErrorMock = mock(() => {});
@@ -67,6 +69,7 @@ const buildMockedHost = () => ({
   taskDirectMergeComplete: taskDirectMergeCompleteMock,
   taskPullRequestUpsert: taskPullRequestUpsertMock,
   gitPushBranch: gitPushBranchMock,
+  gitAbortConflict: gitAbortConflictMock,
   agentSessionsList: async () => [
     {
       ...createAgentSessionFixture({
@@ -106,6 +109,7 @@ const HOST_METHOD_NAMES = [
   "taskDirectMergeComplete",
   "taskPullRequestUpsert",
   "gitPushBranch",
+  "gitAbortConflict",
   "agentSessionsList",
   "specGet",
   "planGet",
@@ -142,33 +146,7 @@ const restoreHostMocks = async (): Promise<void> => {
   Object.assign(hostModule.host, originalHostMethods);
 };
 
-let latestHarnessValue: {
-  taskApprovalModal: {
-    open: boolean;
-    stage: "approval" | "complete_direct_merge";
-    isLoading: boolean;
-    mode: "direct_merge" | "pull_request";
-    mergeMethod: "merge_commit" | "squash" | "rebase";
-    pullRequestDraftMode: "manual" | "generate_ai";
-    pullRequestAvailable: boolean;
-    pullRequestUnavailableReason: string | null;
-    isSubmitting: boolean;
-    squashCommitMessage: string;
-    squashCommitMessageTouched: boolean;
-    hasSuggestedSquashCommitMessage: boolean;
-    hasUncommittedChanges: boolean;
-    uncommittedFileCount: number;
-    errorMessage: string | null;
-    onOpenChange: (open: boolean) => void;
-    onModeChange: (mode: "direct_merge" | "pull_request") => void;
-    onMergeMethodChange: (mergeMethod: "merge_commit" | "squash" | "rebase") => void;
-    onPullRequestDraftModeChange: (mode: "manual" | "generate_ai") => void;
-    onSquashCommitMessageChange: (value: string) => void;
-    onConfirm: () => void;
-    onCompleteDirectMerge: () => void;
-  } | null;
-  openTaskApproval: (taskId: string) => void;
-} | null = null;
+let latestHarnessValue: ReturnType<typeof useTaskApprovalFlow> | null = null;
 
 function createDeferred<TValue>() {
   let resolvePromise!: (value: TValue) => void;
@@ -212,6 +190,40 @@ const waitForTaskApprovalModalClosed = async (timeoutMs = 1000): Promise<void> =
   );
 };
 
+const createTaskApprovalContextFixture = (
+  overrides: Partial<TaskApprovalContext> = {},
+): TaskApprovalContext => ({
+  taskId: "TASK-1",
+  taskStatus: "human_review",
+  workingDirectory: "/repo/.worktrees/task-1",
+  sourceBranch: "odt/TASK-1",
+  targetBranch: { remote: "origin", branch: "main" },
+  publishTarget: { remote: "origin", branch: "main" },
+  defaultMergeMethod: "merge_commit",
+  hasUncommittedChanges: false,
+  uncommittedFileCount: 0,
+  pullRequest: undefined,
+  directMerge: undefined,
+  suggestedSquashCommitMessage: undefined,
+  providers: [],
+  ...overrides,
+});
+
+const createConflictDirectMergeResult = (
+  overrides: { currentBranch?: string; workingDir?: string } = {},
+) =>
+  ({
+    outcome: "conflicts" as const,
+    conflict: {
+      operation: "direct_merge_merge_commit" as const,
+      currentBranch: overrides.currentBranch,
+      targetBranch: "main",
+      conflictedFiles: ["src/app.ts"],
+      output: "conflict output",
+      workingDir: overrides.workingDir,
+    },
+  }) as unknown as Awaited<ReturnType<typeof defaultTaskDirectMerge>>;
+
 describe("useTaskApprovalFlow", () => {
   beforeEach(async () => {
     await applyHostMocks();
@@ -235,6 +247,8 @@ describe("useTaskApprovalFlow", () => {
     taskPullRequestUpsertMock.mockImplementation(defaultTaskPullRequestUpsert);
     gitPushBranchMock.mockClear();
     gitPushBranchMock.mockImplementation(defaultGitPushBranch);
+    gitAbortConflictMock.mockClear();
+    gitAbortConflictMock.mockImplementation(defaultGitAbortConflict);
   });
 
   afterAll(async () => {
@@ -550,6 +564,72 @@ describe("useTaskApprovalFlow", () => {
     });
   });
 
+  test("ignores a stale approval-context response from a superseded open cycle", async () => {
+    const firstContext = createDeferred<TaskApprovalContext>();
+    taskApprovalContextGetMock.mockImplementationOnce(
+      (async () => firstContext.promise) as unknown as never,
+    );
+    taskApprovalContextGetMock.mockResolvedValueOnce(
+      createTaskApprovalContextFixture({
+        taskId: "TASK-2",
+        defaultMergeMethod: "rebase",
+        hasUncommittedChanges: false,
+        providers: [],
+      }) as unknown as never,
+    );
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow({
+        activeRepo: "/repo",
+        tasks: [
+          createTaskCardFixture({ id: "TASK-1", title: "Task 1" }),
+          createTaskCardFixture({ id: "TASK-2", title: "Task 2" }),
+        ],
+        requestPullRequestGeneration: async () => undefined,
+        refreshTasks: async () => {},
+      });
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+    });
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-2");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    expect(latestHarnessValue?.taskApprovalModal?.taskId).toBe("TASK-2");
+    expect(latestHarnessValue?.taskApprovalModal?.mergeMethod).toBe("rebase");
+    expect(latestHarnessValue?.taskApprovalModal?.hasUncommittedChanges).toBe(false);
+
+    firstContext.resolve(
+      createTaskApprovalContextFixture({
+        defaultMergeMethod: "squash",
+        hasUncommittedChanges: true,
+        uncommittedFileCount: 3,
+      }),
+    );
+
+    await act(async () => {
+      await firstContext.promise;
+      await Promise.resolve();
+    });
+
+    expect(latestHarnessValue?.taskApprovalModal?.taskId).toBe("TASK-2");
+    expect(latestHarnessValue?.taskApprovalModal?.mergeMethod).toBe("rebase");
+    expect(latestHarnessValue?.taskApprovalModal?.hasUncommittedChanges).toBe(false);
+    expect(latestHarnessValue?.taskApprovalModal?.uncommittedFileCount).toBe(0);
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
   test("publishes and completes a pending direct merge", async () => {
     taskDirectMergeMock.mockResolvedValueOnce({
       outcome: "completed" as const,
@@ -618,7 +698,9 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("complete_direct_merge");
+    await waitFor(() => {
+      expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("complete_direct_merge");
+    });
 
     await act(async () => {
       latestHarnessValue?.taskApprovalModal?.onCompleteDirectMerge();
@@ -687,6 +769,280 @@ describe("useTaskApprovalFlow", () => {
     expect(taskDirectMergeCompleteMock).not.toHaveBeenCalled();
     await waitForTaskApprovalModalClosed();
     expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("opens the git conflict dialog when direct merge returns conflicts", async () => {
+    taskApprovalContextGetMock.mockResolvedValueOnce(
+      createTaskApprovalContextFixture({ publishTarget: undefined }) as unknown as never,
+    );
+    taskDirectMergeMock.mockResolvedValueOnce(createConflictDirectMergeResult());
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow({
+        activeRepo: "/repo",
+        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+        requestPullRequestGeneration: async () => undefined,
+        refreshTasks: async () => {},
+      });
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    await act(async () => {
+      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      await Promise.resolve();
+    });
+
+    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+    expect(latestHarnessValue?.taskGitConflictDialog?.open).toBe(true);
+    expect(latestHarnessValue?.taskGitConflictDialog?.conflict).toEqual({
+      operation: "direct_merge_merge_commit",
+      currentBranch: null,
+      targetBranch: "main",
+      conflictedFiles: ["src/app.ts"],
+      output: "conflict output",
+      workingDir: null,
+    });
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("reopens approval in direct_merge mode after aborting a git conflict", async () => {
+    taskApprovalContextGetMock.mockResolvedValueOnce(
+      createTaskApprovalContextFixture({ publishTarget: undefined }) as unknown as never,
+    );
+    taskApprovalContextGetMock.mockResolvedValueOnce(
+      createTaskApprovalContextFixture({ publishTarget: undefined }) as unknown as never,
+    );
+    taskDirectMergeMock.mockResolvedValueOnce(
+      createConflictDirectMergeResult({
+        currentBranch: "odt/TASK-1",
+        workingDir: "/repo/.worktrees/task-1",
+      }),
+    );
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow({
+        activeRepo: "/repo",
+        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+        requestPullRequestGeneration: async () => undefined,
+        refreshTasks: async () => {},
+      });
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    await act(async () => {
+      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      latestHarnessValue?.taskGitConflictDialog?.onAbort();
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    expect(gitAbortConflictMock).toHaveBeenCalledWith(
+      "/repo",
+      "direct_merge_merge_commit",
+      "/repo/.worktrees/task-1",
+    );
+    expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("direct_merge");
+    expect(latestHarnessValue?.taskGitConflictDialog).toBeNull();
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("keeps the git conflict dialog open when Ask Builder does not start a resolution session", async () => {
+    taskApprovalContextGetMock.mockResolvedValueOnce(
+      createTaskApprovalContextFixture({ publishTarget: undefined }) as unknown as never,
+    );
+    taskDirectMergeMock.mockResolvedValueOnce(
+      createConflictDirectMergeResult({
+        currentBranch: "odt/TASK-1",
+        workingDir: "/repo/.worktrees/task-1",
+      }),
+    );
+    const onResolveGitConflictMock = mock(async () => false);
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow({
+        activeRepo: "/repo",
+        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+        requestPullRequestGeneration: async () => undefined,
+        refreshTasks: async () => {},
+        onResolveGitConflict: onResolveGitConflictMock,
+      });
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    await act(async () => {
+      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      latestHarnessValue?.taskGitConflictDialog?.onAskBuilder();
+      await Promise.resolve();
+    });
+
+    expect(onResolveGitConflictMock).toHaveBeenCalledWith(
+      expect.objectContaining({ operation: "direct_merge_merge_commit" }),
+      "TASK-1",
+    );
+    expect(latestHarnessValue?.taskGitConflictDialog?.open).toBe(true);
+    expect(latestHarnessValue?.taskGitConflictDialog?.isHandlingConflict).toBe(false);
+    expect(latestHarnessValue?.taskGitConflictDialog?.conflictAction).toBeNull();
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("surfaces Ask Builder failures without closing the git conflict dialog", async () => {
+    taskApprovalContextGetMock.mockResolvedValueOnce(
+      createTaskApprovalContextFixture({ publishTarget: undefined }) as unknown as never,
+    );
+    taskDirectMergeMock.mockResolvedValueOnce(
+      createConflictDirectMergeResult({
+        currentBranch: "odt/TASK-1",
+        workingDir: "/repo/.worktrees/task-1",
+      }),
+    );
+    const onResolveGitConflictMock = mock(async () => {
+      throw new Error("Builder unavailable");
+    });
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow({
+        activeRepo: "/repo",
+        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+        requestPullRequestGeneration: async () => undefined,
+        refreshTasks: async () => {},
+        onResolveGitConflict: onResolveGitConflictMock,
+      });
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    await act(async () => {
+      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      latestHarnessValue?.taskGitConflictDialog?.onAskBuilder();
+      await Promise.resolve();
+    });
+
+    expect(latestHarnessValue?.taskGitConflictDialog?.open).toBe(true);
+    expect(latestHarnessValue?.taskGitConflictDialog?.isHandlingConflict).toBe(false);
+    expect(latestHarnessValue?.taskGitConflictDialog?.conflictAction).toBeNull();
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Failed to contact Builder",
+      expect.objectContaining({ description: "Builder unavailable" }),
+    );
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("creates a pull request manually, refreshes tasks, and closes the modal", async () => {
+    const refreshTasksMock = mock(async () => {});
+    taskApprovalContextGetMock.mockResolvedValueOnce(
+      createTaskApprovalContextFixture({
+        providers: [
+          {
+            providerId: "github",
+            enabled: true,
+            available: true,
+            reason: undefined,
+          },
+        ],
+      }) as unknown as never,
+    );
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow({
+        activeRepo: "/repo",
+        tasks: [
+          createTaskCardFixture({
+            id: "TASK-1",
+            title: "Ship approval flow",
+            description: "Task description",
+          }),
+        ],
+        requestPullRequestGeneration: async () => undefined,
+        refreshTasks: refreshTasksMock,
+      });
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    await act(async () => {
+      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      await Promise.resolve();
+    });
+
+    await waitForTaskApprovalModalClosed();
+    expect(taskPullRequestUpsertMock).toHaveBeenCalledWith(
+      "/repo",
+      "TASK-1",
+      "Ship approval flow",
+      "Task description",
+    );
+    expect(refreshTasksMock).toHaveBeenCalledTimes(1);
+    await waitForTaskApprovalModalClosed();
+    expect(toastSuccessMock).toHaveBeenCalledWith(
+      "Pull request created",
+      expect.objectContaining({ description: "PR #17" }),
+    );
 
     await act(async () => {
       await harness.unmount();
@@ -900,6 +1256,62 @@ describe("useTaskApprovalFlow", () => {
       expect.objectContaining({ description: "Generation crashed" }),
     );
     expect(taskPullRequestUpsertMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("keeps direct-merge completion recoverable when publish configuration is incomplete", async () => {
+    taskApprovalContextGetMock.mockResolvedValueOnce(
+      createTaskApprovalContextFixture({
+        publishTarget: { branch: "main" },
+        directMerge: {
+          method: "merge_commit",
+          sourceBranch: "odt/TASK-1",
+          targetBranch: { branch: "main" },
+          mergedAt: "2026-03-12T12:00:00Z",
+        },
+      }) as unknown as never,
+    );
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow({
+        activeRepo: "/repo",
+        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+        requestPullRequestGeneration: async () => undefined,
+        refreshTasks: async () => {},
+      });
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("complete_direct_merge");
+
+    await act(async () => {
+      latestHarnessValue?.taskApprovalModal?.onCompleteDirectMerge();
+      await Promise.resolve();
+    });
+
+    expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
+    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("complete_direct_merge");
+    expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(false);
+    expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBe(
+      "The configured target branch does not have a publish remote.",
+    );
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Failed to finish direct merge",
+      expect.objectContaining({
+        description: "The configured target branch does not have a publish remote.",
+      }),
+    );
 
     await act(async () => {
       await harness.unmount();
