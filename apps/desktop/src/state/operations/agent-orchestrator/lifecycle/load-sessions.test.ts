@@ -3527,6 +3527,7 @@ describe("agent-orchestrator-load-sessions", () => {
         state: "read",
         timestamp: "2026-02-22T08:00:01.000Z",
         text: "Previous request",
+        displayParts: [],
         parts: [],
       },
     ]);
@@ -3654,6 +3655,7 @@ describe("agent-orchestrator-load-sessions", () => {
             state: "read",
             timestamp: "2026-02-22T08:00:01.000Z",
             text: "Hydrated message",
+            displayParts: [],
             parts: [],
           },
         ],

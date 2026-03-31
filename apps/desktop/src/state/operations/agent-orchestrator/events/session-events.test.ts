@@ -341,6 +341,7 @@ describe("agent-orchestrator-session-events", () => {
       messageId: "user-message-1",
       timestamp: "2026-02-22T08:00:01.000Z",
       message: "Generate the pull request",
+      parts: [{ kind: "text", text: "Generate the pull request" }],
       state: "read",
       model: {
         providerId: "openai",
@@ -359,6 +360,12 @@ describe("agent-orchestrator-session-events", () => {
     if (!userMessages?.[0]?.meta || userMessages[0].meta.kind !== "user") {
       throw new Error("Expected canonical user message metadata");
     }
+    expect(userMessages[0].meta.parts).toEqual([
+      {
+        kind: "text",
+        text: "Generate the pull request",
+      },
+    ]);
     expect(userMessages[0].meta.providerId).toBe("openai");
     expect(userMessages[0].meta.modelId).toBe("gpt-5");
     expect(userMessages[0].meta.variant).toBe("high");
@@ -425,6 +432,7 @@ describe("agent-orchestrator-session-events", () => {
       messageId: "user-message-queued",
       timestamp: "2026-02-22T08:00:01.000Z",
       message: "Queued follow-up",
+      parts: [{ kind: "text", text: "Queued follow-up" }],
       state: "queued",
     });
     handleEvent({
@@ -433,6 +441,7 @@ describe("agent-orchestrator-session-events", () => {
       messageId: "user-message-queued",
       timestamp: "2026-02-22T08:00:01.000Z",
       message: "Queued follow-up",
+      parts: [{ kind: "text", text: "Queued follow-up" }],
       state: "read",
     });
 
@@ -444,6 +453,12 @@ describe("agent-orchestrator-session-events", () => {
     if (!userMessages?.[0]?.meta || userMessages[0].meta.kind !== "user") {
       throw new Error("Expected queued user message metadata");
     }
+    expect(userMessages[0].meta.parts).toEqual([
+      {
+        kind: "text",
+        text: "Queued follow-up",
+      },
+    ]);
     expect(userMessages[0].meta.state).toBe("read");
   });
 

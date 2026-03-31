@@ -358,7 +358,7 @@ describe("opencode-sdk-adapter", () => {
         id: "src/index.ts",
         path: "src/index.ts",
         name: "index.ts",
-        kind: "ts",
+        kind: "code",
       },
     ]);
   });

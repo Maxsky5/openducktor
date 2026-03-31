@@ -158,7 +158,7 @@ describe("catalog-and-mcp searchFiles", () => {
         id: "src/components/button.tsx",
         path: "src/components/button.tsx",
         name: "button.tsx",
-        kind: "ts",
+        kind: "code",
       },
       {
         id: "src/styles.css",

@@ -1,4 +1,7 @@
-import type { AgentUserMessagePart } from "../types/agent-orchestrator";
+import type {
+  AgentUserMessagePart,
+  AgentUserMessagePromptFileReference,
+} from "../types/agent-orchestrator";
 
 const trimBoundaryTextPart = (
   part: AgentUserMessagePart,
@@ -62,4 +65,41 @@ export const serializeAgentUserMessagePartsToText = (parts: AgentUserMessagePart
       return `@${part.file.path}`;
     })
     .join("");
+};
+
+export const buildAgentUserMessagePromptText = (
+  parts: AgentUserMessagePart[],
+): {
+  text: string;
+  fileReferences: AgentUserMessagePromptFileReference[];
+} => {
+  const normalized = normalizeAgentUserMessageParts(parts);
+  let text = "";
+  const fileReferences: AgentUserMessagePromptFileReference[] = [];
+
+  for (const part of normalized) {
+    if (part.kind === "text") {
+      text += part.text;
+      continue;
+    }
+
+    if (part.kind === "slash_command") {
+      text += `/${part.command.trigger}`;
+      continue;
+    }
+
+    const sourceValue = `@${part.file.path}`;
+    const start = text.length;
+    text += sourceValue;
+    fileReferences.push({
+      file: part.file,
+      sourceText: {
+        value: sourceValue,
+        start,
+        end: text.length,
+      },
+    });
+  }
+
+  return { text, fileReferences };
 };

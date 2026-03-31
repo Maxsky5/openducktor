@@ -1,5 +1,6 @@
 import {
   type AgentFileReference,
+  buildAgentUserMessagePromptText,
   normalizeAgentUserMessageParts,
   type SendAgentUserMessageInput,
   serializeAgentUserMessagePartsToText,
@@ -38,6 +39,15 @@ type OpenCodePromptPart =
       mime: string;
       url: string;
       filename: string;
+      source: {
+        type: "file";
+        path: string;
+        text: {
+          value: string;
+          start: number;
+          end: number;
+        };
+      };
     };
 
 const toCommandModelInput = (
@@ -50,32 +60,28 @@ const toCommandModelInput = (
 };
 
 const toFileReferenceMime = (file: AgentFileReference): string => {
-  switch (file.kind) {
-    case "directory":
-      return "inode/directory";
-    case "css":
-      return "text/css";
-    case "ts":
-      return "text/typescript";
-    default:
-      return "text/plain";
-  }
+  return file.kind === "directory" ? "inode/directory" : "text/plain";
 };
 
 const toPromptFilePart = (
-  file: AgentFileReference,
+  fileReference: ReturnType<typeof buildAgentUserMessagePromptText>["fileReferences"][number],
   workingDirectory: string,
 ): Extract<OpenCodePromptPart, { type: "file" }> => {
-  const normalizedPath = file.path.trim();
+  const normalizedPath = fileReference.file.path.trim();
   if (normalizedPath.length === 0) {
     throw new Error("OpenCode file references require a non-empty path.");
   }
 
   return {
     type: "file",
-    mime: toFileReferenceMime(file),
+    mime: toFileReferenceMime(fileReference.file),
     url: toFileUrl(resolveAgainstWorkingDirectory(workingDirectory, normalizedPath)),
-    filename: file.name,
+    filename: fileReference.file.name,
+    source: {
+      type: "file",
+      path: normalizedPath,
+      text: fileReference.sourceText,
+    },
   };
 };
 
@@ -83,22 +89,13 @@ const toPromptParts = (
   parts: SendAgentUserMessageInput["parts"],
   workingDirectory: string,
 ): OpenCodePromptPart[] => {
-  const promptParts: OpenCodePromptPart[] = [];
-
-  for (const part of normalizeAgentUserMessageParts(parts)) {
-    if (part.kind === "text") {
-      if (part.text.length === 0) {
-        continue;
-      }
-      promptParts.push({ type: "text", text: part.text });
-      continue;
-    }
-    if (part.kind === "file_reference") {
-      promptParts.push(toPromptFilePart(part.file, workingDirectory));
-    }
-  }
-
-  return promptParts;
+  const promptText = buildAgentUserMessagePromptText(parts);
+  return [
+    { type: "text", text: promptText.text },
+    ...promptText.fileReferences.map((fileReference) =>
+      toPromptFilePart(fileReference, workingDirectory),
+    ),
+  ];
 };
 
 const toSlashCommandExecutionRequest = (

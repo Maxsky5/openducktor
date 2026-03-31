@@ -21,7 +21,7 @@ const FILE = {
   id: "src/main.ts",
   path: "src/main.ts",
   name: "main.ts",
-  kind: "ts" as const,
+  kind: "code" as const,
 };
 
 describe("applyComposerDraftEdit", () => {

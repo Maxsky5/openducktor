@@ -158,7 +158,7 @@ export const buildFileSearchResult = (
   id: "src/main.ts",
   path: "src/main.ts",
   name: "main.ts",
-  kind: "ts",
+  kind: "code",
   ...overrides,
 });
 

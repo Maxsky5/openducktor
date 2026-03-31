@@ -12,16 +12,9 @@ import {
   readEditableTextContent,
 } from "./agent-chat-composer-selection";
 import { AgentChatComposerSlashMenu } from "./agent-chat-composer-slash-menu";
+import { AGENT_CHAT_FILE_REFERENCE_CHIP_BASE_CLASS_NAME } from "./agent-chat-file-reference-chip";
+import { getAgentChatFileReferenceIconMarkup } from "./agent-chat-file-reference-icon";
 import { useAgentChatComposerEditor } from "./use-agent-chat-composer-editor";
-
-const FILE_CODE_ICON_MARKUP =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-code-corner size-3.5" aria-hidden="true"><path d="M4 12.15V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2h-3.35"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="m5 16-3 3 3 3"></path><path d="m9 22 3-3-3-3"></path></svg>';
-const FILE_TEXT_ICON_MARKUP =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text size-3.5" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg>';
-const FOLDER_TREE_ICON_MARKUP =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder-tree size-3.5" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"></path><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"></path><path d="M3 5a2 2 0 0 0 2 2h3"></path><path d="M3 3v13a2 2 0 0 0 2 2h3"></path></svg>';
-const PAINTBRUSH_ICON_MARKUP =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-paintbrush size-3.5" aria-hidden="true"><path d="m14.622 17.897-10.68-2.913"></path><path d="M18.376 2.622a1 1 0 1 1 3.002 3.002L17.36 9.643a.5.5 0 0 0 0 .707l.944.944a2.41 2.41 0 0 1 0 3.408l-.944.944a.5.5 0 0 1-.707 0L8.354 7.348a.5.5 0 0 1 0-.707l.944-.944a2.41 2.41 0 0 1 3.408 0l.944.944a.5.5 0 0 0 .707 0z"></path><path d="M9 8c-1.804 2.71-3.97 3.46-6.583 3.948a.507.507 0 0 0-.302.819l7.32 8.883a1 1 0 0 0 1.185.204C12.735 20.405 16 16.792 16 15"></path></svg>';
 
 const escapeHtml = (value: string): string => {
   return value
@@ -32,19 +25,6 @@ const escapeHtml = (value: string): string => {
     .replaceAll("'", "&#39;");
 };
 
-const getFileReferenceIconMarkup = (kind: string): string => {
-  switch (kind) {
-    case "directory":
-      return FOLDER_TREE_ICON_MARKUP;
-    case "css":
-      return PAINTBRUSH_ICON_MARKUP;
-    case "ts":
-      return FILE_CODE_ICON_MARKUP;
-    default:
-      return FILE_TEXT_ICON_MARKUP;
-  }
-};
-
 const buildComposerContentMarkup = (draft: AgentChatComposerDraft): string => {
   return draft.segments
     .map((segment, index) => {
@@ -52,11 +32,8 @@ const buildComposerContentMarkup = (draft: AgentChatComposerDraft): string => {
 
       if (segment.kind === "file_reference") {
         return `<span contenteditable="false" data-chip-segment-id="${escapeHtml(segment.id)}" data-segment-id="${escapeHtml(segment.id)}" title="${escapeHtml(segment.file.path)}" class="${escapeHtml(
-          cn(
-            badgeVariants({ variant: "secondary" }),
-            "mr-2 inline-flex h-6 bg-sky-300 dark:bg-sky-800 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium align-middle",
-          ),
-        )}"><span class="inline-flex shrink-0">${getFileReferenceIconMarkup(segment.file.kind)}</span><span class="truncate">${escapeHtml(segment.file.name)}</span></span>`;
+          cn(AGENT_CHAT_FILE_REFERENCE_CHIP_BASE_CLASS_NAME, "mr-2 align-middle"),
+        )}"><span class="inline-flex shrink-0">${getAgentChatFileReferenceIconMarkup(segment.file.kind)}</span><span class="truncate">${escapeHtml(segment.file.name)}</span></span>`;
       }
 
       if (segment.kind === "slash_command") {

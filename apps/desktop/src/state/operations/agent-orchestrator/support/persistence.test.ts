@@ -181,6 +181,12 @@ describe("agent-orchestrator/support/persistence", () => {
           state: "read",
           timestamp: "2026-02-22T08:00:00.000Z",
           text: "Please implement this",
+          displayParts: [
+            {
+              kind: "text",
+              text: "Please implement this",
+            },
+          ],
           model: {
             providerId: "openai",
             modelId: "gpt-5",
@@ -290,6 +296,12 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(user.meta.profileId).toBe("Ares");
     expect(user.meta.variant).toBe("high");
     expect(user.meta.state).toBe("read");
+    expect(user.meta.parts).toEqual([
+      {
+        kind: "text",
+        text: "Please implement this",
+      },
+    ]);
   });
 
   test("preserves session-selected agent when history model metadata is partial", () => {
@@ -341,6 +353,12 @@ describe("agent-orchestrator/support/persistence", () => {
           state: "read",
           timestamp: "2026-02-22T08:00:00.000Z",
           text: "Please implement this",
+          displayParts: [
+            {
+              kind: "text",
+              text: "Please implement this",
+            },
+          ],
           parts: [
             {
               kind: "text",

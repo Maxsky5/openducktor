@@ -94,7 +94,7 @@ const FILE_SEARCH_RESULTS: AgentFileSearchResult[] = [
     id: "src/main.ts",
     path: "src/main.ts",
     name: "main.ts",
-    kind: "ts",
+    kind: "code",
   },
 ];
 
