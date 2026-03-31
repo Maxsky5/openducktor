@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import type { AgentFileSearchResult } from "@openducktor/core";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useRef, useState } from "react";
 import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
 import {
@@ -98,11 +98,33 @@ const EditorHarness = ({
   );
 };
 
-const typeIntoEditor = (container: HTMLElement, value: string): HTMLElement => {
-  const editable = container.querySelector("[data-text-segment-id]");
+const getEditorRoot = (container: HTMLElement): HTMLElement => {
+  const editorRoot = container.querySelector('[contenteditable="true"]');
+  if (!(editorRoot instanceof HTMLElement)) {
+    throw new Error("Expected editable composer root");
+  }
+
+  return editorRoot;
+};
+
+const getTextSegments = (container: HTMLElement): HTMLElement[] => {
+  return Array.from(container.querySelectorAll("[data-text-segment-id]")).filter(
+    (element): element is HTMLElement => element instanceof HTMLElement,
+  );
+};
+
+const getLastTextSegment = (container: HTMLElement): HTMLElement => {
+  const textSegments = getTextSegments(container);
+  const editable = textSegments.at(-1);
   if (!(editable instanceof HTMLElement)) {
     throw new Error("Expected editable composer text segment");
   }
+
+  return editable;
+};
+
+const typeIntoEditor = (container: HTMLElement, value: string): HTMLElement => {
+  const editable = getLastTextSegment(container);
   editable.textContent = value;
   const textNode = editable.firstChild;
   if (textNode) {
@@ -114,17 +136,13 @@ const typeIntoEditor = (container: HTMLElement, value: string): HTMLElement => {
     selection?.addRange(range);
   }
 
-  const editorRoot = editable.closest('[contenteditable="true"]');
-  if (!(editorRoot instanceof HTMLElement)) {
-    throw new Error("Expected editable composer root");
-  }
-  fireEvent.input(editorRoot);
-  return editable;
+  fireEvent.input(editable);
+  return getLastTextSegment(container);
 };
 
 const getEditorShell = (container: HTMLElement): HTMLDivElement => {
-  const editable = typeIntoEditor(container, "");
-  const shell = editable.closest('[aria-disabled="false"]');
+  typeIntoEditor(container, "");
+  const shell = getEditorRoot(container).closest('[aria-disabled="false"]');
   if (!(shell instanceof HTMLDivElement)) {
     throw new Error("Expected composer editor shell");
   }
@@ -171,6 +189,28 @@ describe("AgentChatComposerEditor", () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
+  test("selects a slash command from pointer down without submitting the message", async () => {
+    const onSend = mock(() => {});
+    const rendered = render(
+      <EditorHarness slashCommands={COMMANDS} slashCommandsError={null} onSend={onSend} />,
+    );
+
+    typeIntoEditor(rendered.container, "/");
+
+    const commandButton = await screen.findByRole("button", {
+      name: /compact the current session/i,
+    });
+
+    fireEvent.pointerDown(commandButton);
+
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+        "/compact",
+      );
+    });
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
   test("keeps slash autocomplete open through the keyup after typing slash", async () => {
     const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
 
@@ -180,6 +220,60 @@ describe("AgentChatComposerEditor", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /compact the current session/i })).toBeDefined();
     });
+  });
+
+  test("preserves plain text typing order across rerenders", async () => {
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    typeIntoEditor(rendered.container, "a");
+    typeIntoEditor(rendered.container, "ab");
+    typeIntoEditor(rendered.container, "abc");
+
+    await waitFor(() => {
+      const editable = rendered.container.querySelector("[data-text-segment-id]");
+      expect(editable?.textContent).toBe("abc");
+    });
+  });
+
+  test("selects the full composer content with the select-all shortcut", () => {
+    let activeRange: Range | null = null;
+    const originalGetSelection = globalThis.getSelection;
+    const selection = {
+      removeAllRanges: () => {
+        activeRange = null;
+      },
+      addRange: (range: Range) => {
+        activeRange = range;
+      },
+      get rangeCount() {
+        return activeRange ? 1 : 0;
+      },
+      getRangeAt: () => {
+        if (!activeRange) {
+          throw new Error("Expected active selection range");
+        }
+        return activeRange;
+      },
+    } as unknown as Selection;
+    globalThis.getSelection = () => selection;
+
+    try {
+      const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+      typeIntoEditor(rendered.container, "hello");
+      fireEvent.keyDown(getEditorRoot(rendered.container), {
+        key: "a",
+        metaKey: true,
+      });
+
+      const selectedRange = activeRange as Range | null;
+      expect(selectedRange).toBeTruthy();
+      if (!selectedRange) {
+        throw new Error("Expected active selection range");
+      }
+      expect(selectedRange.toString()).toContain("hello");
+    } finally {
+      globalThis.getSelection = originalGetSelection;
+    }
   });
 
   test("does not open slash autocomplete when slash is typed after normal text", async () => {
@@ -296,6 +390,32 @@ describe("AgentChatComposerEditor", () => {
     expect(searchFiles).toHaveBeenCalledWith("");
   });
 
+  test("selects a file reference from pointer down without submitting the message", async () => {
+    const onSend = mock(() => {});
+    const searchFiles = mock(async () => [buildFileSearchResult()]);
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={searchFiles}
+        onSend={onSend}
+      />,
+    );
+
+    typeIntoEditor(rendered.container, "check @");
+
+    const fileButton = await screen.findByRole("button", { name: /main.ts/i });
+    fireEvent.pointerDown(fileButton);
+
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+        "main.ts",
+      );
+    });
+    expect(onSend).not.toHaveBeenCalled();
+    expect(searchFiles).toHaveBeenCalledWith("");
+  });
+
   test("does not open file autocomplete when the runtime does not support file search", async () => {
     const searchFiles = mock(async () => [buildFileSearchResult()]);
     const rendered = render(
@@ -404,6 +524,96 @@ describe("AgentChatComposerEditor", () => {
     });
   });
 
+  test("does not replace the trailing text segment after typing after a slash chip", async () => {
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "/");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /compact the current session/i })).toBeDefined();
+    });
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+        "/compact",
+      );
+    });
+
+    const originalTrailingEditable =
+      rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+    if (!(originalTrailingEditable instanceof HTMLElement)) {
+      throw new Error("Expected trailing editable text segment");
+    }
+
+    originalTrailingEditable.textContent = " after";
+    const textNode = originalTrailingEditable.firstChild;
+    if (textNode) {
+      const range = document.createRange();
+      range.setStart(textNode, originalTrailingEditable.textContent.length);
+      range.collapse(true);
+      const selection = globalThis.getSelection?.();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+
+    fireEvent.input(originalTrailingEditable);
+
+    await waitFor(() => {
+      const updatedTrailingEditable =
+        rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+      expect(updatedTrailingEditable).toBe(originalTrailingEditable);
+      expect(updatedTrailingEditable?.textContent).toBe(" after");
+    });
+  });
+
+  test("does not refocus the caret on printable keyup after a slash chip when selection is transiently on the root", async () => {
+    resetSelectionMocks();
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "/");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /compact the current session/i })).toBeDefined();
+    });
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+        "/compact",
+      );
+    });
+
+    const trailingEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+    if (!(trailingEditable instanceof HTMLElement)) {
+      throw new Error("Expected trailing editable text segment");
+    }
+
+    trailingEditable.textContent = "a";
+    const textNode = trailingEditable.firstChild;
+    if (textNode) {
+      const range = document.createRange();
+      range.setStart(textNode, 1);
+      range.collapse(true);
+      const selection = globalThis.getSelection?.();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+    fireEvent.input(trailingEditable);
+
+    setCaretOffsetWithinElementMock.mockClear();
+    const editorRoot = getEditorRoot(rendered.container);
+    const collapsedRange = document.createRange();
+    collapsedRange.setStart(editorRoot, 0);
+    collapsedRange.collapse(true);
+    const collapsedSelection = globalThis.getSelection?.();
+    collapsedSelection?.removeAllRanges();
+    collapsedSelection?.addRange(collapsedRange);
+
+    fireEvent.keyUp(editorRoot, { key: "a" });
+
+    expect(setCaretOffsetWithinElementMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /compact the current session/i })).toBeNull();
+  });
+
   test("renders empty trailing text segments as inline blocks for caret placement after file chips", async () => {
     const rendered = render(
       <EditorHarness
@@ -425,6 +635,242 @@ describe("AgentChatComposerEditor", () => {
       const trailingEditable = editables[0];
       expect(trailingEditable?.className).toContain("inline-block");
       expect(trailingEditable?.className).toContain("min-w-[1px]");
+    });
+  });
+
+  test("switches the trailing text segment back to inline after typing after a file chip", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={async () => [buildFileSearchResult()]}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "@");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+    });
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      const editables = Array.from(rendered.container.querySelectorAll("[data-text-segment-id]"));
+      expect(editables).toHaveLength(1);
+      expect(editables[0]?.className).toContain("inline-block");
+    });
+
+    const trailingEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+    if (!(trailingEditable instanceof HTMLElement)) {
+      throw new Error("Expected trailing editable text segment");
+    }
+
+    trailingEditable.textContent = " after";
+    const textNode = trailingEditable.firstChild;
+    if (textNode) {
+      const range = document.createRange();
+      range.setStart(textNode, trailingEditable.textContent.length);
+      range.collapse(true);
+      const selection = globalThis.getSelection?.();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+    fireEvent.input(trailingEditable.closest('[contenteditable="true"]') as HTMLElement);
+
+    await waitFor(() => {
+      const updatedTrailingEditable =
+        rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+      expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
+      expect((updatedTrailingEditable as HTMLElement).className).toContain("inline");
+      expect((updatedTrailingEditable as HTMLElement).className).not.toContain("inline-block");
+      expect((updatedTrailingEditable as HTMLElement).className).not.toContain("min-w-[1px]");
+    });
+  });
+
+  test("keeps typing in the trailing text segment after inserting a file chip", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={async () => [buildFileSearchResult()]}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "check @");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+    });
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+        "main.ts",
+      );
+    });
+
+    const trailingEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[1];
+    if (!(trailingEditable instanceof HTMLElement)) {
+      throw new Error("Expected trailing editable text segment");
+    }
+
+    fireEvent.focus(trailingEditable);
+    trailingEditable.textContent = " after";
+    const textNode = trailingEditable.firstChild;
+    if (textNode) {
+      const range = document.createRange();
+      range.setStart(textNode, trailingEditable.textContent.length);
+      range.collapse(true);
+      const selection = globalThis.getSelection?.();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+    fireEvent.input(trailingEditable.closest('[contenteditable="true"]') as HTMLElement);
+
+    await waitFor(() => {
+      const editorRoot = rendered.container.querySelector("[data-composer-content-root]");
+      expect(editorRoot?.textContent).toContain("check ");
+      expect(editorRoot?.textContent).toContain("main.ts");
+      expect(editorRoot?.textContent).toContain(" after");
+    });
+  });
+
+  test("preserves the trailing text segment id after typing after a file chip", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={async () => [buildFileSearchResult()]}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "check @");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+    });
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+        "main.ts",
+      );
+    });
+
+    const originalTrailingEditable =
+      rendered.container.querySelectorAll("[data-text-segment-id]")[1];
+    if (!(originalTrailingEditable instanceof HTMLElement)) {
+      throw new Error("Expected trailing editable text segment");
+    }
+
+    const trailingSegmentId = originalTrailingEditable.dataset.textSegmentId;
+    originalTrailingEditable.textContent = " ";
+    const textNode = originalTrailingEditable.firstChild;
+    if (textNode) {
+      const range = document.createRange();
+      range.setStart(textNode, 1);
+      range.collapse(true);
+      const selection = globalThis.getSelection?.();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+
+    fireEvent.input(originalTrailingEditable.closest('[contenteditable="true"]') as HTMLElement);
+
+    await waitFor(() => {
+      const updatedTrailingEditable =
+        rendered.container.querySelectorAll("[data-text-segment-id]")[1];
+      expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
+      expect((updatedTrailingEditable as HTMLElement).dataset.textSegmentId).toBe(
+        trailingSegmentId,
+      );
+      expect(updatedTrailingEditable?.textContent).toBe(" ");
+    });
+  });
+
+  test("repairs root-collapsed selection after a file chip so continued typing stays trailing", async () => {
+    resetSelectionMocks();
+    const searchFiles = mock(async () => [buildFileSearchResult()]);
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={searchFiles}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "check @");
+    const fileButton = await screen.findByRole("button", { name: /main.ts/i });
+    fireEvent.pointerDown(fileButton);
+
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+        "main.ts",
+      );
+    });
+
+    const trailingEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[1];
+    if (!(trailingEditable instanceof HTMLElement)) {
+      throw new Error("Expected trailing editable text segment");
+    }
+
+    trailingEditable.textContent = "x";
+    const firstTextNode = trailingEditable.firstChild;
+    if (firstTextNode) {
+      const range = document.createRange();
+      range.setStart(firstTextNode, 1);
+      range.collapse(true);
+      const selection = globalThis.getSelection?.();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+    fireEvent.input(trailingEditable.closest('[contenteditable="true"]') as HTMLElement);
+
+    const editorRoot = rendered.container.querySelector('[contenteditable="true"]');
+    if (!(editorRoot instanceof HTMLElement)) {
+      throw new Error("Expected composer editor root");
+    }
+
+    const collapsedRange = document.createRange();
+    collapsedRange.setStart(editorRoot, 0);
+    collapsedRange.collapse(true);
+    const collapsedSelection = globalThis.getSelection?.();
+    collapsedSelection?.removeAllRanges();
+    collapsedSelection?.addRange(collapsedRange);
+
+    const repairedTrailingEditable =
+      rendered.container.querySelectorAll("[data-text-segment-id]")[1];
+    if (!(repairedTrailingEditable instanceof HTMLElement)) {
+      throw new Error("Expected repaired trailing editable text segment");
+    }
+
+    fireEvent(
+      editorRoot,
+      new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: true,
+        inputType: "insertText",
+        data: " then @AuthContext",
+      }),
+    );
+    repairedTrailingEditable.textContent = "x then @AuthContext";
+    const repairedTextNode = repairedTrailingEditable.firstChild;
+    if (repairedTextNode) {
+      const range = document.createRange();
+      range.setStart(repairedTextNode, repairedTrailingEditable.textContent.length);
+      range.collapse(true);
+      const selection = globalThis.getSelection?.();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+    fireEvent.input(editorRoot);
+
+    await waitFor(() => {
+      const composerRoot = rendered.container.querySelector("[data-composer-content-root]");
+      expect(composerRoot?.textContent).toContain("check ");
+      expect(composerRoot?.textContent).toContain("main.ts");
+      expect(composerRoot?.textContent).toContain("x then @AuthContext");
+    });
+
+    await waitFor(() => {
+      expect(within(rendered.container).getByRole("button", { name: /main.ts/i })).toBeDefined();
     });
   });
 });
