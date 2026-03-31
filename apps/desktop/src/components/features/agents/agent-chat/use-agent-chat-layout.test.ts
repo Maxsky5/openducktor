@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
+  COMPOSER_EDITOR_MIN_HEIGHT_PX,
   COMPOSER_TEXTAREA_MAX_HEIGHT_PX,
   COMPOSER_TEXTAREA_MIN_HEIGHT_PX,
   computeComposerTextareaLayout,
+  resizeComposerEditorElement,
   resizeComposerTextareaElement,
   useAgentChatLayout,
 } from "./use-agent-chat-layout";
@@ -97,6 +99,44 @@ describe("use-agent-chat-layout helpers", () => {
     });
     expect(assignedHeights).toEqual(["auto", "120px"]);
     expect(assignedOverflowValues).toEqual([]);
+  });
+
+  test("resizeComposerEditorElement detects native multiline growth from the last synced height", () => {
+    const styleState = {
+      height: "",
+      overflowY: "hidden" as "auto" | "hidden",
+    };
+    const style = {} as CSSStyleDeclaration;
+
+    Object.defineProperty(style, "height", {
+      configurable: true,
+      get: () => styleState.height,
+      set: (value: string) => {
+        styleState.height = value;
+      },
+    });
+    Object.defineProperty(style, "overflowY", {
+      configurable: true,
+      get: () => styleState.overflowY,
+      set: (value: "auto" | "hidden") => {
+        styleState.overflowY = value;
+      },
+    });
+
+    const editor = {
+      getBoundingClientRect: () => ({ height: 120 }),
+      scrollHeight: 120,
+      style,
+      textContent: "line one\nline two",
+    } as unknown as HTMLDivElement;
+
+    const result = resizeComposerEditorElement(editor, undefined, COMPOSER_EDITOR_MIN_HEIGHT_PX);
+
+    expect(result).toEqual({
+      didHeightChange: true,
+      overflowY: "hidden",
+    });
+    expect(styleState.height).toBe("120px");
   });
 
   test("resizeComposerTextareaElement shrinks when content height decreases", () => {

@@ -47,12 +47,16 @@ const hasExistingSlashCommandSegment = (draft: AgentChatComposerDraft): boolean 
   return draft.segments.some((segment) => segment.kind === "slash_command");
 };
 
-const hasMeaningfulTextBeforeSegment = (
+const hasMeaningfulContentBeforeSegment = (
   draft: AgentChatComposerDraft,
   segmentIndex: number,
 ): boolean => {
   return draft.segments.slice(0, segmentIndex).some((segment) => {
-    return segment.kind === "text" && segment.text.trim().length > 0;
+    if (segment.kind === "text") {
+      return segment.text.trim().length > 0;
+    }
+
+    return true;
   });
 };
 
@@ -146,7 +150,7 @@ export const isTextSegment = (
 export const normalizeComposerDraft = (draft: AgentChatComposerDraft): AgentChatComposerDraft => {
   const normalized: AgentChatComposerSegment[] = [];
 
-  for (const segment of draft.segments) {
+  for (const [index, segment] of draft.segments.entries()) {
     if (segment.kind === "text") {
       const previous = normalized[normalized.length - 1];
       if (previous?.kind === "text") {
@@ -164,7 +168,11 @@ export const normalizeComposerDraft = (draft: AgentChatComposerDraft): AgentChat
       normalized.push(createTextSegment(""));
     }
     normalized.push(segment);
-    normalized.push(createTextSegment(""));
+
+    const nextSegment = draft.segments[index + 1];
+    if (!nextSegment || nextSegment.kind !== "text") {
+      normalized.push(createTextSegment(""));
+    }
   }
 
   if (normalized.length === 0) {
@@ -272,7 +280,7 @@ export const replaceTextRangeWithSlashCommand = (
   if (hasExistingSlashCommandSegment(draft)) {
     return null;
   }
-  if (hasMeaningfulTextBeforeSegment(draft, index)) {
+  if (hasMeaningfulContentBeforeSegment(draft, index)) {
     return null;
   }
   if (segment.text.slice(0, rangeStart).trim().length > 0) {
@@ -427,7 +435,7 @@ export const readSlashTriggerMatchForDraft = (
     return null;
   }
 
-  if (hasMeaningfulTextBeforeSegment(draft, segmentIndex)) {
+  if (hasMeaningfulContentBeforeSegment(draft, segmentIndex)) {
     return null;
   }
 

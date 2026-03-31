@@ -5,6 +5,7 @@ import {
   createFileReferenceSegment,
   createSlashCommandSegment,
   createTextSegment,
+  normalizeComposerDraft,
   readFileTriggerMatchForDraft,
   readSlashTriggerMatchForDraft,
 } from "./agent-chat-composer-draft";
@@ -93,6 +94,38 @@ describe("applyComposerDraftEdit", () => {
     expect(readSlashTriggerMatchForDraft(draft, "text-2", 8)).toBeNull();
   });
 
+  test("does not expose slash autocomplete after a file reference chip", () => {
+    const draft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("", "text-1"),
+        createFileReferenceSegment(FILE, "file-1"),
+        createTextSegment(" /compact", "text-2"),
+      ],
+    };
+
+    expect(readSlashTriggerMatchForDraft(draft, "text-2", 9)).toBeNull();
+  });
+
+  test("does not insert a slash command after a file reference chip", () => {
+    const draft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("", "text-1"),
+        createFileReferenceSegment(FILE, "file-1"),
+        createTextSegment("/compact", "text-2"),
+      ],
+    };
+
+    const result = applyComposerDraftEdit(draft, {
+      type: "insert_slash_command",
+      textSegmentId: "text-2",
+      rangeStart: 0,
+      rangeEnd: 8,
+      command: COMMAND,
+    });
+
+    expect(result).toBeNull();
+  });
+
   test("replaces an @query range with a file reference chip", () => {
     const draft: AgentChatComposerDraft = {
       segments: [createTextSegment("see @src/ma now", "text-1")],
@@ -145,6 +178,24 @@ describe("applyComposerDraftEdit", () => {
         segmentId: "text-before",
         offset: 7,
       },
+    });
+  });
+
+  test("preserves the existing trailing text segment id when normalizing text after a file chip", () => {
+    const draft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("before ", "text-before"),
+        createFileReferenceSegment(FILE, "file-1"),
+        createTextSegment(" after", "text-after"),
+      ],
+    };
+
+    expect(normalizeComposerDraft(draft)).toEqual({
+      segments: [
+        expect.objectContaining({ id: "text-before", kind: "text", text: "before " }),
+        expect.objectContaining({ id: "file-1", kind: "file_reference", file: FILE }),
+        expect.objectContaining({ id: "text-after", kind: "text", text: " after" }),
+      ],
     });
   });
 

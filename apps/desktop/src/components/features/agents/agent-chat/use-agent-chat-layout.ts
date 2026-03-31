@@ -7,6 +7,14 @@ export const COMPOSER_EDITOR_MAX_HEIGHT_PX = 220;
 export const COMPOSER_TEXTAREA_MIN_HEIGHT_PX = COMPOSER_EDITOR_MIN_HEIGHT_PX;
 export const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = COMPOSER_EDITOR_MAX_HEIGHT_PX;
 
+const readInlineHeightPx = (styleHeight: string): number | null => {
+  const inlineHeight = Number.parseFloat(styleHeight);
+  if (Number.isFinite(inlineHeight) && inlineHeight > 0) {
+    return inlineHeight;
+  }
+  return null;
+};
+
 export const computeComposerEditorLayout = (
   scrollHeight: number,
 ): {
@@ -25,10 +33,17 @@ export const computeComposerEditorLayout = (
 
 export const computeComposerTextareaLayout = computeComposerEditorLayout;
 
-const readComposerEditorHeight = (editor: HTMLDivElement): number => {
-  const inlineHeight = Number.parseFloat(editor.style.height);
-  if (Number.isFinite(inlineHeight) && inlineHeight > 0) {
+const readComposerEditorHeight = (editor: HTMLDivElement, previousHeightPx?: number): number => {
+  const inlineHeight = readInlineHeightPx(editor.style.height);
+  if (inlineHeight !== null) {
     return inlineHeight;
+  }
+  if (
+    typeof previousHeightPx === "number" &&
+    Number.isFinite(previousHeightPx) &&
+    previousHeightPx > 0
+  ) {
+    return previousHeightPx;
   }
   return editor.getBoundingClientRect().height;
 };
@@ -36,12 +51,13 @@ const readComposerEditorHeight = (editor: HTMLDivElement): number => {
 export const resizeComposerEditorElement = (
   editor: HTMLDivElement,
   serializedDraftText?: string,
+  previousHeightPx?: number,
 ): {
   didHeightChange: boolean;
   overflowY: "auto" | "hidden";
 } => {
   const resolvedSerializedDraftText = serializedDraftText ?? editor.textContent ?? "";
-  const currentHeight = readComposerEditorHeight(editor);
+  const currentHeight = readComposerEditorHeight(editor, previousHeightPx);
   if (resolvedSerializedDraftText.length === 0) {
     const nextHeight = COMPOSER_EDITOR_MIN_HEIGHT_PX;
     const didHeightChange = Math.abs(currentHeight - nextHeight) > 0.5;
@@ -78,6 +94,7 @@ export const resizeComposerEditorElement = (
 export const resizeComposerTextareaElement = (
   editor: HTMLDivElement | HTMLTextAreaElement,
   serializedDraftText?: string,
+  previousHeightPx?: number,
 ): {
   didHeightChange: boolean;
   overflowY: "auto" | "hidden";
@@ -88,6 +105,7 @@ export const resizeComposerTextareaElement = (
       (editor as unknown as { value?: string }).value ??
       editor.textContent ??
       "",
+    previousHeightPx,
   );
 
 type UseAgentChatLayoutInput = {
@@ -117,6 +135,8 @@ export const useAgentChatLayout = ({
   const resizeFrameIdRef = useRef<number | null>(null);
   const resizeTextareaFrameIdRef = useRef<number | null>(null);
   const didInitializeComposerForSessionRef = useRef(false);
+  const composerEditorHeightRef = useRef(COMPOSER_EDITOR_MIN_HEIGHT_PX);
+  const composerTextareaHeightRef = useRef(COMPOSER_TEXTAREA_MIN_HEIGHT_PX);
 
   const flushComposerEditorResize = useCallback((): void => {
     const editor = composerEditorRef.current;
@@ -130,7 +150,16 @@ export const useAgentChatLayout = ({
         ? container.scrollHeight - container.scrollTop - container.clientHeight <=
           CHAT_SCROLL_EDGE_THRESHOLD_PX
         : false;
-    const { didHeightChange } = resizeComposerEditorElement(editor);
+    const { didHeightChange } = resizeComposerEditorElement(
+      editor,
+      undefined,
+      composerEditorHeightRef.current,
+    );
+    composerEditorHeightRef.current =
+      readInlineHeightPx(editor.style.height) ??
+      ((editor.textContent ?? "").length === 0
+        ? COMPOSER_EDITOR_MIN_HEIGHT_PX
+        : composerEditorHeightRef.current);
     if (wasNearBottom && didHeightChange) {
       syncBottomAfterComposerLayoutRef?.current?.();
     }
@@ -165,7 +194,16 @@ export const useAgentChatLayout = ({
         ? container.scrollHeight - container.scrollTop - container.clientHeight <=
           CHAT_SCROLL_EDGE_THRESHOLD_PX
         : false;
-    const { didHeightChange } = resizeComposerTextareaElement(textarea);
+    const { didHeightChange } = resizeComposerTextareaElement(
+      textarea,
+      undefined,
+      composerTextareaHeightRef.current,
+    );
+    composerTextareaHeightRef.current =
+      readInlineHeightPx(textarea.style.height) ??
+      (textarea.value.length === 0
+        ? COMPOSER_TEXTAREA_MIN_HEIGHT_PX
+        : composerTextareaHeightRef.current);
     if (wasNearBottom && didHeightChange) {
       syncBottomAfterComposerLayoutRef?.current?.();
     }
@@ -190,6 +228,8 @@ export const useAgentChatLayout = ({
 
   useLayoutEffect(() => {
     didInitializeComposerForSessionRef.current = false;
+    composerEditorHeightRef.current = COMPOSER_EDITOR_MIN_HEIGHT_PX;
+    composerTextareaHeightRef.current = COMPOSER_TEXTAREA_MIN_HEIGHT_PX;
     const hasActiveSession = activeSessionId !== null;
     if (hasActiveSession && resizeFrameIdRef.current !== null) {
       const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;

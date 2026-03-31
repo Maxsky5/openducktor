@@ -4,6 +4,7 @@ import {
   type FormEvent as ReactFormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type RefObject,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -11,6 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import {
   type AgentChatComposerDraft,
   type AgentChatComposerDraftEditResult,
@@ -47,6 +49,7 @@ type FileMenuState = {
 type UseAgentChatComposerEditorArgs = {
   draft: AgentChatComposerDraft;
   onDraftChange: (draft: AgentChatComposerDraft) => void;
+  editorRef: RefObject<HTMLDivElement | null>;
   disabled: boolean;
   onEditorInput: () => void;
   onSend: () => void;
@@ -65,7 +68,6 @@ type UseAgentChatComposerEditorResult = {
   showFileMenu: boolean;
   fileSearchError: string | null;
   isFileSearchLoading: boolean;
-  registerTextSegmentRef: (segmentId: string, element: HTMLElement | null) => void;
   focusLastTextSegment: () => void;
   selectSlashCommand: (command: AgentSlashCommand) => void;
   selectFileSearchResult: (result: AgentFileSearchResult) => void;
@@ -84,7 +86,125 @@ type ActiveTextSelection = {
   caretOffset: number | null;
 };
 
+type TextSelectionTarget = {
+  segmentId: string;
+  offset: number;
+};
+
+type PendingInputState = TextSelectionTarget & {
+  inputType: string | null;
+  data: string | null;
+};
+
 const AUTOCOMPLETE_NAVIGATION_KEYS = new Set(["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"]);
+
+const findTextSegment = (
+  draft: AgentChatComposerDraft,
+  segmentId: string,
+): Extract<AgentChatComposerDraft["segments"][number], { kind: "text" }> | null => {
+  for (const segment of draft.segments) {
+    if (segment.kind === "text" && segment.id === segmentId) {
+      return segment;
+    }
+  }
+
+  return null;
+};
+
+const clampTextSelectionOffset = (text: string, offset: number): number => {
+  return Math.max(0, Math.min(offset, text.length));
+};
+
+const resolveTextSelectionTarget = (
+  draft: AgentChatComposerDraft,
+  selectionTarget: TextSelectionTarget | null,
+): TextSelectionTarget | null => {
+  if (!selectionTarget || selectionTarget.segmentId.length === 0) {
+    return null;
+  }
+
+  const segment = findTextSegment(draft, selectionTarget.segmentId);
+  if (!segment) {
+    return null;
+  }
+
+  return {
+    segmentId: segment.id,
+    offset: clampTextSelectionOffset(segment.text, selectionTarget.offset),
+  };
+};
+
+const getLastTextSelectionTarget = (draft: AgentChatComposerDraft): TextSelectionTarget | null => {
+  for (let index = draft.segments.length - 1; index >= 0; index -= 1) {
+    const segment = draft.segments[index];
+    if (segment?.kind !== "text") {
+      continue;
+    }
+
+    return {
+      segmentId: segment.id,
+      offset: segment.text.length,
+    };
+  }
+
+  return null;
+};
+
+const deriveTextSelectionTargetAfterInput = (
+  draft: AgentChatComposerDraft,
+  pendingInputState: PendingInputState | null,
+  rememberedSelection: TextSelectionTarget | null,
+): TextSelectionTarget | null => {
+  const rememberedTarget = resolveTextSelectionTarget(
+    draft,
+    pendingInputState ?? rememberedSelection,
+  );
+  if (!rememberedTarget) {
+    return getLastTextSelectionTarget(draft);
+  }
+
+  if (!pendingInputState) {
+    return rememberedTarget;
+  }
+
+  const segment = findTextSegment(draft, rememberedTarget.segmentId);
+  if (!segment) {
+    return getLastTextSelectionTarget(draft);
+  }
+
+  const { inputType, data } = pendingInputState;
+  if (inputType === "insertLineBreak" || inputType === "insertParagraph") {
+    return {
+      segmentId: segment.id,
+      offset: clampTextSelectionOffset(segment.text, rememberedTarget.offset + 1),
+    };
+  }
+
+  if (inputType?.startsWith("insert")) {
+    const offset =
+      typeof data === "string" ? rememberedTarget.offset + data.length : segment.text.length;
+    return {
+      segmentId: segment.id,
+      offset: clampTextSelectionOffset(segment.text, offset),
+    };
+  }
+
+  if (inputType?.includes("Backward")) {
+    return {
+      segmentId: segment.id,
+      offset: clampTextSelectionOffset(segment.text, rememberedTarget.offset - 1),
+    };
+  }
+
+  if (inputType?.startsWith("delete")) {
+    return {
+      segmentId: segment.id,
+      offset: clampTextSelectionOffset(segment.text, rememberedTarget.offset),
+    };
+  }
+
+  return rememberedTarget;
+};
 
 const filterSlashCommands = (commands: AgentSlashCommand[], query: string): AgentSlashCommand[] => {
   const normalizedQuery = query.trim().toLowerCase();
@@ -96,7 +216,24 @@ const filterSlashCommands = (commands: AgentSlashCommand[], query: string): Agen
 };
 
 const getComposerContentRoot = (root: HTMLElement): HTMLElement | null => {
+  if (root.hasAttribute("data-composer-content-root")) {
+    return root;
+  }
   return root.querySelector<HTMLElement>("[data-composer-content-root]");
+};
+
+const selectComposerContents = (root: HTMLElement): boolean => {
+  const contentRoot = getComposerContentRoot(root);
+  const selection = root.ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
+  if (!contentRoot || !selection) {
+    return false;
+  }
+
+  const range = root.ownerDocument.createRange();
+  range.selectNodeContents(contentRoot);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  return true;
 };
 
 const getClosestTextSegmentElement = (node: Node | null, root: HTMLElement): HTMLElement | null => {
@@ -189,13 +326,15 @@ const parseComposerDraftFromRoot = (
   });
 };
 
-const usePendingFocus = () => {
-  const textSegmentRefs = useRef<Record<string, HTMLElement | null>>({});
+const usePendingFocus = (editorRef: RefObject<HTMLDivElement | null>) => {
   const pendingFocusRef = useRef<AgentChatComposerDraftEditResult["focusTarget"]>(null);
 
   const applyFocusTarget = useCallback(
     (focusTarget: NonNullable<AgentChatComposerDraftEditResult["focusTarget"]>): boolean => {
-      const target = textSegmentRefs.current[focusTarget.segmentId];
+      const root = editorRef.current;
+      const target = root?.querySelector<HTMLElement>(
+        `[data-text-segment-id="${CSS.escape(focusTarget.segmentId)}"]`,
+      );
       if (!target) {
         return false;
       }
@@ -203,7 +342,7 @@ const usePendingFocus = () => {
       setCaretOffsetWithinElement(target, focusTarget.offset);
       return true;
     },
-    [],
+    [editorRef],
   );
 
   useLayoutEffect(() => {
@@ -212,10 +351,9 @@ const usePendingFocus = () => {
       return;
     }
 
-    if (!applyFocusTarget(pendingFocus)) {
-      return;
+    if (applyFocusTarget(pendingFocus)) {
+      pendingFocusRef.current = null;
     }
-    pendingFocusRef.current = null;
 
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
     if (typeof requestAnimationFrameFn !== "function") {
@@ -223,7 +361,10 @@ const usePendingFocus = () => {
     }
 
     const rafId = requestAnimationFrameFn(() => {
-      void applyFocusTarget(pendingFocus);
+      const nextPendingFocus = pendingFocusRef.current ?? pendingFocus;
+      if (applyFocusTarget(nextPendingFocus)) {
+        pendingFocusRef.current = null;
+      }
     });
 
     return () => {
@@ -235,15 +376,16 @@ const usePendingFocus = () => {
   });
 
   return {
-    registerTextSegmentRef: (segmentId: string, element: HTMLElement | null) => {
-      textSegmentRefs.current[segmentId] = element;
-    },
-    focusTextSegment: (segmentId: string, offset: number) => {
-      const target = textSegmentRefs.current[segmentId];
+    focusTextSegment: (segmentId: string, offset: number): boolean => {
+      const root = editorRef.current;
+      const target = root?.querySelector<HTMLElement>(
+        `[data-text-segment-id="${CSS.escape(segmentId)}"]`,
+      );
       if (!target) {
-        return;
+        return false;
       }
       setCaretOffsetWithinElement(target, offset);
+      return true;
     },
     setPendingFocusTarget: (focusTarget: AgentChatComposerDraftEditResult["focusTarget"]) => {
       pendingFocusRef.current = focusTarget;
@@ -254,6 +396,7 @@ const usePendingFocus = () => {
 export const useAgentChatComposerEditor = ({
   draft,
   onDraftChange,
+  editorRef,
   disabled,
   onEditorInput,
   onSend,
@@ -262,12 +405,17 @@ export const useAgentChatComposerEditor = ({
   slashCommands,
   searchFiles,
 }: UseAgentChatComposerEditorArgs): UseAgentChatComposerEditorResult => {
-  const { registerTextSegmentRef, focusTextSegment, setPendingFocusTarget } = usePendingFocus();
+  const { focusTextSegment, setPendingFocusTarget } = usePendingFocus(editorRef);
   const [slashMenuState, setSlashMenuState] = useState<SlashMenuState | null>(null);
   const [activeSlashIndex, setActiveSlashIndex] = useState(0);
   const [fileMenuState, setFileMenuState] = useState<FileMenuState | null>(null);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const fileSearchRequestIdRef = useRef(0);
+  const latestDraftRef = useRef(draft);
+  const rememberedSelectionRef = useRef<TextSelectionTarget | null>(null);
+  const pendingInputStateRef = useRef<PendingInputState | null>(null);
+
+  latestDraftRef.current = draft;
 
   const filteredSlashCommands = useMemo(() => {
     if (!slashMenuState) {
@@ -282,11 +430,59 @@ export const useAgentChatComposerEditor = ({
     setFileMenuState(null);
   }, []);
 
-  const focusTextSegmentWithMemory = useCallback(
-    (segmentId: string, offset: number) => {
-      focusTextSegment(segmentId, offset);
+  const rememberSelectionTarget = useCallback(
+    (sourceDraft: AgentChatComposerDraft, selectionTarget: TextSelectionTarget | null) => {
+      rememberedSelectionRef.current = resolveTextSelectionTarget(sourceDraft, selectionTarget);
     },
-    [focusTextSegment],
+    [],
+  );
+
+  const repairCollapsedSelection = useCallback(
+    (root: HTMLDivElement, sourceDraft: AgentChatComposerDraft): ActiveTextSelection | null => {
+      const selection =
+        root.ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
+      if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+        return null;
+      }
+
+      const fallbackTarget =
+        resolveTextSelectionTarget(sourceDraft, rememberedSelectionRef.current) ??
+        getLastTextSelectionTarget(sourceDraft);
+      if (!fallbackTarget) {
+        return null;
+      }
+
+      const didFocus = focusTextSegment(fallbackTarget.segmentId, fallbackTarget.offset);
+      if (!didFocus) {
+        setPendingFocusTarget(fallbackTarget);
+        return null;
+      }
+
+      rememberSelectionTarget(sourceDraft, fallbackTarget);
+      return readActiveTextSelection(root);
+    },
+    [focusTextSegment, rememberSelectionTarget, setPendingFocusTarget],
+  );
+
+  const focusTextSegmentWithMemory = useCallback(
+    (
+      segmentId: string,
+      offset: number,
+      sourceDraft: AgentChatComposerDraft = latestDraftRef.current,
+    ) => {
+      const selectionTarget = resolveTextSelectionTarget(sourceDraft, { segmentId, offset });
+      if (!selectionTarget) {
+        return false;
+      }
+
+      rememberSelectionTarget(sourceDraft, selectionTarget);
+      const didFocus = focusTextSegment(selectionTarget.segmentId, selectionTarget.offset);
+      if (!didFocus) {
+        setPendingFocusTarget(selectionTarget);
+      }
+      return didFocus;
+    },
+    [focusTextSegment, rememberSelectionTarget, setPendingFocusTarget],
   );
 
   const focusNearestTextSegment = useCallback(
@@ -412,33 +608,46 @@ export const useAgentChatComposerEditor = ({
     [closeFileMenu, disabled, searchFiles, supportsFileSearch],
   );
 
+  const syncMenusForSelectionTarget = useCallback(
+    (sourceDraft: AgentChatComposerDraft, selectionTarget: TextSelectionTarget | null) => {
+      const resolvedSelectionTarget = resolveTextSelectionTarget(sourceDraft, selectionTarget);
+      if (!resolvedSelectionTarget) {
+        setSlashMenuState(null);
+        closeFileMenu();
+        return;
+      }
+
+      const segment = findTextSegment(sourceDraft, resolvedSelectionTarget.segmentId);
+      if (!segment) {
+        setSlashMenuState(null);
+        closeFileMenu();
+        return;
+      }
+
+      updateSlashMenuForText(sourceDraft, segment.id, segment.text, resolvedSelectionTarget.offset);
+      updateFileMenuForText(sourceDraft, segment.id, segment.text, resolvedSelectionTarget.offset);
+    },
+    [closeFileMenu, updateFileMenuForText, updateSlashMenuForText],
+  );
+
   const syncMenusFromRoot = useCallback(
     (
       root: HTMLDivElement,
       sourceDraft: AgentChatComposerDraft,
       eventTarget?: EventTarget | null,
     ) => {
-      const activeSelection = readActiveTextSelection(root, eventTarget);
-      if (!activeSelection || activeSelection.segmentId.length === 0) {
-        setSlashMenuState(null);
-        closeFileMenu();
-        return;
-      }
-
-      updateSlashMenuForText(
-        sourceDraft,
-        activeSelection.segmentId,
-        activeSelection.text,
-        activeSelection.caretOffset,
-      );
-      updateFileMenuForText(
-        sourceDraft,
-        activeSelection.segmentId,
-        activeSelection.text,
-        activeSelection.caretOffset,
-      );
+      const activeSelection =
+        readActiveTextSelection(root, eventTarget) ?? repairCollapsedSelection(root, sourceDraft);
+      const selectionTarget = activeSelection
+        ? resolveTextSelectionTarget(sourceDraft, {
+            segmentId: activeSelection.segmentId,
+            offset: activeSelection.caretOffset ?? activeSelection.text.length,
+          })
+        : null;
+      rememberSelectionTarget(sourceDraft, selectionTarget);
+      syncMenusForSelectionTarget(sourceDraft, selectionTarget);
     },
-    [closeFileMenu, updateFileMenuForText, updateSlashMenuForText],
+    [rememberSelectionTarget, repairCollapsedSelection, syncMenusForSelectionTarget],
   );
 
   useEffect(() => {
@@ -460,12 +669,31 @@ export const useAgentChatComposerEditor = ({
       if (!result) {
         return false;
       }
-      setPendingFocusTarget(result.focusTarget);
-      onDraftChange(result.draft);
-      onEditorInput();
+
+      pendingInputStateRef.current = null;
+      latestDraftRef.current = result.draft;
+      rememberSelectionTarget(result.draft, result.focusTarget);
+
+      flushSync(() => {
+        onDraftChange(result.draft);
+        onEditorInput();
+      });
+
+      if (result.focusTarget) {
+        const didFocus = focusTextSegment(result.focusTarget.segmentId, result.focusTarget.offset);
+        setPendingFocusTarget(didFocus ? null : result.focusTarget);
+      } else {
+        setPendingFocusTarget(null);
+      }
       return true;
     },
-    [onDraftChange, onEditorInput, setPendingFocusTarget],
+    [
+      focusTextSegment,
+      onDraftChange,
+      onEditorInput,
+      rememberSelectionTarget,
+      setPendingFocusTarget,
+    ],
   );
 
   const selectSlashCommand = useCallback(
@@ -474,8 +702,10 @@ export const useAgentChatComposerEditor = ({
         return;
       }
 
+      const sourceDraft = latestDraftRef.current;
+
       const didApply = applyEditResult(
-        applyComposerDraftEdit(draft, {
+        applyComposerDraftEdit(sourceDraft, {
           type: "insert_slash_command",
           textSegmentId: slashMenuState.textSegmentId,
           rangeStart: slashMenuState.rangeStart,
@@ -487,7 +717,7 @@ export const useAgentChatComposerEditor = ({
         setSlashMenuState(null);
       }
     },
-    [applyEditResult, draft, slashMenuState],
+    [applyEditResult, slashMenuState],
   );
 
   const selectFileSearchResult = useCallback(
@@ -496,8 +726,10 @@ export const useAgentChatComposerEditor = ({
         return;
       }
 
+      const sourceDraft = latestDraftRef.current;
+
       const didApply = applyEditResult(
-        applyComposerDraftEdit(draft, {
+        applyComposerDraftEdit(sourceDraft, {
           type: "insert_file_reference",
           textSegmentId: fileMenuState.textSegmentId,
           rangeStart: fileMenuState.rangeStart,
@@ -509,23 +741,81 @@ export const useAgentChatComposerEditor = ({
         closeFileMenu();
       }
     },
-    [applyEditResult, closeFileMenu, draft, fileMenuState],
+    [applyEditResult, closeFileMenu, fileMenuState],
   );
 
   const handleEditorInput = useCallback(
     (root: HTMLDivElement) => {
-      const nextDraft = parseComposerDraftFromRoot(root, draft);
+      const activeSelection = readActiveTextSelection(root);
+      const nextDraft = parseComposerDraftFromRoot(root, latestDraftRef.current);
+      const activeSelectionTarget = activeSelection
+        ? resolveTextSelectionTarget(nextDraft, {
+            segmentId: activeSelection.segmentId,
+            offset: activeSelection.caretOffset ?? activeSelection.text.length,
+          })
+        : null;
+      const nextSelectionTarget =
+        activeSelectionTarget ??
+        deriveTextSelectionTargetAfterInput(
+          nextDraft,
+          pendingInputStateRef.current,
+          rememberedSelectionRef.current,
+        );
+
+      rememberSelectionTarget(nextDraft, nextSelectionTarget);
+      latestDraftRef.current = nextDraft;
+      if (activeSelectionTarget) {
+        setPendingFocusTarget(null);
+      } else if (nextSelectionTarget) {
+        const didFocusSelectionTarget = focusTextSegment(
+          nextSelectionTarget.segmentId,
+          nextSelectionTarget.offset,
+        );
+        setPendingFocusTarget(didFocusSelectionTarget ? null : nextSelectionTarget);
+      } else {
+        setPendingFocusTarget(null);
+      }
+      pendingInputStateRef.current = null;
       onDraftChange(nextDraft);
       onEditorInput();
-      syncMenusFromRoot(root, nextDraft);
+      syncMenusForSelectionTarget(nextDraft, nextSelectionTarget);
     },
-    [draft, onDraftChange, onEditorInput, syncMenusFromRoot],
+    [
+      focusTextSegment,
+      onDraftChange,
+      onEditorInput,
+      rememberSelectionTarget,
+      setPendingFocusTarget,
+      syncMenusForSelectionTarget,
+    ],
   );
 
   const handleEditorBeforeInput = useCallback(
     (event: ReactFormEvent<HTMLDivElement>) => {
-      const nativeEvent = event.nativeEvent as { inputType?: unknown };
+      const sourceDraft = latestDraftRef.current;
+      const activeSelection =
+        readActiveTextSelection(event.currentTarget, event.target) ??
+        repairCollapsedSelection(event.currentTarget, sourceDraft);
+      const nativeEvent = event.nativeEvent as { inputType?: unknown; data?: unknown };
       const inputType = typeof nativeEvent.inputType === "string" ? nativeEvent.inputType : null;
+      const data = typeof nativeEvent.data === "string" ? nativeEvent.data : null;
+      if (activeSelection && activeSelection.segmentId.length > 0) {
+        const selectionTarget = resolveTextSelectionTarget(sourceDraft, {
+          segmentId: activeSelection.segmentId,
+          offset: activeSelection.caretOffset ?? activeSelection.text.length,
+        });
+        rememberSelectionTarget(sourceDraft, selectionTarget);
+        pendingInputStateRef.current = selectionTarget
+          ? {
+              ...selectionTarget,
+              inputType,
+              data,
+            }
+          : null;
+      } else {
+        pendingInputStateRef.current = null;
+      }
+
       if (inputType !== "insertLineBreak" && inputType !== "insertParagraph") {
         return;
       }
@@ -533,21 +823,21 @@ export const useAgentChatComposerEditor = ({
       setSlashMenuState(null);
       closeFileMenu();
     },
-    [closeFileMenu],
+    [closeFileMenu, rememberSelectionTarget, repairCollapsedSelection],
   );
 
   const handleEditorFocus = useCallback(
     (event: ReactFocusEvent<HTMLDivElement>) => {
-      syncMenusFromRoot(event.currentTarget, draft, event.target);
+      syncMenusFromRoot(event.currentTarget, latestDraftRef.current, event.target);
     },
-    [draft, syncMenusFromRoot],
+    [syncMenusFromRoot],
   );
 
   const handleEditorClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
-      syncMenusFromRoot(event.currentTarget, draft, event.target);
+      syncMenusFromRoot(event.currentTarget, latestDraftRef.current, event.target);
     },
-    [draft, syncMenusFromRoot],
+    [syncMenusFromRoot],
   );
 
   const handleEditorKeyUp = useCallback(
@@ -555,15 +845,34 @@ export const useAgentChatComposerEditor = ({
       if (AUTOCOMPLETE_NAVIGATION_KEYS.has(event.key)) {
         return;
       }
-      syncMenusFromRoot(event.currentTarget, draft, event.target);
+
+      const sourceDraft = latestDraftRef.current;
+      const activeSelection = readActiveTextSelection(event.currentTarget, event.target);
+      const selectionTarget = activeSelection
+        ? resolveTextSelectionTarget(sourceDraft, {
+            segmentId: activeSelection.segmentId,
+            offset: activeSelection.caretOffset ?? activeSelection.text.length,
+          })
+        : resolveTextSelectionTarget(sourceDraft, rememberedSelectionRef.current);
+
+      rememberSelectionTarget(sourceDraft, selectionTarget);
+      syncMenusForSelectionTarget(sourceDraft, selectionTarget);
     },
-    [draft, syncMenusFromRoot],
+    [rememberSelectionTarget, syncMenusForSelectionTarget],
   );
 
   const handleEditorKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const sourceDraft = latestDraftRef.current;
       const root = event.currentTarget;
       const activeSelection = readActiveTextSelection(root, event.target);
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
+        if (selectComposerContents(root)) {
+          event.preventDefault();
+        }
+        return;
+      }
 
       if (fileMenuState) {
         if (fileMenuState.results.length > 0 && event.key === "ArrowDown") {
@@ -625,7 +934,7 @@ export const useAgentChatComposerEditor = ({
 
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
-        if (!disabled && draftHasMeaningfulContent(draft)) {
+        if (!disabled && draftHasMeaningfulContent(sourceDraft)) {
           onSend();
         }
         return;
@@ -637,32 +946,33 @@ export const useAgentChatComposerEditor = ({
         return;
       }
 
-      if (!activeSelection) {
+      const repairedSelection = activeSelection ?? repairCollapsedSelection(root, sourceDraft);
+      if (!repairedSelection) {
         return;
       }
 
       if (
         event.key === "Backspace" &&
-        activeSelection.text.length === 0 &&
-        !draftHasMeaningfulContent(draft)
+        repairedSelection.text.length === 0 &&
+        !draftHasMeaningfulContent(sourceDraft)
       ) {
         event.preventDefault();
-        focusTextSegmentWithMemory(activeSelection.segmentId, 0);
+        focusTextSegmentWithMemory(repairedSelection.segmentId, 0);
         return;
       }
 
-      if (event.key === "Backspace" && activeSelection.caretOffset === 0) {
-        const currentIndex = draft.segments.findIndex(
-          (segment) => segment.id === activeSelection.segmentId,
+      if (event.key === "Backspace" && repairedSelection.caretOffset === 0) {
+        const currentIndex = sourceDraft.segments.findIndex(
+          (segment) => segment.id === repairedSelection.segmentId,
         );
-        const previousSegment = currentIndex > 0 ? draft.segments[currentIndex - 1] : null;
+        const previousSegment = currentIndex > 0 ? sourceDraft.segments[currentIndex - 1] : null;
         if (
           previousSegment?.kind === "slash_command" ||
           previousSegment?.kind === "file_reference"
         ) {
           event.preventDefault();
           const didApply = applyEditResult(
-            applyComposerDraftEdit(draft, {
+            applyComposerDraftEdit(sourceDraft, {
               type:
                 previousSegment.kind === "slash_command"
                   ? "remove_slash_command"
@@ -683,11 +993,11 @@ export const useAgentChatComposerEditor = ({
       applyEditResult,
       closeFileMenu,
       disabled,
-      draft,
       fileMenuState,
       filteredSlashCommands,
       focusTextSegmentWithMemory,
       onSend,
+      repairCollapsedSelection,
       selectFileSearchResult,
       selectSlashCommand,
       slashMenuState,
@@ -695,15 +1005,16 @@ export const useAgentChatComposerEditor = ({
   );
 
   const focusLastTextSegment = useCallback(() => {
-    for (let index = draft.segments.length - 1; index >= 0; index -= 1) {
-      const segment = draft.segments[index];
+    const sourceDraft = latestDraftRef.current;
+    for (let index = sourceDraft.segments.length - 1; index >= 0; index -= 1) {
+      const segment = sourceDraft.segments[index];
       if (!segment || segment.kind !== "text") {
         continue;
       }
       focusTextSegmentWithMemory(segment.id, segment.text.length);
       return;
     }
-  }, [draft.segments, focusTextSegmentWithMemory]);
+  }, [focusTextSegmentWithMemory]);
 
   return {
     filteredSlashCommands,
@@ -714,7 +1025,6 @@ export const useAgentChatComposerEditor = ({
     showFileMenu: supportsFileSearch && fileMenuState !== null,
     fileSearchError: fileMenuState?.error ?? null,
     isFileSearchLoading: fileMenuState?.isLoading ?? false,
-    registerTextSegmentRef,
     focusLastTextSegment,
     selectSlashCommand,
     selectFileSearchResult,
