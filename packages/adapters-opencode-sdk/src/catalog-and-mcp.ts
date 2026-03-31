@@ -81,8 +81,18 @@ const detectFileSearchResultKind = (
   if (/\.(css|scss|sass|less)$/.test(lowerPath)) {
     return "css";
   }
-  if (/\.(ts|tsx|mts|cts)$/.test(lowerPath)) {
-    return "ts";
+  if (
+    /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|java|kt|kts|php|phtml|html|htm|rs|py|rb|go|c|h|cpp|cc|cxx|hpp|cs|swift|scala|sh|bash|zsh|sql|json|yaml|yml|toml|xml)$/.test(
+      lowerPath,
+    )
+  ) {
+    return "code";
+  }
+  if (/\.(png|jpg|jpeg|gif|webp|svg|bmp|ico|avif)$/.test(lowerPath)) {
+    return "image";
+  }
+  if (/\.(mp4|mov|webm|mkv|avi|m4v)$/.test(lowerPath)) {
+    return "video";
   }
   return "default";
 };

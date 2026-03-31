@@ -9,10 +9,14 @@ import {
   type UnknownRecord,
 } from "../guards";
 import {
+  ensureVisibleUserTextDisplayParts,
   extractMessageTotalTokens,
+  hasVisibleUserTextDisplayPart,
+  normalizeUserMessageDisplayParts,
   readMessageModelSelection,
   readTextFromMessageInfo,
   readTextFromParts,
+  readVisibleUserTextFromDisplayParts,
   sanitizeAssistantMessage,
 } from "../message-normalizers";
 import { toIsoFromEpoch } from "../session-runtime-utils";
@@ -127,12 +131,19 @@ const emitKnownUserMessage = (
   },
 ): boolean => {
   const session = runtime.getSession(runtime.sessionId);
-
-  const visible =
-    readTextFromParts(getKnownMessageParts(runtime, input.messageId)) ||
-    session?.messageMetadataById.get(input.messageId)?.text ||
-    "";
-  if (visible.trim().length === 0) {
+  const metadata = session?.messageMetadataById.get(input.messageId);
+  const knownDisplayParts = normalizeUserMessageDisplayParts(
+    getKnownMessageParts(runtime, input.messageId),
+  );
+  const fallbackText = metadata?.text ?? "";
+  const displayParts = ensureVisibleUserTextDisplayParts(
+    knownDisplayParts.length > 0 ? knownDisplayParts : (metadata?.displayParts ?? []),
+    fallbackText,
+  );
+  const visible = hasVisibleUserTextDisplayPart(displayParts)
+    ? readVisibleUserTextFromDisplayParts(displayParts)
+    : fallbackText || readVisibleUserTextFromDisplayParts(displayParts) || "";
+  if (visible.trim().length === 0 && displayParts.length === 0) {
     return false;
   }
 
@@ -140,6 +151,7 @@ const emitKnownUserMessage = (
     messageId: input.messageId,
     timestamp: input.timestamp,
     message: visible,
+    parts: displayParts,
     state: input.state,
     ...(input.model ? { model: input.model } : {}),
   });
@@ -148,6 +160,7 @@ const emitKnownUserMessage = (
 const buildUserMessageSignature = (input: {
   timestamp: string;
   message: string;
+  parts: import("@openducktor/core").AgentUserMessageDisplayPart[];
   state: AgentUserMessageState;
   model?: ReturnType<typeof readMessageModelSelection>;
 }): string => {
@@ -155,6 +168,7 @@ const buildUserMessageSignature = (input: {
   return JSON.stringify({
     timestamp: input.timestamp,
     message: input.message,
+    parts: input.parts,
     state: input.state,
     providerId: model?.providerId ?? null,
     modelId: model?.modelId ?? null,
@@ -169,6 +183,7 @@ const emitUserMessage = (
     messageId: string;
     timestamp: string;
     message: string;
+    parts: import("@openducktor/core").AgentUserMessageDisplayPart[];
     state: AgentUserMessageState;
     model?: ReturnType<typeof readMessageModelSelection>;
   },
@@ -185,6 +200,7 @@ const emitUserMessage = (
     timestamp: input.timestamp,
     messageId: input.messageId,
     message: input.message,
+    parts: input.parts,
     state: input.state,
     ...(input.model ? { model: input.model } : {}),
   });
@@ -361,12 +377,23 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
   const parentId = infoRecord
     ? readStringProp(infoRecord, ["parentID", "parentId", "parent_id"])
     : undefined;
+  const existingMetadata = messageId ? session?.messageMetadataById.get(messageId) : undefined;
   if (messageId && role) {
     runtime.messageRoleById.set(messageId, role);
     session?.messageMetadataById.set(messageId, {
       timestamp: messageTimestamp,
-      ...(messageModel ? { model: messageModel } : {}),
-      ...(parentId ? { parentId } : {}),
+      ...(messageModel
+        ? { model: messageModel }
+        : existingMetadata?.model
+          ? { model: existingMetadata.model }
+          : {}),
+      ...(parentId
+        ? { parentId }
+        : existingMetadata?.parentId
+          ? { parentId: existingMetadata.parentId }
+          : {}),
+      ...(existingMetadata?.text ? { text: existingMetadata.text } : {}),
+      ...(existingMetadata?.displayParts ? { displayParts: existingMetadata.displayParts } : {}),
     });
   }
 
@@ -434,18 +461,32 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
   if (messageId && role === "user") {
     const userParts =
       normalizedParts.length > 0 ? normalizedParts : getKnownMessageParts(runtime, messageId);
-    const textFromParts = readTextFromParts(userParts);
-    const visible = textFromParts.length > 0 ? textFromParts : readTextFromMessageInfo(infoRecord);
-    if (visible.trim().length === 0) {
+    const currentMetadata = session?.messageMetadataById.get(messageId);
+    const normalizedDisplayParts = normalizeUserMessageDisplayParts(userParts);
+    const fallbackText = currentMetadata?.text ?? readTextFromMessageInfo(infoRecord);
+    const displayParts = ensureVisibleUserTextDisplayParts(
+      normalizedDisplayParts.length > 0
+        ? normalizedDisplayParts
+        : (currentMetadata?.displayParts ?? []),
+      fallbackText,
+    );
+    const hasVisibleText = hasVisibleUserTextDisplayPart(displayParts);
+    const textFromParts = hasVisibleText ? readVisibleUserTextFromDisplayParts(displayParts) : "";
+    const visible = textFromParts.length > 0 ? textFromParts : fallbackText;
+    if (visible.trim().length === 0 && displayParts.length === 0) {
       return true;
     }
 
-    const existingMetadata = session?.messageMetadataById.get(messageId);
     session?.messageMetadataById.set(messageId, {
-      timestamp: existingMetadata?.timestamp ?? messageTimestamp,
-      ...(existingMetadata?.model ? { model: existingMetadata.model } : {}),
-      ...(existingMetadata?.parentId ? { parentId: existingMetadata.parentId } : {}),
+      timestamp: currentMetadata?.timestamp ?? messageTimestamp,
+      ...(messageModel
+        ? { model: messageModel }
+        : currentMetadata?.model
+          ? { model: currentMetadata.model }
+          : {}),
+      ...(currentMetadata?.parentId ? { parentId: currentMetadata.parentId } : {}),
       text: visible,
+      ...(displayParts.length > 0 ? { displayParts } : {}),
     });
 
     const explicitState = readExplicitUserMessageState(infoRecord, properties);
@@ -453,6 +494,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
       messageId,
       timestamp: messageTimestamp,
       message: visible,
+      parts: displayParts,
       state: resolveLiveUserMessageState(runtime, {
         messageId,
         visible,
@@ -590,13 +632,24 @@ const handleMessagePartUpdatedEvent = (event: Event, runtime: EventStreamRuntime
   if (role === "user") {
     const session = runtime.getSession(runtime.sessionId);
     const metadata = session?.messageMetadataById.get(messageId);
-    const visible = readTextFromParts(getKnownMessageParts(runtime, messageId));
-    if (visible.trim().length > 0) {
+    const normalizedDisplayParts = normalizeUserMessageDisplayParts(
+      getKnownMessageParts(runtime, messageId),
+    );
+    const fallbackText = metadata?.text ?? "";
+    const displayParts = ensureVisibleUserTextDisplayParts(
+      normalizedDisplayParts.length > 0 ? normalizedDisplayParts : (metadata?.displayParts ?? []),
+      fallbackText,
+    );
+    const visible = hasVisibleUserTextDisplayPart(displayParts)
+      ? readVisibleUserTextFromDisplayParts(displayParts)
+      : fallbackText || readVisibleUserTextFromDisplayParts(displayParts) || "";
+    if (visible.trim().length > 0 || displayParts.length > 0) {
       session?.messageMetadataById.set(messageId, {
         timestamp: metadata?.timestamp ?? runtime.now(),
         ...(metadata?.model ? { model: metadata.model } : {}),
         ...(metadata?.parentId ? { parentId: metadata.parentId } : {}),
         text: visible,
+        ...(displayParts.length > 0 ? { displayParts } : {}),
       });
     }
     emitKnownUserMessage(runtime, {

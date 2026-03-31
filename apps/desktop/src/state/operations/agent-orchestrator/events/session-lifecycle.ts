@@ -80,6 +80,7 @@ const findExistingAssistantMessageIndex = (
 
 const toUserMessageMeta = (event: Extract<SessionEvent, { type: "user_message" }>) => {
   const model = event.model;
+  const parts = Array.isArray(event.parts) ? event.parts : [];
   return {
     kind: "user" as const,
     state: event.state,
@@ -87,6 +88,7 @@ const toUserMessageMeta = (event: Extract<SessionEvent, { type: "user_message" }
     ...(model?.modelId ? { modelId: model.modelId } : {}),
     ...(model?.variant ? { variant: model.variant } : {}),
     ...(model?.profileId ? { profileId: model.profileId } : {}),
+    ...(parts.length > 0 ? { parts } : {}),
   };
 };
 

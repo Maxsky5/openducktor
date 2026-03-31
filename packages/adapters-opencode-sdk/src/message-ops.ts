@@ -9,10 +9,14 @@ import type {
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import {
+  ensureVisibleUserTextDisplayParts,
   extractMessageTotalTokens,
+  hasVisibleUserTextDisplayPart,
+  normalizeUserMessageDisplayParts,
   readMessageModelSelection,
   readTextFromMessageInfo,
   readTextFromParts,
+  readVisibleUserTextFromDisplayParts,
   sanitizeAssistantMessage,
 } from "./message-normalizers";
 import { toOpenCodeRequestError } from "./request-errors";
@@ -169,9 +173,21 @@ export const loadSessionHistory = async (
   const data = unwrapData(response, "load session messages");
   const entries = data
     .map((entry) => {
-      const rawTextFromParts = readTextFromParts(entry.parts);
-      const rawText =
-        rawTextFromParts.length > 0 ? rawTextFromParts : readTextFromMessageInfo(entry.info);
+      const infoText = readTextFromMessageInfo(entry.info);
+      const displayParts =
+        entry.info.role === "user"
+          ? ensureVisibleUserTextDisplayParts(
+              normalizeUserMessageDisplayParts(entry.parts),
+              infoText,
+            )
+          : [];
+      const rawTextFromParts =
+        entry.info.role === "user"
+          ? hasVisibleUserTextDisplayPart(displayParts)
+            ? readVisibleUserTextFromDisplayParts(displayParts)
+            : ""
+          : readTextFromParts(entry.parts);
+      const rawText = rawTextFromParts.length > 0 ? rawTextFromParts : infoText;
       const text = entry.info.role === "assistant" ? sanitizeAssistantMessage(rawText) : rawText;
       const totalTokens = extractMessageTotalTokens(entry.info, entry.parts);
       const parts = entry.parts
@@ -191,6 +207,7 @@ export const loadSessionHistory = async (
         ...(typeof totalTokens === "number" ? { totalTokens } : {}),
         ...(model ? { model } : {}),
         ...(parentId ? { parentId } : {}),
+        ...(entry.info.role === "user" ? { displayParts } : {}),
         parts,
       };
     })
@@ -230,6 +247,7 @@ export const loadSessionHistory = async (
       role: "user",
       timestamp: item.timestamp,
       text: item.text,
+      displayParts: item.displayParts ?? [],
       state: pendingAssistantIndex >= 0 && index > pendingAssistantIndex ? "queued" : "read",
       ...(item.model ? { model: item.model } : {}),
       parts: item.parts,

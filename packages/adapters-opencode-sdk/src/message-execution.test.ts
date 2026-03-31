@@ -13,7 +13,7 @@ const FILE_REFERENCE = {
   id: "file-src-main",
   path: "src/main.ts",
   name: "main.ts",
-  kind: "ts" as const,
+  kind: "code" as const,
 };
 
 const createSession = (overrides?: {
@@ -211,14 +211,22 @@ describe("message-execution", () => {
       directory: "/repo",
       tools: {},
       parts: [
-        { type: "text", text: "check " },
+        { type: "text", text: "check @src/main.ts please" },
         {
           type: "file",
-          mime: "text/typescript",
+          mime: "text/plain",
           url: "file:///repo/src/main.ts",
           filename: "main.ts",
+          source: {
+            type: "file",
+            path: "src/main.ts",
+            text: {
+              value: "@src/main.ts",
+              start: 6,
+              end: 18,
+            },
+          },
         },
-        { type: "text", text: " please" },
       ],
     });
     expect(command).not.toHaveBeenCalled();

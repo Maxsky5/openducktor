@@ -13,6 +13,7 @@ import type {
   AgentSessionTodoItem,
   AgentSlashCommandCatalog,
   AgentStreamPart,
+  AgentUserMessageDisplayPart,
   AgentUserMessagePart,
   AgentUserMessageState,
   RuntimeKind,
@@ -110,6 +111,7 @@ export type AgentSessionHistoryMessage =
       role: "user";
       timestamp: string;
       text: string;
+      displayParts: AgentUserMessageDisplayPart[];
       state: AgentUserMessageState;
       model?: AgentModelSelection;
       parts: AgentStreamPart[];

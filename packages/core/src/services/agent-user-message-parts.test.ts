@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildAgentUserMessagePromptText,
   hasMeaningfulAgentUserMessageParts,
   normalizeAgentUserMessageParts,
   serializeAgentUserMessagePartsToText,
@@ -16,7 +17,7 @@ const createFileReference = () => ({
   id: "src-index-ts",
   path: "src/index.ts",
   name: "index.ts",
-  kind: "ts" as const,
+  kind: "code" as const,
 });
 
 describe("agent-user-message-parts", () => {
@@ -108,5 +109,29 @@ describe("agent-user-message-parts", () => {
         { kind: "text", text: " now  " },
       ]),
     ).toBe("see @src/index.ts now");
+  });
+
+  test("builds upstream prompt text with inline file-reference spans", () => {
+    const file = createFileReference();
+
+    expect(
+      buildAgentUserMessagePromptText([
+        { kind: "text", text: "check " },
+        { kind: "file_reference", file },
+        { kind: "text", text: " please" },
+      ]),
+    ).toEqual({
+      text: "check @src/index.ts please",
+      fileReferences: [
+        {
+          file,
+          sourceText: {
+            value: "@src/index.ts",
+            start: 6,
+            end: 19,
+          },
+        },
+      ],
+    });
   });
 });

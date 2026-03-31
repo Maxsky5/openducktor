@@ -1633,6 +1633,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           state: "read",
           timestamp: "2026-02-22T08:21:00.000Z",
           text: "Generate the PR summary.",
+          displayParts: [],
           parts: [],
         },
         {
@@ -1785,6 +1786,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         state: "read",
         timestamp: "2026-02-22T08:21:00.000Z",
         text: "Hydrated child history",
+        displayParts: [],
         parts: [],
       },
     ];
@@ -2041,6 +2043,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           state: "read",
           timestamp: "2026-02-22T08:21:00.000Z",
           text: "Hydrated child history",
+          displayParts: [],
           parts: [],
         },
       ];
