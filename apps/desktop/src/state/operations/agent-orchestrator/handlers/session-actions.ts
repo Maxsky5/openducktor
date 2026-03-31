@@ -298,6 +298,15 @@ export const createAgentSessionActions = ({
       return;
     }
 
+    updateSession(
+      sessionId,
+      (current) => ({
+        ...current,
+        stopRequestedAt: now(),
+      }),
+      { persist: false },
+    );
+
     const roleRequiresHostStop = session.role === "build" || session.role === "qa";
     const hasLocalRuntimeSession = adapter.hasSession(sessionId);
 
@@ -306,6 +315,14 @@ export const createAgentSessionActions = ({
         await stopBuildRun(session.runId);
       }
     } catch (error) {
+      updateSession(
+        sessionId,
+        (current) => ({
+          ...current,
+          stopRequestedAt: null,
+        }),
+        { persist: false },
+      );
       throw new Error(
         `Failed to stop ${session.role} session '${sessionId}': ${errorMessage(error)}`,
       );
@@ -340,6 +357,7 @@ export const createAgentSessionActions = ({
         draftAssistantMessageId: null,
         draftReasoningText: "",
         draftReasoningMessageId: null,
+        stopRequestedAt: null,
         pendingPermissions: [],
         pendingQuestions: [],
       };

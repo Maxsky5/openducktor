@@ -237,11 +237,83 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(localStopCalls).toBe(0);
       expect(unsubscribeCalls).toBe(0);
       expect(sessionsRef.current["session-1"]?.status).toBe("running");
+      expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
       expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(1);
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(1);
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;
+    }
+  });
+
+  test("records stop intent before awaiting authoritative build stop", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const stopDeferred = createDeferred<void>();
+
+    adapter.hasSession = () => false;
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          role: "build",
+          runId: "run-1",
+        }),
+      },
+    };
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map() },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[sessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+      stopBuildRun: async () => {
+        await stopDeferred.promise;
+      },
+    });
+
+    try {
+      const stopPromise = actions.stopAgentSession("session-1");
+      await Promise.resolve();
+
+      expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeString();
+      expect(sessionsRef.current["session-1"]?.status).toBe("running");
+
+      stopDeferred.resolve();
+      await stopPromise;
+
+      expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
+      expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+    } finally {
+      adapter.hasSession = originalHasSession;
     }
   });
 
