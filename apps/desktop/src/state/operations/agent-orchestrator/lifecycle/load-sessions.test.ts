@@ -745,6 +745,234 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(runtimeEnsureCalls).toEqual([]);
   });
 
+  test("composes bootstrap, requested history hydration, and live reconciliation without cross-mode regressions", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    let state: Record<string, AgentSessionState> = {};
+    let attachedToAdapter = false;
+    let liveSnapshotLoads = 0;
+    let historyLoads = 0;
+    let resumeCalls = 0;
+    let attachedListeners = 0;
+    let promptOverrideLoads = 0;
+
+    const persistedRecords = [
+      persistedSessionRecord({
+        runtimeKind: "opencode",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "planner",
+        scenario: "planner_initial",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+        workingDirectory: "/tmp/repo",
+      }),
+    ];
+    const runtimeLists = new Map<"opencode", RuntimeInstanceSummary[]>([
+      [
+        "opencode",
+        [
+          {
+            kind: "opencode",
+            runtimeId: "runtime-1",
+            repoPath: "/tmp/repo",
+            taskId: null,
+            role: "workspace",
+            workingDirectory: "/tmp/repo",
+            runtimeRoute: {
+              type: "local_http",
+              endpoint: "http://127.0.0.1:4444",
+            },
+            startedAt: "2026-02-22T08:00:00.000Z",
+            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+          },
+        ],
+      ],
+    ]);
+
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [sessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: createAdapter({
+        hasSession: () => attachedToAdapter,
+        listLiveAgentSessionSnapshots: async () => {
+          liveSnapshotLoads += 1;
+          return [
+            {
+              externalSessionId: "external-1",
+              title: "PLANNER task-1",
+              role: "planner",
+              scenario: "planner_initial",
+              workingDirectory: "/tmp/repo",
+              startedAt: "2026-02-22T08:00:00.000Z",
+              status: { type: "busy" },
+              pendingPermissions: [
+                { requestId: "permission-live", permission: "read", patterns: ["README.md"] },
+              ],
+              pendingQuestions: [
+                {
+                  requestId: "question-live",
+                  questions: [
+                    {
+                      header: "Confirm",
+                      question: "Continue?",
+                      options: [{ label: "Yes", description: "Proceed" }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ];
+        },
+        loadSessionHistory: async () => {
+          historyLoads += 1;
+          return [
+            {
+              messageId: "history-1",
+              role: "assistant",
+              timestamp: "2026-02-22T08:00:01.000Z",
+              text: "Requested history",
+              parts: [
+                {
+                  kind: "text",
+                  messageId: "history-1",
+                  partId: "part-1",
+                  text: "Requested history",
+                  completed: true,
+                },
+              ],
+            },
+          ];
+        },
+        resumeSession: async (input) => {
+          resumeCalls += 1;
+          attachedToAdapter = true;
+          return {
+            sessionId: input.sessionId,
+            externalSessionId: input.externalSessionId,
+            role: input.role,
+            scenario: input.scenario,
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: "running",
+            runtimeKind: input.runtimeKind,
+          };
+        },
+      }),
+      repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession,
+      attachSessionListener: () => {
+        attachedListeners += 1;
+      },
+      loadRepoPromptOverrides: async () => {
+        promptOverrideLoads += 1;
+        return {};
+      },
+      loadTaskDocuments: async () => ({
+        specMarkdown: "",
+        planMarkdown: "",
+        qaMarkdown: "",
+      }),
+    });
+
+    await loadAgentSessions("task-1", {
+      mode: "bootstrap",
+      persistedRecords,
+      preloadedRuntimeLists: runtimeLists,
+      historyPolicy: "none",
+    });
+
+    expect(state["session-1"]).toMatchObject({
+      status: "stopped",
+      runtimeEndpoint: "",
+      messages: [],
+      pendingPermissions: [],
+      pendingQuestions: [],
+    });
+    expect(historyLoads).toBe(0);
+    expect(resumeCalls).toBe(0);
+    expect(attachedListeners).toBe(0);
+    expect(promptOverrideLoads).toBe(0);
+
+    await loadAgentSessions("task-1", {
+      mode: "requested_history",
+      targetSessionId: "session-1",
+      persistedRecords,
+      preloadedRuntimeLists: runtimeLists,
+      historyPolicy: "requested_only",
+    });
+
+    const hydratedSession = state["session-1"];
+    expect(hydratedSession).toMatchObject({
+      status: "running",
+      runtimeEndpoint: "http://127.0.0.1:4444",
+      historyHydrationState: "hydrated",
+      pendingPermissions: [
+        { requestId: "permission-live", permission: "read", patterns: ["README.md"] },
+      ],
+    });
+    expect(hydratedSession?.pendingQuestions).toHaveLength(1);
+    expect(hydratedSession?.messages.map((message) => message.content)).toEqual([
+      "Session started (planner - planner_initial)",
+      expect.stringContaining("System prompt:"),
+      "Requested history",
+    ]);
+    expect(historyLoads).toBe(1);
+    expect(resumeCalls).toBe(0);
+    expect(attachedListeners).toBe(0);
+
+    const hydratedMessageIds = hydratedSession?.messages.map((message) => message.id) ?? [];
+
+    await loadAgentSessions("task-1", {
+      mode: "reconcile_live",
+      persistedRecords,
+      preloadedRuntimeLists: runtimeLists,
+      historyPolicy: "live_if_empty",
+    });
+
+    expect(historyLoads).toBe(1);
+    expect(resumeCalls).toBe(1);
+    expect(attachedListeners).toBe(1);
+    expect(liveSnapshotLoads).toBe(2);
+    expect(state["session-1"]?.messages.map((message) => message.id)).toEqual(hydratedMessageIds);
+    expect(state["session-1"]).toMatchObject({
+      status: "running",
+      runtimeEndpoint: "http://127.0.0.1:4444",
+      historyHydrationState: "hydrated",
+      pendingPermissions: [
+        { requestId: "permission-live", permission: "read", patterns: ["README.md"] },
+      ],
+    });
+    expect(state["session-1"]?.pendingQuestions).toHaveLength(1);
+    expect(promptOverrideLoads).toBe(2);
+  });
+
   test("reuses the trusted live agent session store for requested session hydration", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
