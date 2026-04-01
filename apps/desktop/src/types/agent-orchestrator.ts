@@ -74,6 +74,12 @@ export type AgentChatMessageMeta =
       tone: "cancelled";
       reason: "user_stopped";
       title: string;
+    }
+  | {
+      kind: "session_notice";
+      tone: "error";
+      reason: "session_error";
+      title: string;
     };
 
 export type AgentChatMessage = {

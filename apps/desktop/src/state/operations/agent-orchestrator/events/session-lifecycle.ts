@@ -380,18 +380,59 @@ export const handleSessionTodosUpdated = (
   );
 };
 
-const buildUserStoppedNoticeMessage = (timestamp: string) => ({
+const buildSessionNoticeMessage = ({
+  timestamp,
+  content,
+  tone,
+  title,
+}:
+  | {
+      timestamp: string;
+      content: string;
+      tone: "cancelled";
+      title: string;
+    }
+  | {
+      timestamp: string;
+      content: string;
+      tone: "error";
+      title: string;
+    }) => ({
   id: crypto.randomUUID(),
   role: "system" as const,
-  content: "Session stopped at your request.",
+  content,
   timestamp,
-  meta: {
-    kind: "session_notice" as const,
-    tone: "cancelled" as const,
-    reason: "user_stopped" as const,
-    title: "Stopped",
-  },
+  meta:
+    tone === "cancelled"
+      ? {
+          kind: "session_notice" as const,
+          tone: "cancelled" as const,
+          reason: "user_stopped" as const,
+          title,
+        }
+      : {
+          kind: "session_notice" as const,
+          tone: "error" as const,
+          reason: "session_error" as const,
+          title,
+        },
 });
+
+const buildUserStoppedNoticeMessage = (timestamp: string) =>
+  buildSessionNoticeMessage({
+    timestamp,
+    content: "Session stopped at your request.",
+    tone: "cancelled",
+    title: "Stopped",
+  });
+
+const buildSessionErrorNoticeMessage = (timestamp: string, message: string) =>
+  buildSessionNoticeMessage({
+    timestamp,
+    content: message,
+    tone: "error",
+    title: "Error",
+  });
 
 const settleTerminalMessages = (
   messages: SessionLifecycleEventContext["store"]["sessionsRef"]["current"][string]["messages"],
@@ -452,12 +493,7 @@ export const handleSessionError = (
                 outcome: "error",
                 errorMessage: sessionErrorMessage,
               }),
-              {
-                id: crypto.randomUUID(),
-                role: "system" as const,
-                content: `Session error: ${sessionErrorMessage}`,
-                timestamp: event.timestamp,
-              },
+              buildSessionErrorNoticeMessage(event.timestamp, sessionErrorMessage),
             ],
       };
     },
