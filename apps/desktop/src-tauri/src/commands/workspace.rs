@@ -43,7 +43,7 @@ pub async fn workspace_update_repo_config(
     repo_path: String,
     config: RepoConfigPayload,
 ) -> Result<host_domain::WorkspaceRecord, String> {
-    as_error(state.service.workspace_merge_repo_config(
+    let updated = as_error(state.service.workspace_merge_repo_config(
         &repo_path,
         RepoConfigUpdate {
             default_runtime_kind: config.default_runtime_kind,
@@ -56,7 +56,9 @@ pub async fn workspace_update_repo_config(
             prompt_overrides: config.prompt_overrides,
             agent_defaults: config.agent_defaults,
         },
-    ))
+    ))?;
+    super::git::invalidate_worktree_resolution_cache_for_repo(&repo_path)?;
+    Ok(updated)
 }
 
 // Generic runtime keeps this command testable under MockRuntime without changing
@@ -69,6 +71,7 @@ pub async fn workspace_save_repo_settings<R: tauri::Runtime>(
     settings: RepoSettingsPayload,
 ) -> Result<host_domain::WorkspaceRecord, String> {
     let service = state.service.clone();
+    let repo_path_for_worker = repo_path.clone();
     let confirmation_port = TauriHookTrustConfirmationPort::new(app);
     let update = RepoSettingsUpdate {
         default_runtime_kind: settings.default_runtime_kind,
@@ -84,12 +87,14 @@ pub async fn workspace_save_repo_settings<R: tauri::Runtime>(
         agent_defaults: settings.agent_defaults,
     };
 
-    as_error(
+    let updated = as_error(
         run_service_blocking("workspace_save_repo_settings", move || {
-            service.workspace_save_repo_settings(&repo_path, update, &confirmation_port)
+            service.workspace_save_repo_settings(&repo_path_for_worker, update, &confirmation_port)
         })
         .await,
-    )
+    )?;
+    super::git::invalidate_worktree_resolution_cache_for_repo(&repo_path)?;
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -178,8 +183,9 @@ pub async fn workspace_save_settings_snapshot<R: tauri::Runtime>(
     } = snapshot;
     let service = state.service.clone();
     let confirmation_port = TauriHookTrustConfirmationPort::new(app);
+    let repo_paths_to_invalidate = repos.keys().cloned().collect::<Vec<_>>();
 
-    as_error(
+    let updated = as_error(
         run_service_blocking("workspace_save_settings_snapshot", move || {
             service.workspace_save_settings_snapshot(
                 WorkspaceSettingsSnapshotUpdate {
@@ -195,7 +201,11 @@ pub async fn workspace_save_settings_snapshot<R: tauri::Runtime>(
             )
         })
         .await,
-    )
+    )?;
+    for repo_path in &repo_paths_to_invalidate {
+        super::git::invalidate_worktree_resolution_cache_for_repo(repo_path)?;
+    }
+    Ok(updated)
 }
 
 // Generic runtime keeps this command testable under MockRuntime without changing
@@ -361,9 +371,14 @@ mod tests {
         format_hook_list, sanitize_hook_preview, workspace_detect_github_repository,
         workspace_prepare_trusted_hooks_challenge, workspace_save_repo_settings,
         workspace_save_settings_snapshot, workspace_set_trusted_hooks,
+        workspace_update_repo_config,
         workspace_update_global_git_config, HookSet,
     };
-    use crate::{AppState, RepoSettingsPayload, SettingsSnapshotPayload};
+    use crate::commands::git::{
+        authorized_worktree_cache, cache_key, read_worktree_state_token,
+    };
+    use crate::commands::git::resolve_working_dir;
+    use crate::{AppState, RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload};
     use host_application::{AppService, PreparedHookTrustChallenge};
     use host_domain::{TaskStore, WorkspaceRecord, TASK_METADATA_NAMESPACE};
     use host_infra_beads::BeadsTaskStore;
@@ -373,10 +388,12 @@ mod tests {
     };
     use serde_json::{json, Value};
     use std::{
+        collections::HashSet,
         fs,
-        path::PathBuf,
+        path::{Path, PathBuf},
         process::Command,
         sync::{Arc, Mutex},
+        time::Instant,
         time::{SystemTime, UNIX_EPOCH},
     };
     use tauri::{
@@ -408,6 +425,43 @@ mod tests {
             std::env::temp_dir().join(format!("openducktor-workspace-command-{prefix}-{nanos}"));
         fs::create_dir_all(&root).expect("test root should be created");
         root
+    }
+
+    fn run_git(args: &[&str], cwd: &Path) {
+        let status = Command::new("git")
+            .args(args)
+            .current_dir(cwd)
+            .status()
+            .expect("failed to run git command");
+        assert!(status.success(), "git command failed: {:?}", args);
+    }
+
+    fn seed_authorized_worktree_cache_with_subset(repo: &Path, allowed_worktrees: &[&Path]) {
+        let canonical_repo = fs::canonicalize(repo).expect("repo should canonicalize for cache seed");
+        let worktree_state_token = read_worktree_state_token(canonical_repo.as_path())
+            .expect("worktree state token should be readable for cache seed");
+        let seeded_worktrees = allowed_worktrees
+            .iter()
+            .map(|path| fs::canonicalize(path).expect("worktree should canonicalize for cache seed"))
+            .collect::<HashSet<_>>();
+        let mut cache = authorized_worktree_cache()
+            .lock()
+            .expect("authorized worktree cache lock should not be poisoned");
+        cache.insert(
+            cache_key(canonical_repo.as_path()),
+            crate::commands::git::AuthorizedWorktreeCacheEntry {
+                cached_at: Instant::now(),
+                worktree_state_token,
+                worktrees: seeded_worktrees,
+            },
+        );
+    }
+
+    fn clear_authorized_worktree_cache_for_repo(repo: &Path) {
+        super::super::git::invalidate_worktree_resolution_cache_for_repo(
+            repo.to_string_lossy().as_ref(),
+        )
+        .expect("worktree cache should clear for repository");
     }
 
     fn setup_workspace_command_fixture(prefix: &str, hooks: HookSet) -> WorkspaceCommandFixture {
@@ -525,6 +579,18 @@ mod tests {
             app_handle,
             fixture.repo_path.clone(),
             settings,
+        ))
+    }
+
+    fn run_workspace_update_repo_config(
+        fixture: &WorkspaceCommandFixture,
+        config: RepoConfigPayload,
+    ) -> Result<WorkspaceRecord, String> {
+        let state = fixture.app.state::<AppState>();
+        tauri::async_runtime::block_on(workspace_update_repo_config(
+            state,
+            fixture.repo_path.clone(),
+            config,
         ))
     }
 
@@ -929,6 +995,208 @@ mod tests {
             .workspace_get_repo_config(fixture.repo_path.as_str())
             .map_err(|error| error.to_string())?;
         assert_eq!(persisted.default_runtime_kind, "claude-code");
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_update_repo_config_invalidates_authorized_worktree_cache() -> Result<(), String> {
+        let fixture = setup_workspace_command_fixture("update-repo-config-cache", HookSet::default());
+        let repo_path = PathBuf::from(&fixture.repo_path);
+        clear_authorized_worktree_cache_for_repo(repo_path.as_path());
+        let worktree_one = fixture.root.join("repo-wt-config-one");
+        let worktree_two = fixture.root.join("repo-wt-config-two");
+        run_git(
+            &[
+                "-C",
+                fixture.repo_path.as_str(),
+                "worktree",
+                "add",
+                "-b",
+                "feature/config-cache-one",
+                worktree_one.to_string_lossy().as_ref(),
+            ],
+            repo_path.as_path(),
+        );
+        run_git(
+            &[
+                "-C",
+                fixture.repo_path.as_str(),
+                "worktree",
+                "add",
+                "-b",
+                "feature/config-cache-two",
+                worktree_two.to_string_lossy().as_ref(),
+            ],
+            repo_path.as_path(),
+        );
+
+        seed_authorized_worktree_cache_with_subset(repo_path.as_path(), &[worktree_one.as_path()]);
+
+        let worktree_two_str = worktree_two.to_string_lossy().to_string();
+        let stale_error = resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+            .expect_err("seeded cache should reject worktree omitted from subset");
+        assert!(stale_error.contains("not within authorized repository or linked worktrees"));
+
+        run_workspace_update_repo_config(
+            &fixture,
+            RepoConfigPayload {
+                default_runtime_kind: None,
+                worktree_base_path: Some(fixture.root.join("updated-base").to_string_lossy().to_string()),
+                branch_prefix: None,
+                default_target_branch: None,
+                git: None,
+                dev_servers: None,
+                worktree_file_copies: None,
+                prompt_overrides: None,
+                agent_defaults: None,
+            },
+        )?;
+
+        let resolved = resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+            .expect("worktree cache should refresh after repo config update invalidation");
+        let expected = fs::canonicalize(&worktree_two)
+            .expect("worktree should canonicalize")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(resolved, expected);
+
+        clear_authorized_worktree_cache_for_repo(repo_path.as_path());
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_save_repo_settings_invalidates_authorized_worktree_cache() -> Result<(), String> {
+        let fixture = setup_workspace_command_fixture("save-repo-settings-cache", HookSet::default());
+        let repo_path = PathBuf::from(&fixture.repo_path);
+        clear_authorized_worktree_cache_for_repo(repo_path.as_path());
+        let worktree_one = fixture.root.join("repo-wt-settings-one");
+        let worktree_two = fixture.root.join("repo-wt-settings-two");
+        run_git(
+            &[
+                "-C",
+                fixture.repo_path.as_str(),
+                "worktree",
+                "add",
+                "-b",
+                "feature/settings-cache-one",
+                worktree_one.to_string_lossy().as_ref(),
+            ],
+            repo_path.as_path(),
+        );
+        run_git(
+            &[
+                "-C",
+                fixture.repo_path.as_str(),
+                "worktree",
+                "add",
+                "-b",
+                "feature/settings-cache-two",
+                worktree_two.to_string_lossy().as_ref(),
+            ],
+            repo_path.as_path(),
+        );
+
+        seed_authorized_worktree_cache_with_subset(repo_path.as_path(), &[worktree_one.as_path()]);
+
+        let worktree_two_str = worktree_two.to_string_lossy().to_string();
+        let stale_error = resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+            .expect_err("seeded cache should reject worktree omitted from subset");
+        assert!(stale_error.contains("not within authorized repository or linked worktrees"));
+
+        run_workspace_save_repo_settings(
+            &fixture,
+            RepoSettingsPayload {
+                default_runtime_kind: None,
+                worktree_base_path: Some(fixture.root.join("updated-settings-base").to_string_lossy().to_string()),
+                branch_prefix: None,
+                default_target_branch: None,
+                git: None,
+                trusted_hooks: false,
+                hooks: None,
+                dev_servers: None,
+                worktree_file_copies: None,
+                prompt_overrides: None,
+                agent_defaults: None,
+            },
+        )?;
+
+        let resolved = resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+            .expect("worktree cache should refresh after repo settings save invalidation");
+        let expected = fs::canonicalize(&worktree_two)
+            .expect("worktree should canonicalize")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(resolved, expected);
+
+        clear_authorized_worktree_cache_for_repo(repo_path.as_path());
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_save_settings_snapshot_invalidates_authorized_worktree_cache() -> Result<(), String> {
+        let fixture = setup_workspace_command_fixture("save-settings-snapshot-cache", HookSet::default());
+        let repo_path = PathBuf::from(&fixture.repo_path);
+        clear_authorized_worktree_cache_for_repo(repo_path.as_path());
+        let worktree_one = fixture.root.join("repo-wt-snapshot-one");
+        let worktree_two = fixture.root.join("repo-wt-snapshot-two");
+        run_git(
+            &[
+                "-C",
+                fixture.repo_path.as_str(),
+                "worktree",
+                "add",
+                "-b",
+                "feature/snapshot-cache-one",
+                worktree_one.to_string_lossy().as_ref(),
+            ],
+            repo_path.as_path(),
+        );
+        run_git(
+            &[
+                "-C",
+                fixture.repo_path.as_str(),
+                "worktree",
+                "add",
+                "-b",
+                "feature/snapshot-cache-two",
+                worktree_two.to_string_lossy().as_ref(),
+            ],
+            repo_path.as_path(),
+        );
+
+        seed_authorized_worktree_cache_with_subset(repo_path.as_path(), &[worktree_one.as_path()]);
+
+        let worktree_two_str = worktree_two.to_string_lossy().to_string();
+        let stale_error = resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+            .expect_err("seeded cache should reject worktree omitted from subset");
+        assert!(stale_error.contains("not within authorized repository or linked worktrees"));
+
+        let (theme, git, chat, kanban, autopilot, repos, global_prompt_overrides) = fixture
+            .service
+            .workspace_get_settings_snapshot()
+            .map_err(|error| error.to_string())?;
+        run_workspace_save_settings_snapshot(
+            &fixture,
+            SettingsSnapshotPayload {
+                theme,
+                git,
+                chat,
+                kanban,
+                autopilot,
+                repos,
+                global_prompt_overrides,
+            },
+        )?;
+
+        let resolved = resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+            .expect("worktree cache should refresh after snapshot save invalidation");
+        let expected = fs::canonicalize(&worktree_two)
+            .expect("worktree should canonicalize")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(resolved, expected);
+
+        clear_authorized_worktree_cache_for_repo(repo_path.as_path());
         Ok(())
     }
 
