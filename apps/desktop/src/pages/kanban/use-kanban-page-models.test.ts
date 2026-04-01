@@ -6,7 +6,7 @@ describe("isKanbanForegroundLoading", () => {
     expect(
       isKanbanForegroundLoading({
         hasActiveRepo: true,
-        isLoadingTasks: false,
+        isForegroundLoadingTasks: false,
         isSettingsPending: false,
         doneVisibleDays: 1,
         isKanbanPending: true,
@@ -18,7 +18,7 @@ describe("isKanbanForegroundLoading", () => {
     expect(
       isKanbanForegroundLoading({
         hasActiveRepo: true,
-        isLoadingTasks: false,
+        isForegroundLoadingTasks: false,
         isSettingsPending: false,
         doneVisibleDays: 1,
         isKanbanPending: false,
@@ -30,7 +30,7 @@ describe("isKanbanForegroundLoading", () => {
     expect(
       isKanbanForegroundLoading({
         hasActiveRepo: true,
-        isLoadingTasks: true,
+        isForegroundLoadingTasks: true,
         isSettingsPending: false,
         doneVisibleDays: 1,
         isKanbanPending: false,

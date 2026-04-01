@@ -33,6 +33,8 @@ type UseTaskOperationsArgs = {
 type UseTaskOperationsResult = {
   tasks: TaskCard[];
   runs: RunSummary[];
+  isForegroundLoadingTasks: boolean;
+  isRefreshingTasksInBackground: boolean;
   isLoadingTasks: boolean;
   detectingPullRequestTaskId: string | null;
   linkingMergedPullRequestTaskId: string | null;
@@ -550,12 +552,17 @@ export function useTaskOperations({
 
   const tasks = activeRepo ? (repoTaskDataQuery.data?.tasks ?? []) : [];
   const runs = activeRepo ? (repoTaskDataQuery.data?.runs ?? []) : [];
-  const isLoadingTasks =
+  const isForegroundLoadingTasks =
     isManualLoadingTasks || (activeRepo !== null && repoTaskDataQuery.isPending);
+  const isRefreshingTasksInBackground =
+    activeRepo !== null && repoTaskDataQuery.isFetching && !isForegroundLoadingTasks;
+  const isLoadingTasks = isForegroundLoadingTasks;
 
   return {
     tasks,
     runs,
+    isForegroundLoadingTasks,
+    isRefreshingTasksInBackground,
     isLoadingTasks,
     detectingPullRequestTaskId,
     linkingMergedPullRequestTaskId,

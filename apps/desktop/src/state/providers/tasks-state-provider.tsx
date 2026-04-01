@@ -17,6 +17,8 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
   const {
     tasks,
     runs,
+    isForegroundLoadingTasks,
+    isRefreshingTasksInBackground,
     isLoadingTasks,
     detectingPullRequestTaskId,
     linkingMergedPullRequestTaskId,
@@ -48,6 +50,8 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
   const tasksStateValue = useMemo(
     () =>
       buildTasksStateValue({
+        isForegroundLoadingTasks,
+        isRefreshingTasksInBackground,
         isLoadingTasks,
         detectingPullRequestTaskId,
         linkingMergedPullRequestTaskId,
@@ -78,6 +82,8 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
       detectingPullRequestTaskId,
       humanApproveTask,
       humanRequestChangesTask,
+      isForegroundLoadingTasks,
+      isRefreshingTasksInBackground,
       isLoadingTasks,
       linkMergedPullRequest,
       linkingMergedPullRequestTaskId,

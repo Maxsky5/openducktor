@@ -92,6 +92,8 @@ export type ChecksStateContextValue = {
 };
 
 export type TasksStateContextValue = {
+  isForegroundLoadingTasks: boolean;
+  isRefreshingTasksInBackground: boolean;
   isLoadingTasks: boolean;
   detectingPullRequestTaskId: string | null;
   linkingMergedPullRequestTaskId: string | null;

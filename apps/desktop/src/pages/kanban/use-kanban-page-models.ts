@@ -23,13 +23,13 @@ type UseKanbanPageModelsArgs = {
 
 export const isKanbanForegroundLoading = (args: {
   hasActiveRepo: boolean;
-  isLoadingTasks: boolean;
+  isForegroundLoadingTasks: boolean;
   isSettingsPending: boolean;
   doneVisibleDays: number | undefined;
   isKanbanPending: boolean;
 }): boolean => {
-  if (args.isLoadingTasks || !args.hasActiveRepo || args.isSettingsPending) {
-    return args.isLoadingTasks || (args.hasActiveRepo && args.isSettingsPending);
+  if (args.isForegroundLoadingTasks || !args.hasActiveRepo || args.isSettingsPending) {
+    return args.isForegroundLoadingTasks || (args.hasActiveRepo && args.isSettingsPending);
   }
 
   return args.doneVisibleDays !== undefined && args.isKanbanPending;
@@ -57,7 +57,7 @@ export function useKanbanPageModels({
     linkMergedPullRequest,
     cancelLinkMergedPullRequest,
     unlinkPullRequest,
-    isLoadingTasks,
+    isForegroundLoadingTasks,
     detectingPullRequestTaskId,
     linkingMergedPullRequestTaskId,
     pendingMergedPullRequest,
@@ -113,7 +113,7 @@ export function useKanbanPageModels({
   const kanbanTasks = activeRepo ? (kanbanTaskListQuery.data ?? []) : [];
   const isLoadingKanbanTasks = isKanbanForegroundLoading({
     hasActiveRepo: activeRepo !== null,
-    isLoadingTasks,
+    isForegroundLoadingTasks,
     isSettingsPending: settingsSnapshotQuery.isPending,
     doneVisibleDays,
     isKanbanPending: kanbanTaskListQuery.isPending,
