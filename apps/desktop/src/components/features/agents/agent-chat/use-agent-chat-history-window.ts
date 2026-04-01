@@ -265,7 +265,7 @@ export function useAgentChatHistoryWindow({
   }, []);
 
   const windowStart = turns[effectiveTurnStart]?.start ?? 0;
-  const windowedRows = rows.slice(windowStart);
+  const windowedRows = useMemo(() => rows.slice(windowStart), [rows, windowStart]);
 
   return {
     latestTurnStart,

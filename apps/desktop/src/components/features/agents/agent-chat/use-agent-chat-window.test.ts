@@ -306,6 +306,27 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("keeps the same windowedRows reference when the window inputs are unchanged", async () => {
+    const rows = createTurnRows(12);
+    const harness = await mountHarness({
+      rows,
+      activeSessionId: "session-1",
+      isSessionViewLoading: false,
+    });
+
+    const initialWindowedRows = harness.getLatestResult().windowedRows;
+
+    await harness.update({
+      rows,
+      activeSessionId: "session-1",
+      isSessionViewLoading: false,
+    });
+
+    expect(harness.getLatestResult().windowedRows).toBe(initialWindowedRows);
+
+    await harness.unmount();
+  });
+
   test("fills hidden history until the transcript overflows", async () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness(
