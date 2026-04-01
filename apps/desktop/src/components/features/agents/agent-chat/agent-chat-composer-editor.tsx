@@ -8,8 +8,8 @@ import {
 } from "./agent-chat-composer-draft";
 import { AgentChatComposerFileMenu } from "./agent-chat-composer-file-menu";
 import {
-  EMPTY_TEXT_SEGMENT_SENTINEL,
   readEditableTextContent,
+  renderEditableTextContent,
 } from "./agent-chat-composer-selection";
 import { AgentChatComposerSlashMenu } from "./agent-chat-composer-slash-menu";
 import {
@@ -117,9 +117,9 @@ const buildComposerContentMarkup = (draft: AgentChatComposerDraft): string => {
           : "inline",
       );
 
-      return `<span data-segment-id="${escapeHtml(segment.id)}" data-text-segment-id="${escapeHtml(segment.id)}" class="${escapeHtml(className)}">${
-        segment.text.length > 0 ? escapeHtml(segment.text) : EMPTY_TEXT_SEGMENT_SENTINEL
-      }</span>`;
+      return `<span data-segment-id="${escapeHtml(segment.id)}" data-text-segment-id="${escapeHtml(segment.id)}" class="${escapeHtml(className)}">${escapeHtml(
+        renderEditableTextContent(segment.text),
+      )}</span>`;
     })
     .join("");
 };

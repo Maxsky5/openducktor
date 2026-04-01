@@ -116,6 +116,20 @@ const clampTextSelectionOffset = (text: string, offset: number): number => {
   return Math.max(0, Math.min(offset, text.length));
 };
 
+const resolveSelectionTargetFromActiveSelection = (
+  draft: AgentChatComposerDraft,
+  activeSelection: ActiveTextSelection | null,
+): TextSelectionTarget | null => {
+  if (!activeSelection) {
+    return null;
+  }
+
+  return resolveTextSelectionTarget(draft, {
+    segmentId: activeSelection.segmentId,
+    offset: activeSelection.caretOffset ?? activeSelection.text.length,
+  });
+};
+
 const resolveTextSelectionTarget = (
   draft: AgentChatComposerDraft,
   selectionTarget: TextSelectionTarget | null,
@@ -455,6 +469,13 @@ export const useAgentChatComposerEditor = ({
     [],
   );
 
+  const getFallbackSelectionTarget = useCallback((sourceDraft: AgentChatComposerDraft) => {
+    return (
+      resolveTextSelectionTarget(sourceDraft, rememberedSelectionRef.current) ??
+      getLastTextSelectionTarget(sourceDraft)
+    );
+  }, []);
+
   const repairCollapsedSelection = useCallback(
     (root: HTMLDivElement, sourceDraft: AgentChatComposerDraft): ActiveTextSelection | null => {
       const selection =
@@ -463,9 +484,7 @@ export const useAgentChatComposerEditor = ({
         return null;
       }
 
-      const fallbackTarget =
-        resolveTextSelectionTarget(sourceDraft, rememberedSelectionRef.current) ??
-        getLastTextSelectionTarget(sourceDraft);
+      const fallbackTarget = getFallbackSelectionTarget(sourceDraft);
       if (!fallbackTarget) {
         return null;
       }
@@ -477,9 +496,34 @@ export const useAgentChatComposerEditor = ({
       }
 
       rememberSelectionTarget(sourceDraft, fallbackTarget);
-      return readActiveTextSelection(root);
+      const repairedElement = root.querySelector<HTMLElement>(
+        `[data-text-segment-id="${CSS.escape(fallbackTarget.segmentId)}"]`,
+      );
+      if (!repairedElement) {
+        return null;
+      }
+
+      return {
+        segmentId: fallbackTarget.segmentId,
+        element: repairedElement,
+        text: readEditableTextContent(repairedElement),
+        caretOffset: fallbackTarget.offset,
+      };
     },
-    [focusTextSegment, rememberSelectionTarget, setPendingFocusTarget],
+    [focusTextSegment, getFallbackSelectionTarget, rememberSelectionTarget, setPendingFocusTarget],
+  );
+
+  const resolveActiveTextSelection = useCallback(
+    (
+      root: HTMLDivElement,
+      sourceDraft: AgentChatComposerDraft,
+      eventTarget?: EventTarget | null,
+    ) => {
+      return (
+        readActiveTextSelection(root, eventTarget) ?? repairCollapsedSelection(root, sourceDraft)
+      );
+    },
+    [repairCollapsedSelection],
   );
 
   const focusTextSegmentWithMemory = useCallback(
@@ -627,18 +671,31 @@ export const useAgentChatComposerEditor = ({
       sourceDraft: AgentChatComposerDraft,
       eventTarget?: EventTarget | null,
     ) => {
-      const activeSelection =
-        readActiveTextSelection(root, eventTarget) ?? repairCollapsedSelection(root, sourceDraft);
-      const selectionTarget = activeSelection
-        ? resolveTextSelectionTarget(sourceDraft, {
-            segmentId: activeSelection.segmentId,
-            offset: activeSelection.caretOffset ?? activeSelection.text.length,
-          })
-        : null;
+      const activeSelection = resolveActiveTextSelection(root, sourceDraft, eventTarget);
+      const selectionTarget = resolveSelectionTargetFromActiveSelection(
+        sourceDraft,
+        activeSelection,
+      );
       rememberSelectionTarget(sourceDraft, selectionTarget);
       syncMenusForSelectionTarget(sourceDraft, selectionTarget);
     },
-    [rememberSelectionTarget, repairCollapsedSelection, syncMenusForSelectionTarget],
+    [rememberSelectionTarget, resolveActiveTextSelection, syncMenusForSelectionTarget],
+  );
+
+  const resolveSelectionTargetForLineBreak = useCallback(
+    (
+      root: HTMLDivElement,
+      sourceDraft: AgentChatComposerDraft,
+      activeSelection: ActiveTextSelection | null,
+    ): TextSelectionTarget | null => {
+      const resolvedActiveSelection =
+        activeSelection ?? resolveActiveTextSelection(root, sourceDraft);
+      return (
+        resolveSelectionTargetFromActiveSelection(sourceDraft, resolvedActiveSelection) ??
+        getFallbackSelectionTarget(sourceDraft)
+      );
+    },
+    [getFallbackSelectionTarget, resolveActiveTextSelection],
   );
 
   useEffect(() => {
@@ -790,12 +847,10 @@ export const useAgentChatComposerEditor = ({
     (root: HTMLDivElement) => {
       const activeSelection = readActiveTextSelection(root);
       const nextDraft = parseComposerDraftFromRoot(root, latestDraftRef.current);
-      const activeSelectionTarget = activeSelection
-        ? resolveTextSelectionTarget(nextDraft, {
-            segmentId: activeSelection.segmentId,
-            offset: activeSelection.caretOffset ?? activeSelection.text.length,
-          })
-        : null;
+      const activeSelectionTarget = resolveSelectionTargetFromActiveSelection(
+        nextDraft,
+        activeSelection,
+      );
       const nextSelectionTarget =
         activeSelectionTarget ??
         deriveTextSelectionTargetAfterInput(
@@ -835,17 +890,19 @@ export const useAgentChatComposerEditor = ({
   const handleEditorBeforeInput = useCallback(
     (event: ReactFormEvent<HTMLDivElement>) => {
       const sourceDraft = latestDraftRef.current;
-      const activeSelection =
-        readActiveTextSelection(event.currentTarget, event.target) ??
-        repairCollapsedSelection(event.currentTarget, sourceDraft);
+      const activeSelection = resolveActiveTextSelection(
+        event.currentTarget,
+        sourceDraft,
+        event.target,
+      );
       const nativeEvent = event.nativeEvent as { inputType?: unknown; data?: unknown };
       const inputType = typeof nativeEvent.inputType === "string" ? nativeEvent.inputType : null;
       const data = typeof nativeEvent.data === "string" ? nativeEvent.data : null;
-      if (activeSelection && activeSelection.segmentId.length > 0) {
-        const selectionTarget = resolveTextSelectionTarget(sourceDraft, {
-          segmentId: activeSelection.segmentId,
-          offset: activeSelection.caretOffset ?? activeSelection.text.length,
-        });
+      const selectionTarget = resolveSelectionTargetFromActiveSelection(
+        sourceDraft,
+        activeSelection,
+      );
+      if (selectionTarget) {
         rememberSelectionTarget(sourceDraft, selectionTarget);
         pendingInputStateRef.current = selectionTarget
           ? {
@@ -876,12 +933,7 @@ export const useAgentChatComposerEditor = ({
       closeFileMenu();
 
       void insertNewlineAtSelectionTarget(
-        activeSelection
-          ? {
-              segmentId: activeSelection.segmentId,
-              offset: activeSelection.caretOffset ?? activeSelection.text.length,
-            }
-          : rememberedSelectionRef.current,
+        resolveSelectionTargetForLineBreak(event.currentTarget, sourceDraft, activeSelection),
       );
     },
     [
@@ -889,7 +941,8 @@ export const useAgentChatComposerEditor = ({
       closeFileMenu,
       insertNewlineAtSelectionTarget,
       rememberSelectionTarget,
-      repairCollapsedSelection,
+      resolveActiveTextSelection,
+      resolveSelectionTargetForLineBreak,
     ],
   );
 
@@ -915,12 +968,9 @@ export const useAgentChatComposerEditor = ({
 
       const sourceDraft = latestDraftRef.current;
       const activeSelection = readActiveTextSelection(event.currentTarget, event.target);
-      const selectionTarget = activeSelection
-        ? resolveTextSelectionTarget(sourceDraft, {
-            segmentId: activeSelection.segmentId,
-            offset: activeSelection.caretOffset ?? activeSelection.text.length,
-          })
-        : resolveTextSelectionTarget(sourceDraft, rememberedSelectionRef.current);
+      const selectionTarget =
+        resolveSelectionTargetFromActiveSelection(sourceDraft, activeSelection) ??
+        resolveTextSelectionTarget(sourceDraft, rememberedSelectionRef.current);
 
       rememberSelectionTarget(sourceDraft, selectionTarget);
       syncMenusForSelectionTarget(sourceDraft, selectionTarget);
@@ -1019,17 +1069,12 @@ export const useAgentChatComposerEditor = ({
       if (event.key === "Enter" && event.shiftKey) {
         event.preventDefault();
         void insertNewlineAtSelectionTarget(
-          activeSelection
-            ? {
-                segmentId: activeSelection.segmentId,
-                offset: activeSelection.caretOffset ?? activeSelection.text.length,
-              }
-            : rememberedSelectionRef.current,
+          resolveSelectionTargetForLineBreak(root, sourceDraft, activeSelection),
         );
         return;
       }
 
-      const repairedSelection = activeSelection ?? repairCollapsedSelection(root, sourceDraft);
+      const repairedSelection = activeSelection ?? resolveActiveTextSelection(root, sourceDraft);
       if (!repairedSelection) {
         return;
       }
@@ -1082,7 +1127,8 @@ export const useAgentChatComposerEditor = ({
       focusTextSegmentWithMemory,
       insertNewlineAtSelectionTarget,
       onSend,
-      repairCollapsedSelection,
+      resolveActiveTextSelection,
+      resolveSelectionTargetForLineBreak,
       selectFileSearchResult,
       selectSlashCommand,
       slashMenuState,
