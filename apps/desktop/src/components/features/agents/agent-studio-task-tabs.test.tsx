@@ -50,16 +50,31 @@ describe("AgentStudioTaskTabs", () => {
     expect(html).toContain("after:bg-card");
     expect(html).toContain("overflow-x-auto");
     expect(html).toContain("hide-scrollbar");
-    expect(html).toContain("max-w-full overflow-x-auto");
+    expect(html).toContain("max-w-full");
     expect(html).not.toContain("overflow-y-visible");
     expect(html).not.toContain("rounded-full border");
     expect(html).not.toContain("bg-card/80");
     expect(html).toContain("bg-studio-chrome");
     expect(html).toContain("size-[1.4rem]");
 
-    const lastTabCloseIndex = html.lastIndexOf("Close tab for Ship QA checklist");
-    const newTabButtonIndex = html.indexOf('aria-label="Open new task tab"');
-    expect(newTabButtonIndex).toBeGreaterThan(lastTabCloseIndex);
+    const { unmount } = render(
+      createElement(
+        Tabs,
+        { value: "task-1" },
+        createElement(AgentStudioTaskTabs, { model: buildModel() }),
+      ),
+    );
+
+    const newTabButton = screen.getByRole("button", { name: "Open new task tab" });
+    const lastTabCloseButton = screen.getByRole("button", {
+      name: "Close tab for Ship QA checklist",
+    });
+
+    expect(
+      lastTabCloseButton.compareDocumentPosition(newTabButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    unmount();
   });
 
   test("shows empty-state copy when no tabs are open", () => {
@@ -99,10 +114,29 @@ describe("AgentStudioTaskTabs", () => {
 
     expect(html).toContain("Hide documents panel");
 
-    const newTabButtonIndex = html.indexOf('aria-label="Open new task tab"');
-    const rightPanelToggleIndex = html.indexOf('aria-label="Hide documents panel"');
-    expect(newTabButtonIndex).toBeGreaterThan(-1);
-    expect(rightPanelToggleIndex).toBeGreaterThan(newTabButtonIndex);
+    const { unmount } = render(
+      createElement(
+        Tabs,
+        { value: "task-1" },
+        createElement(AgentStudioTaskTabs, {
+          model: buildModel(),
+          rightPanelToggleModel: {
+            kind: "documents",
+            isOpen: true,
+            onToggle: () => {},
+          },
+        }),
+      ),
+    );
+
+    const newTabButton = screen.getByRole("button", { name: "Open new task tab" });
+    const rightPanelToggle = screen.getByRole("button", { name: "Hide documents panel" });
+
+    expect(
+      newTabButton.compareDocumentPosition(rightPanelToggle) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    unmount();
   });
 
   test("keeps new-tab button enabled while tab tasks are loading", () => {
@@ -126,7 +160,7 @@ describe("AgentStudioTaskTabs", () => {
   });
 
   test("keeps the new-tab button outside the horizontal scroll region", () => {
-    const { container } = render(
+    render(
       createElement(
         Tabs,
         { value: "task-1" },
@@ -141,7 +175,8 @@ describe("AgentStudioTaskTabs", () => {
       ),
     );
 
-    const scrollRegion = container.querySelector(".hide-scrollbar.overflow-x-auto");
+    const tabList = screen.getByRole("tablist", { name: "Agent Studio task tabs" });
+    const scrollRegion = tabList.parentElement?.parentElement;
     const newTabButton = screen.getByRole("button", { name: "Open new task tab" });
     const rightPanelToggle = screen.getByRole("button", { name: "Hide documents panel" });
 

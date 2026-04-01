@@ -108,7 +108,7 @@ export function AgentStudioTaskTabs({
       <div className="flex min-w-0 items-center gap-1">
         <div className="flex min-w-0 flex-1 items-center gap-1">
           <div className="hide-scrollbar min-w-0 max-w-full overflow-x-auto">
-            <div className="inline-flex h-10 min-w-max items-center gap-1 px-2">
+            <div className="inline-flex h-10 min-w-max items-center gap-1 pl-2">
               {hasAnyTab ? (
                 <TabsList
                   aria-label="Agent Studio task tabs"
