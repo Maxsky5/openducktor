@@ -386,6 +386,35 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("border-destructive-border");
   });
 
+  test("renders user-stopped session notices as cancelled cards", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "session-notice-stopped",
+          role: "system",
+          content: "Session stopped at your request.",
+          timestamp: "2026-02-22T10:21:45.000Z",
+          meta: {
+            kind: "session_notice",
+            tone: "cancelled",
+            reason: "user_stopped",
+            title: "Stopped",
+          },
+        },
+        sessionRole: "build",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("border-cancelled-border");
+    expect(html).toContain("bg-cancelled-surface");
+    expect(html).toContain("Session stopped at your request.");
+    expect(html).toContain("Stopped");
+    expect(html).not.toContain("border-destructive-border");
+    expect(html).not.toContain(">System<");
+  });
+
   test("renders system prompt as expandable card", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {

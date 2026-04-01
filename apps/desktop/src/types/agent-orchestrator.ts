@@ -68,6 +68,12 @@ export type AgentChatMessageMeta =
       agent: string;
       prompt: string;
       description: string;
+    }
+  | {
+      kind: "session_notice";
+      tone: "cancelled";
+      reason: "user_stopped";
+      title: string;
     };
 
 export type AgentChatMessage = {
@@ -139,6 +145,7 @@ export type AgentSessionState = {
   selectedModel: AgentModelSelection | null;
   isLoadingModelCatalog: boolean;
   promptOverrides?: RepoPromptOverrides;
+  stopRequestedAt?: string | null;
 };
 
 export type AgentSessionLoadMode = "bootstrap" | "requested_history" | "reconcile_live";

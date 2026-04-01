@@ -778,7 +778,7 @@ describe("agent-orchestrator-session-events", () => {
     handleEvent({
       type: "session_error",
       sessionId: "session-1",
-      message: "boom",
+      message: "Aborted",
       timestamp: "2026-02-22T08:00:10.000Z",
     });
 
@@ -787,9 +787,118 @@ describe("agent-orchestrator-session-events", () => {
     expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
     expect(
       sessionsRef.current["session-1"]?.messages.some((message) =>
-        message.content.includes("Session error:"),
+        message.content.includes("Session error: Aborted"),
       ),
     ).toBe(true);
+  });
+
+  test("renders a cancelled session notice when a user-requested stop aborts", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          role: "build",
+          stopRequestedAt: "2026-02-22T08:00:09.000Z",
+          messages: [
+            {
+              id: "tool-running",
+              role: "tool",
+              content: "Tool todowrite running...",
+              timestamp: "2026-02-22T08:00:08.000Z",
+              meta: {
+                kind: "tool",
+                partId: "part-tool-running",
+                callId: "call-tool-running",
+                tool: "todowrite",
+                status: "running",
+              },
+            },
+          ],
+          pendingPermissions: [
+            {
+              requestId: "perm-1",
+              permission: "read",
+              patterns: ["*.md"],
+            },
+          ],
+        }),
+      },
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "session_error",
+      sessionId: "session-1",
+      message: '{"message":"Aborted"}',
+      timestamp: "2026-02-22T08:00:10.000Z",
+    });
+
+    const lastMessage = sessionsRef.current["session-1"]?.messages.at(-1);
+    expect(lastMessage?.content).toBe("Session stopped at your request.");
+    expect(lastMessage?.meta).toEqual({
+      kind: "session_notice",
+      tone: "cancelled",
+      reason: "user_stopped",
+      title: "Stopped",
+    });
+    const toolMessage = sessionsRef.current["session-1"]?.messages.find(
+      (message) => message.id === "tool-running",
+    );
+    expect(toolMessage?.meta?.kind).toBe("tool");
+    if (toolMessage?.meta?.kind !== "tool") {
+      throw new Error("Expected tool metadata");
+    }
+    expect(toolMessage.meta.status).toBe("error");
+    expect(toolMessage.meta.error).toBe("Aborted");
+    expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+    expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
+    expect(
+      sessionsRef.current["session-1"]?.messages.some((message) =>
+        message.content.includes("Session error:"),
+      ),
+    ).toBe(false);
   });
 
   test("handles question/todo updates and terminal finish", () => {
@@ -873,6 +982,200 @@ describe("agent-orchestrator-session-events", () => {
     expect(sessionsRef.current["session-1"]?.todos).toHaveLength(1);
     expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
     expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+  });
+
+  test("renders a cancelled session notice when a user-requested stop finishes normally", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          role: "build",
+          stopRequestedAt: "2026-02-22T08:00:09.000Z",
+          messages: [
+            {
+              id: "tool-running",
+              role: "tool",
+              content: "Tool todowrite running...",
+              timestamp: "2026-02-22T08:00:08.000Z",
+              meta: {
+                kind: "tool",
+                partId: "part-tool-running",
+                callId: "call-tool-running",
+                tool: "todowrite",
+                status: "running",
+              },
+            },
+          ],
+          pendingPermissions: [
+            {
+              requestId: "perm-1",
+              permission: "read",
+              patterns: ["*.md"],
+            },
+          ],
+          pendingQuestions: [
+            {
+              requestId: "question-1",
+              questions: [
+                {
+                  header: "Confirm",
+                  question: "Confirm",
+                  options: [],
+                  multiple: false,
+                  custom: false,
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "session_finished",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:10.000Z",
+      message: "Session stopped",
+    });
+
+    const lastMessage = sessionsRef.current["session-1"]?.messages.at(-1);
+    expect(lastMessage?.content).toBe("Session stopped at your request.");
+    expect(lastMessage?.meta).toEqual({
+      kind: "session_notice",
+      tone: "cancelled",
+      reason: "user_stopped",
+      title: "Stopped",
+    });
+    const toolMessage = sessionsRef.current["session-1"]?.messages.find(
+      (message) => message.id === "tool-running",
+    );
+    expect(toolMessage?.meta?.kind).toBe("tool");
+    if (toolMessage?.meta?.kind !== "tool") {
+      throw new Error("Expected tool metadata");
+    }
+    expect(toolMessage.meta.status).toBe("error");
+    expect(toolMessage.meta.error).toBe("Session stopped at your request.");
+    expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
+    expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
+    expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
+    expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+  });
+
+  test("keeps real failures on the error path even when stop intent was set", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          role: "build",
+          stopRequestedAt: "2026-02-22T08:00:09.000Z",
+        }),
+      },
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "session_error",
+      sessionId: "session-1",
+      message: "Permission denied",
+      timestamp: "2026-02-22T08:00:10.000Z",
+    });
+
+    expect(sessionsRef.current["session-1"]?.status).toBe("error");
+    expect(
+      sessionsRef.current["session-1"]?.messages.some((message) =>
+        message.content.includes("Session stopped at your request."),
+      ),
+    ).toBe(false);
+    expect(
+      sessionsRef.current["session-1"]?.messages.some((message) =>
+        message.content.includes("Session error: Permission denied"),
+      ),
+    ).toBe(true);
   });
 
   test("finalizes assistant draft through status transitions", () => {

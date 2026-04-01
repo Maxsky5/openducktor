@@ -12,6 +12,7 @@ import { isDuplicateAssistantMessage, READ_ONLY_ROLES } from "../support/core";
 import { upsertMessage } from "../support/messages";
 import { mergeTodoListPreservingOrder } from "../support/todos";
 import {
+  isStopAbortSessionErrorMessage,
   normalizeRetryStatusMessage,
   normalizeSessionErrorMessage,
 } from "../support/tool-messages";
@@ -379,6 +380,40 @@ export const handleSessionTodosUpdated = (
   );
 };
 
+const buildUserStoppedNoticeMessage = (timestamp: string) => ({
+  id: crypto.randomUUID(),
+  role: "system" as const,
+  content: "Session stopped at your request.",
+  timestamp,
+  meta: {
+    kind: "session_notice" as const,
+    tone: "cancelled" as const,
+    reason: "user_stopped" as const,
+    title: "Stopped",
+  },
+});
+
+const settleTerminalMessages = (
+  messages: SessionLifecycleEventContext["store"]["sessionsRef"]["current"][string]["messages"],
+  timestamp: string,
+  options?: {
+    outcome?: "completed" | "error";
+    errorMessage?: string;
+    appendUserStoppedNotice?: boolean;
+  },
+) => {
+  const settledMessages = settleDanglingTodoToolMessages(messages, timestamp, {
+    ...(options?.outcome ? { outcome: options.outcome } : {}),
+    ...(options?.errorMessage ? { errorMessage: options.errorMessage } : {}),
+  });
+
+  if (!options?.appendUserStoppedNotice) {
+    return settledMessages;
+  }
+
+  return [...settledMessages, buildUserStoppedNoticeMessage(timestamp)];
+};
+
 export const handleSessionError = (
   context: SessionLifecycleEventContext,
   event: Extract<SessionEvent, { type: "session_error" }>,
@@ -398,24 +433,32 @@ export const handleSessionError = (
           current.messages,
         ),
       );
-      const settledMessages = settleDanglingTodoToolMessages(finalized.messages, event.timestamp, {
-        outcome: "error",
-        errorMessage: sessionErrorMessage,
-      });
+      const appendUserStoppedNotice =
+        Boolean(current.stopRequestedAt) && isStopAbortSessionErrorMessage(sessionErrorMessage);
       return {
         ...finalized,
-        status: "error",
+        status: appendUserStoppedNotice ? "stopped" : "error",
+        stopRequestedAt: null,
         pendingPermissions: [],
         pendingQuestions: [],
-        messages: [
-          ...settledMessages,
-          {
-            id: crypto.randomUUID(),
-            role: "system",
-            content: `Session error: ${sessionErrorMessage}`,
-            timestamp: event.timestamp,
-          },
-        ],
+        messages: appendUserStoppedNotice
+          ? settleTerminalMessages(finalized.messages, event.timestamp, {
+              outcome: "error",
+              errorMessage: sessionErrorMessage,
+              appendUserStoppedNotice: true,
+            })
+          : [
+              ...settleTerminalMessages(finalized.messages, event.timestamp, {
+                outcome: "error",
+                errorMessage: sessionErrorMessage,
+              }),
+              {
+                id: crypto.randomUUID(),
+                role: "system" as const,
+                content: `Session error: ${sessionErrorMessage}`,
+                timestamp: event.timestamp,
+              },
+            ],
       };
     },
     { persist: true },
@@ -454,12 +497,22 @@ export const handleSessionFinished = (
           current.messages,
         ),
       );
+      const appendUserStoppedNotice = Boolean(current.stopRequestedAt);
       return {
         ...finalized,
-        messages: settleDanglingTodoToolMessages(finalized.messages, event.timestamp),
+        messages: settleTerminalMessages(finalized.messages, event.timestamp, {
+          ...(appendUserStoppedNotice
+            ? {
+                outcome: "error" as const,
+                errorMessage: "Session stopped at your request.",
+                appendUserStoppedNotice: true,
+              }
+            : {}),
+        }),
         pendingPermissions: [],
         pendingQuestions: [],
         status: "stopped",
+        stopRequestedAt: null,
       };
     },
     { persist: true },

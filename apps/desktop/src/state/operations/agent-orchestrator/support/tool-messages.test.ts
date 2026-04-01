@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
+  isStopAbortSessionErrorMessage,
   normalizeRetryStatusMessage,
   normalizeSessionErrorMessage,
   resolveToolMessageId,
@@ -41,5 +42,14 @@ describe("agent-orchestrator/support/tool-messages", () => {
   test("normalizes session and retry error messages", () => {
     expect(normalizeSessionErrorMessage('{"message":"Oops"}')).toBe("Oops");
     expect(normalizeRetryStatusMessage('{"message":"Retrying"}')).toBe("Retrying");
+  });
+
+  test("classifies intentional stop abort variants narrowly", () => {
+    expect(isStopAbortSessionErrorMessage("Aborted")).toBe(true);
+    expect(isStopAbortSessionErrorMessage('"Aborted"')).toBe(true);
+    expect(isStopAbortSessionErrorMessage('{"message":"Request cancelled by user"}')).toBe(true);
+    expect(isStopAbortSessionErrorMessage('{"error":{"message":"Operation canceled"}}')).toBe(true);
+    expect(isStopAbortSessionErrorMessage("Permission denied")).toBe(false);
+    expect(isStopAbortSessionErrorMessage("boom")).toBe(false);
   });
 });
