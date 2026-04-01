@@ -551,8 +551,7 @@ export function useTaskOperations({
   const tasks = activeRepo ? (repoTaskDataQuery.data?.tasks ?? []) : [];
   const runs = activeRepo ? (repoTaskDataQuery.data?.runs ?? []) : [];
   const isLoadingTasks =
-    isManualLoadingTasks ||
-    (activeRepo !== null && (repoTaskDataQuery.isPending || repoTaskDataQuery.isFetching));
+    isManualLoadingTasks || (activeRepo !== null && repoTaskDataQuery.isPending);
 
   return {
     tasks,

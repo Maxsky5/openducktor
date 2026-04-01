@@ -21,6 +21,20 @@ type UseKanbanPageModelsArgs = {
   onCloseDetails: () => void;
 };
 
+export const isKanbanForegroundLoading = (args: {
+  hasActiveRepo: boolean;
+  isLoadingTasks: boolean;
+  isSettingsPending: boolean;
+  doneVisibleDays: number | undefined;
+  isKanbanPending: boolean;
+}): boolean => {
+  if (args.isLoadingTasks || !args.hasActiveRepo || args.isSettingsPending) {
+    return args.isLoadingTasks || (args.hasActiveRepo && args.isSettingsPending);
+  }
+
+  return args.doneVisibleDays !== undefined && args.isKanbanPending;
+};
+
 export function useKanbanPageModels({
   onOpenDetails,
   onCloseDetails,
@@ -97,12 +111,13 @@ export function useKanbanPageModels({
   }, [kanbanTaskListQuery.error, kanbanTaskListQuery.isError]);
 
   const kanbanTasks = activeRepo ? (kanbanTaskListQuery.data ?? []) : [];
-  const isLoadingKanbanTasks =
-    isLoadingTasks ||
-    (activeRepo !== null &&
-      (settingsSnapshotQuery.isPending ||
-        (doneVisibleDays !== undefined &&
-          (kanbanTaskListQuery.isPending || kanbanTaskListQuery.isFetching))));
+  const isLoadingKanbanTasks = isKanbanForegroundLoading({
+    hasActiveRepo: activeRepo !== null,
+    isLoadingTasks,
+    isSettingsPending: settingsSnapshotQuery.isPending,
+    doneVisibleDays,
+    isKanbanPending: kanbanTaskListQuery.isPending,
+  });
   const navigate = useNavigate();
 
   const sessionStartFlow = useKanbanSessionStartFlow({

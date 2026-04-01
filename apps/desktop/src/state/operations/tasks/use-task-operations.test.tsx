@@ -624,6 +624,65 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("scheduled refresh keeps task loading state in background while repo data refetch is in flight", async () => {
+    const repoPullRequestSyncDeferred = createDeferred<{ ok: boolean }>();
+    const repoPullRequestSync = mock(async () => repoPullRequestSyncDeferred.promise);
+    const tasksList = mock(async () => [makeTask("A", "open")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      repoPullRequestSync: host.repoPullRequestSync,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.repoPullRequestSync = repoPullRequestSync;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.id === "A");
+      tasksList.mockClear();
+      runsList.mockClear();
+
+      let scheduledRefreshPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        scheduledRefreshPromise = value.refreshTasksWithOptions({ trigger: "scheduled" });
+      });
+
+      expect(harness.getLatest().isLoadingTasks).toBe(false);
+      expect(repoPullRequestSync).toHaveBeenCalledTimes(1);
+
+      if (!scheduledRefreshPromise) {
+        throw new Error("Expected scheduled refresh promise to be created");
+      }
+
+      await harness.run(async () => {
+        repoPullRequestSyncDeferred.resolve({ ok: true });
+        await scheduledRefreshPromise;
+      });
+
+      expect(harness.getLatest().isLoadingTasks).toBe(false);
+      expect(tasksList).toHaveBeenCalledTimes(1);
+      expect(runsList).toHaveBeenCalledTimes(1);
+    } finally {
+      repoPullRequestSyncDeferred.resolve({ ok: true });
+      await harness.unmount();
+      host.repoPullRequestSync = original.repoPullRequestSync;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
   test("scheduled refresh dedupes repeated identical failures and resets after success", async () => {
     let shouldFailPullRequestSync = true;
     const repoPullRequestSync = mock(async () => {
