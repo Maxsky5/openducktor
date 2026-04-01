@@ -20,6 +20,7 @@ import {
 } from "../message-normalizers";
 import { toIsoFromEpoch } from "../session-runtime-utils";
 import { mapPartToAgentStreamPart } from "../stream-part-mapper";
+import { buildQueuedDisplaySignature } from "../user-message-signatures";
 import {
   readEventInfo,
   readEventPart,
@@ -398,27 +399,10 @@ const readExplicitUserMessageState = (
   return undefined;
 };
 
-const modelsMatch = (
-  left: ReturnType<typeof readMessageModelSelection> | undefined,
-  right: ReturnType<typeof readMessageModelSelection> | undefined,
-): boolean => {
-  if (!left && !right) {
-    return true;
-  }
-  if (!left || !right) {
-    return false;
-  }
-  return (
-    left.providerId === right.providerId &&
-    left.modelId === right.modelId &&
-    left.variant === right.variant &&
-    left.profileId === right.profileId
-  );
-};
-
 const takeQueuedUserSendMatch = (
   runtime: EventStreamRuntime,
   visible: string,
+  parts: import("@openducktor/core").AgentUserMessageDisplayPart[],
   model: ReturnType<typeof readMessageModelSelection> | undefined,
 ): boolean => {
   const session = runtime.getSession(runtime.sessionId);
@@ -426,9 +410,13 @@ const takeQueuedUserSendMatch = (
     return false;
   }
 
-  const normalizedVisible = visible.trim();
+  const signature = buildQueuedDisplaySignature({
+    visible,
+    parts,
+    ...(model ? { model } : {}),
+  });
   const matchIndex = session.pendingQueuedUserMessages.findIndex(
-    (entry) => entry.content === normalizedVisible && modelsMatch(entry.model, model),
+    (entry) => entry.signature === signature,
   );
   if (matchIndex < 0) {
     return false;
@@ -455,6 +443,7 @@ const resolveLiveUserMessageState = (
   input: {
     messageId: string;
     visible: string;
+    parts: import("@openducktor/core").AgentUserMessageDisplayPart[];
     explicitState?: AgentUserMessageState;
     model?: ReturnType<typeof readMessageModelSelection>;
   },
@@ -464,7 +453,12 @@ const resolveLiveUserMessageState = (
     session,
     input.messageId,
   );
-  const matchedQueuedSend = takeQueuedUserSendMatch(runtime, input.visible, input.model);
+  const matchedQueuedSend = takeQueuedUserSendMatch(
+    runtime,
+    input.visible,
+    input.parts,
+    input.model,
+  );
 
   if (matchedQueuedSend && pendingAssistantState === "queued") {
     return "queued";
@@ -670,6 +664,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
       state: resolveLiveUserMessageState(runtime, {
         messageId,
         visible,
+        parts: displayParts,
         ...(explicitState ? { explicitState } : {}),
         ...(messageModel ? { model: messageModel } : {}),
       }),
@@ -809,6 +804,7 @@ const handleMessagePartUpdatedEvent = (event: Event, runtime: EventStreamRuntime
       state: resolveLiveUserMessageState(runtime, {
         messageId,
         visible,
+        parts: displayParts,
         ...(metadata?.model ? { model: metadata.model } : {}),
       }),
       ...(metadata?.model ? { model: metadata.model } : {}),

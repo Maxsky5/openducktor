@@ -82,6 +82,7 @@ type AgentStudioReadinessContext = {
 
 type AgentStudioModelSelectionContext = {
   selectedModelSelection: AgentModelSelection | null;
+  selectedModelDescriptor?: AgentChatModel["composer"]["selectedModelDescriptor"];
   isSelectionCatalogLoading: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
@@ -325,6 +326,7 @@ export function useAgentStudioPageModels({
     isStarting: sessionActions.isStarting,
     chatContextUsage,
     selectedModelSelection: modelSelection.selectedModelSelection,
+    selectedModelDescriptor: modelSelection.selectedModelDescriptor,
     isSelectionCatalogLoading: modelSelection.isSelectionCatalogLoading,
     supportsSlashCommands: modelSelection.supportsSlashCommands,
     supportsFileSearch: modelSelection.supportsFileSearch,

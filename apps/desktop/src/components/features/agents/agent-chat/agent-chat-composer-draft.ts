@@ -1,4 +1,5 @@
 import type {
+  AgentAttachmentKind,
   AgentFileReference,
   AgentSlashCommand,
   AgentUserMessagePart,
@@ -28,8 +29,19 @@ export type AgentChatComposerSegment =
   | AgentChatComposerSlashCommandSegment
   | AgentChatComposerFileReferenceSegment;
 
+export type AgentChatComposerAttachment = {
+  id: string;
+  name: string;
+  kind: AgentAttachmentKind;
+  mime?: string;
+  path?: string;
+  file?: File;
+  previewUrl?: string;
+};
+
 export type AgentChatComposerDraft = {
   segments: AgentChatComposerSegment[];
+  attachments?: AgentChatComposerAttachment[];
 };
 
 export type AgentChatSlashTriggerMatch = {
@@ -140,8 +152,17 @@ export const createFileReferenceSegment = (
   file,
 });
 
+export const createComposerAttachment = (
+  attachment: Omit<AgentChatComposerAttachment, "id">,
+  id = createSegmentId(),
+): AgentChatComposerAttachment => ({
+  id,
+  ...attachment,
+});
+
 export const createEmptyComposerDraft = (): AgentChatComposerDraft => ({
   segments: [createTextSegment("")],
+  attachments: [],
 });
 
 export const isTextSegment = (
@@ -189,14 +210,24 @@ export const normalizeComposerDraft = (draft: AgentChatComposerDraft): AgentChat
 
   return {
     segments: normalized,
+    attachments: draft.attachments ?? [],
   };
 };
+
+const withDraftSegments = (
+  draft: AgentChatComposerDraft,
+  segments: AgentChatComposerSegment[],
+): AgentChatComposerDraft => ({
+  ...draft,
+  segments,
+});
 
 export const updateTextSegmentInDraft = (
   draft: AgentChatComposerDraft,
   segmentId: string,
   text: string,
 ): AgentChatComposerDraft => ({
+  ...draft,
   segments: draft.segments.map((segment) =>
     segment.kind === "text" && segment.id === segmentId ? { ...segment, text } : segment,
   ),
@@ -244,7 +275,7 @@ const removeNonTextSegmentFromDraft = (
   segments.splice(index - 1, 3, createTextSegment(mergedText, previous.id));
 
   return {
-    draft: { segments },
+    draft: withDraftSegments(draft, segments),
     focusTarget: {
       segmentId: previous.id,
       offset: previous.text.length,
@@ -300,7 +331,7 @@ export const replaceTextRangeWithSlashCommand = (
   segments.splice(index, 1, ...replacement);
 
   return {
-    draft: { segments },
+    draft: withDraftSegments(draft, segments),
     focusTarget: {
       segmentId: afterSegment.id,
       offset: 0,
@@ -333,7 +364,7 @@ export const replaceTextRangeWithFileReference = (
   segments.splice(index, 1, ...replacement);
 
   return {
-    draft: { segments },
+    draft: withDraftSegments(draft, segments),
     focusTarget: {
       segmentId: afterSegment.id,
       offset: 0,
@@ -384,17 +415,70 @@ export const applyComposerDraftEdit = (
 };
 
 export const draftToUserMessageParts = (draft: AgentChatComposerDraft): AgentUserMessagePart[] => {
-  return normalizeComposerDraft(draft).segments.flatMap<AgentUserMessagePart>((segment) => {
-    if (segment.kind === "text") {
-      return segment.text.length > 0 ? [{ kind: "text", text: segment.text }] : [];
-    }
+  const normalizedDraft = normalizeComposerDraft(draft);
+  return [
+    ...normalizedDraft.segments.flatMap<AgentUserMessagePart>((segment) => {
+      if (segment.kind === "text") {
+        return segment.text.length > 0 ? [{ kind: "text", text: segment.text }] : [];
+      }
 
-    if (segment.kind === "file_reference") {
-      return [{ kind: "file_reference", file: segment.file }];
-    }
+      if (segment.kind === "file_reference") {
+        return [{ kind: "file_reference", file: segment.file }];
+      }
 
-    return [{ kind: "slash_command", command: segment.command }];
+      return [{ kind: "slash_command", command: segment.command }];
+    }),
+    ...(normalizedDraft.attachments ?? []).flatMap<AgentUserMessagePart>((attachment) => {
+      if (!attachment.path) {
+        return [];
+      }
+
+      return [
+        {
+          kind: "attachment",
+          attachment: {
+            id: attachment.id,
+            path: attachment.path,
+            name: attachment.name,
+            kind: attachment.kind,
+            ...(attachment.mime ? { mime: attachment.mime } : {}),
+          },
+        },
+      ];
+    }),
+  ];
+};
+
+export const resolveDraftToUserMessageParts = async (
+  draft: AgentChatComposerDraft,
+  resolveAttachmentPath: (attachment: AgentChatComposerAttachment) => Promise<string>,
+): Promise<AgentUserMessagePart[]> => {
+  const parts = draftToUserMessageParts({
+    ...draft,
+    attachments: [],
   });
+
+  const attachmentParts = await Promise.all(
+    (normalizeComposerDraft(draft).attachments ?? []).map(async (attachment) => {
+      const path = attachment.path ?? (await resolveAttachmentPath(attachment));
+      if (path.trim().length === 0) {
+        throw new Error(`Attachment "${attachment.name}" is missing a local file path.`);
+      }
+
+      return {
+        kind: "attachment" as const,
+        attachment: {
+          id: attachment.id,
+          path,
+          name: attachment.name,
+          kind: attachment.kind,
+          ...(attachment.mime ? { mime: attachment.mime } : {}),
+        },
+      } satisfies AgentUserMessagePart;
+    }),
+  );
+
+  return [...parts, ...attachmentParts];
 };
 
 export const draftToSerializedText = (draft: AgentChatComposerDraft): string => {
@@ -402,6 +486,10 @@ export const draftToSerializedText = (draft: AgentChatComposerDraft): string => 
 };
 
 export const draftHasMeaningfulContent = (draft: AgentChatComposerDraft): boolean => {
+  if ((draft.attachments ?? []).length > 0) {
+    return true;
+  }
+
   return draftToUserMessageParts(draft).some((part) => {
     if (part.kind === "text") {
       return part.text.trim().length > 0;
@@ -409,6 +497,26 @@ export const draftHasMeaningfulContent = (draft: AgentChatComposerDraft): boolea
     return true;
   });
 };
+
+export const draftHasSlashCommandSegment = (draft: AgentChatComposerDraft): boolean => {
+  return draft.segments.some((segment) => segment.kind === "slash_command");
+};
+
+export const appendAttachmentsToDraft = (
+  draft: AgentChatComposerDraft,
+  attachments: AgentChatComposerAttachment[],
+): AgentChatComposerDraft => ({
+  ...draft,
+  attachments: [...(draft.attachments ?? []), ...attachments],
+});
+
+export const removeAttachmentFromDraft = (
+  draft: AgentChatComposerDraft,
+  attachmentId: string,
+): AgentChatComposerDraft => ({
+  ...draft,
+  attachments: (draft.attachments ?? []).filter((attachment) => attachment.id !== attachmentId),
+});
 
 export const readSlashTriggerMatchForDraft = (
   draft: AgentChatComposerDraft,

@@ -69,6 +69,10 @@ export type TrustedHooksProof = {
   fingerprint: string;
 };
 
+export type StagedLocalAttachment = {
+  path: string;
+};
+
 const parseTrustedHooksChallenge = (payload: unknown): TrustedHooksChallenge => {
   if (!payload || typeof payload !== "object") {
     throw new Error("Expected trusted hooks challenge payload from host command");
@@ -100,6 +104,20 @@ const parseTrustedHooksChallenge = (payload: unknown): TrustedHooksChallenge => 
     preStartCount: readCount("preStartCount"),
     postCompleteCount: readCount("postCompleteCount"),
   };
+};
+
+const parseStagedLocalAttachment = (payload: unknown): StagedLocalAttachment => {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Expected staged local attachment payload from host command");
+  }
+
+  const candidate = payload as Record<string, unknown>;
+  const path = candidate.path;
+  if (typeof path !== "string" || path.trim().length === 0) {
+    throw new Error("Expected non-empty 'path' in staged local attachment payload");
+  }
+
+  return { path };
 };
 
 const workspaceList = async (invokeFn: InvokeFn): Promise<WorkspaceRecord[]> => {
@@ -222,6 +240,18 @@ const setTheme = async (invokeFn: InvokeFn, theme: string): Promise<void> => {
   await invokeFn("set_theme", { theme });
 };
 
+const workspaceStageLocalAttachment = async (
+  invokeFn: InvokeFn,
+  input: {
+    name: string;
+    mime?: string;
+    base64Data: string;
+  },
+): Promise<StagedLocalAttachment> => {
+  const payload = await invokeFn("workspace_stage_local_attachment", input);
+  return parseStagedLocalAttachment(payload);
+};
+
 export class TauriWorkspaceClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
@@ -288,6 +318,14 @@ export class TauriWorkspaceClient {
     challenge?: TrustedHooksProof,
   ): Promise<WorkspaceRecord> {
     return workspaceSetTrustedHooks(this.invokeFn, repoPath, trusted, challenge);
+  }
+
+  async workspaceStageLocalAttachment(input: {
+    name: string;
+    mime?: string;
+    base64Data: string;
+  }): Promise<StagedLocalAttachment> {
+    return workspaceStageLocalAttachment(this.invokeFn, input);
   }
 
   async setTheme(theme: string): Promise<void> {

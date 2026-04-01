@@ -355,6 +355,7 @@ const parseComposerDraftFromRoot = (
 
   return normalizeComposerDraft({
     segments: nextSegments.length > 0 ? nextSegments : [createTextSegment("")],
+    attachments: previousDraft.attachments ?? [],
   });
 };
 

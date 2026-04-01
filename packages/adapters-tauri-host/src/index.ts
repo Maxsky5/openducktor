@@ -26,6 +26,7 @@ const WORKSPACE_METHODS = [
   "workspaceSaveSettingsSnapshot",
   "workspacePrepareTrustedHooksChallenge",
   "workspaceSetTrustedHooks",
+  "workspaceStageLocalAttachment",
   "setTheme",
 ] as const satisfies readonly MethodName<TauriWorkspaceClient>[];
 

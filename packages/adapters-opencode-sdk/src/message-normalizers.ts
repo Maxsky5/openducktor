@@ -58,10 +58,74 @@ const normalizeSourceText = (value: unknown): AgentUserMessageSourceText | undef
   };
 };
 
+const normalizeAttachmentPart = (
+  part: Extract<Part, { type: "file" }>,
+): AgentUserMessageDisplayPart | null => {
+  const filePath = readFilePathFromUrl(part.url) ?? part.filename?.trim() ?? "";
+  if (filePath.length === 0 || !part.mime) {
+    return null;
+  }
+
+  const name = part.filename?.trim() || readPathBasename(filePath);
+  if (part.mime.startsWith("image/")) {
+    return {
+      kind: "attachment",
+      attachment: {
+        id: part.id,
+        path: filePath,
+        name,
+        kind: "image",
+        mime: part.mime,
+      },
+    };
+  }
+  if (part.mime.startsWith("audio/")) {
+    return {
+      kind: "attachment",
+      attachment: {
+        id: part.id,
+        path: filePath,
+        name,
+        kind: "audio",
+        mime: part.mime,
+      },
+    };
+  }
+  if (part.mime.startsWith("video/")) {
+    return {
+      kind: "attachment",
+      attachment: {
+        id: part.id,
+        path: filePath,
+        name,
+        kind: "video",
+        mime: part.mime,
+      },
+    };
+  }
+  if (part.mime === "application/pdf") {
+    return {
+      kind: "attachment",
+      attachment: {
+        id: part.id,
+        path: filePath,
+        name,
+        kind: "pdf",
+        mime: part.mime,
+      },
+    };
+  }
+
+  return null;
+};
+
 const normalizeFileReferencePart = (
   part: Extract<Part, { type: "file" }>,
 ): AgentUserMessageDisplayPart | null => {
   const source = part.source;
+  if (source?.type !== "file" || !source.text) {
+    return normalizeAttachmentPart(part);
+  }
   const sourcePath = source?.type === "file" ? source.path.trim() : "";
   const filePath =
     sourcePath.length > 0
@@ -72,7 +136,7 @@ const normalizeFileReferencePart = (
   }
 
   const name = part.filename?.trim() || readPathBasename(filePath);
-  const sourceText = source?.type === "file" ? normalizeSourceText(source.text) : undefined;
+  const sourceText = normalizeSourceText(source.text);
   return {
     kind: "file_reference",
     file: {
@@ -135,6 +199,10 @@ export const readVisibleUserTextFromDisplayParts = (
   const userMessageParts = parts.flatMap<AgentUserMessagePart>((part) => {
     if (part.kind === "text") {
       return part.synthetic ? [] : [{ kind: "text", text: part.text }];
+    }
+
+    if (part.kind === "attachment") {
+      return [];
     }
 
     return [{ kind: "file_reference", file: part.file }];

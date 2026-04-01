@@ -113,6 +113,7 @@ type AgentStudioPageModelsSessionActionsContext = Parameters<
 type AgentStudioPageModelsModelSelectionContext = Pick<
   ReturnType<typeof useAgentStudioModelSelection>,
   | "selectedModelSelection"
+  | "selectedModelDescriptor"
   | "isSelectionCatalogLoading"
   | "supportsSlashCommands"
   | "supportsFileSearch"
@@ -254,6 +255,7 @@ export function useAgentStudioOrchestrationController({
   const {
     selectionForNewSession,
     selectedModelSelection,
+    selectedModelDescriptor,
     isSelectionCatalogLoading,
     supportsSlashCommands,
     supportsFileSearch,
@@ -307,6 +309,7 @@ export function useAgentStudioOrchestrationController({
     scenario: viewScenario,
     activeSession: viewActiveSession,
     selectedModelSelection,
+    selectedModelDescriptor,
     sessionsForTask: viewSessionsForTask,
     selectedTask: viewSelectedTask,
     agentStudioReady,
@@ -382,6 +385,7 @@ export function useAgentStudioOrchestrationController({
     },
     modelSelection: {
       selectedModelSelection,
+      selectedModelDescriptor,
       isSelectionCatalogLoading,
       supportsSlashCommands,
       supportsFileSearch,

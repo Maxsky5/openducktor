@@ -150,6 +150,7 @@ export const buildModelSelection = (
 
 export const createComposerDraft = (text: string) => ({
   segments: [createTextSegment(text)],
+  attachments: [],
 });
 
 export const buildFileSearchResult = (

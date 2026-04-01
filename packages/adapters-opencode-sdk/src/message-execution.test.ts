@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { __testExports, sendUserMessage } from "./message-execution";
 import type { SessionRecord } from "./types";
+import { buildQueuedRequestSignature } from "./user-message-signatures";
 
 const COMMAND = {
   id: "compact",
@@ -28,6 +29,14 @@ const VIDEO_FILE_REFERENCE = {
   path: "recordings/demo.mov",
   name: "demo.mov",
   kind: "video" as const,
+};
+
+const IMAGE_ATTACHMENT = {
+  id: "attachment-image-1",
+  path: "/tmp/diagram.png",
+  name: "diagram.png",
+  kind: "image" as const,
+  mime: "image/png",
 };
 
 const createSession = (overrides?: {
@@ -125,7 +134,15 @@ describe("message-execution", () => {
     });
 
     expect(session.pendingQueuedUserMessages).toEqual([
-      { content: "/compact summarize latest session" },
+      {
+        signature: buildQueuedRequestSignature(
+          [
+            { kind: "slash_command", command: COMMAND },
+            { kind: "text", text: " summarize latest session" },
+          ],
+          undefined,
+        ),
+      },
     ]);
     expect(command).toHaveBeenCalledTimes(1);
     expect(promptAsync).not.toHaveBeenCalled();
@@ -139,7 +156,15 @@ describe("message-execution", () => {
       },
     });
     session.activeAssistantMessageId = "msg-200";
-    const preservedEntry = { content: "/compact summarize latest session" };
+    const preservedEntry = {
+      signature: buildQueuedRequestSignature(
+        [
+          { kind: "slash_command", command: COMMAND },
+          { kind: "text", text: " summarize latest session" },
+        ],
+        undefined,
+      ),
+    };
     session.pendingQueuedUserMessages = [preservedEntry];
 
     await expect(
@@ -244,6 +269,37 @@ describe("message-execution", () => {
       ],
     });
     expect(command).not.toHaveBeenCalled();
+  });
+
+  test("routes local attachments through native prompt file parts without repo source text", async () => {
+    const { session, promptAsync } = createSession();
+
+    await sendUserMessage({
+      session,
+      request: {
+        sessionId: "session-1",
+        parts: [
+          { kind: "text", text: "describe this" },
+          { kind: "attachment", attachment: IMAGE_ATTACHMENT },
+        ],
+      },
+      tools: {},
+    });
+
+    expect(promptAsync).toHaveBeenCalledWith({
+      sessionID: "session-opencode-1",
+      directory: "/repo",
+      tools: {},
+      parts: [
+        { type: "text", text: "describe this" },
+        {
+          type: "file",
+          mime: "image/png",
+          url: "file:///tmp/diagram.png",
+          filename: "diagram.png",
+        },
+      ],
+    });
   });
 
   test("encodes file URLs for special characters and relative paths", async () => {
@@ -354,7 +410,27 @@ describe("message-execution", () => {
         tools: {},
       }),
     ).rejects.toThrow(
-      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured file references.",
+      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments or file references.",
+    );
+  });
+
+  test("fails explicitly when a slash command message also contains an attachment", async () => {
+    const { session } = createSession();
+
+    await expect(
+      sendUserMessage({
+        session,
+        request: {
+          sessionId: "session-1",
+          parts: [
+            { kind: "slash_command", command: COMMAND },
+            { kind: "attachment", attachment: IMAGE_ATTACHMENT },
+          ],
+        },
+        tools: {},
+      }),
+    ).rejects.toThrow(
+      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments or file references.",
     );
   });
 

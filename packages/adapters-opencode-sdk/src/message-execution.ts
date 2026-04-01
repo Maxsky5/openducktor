@@ -10,6 +10,7 @@ import { resolveAgainstWorkingDirectory, toFileUrl } from "./path-utils";
 import { normalizeModelInput, resolveAssistantResponseMessageId } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
 import type { SessionRecord } from "./types";
+import { buildQueuedRequestSignature } from "./user-message-signatures";
 
 type SlashCommandExecutionRequest = {
   command: string;
@@ -21,7 +22,6 @@ type SessionCommandClient = {
 };
 
 type PreparedUserSend = {
-  queuedContent: string;
   execute: (args: {
     session: SessionRecord;
     modelInput: ReturnType<typeof normalizeModelInput>;
@@ -39,7 +39,7 @@ type OpenCodePromptPart =
       mime: string;
       url: string;
       filename: string;
-      source: {
+      source?: {
         type: "file";
         path: string;
         text: {
@@ -91,6 +91,28 @@ const toPromptParts = (
     ...promptText.fileReferences.map((fileReference) =>
       toPromptFilePart(fileReference, workingDirectory),
     ),
+    ...parts.flatMap((part) => {
+      if (part.kind !== "attachment") {
+        return [];
+      }
+
+      const normalizedPath = part.attachment.path.trim();
+      if (normalizedPath.length === 0) {
+        throw new Error("OpenCode attachments require a non-empty path.");
+      }
+      if (!part.attachment.mime || part.attachment.mime.trim().length === 0) {
+        throw new Error(`OpenCode attachment "${part.attachment.name}" is missing a MIME type.`);
+      }
+
+      return [
+        {
+          type: "file" as const,
+          mime: part.attachment.mime,
+          url: toFileUrl(resolveAgainstWorkingDirectory(workingDirectory, normalizedPath)),
+          filename: part.attachment.name,
+        },
+      ];
+    }),
   ];
 };
 
@@ -104,10 +126,14 @@ const toSlashCommandExecutionRequest = (
   if (slashCommandIndexes.length === 0) {
     return null;
   }
-  if (normalizedParts.some((part) => part.kind === "file_reference")) {
+  if (
+    normalizedParts.some((part) => part.kind === "file_reference" || part.kind === "attachment")
+  ) {
     throw toOpenCodeRequestError(
       "run slash command",
-      new Error("OpenCode slash commands do not support structured file references."),
+      new Error(
+        "OpenCode slash commands do not support structured attachments or file references.",
+      ),
     );
   }
   if (slashCommandIndexes.length > 1) {
@@ -139,10 +165,7 @@ const toSlashCommandExecutionRequest = (
 };
 
 const preparePromptSend = (request: SendAgentUserMessageInput): PreparedUserSend => {
-  const queuedContent = serializeAgentUserMessagePartsToText(request.parts).trim();
-
   return {
-    queuedContent,
     execute: async ({ session, modelInput, tools }) => {
       const promptParts = toPromptParts(request.parts, session.input.workingDirectory);
       const promptRequest = {
@@ -173,10 +196,7 @@ const prepareSlashCommandSend = (
   request: SendAgentUserMessageInput,
   slashCommandRequest: SlashCommandExecutionRequest,
 ): PreparedUserSend => {
-  const queuedContent = serializeAgentUserMessagePartsToText(request.parts).trim();
-
   return {
-    queuedContent,
     execute: async ({ session, modelInput }) => {
       const commandClient = session.client.session as SessionCommandClient;
       if (typeof commandClient.command !== "function") {
@@ -221,15 +241,14 @@ export const sendUserMessage = async (input: {
   const preparedSend = slashCommandRequest
     ? prepareSlashCommandSend(input.request, slashCommandRequest)
     : preparePromptSend(input.request);
-  const queuedContent = preparedSend.queuedContent;
   const pendingQueuedUserMessages = input.session.pendingQueuedUserMessages ?? [];
   input.session.pendingQueuedUserMessages = pendingQueuedUserMessages;
   const shouldTrackAsQueued =
-    input.session.activeAssistantMessageId !== null && queuedContent.length > 0;
+    input.session.activeAssistantMessageId !== null &&
+    normalizeAgentUserMessageParts(input.request.parts).length > 0;
   const queuedEntry = shouldTrackAsQueued
     ? {
-        content: queuedContent,
-        ...(model ? { model } : {}),
+        signature: buildQueuedRequestSignature(input.request.parts, model ?? undefined),
       }
     : null;
 

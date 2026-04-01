@@ -20,6 +20,12 @@
       }
     ],
     "security": {
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": ["$TEMP/openducktor-local-attachments/**"]
+        }
+      },
       "csp": {
         "default-src": ["'self'"],
         "base-uri": ["'none'"],
@@ -28,7 +34,8 @@
         "form-action": ["'self'"],
         "script-src": ["'self'"],
         "style-src": ["'self'", "'unsafe-inline'"],
-        "img-src": ["'self'", "data:"],
+        "img-src": ["'self'", "data:", "asset:", "http://asset.localhost"],
+        "media-src": ["'self'", "data:", "asset:", "http://asset.localhost"],
         "connect-src": ["ipc:", "http://ipc.localhost", "http://127.0.0.1:*"]
       },
       "devCsp": {
@@ -39,7 +46,8 @@
         "form-action": ["'self'"],
         "script-src": ["'self'", "'unsafe-eval'", "'unsafe-inline'"],
         "style-src": ["'self'", "'unsafe-inline'"],
-        "img-src": ["'self'", "data:"],
+        "img-src": ["'self'", "data:", "asset:", "http://asset.localhost"],
+        "media-src": ["'self'", "data:", "asset:", "http://asset.localhost"],
         "connect-src": [
           "'self'",
           "ipc:",
@@ -59,6 +67,12 @@
     "macOS": {
       "minimumSystemVersion": "12.0"
     },
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico", "icons/icon.icns"]
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.icns"
+    ]
   }
 }

@@ -2,15 +2,58 @@ use crate::{
     as_error, run_service_blocking, AppState, RepoConfigPayload, RepoSettingsPayload,
     SettingsSnapshotPayload, SettingsSnapshotResponsePayload,
 };
+use base64::Engine;
 use host_application::{
     HookTrustConfirmationPort, HookTrustConfirmationRequest, PreparedHookTrustChallenge,
     RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate,
 };
 use host_infra_system::HookSet;
+use std::path::PathBuf;
 #[cfg(test)]
 use tauri::Manager;
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use uuid::Uuid;
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StagedLocalAttachmentPayload {
+    pub path: String,
+}
+
+fn sanitize_attachment_filename(name: &str) -> String {
+    let sanitized = name
+        .chars()
+        .map(|character| match character {
+            '/' | '\\' | ':' | '\0' => '_',
+            _ => character,
+        })
+        .collect::<String>();
+    let trimmed = sanitized.trim().trim_matches('.');
+    if trimmed.is_empty() {
+        "attachment.bin".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+pub(crate) fn stage_local_attachment_to_temp(name: &str, base64_data: &str) -> Result<PathBuf, String> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64_data)
+        .map_err(|error| format!("Failed to decode attachment payload: {error}"))?;
+    let attachment_dir = std::env::temp_dir().join("openducktor-local-attachments");
+    std::fs::create_dir_all(&attachment_dir)
+        .map_err(|error| format!("Failed to prepare attachment staging directory: {error}"))?;
+    let file_name = format!(
+        "{}-{}",
+        Uuid::new_v4(),
+        sanitize_attachment_filename(name)
+    );
+    let path = attachment_dir.join(file_name);
+    std::fs::write(&path, bytes)
+        .map_err(|error| format!("Failed to stage local attachment: {error}"))?;
+    Ok(path)
+}
 
 #[tauri::command]
 pub async fn workspace_list(
@@ -35,6 +78,25 @@ pub async fn workspace_select(
     let selected = as_error(state.service.workspace_select(&repo_path))?;
     super::git::invalidate_worktree_resolution_cache_for_repo(&repo_path)?;
     Ok(selected)
+}
+
+#[tauri::command]
+pub async fn workspace_stage_local_attachment(
+    name: String,
+    _mime: Option<String>,
+    base64_data: String,
+) -> Result<StagedLocalAttachmentPayload, String> {
+    if name.trim().is_empty() {
+        return Err("Attachment name is required.".to_string());
+    }
+    if base64_data.trim().is_empty() {
+        return Err("Attachment payload is required.".to_string());
+    }
+
+    let path = stage_local_attachment_to_temp(&name, &base64_data)?;
+    Ok(StagedLocalAttachmentPayload {
+        path: path.to_string_lossy().into_owned(),
+    })
 }
 
 #[tauri::command]

@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import type { AgentEvent } from "@openducktor/core";
+import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
 import { subscribeOpencodeEvents } from "./event-stream";
 import type { SessionInput, SessionRecord } from "./types";
+import { buildQueuedRequestSignature } from "./user-message-signatures";
 
 const makeClientWithEvents = (events: Event[]): OpencodeClient => {
   return {
@@ -62,6 +63,11 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   messageMetadataById: new Map(),
   pendingDeltasByPartId: new Map(),
 });
+
+const buildQueuedSignature = (message: string, model?: AgentModelSelection | null): string => {
+  const parts: AgentUserMessagePart[] = [{ kind: "text", text: message }];
+  return buildQueuedRequestSignature(parts, model ?? undefined);
+};
 
 const runEventStreamWithSession = async (
   events: Event[],
@@ -566,7 +572,9 @@ describe("event-stream", () => {
         } as unknown as Event,
       ],
       (nextSessionRecord) => {
-        nextSessionRecord.pendingQueuedUserMessages.push({ content: "Ship it" });
+        nextSessionRecord.pendingQueuedUserMessages.push({
+          signature: buildQueuedSignature("Ship it"),
+        });
         nextSessionRecord.activeAssistantMessageId = null;
       },
     );
@@ -648,15 +656,15 @@ describe("event-stream", () => {
       (nextSessionRecord) => {
         nextSessionRecord.activeAssistantMessageId = "msg-100";
         nextSessionRecord.pendingQueuedUserMessages.push(
-          { content: "Ship it" },
+          { signature: buildQueuedSignature("Ship it") },
           {
-            content: "Ship it",
-            model: {
+            signature: buildQueuedSignature("Ship it", {
+              runtimeKind: "opencode",
               providerId: "openai",
               modelId: "gpt-5",
               profileId: "Hephaestus",
               variant: "high",
-            },
+            }),
           },
         );
       },
@@ -669,7 +677,9 @@ describe("event-stream", () => {
       messageId: "msg-200",
       state: "queued",
     });
-    expect(sessionRecord.pendingQueuedUserMessages).toEqual([{ content: "Ship it" }]);
+    expect(sessionRecord.pendingQueuedUserMessages).toEqual([
+      { signature: buildQueuedSignature("Ship it") },
+    ]);
   });
 
   test("reconciles queued follow-ups when a newer assistant becomes pending", async () => {

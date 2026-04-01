@@ -6,13 +6,15 @@ use crate::{
 };
 use anyhow::Context;
 use axum::extract::rejection::JsonRejection;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::header;
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use serde::Deserialize;
 use serde_json::{json, Value};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
@@ -39,6 +41,7 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
         .route("/health", get(health_handler))
         .route("/events", get(events_handler))
         .route("/dev-server-events", get(dev_server_events_handler))
+        .route("/local-attachment-preview", get(local_attachment_preview_handler))
         .route("/invoke/{command}", post(invoke_handler))
         .layer(browser_backend_cors_layer()?)
         .with_state(HeadlessState {
@@ -108,6 +111,43 @@ async fn invoke_handler(
         Ok(payload) => (StatusCode::OK, Json(payload)).into_response(),
         Err(error) => error.into_response(),
     }
+}
+
+#[derive(Deserialize)]
+struct LocalAttachmentPreviewQuery {
+    path: String,
+    mime: Option<String>,
+}
+
+async fn local_attachment_preview_handler(
+    Query(query): Query<LocalAttachmentPreviewQuery>,
+) -> Result<Response, HeadlessCommandError> {
+    let path = PathBuf::from(&query.path);
+    let metadata = tokio::fs::metadata(&path).await.map_err(|error| HeadlessCommandError {
+        message: format!("Failed to stat local attachment preview: {error}"),
+        status: StatusCode::NOT_FOUND,
+    })?;
+    if !metadata.is_file() {
+        return Err(HeadlessCommandError {
+            message: "Local attachment preview path must reference a file".to_string(),
+            status: StatusCode::BAD_REQUEST,
+        });
+    }
+
+    let bytes = tokio::fs::read(&path).await.map_err(|error| HeadlessCommandError {
+        message: format!("Failed to read local attachment preview: {error}"),
+        status: StatusCode::INTERNAL_SERVER_ERROR,
+    })?;
+    let mime = query.mime.unwrap_or_else(|| "application/octet-stream".to_string());
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, mime)
+        .body(axum::body::Body::from(bytes))
+        .map_err(|error| HeadlessCommandError {
+            message: format!("Failed to build local attachment preview response: {error}"),
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+        })
 }
 
 fn json_rejection_error(error: JsonRejection) -> HeadlessCommandError {
@@ -239,5 +279,29 @@ mod tests {
             payload,
             json!({ "error": "Failed to parse the request body as JSON: key must be a string at line 1 column 2" })
         );
+    }
+
+    #[tokio::test]
+    async fn local_attachment_preview_handler_returns_file_bytes() {
+        let fixture = test_state_fixture();
+        let preview_path = fixture.root.join("preview.png");
+        fs::write(&preview_path, b"preview-bytes").expect("preview fixture should write");
+
+        let response = local_attachment_preview_handler(Query(LocalAttachmentPreviewQuery {
+            path: preview_path.to_string_lossy().into_owned(),
+            mime: Some("image/png".to_string()),
+        }))
+        .await
+        .expect("preview request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get(CONTENT_TYPE),
+            Some(&HeaderValue::from_static("image/png"))
+        );
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should read");
+        assert_eq!(body.as_ref(), b"preview-bytes");
     }
 }

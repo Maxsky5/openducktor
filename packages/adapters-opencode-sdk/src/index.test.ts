@@ -2,8 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
 import type { AgentEvent } from "@openducktor/core";
 import { OpencodeSdkAdapter } from "./index";
+import { buildQueuedRequestSignature } from "./user-message-signatures";
 
 const flushAsync = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+const buildQueuedSignature = (text: string): string =>
+  buildQueuedRequestSignature([{ kind: "text", text }]);
 const defaultRuntimeConnection = {
   endpoint: "http://127.0.0.1:12345",
   workingDirectory: "/repo",
@@ -933,7 +936,7 @@ describe("OpencodeSdkAdapter", () => {
           string,
           {
             activeAssistantMessageId: string | null;
-            pendingQueuedUserMessages: Array<{ content: string }>;
+            pendingQueuedUserMessages: Array<{ signature: string }>;
           }
         >;
       }
@@ -969,7 +972,7 @@ describe("OpencodeSdkAdapter", () => {
           {
             hasIdleSinceActivity: boolean;
             activeAssistantMessageId: string | null;
-            pendingQueuedUserMessages: Array<{ content: string }>;
+            pendingQueuedUserMessages: Array<{ signature: string }>;
           }
         >;
       }
@@ -987,7 +990,9 @@ describe("OpencodeSdkAdapter", () => {
       parts: [{ kind: "text", text: "Queued follow-up" }],
     });
 
-    expect(session.pendingQueuedUserMessages).toEqual([{ content: "Queued follow-up" }]);
+    expect(session.pendingQueuedUserMessages).toEqual([
+      { signature: buildQueuedSignature("Queued follow-up") },
+    ]);
   });
 
   test("sendUserMessage pre-queues follow-ups after a slash command establishes an assistant boundary", async () => {
@@ -1014,7 +1019,7 @@ describe("OpencodeSdkAdapter", () => {
           string,
           {
             activeAssistantMessageId: string | null;
-            pendingQueuedUserMessages: Array<{ content: string }>;
+            pendingQueuedUserMessages: Array<{ signature: string }>;
           }
         >;
       }
@@ -1046,7 +1051,9 @@ describe("OpencodeSdkAdapter", () => {
       parts: [{ kind: "text", text: "Queued follow-up" }],
     });
 
-    expect(session.pendingQueuedUserMessages).toEqual([{ content: "Queued follow-up" }]);
+    expect(session.pendingQueuedUserMessages).toEqual([
+      { signature: buildQueuedSignature("Queued follow-up") },
+    ]);
   });
 
   test("updateSessionModel refreshes the adapter session model used for subsequent prompts", async () => {

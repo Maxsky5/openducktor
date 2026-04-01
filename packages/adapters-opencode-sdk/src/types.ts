@@ -18,8 +18,7 @@ export type SessionInput = Omit<StartAgentSessionInput, "sessionId"> & {
 };
 
 export type QueuedUserMessageSend = {
-  content: string;
-  model?: AgentModelSelection;
+  signature: string;
 };
 
 export type SessionRecord = {

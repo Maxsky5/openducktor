@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import type { RefObject } from "react";
 import type {
   AgentChatComposerModel,
@@ -152,6 +152,7 @@ type AgentChatComposerModelArgs = {
   waitingInputPlaceholder?: string | null;
   isModelSelectionPending: boolean;
   selectedModelSelection: AgentModelSelection | null;
+  selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
@@ -228,6 +229,9 @@ export const buildAgentChatComposerModel = (
   waitingInputPlaceholder: args.waitingInputPlaceholder ?? null,
   isModelSelectionPending: args.isModelSelectionPending,
   selectedModelSelection: args.selectedModelSelection,
+  ...(args.selectedModelDescriptor !== undefined
+    ? { selectedModelDescriptor: args.selectedModelDescriptor }
+    : {}),
   isSelectionCatalogLoading: args.isSelectionCatalogLoading,
   supportsSlashCommands: args.supportsSlashCommands,
   supportsFileSearch: args.supportsFileSearch,

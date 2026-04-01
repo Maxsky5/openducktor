@@ -846,8 +846,8 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).toContain("Queued");
-    expect(html).toContain("mt-2 flex items-end justify-end gap-2");
+    expect(html).toContain("mt-2 flex items-end justify-between gap-3");
     expect(html).toContain("flex shrink-0 items-center justify-end gap-2 self-end");
-    expect(html).not.toContain("flex min-w-0 flex-1 flex-wrap justify-start gap-2");
+    expect(html).not.toContain("flex min-w-0 flex-wrap items-center gap-2");
   });
 });

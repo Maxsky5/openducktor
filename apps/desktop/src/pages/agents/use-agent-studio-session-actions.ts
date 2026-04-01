@@ -1,17 +1,25 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentModelSelection,
+  AgentRole,
+  AgentScenario,
+} from "@openducktor/core";
 import { isAgentKickoffScenario } from "@openducktor/core";
 import { useCallback, useEffect, useState } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
+import { validateComposerAttachments } from "@/components/features/agents/agent-chat/agent-chat-attachments";
 import {
   type AgentChatComposerDraft,
   draftHasMeaningfulContent,
+  draftHasSlashCommandSegment,
   draftToSerializedText,
-  draftToUserMessageParts,
+  resolveDraftToUserMessageParts,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { SessionStartRequestReason } from "@/features/session-start";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
+import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
@@ -37,6 +45,7 @@ type UseAgentStudioSessionActionsArgs = {
   scenario: AgentScenario;
   activeSession: AgentSessionState | null;
   selectedModelSelection: AgentModelSelection | null;
+  selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
   sessionsForTask: AgentSessionState[];
   selectedTask: TaskCard | null;
   agentStudioReady: boolean;
@@ -60,6 +69,7 @@ export function useAgentStudioSessionActions({
   scenario,
   activeSession,
   selectedModelSelection,
+  selectedModelDescriptor,
   sessionsForTask,
   selectedTask,
   agentStudioReady,
@@ -198,8 +208,26 @@ export function useAgentStudioSessionActions({
         return false;
       }
 
+      if ((draft.attachments ?? []).length > 0) {
+        if (draftHasSlashCommandSegment(draft)) {
+          return false;
+        }
+
+        const attachmentErrors = validateComposerAttachments(
+          draft.attachments ?? [],
+          selectedModelDescriptor?.attachmentSupport,
+        );
+        if (Object.keys(attachmentErrors).length > 0) {
+          return false;
+        }
+      }
+
       const serializedDraft = draftToSerializedText(draft).trim();
-      if (!draftHasMeaningfulContent(draft) || !serializedDraft || !taskId) {
+      if (
+        !draftHasMeaningfulContent(draft) ||
+        (!serializedDraft && (draft.attachments ?? []).length === 0) ||
+        !taskId
+      ) {
         return false;
       }
       const sendContextKeys = new Set<string>();
@@ -230,7 +258,18 @@ export function useAgentStudioSessionActions({
           }
           return next;
         });
-        await sendAgentMessage(targetSessionId, draftToUserMessageParts(draft));
+        await sendAgentMessage(
+          targetSessionId,
+          await resolveDraftToUserMessageParts(draft, async (attachment) => {
+            if (attachment.path) {
+              return attachment.path;
+            }
+            if (attachment.file) {
+              return stageLocalAttachmentFile(attachment.file);
+            }
+            throw new Error(`Attachment "${attachment.name}" is missing local file data.`);
+          }),
+        );
         return true;
       } finally {
         if (sendContextKeys.size > 0) {
@@ -256,6 +295,7 @@ export function useAgentStudioSessionActions({
       busySendBlockedReason,
       role,
       selectedTask,
+      selectedModelDescriptor?.attachmentSupport,
       sendAgentMessage,
       startSession,
       taskId,
