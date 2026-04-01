@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { buildFatalErrorReport } from "./fatal-error-report";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { buildFatalErrorReport, logFatalError } from "./fatal-error-report";
 
 if (typeof globalThis.PromiseRejectionEvent === "undefined") {
   (globalThis as Record<string, unknown>).PromiseRejectionEvent =
@@ -147,5 +147,49 @@ describe("buildFatalErrorReport", () => {
       expect(report.title).toBe("Unknown error");
       expect(report.message).toBe("[object Object]");
     });
+  });
+});
+
+describe("logFatalError", () => {
+  const originalConsoleError = console.error;
+  let consoleErrorMock: ReturnType<typeof mock>;
+
+  beforeEach(() => {
+    consoleErrorMock = mock(() => {});
+    console.error = consoleErrorMock as unknown as typeof console.error;
+  });
+
+  afterEach(() => {
+    console.error = originalConsoleError;
+  });
+
+  test("logs structured metadata with raw value", () => {
+    const rawError = new TypeError("test");
+    const report = buildFatalErrorReport(rawError, "boundary");
+
+    logFatalError(report, rawError);
+
+    expect(consoleErrorMock).toHaveBeenCalledTimes(1);
+    const args = consoleErrorMock.mock.calls[0] as unknown[];
+    expect(args[0]).toContain("[AppCrashShell]");
+    expect(args[0]).toContain("boundary");
+
+    const context = args[args.length - 1] as Record<string, unknown>;
+    expect(context.source).toBe("boundary");
+    expect(context.rawValue).toBe(rawError);
+    expect(context.timestamp).toBeDefined();
+    expect(context.componentStack).toBeUndefined();
+  });
+
+  test("includes component stack when provided", () => {
+    const rawError = new Error("crash");
+    const report = buildFatalErrorReport(rawError, "boundary");
+    const componentStack = "\n    at BrokenComponent\n    at App";
+
+    logFatalError(report, rawError, componentStack);
+
+    const args = consoleErrorMock.mock.calls[0] as unknown[];
+    const context = args[args.length - 1] as Record<string, unknown>;
+    expect(context.componentStack).toBe(componentStack);
   });
 });

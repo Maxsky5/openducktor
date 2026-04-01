@@ -1,7 +1,7 @@
 import { type ReactElement, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { AppErrorBoundary } from "./app-error-boundary";
 import { FatalErrorPage } from "./fatal-error-page";
-import { buildFatalErrorReport, type FatalErrorReport } from "./fatal-error-report";
+import { buildFatalErrorReport, type FatalErrorReport, logFatalError } from "./fatal-error-report";
 
 interface AppCrashShellProps {
   children: ReactNode;
@@ -16,30 +16,30 @@ export function AppCrashShell({ children }: AppCrashShellProps): ReactElement {
 
   const handleCrash = useCallback((report: FatalErrorReport) => {
     if (reportRef.current !== null) return;
-    console.error("[AppCrashShell] Fatal error captured:", report.title, report.message);
     setFatalReport(report);
   }, []);
 
   useEffect(() => {
-    const onError = (event: ErrorEvent): void => {
+    const onError = (event: Event): void => {
       if (reportRef.current !== null) return;
+      if (!(event instanceof ErrorEvent) || !event.error) return;
       const report = buildFatalErrorReport(event, "error");
-      console.error("[AppCrashShell] Browser error event:", report.title, report.message);
+      logFatalError(report, event);
       setFatalReport(report);
     };
 
     const onUnhandledRejection = (event: PromiseRejectionEvent): void => {
       if (reportRef.current !== null) return;
       const report = buildFatalErrorReport(event, "unhandledrejection");
-      console.error("[AppCrashShell] Unhandled rejection:", report.title, report.message);
+      logFatalError(report, event);
       setFatalReport(report);
     };
 
-    window.addEventListener("error", onError);
+    window.addEventListener("error", onError as EventListener);
     window.addEventListener("unhandledrejection", onUnhandledRejection);
 
     return () => {
-      window.removeEventListener("error", onError);
+      window.removeEventListener("error", onError as EventListener);
       window.removeEventListener("unhandledrejection", onUnhandledRejection);
     };
   }, []);

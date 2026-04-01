@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { buildFatalErrorReport, type FatalErrorReport } from "./fatal-error-report";
+import { buildFatalErrorReport, type FatalErrorReport, logFatalError } from "./fatal-error-report";
 
 interface Props {
   children: ReactNode;
@@ -24,6 +24,7 @@ export class AppErrorBoundary extends Component<Props, State> {
         .filter(Boolean)
         .join("\n");
     }
+    logFatalError(report, error, info.componentStack ?? undefined);
     this.props.onCrash(report);
   }
 

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { lazy, Suspense } from "react";
 import { AppCrashShell } from "./app-crash-shell";
 
 if (typeof globalThis.PromiseRejectionEvent === "undefined") {
@@ -226,6 +227,203 @@ describe("AppCrashShell", () => {
           configurable: true,
         });
       }
+    });
+  });
+
+  describe("lazy-load failure", () => {
+    test("shows fatal error page when a lazy module fails to load", async () => {
+      const LazyBroken = lazy(() =>
+        Promise.reject(new Error("Failed to fetch dynamically imported module")),
+      );
+
+      render(
+        <AppCrashShell>
+          <Suspense fallback={<div data-testid="loading">Loading...</div>}>
+            <LazyBroken />
+          </Suspense>
+        </AppCrashShell>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("fatal-error-title")).toBeDefined();
+      });
+
+      expect(screen.getByTestId("fatal-error-message").textContent).toBe(
+        "Failed to fetch dynamically imported module",
+      );
+      expect(screen.getByTestId("fatal-error-retry")).toBeDefined();
+    });
+  });
+
+  describe("error listener narrowing", () => {
+    test("ignores plain Event (resource load error) dispatched on window", async () => {
+      render(
+        <AppCrashShell>
+          <div data-testid="healthy-app">App is running</div>
+        </AppCrashShell>,
+      );
+
+      expect(screen.getByTestId("healthy-app")).toBeDefined();
+
+      act(() => {
+        const resourceError = new Event("error");
+        window.dispatchEvent(resourceError);
+      });
+
+      expect(screen.getByTestId("healthy-app")).toBeDefined();
+      expect(screen.queryByTestId("fatal-error-title")).toBeNull();
+    });
+
+    test("ignores ErrorEvent without an error object (cross-origin script error)", async () => {
+      render(
+        <AppCrashShell>
+          <div data-testid="healthy-app">App is running</div>
+        </AppCrashShell>,
+      );
+
+      act(() => {
+        const crossOriginError = new ErrorEvent("error", {
+          message: "Script error.",
+        });
+        window.dispatchEvent(crossOriginError);
+      });
+
+      expect(screen.getByTestId("healthy-app")).toBeDefined();
+      expect(screen.queryByTestId("fatal-error-title")).toBeNull();
+    });
+  });
+
+  describe("listener lifecycle", () => {
+    test("removes listeners on unmount", () => {
+      const originalRemoveEventListener = window.removeEventListener;
+      const removedListeners: string[] = [];
+      const removeListenerSpy = mock((type: string, ...args: unknown[]) => {
+        removedListeners.push(type);
+        return originalRemoveEventListener.call(
+          window,
+          type,
+          ...(args as [EventListenerOrEventListenerObject]),
+        );
+      });
+      window.removeEventListener =
+        removeListenerSpy as unknown as typeof window.removeEventListener;
+
+      try {
+        const { unmount } = render(
+          <AppCrashShell>
+            <div>App</div>
+          </AppCrashShell>,
+        );
+
+        unmount();
+
+        expect(removedListeners).toContain("error");
+        expect(removedListeners).toContain("unhandledrejection");
+      } finally {
+        window.removeEventListener = originalRemoveEventListener;
+      }
+    });
+
+    test("does not re-register listeners on rerender", () => {
+      const originalAddEventListener = window.addEventListener;
+      let addCount = 0;
+      const addListenerSpy = mock((type: string, ...args: unknown[]) => {
+        if (type === "error" || type === "unhandledrejection") {
+          addCount++;
+        }
+        return originalAddEventListener.call(
+          window,
+          type,
+          ...(args as [EventListenerOrEventListenerObject]),
+        );
+      });
+      window.addEventListener = addListenerSpy as unknown as typeof window.addEventListener;
+
+      try {
+        const { rerender } = render(
+          <AppCrashShell>
+            <div>First render</div>
+          </AppCrashShell>,
+        );
+
+        const countAfterMount = addCount;
+
+        rerender(
+          <AppCrashShell>
+            <div>Second render</div>
+          </AppCrashShell>,
+        );
+
+        rerender(
+          <AppCrashShell>
+            <div>Third render</div>
+          </AppCrashShell>,
+        );
+
+        expect(addCount).toBe(countAfterMount);
+      } finally {
+        window.addEventListener = originalAddEventListener;
+      }
+    });
+  });
+
+  describe("structured logging", () => {
+    function findStructuredLogCall(
+      errorMock: ReturnType<typeof mock>,
+      sourceFilter: string,
+    ): unknown[] {
+      const calls = errorMock.mock.calls as unknown[][];
+      const match = calls.find(
+        (args) => typeof args[0] === "string" && args[0].includes(sourceFilter),
+      );
+      if (!match) throw new Error(`No console.error call matching "${sourceFilter}"`);
+      return match;
+    }
+
+    test("logs structured context with raw value on boundary crash", async () => {
+      render(
+        <AppCrashShell>
+          <ThrowingChild shouldThrow={true} />
+        </AppCrashShell>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("fatal-error-title")).toBeDefined();
+      });
+
+      const structuredCall = findStructuredLogCall(consoleErrorMock, "[AppCrashShell]");
+      const context = structuredCall[structuredCall.length - 1] as Record<string, unknown>;
+      expect(context.source).toBe("boundary");
+      expect(context.rawValue).toBeInstanceOf(Error);
+      expect(context.timestamp).toBeDefined();
+    });
+
+    test("logs structured context with raw event on browser error", async () => {
+      render(
+        <AppCrashShell>
+          <div data-testid="healthy-app">App is running</div>
+        </AppCrashShell>,
+      );
+
+      act(() => {
+        const errorEvent = new ErrorEvent("error", {
+          error: new Error("async boom"),
+          message: "Uncaught Error",
+        });
+        window.dispatchEvent(errorEvent);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("fatal-error-title")).toBeDefined();
+      });
+
+      const structuredCall = findStructuredLogCall(
+        consoleErrorMock,
+        "[AppCrashShell] Fatal error (error)",
+      );
+      const context = structuredCall[structuredCall.length - 1] as Record<string, unknown>;
+      expect(context.source).toBe("error");
+      expect(context.rawValue).toBeInstanceOf(ErrorEvent);
     });
   });
 });

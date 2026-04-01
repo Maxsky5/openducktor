@@ -90,6 +90,36 @@ export function buildFatalErrorReport(
   };
 }
 
+/**
+ * Centralized fatal-error logger.
+ *
+ * Emits a structured `console.error` with the normalized report metadata,
+ * the **original raw thrown value / event** (so devtools can inspect the live
+ * object), and an optional React component stack when available.
+ */
+export function logFatalError(
+  report: FatalErrorReport,
+  rawValue: unknown,
+  componentStack?: string,
+): void {
+  const context: Record<string, unknown> = {
+    source: report.source,
+    timestamp: report.timestamp,
+    rawValue,
+  };
+  if (componentStack) {
+    context.componentStack = componentStack;
+  }
+
+  console.error(
+    `[AppCrashShell] Fatal error (${report.source}):`,
+    report.title,
+    "-",
+    report.message,
+    context,
+  );
+}
+
 function safeStringify(value: unknown): string {
   try {
     const json = JSON.stringify(value);
