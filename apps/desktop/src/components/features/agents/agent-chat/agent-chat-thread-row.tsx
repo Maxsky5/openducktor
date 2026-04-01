@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import { memo, type ReactElement } from "react";
 import { assertNever } from "@/lib/assert-never";
 import { cn } from "@/lib/utils";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -14,11 +14,11 @@ type AgentChatWindowRowProps = {
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
 };
 
-export function AgentChatThreadRow({
+export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   row,
   sessionAgentColors,
   sessionRole,
-  sessionSelectedModel,
+  sessionSelectedModel: _sessionSelectedModel,
   sessionWorkingDirectory,
 }: AgentChatWindowRowProps): ReactElement {
   switch (row.kind) {
@@ -32,7 +32,6 @@ export function AgentChatThreadRow({
           <AgentChatMessageCard
             message={row.message}
             sessionRole={sessionRole}
-            sessionSelectedModel={sessionSelectedModel}
             sessionAgentColors={sessionAgentColors}
             sessionWorkingDirectory={sessionWorkingDirectory}
           />
@@ -42,4 +41,4 @@ export function AgentChatThreadRow({
     default:
       return assertNever(row, "Unhandled agent chat row");
   }
-}
+});

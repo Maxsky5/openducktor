@@ -149,4 +149,22 @@ describe("useAgentStudioDiffPolling", () => {
       await harness.unmount();
     }
   });
+
+  test("keeps one active subscription across rerenders", async () => {
+    const poll = mock(() => {});
+    const harness = createHarness(createBaseProps({ poll }));
+
+    try {
+      await harness.mount();
+      await harness.update(createBaseProps({ poll }));
+
+      await harness.run(() => {
+        globalThis.dispatchEvent(new Event("focus"));
+      });
+
+      expect(poll).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

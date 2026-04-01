@@ -26,25 +26,6 @@ export function useAgentStudioDiffPolling({
       poll();
     };
 
-    return () => {
-      globalThis.removeEventListener("focus", refreshWhenVisible);
-      globalThis.document.removeEventListener("visibilitychange", refreshWhenVisible);
-    };
-  }, [enablePolling, poll, repoPath, shouldBlockDiffLoading]);
-
-  useEffect(() => {
-    if (!enablePolling || !repoPath || shouldBlockDiffLoading) {
-      return;
-    }
-
-    const refreshWhenVisible = (): void => {
-      if (globalThis.document.visibilityState !== "visible") {
-        return;
-      }
-
-      poll();
-    };
-
     globalThis.addEventListener("focus", refreshWhenVisible);
     globalThis.document.addEventListener("visibilitychange", refreshWhenVisible);
 
