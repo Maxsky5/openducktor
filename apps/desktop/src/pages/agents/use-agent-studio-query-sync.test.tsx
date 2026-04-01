@@ -2,6 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { useState } from "react";
 import type { SetURLSearchParams } from "react-router-dom";
 import {
+  createMemoryStorage,
+  seedRepoNavigationContexts,
+  withMockedLocalStorage,
+} from "./agent-studio-repo-persistence-test-utils";
+import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
@@ -12,30 +17,6 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioQuerySync>[0];
 type SearchParamsCall = Parameters<SetURLSearchParams>;
-
-type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem" | "clear" | "key"> & {
-  readonly length: number;
-};
-
-const createMemoryStorage = (): StorageLike => {
-  const store = new Map<string, string>();
-  return {
-    getItem: (key) => store.get(key) ?? null,
-    setItem: (key, value) => {
-      store.set(key, value);
-    },
-    removeItem: (key) => {
-      store.delete(key);
-    },
-    clear: () => {
-      store.clear();
-    },
-    key: (index) => Array.from(store.keys())[index] ?? null,
-    get length() {
-      return store.size;
-    },
-  };
-};
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioQuerySync, initialProps);
@@ -339,21 +320,11 @@ describe("useAgentStudioQuerySync", () => {
 
   test("restores repo-scoped URL context when switching back to a previous repository", async () => {
     const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
-
-    try {
-      memoryStorage.setItem(
-        toContextStorageKey("/repo-a"),
-        JSON.stringify({ taskId: "task-a", role: "spec", sessionId: "session-a" }),
-      );
-      memoryStorage.setItem(
-        toContextStorageKey("/repo-b"),
-        JSON.stringify({ taskId: "task-b", role: "planner", sessionId: "session-b" }),
-      );
+    await withMockedLocalStorage(memoryStorage, async () => {
+      seedRepoNavigationContexts(memoryStorage, {
+        "/repo-a": { taskId: "task-a", role: "spec", sessionId: "session-a" },
+        "/repo-b": { taskId: "task-b", role: "planner", sessionId: "session-b" },
+      });
 
       const harness = createStatefulQuerySyncHarness({
         activeRepo: "/repo-a",
@@ -375,31 +346,16 @@ describe("useAgentStudioQuerySync", () => {
       expect(latest.roleFromQuery).toBe("spec");
 
       await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
+    });
   });
 
   test("rapid repo changes keep the final repository context authoritative", async () => {
     const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
-
-    try {
-      memoryStorage.setItem(
-        toContextStorageKey("/repo-a"),
-        JSON.stringify({ taskId: "task-a", role: "spec", sessionId: "session-a" }),
-      );
-      memoryStorage.setItem(
-        toContextStorageKey("/repo-b"),
-        JSON.stringify({ taskId: "task-b", role: "planner", sessionId: "session-b" }),
-      );
+    await withMockedLocalStorage(memoryStorage, async () => {
+      seedRepoNavigationContexts(memoryStorage, {
+        "/repo-a": { taskId: "task-a", role: "spec", sessionId: "session-a" },
+        "/repo-b": { taskId: "task-b", role: "planner", sessionId: "session-b" },
+      });
 
       const harness = createStatefulQuerySyncHarness({
         activeRepo: "/repo-a",
@@ -419,12 +375,7 @@ describe("useAgentStudioQuerySync", () => {
       expect(latest.roleFromQuery).toBe("spec");
 
       await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
+    });
   });
 
   test("flushes pending context persistence on unmount cleanup", async () => {

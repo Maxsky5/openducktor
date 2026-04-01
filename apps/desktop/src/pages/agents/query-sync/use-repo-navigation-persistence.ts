@@ -24,26 +24,30 @@ type UseRepoNavigationPersistenceResult = {
   retryPersistenceRestore: () => void;
 };
 
-export const resolveRepoNavigationBoundaryPending = ({
+export type RepoNavigationBoundaryPhase = "idle" | "detecting" | "clearing";
+
+export const resolveRepoNavigationBoundaryPhase = ({
   activeRepo,
   lastActiveRepo,
   boundaryRepo,
-  boundaryStatePending,
 }: {
   activeRepo: string | null;
   lastActiveRepo: string | null;
   boundaryRepo: string | null;
-  boundaryStatePending: boolean;
-}): boolean => {
+}): RepoNavigationBoundaryPhase => {
   if (!activeRepo) {
-    return false;
+    return "idle";
   }
 
-  return (
-    (Boolean(lastActiveRepo) && lastActiveRepo !== activeRepo) ||
-    boundaryRepo === activeRepo ||
-    boundaryStatePending
-  );
+  if (Boolean(lastActiveRepo) && lastActiveRepo !== activeRepo) {
+    return "detecting";
+  }
+
+  if (boundaryRepo === activeRepo) {
+    return "clearing";
+  }
+
+  return "idle";
 };
 
 const readPersistedContextPayload = (storageKey: string): string | null => {
@@ -74,19 +78,18 @@ export function useRepoNavigationPersistence({
   setNavigation,
 }: UseRepoNavigationPersistenceArgs): UseRepoNavigationPersistenceResult {
   const lastActiveRepoRef = useRef<string | null>(activeRepo);
-  const pendingRepoNavigationBoundaryRepoRef = useRef<string | null>(null);
   const restoredContextRepoRef = useRef<string | null>(null);
   const persistedContextPayloadRef = useRef<string | null>(null);
   const pendingContextPersistRef = useRef<{ key: string; payload: string } | null>(null);
   const pendingPersistTimeoutIdRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-  const [boundaryStatePending, setBoundaryStatePending] = useState(false);
+  const [boundaryRepo, setBoundaryRepo] = useState<string | null>(null);
   const [persistenceError, setPersistenceError] = useState<Error | null>(null);
-  const isRepoNavigationBoundaryPending = resolveRepoNavigationBoundaryPending({
+  const repoNavigationBoundaryPhase = resolveRepoNavigationBoundaryPhase({
     activeRepo,
     lastActiveRepo: lastActiveRepoRef.current,
-    boundaryRepo: pendingRepoNavigationBoundaryRepoRef.current,
-    boundaryStatePending,
+    boundaryRepo,
   });
+  const isRepoNavigationBoundaryPending = repoNavigationBoundaryPhase !== "idle";
 
   const flushPendingContextPersist = useCallback((): void => {
     const pendingPersist = pendingContextPersistRef.current;
@@ -135,8 +138,7 @@ export function useRepoNavigationPersistence({
     lastActiveRepoRef.current = activeRepo;
     restoredContextRepoRef.current = null;
     persistedContextPayloadRef.current = null;
-    pendingRepoNavigationBoundaryRepoRef.current = previousRepo && activeRepo ? activeRepo : null;
-    setBoundaryStatePending(Boolean(pendingRepoNavigationBoundaryRepoRef.current));
+    setBoundaryRepo(previousRepo && activeRepo ? activeRepo : null);
 
     if (persistenceError) {
       setPersistenceError(null);
@@ -148,8 +150,7 @@ export function useRepoNavigationPersistence({
       if (!tryFlushPendingContextPersist()) {
         return;
       }
-      pendingRepoNavigationBoundaryRepoRef.current = null;
-      setBoundaryStatePending(false);
+      setBoundaryRepo(null);
       restoredContextRepoRef.current = null;
       persistedContextPayloadRef.current = null;
       setPersistenceError(null);
@@ -157,22 +158,17 @@ export function useRepoNavigationPersistence({
   }, [activeRepo, tryFlushPendingContextPersist]);
 
   useEffect(() => {
-    if (
-      !activeRepo ||
-      pendingRepoNavigationBoundaryRepoRef.current !== activeRepo ||
-      !isRepoNavigationBoundaryPending
-    ) {
+    if (!activeRepo || repoNavigationBoundaryPhase !== "clearing") {
       return;
     }
 
     if (!hasAgentStudioNavigationSelection(navigation)) {
-      pendingRepoNavigationBoundaryRepoRef.current = null;
-      setBoundaryStatePending(false);
+      setBoundaryRepo(null);
       return;
     }
 
     setNavigation((current) => clearAgentStudioNavigationState(current));
-  }, [activeRepo, isRepoNavigationBoundaryPending, navigation, setNavigation]);
+  }, [activeRepo, navigation, repoNavigationBoundaryPhase, setNavigation]);
 
   useEffect(() => {
     if (!activeRepo) {
@@ -181,10 +177,7 @@ export function useRepoNavigationPersistence({
     if (persistenceError) {
       return;
     }
-    if (
-      isRepoNavigationBoundaryPending ||
-      pendingRepoNavigationBoundaryRepoRef.current === activeRepo
-    ) {
+    if (isRepoNavigationBoundaryPending) {
       return;
     }
     if (restoredContextRepoRef.current === activeRepo) {
@@ -223,7 +216,6 @@ export function useRepoNavigationPersistence({
     if (
       !activeRepo ||
       isRepoNavigationBoundaryPending ||
-      pendingRepoNavigationBoundaryRepoRef.current === activeRepo ||
       persistenceError ||
       restoredContextRepoRef.current !== activeRepo
     ) {

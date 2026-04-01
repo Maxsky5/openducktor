@@ -1,5 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
+  createMemoryStorage,
+  seedRepoTaskTabs,
+  type TestStorageLike,
+  withMockedLocalStorage,
+} from "./agent-studio-repo-persistence-test-utils";
+import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
@@ -13,35 +19,11 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioTaskTabs>[0];
 
-type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem" | "clear" | "key"> & {
-  readonly length: number;
-};
-
-const createMemoryStorage = (): StorageLike => {
-  const store = new Map<string, string>();
-  return {
-    getItem: (key) => store.get(key) ?? null,
-    setItem: (key, value) => {
-      store.set(key, value);
-    },
-    removeItem: (key) => {
-      store.delete(key);
-    },
-    clear: () => {
-      store.clear();
-    },
-    key: (index) => Array.from(store.keys())[index] ?? null,
-    get length() {
-      return store.size;
-    },
-  };
-};
-
 const createThrowingStorage = (args: {
   throwOnGetItem?: boolean;
   throwOnSetItem?: boolean;
   message?: string;
-}): StorageLike => {
+}): TestStorageLike => {
   const store = new Map<string, string>();
   const message = args.message ?? "storage unavailable";
   return {
@@ -553,27 +535,11 @@ describe("useAgentStudioTaskTabs", () => {
 
   test("restores repo-scoped fallback tabs when switching away and back", async () => {
     const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
-
-    try {
-      memoryStorage.setItem(
-        toTabsStorageKey("/repo-a"),
-        toPersistedTaskTabs({
-          tabs: ["task-a"],
-          activeTaskId: "task-a",
-        }),
-      );
-      memoryStorage.setItem(
-        toTabsStorageKey("/repo-b"),
-        toPersistedTaskTabs({
-          tabs: ["task-b"],
-          activeTaskId: "task-b",
-        }),
-      );
+    await withMockedLocalStorage(memoryStorage, async () => {
+      seedRepoTaskTabs(memoryStorage, {
+        "/repo-a": { tabs: ["task-a"], activeTaskId: "task-a" },
+        "/repo-b": { tabs: ["task-b"], activeTaskId: "task-b" },
+      });
 
       const updateCalls: Array<Record<string, string | undefined>> = [];
       const harness = createHookHarness({
@@ -623,12 +589,7 @@ describe("useAgentStudioTaskTabs", () => {
       expect(updateCalls.map((call) => call.task)).toEqual(["task-a", "task-b", "task-a"]);
 
       await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
+    });
   });
 
   test("removes a task tab when the selected task becomes closed and routes to the first remaining tab", async () => {
