@@ -19,7 +19,6 @@ import {
   repoRuntimeHealthQueryOptions,
   runtimeCheckQueryOptions,
 } from "../../queries/checks";
-import { host } from "../shared/host";
 
 type UseChecksArgs = {
   activeRepo: string | null;
@@ -75,6 +74,26 @@ const buildRuntimeHealthErrorMap = (
   ) as RepoRuntimeHealthMap;
 };
 
+const getSettledErrorDescriptions = (
+  results: Array<{ label: string; result: PromiseSettledResult<unknown> }>,
+): string[] => {
+  return results.flatMap(({ label, result }) => {
+    if (result.status === "fulfilled") {
+      return [];
+    }
+
+    return [`${label}: ${errorMessage(result.reason)}`];
+  });
+};
+
+const getSettledValue = <T>(result: PromiseSettledResult<T>): T => {
+  if (result.status === "rejected") {
+    throw result.reason;
+  }
+
+  return result.value;
+};
+
 export function useChecks({
   activeRepo,
   runtimeDefinitions,
@@ -99,9 +118,12 @@ export function useChecks({
   const refreshRuntimeCheck = useCallback(
     async (force = false): Promise<RuntimeCheck> => {
       if (force) {
-        const check = await host.runtimeCheck(true);
-        queryClient.setQueryData(checksQueryKeys.runtime(), check);
-        return check;
+        await queryClient.invalidateQueries({
+          queryKey: checksQueryKeys.runtime(),
+          exact: true,
+          refetchType: "none",
+        });
+        return queryClient.fetchQuery(runtimeCheckQueryOptions(true));
       }
 
       return loadRuntimeCheckFromQuery(queryClient);
@@ -164,9 +186,27 @@ export function useChecks({
 
     setIsManualLoadingChecks(true);
     try {
-      const runtime = await refreshRuntimeCheck(true);
-      const beads = await refreshBeadsCheckForRepo(activeRepo, true);
-      const runtimeHealthByRuntime = await refreshRepoRuntimeHealthForRepo(activeRepo, true);
+      const [runtimeResult, beadsResult, runtimeHealthResult] = await Promise.allSettled([
+        refreshRuntimeCheck(true),
+        refreshBeadsCheckForRepo(activeRepo, true),
+        refreshRepoRuntimeHealthForRepo(activeRepo, true),
+      ]);
+      const unavailableDetails = getSettledErrorDescriptions([
+        { label: "runtime", result: runtimeResult },
+        { label: "beads", result: beadsResult },
+        { label: "runtime health", result: runtimeHealthResult },
+      ]);
+
+      if (unavailableDetails.length > 0) {
+        toast.error("Diagnostics check unavailable", {
+          description: unavailableDetails.join(" | "),
+        });
+        return;
+      }
+
+      const runtime = getSettledValue(runtimeResult);
+      const beads = getSettledValue(beadsResult);
+      const runtimeHealthByRuntime = getSettledValue(runtimeHealthResult);
       const runtimesHealthy = runtime.runtimes.every((runtimeEntry) => runtimeEntry.ok);
       const runtimeHealthEntries = runtimeDefinitions.map(
         (definition) => runtimeHealthByRuntime[definition.kind],
@@ -195,8 +235,6 @@ export function useChecks({
         ].join(" | ");
         toast.error("Diagnostics check failed", { description: details });
       }
-    } catch (error) {
-      toast.error("Diagnostics check unavailable", { description: errorMessage(error) });
     } finally {
       setIsManualLoadingChecks(false);
     }

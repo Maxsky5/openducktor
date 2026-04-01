@@ -13,6 +13,7 @@ import { host } from "../operations/host";
 const RUNTIME_CHECK_STALE_TIME_MS = 5 * 60_000;
 const BEADS_CHECK_STALE_TIME_MS = 60_000;
 const RUNTIME_HEALTH_STALE_TIME_MS = 60_000;
+const DIAGNOSTICS_QUERY_TIMEOUT_MS = 5_000;
 
 const buildRuntimeHealthErrorCheck = (
   runtimeHealthError: string,
@@ -34,6 +35,23 @@ const buildRuntimeHealthErrorCheck = (
 const normalizeRuntimeKinds = (runtimeKinds: RuntimeKind[]): RuntimeKind[] =>
   [...runtimeKinds].sort();
 
+const withDiagnosticsQueryTimeout = async <T>(promise: Promise<T>): Promise<T> => {
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeoutId = globalThis.setTimeout(() => {
+      reject(new Error(`Timed out after ${DIAGNOSTICS_QUERY_TIMEOUT_MS}ms`));
+    }, DIAGNOSTICS_QUERY_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId !== null) {
+      globalThis.clearTimeout(timeoutId);
+    }
+  }
+};
+
 export const checksQueryKeys = {
   all: ["checks"] as const,
   runtime: () => [...checksQueryKeys.all, "runtime"] as const,
@@ -47,17 +65,17 @@ export const checksQueryKeys = {
     ] as const,
 };
 
-export const runtimeCheckQueryOptions = () =>
+export const runtimeCheckQueryOptions = (force = false) =>
   queryOptions({
     queryKey: checksQueryKeys.runtime(),
-    queryFn: (): Promise<RuntimeCheck> => host.runtimeCheck(false),
+    queryFn: (): Promise<RuntimeCheck> => withDiagnosticsQueryTimeout(host.runtimeCheck(force)),
     staleTime: RUNTIME_CHECK_STALE_TIME_MS,
   });
 
 export const beadsCheckQueryOptions = (repoPath: string) =>
   queryOptions({
     queryKey: checksQueryKeys.beads(repoPath),
-    queryFn: (): Promise<BeadsCheck> => host.beadsCheck(repoPath),
+    queryFn: (): Promise<BeadsCheck> => withDiagnosticsQueryTimeout(host.beadsCheck(repoPath)),
     staleTime: BEADS_CHECK_STALE_TIME_MS,
   });
 
@@ -77,7 +95,9 @@ export const repoRuntimeHealthQueryOptions = (
     queryFn: async (): Promise<RepoRuntimeHealthMap> => {
       const checks = await Promise.all(
         runtimeDefinitions.map(async (definition) => {
-          const check = await checkRepoRuntimeHealth(repoPath, definition.kind).catch((error) =>
+          const check = await withDiagnosticsQueryTimeout(
+            checkRepoRuntimeHealth(repoPath, definition.kind),
+          ).catch((error) =>
             buildRuntimeHealthErrorCheck(errorMessage(error), new Date().toISOString()),
           );
           return [definition.kind, check] as const;
