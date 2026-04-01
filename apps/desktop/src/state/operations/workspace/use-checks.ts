@@ -75,6 +75,24 @@ const buildRuntimeHealthErrorMap = (
   ) as RepoRuntimeHealthMap;
 };
 
+const getSettledErrorDescriptions = (results: PromiseSettledResult<unknown>[]): string[] => {
+  return results.flatMap((result) => {
+    if (result.status === "fulfilled") {
+      return [];
+    }
+
+    return [errorMessage(result.reason)];
+  });
+};
+
+const getSettledValue = <T>(result: PromiseSettledResult<T>): T => {
+  if (result.status === "rejected") {
+    throw result.reason;
+  }
+
+  return result.value;
+};
+
 export function useChecks({
   activeRepo,
   runtimeDefinitions,
@@ -164,9 +182,27 @@ export function useChecks({
 
     setIsManualLoadingChecks(true);
     try {
-      const runtime = await refreshRuntimeCheck(true);
-      const beads = await refreshBeadsCheckForRepo(activeRepo, true);
-      const runtimeHealthByRuntime = await refreshRepoRuntimeHealthForRepo(activeRepo, true);
+      const [runtimeResult, beadsResult, runtimeHealthResult] = await Promise.allSettled([
+        refreshRuntimeCheck(true),
+        refreshBeadsCheckForRepo(activeRepo, true),
+        refreshRepoRuntimeHealthForRepo(activeRepo, true),
+      ]);
+      const unavailableDetails = getSettledErrorDescriptions([
+        runtimeResult,
+        beadsResult,
+        runtimeHealthResult,
+      ]);
+
+      if (unavailableDetails.length > 0) {
+        toast.error("Diagnostics check unavailable", {
+          description: unavailableDetails.join(" | "),
+        });
+        return;
+      }
+
+      const runtime = getSettledValue(runtimeResult);
+      const beads = getSettledValue(beadsResult);
+      const runtimeHealthByRuntime = getSettledValue(runtimeHealthResult);
       const runtimesHealthy = runtime.runtimes.every((runtimeEntry) => runtimeEntry.ok);
       const runtimeHealthEntries = runtimeDefinitions.map(
         (definition) => runtimeHealthByRuntime[definition.kind],

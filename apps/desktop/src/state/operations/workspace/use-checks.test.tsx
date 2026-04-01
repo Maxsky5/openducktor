@@ -9,6 +9,7 @@ import {
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { host } from "../shared/host";
 
@@ -350,6 +351,79 @@ describe("use-checks", () => {
     }
   });
 
+  test("refreshChecks starts independent probes in parallel", async () => {
+    const runtimeDeferred = createDeferred<RuntimeCheck>();
+    const beadsDeferred = createDeferred<BeadsCheck>();
+    const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthCheck>();
+    let runtimeCallCount = 0;
+    let beadsCallCount = 0;
+    let runtimeHealthCallCount = 0;
+    const runtimeCheck = mock(async (_force?: boolean): Promise<RuntimeCheck> => {
+      runtimeCallCount += 1;
+      return runtimeCallCount === 1 ? makeRuntimeCheck() : runtimeDeferred.promise;
+    });
+    const beadsCheck = mock(async (): Promise<BeadsCheck> => {
+      beadsCallCount += 1;
+      return beadsCallCount === 1 ? makeBeadsCheck() : beadsDeferred.promise;
+    });
+    repoHealthHandler = async () => {
+      runtimeHealthCallCount += 1;
+      return runtimeHealthCallCount === 1 ? makeRepoHealth() : runtimeHealthDeferred.promise;
+    };
+
+    const original = {
+      runtimeCheck: host.runtimeCheck,
+      beadsCheck: host.beadsCheck,
+    };
+    host.runtimeCheck = runtimeCheck;
+    host.beadsCheck = beadsCheck;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+
+    let refreshPromise: Promise<void> | null = null;
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => {
+        return (
+          value.runtimeCheck !== null &&
+          value.activeBeadsCheck !== null &&
+          value.activeRepoRuntimeHealthByRuntime.opencode != null &&
+          value.isLoadingChecks === false
+        );
+      });
+      runtimeCheck.mockClear();
+      beadsCheck.mockClear();
+      checkRepoRuntimeHealthMock.mockClear();
+
+      await harness.run((value) => {
+        refreshPromise = value.refreshChecks();
+      });
+      await harness.waitFor((value) => value.isLoadingChecks === true);
+
+      expect(runtimeCheck).toHaveBeenCalledTimes(1);
+      expect(runtimeCheck.mock.calls[0]).toEqual([true]);
+      expect(beadsCheck).toHaveBeenCalledTimes(1);
+      expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(1);
+      expect(checkRepoRuntimeHealthMock.mock.calls[0]).toEqual(["/repo-a", "opencode"]);
+
+      runtimeDeferred.resolve(makeRuntimeCheck());
+      beadsDeferred.resolve(makeBeadsCheck());
+      runtimeHealthDeferred.resolve(makeRepoHealth());
+      await harness.run(async () => {
+        await refreshPromise;
+      });
+      await harness.waitFor((value) => value.isLoadingChecks === false);
+    } finally {
+      await harness.unmount();
+      host.runtimeCheck = original.runtimeCheck;
+      host.beadsCheck = original.beadsCheck;
+    }
+  });
+
   test("refreshChecks forces a fresh runtime check and surfaces errors", async () => {
     let callCount = 0;
     const runtimeCheck = mock(
@@ -363,11 +437,15 @@ describe("use-checks", () => {
           reject(new Error("runtime down"));
         }),
     );
+    const beadsCheck = mock(async (): Promise<BeadsCheck> => makeBeadsCheck());
+    repoHealthHandler = async () => makeRepoHealth();
 
     const original = {
       runtimeCheck: host.runtimeCheck,
+      beadsCheck: host.beadsCheck,
     };
     host.runtimeCheck = runtimeCheck;
+    host.beadsCheck = beadsCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -393,6 +471,82 @@ describe("use-checks", () => {
     } finally {
       await harness.unmount();
       host.runtimeCheck = original.runtimeCheck;
+      host.beadsCheck = original.beadsCheck;
+    }
+  });
+
+  test("refreshChecks waits for all failed probes before surfacing unavailable diagnostics", async () => {
+    const runtimeDeferred = createDeferred<RuntimeCheck>();
+    const beadsDeferred = createDeferred<BeadsCheck>();
+    const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthCheck>();
+    let runtimeCallCount = 0;
+    let beadsCallCount = 0;
+    let runtimeHealthCallCount = 0;
+    const runtimeCheck = mock(async (_force?: boolean): Promise<RuntimeCheck> => {
+      runtimeCallCount += 1;
+      return runtimeCallCount === 1 ? makeRuntimeCheck() : runtimeDeferred.promise;
+    });
+    const beadsCheck = mock(async (): Promise<BeadsCheck> => {
+      beadsCallCount += 1;
+      return beadsCallCount === 1 ? makeBeadsCheck() : beadsDeferred.promise;
+    });
+    repoHealthHandler = async () => {
+      runtimeHealthCallCount += 1;
+      return runtimeHealthCallCount === 1 ? makeRepoHealth() : runtimeHealthDeferred.promise;
+    };
+
+    const original = {
+      runtimeCheck: host.runtimeCheck,
+      beadsCheck: host.beadsCheck,
+    };
+    host.runtimeCheck = runtimeCheck;
+    host.beadsCheck = beadsCheck;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+
+    let refreshPromise: Promise<void> | null = null;
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => {
+        return (
+          value.runtimeCheck !== null &&
+          value.activeBeadsCheck !== null &&
+          value.activeRepoRuntimeHealthByRuntime.opencode != null &&
+          value.isLoadingChecks === false
+        );
+      });
+      runtimeCheck.mockClear();
+      beadsCheck.mockClear();
+      checkRepoRuntimeHealthMock.mockClear();
+
+      await harness.run((value) => {
+        refreshPromise = value.refreshChecks();
+      });
+      await harness.waitFor((value) => value.isLoadingChecks === true);
+
+      runtimeDeferred.reject(new Error("runtime down"));
+      await Promise.resolve();
+      expect(toastError).not.toHaveBeenCalled();
+
+      beadsDeferred.reject(new Error("beads down"));
+      runtimeHealthDeferred.resolve(makeRepoHealth());
+      await harness.run(async () => {
+        await refreshPromise;
+      });
+      await harness.waitFor((value) => value.isLoadingChecks === false);
+
+      expect(toastError).toHaveBeenCalledWith("Diagnostics check unavailable", {
+        description: "runtime down | beads down",
+      });
+      expect(harness.getLatest().isLoadingChecks).toBe(false);
+    } finally {
+      await harness.unmount();
+      host.runtimeCheck = original.runtimeCheck;
+      host.beadsCheck = original.beadsCheck;
     }
   });
 
