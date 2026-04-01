@@ -1192,6 +1192,106 @@ describe("useTaskApprovalFlow", () => {
     });
   });
 
+  test("does not let a stale PR-generation cancellation unlock a newer loading modal", async () => {
+    const requestPullRequestGenerationDeferred = createDeferred<string | undefined>();
+    const requestPullRequestGenerationMock = mock(
+      async () => requestPullRequestGenerationDeferred.promise,
+    );
+    const secondApprovalContext = createDeferred<TaskApprovalContext>();
+
+    taskApprovalContextGetMock.mockImplementation((async (_repoPath: string, taskId: string) => {
+      if (taskId === "TASK-1") {
+        return createTaskApprovalContextFixture({
+          taskId,
+          providers: [
+            {
+              providerId: "github",
+              enabled: true,
+              available: true,
+              reason: undefined,
+            },
+          ],
+        });
+      }
+
+      return secondApprovalContext.promise;
+    }) as unknown as never);
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow({
+        activeRepo: "/repo",
+        tasks: [
+          createTaskCardFixture({ id: "TASK-1", title: "Task 1" }),
+          createTaskCardFixture({ id: "TASK-2", title: "Task 2" }),
+        ],
+        requestPullRequestGeneration: requestPullRequestGenerationMock,
+        refreshTasks: async () => {},
+      });
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    await act(async () => {
+      latestHarnessValue?.taskApprovalModal?.onModeChange("pull_request");
+      latestHarnessValue?.taskApprovalModal?.onPullRequestDraftModeChange("generate_ai");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      await Promise.resolve();
+    });
+
+    expect(latestHarnessValue?.taskApprovalModal?.taskId).toBe("TASK-1");
+    expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(true);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-2");
+      await Promise.resolve();
+    });
+
+    expect(latestHarnessValue?.taskApprovalModal?.taskId).toBe("TASK-2");
+    expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(true);
+
+    requestPullRequestGenerationDeferred.resolve(undefined);
+
+    await act(async () => {
+      await requestPullRequestGenerationDeferred.promise;
+      await Promise.resolve();
+    });
+
+    expect(latestHarnessValue?.taskApprovalModal?.taskId).toBe("TASK-2");
+    expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(true);
+    expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(false);
+
+    secondApprovalContext.resolve(
+      createTaskApprovalContextFixture({
+        taskId: "TASK-2",
+        providers: [],
+      }),
+    );
+
+    await act(async () => {
+      await secondApprovalContext.promise;
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    expect(latestHarnessValue?.taskApprovalModal?.taskId).toBe("TASK-2");
+    expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("direct_merge");
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
   test("keeps the modal open when pull request generation cannot start", async () => {
     taskApprovalContextGetMock.mockResolvedValue({
       taskId: "TASK-1",
@@ -1311,6 +1411,62 @@ describe("useTaskApprovalFlow", () => {
       expect.objectContaining({
         description: "The configured target branch does not have a publish remote.",
       }),
+    );
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("uses a fallback message when direct-merge publish fails without output", async () => {
+    gitPushBranchMock.mockResolvedValueOnce({
+      outcome: "rejected" as const,
+      remote: "origin",
+      branch: "main",
+      output: "",
+    } as unknown as never);
+    taskApprovalContextGetMock.mockResolvedValueOnce(
+      createTaskApprovalContextFixture({
+        directMerge: {
+          method: "merge_commit",
+          sourceBranch: "odt/TASK-1",
+          targetBranch: { remote: "origin", branch: "main" },
+          mergedAt: "2026-03-12T12:00:00Z",
+        },
+      }) as unknown as never,
+    );
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow({
+        activeRepo: "/repo",
+        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+        requestPullRequestGeneration: async () => undefined,
+        refreshTasks: async () => {},
+      });
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("complete_direct_merge");
+
+    await act(async () => {
+      latestHarnessValue?.taskApprovalModal?.onCompleteDirectMerge();
+      await Promise.resolve();
+    });
+
+    expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBe(
+      "Git push failed with no output.",
+    );
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Failed to finish direct merge",
+      expect.objectContaining({ description: "Git push failed with no output." }),
     );
 
     await act(async () => {
