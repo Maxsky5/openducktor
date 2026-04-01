@@ -46,7 +46,7 @@ export const createReattachLiveSession = ({
   resolveHydrationRuntime,
   listLiveAgentSessions,
   resumeMissingLiveSession,
-  isStaleRepoOperation: _isStaleRepoOperation,
+  isStaleRepoOperation,
   toLiveSessionState,
 }: CreateReattachLiveSessionArgs) => {
   return async (record: AgentSessionRecord): Promise<boolean> => {
@@ -55,6 +55,9 @@ export const createReattachLiveSession = ({
     }
 
     const runtimeResolution = await resolveHydrationRuntime(record);
+    if (isStaleRepoOperation()) {
+      return false;
+    }
     if (!runtimeResolution.ok) {
       return false;
     }
@@ -66,6 +69,9 @@ export const createReattachLiveSession = ({
       runtimeResolution.runtimeConnection,
       [record.workingDirectory],
     );
+    if (isStaleRepoOperation()) {
+      return false;
+    }
     const liveSession = liveAgentSessions.find(
       (session) => session.externalSessionId === externalSessionId,
     );
@@ -86,8 +92,14 @@ export const createReattachLiveSession = ({
         runtimeKind: runtimeResolution.runtimeKind,
         runtimeConnection: runtimeResolution.runtimeConnection,
       });
+      if (isStaleRepoOperation()) {
+        return false;
+      }
     }
 
+    if (isStaleRepoOperation()) {
+      return false;
+    }
     attachSessionListener(repoPath, record.sessionId);
     updateSession(
       record.sessionId,
