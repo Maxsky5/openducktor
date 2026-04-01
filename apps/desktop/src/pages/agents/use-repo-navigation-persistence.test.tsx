@@ -168,6 +168,41 @@ describe("useRepoNavigationPersistence", () => {
     }
   });
 
+  test("does not override explicit role-only selection with persisted repo context", async () => {
+    const memoryStorage = createMemoryStorage();
+    await withMockedLocalStorage(memoryStorage, async () => {
+      seedRepoNavigationContexts(memoryStorage, {
+        "/repo": {
+          taskId: "task-from-context",
+          role: "qa",
+          sessionId: "session-from-context",
+          scenario: "qa_review",
+        },
+      });
+
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+        initialNavigation: {
+          taskId: "",
+          sessionId: null,
+          role: "planner",
+          scenario: "planner_initial",
+        },
+      });
+
+      await harness.mount();
+
+      expect(harness.getLatest().navigation).toEqual({
+        taskId: "",
+        sessionId: null,
+        role: "planner",
+        scenario: "planner_initial",
+      });
+
+      await harness.unmount();
+    });
+  });
+
   test("flushes pending persistence during unmount cleanup", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;
@@ -389,13 +424,7 @@ describe("useRepoNavigationPersistence", () => {
 
   test("clears stale repo navigation before restoring and persisting the next repo context", async () => {
     const { storage, writes } = createRecordingStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: storage,
-    });
-
-    try {
+    await withMockedLocalStorage(storage, async () => {
       storage.setItem(
         toContextStorageKey("/repo-b"),
         JSON.stringify({
@@ -436,12 +465,7 @@ describe("useRepoNavigationPersistence", () => {
       expect(repoBWrites.some((entry) => entry.value.includes("session-a"))).toBeFalse();
 
       await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
+    });
   });
 
   test("restores repo-scoped context when switching back to a previous repository", async () => {

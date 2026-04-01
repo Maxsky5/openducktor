@@ -204,7 +204,7 @@ export function useRepoNavigationPersistence({
     }
 
     setNavigation((current) => {
-      if (current.taskId || current.sessionId) {
+      if (hasAgentStudioNavigationSelection(current)) {
         return current;
       }
 

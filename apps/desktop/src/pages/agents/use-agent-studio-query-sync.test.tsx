@@ -273,13 +273,7 @@ describe("useAgentStudioQuerySync", () => {
 
   test("clears stale URL authority on repo switch before restoring the next repo context", async () => {
     const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
-
-    try {
+    await withMockedLocalStorage(memoryStorage, async () => {
       memoryStorage.setItem(
         toContextStorageKey("/repo-b"),
         JSON.stringify({
@@ -310,12 +304,7 @@ describe("useAgentStudioQuerySync", () => {
       expect(latest.roleFromQuery).toBe("planner");
 
       await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
+    });
   });
 
   test("restores repo-scoped URL context when switching back to a previous repository", async () => {
