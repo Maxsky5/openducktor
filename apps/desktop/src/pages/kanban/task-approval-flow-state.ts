@@ -131,7 +131,7 @@ export function taskApprovalFlowReducer(
     case "start_submitting":
       return state.kind === "open" ? { ...state, phase: "submitting" } : state;
     case "return_to_editable":
-      return state.kind === "open"
+      return state.kind === "open" && state.phase === "submitting"
         ? { ...state, phase: "ready", errorMessage: action.errorMessage }
         : state;
     case "clear_error":

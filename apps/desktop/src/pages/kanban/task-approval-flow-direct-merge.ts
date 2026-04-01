@@ -9,6 +9,8 @@ import {
 } from "@/state/queries/task-approval";
 import type { TaskApprovalFlowReadyState } from "./task-approval-flow-state";
 
+const DIRECT_MERGE_PUSH_FAILURE_MESSAGE = "Git push failed with no output.";
+
 type SubmitDirectMergeApprovalArgs = {
   approval: TaskApprovalFlowReadyState;
   queryClient: QueryClient;
@@ -114,7 +116,7 @@ export async function completeDirectMergeApproval({
       remote: publishTarget.remote,
     });
     if (pushResult.outcome !== "pushed") {
-      throw new Error(pushResult.output);
+      throw new Error(pushResult.output.trim() || DIRECT_MERGE_PUSH_FAILURE_MESSAGE);
     }
   }
 
