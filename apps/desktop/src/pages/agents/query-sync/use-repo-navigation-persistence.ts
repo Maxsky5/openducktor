@@ -24,6 +24,28 @@ type UseRepoNavigationPersistenceResult = {
   retryPersistenceRestore: () => void;
 };
 
+export const resolveRepoNavigationBoundaryPending = ({
+  activeRepo,
+  lastActiveRepo,
+  boundaryRepo,
+  boundaryStatePending,
+}: {
+  activeRepo: string | null;
+  lastActiveRepo: string | null;
+  boundaryRepo: string | null;
+  boundaryStatePending: boolean;
+}): boolean => {
+  if (!activeRepo) {
+    return false;
+  }
+
+  return (
+    (Boolean(lastActiveRepo) && lastActiveRepo !== activeRepo) ||
+    boundaryRepo === activeRepo ||
+    boundaryStatePending
+  );
+};
+
 const readPersistedContextPayload = (storageKey: string): string | null => {
   try {
     return globalThis.localStorage.getItem(storageKey);
@@ -57,8 +79,14 @@ export function useRepoNavigationPersistence({
   const persistedContextPayloadRef = useRef<string | null>(null);
   const pendingContextPersistRef = useRef<{ key: string; payload: string } | null>(null);
   const pendingPersistTimeoutIdRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-  const [isRepoNavigationBoundaryPending, setIsRepoNavigationBoundaryPending] = useState(false);
+  const [boundaryStatePending, setBoundaryStatePending] = useState(false);
   const [persistenceError, setPersistenceError] = useState<Error | null>(null);
+  const isRepoNavigationBoundaryPending = resolveRepoNavigationBoundaryPending({
+    activeRepo,
+    lastActiveRepo: lastActiveRepoRef.current,
+    boundaryRepo: pendingRepoNavigationBoundaryRepoRef.current,
+    boundaryStatePending,
+  });
 
   const flushPendingContextPersist = useCallback((): void => {
     const pendingPersist = pendingContextPersistRef.current;
@@ -108,7 +136,7 @@ export function useRepoNavigationPersistence({
     restoredContextRepoRef.current = null;
     persistedContextPayloadRef.current = null;
     pendingRepoNavigationBoundaryRepoRef.current = previousRepo && activeRepo ? activeRepo : null;
-    setIsRepoNavigationBoundaryPending(Boolean(pendingRepoNavigationBoundaryRepoRef.current));
+    setBoundaryStatePending(Boolean(pendingRepoNavigationBoundaryRepoRef.current));
 
     if (persistenceError) {
       setPersistenceError(null);
@@ -121,7 +149,7 @@ export function useRepoNavigationPersistence({
         return;
       }
       pendingRepoNavigationBoundaryRepoRef.current = null;
-      setIsRepoNavigationBoundaryPending(false);
+      setBoundaryStatePending(false);
       restoredContextRepoRef.current = null;
       persistedContextPayloadRef.current = null;
       setPersistenceError(null);
@@ -139,7 +167,7 @@ export function useRepoNavigationPersistence({
 
     if (!hasAgentStudioNavigationSelection(navigation)) {
       pendingRepoNavigationBoundaryRepoRef.current = null;
-      setIsRepoNavigationBoundaryPending(false);
+      setBoundaryStatePending(false);
       return;
     }
 

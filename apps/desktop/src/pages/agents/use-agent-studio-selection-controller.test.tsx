@@ -151,7 +151,13 @@ describe("useAgentStudioSelectionController", () => {
   });
 
   test("suppresses stale query task and session selection while repo boundary reset is pending", async () => {
+    const readSessionModelCatalog = mock(async () => emptyCatalog);
+    const readSessionTodos = mock(async () => []);
+    const hydrateRequestedTaskSessionHistory = mock(async () => {});
     const staleSession = createSession("task-1", "session-1", {
+      runtimeKind: "opencode",
+      runtimeEndpoint: "http://runtime",
+      workingDirectory: "/repo-a",
       role: "build",
       scenario: "build_implementation_start",
       status: "running",
@@ -165,6 +171,9 @@ describe("useAgentStudioSelectionController", () => {
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
         scenarioFromQuery: "build_implementation_start",
+        readSessionModelCatalog,
+        readSessionTodos,
+        hydrateRequestedTaskSessionHistory,
       }),
     );
 
@@ -178,6 +187,9 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.activeSession).toBeNull();
       expect(latest.viewTaskId).toBe("");
       expect(latest.viewActiveSession).toBeNull();
+      expect(readSessionModelCatalog).toHaveBeenCalledTimes(0);
+      expect(readSessionTodos).toHaveBeenCalledTimes(0);
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
     }

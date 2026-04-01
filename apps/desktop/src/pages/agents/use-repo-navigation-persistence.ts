@@ -1,1 +1,4 @@
-export { useRepoNavigationPersistence } from "./query-sync/use-repo-navigation-persistence";
+export {
+  resolveRepoNavigationBoundaryPending,
+  useRepoNavigationPersistence,
+} from "./query-sync/use-repo-navigation-persistence";

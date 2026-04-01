@@ -195,40 +195,41 @@ let readinessState: ReadinessState = {
 };
 const rightPanelToggleModel = { label: "Toggle panel" };
 const rightPanelModel = { kind: "documents" };
+const baseSessionStartModal: SessionStartModalModel = {
+  open: true,
+  title: "Start Planner Session",
+  description: "Pick a model and launch a session.",
+  confirmLabel: "Start session",
+  selectedModelSelection: null,
+  selectedRuntimeKind: "opencode",
+  runtimeOptions: [],
+  supportsProfiles: true,
+  supportsVariants: true,
+  isSelectionCatalogLoading: false,
+  agentOptions: [],
+  modelOptions: [],
+  modelGroups: [],
+  variantOptions: [],
+  availableStartModes: ["fresh"],
+  selectedStartMode: "fresh",
+  existingSessionOptions: [],
+  selectedSourceSessionId: "",
+  onSelectStartMode: mock(() => {}),
+  onSelectSourceSession: mock(() => {}),
+  onSelectRuntime: mock(() => {}),
+  onSelectAgent: mock(() => {}),
+  onSelectModel: mock(() => {}),
+  onSelectVariant: mock(() => {}),
+  isStarting: false,
+  onOpenChange: mock(() => {}),
+  onConfirm: mock(() => {}),
+};
 let orchestrationState: OrchestrationState = {
   repoSettings: null,
   chatSettingsLoadError: new Error("chat settings failed"),
   retryChatSettingsLoad,
   humanReviewFeedbackModal: { kind: "feedback" },
-  sessionStartModal: {
-    open: true,
-    title: "Start Planner Session",
-    description: "Pick a model and launch a session.",
-    confirmLabel: "Start session",
-    selectedModelSelection: null,
-    selectedRuntimeKind: "opencode",
-    runtimeOptions: [],
-    supportsProfiles: true,
-    supportsVariants: true,
-    isSelectionCatalogLoading: false,
-    agentOptions: [],
-    modelOptions: [],
-    modelGroups: [],
-    variantOptions: [],
-    availableStartModes: ["fresh"],
-    selectedStartMode: "fresh",
-    existingSessionOptions: [],
-    selectedSourceSessionId: "",
-    onSelectStartMode: mock(() => {}),
-    onSelectSourceSession: mock(() => {}),
-    onSelectRuntime: mock(() => {}),
-    onSelectAgent: mock(() => {}),
-    onSelectModel: mock(() => {}),
-    onSelectVariant: mock(() => {}),
-    isStarting: false,
-    onOpenChange: mock(() => {}),
-    onConfirm: mock(() => {}),
-  },
+  sessionStartModal: { ...baseSessionStartModal },
   startSessionRequest: async () => undefined,
   activeTabValue: "task-1",
   agentStudioTaskTabsModel: { tabs: [] },
@@ -330,10 +331,6 @@ beforeEach(async () => {
   mock.restore();
   registerModuleMocks();
   ({ useAgentsPageShellModel } = await import("./use-agents-page-shell-model"));
-  const sessionStartModal = orchestrationState.sessionStartModal;
-  if (!sessionStartModal) {
-    throw new Error("Expected base session start modal fixture.");
-  }
   workspaceState = {
     activeRepo: "/repo",
     activeBranch: "main",
@@ -424,7 +421,7 @@ beforeEach(async () => {
     retryChatSettingsLoad,
     humanReviewFeedbackModal: { kind: "feedback" },
     sessionStartModal: {
-      ...sessionStartModal,
+      ...baseSessionStartModal,
     },
     startSessionRequest: async () => undefined,
     activeTabValue: "task-1",
@@ -522,6 +519,38 @@ describe("useAgentsPageShellModel", () => {
       expect(state.hasSelectedTask).toBe(false);
       expect(state.sessionStartModal).toBeNull();
       expect(state.mergedPullRequestModal).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps the shell stable while repo-boundary reset clears stale Agent Studio selection", async () => {
+    querySyncState = {
+      ...querySyncState,
+      isRepoNavigationBoundaryPending: true,
+    };
+    selectionState = {
+      ...selectionState,
+      viewTaskId: "",
+      viewSelectedTask: null,
+      viewActiveSession: null,
+      taskId: "",
+      activeSession: null,
+      selectedSessionById: {},
+      sessionsForTask: [],
+      viewSessionsForTask: [],
+    };
+
+    const harness = createHookHarness();
+
+    try {
+      await harness.mount();
+
+      const state = harness.getLatest();
+      expect(state.activeRepo).toBe("/repo");
+      expect(state.hasSelectedTask).toBe(false);
+      expect(state.isRightPanelVisible).toBe(true);
+      expect(state.taskDetailsSheet).not.toBeNull();
     } finally {
       await harness.unmount();
     }

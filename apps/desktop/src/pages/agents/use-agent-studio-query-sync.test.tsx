@@ -337,6 +337,96 @@ describe("useAgentStudioQuerySync", () => {
     }
   });
 
+  test("restores repo-scoped URL context when switching back to a previous repository", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      memoryStorage.setItem(
+        toContextStorageKey("/repo-a"),
+        JSON.stringify({ taskId: "task-a", role: "spec", sessionId: "session-a" }),
+      );
+      memoryStorage.setItem(
+        toContextStorageKey("/repo-b"),
+        JSON.stringify({ taskId: "task-b", role: "planner", sessionId: "session-b" }),
+      );
+
+      const harness = createStatefulQuerySyncHarness({
+        activeRepo: "/repo-a",
+        initialSearchParams: "",
+      });
+
+      await harness.mount();
+      await harness.waitFor((state) => state.taskIdParam === "task-a");
+
+      await harness.update({ activeRepo: "/repo-b", initialSearchParams: "" });
+      await harness.waitFor((state) => state.taskIdParam === "task-b");
+
+      await harness.update({ activeRepo: "/repo-a", initialSearchParams: "" });
+      await harness.waitFor((state) => state.taskIdParam === "task-a");
+
+      const latest = harness.getLatest();
+      expect(latest.taskIdParam).toBe("task-a");
+      expect(latest.sessionParam).toBe("session-a");
+      expect(latest.roleFromQuery).toBe("spec");
+
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
+  test("rapid repo changes keep the final repository context authoritative", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      memoryStorage.setItem(
+        toContextStorageKey("/repo-a"),
+        JSON.stringify({ taskId: "task-a", role: "spec", sessionId: "session-a" }),
+      );
+      memoryStorage.setItem(
+        toContextStorageKey("/repo-b"),
+        JSON.stringify({ taskId: "task-b", role: "planner", sessionId: "session-b" }),
+      );
+
+      const harness = createStatefulQuerySyncHarness({
+        activeRepo: "/repo-a",
+        initialSearchParams: "",
+      });
+
+      await harness.mount();
+      await harness.waitFor((state) => state.taskIdParam === "task-a");
+
+      await harness.update({ activeRepo: "/repo-b", initialSearchParams: "" });
+      await harness.update({ activeRepo: "/repo-a", initialSearchParams: "" });
+      await harness.waitFor((state) => state.taskIdParam === "task-a");
+
+      const latest = harness.getLatest();
+      expect(latest.taskIdParam).toBe("task-a");
+      expect(latest.sessionParam).toBe("session-a");
+      expect(latest.roleFromQuery).toBe("spec");
+
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
   test("flushes pending context persistence on unmount cleanup", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;

@@ -5,7 +5,10 @@ import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { useRepoNavigationPersistence } from "./use-repo-navigation-persistence";
+import {
+  resolveRepoNavigationBoundaryPending,
+  useRepoNavigationPersistence,
+} from "./use-repo-navigation-persistence";
 
 enableReactActEnvironment();
 
@@ -126,6 +129,25 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useHookHarness, initialProps);
 
 describe("useRepoNavigationPersistence", () => {
+  test("treats the first render after a repo change as boundary-pending before effects run", () => {
+    expect(
+      resolveRepoNavigationBoundaryPending({
+        activeRepo: "/repo-b",
+        lastActiveRepo: "/repo-a",
+        boundaryRepo: null,
+        boundaryStatePending: false,
+      }),
+    ).toBeTrue();
+    expect(
+      resolveRepoNavigationBoundaryPending({
+        activeRepo: "/repo-a",
+        lastActiveRepo: "/repo-a",
+        boundaryRepo: null,
+        boundaryStatePending: false,
+      }),
+    ).toBeFalse();
+  });
+
   test("restores persisted repo context when navigation has no explicit task selection", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;
@@ -432,6 +454,118 @@ describe("useRepoNavigationPersistence", () => {
       const repoBWrites = writes.filter((entry) => entry.key === toContextStorageKey("/repo-b"));
       expect(repoBWrites.some((entry) => entry.value.includes("task-a"))).toBeFalse();
       expect(repoBWrites.some((entry) => entry.value.includes("session-a"))).toBeFalse();
+
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
+  test("restores repo-scoped context when switching back to a previous repository", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      memoryStorage.setItem(
+        toContextStorageKey("/repo-a"),
+        JSON.stringify({
+          taskId: "task-a",
+          role: "spec",
+          sessionId: "session-a",
+        }),
+      );
+      memoryStorage.setItem(
+        toContextStorageKey("/repo-b"),
+        JSON.stringify({
+          taskId: "task-b",
+          role: "planner",
+          sessionId: "session-b",
+        }),
+      );
+
+      const harness = createHookHarness({
+        activeRepo: "/repo-a",
+      });
+
+      await harness.mount();
+      await harness.waitFor((state) => state.navigation.taskId === "task-a");
+
+      await harness.update({
+        activeRepo: "/repo-b",
+      });
+      await harness.waitFor((state) => state.navigation.taskId === "task-b");
+
+      await harness.update({
+        activeRepo: "/repo-a",
+      });
+      await harness.waitFor((state) => state.navigation.taskId === "task-a");
+
+      expect(harness.getLatest().navigation).toEqual({
+        taskId: "task-a",
+        sessionId: "session-a",
+        role: "spec",
+        scenario: null,
+      });
+
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
+  test("rapid repo changes leave the final repository context restored", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      memoryStorage.setItem(
+        toContextStorageKey("/repo-a"),
+        JSON.stringify({
+          taskId: "task-a",
+          role: "spec",
+          sessionId: "session-a",
+        }),
+      );
+      memoryStorage.setItem(
+        toContextStorageKey("/repo-b"),
+        JSON.stringify({
+          taskId: "task-b",
+          role: "planner",
+          sessionId: "session-b",
+        }),
+      );
+
+      const harness = createHookHarness({
+        activeRepo: "/repo-a",
+      });
+
+      await harness.mount();
+      await harness.waitFor((state) => state.navigation.taskId === "task-a");
+
+      await harness.update({ activeRepo: "/repo-b" });
+      await harness.update({ activeRepo: "/repo-a" });
+      await harness.waitFor((state) => state.navigation.taskId === "task-a");
+
+      expect(harness.getLatest().navigation).toEqual({
+        taskId: "task-a",
+        sessionId: "session-a",
+        role: "spec",
+        scenario: null,
+      });
 
       await harness.unmount();
     } finally {

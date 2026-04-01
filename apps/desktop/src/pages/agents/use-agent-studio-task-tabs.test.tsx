@@ -551,6 +551,86 @@ describe("useAgentStudioTaskTabs", () => {
     }
   });
 
+  test("restores repo-scoped fallback tabs when switching away and back", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      memoryStorage.setItem(
+        toTabsStorageKey("/repo-a"),
+        toPersistedTaskTabs({
+          tabs: ["task-a"],
+          activeTaskId: "task-a",
+        }),
+      );
+      memoryStorage.setItem(
+        toTabsStorageKey("/repo-b"),
+        toPersistedTaskTabs({
+          tabs: ["task-b"],
+          activeTaskId: "task-b",
+        }),
+      );
+
+      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const harness = createHookHarness({
+        activeRepo: "/repo-a",
+        taskId: "",
+        selectedTask: null,
+        tasks: [createTask("task-a")],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map([["task-a", createSession("task-a", "session-a")]]),
+        updateQuery: (updates) => {
+          updateCalls.push(updates);
+        },
+        clearComposerInput: () => {},
+      });
+
+      await harness.mount();
+      await harness.waitFor(() => updateCalls.length === 1);
+
+      await harness.update({
+        activeRepo: "/repo-b",
+        taskId: "",
+        selectedTask: null,
+        tasks: [createTask("task-b")],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map([["task-b", createSession("task-b", "session-b")]]),
+        updateQuery: (updates) => {
+          updateCalls.push(updates);
+        },
+        clearComposerInput: () => {},
+      });
+      await harness.waitFor(() => updateCalls.length === 2);
+
+      await harness.update({
+        activeRepo: "/repo-a",
+        taskId: "",
+        selectedTask: null,
+        tasks: [createTask("task-a")],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map([["task-a", createSession("task-a", "session-a-2")]]),
+        updateQuery: (updates) => {
+          updateCalls.push(updates);
+        },
+        clearComposerInput: () => {},
+      });
+      await harness.waitFor(() => updateCalls.length === 3);
+
+      expect(updateCalls.map((call) => call.task)).toEqual(["task-a", "task-b", "task-a"]);
+
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
   test("removes a task tab when the selected task becomes closed and routes to the first remaining tab", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;
