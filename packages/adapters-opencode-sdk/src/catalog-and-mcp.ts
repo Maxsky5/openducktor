@@ -1,11 +1,14 @@
 import { slashCommandCatalogSchema } from "@openducktor/contracts";
 import type {
   AgentDescriptor,
+  AgentFileSearchResult,
   AgentModelCatalog,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
+import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import { asUnknownRecord, readStringArrayProp, readStringProp } from "./guards";
+import { basename, isAbsolutePath, toProjectRelativePath } from "./path-utils";
 import { mapProviderListToCatalog, toToolIdList } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
 import type { ClientFactory, McpServerStatus } from "./types";
@@ -13,6 +16,23 @@ import type { ClientFactory, McpServerStatus } from "./types";
 const OPENCODE_DEFAULT_AGENT_COLORS: Record<string, string> = {
   build: "var(--icon-agent-build-base)",
   plan: "var(--icon-agent-plan-base)",
+};
+
+const FILE_SEARCH_LIMIT = 20;
+
+type FindFilesClient = {
+  find?: {
+    files?: (input: {
+      directory: string;
+      query: string;
+      dirs?: "true" | "false";
+      type?: "file" | "directory";
+      limit?: number;
+    }) => Promise<{
+      data?: unknown;
+      error?: { message?: string } | unknown;
+    }>;
+  };
 };
 
 const isAgentMode = (value: string | undefined): value is AgentDescriptor["mode"] =>
@@ -33,6 +53,51 @@ const resolveAgentColor = (
 
   const normalizedName = agentName.trim().toLowerCase();
   return OPENCODE_DEFAULT_AGENT_COLORS[normalizedName];
+};
+
+const normalizeFileSearchPath = (rawPath: string, workingDirectory: string): string => {
+  const trimmedPath = rawPath.trim();
+  if (trimmedPath.length === 0) {
+    throw new Error("Invalid file search payload: expected non-empty file paths.");
+  }
+
+  const withoutTrailingSlash = trimmedPath.replace(/[\\/]+$/, "");
+  const normalizedPath = withoutTrailingSlash.length > 0 ? withoutTrailingSlash : trimmedPath;
+  if (isAbsolutePath(normalizedPath)) {
+    return toProjectRelativePath(normalizedPath, workingDirectory);
+  }
+
+  return normalizedPath;
+};
+
+const toFileSearchResult = (rawPath: string, workingDirectory: string): AgentFileSearchResult => {
+  const path = normalizeFileSearchPath(rawPath, workingDirectory);
+  const name = basename(path);
+  return {
+    id: path,
+    path,
+    name: name.length > 0 ? name : path,
+    kind: detectAgentFileReferenceKind({
+      filePath: path,
+      isDirectory: /[\\/]\s*$/.test(rawPath),
+    }),
+  };
+};
+
+const toFileSearchResults = (
+  payload: unknown,
+  workingDirectory: string,
+): AgentFileSearchResult[] => {
+  if (!Array.isArray(payload)) {
+    throw new Error("Invalid file search payload: expected an array of file paths.");
+  }
+
+  return payload.map((entry) => {
+    if (typeof entry !== "string") {
+      throw new Error("Invalid file search payload: expected an array of file paths.");
+    }
+    return toFileSearchResult(entry, workingDirectory);
+  });
 };
 
 export const listAvailableModels = async (
@@ -170,6 +235,36 @@ export const listAvailableSlashCommands = async (
     return slashCommandCatalogSchema.parse({ commands });
   } catch (error) {
     throw toOpenCodeRequestError("list slash commands", error);
+  }
+};
+
+export const searchFiles = async (
+  createClient: ClientFactory,
+  input: {
+    runtimeEndpoint: string;
+    workingDirectory: string;
+    query: string;
+  },
+): Promise<AgentFileSearchResult[]> => {
+  try {
+    const client = createClient({
+      runtimeEndpoint: input.runtimeEndpoint,
+      workingDirectory: input.workingDirectory,
+    });
+    const findClient = (client as FindFilesClient).find;
+    if (!findClient || typeof findClient.files !== "function") {
+      throw new Error("OpenCode runtime does not expose the file search API.");
+    }
+
+    const payload = await findClient.files({
+      directory: input.workingDirectory,
+      query: input.query,
+      limit: FILE_SEARCH_LIMIT,
+    });
+
+    return toFileSearchResults(unwrapData(payload, "search files"), input.workingDirectory);
+  } catch (error) {
+    throw toOpenCodeRequestError("search files", error);
   }
 };
 

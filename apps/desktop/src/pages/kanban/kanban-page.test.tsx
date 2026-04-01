@@ -254,6 +254,7 @@ const renderPage = async (options?: { waitForKanbanReady?: boolean }): Promise<R
           refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
           loadRepoRuntimeCatalog: loadRepoRuntimeCatalogMock,
           loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+          loadRepoRuntimeFileSearch: async () => [],
         }}
       >
         <MemoryRouter initialEntries={["/"]}>

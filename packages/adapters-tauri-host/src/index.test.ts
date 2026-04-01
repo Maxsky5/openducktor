@@ -1105,6 +1105,7 @@ describe("TauriHostClient", () => {
               supportsProfiles: true,
               supportsVariants: true,
               supportsSlashCommands: true,
+              supportsFileSearch: true,
               supportsOdtWorkflowTools: true,
               supportsPermissionRequests: true,
               supportsQuestionRequests: true,

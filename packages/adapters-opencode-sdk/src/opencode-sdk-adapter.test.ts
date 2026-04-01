@@ -325,6 +325,67 @@ describe("opencode-sdk-adapter", () => {
     ).rejects.toThrow("OpenCode runtime does not expose the command listing API.");
   });
 
+  test("searchFiles forwards runtime inputs to the catalog loader", async () => {
+    const files = mock(async () => ({
+      data: ["src/", "src/index.ts"],
+      error: undefined,
+    }));
+    const createClient = mock(() => ({ find: { files } })) as () => OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({ createClient, now: () => "2026-02-22T12:00:00.000Z" });
+
+    const results = await adapter.searchFiles({
+      runtimeKind: "opencode",
+      runtimeConnection: {
+        endpoint: "http://127.0.0.1:12345",
+        workingDirectory: "/repo",
+      },
+      query: "src",
+    });
+
+    expect(createClient).toHaveBeenCalledWith({
+      runtimeEndpoint: "http://127.0.0.1:12345",
+      workingDirectory: "/repo",
+    });
+    expect(files).toHaveBeenCalledTimes(1);
+    expect(files).toHaveBeenCalledWith({
+      directory: "/repo",
+      limit: 20,
+      query: "src",
+    });
+    expect(results).toEqual([
+      {
+        id: "src",
+        path: "src",
+        name: "src",
+        kind: "directory",
+      },
+      {
+        id: "src/index.ts",
+        path: "src/index.ts",
+        name: "index.ts",
+        kind: "code",
+      },
+    ]);
+  });
+
+  test("searchFiles propagates catalog loader failures", async () => {
+    const adapter = new OpencodeSdkAdapter({
+      createClient: (() => ({})) as () => OpencodeClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await expect(
+      adapter.searchFiles({
+        runtimeKind: "opencode",
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:12345",
+          workingDirectory: "/repo",
+        },
+        query: "src",
+      }),
+    ).rejects.toThrow("OpenCode runtime does not expose the file search API.");
+  });
+
   test("listLiveAgentSessionSnapshots merges status and pending input into a single live-session view", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({

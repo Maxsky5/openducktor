@@ -9,6 +9,27 @@ const COMMAND = {
   hints: ["compact"],
 };
 
+const FILE_REFERENCE = {
+  id: "file-src-main",
+  path: "src/main.ts",
+  name: "main.ts",
+  kind: "code" as const,
+};
+
+const IMAGE_FILE_REFERENCE = {
+  id: "file-assets-diagram",
+  path: "assets/diagram.svg",
+  name: "diagram.svg",
+  kind: "image" as const,
+};
+
+const VIDEO_FILE_REFERENCE = {
+  id: "file-recordings-demo",
+  path: "recordings/demo.mov",
+  name: "demo.mov",
+  kind: "video" as const,
+};
+
 const createSession = (overrides?: {
   commandResult?: { data?: unknown; error?: unknown; response?: unknown };
   promptAsyncResult?: { data?: unknown; error?: unknown; response?: unknown };
@@ -181,6 +202,160 @@ describe("message-execution", () => {
       parts: [{ type: "text", text: "plain follow-up" }],
     });
     expect(command).not.toHaveBeenCalled();
+  });
+
+  test("routes file references through native prompt file parts", async () => {
+    const { session, command, promptAsync } = createSession();
+
+    await sendUserMessage({
+      session,
+      request: {
+        sessionId: "session-1",
+        parts: [
+          { kind: "text", text: "check " },
+          { kind: "file_reference", file: FILE_REFERENCE },
+          { kind: "text", text: " please" },
+        ],
+      },
+      tools: {},
+    });
+
+    expect(promptAsync).toHaveBeenCalledWith({
+      sessionID: "session-opencode-1",
+      directory: "/repo",
+      tools: {},
+      parts: [
+        { type: "text", text: "check @src/main.ts please" },
+        {
+          type: "file",
+          mime: "text/plain",
+          url: "file:///repo/src/main.ts",
+          filename: "main.ts",
+          source: {
+            type: "file",
+            path: "src/main.ts",
+            text: {
+              value: "@src/main.ts",
+              start: 6,
+              end: 18,
+            },
+          },
+        },
+      ],
+    });
+    expect(command).not.toHaveBeenCalled();
+  });
+
+  test("encodes file URLs for special characters and relative paths", async () => {
+    const { session, promptAsync } = createSession();
+
+    await sendUserMessage({
+      session,
+      request: {
+        sessionId: "session-1",
+        parts: [
+          {
+            kind: "file_reference",
+            file: {
+              id: "file-special",
+              path: "docs/guide?#.md",
+              name: "guide?#.md",
+              kind: "default",
+            },
+          },
+        ],
+      },
+      tools: {},
+    });
+
+    expect(promptAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: [
+          { type: "text", text: "@docs/guide?#.md" },
+          expect.objectContaining({
+            type: "file",
+            url: "file:///repo/docs/guide%3F%23.md",
+            filename: "guide?#.md",
+          }),
+        ],
+      }),
+    );
+  });
+
+  test("uses media mime types for image and video file references", async () => {
+    const { session, promptAsync } = createSession();
+
+    await sendUserMessage({
+      session,
+      request: {
+        sessionId: "session-1",
+        parts: [
+          { kind: "file_reference", file: IMAGE_FILE_REFERENCE },
+          { kind: "text", text: " and " },
+          { kind: "file_reference", file: VIDEO_FILE_REFERENCE },
+        ],
+      },
+      tools: {},
+    });
+
+    expect(promptAsync).toHaveBeenCalledWith({
+      sessionID: "session-opencode-1",
+      directory: "/repo",
+      tools: {},
+      parts: [
+        { type: "text", text: "@assets/diagram.svg and @recordings/demo.mov" },
+        {
+          type: "file",
+          mime: "image/svg+xml",
+          url: "file:///repo/assets/diagram.svg",
+          filename: "diagram.svg",
+          source: {
+            type: "file",
+            path: "assets/diagram.svg",
+            text: {
+              value: "@assets/diagram.svg",
+              start: 0,
+              end: 19,
+            },
+          },
+        },
+        {
+          type: "file",
+          mime: "video/quicktime",
+          url: "file:///repo/recordings/demo.mov",
+          filename: "demo.mov",
+          source: {
+            type: "file",
+            path: "recordings/demo.mov",
+            text: {
+              value: "@recordings/demo.mov",
+              start: 24,
+              end: 44,
+            },
+          },
+        },
+      ],
+    });
+  });
+
+  test("fails explicitly when a slash command message also contains a file reference", async () => {
+    const { session } = createSession();
+
+    await expect(
+      sendUserMessage({
+        session,
+        request: {
+          sessionId: "session-1",
+          parts: [
+            { kind: "slash_command", command: COMMAND },
+            { kind: "file_reference", file: FILE_REFERENCE },
+          ],
+        },
+        tools: {},
+      }),
+    ).rejects.toThrow(
+      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured file references.",
+    );
   });
 
   test("preserves slash-command error context without wrapping it as a prompt failure", async () => {

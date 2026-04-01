@@ -58,8 +58,10 @@ export function AgentChatComposerSlashMenu({
                   "flex w-full cursor-pointer gap-3 px-3 py-2 text-left transition-colors",
                   isActive ? "bg-primary/20" : "hover:bg-muted/80",
                 )}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => onSelectCommand(command)}
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  onSelectCommand(command);
+                }}
               >
                 <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                   <Terminal className="size-3.5" />

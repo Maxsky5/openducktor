@@ -123,6 +123,7 @@ Canonical capability schema: `packages/contracts/src/agent-runtime-schemas.ts`
 | `supportsTodos` | Optional enhancement | Runtime can list session todo items | Session warmup and event refresh | Todo warmup and refresh logic read from this surface |
 | `supportsDiff` | Optional enhancement | Runtime can provide session diff data | Diff inspection | Diff views call this when showing runtime-produced changes |
 | `supportsFileStatus` | Optional enhancement | Runtime can provide file status data | File-status inspection | File-status inspection calls this when showing workspace state |
+| `supportsFileSearch` | Optional enhancement | Runtime can search files for `@` references in the chat composer and accept structured file-reference prompt parts | Agent Studio composer, runtime catalog queries, and prompt-send adapter boundary | The composer only opens `@` autocomplete when this flag is true, search requests stay runtime-backed in repo/session scoped query paths, and adapters must encode file references faithfully instead of flattening them into lossy plain text |
 | `supportsMcpStatus` | Optional enhancement | Runtime exposes MCP status info | Diagnostics and health checks | Diagnostics and MCP health checks read this before querying MCP status |
 | `supportedScopes` | Product-required scope coverage | Declares the workflow scopes the runtime implements. For OpenDucktor integration this must include `workspace`, `task`, and `build`. | Runtime validation and host startup | Runtime registration rejects descriptors missing any required workflow scope, and the host fails fast if a runtime does not cover the full workflow scope set |
 | `provisioningMode` | Whether runtime is `host_managed` or `external` | Host/runtime startup model | Startup flows use this to decide whether the host starts the runtime or connects to one that already exists |
@@ -142,6 +143,15 @@ When `supportsSlashCommands` is true, OpenDucktor loads a slash-command catalog 
 - filtering stays local in the composer, so typing after `/` does not trigger a runtime round-trip per keystroke.
 
 The shared/core boundary keeps slash commands as structured message parts. The OpenCode adapter converts a leading slash-command token plus trailing text into the runtime's native `session.command` request, where the trailing text becomes the command `arguments`. If the draft cannot be represented faithfully by the runtime-specific command endpoint, the adapter fails explicitly instead of flattening the structured command back into plain text.
+
+File search follows the same runtime-owned pattern, but with per-query reads instead of startup-loaded metadata:
+
+- repo-scoped `@` search runs against the selected repo runtime before a session exists,
+- active-session `@` search uses the session runtime connection only,
+- adapters normalize runtime search hits into core `AgentFileSearchResult` items,
+- structured file references stay typed through the draft/core boundary and are converted into runtime-native prompt parts only inside the runtime adapter.
+
+If a runtime can search files but cannot faithfully encode those structured file references for prompt sends, the adapter must return an actionable error instead of flattening the reference back into plain text.
 
 ## Read-Only Tool Policy
 

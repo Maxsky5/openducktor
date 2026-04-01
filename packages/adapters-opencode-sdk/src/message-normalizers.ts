@@ -1,5 +1,12 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
-import type { AgentModelSelection } from "@openducktor/core";
+import {
+  type AgentModelSelection,
+  type AgentUserMessageDisplayPart,
+  type AgentUserMessagePart,
+  type AgentUserMessageSourceText,
+  serializeAgentUserMessagePartsToText,
+} from "@openducktor/core";
+import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import { asUnknownRecord, readRecordProp, readUnknownProp } from "./guards";
 
 export const readTextFromParts = (parts: Part[]): string => {
@@ -8,6 +15,132 @@ export const readTextFromParts = (parts: Part[]): string => {
     .map((part) => part.text)
     .join("\n")
     .trim();
+};
+
+const readPathBasename = (filePath: string): string => {
+  const normalized = filePath.replace(/\\/g, "/").replace(/\/+$/, "");
+  const segments = normalized.split("/");
+  return segments[segments.length - 1] ?? filePath;
+};
+
+const readFilePathFromUrl = (url: string): string | null => {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "file:") {
+      return null;
+    }
+    const pathname = decodeURIComponent(parsed.pathname);
+    if (/^\/[A-Za-z]:/.test(pathname)) {
+      return pathname.slice(1);
+    }
+    return pathname;
+  } catch {
+    return null;
+  }
+};
+
+const normalizeSourceText = (value: unknown): AgentUserMessageSourceText | undefined => {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const textValue = record.value;
+  const start = record.start;
+  const end = record.end;
+  if (typeof textValue !== "string" || typeof start !== "number" || typeof end !== "number") {
+    return undefined;
+  }
+  return {
+    value: textValue,
+    start,
+    end,
+  };
+};
+
+const normalizeFileReferencePart = (
+  part: Extract<Part, { type: "file" }>,
+): AgentUserMessageDisplayPart | null => {
+  const source = part.source;
+  const sourcePath = source?.type === "file" ? source.path.trim() : "";
+  const filePath =
+    sourcePath.length > 0
+      ? sourcePath
+      : (readFilePathFromUrl(part.url) ?? part.filename?.trim() ?? "");
+  if (filePath.length === 0) {
+    return null;
+  }
+
+  const name = part.filename?.trim() || readPathBasename(filePath);
+  const sourceText = source?.type === "file" ? normalizeSourceText(source.text) : undefined;
+  return {
+    kind: "file_reference",
+    file: {
+      id: part.id,
+      path: filePath,
+      name,
+      kind: detectAgentFileReferenceKind({ filePath, mime: part.mime }),
+    },
+    ...(sourceText ? { sourceText } : {}),
+  };
+};
+
+export const normalizeUserMessageDisplayParts = (parts: Part[]): AgentUserMessageDisplayPart[] => {
+  return parts.flatMap((part) => {
+    if (part.type === "text") {
+      if (part.synthetic || part.ignored || part.text.length === 0) {
+        return [];
+      }
+      return [{ kind: "text", text: part.text } satisfies AgentUserMessageDisplayPart];
+    }
+
+    if (part.type === "file") {
+      const fileReference = normalizeFileReferencePart(part);
+      return fileReference ? [fileReference] : [];
+    }
+
+    return [];
+  });
+};
+
+export const hasVisibleUserTextDisplayPart = (parts: AgentUserMessageDisplayPart[]): boolean => {
+  return parts.some((part) => part.kind === "text" && !part.synthetic && part.text.length > 0);
+};
+
+export const ensureVisibleUserTextDisplayParts = (
+  parts: AgentUserMessageDisplayPart[],
+  fallbackText: string,
+): AgentUserMessageDisplayPart[] => {
+  if (hasVisibleUserTextDisplayPart(parts) || fallbackText.length === 0) {
+    return parts;
+  }
+
+  return [{ kind: "text", text: fallbackText }, ...parts];
+};
+
+export const readVisibleUserTextFromDisplayParts = (
+  parts: AgentUserMessageDisplayPart[],
+): string => {
+  const visibleText = parts
+    .filter(
+      (part): part is Extract<AgentUserMessageDisplayPart, { kind: "text" }> =>
+        part.kind === "text" && !part.synthetic,
+    )
+    .map((part) => part.text)
+    .join("");
+  if (visibleText.length > 0) {
+    return visibleText;
+  }
+
+  const userMessageParts = parts.flatMap<AgentUserMessagePart>((part) => {
+    if (part.kind === "text") {
+      return part.synthetic ? [] : [{ kind: "text", text: part.text }];
+    }
+
+    return [{ kind: "file_reference", file: part.file }];
+  });
+
+  return serializeAgentUserMessagePartsToText(userMessageParts);
 };
 
 export const readTextFromMessageInfo = (info: unknown): string => {
@@ -20,7 +153,7 @@ export const readTextFromMessageInfo = (info: unknown): string => {
     readUnknownProp(record, "text") ??
     readUnknownProp(record, "content") ??
     readUnknownProp(readRecordProp(record, "message"), "text");
-  return typeof direct === "string" ? direct.trim() : "";
+  return typeof direct === "string" ? direct : "";
 };
 
 export const sanitizeAssistantMessage = (rawMessage: string): string => rawMessage.trim();

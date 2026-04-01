@@ -264,6 +264,7 @@ describe("event-stream", () => {
     expect(userMessages[0].messageId).toBe("user-message-1");
     expect(userMessages[0].message).toBe("Generate the PR");
     expect(userMessages[0].timestamp).toBe("2026-02-22T12:00:03.000Z");
+    expect(userMessages[0].parts).toEqual([{ kind: "text", text: "Generate the PR" }]);
     expect(userMessages[0].model).toEqual({
       providerId: "openai",
       modelId: "gpt-5",
@@ -315,6 +316,7 @@ describe("event-stream", () => {
       message: "Generate the PR",
       timestamp: "2026-02-22T12:00:04.000Z",
     });
+    expect(userMessages[0].parts).toEqual([{ kind: "text", text: "Generate the PR" }]);
   });
 
   test("emits user_message when user text parts arrive after message.updated", async () => {
@@ -367,6 +369,7 @@ describe("event-stream", () => {
         variant: "high",
       },
     });
+    expect(userMessages[0].parts).toEqual([{ kind: "text", text: "Ship it" }]);
   });
 
   test("re-emits user_message when later parts update the visible text", async () => {
@@ -412,6 +415,82 @@ describe("event-stream", () => {
       messageId: "user-message-4",
       message: "New text",
       state: "read",
+    });
+    expect(userMessages[1]?.parts).toEqual([{ kind: "text", text: "New text" }]);
+  });
+
+  test("preserves visible user text when later file parts arrive without visible text parts", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "user-message-5",
+            role: "user",
+            sessionID: "external-session-1",
+            text: "check @src/main.ts please",
+            time: {
+              created: Date.parse("2026-02-22T12:00:07.000Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "user-file-5",
+            sessionID: "external-session-1",
+            messageID: "user-message-5",
+            type: "file",
+            mime: "text/plain",
+            filename: "main.ts",
+            url: "file:///repo/src/main.ts",
+            source: {
+              type: "file",
+              path: "src/main.ts",
+              text: {
+                value: "@src/main.ts",
+                start: 6,
+                end: 18,
+              },
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages[0]).toMatchObject({
+      type: "user_message",
+      messageId: "user-message-5",
+      message: "check @src/main.ts please",
+    });
+    expect(userMessages[1]).toMatchObject({
+      type: "user_message",
+      messageId: "user-message-5",
+      message: "check @src/main.ts please",
+      parts: [
+        {
+          kind: "text",
+          text: "check @src/main.ts please",
+        },
+        {
+          kind: "file_reference",
+          file: {
+            id: "user-file-5",
+            path: "src/main.ts",
+            name: "main.ts",
+            kind: "code",
+          },
+          sourceText: {
+            value: "@src/main.ts",
+            start: 6,
+            end: 18,
+          },
+        },
+      ],
     });
   });
 

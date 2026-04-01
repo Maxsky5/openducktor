@@ -88,6 +88,23 @@ export type AgentRuntimeDefinition = RuntimeDescriptor;
 export type AgentSlashCommand = ContractsSlashCommandDescriptor;
 export type AgentSlashCommandCatalog = ContractsSlashCommandCatalog;
 
+export type AgentFileSearchResultKind =
+  | "directory"
+  | "css"
+  | "code"
+  | "image"
+  | "video"
+  | "default";
+
+export type AgentFileReference = {
+  id: string;
+  path: string;
+  name: string;
+  kind: AgentFileSearchResultKind;
+};
+
+export type AgentFileSearchResult = AgentFileReference;
+
 export type AgentUserMessagePart =
   | {
       kind: "text";
@@ -96,7 +113,34 @@ export type AgentUserMessagePart =
   | {
       kind: "slash_command";
       command: AgentSlashCommand;
+    }
+  | {
+      kind: "file_reference";
+      file: AgentFileReference;
     };
+
+export type AgentUserMessageSourceText = {
+  value: string;
+  start: number;
+  end: number;
+};
+
+export type AgentUserMessageDisplayPart =
+  | {
+      kind: "text";
+      text: string;
+      synthetic?: boolean;
+    }
+  | {
+      kind: "file_reference";
+      file: AgentFileReference;
+      sourceText?: AgentUserMessageSourceText;
+    };
+
+export type AgentUserMessagePromptFileReference = {
+  file: AgentFileReference;
+  sourceText: AgentUserMessageSourceText;
+};
 
 export type AgentSessionTodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
 export type AgentSessionTodoPriority = "high" | "medium" | "low";
@@ -320,6 +364,7 @@ export type AgentEvent =
       timestamp: string;
       messageId: string;
       message: string;
+      parts: AgentUserMessageDisplayPart[];
       state: AgentUserMessageState;
       model?: AgentModelSelection;
     }

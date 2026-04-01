@@ -25,6 +25,7 @@ const runtimeFixture: RuntimeInstanceSummary = {
       supportedScopes: ["workspace"],
       supportsDiff: true,
       supportsFileStatus: true,
+      supportsFileSearch: true,
       supportsMcpStatus: true,
       supportsOdtWorkflowTools: true,
       supportsPermissionRequests: true,

@@ -51,7 +51,8 @@ export const setCaretOffsetWithinElement = (element: HTMLElement, logicalOffset:
   range.collapse(true);
   selection.removeAllRanges();
   selection.addRange(range);
-  element.focus();
+  const focusTarget = element.closest<HTMLElement>('[contenteditable="true"]') ?? element;
+  focusTarget.focus();
 };
 
 export const insertTextAtCaretWithinElement = (
@@ -84,7 +85,8 @@ export const insertTextAtCaretWithinElement = (
     fallbackRange.collapse(true);
     selection.removeAllRanges();
     selection.addRange(fallbackRange);
-    element.focus();
+    const focusTarget = element.closest<HTMLElement>('[contenteditable="true"]') ?? element;
+    focusTarget.focus();
   }
 
   if (selection.rangeCount === 0) {
@@ -101,7 +103,8 @@ export const insertTextAtCaretWithinElement = (
   nextRange.collapse(true);
   selection.removeAllRanges();
   selection.addRange(nextRange);
-  element.focus();
+  const focusTarget = element.closest<HTMLElement>('[contenteditable="true"]') ?? element;
+  focusTarget.focus();
 
   return getCaretOffsetWithinElement(element);
 };

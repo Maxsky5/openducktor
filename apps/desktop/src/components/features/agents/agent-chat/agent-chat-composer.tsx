@@ -174,9 +174,11 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     selectedModelSelection,
     isSelectionCatalogLoading,
     supportsSlashCommands,
+    supportsFileSearch,
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
+    searchFiles,
     agentOptions,
     modelOptions,
     modelGroups,
@@ -301,7 +303,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     isModelSelectionPending ||
     isWaitingInput ||
     Boolean(busySendBlockedReason);
-  let composerPlaceholder = "@ for files/agents; / for commands; ! for shell";
+  let composerPlaceholder = "@ for files; / for commands; ! for shell";
   if (isReadOnly && readOnlyReason) {
     composerPlaceholder = readOnlyReason;
   }
@@ -352,9 +354,11 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
             onEditorInput={onComposerEditorInput}
             onSend={handleSubmit}
             supportsSlashCommands={supportsSlashCommands}
+            supportsFileSearch={supportsFileSearch}
             slashCommands={slashCommands}
             slashCommandsError={slashCommandsError}
             isSlashCommandsLoading={isSlashCommandsLoading}
+            searchFiles={searchFiles}
           />
 
           <AgentChatComposerControls

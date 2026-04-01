@@ -2,6 +2,7 @@ import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentModelSelection,
   AgentSessionSummary,
+  AgentUserMessageDisplayPart,
   StartAgentSessionInput,
 } from "@openducktor/core";
 import type { PendingPartDelta } from "./event-stream/shared";
@@ -45,6 +46,7 @@ export type SessionRecord = {
       text?: string;
       hasStopSignal?: boolean;
       totalTokens?: number;
+      displayParts?: AgentUserMessageDisplayPart[];
     }
   >;
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;

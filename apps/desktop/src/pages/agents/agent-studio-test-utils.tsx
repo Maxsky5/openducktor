@@ -44,6 +44,7 @@ const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
     throw new Error("Test runtime catalog loader was not configured.");
   },
   loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+  loadRepoRuntimeFileSearch: async () => [],
 } satisfies ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
 
 const TEST_CHECKS_OPERATIONS_CONTEXT = {

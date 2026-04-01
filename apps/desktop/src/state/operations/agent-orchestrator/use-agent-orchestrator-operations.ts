@@ -7,6 +7,7 @@ import type {
 } from "@openducktor/contracts";
 import type {
   AgentEnginePort,
+  AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
   AgentRuntimeConnection,
@@ -91,6 +92,11 @@ type UseAgentOrchestratorOperationsResult = {
     runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
   ) => Promise<AgentSlashCommandCatalog>;
+  readSessionFileSearch: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+    query: string,
+  ) => Promise<AgentFileSearchResult[]>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
   startAgentSession: (input: StartAgentSessionInput) => Promise<string>;
   sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
@@ -246,6 +252,16 @@ export function useAgentOrchestratorOperations({
       agentEngine.listAvailableSlashCommands({
         runtimeKind,
         runtimeConnection,
+      }),
+    [agentEngine],
+  );
+
+  const readSessionFileSearch = useCallback(
+    (runtimeKind: RuntimeKind, runtimeConnection: AgentRuntimeConnection, query: string) =>
+      agentEngine.searchFiles({
+        runtimeKind,
+        runtimeConnection,
+        query,
       }),
     [agentEngine],
   );
@@ -543,6 +559,7 @@ export function useAgentOrchestratorOperations({
         readSessionModelCatalog,
         readSessionTodos,
         readSessionSlashCommands,
+        readSessionFileSearch,
         removeAgentSessions,
         sessionActions,
       }),
@@ -553,6 +570,7 @@ export function useAgentOrchestratorOperations({
       readSessionModelCatalog,
       readSessionTodos,
       readSessionSlashCommands,
+      readSessionFileSearch,
       removeAgentSessions,
       sessionActions,
     ],

@@ -1387,6 +1387,102 @@ describe("OpencodeSdkAdapter", () => {
     expect(history[2].state).toBe("queued");
   });
 
+  test("loadSessionHistory preserves user whitespace and reconstructs adjacent file references", async () => {
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-user-1",
+            role: "user",
+            text: "  @src/alpha.ts @src/beta.ts  ",
+            time: { created: Date.parse("2026-02-17T11:59:00Z") },
+          },
+          parts: [
+            {
+              id: "file-alpha",
+              sessionID: "session-opencode-1",
+              messageID: "msg-user-1",
+              type: "file",
+              mime: "text/plain",
+              filename: "alpha.ts",
+              url: "file:///repo/src/alpha.ts",
+              source: {
+                type: "file",
+                path: "src/alpha.ts",
+                text: { value: "@src/alpha.ts", start: 2, end: 15 },
+              },
+            } as Part,
+            {
+              id: "file-beta",
+              sessionID: "session-opencode-1",
+              messageID: "msg-user-1",
+              type: "file",
+              mime: "text/plain",
+              filename: "beta.ts",
+              url: "file:///repo/src/beta.ts",
+              source: {
+                type: "file",
+                path: "src/beta.ts",
+                text: { value: "@src/beta.ts", start: 15, end: 27 },
+              },
+            } as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const history = await adapter.loadSessionHistory({
+      runtimeKind: "opencode",
+      runtimeConnection: defaultRuntimeConnection,
+      externalSessionId: "session-opencode-1",
+      limit: 100,
+    });
+
+    expect(history).toHaveLength(1);
+    if (history[0]?.role !== "user") {
+      throw new Error("Expected user history entry");
+    }
+    expect(history[0].text).toBe("  @src/alpha.ts @src/beta.ts  ");
+    expect(history[0].displayParts).toEqual([
+      {
+        kind: "text",
+        text: "  @src/alpha.ts @src/beta.ts  ",
+      },
+      {
+        kind: "file_reference",
+        file: {
+          id: "file-alpha",
+          path: "src/alpha.ts",
+          name: "alpha.ts",
+          kind: "code",
+        },
+        sourceText: {
+          start: 2,
+          end: 15,
+          value: "@src/alpha.ts",
+        },
+      },
+      {
+        kind: "file_reference",
+        file: {
+          id: "file-beta",
+          path: "src/beta.ts",
+          name: "beta.ts",
+          kind: "code",
+        },
+        sourceText: {
+          start: 15,
+          end: 27,
+          value: "@src/beta.ts",
+        },
+      },
+    ]);
+  });
+
   test("maps message.updated events into assistant parts and assistant message", async () => {
     const streamEvents: Event[] = [
       {

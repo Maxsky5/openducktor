@@ -40,6 +40,7 @@ type AgentStudioOrchestrationActionsContext = {
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   stopAgentSession: AgentStateContextValue["stopAgentSession"];
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
+  readSessionFileSearch: AgentStateContextValue["readSessionFileSearch"];
   readSessionSlashCommands: AgentStateContextValue["readSessionSlashCommands"];
   bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
   hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
@@ -114,10 +115,12 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "selectedModelSelection"
   | "isSelectionCatalogLoading"
   | "supportsSlashCommands"
+  | "supportsFileSearch"
   | "slashCommandCatalog"
   | "slashCommands"
   | "slashCommandsError"
   | "isSlashCommandsLoading"
+  | "searchFiles"
   | "agentOptions"
   | "modelOptions"
   | "modelGroups"
@@ -228,6 +231,7 @@ export function useAgentStudioOrchestrationController({
     sendAgentMessage,
     stopAgentSession,
     updateAgentSessionModel,
+    readSessionFileSearch,
     readSessionSlashCommands,
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
@@ -252,10 +256,12 @@ export function useAgentStudioOrchestrationController({
     selectedModelSelection,
     isSelectionCatalogLoading,
     supportsSlashCommands,
+    supportsFileSearch,
     slashCommandCatalog,
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
+    searchFiles,
     agentOptions,
     modelOptions,
     modelGroups,
@@ -271,6 +277,7 @@ export function useAgentStudioOrchestrationController({
     role: viewRole,
     repoSettings,
     updateAgentSessionModel,
+    readSessionFileSearch,
     readSessionSlashCommands,
   });
 
@@ -377,10 +384,12 @@ export function useAgentStudioOrchestrationController({
       selectedModelSelection,
       isSelectionCatalogLoading,
       supportsSlashCommands,
+      supportsFileSearch,
       slashCommandCatalog,
       slashCommands,
       slashCommandsError,
       isSlashCommandsLoading,
+      searchFiles,
       agentOptions,
       modelOptions,
       modelGroups,

@@ -73,6 +73,7 @@ describe("agent-orchestrator-public-operations", () => {
         defaultModelsByProvider: {},
       }),
       readSessionSlashCommands: async () => ({ commands: [] }),
+      readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       sessionActions: createSessionActions(),
@@ -102,6 +103,7 @@ describe("agent-orchestrator-public-operations", () => {
         defaultModelsByProvider: {},
       }),
       readSessionSlashCommands: async () => ({ commands: [] }),
+      readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       sessionActions: createSessionActions(),
@@ -136,6 +138,7 @@ describe("agent-orchestrator-public-operations", () => {
         defaultModelsByProvider: {},
       }),
       readSessionSlashCommands: async () => ({ commands: [] }),
+      readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       sessionActions: createSessionActions({
@@ -181,6 +184,7 @@ describe("agent-orchestrator-public-operations", () => {
         defaultModelsByProvider: {},
       }),
       readSessionSlashCommands: async () => ({ commands: [] }),
+      readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       sessionActions: createSessionActions({
@@ -221,6 +225,7 @@ describe("agent-orchestrator-public-operations", () => {
         defaultModelsByProvider: {},
       }),
       readSessionSlashCommands: async () => ({ commands: [] }),
+      readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       removeAgentSessions: () => {},
       sessionActions: createSessionActions({
@@ -256,6 +261,7 @@ describe("agent-orchestrator-public-operations", () => {
         defaultModelsByProvider: {},
       }),
       readSessionSlashCommands: async () => ({ commands: [] }),
+      readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       removeAgentSessions,
       sessionActions: createSessionActions(),

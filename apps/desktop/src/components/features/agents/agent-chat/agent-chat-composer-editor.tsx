@@ -1,14 +1,210 @@
-import type { AgentSlashCommand } from "@openducktor/core";
-import type { ReactElement } from "react";
+import type { AgentFileSearchResult, AgentSlashCommand } from "@openducktor/core";
+import { type ReactElement, useLayoutEffect, useState } from "react";
 import { badgeVariants } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
   type AgentChatComposerDraft,
   draftHasMeaningfulContent,
 } from "./agent-chat-composer-draft";
-import { EMPTY_TEXT_SEGMENT_SENTINEL } from "./agent-chat-composer-selection";
+import { AgentChatComposerFileMenu } from "./agent-chat-composer-file-menu";
+import {
+  EMPTY_TEXT_SEGMENT_SENTINEL,
+  readEditableTextContent,
+} from "./agent-chat-composer-selection";
 import { AgentChatComposerSlashMenu } from "./agent-chat-composer-slash-menu";
+import {
+  AGENT_CHAT_FILE_REFERENCE_CHIP_BASE_CLASS_NAME,
+  AGENT_CHAT_FILE_REFERENCE_CHIP_ICON_CLASS_NAME,
+  AGENT_CHAT_FILE_REFERENCE_CHIP_LABEL_CLASS_NAME,
+  type AgentChatFileReferenceChipFile,
+} from "./agent-chat-file-reference-chip";
+import { getAgentChatFileReferenceIconMarkup } from "./agent-chat-file-reference-icon";
 import { useAgentChatComposerEditor } from "./use-agent-chat-composer-editor";
+
+const escapeHtml = (value: string): string => {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+};
+
+const buildComposerFileReferenceChipMarkup = (
+  file: AgentChatFileReferenceChipFile,
+  segmentId: string,
+): string => {
+  return `<span contenteditable="false" data-chip-segment-id="${escapeHtml(segmentId)}" data-segment-id="${escapeHtml(segmentId)}" data-file-reference-path="${escapeHtml(file.path)}" class="${escapeHtml(
+    cn(AGENT_CHAT_FILE_REFERENCE_CHIP_BASE_CLASS_NAME, "mr-2 max-w-full align-middle"),
+  )}"><span class="${escapeHtml(AGENT_CHAT_FILE_REFERENCE_CHIP_ICON_CLASS_NAME)}">${getAgentChatFileReferenceIconMarkup(
+    file.kind,
+  )}</span><span class="${escapeHtml(AGENT_CHAT_FILE_REFERENCE_CHIP_LABEL_CLASS_NAME)}">${escapeHtml(
+    file.name,
+  )}</span></span>`;
+};
+
+const COMPOSER_FILE_REFERENCE_TOOLTIP_OFFSET = 8;
+const COMPOSER_FILE_REFERENCE_TOOLTIP_TOP_MINIMUM = 40;
+
+type ComposerFileReferenceTooltipState = {
+  path: string;
+  left: number;
+  top: number;
+  side: "top" | "bottom";
+};
+
+const readComposerFileReferenceChipElement = (target: EventTarget | null): HTMLElement | null => {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+
+  const chip = target.closest("[data-file-reference-path]");
+  return chip instanceof HTMLElement ? chip : null;
+};
+
+const readComposerFileReferenceTooltipState = (
+  target: EventTarget | null,
+): ComposerFileReferenceTooltipState | null => {
+  const chip = readComposerFileReferenceChipElement(target);
+  const path = chip?.dataset.fileReferencePath;
+  if (!chip || !path) {
+    return null;
+  }
+
+  const chipBounds = chip.getBoundingClientRect();
+  const side = chipBounds.top >= COMPOSER_FILE_REFERENCE_TOOLTIP_TOP_MINIMUM ? "top" : "bottom";
+
+  return {
+    path,
+    left: chipBounds.left + chipBounds.width / 2,
+    top:
+      side === "top"
+        ? chipBounds.top - COMPOSER_FILE_REFERENCE_TOOLTIP_OFFSET
+        : chipBounds.bottom + COMPOSER_FILE_REFERENCE_TOOLTIP_OFFSET,
+    side,
+  };
+};
+
+const buildComposerContentMarkup = (draft: AgentChatComposerDraft): string => {
+  return draft.segments
+    .map((segment, index) => {
+      const nextSegment = draft.segments[index + 1];
+
+      if (segment.kind === "file_reference") {
+        return buildComposerFileReferenceChipMarkup(segment.file, segment.id);
+      }
+
+      if (segment.kind === "slash_command") {
+        return `<span contenteditable="false" data-chip-segment-id="${escapeHtml(segment.id)}" data-segment-id="${escapeHtml(segment.id)}" class="${escapeHtml(
+          cn(
+            badgeVariants({ variant: "secondary" }),
+            "mx-0.5 mr-2 inline-flex h-6 bg-yellow-300 dark:bg-yellow-600 items-center rounded-full px-2.5 text-xs font-medium align-middle",
+          ),
+        )}">/${escapeHtml(segment.command.trigger)}</span>`;
+      }
+
+      const segmentText = segment.text.trim();
+      const isLeadingEmptyChipHost =
+        segmentText.length === 0 && nextSegment != null && nextSegment.kind !== "text";
+      if (isLeadingEmptyChipHost) {
+        return "";
+      }
+
+      const className = cn(
+        "whitespace-pre-wrap break-words align-middle leading-6 outline-none",
+        segmentText.length === 0 && draft.segments[index - 1]?.kind !== "text"
+          ? "inline-block min-w-[1px]"
+          : "inline",
+      );
+
+      return `<span data-segment-id="${escapeHtml(segment.id)}" data-text-segment-id="${escapeHtml(segment.id)}" class="${escapeHtml(className)}">${
+        segment.text.length > 0 ? escapeHtml(segment.text) : EMPTY_TEXT_SEGMENT_SENTINEL
+      }</span>`;
+    })
+    .join("");
+};
+
+const shouldRenderTextSegment = (draft: AgentChatComposerDraft, index: number): boolean => {
+  const segment = draft.segments[index];
+  if (!segment || segment.kind !== "text") {
+    return false;
+  }
+
+  const nextSegment = draft.segments[index + 1];
+  return !(segment.text.trim().length === 0 && nextSegment != null && nextSegment.kind !== "text");
+};
+
+const readExpectedTextSegmentClassName = (
+  draft: AgentChatComposerDraft,
+  index: number,
+): string | null => {
+  const segment = draft.segments[index];
+  if (!segment || segment.kind !== "text") {
+    return null;
+  }
+
+  const segmentText = segment.text.trim();
+  return cn(
+    "whitespace-pre-wrap break-words align-middle leading-6 outline-none",
+    segmentText.length === 0 && draft.segments[index - 1]?.kind !== "text"
+      ? "inline-block min-w-[1px]"
+      : "inline",
+  );
+};
+
+const syncComposerDomInPlace = (root: HTMLDivElement, draft: AgentChatComposerDraft): boolean => {
+  const domNodes = Array.from(root.childNodes).filter(
+    (node) => !(node instanceof Text && (node.textContent ?? "").length === 0),
+  );
+  const renderableSegments = draft.segments.flatMap((segment, draftIndex) => {
+    if (segment.kind === "text" && !shouldRenderTextSegment(draft, draftIndex)) {
+      return [];
+    }
+
+    return [{ segment, draftIndex }];
+  });
+
+  if (domNodes.length !== renderableSegments.length) {
+    return false;
+  }
+
+  return renderableSegments.every(({ segment, draftIndex }, index) => {
+    const node = domNodes[index];
+    if (!(node instanceof HTMLElement)) {
+      return false;
+    }
+
+    if (segment.kind === "text") {
+      const expectedClassName = readExpectedTextSegmentClassName(draft, draftIndex);
+      if (!expectedClassName) {
+        return false;
+      }
+
+      if (node.className !== expectedClassName) {
+        node.className = expectedClassName;
+      }
+
+      return (
+        node.dataset.textSegmentId === segment.id &&
+        readEditableTextContent(node) === segment.text &&
+        node.className === expectedClassName
+      );
+    }
+
+    if (segment.kind === "slash_command") {
+      return (
+        node.dataset.chipSegmentId === segment.id &&
+        node.textContent === `/${segment.command.trigger}`
+      );
+    }
+
+    return (
+      node.dataset.chipSegmentId === segment.id &&
+      node.dataset.fileReferencePath === segment.file.path &&
+      (node.textContent ?? "").includes(segment.file.name)
+    );
+  });
+};
 
 const shouldRedirectShellClickToComposer = (
   target: EventTarget | null,
@@ -22,24 +218,15 @@ const shouldRedirectShellClickToComposer = (
     return false;
   }
 
-  if (target.closest('[contenteditable="true"],button,a,input,textarea,select,[role="button"]')) {
+  if (
+    target.closest(
+      '[contenteditable="true"],[data-chip-segment-id],button,a,input,textarea,select,[role="button"]',
+    )
+  ) {
     return false;
   }
 
   return true;
-};
-
-const getTextSegmentElement = (target: EventTarget | null): HTMLElement | null => {
-  if (!(target instanceof HTMLElement)) {
-    return null;
-  }
-
-  const segmentElement = target.closest<HTMLElement>("[data-segment-id]");
-  if (!segmentElement?.isContentEditable) {
-    return null;
-  }
-
-  return segmentElement;
 };
 
 type AgentChatComposerEditorProps = {
@@ -51,9 +238,11 @@ type AgentChatComposerEditorProps = {
   onEditorInput: () => void;
   onSend: () => void;
   supportsSlashCommands: boolean;
+  supportsFileSearch: boolean;
   slashCommands: AgentSlashCommand[];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
 };
 
 export function AgentChatComposerEditor({
@@ -65,36 +254,106 @@ export function AgentChatComposerEditor({
   onEditorInput,
   onSend,
   supportsSlashCommands,
+  supportsFileSearch,
   slashCommands,
   slashCommandsError,
   isSlashCommandsLoading,
+  searchFiles,
 }: AgentChatComposerEditorProps): ReactElement {
+  const [composerFileReferenceTooltip, setComposerFileReferenceTooltip] =
+    useState<ComposerFileReferenceTooltipState | null>(null);
   const {
     filteredSlashCommands,
     activeSlashIndex,
     showSlashMenu,
-    registerTextSegmentRef,
+    fileSearchResults,
+    activeFileIndex,
+    showFileMenu,
+    fileSearchError,
+    isFileSearchLoading,
     focusLastTextSegment,
-    focusSlashCommandSegment,
     selectSlashCommand,
-    handleTextInput,
-    handleTextBeforeInput,
-    handleTextFocus,
-    handleTextClick,
-    handleTextKeyUp,
-    handleTextKeyDown,
+    selectFileSearchResult,
+    handleEditorInput,
+    handleEditorBeforeInput,
+    handleEditorFocus,
+    handleEditorClick,
+    handleEditorKeyUp,
+    handleEditorKeyDown,
   } = useAgentChatComposerEditor({
     draft,
     onDraftChange,
+    editorRef,
     disabled,
     onEditorInput,
     onSend,
     supportsSlashCommands,
+    supportsFileSearch,
     slashCommands,
+    searchFiles,
   });
+  const composerContentMarkup = buildComposerContentMarkup(draft);
+
+  useLayoutEffect(() => {
+    const editor = editorRef.current?.querySelector<HTMLDivElement>("[data-composer-content-root]");
+    if (!editor || syncComposerDomInPlace(editor, draft)) {
+      return;
+    }
+    editor.innerHTML = composerContentMarkup;
+  }, [composerContentMarkup, draft, editorRef]);
+
+  useLayoutEffect(() => {
+    if (!composerFileReferenceTooltip) {
+      return;
+    }
+
+    const hideTooltip = (): void => {
+      setComposerFileReferenceTooltip(null);
+    };
+
+    window.addEventListener("resize", hideTooltip);
+    window.addEventListener("scroll", hideTooltip, true);
+    return () => {
+      window.removeEventListener("resize", hideTooltip);
+      window.removeEventListener("scroll", hideTooltip, true);
+    };
+  }, [composerFileReferenceTooltip]);
 
   return (
     <div className="relative">
+      {composerFileReferenceTooltip ? (
+        <div
+          className={cn(
+            "pointer-events-none fixed z-50 max-w-80 rounded-md bg-foreground px-3 py-1.5 text-xs text-background text-balance shadow-sm",
+            composerFileReferenceTooltip.side === "top"
+              ? "-translate-x-1/2 -translate-y-full"
+              : "-translate-x-1/2",
+          )}
+          style={{
+            left: `${composerFileReferenceTooltip.left}px`,
+            top: `${composerFileReferenceTooltip.top}px`,
+          }}
+        >
+          <div>{composerFileReferenceTooltip.path}</div>
+          <div
+            className={cn(
+              "absolute left-1/2 size-2.5 -translate-x-1/2 rotate-45 bg-foreground",
+              composerFileReferenceTooltip.side === "top"
+                ? "bottom-0 translate-y-1/2"
+                : "top-0 -translate-y-1/2",
+            )}
+          />
+        </div>
+      ) : null}
+      {showFileMenu ? (
+        <AgentChatComposerFileMenu
+          results={fileSearchResults}
+          activeIndex={activeFileIndex}
+          fileSearchError={fileSearchError}
+          isFileSearchLoading={isFileSearchLoading}
+          onSelectFile={selectFileSearchResult}
+        />
+      ) : null}
       {showSlashMenu ? (
         <AgentChatComposerSlashMenu
           commands={filteredSlashCommands}
@@ -104,33 +363,66 @@ export function AgentChatComposerEditor({
           onSelectCommand={selectSlashCommand}
         />
       ) : null}
-
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: the contenteditable root is the editor surface. */}
       <div
         ref={editorRef}
+        contentEditable={!disabled}
+        suppressContentEditableWarning
+        spellCheck={false}
         className={cn(
           "min-h-11 max-h-[220px] overflow-y-auto px-3 py-2.5 text-[15px] leading-6 outline-none",
+          !draftHasMeaningfulContent(draft) &&
+            "selection:bg-transparent [&_*::selection]:bg-transparent",
           disabled ? "cursor-not-allowed opacity-60" : "cursor-text",
         )}
         aria-disabled={disabled}
+        onBeforeInput={handleEditorBeforeInput}
+        onInput={(event) => handleEditorInput(event.currentTarget)}
+        onFocus={handleEditorFocus}
+        onClick={handleEditorClick}
+        onKeyUp={handleEditorKeyUp}
+        onKeyDown={handleEditorKeyDown}
+        onMouseOver={(event) => {
+          const nextTooltip = readComposerFileReferenceTooltipState(event.target);
+          if (!nextTooltip) {
+            return;
+          }
+
+          setComposerFileReferenceTooltip((current) => {
+            if (
+              current?.path === nextTooltip.path &&
+              current.left === nextTooltip.left &&
+              current.top === nextTooltip.top &&
+              current.side === nextTooltip.side
+            ) {
+              return current;
+            }
+
+            return nextTooltip;
+          });
+        }}
+        onMouseOut={(event) => {
+          const currentChip = readComposerFileReferenceChipElement(event.target);
+          if (!currentChip) {
+            return;
+          }
+
+          const nextChip = readComposerFileReferenceChipElement(event.relatedTarget);
+          if (currentChip === nextChip) {
+            return;
+          }
+
+          setComposerFileReferenceTooltip(null);
+        }}
+        onBlur={() => {
+          setComposerFileReferenceTooltip(null);
+        }}
         onMouseDownCapture={(event) => {
           if (disabled || !shouldRedirectShellClickToComposer(event.target, event.currentTarget)) {
             return;
           }
           event.preventDefault();
           focusLastTextSegment();
-        }}
-        onMouseUpCapture={(event) => {
-          const segmentElement = getTextSegmentElement(event.target);
-          if (!segmentElement) {
-            return;
-          }
-
-          const segmentId = segmentElement.dataset.segmentId;
-          if (!segmentId) {
-            return;
-          }
-
-          handleTextClick(segmentId, segmentElement);
         }}
       >
         {!draftHasMeaningfulContent(draft) ? (
@@ -139,63 +431,14 @@ export function AgentChatComposerEditor({
           </div>
         ) : null}
 
-        <div className="relative z-10 min-h-7 whitespace-pre-wrap break-words">
-          {draft.segments.map((segment, index) => {
-            const nextSegment = draft.segments[index + 1];
-
-            if (segment.kind === "slash_command") {
-              return (
-                <button
-                  key={segment.id}
-                  type="button"
-                  contentEditable={false}
-                  aria-label={`Slash command /${segment.command.trigger}. Press Backspace immediately after the chip to remove it.`}
-                  className={cn(
-                    badgeVariants({ variant: "secondary" }),
-                    "mx-0.5 inline-flex h-6 align-baseline rounded-full border border-border px-2.5 text-xs font-medium mr-2",
-                  )}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => focusSlashCommandSegment(segment.id)}
-                >
-                  /{segment.command.trigger}
-                </button>
-              );
-            }
-
-            const segmentText = segment.text.trim();
-
-            const isLeadingEmptySlashHost =
-              segmentText.length === 0 && nextSegment?.kind === "slash_command";
-            if (isLeadingEmptySlashHost) {
-              return null;
-            }
-
-            return (
-              /* biome-ignore lint/a11y/noStaticElementInteractions: inline contenteditable segments need custom caret and keyboard handling. */
-              <span
-                key={segment.id}
-                ref={(element) => registerTextSegmentRef(segment.id, element)}
-                contentEditable={!disabled}
-                suppressContentEditableWarning
-                spellCheck={false}
-                data-segment-id={segment.id}
-                className={cn(
-                  "whitespace-pre-wrap break-words align-baseline outline-none",
-                  segmentText.length === 0 && draft.segments[index - 1]?.kind === "slash_command"
-                    ? "inline-block min-w-[1px]"
-                    : "inline",
-                )}
-                onBeforeInput={(event) => handleTextBeforeInput(segment.id, event)}
-                onInput={(event) => handleTextInput(segment.id, event.currentTarget)}
-                onFocus={(event) => handleTextFocus(segment.id, event.currentTarget)}
-                onKeyUp={(event) => handleTextKeyUp(segment.id, event)}
-                onKeyDown={(event) => handleTextKeyDown(segment.id, event)}
-              >
-                {segment.text.length > 0 ? segment.text : EMPTY_TEXT_SEGMENT_SENTINEL}
-              </span>
-            );
-          })}
-        </div>
+        <div
+          className={cn(
+            "relative z-10 min-h-6 whitespace-pre-wrap break-words",
+            !draftHasMeaningfulContent(draft) &&
+              "selection:bg-transparent [&_*::selection]:bg-transparent",
+          )}
+          data-composer-content-root
+        />
       </div>
     </div>
   );

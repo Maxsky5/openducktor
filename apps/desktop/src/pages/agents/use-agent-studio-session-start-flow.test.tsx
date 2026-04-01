@@ -117,6 +117,7 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
             refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
             loadRepoRuntimeCatalog: async () => createModalCatalog(),
             loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+            loadRepoRuntimeFileSearch: async () => [],
           },
           children,
         }),

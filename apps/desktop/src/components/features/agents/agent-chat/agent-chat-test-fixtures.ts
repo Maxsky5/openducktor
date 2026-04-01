@@ -1,5 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type {
+  AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
   AgentSessionTodoItem,
@@ -149,6 +150,16 @@ export const buildModelSelection = (
 
 export const createComposerDraft = (text: string) => ({
   segments: [createTextSegment(text)],
+});
+
+export const buildFileSearchResult = (
+  overrides: Partial<AgentFileSearchResult> = {},
+): AgentFileSearchResult => ({
+  id: "src/main.ts",
+  path: "src/main.ts",
+  name: "main.ts",
+  kind: "code",
+  ...overrides,
 });
 
 export { createEmptyComposerDraft };

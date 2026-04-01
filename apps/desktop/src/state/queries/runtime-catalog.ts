@@ -1,8 +1,13 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentSlashCommandCatalog } from "@openducktor/core";
+import type {
+  AgentFileSearchResult,
+  AgentModelCatalog,
+  AgentSlashCommandCatalog,
+} from "@openducktor/core";
 import { queryOptions } from "@tanstack/react-query";
 
 const RUNTIME_CATALOG_STALE_TIME_MS = 5 * 60_000;
+export const RUNTIME_FILE_SEARCH_STALE_TIME_MS = 15_000;
 
 const runtimeCatalogQueryKeys = {
   all: ["runtime-catalog"] as const,
@@ -10,6 +15,8 @@ const runtimeCatalogQueryKeys = {
     [...runtimeCatalogQueryKeys.all, repoPath, runtimeKind] as const,
   repoSlashCommands: (repoPath: string, runtimeKind: RuntimeKind) =>
     [...runtimeCatalogQueryKeys.all, "slash-commands", repoPath, runtimeKind] as const,
+  repoFileSearch: (repoPath: string, runtimeKind: RuntimeKind, query: string) =>
+    [...runtimeCatalogQueryKeys.all, "file-search", repoPath, runtimeKind, query] as const,
 };
 
 export const repoRuntimeCatalogQueryOptions = (
@@ -39,4 +46,21 @@ export const repoRuntimeSlashCommandsQueryOptions = (
     queryFn: (): Promise<AgentSlashCommandCatalog> =>
       loadRepoRuntimeSlashCommands(repoPath, runtimeKind),
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
+  });
+
+export const repoRuntimeFileSearchQueryOptions = (
+  repoPath: string,
+  runtimeKind: RuntimeKind,
+  query: string,
+  loadRepoRuntimeFileSearch: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+    query: string,
+  ) => Promise<AgentFileSearchResult[]>,
+) =>
+  queryOptions({
+    queryKey: runtimeCatalogQueryKeys.repoFileSearch(repoPath, runtimeKind, query),
+    queryFn: (): Promise<AgentFileSearchResult[]> =>
+      loadRepoRuntimeFileSearch(repoPath, runtimeKind, query),
+    staleTime: RUNTIME_FILE_SEARCH_STALE_TIME_MS,
   });

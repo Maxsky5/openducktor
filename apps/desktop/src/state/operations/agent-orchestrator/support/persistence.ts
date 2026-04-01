@@ -4,6 +4,7 @@ import {
   type AgentRole,
   type AgentScenario,
   type AgentSessionHistoryMessage,
+  type AgentUserMessageDisplayPart,
   defaultAgentScenarioForRole,
 } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
@@ -114,25 +115,6 @@ const assistantDurationFromHistory = (
   return undefined;
 };
 
-const isSyntheticHistoryUserMessage = (message: AgentSessionHistoryMessage): boolean => {
-  if (message.role !== "user") {
-    return false;
-  }
-
-  let hasTextPart = false;
-  for (const part of message.parts) {
-    if (part.kind !== "text") {
-      continue;
-    }
-    hasTextPart = true;
-    if (!part.synthetic) {
-      return false;
-    }
-  }
-
-  return hasTextPart;
-};
-
 const assistantMessageMeta = (
   role: AgentRole,
   selectedModel: AgentModelSelection | null,
@@ -168,6 +150,7 @@ const isFinalAssistantHistoryMessage = (message: AgentSessionHistoryMessage): bo
 const userMessageMeta = (
   messageModel: AgentModelSelection | undefined,
   state: Extract<AgentSessionHistoryMessage, { role: "user" }>["state"],
+  parts: AgentUserMessageDisplayPart[] = [],
 ) => {
   const effectiveModel = mergeModelSelection(null, messageModel);
   return {
@@ -177,6 +160,7 @@ const userMessageMeta = (
     ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
     ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),
     ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : {}),
+    ...(parts.length > 0 ? { parts } : {}),
   } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }>;
 };
 
@@ -259,6 +243,8 @@ export const historyToChatMessages = (
   let previousUserTimestampMs: number | null = null;
 
   for (const message of history) {
+    const userDisplayParts = message.role === "user" ? (message.displayParts ?? []) : [];
+
     for (const part of message.parts) {
       const partMessage = historyPartToChatMessage(message, part);
       if (partMessage) {
@@ -266,8 +252,9 @@ export const historyToChatMessages = (
       }
     }
 
-    const content = message.text.trim();
-    if (content.length > 0) {
+    const content = message.text;
+    const shouldRenderPrimaryMessage = content.length > 0 || userDisplayParts.length > 0;
+    if (shouldRenderPrimaryMessage) {
       const isFinalAssistantMessage = isFinalAssistantHistoryMessage(message);
       const assistantDurationMs = assistantDurationFromHistory(message, previousUserTimestampMs);
       let meta: AgentChatMessage["meta"] | undefined;
@@ -281,7 +268,7 @@ export const historyToChatMessages = (
           isFinalAssistantMessage ? message.totalTokens : undefined,
         );
       } else if (message.role === "user") {
-        meta = userMessageMeta(message.model, message.state);
+        meta = userMessageMeta(message.model, message.state, userDisplayParts);
       }
 
       next.push({
@@ -293,7 +280,7 @@ export const historyToChatMessages = (
       });
     }
 
-    if (message.role === "user" && !isSyntheticHistoryUserMessage(message)) {
+    if (message.role === "user" && (content.length > 0 || userDisplayParts.length > 0)) {
       const parsed = Date.parse(message.timestamp);
       previousUserTimestampMs = Number.isNaN(parsed) ? previousUserTimestampMs : parsed;
     }

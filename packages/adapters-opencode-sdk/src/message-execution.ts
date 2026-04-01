@@ -1,9 +1,12 @@
 import {
+  buildAgentUserMessagePromptText,
   normalizeAgentUserMessageParts,
   type SendAgentUserMessageInput,
   serializeAgentUserMessagePartsToText,
 } from "@openducktor/core";
 import { setSessionActive } from "./event-stream/shared";
+import { detectAgentFileReferenceMime } from "./file-reference-utils";
+import { resolveAgainstWorkingDirectory, toFileUrl } from "./path-utils";
 import { normalizeModelInput, resolveAssistantResponseMessageId } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
 import type { SessionRecord } from "./types";
@@ -26,6 +29,27 @@ type PreparedUserSend = {
   }) => Promise<{ assistantMessageId: string | null }>;
 };
 
+type OpenCodePromptPart =
+  | {
+      type: "text";
+      text: string;
+    }
+  | {
+      type: "file";
+      mime: string;
+      url: string;
+      filename: string;
+      source: {
+        type: "file";
+        path: string;
+        text: {
+          value: string;
+          start: number;
+          end: number;
+        };
+      };
+    };
+
 const toCommandModelInput = (
   modelInput: ReturnType<typeof normalizeModelInput>,
 ): string | undefined => {
@@ -33,6 +57,41 @@ const toCommandModelInput = (
     return undefined;
   }
   return `${modelInput.model.providerID}/${modelInput.model.modelID}`;
+};
+
+const toPromptFilePart = (
+  fileReference: ReturnType<typeof buildAgentUserMessagePromptText>["fileReferences"][number],
+  workingDirectory: string,
+): Extract<OpenCodePromptPart, { type: "file" }> => {
+  const normalizedPath = fileReference.file.path.trim();
+  if (normalizedPath.length === 0) {
+    throw new Error("OpenCode file references require a non-empty path.");
+  }
+
+  return {
+    type: "file",
+    mime: detectAgentFileReferenceMime(fileReference.file),
+    url: toFileUrl(resolveAgainstWorkingDirectory(workingDirectory, normalizedPath)),
+    filename: fileReference.file.name,
+    source: {
+      type: "file",
+      path: normalizedPath,
+      text: fileReference.sourceText,
+    },
+  };
+};
+
+const toPromptParts = (
+  parts: SendAgentUserMessageInput["parts"],
+  workingDirectory: string,
+): OpenCodePromptPart[] => {
+  const promptText = buildAgentUserMessagePromptText(parts);
+  return [
+    { type: "text", text: promptText.text },
+    ...promptText.fileReferences.map((fileReference) =>
+      toPromptFilePart(fileReference, workingDirectory),
+    ),
+  ];
 };
 
 const toSlashCommandExecutionRequest = (
@@ -44,6 +103,12 @@ const toSlashCommandExecutionRequest = (
   );
   if (slashCommandIndexes.length === 0) {
     return null;
+  }
+  if (normalizedParts.some((part) => part.kind === "file_reference")) {
+    throw toOpenCodeRequestError(
+      "run slash command",
+      new Error("OpenCode slash commands do not support structured file references."),
+    );
   }
   if (slashCommandIndexes.length > 1) {
     throw new Error("OpenCode supports only one slash command token per message.");
@@ -79,6 +144,7 @@ const preparePromptSend = (request: SendAgentUserMessageInput): PreparedUserSend
   return {
     queuedContent,
     execute: async ({ session, modelInput, tools }) => {
+      const promptParts = toPromptParts(request.parts, session.input.workingDirectory);
       const promptRequest = {
         sessionID: session.externalSessionId,
         directory: session.input.workingDirectory,
@@ -89,7 +155,7 @@ const preparePromptSend = (request: SendAgentUserMessageInput): PreparedUserSend
         ...(modelInput.variant ? { variant: modelInput.variant } : {}),
         ...(modelInput.agent ? { agent: modelInput.agent } : {}),
         tools,
-        parts: [{ type: "text" as const, text: queuedContent }],
+        parts: promptParts,
       };
 
       const response = await session.client.session.promptAsync(promptRequest);

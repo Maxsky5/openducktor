@@ -1,6 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR, type RunSummary } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentSlashCommandCatalog } from "@openducktor/core";
+import type {
+  AgentFileSearchResult,
+  AgentModelCatalog,
+  AgentSlashCommandCatalog,
+} from "@openducktor/core";
 import { createRuntimeCatalogOperations } from "./runtime-catalog";
 
 type CatalogDependencies = Parameters<typeof createRuntimeCatalogOperations>[0];
@@ -52,6 +56,15 @@ const slashCommandCatalogFixture: AgentSlashCommandCatalog = {
   ],
 };
 
+const fileSearchResultsFixture: AgentFileSearchResult[] = [
+  {
+    id: "src/main.ts",
+    path: "src/main.ts",
+    name: "main.ts",
+    kind: "code",
+  },
+];
+
 const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDependencies => ({
   getRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
   ensureRuntime: async () => runtimeFixture,
@@ -60,6 +73,7 @@ const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDepend
   listRuns: async () => [],
   listAvailableModels: async () => catalogFixture,
   listAvailableSlashCommands: async () => slashCommandCatalogFixture,
+  searchFiles: async () => fileSearchResultsFixture,
   listAvailableToolIds: async () => ["odt_read_task"],
   getMcpStatus: async () => ({
     openducktor: {
@@ -141,6 +155,56 @@ describe("opencode-catalog", () => {
       runtimeKind: "opencode",
       runtimeEndpoint: "http://127.0.0.1:4444",
       workingDirectory: "/tmp/repo",
+    });
+  });
+
+  test("loads repo file search results from runtime coordinates", async () => {
+    const ensureRuntime = mock(async () => runtimeFixture);
+    const searchFiles = mock(async () => fileSearchResultsFixture);
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        ensureRuntime,
+        searchFiles,
+      }),
+    );
+
+    await expect(
+      operations.loadRepoRuntimeFileSearch("/tmp/repo", "opencode", "src/ma"),
+    ).resolves.toEqual(fileSearchResultsFixture);
+    expect(ensureRuntime).toHaveBeenCalledWith("opencode", "/tmp/repo");
+    expect(searchFiles).toHaveBeenCalledWith({
+      runtimeKind: "opencode",
+      runtimeEndpoint: "http://127.0.0.1:4444",
+      workingDirectory: "/tmp/repo/worktree",
+      query: "src/ma",
+    });
+  });
+
+  test("reuses a cached repo runtime for file search before ensuring again", async () => {
+    const ensureRuntime = mock(async () => runtimeFixture);
+    const searchFiles = mock(async () => fileSearchResultsFixture);
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        ensureRuntime,
+        listRuntimesForRepo: async () => [
+          {
+            ...runtimeFixture,
+            workingDirectory: "/tmp/repo",
+          },
+        ],
+        searchFiles,
+      }),
+    );
+
+    await expect(
+      operations.loadRepoRuntimeFileSearch("/tmp/repo", "opencode", "src"),
+    ).resolves.toEqual(fileSearchResultsFixture);
+    expect(ensureRuntime).not.toHaveBeenCalled();
+    expect(searchFiles).toHaveBeenCalledWith({
+      runtimeKind: "opencode",
+      runtimeEndpoint: "http://127.0.0.1:4444",
+      workingDirectory: "/tmp/repo",
+      query: "src",
     });
   });
 
