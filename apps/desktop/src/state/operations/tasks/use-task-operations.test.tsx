@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
+import { isKanbanForegroundLoading } from "@/pages/kanban/use-kanban-page-models";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { documentQueryKeys } from "../../queries/documents";
@@ -151,6 +152,7 @@ const createHookHarness = (initialArgs: HookArgs) => {
 type TaskAndKanbanHarnessState = {
   operations: ReturnType<typeof useTaskOperations>;
   kanbanTasks: TaskCard[];
+  isPendingKanban: boolean;
   isFetchingKanban: boolean;
 };
 
@@ -168,6 +170,7 @@ const createTaskAndKanbanHarness = (initialArgs: HookArgs, doneVisibleDays = 1) 
     latest = {
       operations,
       kanbanTasks: args.activeRepo ? (kanbanTaskListQuery.data ?? []) : [],
+      isPendingKanban: args.activeRepo !== null && kanbanTaskListQuery.isPending,
       isFetchingKanban:
         args.activeRepo !== null &&
         (kanbanTaskListQuery.isPending || kanbanTaskListQuery.isFetching),
@@ -676,6 +679,208 @@ describe("use-task-operations", () => {
       expect(runsList).toHaveBeenCalledTimes(1);
     } finally {
       repoPullRequestSyncDeferred.resolve({ ok: true });
+      await harness.unmount();
+      host.repoPullRequestSync = original.repoPullRequestSync;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
+  test("scheduled refresh keeps an empty kanban board out of foreground loading during post-sync refetch", async () => {
+    const repoPullRequestSyncDeferred = createDeferred<{ ok: boolean }>();
+    let repoTaskListCallCount = 0;
+    let kanbanTaskListCallCount = 0;
+    let runsListCallCount = 0;
+    const repoTaskRefreshDeferred = createDeferred<TaskCard[]>();
+    const kanbanRefreshDeferred = createDeferred<TaskCard[]>();
+    const runsRefreshDeferred = createDeferred<RunSummary[]>();
+    const repoPullRequestSync = mock(async () => repoPullRequestSyncDeferred.promise);
+    const tasksList = mock(async (_repoPath: string, doneVisibleDays?: number) => {
+      if (typeof doneVisibleDays === "number") {
+        kanbanTaskListCallCount += 1;
+        return kanbanTaskListCallCount === 1 ? [] : kanbanRefreshDeferred.promise;
+      }
+
+      repoTaskListCallCount += 1;
+      return repoTaskListCallCount === 1 ? [] : repoTaskRefreshDeferred.promise;
+    });
+    const runsList = mock(async (): Promise<RunSummary[]> => {
+      runsListCallCount += 1;
+      return runsListCallCount === 1 ? [] : runsRefreshDeferred.promise;
+    });
+
+    const original = {
+      repoPullRequestSync: host.repoPullRequestSync,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.repoPullRequestSync = repoPullRequestSync;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createTaskAndKanbanHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (value) =>
+          !value.isPendingKanban && !value.isFetchingKanban && value.kanbanTasks.length === 0,
+        1000,
+      );
+
+      let scheduledRefreshPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        scheduledRefreshPromise = value.operations.refreshTasksWithOptions({
+          trigger: "scheduled",
+        });
+      });
+
+      await harness.run(async () => {
+        repoPullRequestSyncDeferred.resolve({ ok: true });
+      });
+      await harness.waitFor(
+        (value) => !value.isPendingKanban && value.isFetchingKanban && kanbanTaskListCallCount >= 2,
+        1000,
+      );
+
+      if (!scheduledRefreshPromise) {
+        throw new Error("Expected scheduled refresh promise to be created");
+      }
+
+      const latest = harness.getLatest();
+      const foregroundLoading = isKanbanForegroundLoading({
+        hasActiveRepo: true,
+        isLoadingTasks: latest.operations.isLoadingTasks,
+        isSettingsPending: false,
+        doneVisibleDays: 1,
+        isKanbanPending: latest.isPendingKanban,
+      });
+
+      expect(repoTaskListCallCount).toBeGreaterThanOrEqual(2);
+      expect(foregroundLoading).toBe(false);
+      expect(foregroundLoading && latest.kanbanTasks.length === 0).toBe(false);
+
+      await harness.run(async () => {
+        repoTaskRefreshDeferred.resolve([]);
+        kanbanRefreshDeferred.resolve([]);
+        runsRefreshDeferred.resolve([]);
+        await scheduledRefreshPromise;
+      });
+    } finally {
+      repoPullRequestSyncDeferred.resolve({ ok: true });
+      repoTaskRefreshDeferred.resolve([]);
+      kanbanRefreshDeferred.resolve([]);
+      runsRefreshDeferred.resolve([]);
+      await harness.unmount();
+      host.repoPullRequestSync = original.repoPullRequestSync;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
+  test("scheduled refresh keeps visible kanban tasks out of foreground loading during post-sync refetch", async () => {
+    const repoPullRequestSyncDeferred = createDeferred<{ ok: boolean }>();
+    let repoTaskListCallCount = 0;
+    let kanbanTaskListCallCount = 0;
+    let runsListCallCount = 0;
+    const repoTaskRefreshDeferred = createDeferred<TaskCard[]>();
+    const kanbanRefreshDeferred = createDeferred<TaskCard[]>();
+    const runsRefreshDeferred = createDeferred<RunSummary[]>();
+    const repoPullRequestSync = mock(async () => repoPullRequestSyncDeferred.promise);
+    const tasksList = mock(async (_repoPath: string, doneVisibleDays?: number) => {
+      if (typeof doneVisibleDays === "number") {
+        kanbanTaskListCallCount += 1;
+        return kanbanTaskListCallCount === 1
+          ? [makeTask("A", "open")]
+          : kanbanRefreshDeferred.promise;
+      }
+
+      repoTaskListCallCount += 1;
+      return repoTaskListCallCount === 1
+        ? [makeTask("A", "open")]
+        : repoTaskRefreshDeferred.promise;
+    });
+    const runsList = mock(async (): Promise<RunSummary[]> => {
+      runsListCallCount += 1;
+      return runsListCallCount === 1 ? [] : runsRefreshDeferred.promise;
+    });
+
+    const original = {
+      repoPullRequestSync: host.repoPullRequestSync,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.repoPullRequestSync = repoPullRequestSync;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createTaskAndKanbanHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (value) =>
+          !value.isPendingKanban && !value.isFetchingKanban && value.kanbanTasks[0]?.id === "A",
+        1000,
+      );
+
+      let scheduledRefreshPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        scheduledRefreshPromise = value.operations.refreshTasksWithOptions({
+          trigger: "scheduled",
+        });
+      });
+
+      await harness.run(async () => {
+        repoPullRequestSyncDeferred.resolve({ ok: true });
+      });
+      await harness.waitFor(
+        (value) => !value.isPendingKanban && value.isFetchingKanban && kanbanTaskListCallCount >= 2,
+        1000,
+      );
+
+      if (!scheduledRefreshPromise) {
+        throw new Error("Expected scheduled refresh promise to be created");
+      }
+
+      const latest = harness.getLatest();
+      const foregroundLoading = isKanbanForegroundLoading({
+        hasActiveRepo: true,
+        isLoadingTasks: latest.operations.isLoadingTasks,
+        isSettingsPending: false,
+        doneVisibleDays: 1,
+        isKanbanPending: latest.isPendingKanban,
+      });
+
+      expect(repoTaskListCallCount).toBeGreaterThanOrEqual(2);
+      expect(foregroundLoading).toBe(false);
+      expect(latest.kanbanTasks[0]?.id).toBe("A");
+
+      await harness.run(async () => {
+        repoTaskRefreshDeferred.resolve([makeTask("A", "open")]);
+        kanbanRefreshDeferred.resolve([makeTask("A", "open")]);
+        runsRefreshDeferred.resolve([]);
+        await scheduledRefreshPromise;
+      });
+    } finally {
+      repoPullRequestSyncDeferred.resolve({ ok: true });
+      repoTaskRefreshDeferred.resolve([makeTask("A", "open")]);
+      kanbanRefreshDeferred.resolve([makeTask("A", "open")]);
+      runsRefreshDeferred.resolve([]);
       await harness.unmount();
       host.repoPullRequestSync = original.repoPullRequestSync;
       host.tasksList = original.tasksList;
