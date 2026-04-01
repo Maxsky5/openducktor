@@ -57,6 +57,10 @@ type AgentChatTranscriptProps = {
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
   messagesContentRef: RefObject<HTMLDivElement | null>;
   windowedRows: AgentChatWindowRow[];
+  windowStart: number;
+  hasHiddenRowsBelow: boolean;
+  topSentinelRef: (element: HTMLDivElement | null) => void;
+  bottomSentinelRef: (element: HTMLDivElement | null) => void;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
   showRuntimeCheckingOverlay: boolean;
   showRuntimeBlockedCard: boolean;
@@ -84,10 +88,6 @@ type AgentChatBottomStackProps = {
 };
 
 const EMPTY_ROWS: AgentChatWindowRow[] = [];
-const ROW_CONTENT_VISIBILITY_STYLE = {
-  contentVisibility: "auto",
-  containIntrinsicSize: "auto 500px",
-} as const;
 
 const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
   row,
@@ -97,12 +97,7 @@ const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
   resolveRowRef,
 }: AgentChatThreadMotionRowProps): ReactElement {
   return (
-    <div
-      ref={resolveRowRef(row.key)}
-      data-row-key={row.key}
-      className="agent-chat-row-motion"
-      style={ROW_CONTENT_VISIBILITY_STYLE}
-    >
+    <div ref={resolveRowRef(row.key)} data-row-key={row.key} className="agent-chat-row-motion">
       <AgentChatThreadRow
         row={row}
         sessionRole={sessionRole}
@@ -129,6 +124,10 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   messagesContainerRef,
   messagesContentRef,
   windowedRows,
+  windowStart,
+  hasHiddenRowsBelow,
+  topSentinelRef,
+  bottomSentinelRef,
   resolveRowRef,
   showRuntimeCheckingOverlay,
   showRuntimeBlockedCard,
@@ -207,8 +206,10 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
           </div>
         ) : null}
 
-        {hasSession
-          ? windowedRows.map((row) => (
+        {hasSession ? (
+          <>
+            {windowStart > 0 ? <div ref={topSentinelRef} className="h-px" /> : null}
+            {windowedRows.map((row) => (
               <AgentChatThreadMotionRow
                 key={row.key}
                 row={row}
@@ -217,8 +218,10 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
                 sessionWorkingDirectory={sessionWorkingDirectory}
                 resolveRowRef={resolveRowRef}
               />
-            ))
-          : null}
+            ))}
+            {hasHiddenRowsBelow ? <div ref={bottomSentinelRef} className="h-px" /> : null}
+          </>
+        ) : null}
       </div>
       {showLoadingOverlay ? (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-muted/85">
@@ -378,8 +381,11 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const {
     windowedRows,
     windowStart,
+    windowEnd,
     isNearBottom,
     isNearTop,
+    topSentinelRef,
+    bottomSentinelRef,
     scrollToBottom,
     scrollToTop,
     scrollToBottomOnSend,
@@ -460,6 +466,12 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
         windowedRows={rows.length > 0 && !hideTranscriptWhileHydrating ? windowedRows : EMPTY_ROWS}
+        windowStart={rows.length > 0 && !hideTranscriptWhileHydrating ? windowStart : 0}
+        hasHiddenRowsBelow={
+          rows.length > 0 && !hideTranscriptWhileHydrating && windowEnd < rows.length - 1
+        }
+        topSentinelRef={topSentinelRef}
+        bottomSentinelRef={bottomSentinelRef}
         resolveRowRef={resolveRowRef}
         showRuntimeCheckingOverlay={showRuntimeCheckingOverlay}
         showRuntimeBlockedCard={showRuntimeBlockedCard}

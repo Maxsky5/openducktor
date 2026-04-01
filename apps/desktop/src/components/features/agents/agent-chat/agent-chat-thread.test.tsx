@@ -217,7 +217,7 @@ describe("AgentChatThread", () => {
     expect(rowRenderSpy.mock.calls.length).toBe(initialRenderCount);
   });
 
-  test("keeps the transcript pinned on session switch while preserving row containment", async () => {
+  test("keeps the transcript pinned on session switch", async () => {
     const stableProps = createStableThreadProps();
     const firstSession = buildSession({
       sessionId: "session-a",
@@ -244,13 +244,6 @@ describe("AgentChatThread", () => {
     rerender(<AgentChatThread model={buildModel(secondSession, stableProps)} />);
     await flushEffects();
 
-    const firstRenderedRow = screen.getByTestId("session-b:session-b-user-2").parentElement;
-    if (!firstRenderedRow) {
-      throw new Error("Expected row wrapper");
-    }
-
-    expect(firstRenderedRow.style.contentVisibility).toBe("auto");
-    expect(firstRenderedRow.style.containIntrinsicSize).toBe("auto 500px");
     expect(container.scrollTop).toBe(container.scrollHeight - container.clientHeight);
   });
 });

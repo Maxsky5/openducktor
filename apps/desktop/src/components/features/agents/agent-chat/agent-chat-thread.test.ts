@@ -114,6 +114,7 @@ describe("AgentChatThread", () => {
   const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
 
   beforeEach(() => {
+    let nextAnimationFrameTime = 16;
     globalThis.matchMedia = ((query: string) =>
       ({
         matches: false,
@@ -126,7 +127,11 @@ describe("AgentChatThread", () => {
         dispatchEvent: () => false,
       }) as MediaQueryList) as typeof matchMedia;
     globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      callback(16);
+      const frameTime = nextAnimationFrameTime;
+      nextAnimationFrameTime += 16;
+      queueMicrotask(() => {
+        callback(frameTime);
+      });
       return 1;
     }) as typeof requestAnimationFrame;
     globalThis.cancelAnimationFrame = (() => {}) as typeof cancelAnimationFrame;

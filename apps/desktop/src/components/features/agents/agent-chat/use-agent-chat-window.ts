@@ -1,8 +1,12 @@
 import type { MutableRefObject, RefObject } from "react";
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
+import { clampWindowRange, createBottomAnchoredWindow } from "./agent-chat-window-shared";
 import { useAgentChatHistoryWindow } from "./use-agent-chat-history-window";
+import { useAgentChatResizeSync } from "./use-agent-chat-resize-sync";
 import { useAgentChatScrollController } from "./use-agent-chat-scroll-controller";
+import { useAgentChatSentinelObservers } from "./use-agent-chat-sentinel-observers";
+import { useAgentChatWindowRangeController } from "./use-agent-chat-window-range-controller";
 
 type UseAgentChatWindowInput = {
   rows: AgentChatWindowRow[];
@@ -17,8 +21,11 @@ type UseAgentChatWindowInput = {
 type UseAgentChatWindowResult = {
   windowedRows: AgentChatWindowRow[];
   windowStart: number;
+  windowEnd: number;
   isNearBottom: boolean;
   isNearTop: boolean;
+  topSentinelRef: (element: HTMLDivElement | null) => void;
+  bottomSentinelRef: (element: HTMLDivElement | null) => void;
   scrollToBottom: () => void;
   scrollToTop: () => void;
   scrollToBottomOnSend: () => void;
@@ -28,7 +35,6 @@ export function useAgentChatWindow({
   rows,
   activeSessionId,
   isSessionViewLoading,
-  isSessionWorking = false,
   messagesContainerRef,
   messagesContentRef,
   syncBottomAfterComposerLayoutRef,
@@ -38,22 +44,34 @@ export function useAgentChatWindow({
   const composerLayoutSyncTokenRef = useRef(0);
   const prevSessionIdRef = useRef<string | null>(null);
   const prevIsSessionViewLoadingRef = useRef(isSessionViewLoading);
+  const pendingBottomResetRef = useRef(false);
+  const pendingTopRevealRef = useRef(false);
+  const initialWindow = createBottomAnchoredWindow(rows.length);
   const {
     isNearBottom,
     isNearTop,
     userScrolledRef,
     userScrollIntentVersionRef,
-    forceScrollToBottom,
+    isPinnedToBottomRef,
+    suppressSentinelsRef,
+    isUpdatingRef,
+    hasPendingScrollRequest,
+    captureScrollAnchor,
+    syncBottomIfPinned,
+    scrollToBottomOnSend: jumpToBottomOnSend,
+    requestWindowScroll,
+    applyPendingScrollRequest,
+    setBottomAnchoredState,
+    setTopAnchoredState,
   } = useAgentChatScrollController({
     messagesContainerRef,
-    messagesContentRef,
-    isSessionWorking,
+    initialWindow,
   });
   const {
     latestTurnStart,
     turnStart,
-    windowStart,
-    windowedRows,
+    windowStart: historyWindowStart,
+    windowedRows: historyWindowedRows,
     resetToLatestTurns,
     revealAllHistory,
   } = useAgentChatHistoryWindow({
@@ -62,36 +80,17 @@ export function useAgentChatWindow({
     messagesContainerRef,
     userScrolledRef,
   });
-  const pendingBottomResetRef = useRef(false);
+  const historyRowCount = historyWindowedRows.length;
 
-  const resetLatestTurnsAndPinBottom = useCallback(() => {
-    if (turnStart === latestTurnStart) {
-      forceScrollToBottom();
-      return;
-    }
+  useLayoutEffect(() => {
+    applyPendingScrollRequest();
+  });
 
-    pendingBottomResetRef.current = true;
-    resetToLatestTurns();
-  }, [forceScrollToBottom, latestTurnStart, resetToLatestTurns, turnStart]);
-
-  useEffect(() => {
-    if (prevSessionIdRef.current === activeSessionId) {
-      return;
-    }
-
-    prevSessionIdRef.current = activeSessionId;
-    resetLatestTurnsAndPinBottom();
-  }, [activeSessionId, resetLatestTurnsAndPinBottom]);
-
-  useEffect(() => {
-    const finishedLoading = prevIsSessionViewLoadingRef.current && !isSessionViewLoading;
-    prevIsSessionViewLoadingRef.current = isSessionViewLoading;
-    if (!finishedLoading) {
-      return;
-    }
-
-    resetLatestTurnsAndPinBottom();
-  }, [isSessionViewLoading, resetLatestTurnsAndPinBottom]);
+  useAgentChatResizeSync({
+    messagesContainerRef,
+    messagesContentRef,
+    syncBottomIfPinned,
+  });
 
   useEffect(() => {
     if (!syncBottomAfterComposerLayoutRef) {
@@ -114,7 +113,7 @@ export function useAgentChatWindow({
       cancelScheduledComposerLayoutSync();
       const requestAnimationFrameFn = globalThis.requestAnimationFrame;
       if (typeof requestAnimationFrameFn !== "function") {
-        forceScrollToBottom();
+        syncBottomIfPinned({ forcePinned: true });
         return;
       }
 
@@ -133,7 +132,7 @@ export function useAgentChatWindow({
             return;
           }
 
-          forceScrollToBottom();
+          syncBottomIfPinned({ forcePinned: true });
         });
       });
     };
@@ -144,7 +143,67 @@ export function useAgentChatWindow({
         syncBottomAfterComposerLayoutRef.current = null;
       }
     };
-  }, [forceScrollToBottom, syncBottomAfterComposerLayoutRef, userScrollIntentVersionRef]);
+  }, [syncBottomAfterComposerLayoutRef, syncBottomIfPinned, userScrollIntentVersionRef]);
+
+  const {
+    windowRange,
+    scrollToBottom: scrollViewportToBottom,
+    scrollToTop: scrollViewportToTop,
+    shiftWindowUp,
+    shiftWindowDown,
+  } = useAgentChatWindowRangeController({
+    rows: historyWindowedRows,
+    rowCount: historyRowCount,
+    activeSessionId,
+    isSessionViewLoading,
+    isPinnedToBottomRef,
+    suppressSentinelsRef,
+    isUpdatingRef,
+    hasPendingScrollRequest,
+    captureScrollAnchor,
+    requestWindowScroll,
+    setBottomAnchoredState,
+    setTopAnchoredState,
+  });
+
+  const { topSentinelRef, bottomSentinelRef } = useAgentChatSentinelObservers({
+    messagesContainerRef,
+    rowCount: historyRowCount,
+    windowStart: windowRange.start,
+    windowEnd: windowRange.end,
+    suppressSentinelsRef,
+    shiftWindowUp,
+    shiftWindowDown,
+  });
+
+  const resetLatestTurnsAndPinBottom = useCallback(() => {
+    if (turnStart === latestTurnStart) {
+      scrollViewportToBottom();
+      return;
+    }
+
+    pendingBottomResetRef.current = true;
+    resetToLatestTurns();
+  }, [latestTurnStart, resetToLatestTurns, scrollViewportToBottom, turnStart]);
+
+  useEffect(() => {
+    if (prevSessionIdRef.current === activeSessionId) {
+      return;
+    }
+
+    prevSessionIdRef.current = activeSessionId;
+    resetLatestTurnsAndPinBottom();
+  }, [activeSessionId, resetLatestTurnsAndPinBottom]);
+
+  useEffect(() => {
+    const finishedLoading = prevIsSessionViewLoadingRef.current && !isSessionViewLoading;
+    prevIsSessionViewLoadingRef.current = isSessionViewLoading;
+    if (!finishedLoading) {
+      return;
+    }
+
+    resetLatestTurnsAndPinBottom();
+  }, [isSessionViewLoading, resetLatestTurnsAndPinBottom]);
 
   useLayoutEffect(() => {
     if (!pendingBottomResetRef.current) {
@@ -152,35 +211,53 @@ export function useAgentChatWindow({
     }
 
     pendingBottomResetRef.current = false;
-    forceScrollToBottom();
+    scrollViewportToBottom();
   });
+
+  useLayoutEffect(() => {
+    if (!pendingTopRevealRef.current || turnStart !== 0) {
+      return;
+    }
+
+    pendingTopRevealRef.current = false;
+    scrollViewportToTop();
+  }, [scrollViewportToTop, turnStart]);
+
+  const effectiveWindow = clampWindowRange(windowRange, historyRowCount);
+  const hasVisibleRows = effectiveWindow.end >= effectiveWindow.start;
+  const windowedRows = useMemo(
+    () =>
+      hasVisibleRows
+        ? historyWindowedRows.slice(effectiveWindow.start, effectiveWindow.end + 1)
+        : [],
+    [effectiveWindow.end, effectiveWindow.start, hasVisibleRows, historyWindowedRows],
+  );
+  const globalWindowStart = hasVisibleRows ? historyWindowStart + effectiveWindow.start : 0;
+  const globalWindowEnd = hasVisibleRows ? historyWindowStart + effectiveWindow.end : -1;
 
   return {
     windowedRows,
-    windowStart,
+    windowStart: globalWindowStart,
+    windowEnd: globalWindowEnd,
     isNearBottom,
     isNearTop: isNearTop && turnStart === 0,
+    topSentinelRef,
+    bottomSentinelRef,
     scrollToBottom: () => {
       resetLatestTurnsAndPinBottom();
     },
     scrollToTop: () => {
       const container = messagesContainerRef.current;
       if (container) {
-        // Prevent browser anchor compensation from undoing the explicit jump to top.
         container.style.overflowAnchor = "none";
       }
 
+      pendingTopRevealRef.current = true;
       revealAllHistory();
-      if (!container) {
-        return;
-      }
-
-      container.scrollTo({
-        top: 0,
-        behavior: "auto",
-      });
+      scrollViewportToTop();
     },
     scrollToBottomOnSend: () => {
+      jumpToBottomOnSend();
       resetLatestTurnsAndPinBottom();
     },
   };

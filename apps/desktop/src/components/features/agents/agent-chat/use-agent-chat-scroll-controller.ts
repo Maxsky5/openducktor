@@ -1,11 +1,14 @@
 import type { MutableRefObject, RefObject } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { CHAT_SCROLL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  CHAT_SCROLL_EDGE_THRESHOLD_PX,
+  type PendingScrollRequest,
+  type WindowRange,
+} from "./agent-chat-window-shared";
 
 type UseAgentChatScrollControllerInput = {
   messagesContainerRef: RefObject<HTMLDivElement | null>;
-  messagesContentRef: RefObject<HTMLDivElement | null>;
-  isSessionWorking: boolean;
+  initialWindow: WindowRange;
 };
 
 type UseAgentChatScrollControllerResult = {
@@ -13,110 +16,301 @@ type UseAgentChatScrollControllerResult = {
   isNearTop: boolean;
   userScrolledRef: MutableRefObject<boolean>;
   userScrollIntentVersionRef: MutableRefObject<number>;
-  forceScrollToBottom: () => void;
+  isPinnedToBottomRef: MutableRefObject<boolean>;
+  suppressSentinelsRef: MutableRefObject<boolean>;
+  isUpdatingRef: MutableRefObject<boolean>;
+  hasPendingScrollRequest: () => boolean;
+  captureScrollAnchor: (rowKey: string) => void;
+  syncBottomIfPinned: (options?: { forcePinned?: boolean }) => void;
+  scrollToBottomOnSend: () => void;
+  requestWindowScroll: (request: PendingScrollRequest) => void;
+  applyPendingScrollRequest: () => void;
+  setBottomAnchoredState: (windowStart: number) => void;
+  setTopAnchoredState: () => void;
 };
 
-const AUTO_SCROLL_MARK_TTL_MS = 1500;
 export function useAgentChatScrollController({
   messagesContainerRef,
-  messagesContentRef,
-  isSessionWorking,
+  initialWindow,
 }: UseAgentChatScrollControllerInput): UseAgentChatScrollControllerResult {
-  const [userScrolled, setUserScrolled] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
-  const [isNearTop, setIsNearTop] = useState(true);
+  const [isNearTop, setIsNearTop] = useState(initialWindow.start === 0);
+  const isPinnedToBottomRef = useRef(true);
   const userScrolledRef = useRef(false);
   const userScrollIntentVersionRef = useRef(0);
-  const autoScrollRef = useRef<{ time: number; top: number } | null>(null);
-  const autoScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingScrollRequestRef = useRef<PendingScrollRequest | null>(null);
+  const suppressSentinelsRef = useRef(false);
+  const sentinelUnlockFrameRef = useRef<number | null>(null);
+  const scrollAnimationFrameRef = useRef<number | null>(null);
+  const scrollAnimationCleanupRef = useRef<(() => void) | null>(null);
+  const isBottomAutoFollowAnimationRef = useRef(false);
+  const isUpdatingRef = useRef(false);
+  const lastScrollTopRef = useRef<number | null>(null);
+  const pendingScrollAnchorRef = useRef<{ rowKey: string; topOffset: number } | null>(null);
 
-  const setUserScrolledState = useCallback((nextValue: boolean) => {
-    userScrolledRef.current = nextValue;
-    setUserScrolled(nextValue);
+  const syncUserScrolled = useCallback((isPinnedToBottom: boolean) => {
+    userScrolledRef.current = !isPinnedToBottom;
   }, []);
 
-  const canScroll = useCallback((element: HTMLDivElement) => {
-    return element.scrollHeight - element.clientHeight > 1;
+  const getRowElementByKey = useCallback(
+    (container: HTMLDivElement, rowKey: string): HTMLElement | null => {
+      if (typeof container.querySelectorAll !== "function") {
+        return null;
+      }
+
+      const rowElements = container.querySelectorAll<HTMLElement>("[data-row-key]");
+      for (const rowElement of rowElements) {
+        if (rowElement.dataset.rowKey === rowKey) {
+          return rowElement;
+        }
+      }
+
+      return null;
+    },
+    [],
+  );
+
+  const captureScrollAnchor = useCallback(
+    (rowKey: string) => {
+      const container = messagesContainerRef.current;
+      if (!container || typeof container.getBoundingClientRect !== "function") {
+        pendingScrollAnchorRef.current = null;
+        return;
+      }
+
+      const rowElement = getRowElementByKey(container, rowKey);
+      if (!rowElement || typeof rowElement.getBoundingClientRect !== "function") {
+        pendingScrollAnchorRef.current = null;
+        return;
+      }
+
+      const containerTop = container.getBoundingClientRect().top;
+      const rowTop = rowElement.getBoundingClientRect().top;
+      pendingScrollAnchorRef.current = {
+        rowKey,
+        topOffset: rowTop - containerTop,
+      };
+    },
+    [getRowElementByKey, messagesContainerRef],
+  );
+
+  const cancelScrollAnimation = useCallback(() => {
+    if (scrollAnimationFrameRef.current !== null) {
+      globalThis.cancelAnimationFrame(scrollAnimationFrameRef.current);
+    }
+    scrollAnimationFrameRef.current = null;
+
+    scrollAnimationCleanupRef.current?.();
+    scrollAnimationCleanupRef.current = null;
+    isBottomAutoFollowAnimationRef.current = false;
   }, []);
 
-  const distanceFromBottom = useCallback((element: HTMLDivElement) => {
-    return element.scrollHeight - element.clientHeight - element.scrollTop;
-  }, []);
+  const animateScrollTo = useCallback(
+    (container: HTMLDivElement, resolveTargetTop: () => number, durationMs: number) => {
+      cancelScrollAnimation();
 
-  const markAutoScroll = useCallback((element: HTMLDivElement) => {
-    autoScrollRef.current = {
-      time: Date.now(),
-      top: Math.max(0, element.scrollHeight - element.clientHeight),
-    };
+      const initialTargetTop = resolveTargetTop();
+      const startTop = container.scrollTop;
+      const initialDelta = initialTargetTop - startTop;
+      if (Math.abs(initialDelta) < 1 || durationMs <= 0) {
+        container.scrollTop = initialTargetTop;
+        return;
+      }
 
-    if (autoScrollTimerRef.current !== null) {
-      clearTimeout(autoScrollTimerRef.current);
+      isBottomAutoFollowAnimationRef.current = true;
+
+      const handleUserInterrupt = () => {
+        cancelScrollAnimation();
+      };
+
+      container.addEventListener("wheel", handleUserInterrupt, { passive: true });
+      container.addEventListener("touchstart", handleUserInterrupt, { passive: true });
+      container.addEventListener("pointerdown", handleUserInterrupt, { passive: true });
+      scrollAnimationCleanupRef.current = () => {
+        container.removeEventListener("wheel", handleUserInterrupt);
+        container.removeEventListener("touchstart", handleUserInterrupt);
+        container.removeEventListener("pointerdown", handleUserInterrupt);
+      };
+
+      let startTime: number | null = null;
+      const step = (timestamp: number) => {
+        if (startTime === null) {
+          startTime = timestamp;
+        }
+
+        const elapsed = timestamp - startTime;
+        const progress = Math.min(1, elapsed / durationMs);
+        const currentTargetTop = resolveTargetTop();
+        container.scrollTop = startTop + (currentTargetTop - startTop) * progress;
+
+        if (progress >= 1) {
+          container.scrollTop = resolveTargetTop();
+          cancelScrollAnimation();
+          return;
+        }
+
+        scrollAnimationFrameRef.current = globalThis.requestAnimationFrame(step);
+      };
+
+      scrollAnimationFrameRef.current = globalThis.requestAnimationFrame(step);
+    },
+    [cancelScrollAnimation],
+  );
+
+  const requestWindowScroll = useCallback(
+    (request: PendingScrollRequest) => {
+      cancelScrollAnimation();
+      pendingScrollRequestRef.current = request;
+      if (!request.suppressSentinels) {
+        return;
+      }
+
+      suppressSentinelsRef.current = true;
+      if (sentinelUnlockFrameRef.current !== null) {
+        globalThis.cancelAnimationFrame(sentinelUnlockFrameRef.current);
+        sentinelUnlockFrameRef.current = null;
+      }
+    },
+    [cancelScrollAnimation],
+  );
+
+  const applyPendingScrollRequest = useCallback(() => {
+    const request = pendingScrollRequestRef.current;
+    if (!request) {
+      return;
     }
 
-    autoScrollTimerRef.current = setTimeout(() => {
-      autoScrollRef.current = null;
-      autoScrollTimerRef.current = null;
-    }, AUTO_SCROLL_MARK_TTL_MS);
-  }, []);
-
-  const isAutoScrollEvent = useCallback((element: HTMLDivElement) => {
-    const autoScroll = autoScrollRef.current;
-    if (!autoScroll) {
-      return false;
+    pendingScrollRequestRef.current = null;
+    const container = messagesContainerRef.current;
+    if (!container) {
+      cancelScrollAnimation();
+      suppressSentinelsRef.current = false;
+      return;
     }
 
-    if (Date.now() - autoScroll.time > AUTO_SCROLL_MARK_TTL_MS) {
-      autoScrollRef.current = null;
-      return false;
+    if (typeof request.animationDurationMs === "number") {
+      animateScrollTo(
+        container,
+        () =>
+          request.target === "bottom"
+            ? Math.max(0, container.scrollHeight - container.clientHeight)
+            : 0,
+        request.animationDurationMs,
+      );
+    } else {
+      container.scrollTo({
+        top: request.target === "bottom" ? container.scrollHeight : 0,
+        behavior: request.behavior,
+      });
     }
 
-    return Math.abs(element.scrollTop - autoScroll.top) < 2;
-  }, []);
+    if (!request.suppressSentinels) {
+      return;
+    }
 
-  const scrollToBottomNow = useCallback(
-    (force: boolean) => {
+    sentinelUnlockFrameRef.current = globalThis.requestAnimationFrame(() => {
+      suppressSentinelsRef.current = false;
+      sentinelUnlockFrameRef.current = null;
+    });
+  }, [animateScrollTo, cancelScrollAnimation, messagesContainerRef]);
+
+  const syncBottomIfPinned = useCallback(
+    (options?: { forcePinned?: boolean }) => {
       const container = messagesContainerRef.current;
       if (!container) {
         return;
       }
+      const forcePinned = options?.forcePinned === true;
 
-      if (!force && userScrolledRef.current) {
+      if (pendingScrollRequestRef.current?.target === "bottom" || suppressSentinelsRef.current) {
         return;
       }
 
-      if (force && userScrolledRef.current) {
-        setUserScrolledState(false);
+      if (isUpdatingRef.current && !isPinnedToBottomRef.current && !forcePinned) {
+        return;
       }
 
-      const distance = distanceFromBottom(container);
-      if (distance < 2) {
-        markAutoScroll(container);
+      if (isBottomAutoFollowAnimationRef.current) {
         setIsNearBottom(true);
-        setIsNearTop(container.scrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX);
+        syncUserScrolled(true);
         return;
       }
 
-      markAutoScroll(container);
-      container.scrollTop = container.scrollHeight;
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      const isWithinBottomThreshold = distanceFromBottom <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
+      if (!forcePinned && !isPinnedToBottomRef.current && !isWithinBottomThreshold) {
+        return;
+      }
+
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: "auto",
+      });
+      isPinnedToBottomRef.current = true;
+      syncUserScrolled(true);
       setIsNearBottom(true);
       setIsNearTop(false);
     },
-    [distanceFromBottom, markAutoScroll, messagesContainerRef, setUserScrolledState],
+    [messagesContainerRef, syncUserScrolled],
   );
 
-  const stopFollowing = useCallback(() => {
+  const setBottomAnchoredState = useCallback(
+    (windowStart: number) => {
+      setIsNearBottom(true);
+      setIsNearTop(windowStart === 0);
+      isPinnedToBottomRef.current = true;
+      syncUserScrolled(true);
+    },
+    [syncUserScrolled],
+  );
+
+  const setTopAnchoredState = useCallback(() => {
+    isPinnedToBottomRef.current = false;
+    syncUserScrolled(false);
+    setIsNearBottom(false);
+    setIsNearTop(true);
+  }, [syncUserScrolled]);
+
+  const scrollToBottomOnSend = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container) {
       return;
     }
 
-    if (!canScroll(container) || userScrolledRef.current) {
+    cancelScrollAnimation();
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: "instant",
+    });
+    isPinnedToBottomRef.current = true;
+    syncUserScrolled(true);
+  }, [cancelScrollAnimation, messagesContainerRef, syncUserScrolled]);
+
+  useLayoutEffect(() => {
+    const pendingScrollAnchor = pendingScrollAnchorRef.current;
+    if (!pendingScrollAnchor) {
       return;
     }
 
-    userScrollIntentVersionRef.current += 1;
-    setUserScrolledState(true);
-  }, [canScroll, messagesContainerRef, setUserScrolledState]);
+    pendingScrollAnchorRef.current = null;
+    const container = messagesContainerRef.current;
+    if (!container || typeof container.getBoundingClientRect !== "function") {
+      return;
+    }
+
+    const rowElement = getRowElementByKey(container, pendingScrollAnchor.rowKey);
+    if (!rowElement || typeof rowElement.getBoundingClientRect !== "function") {
+      return;
+    }
+
+    const containerTop = container.getBoundingClientRect().top;
+    const nextTopOffset = rowElement.getBoundingClientRect().top - containerTop;
+    const delta = nextTopOffset - pendingScrollAnchor.topOffset;
+    if (Math.abs(delta) >= 1) {
+      container.scrollTop += delta;
+    }
+  });
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -124,12 +318,12 @@ export function useAgentChatScrollController({
       return;
     }
 
-    const updateOverflowAnchor = () => {
-      container.style.overflowAnchor = userScrolledRef.current ? "auto" : "none";
+    const registerUserScrollIntent = () => {
+      userScrollIntentVersionRef.current += 1;
     };
 
     const handleWheel = (event: WheelEvent) => {
-      userScrollIntentVersionRef.current += 1;
+      registerUserScrollIntent();
       if (event.deltaY >= 0) {
         return;
       }
@@ -140,75 +334,50 @@ export function useAgentChatScrollController({
         return;
       }
 
-      stopFollowing();
-    };
-
-    const handlePointerDown = () => {
-      userScrollIntentVersionRef.current += 1;
-    };
-
-    const handleTouchStart = () => {
-      userScrollIntentVersionRef.current += 1;
+      if (container.scrollHeight - container.clientHeight > 1) {
+        isPinnedToBottomRef.current = false;
+        syncUserScrolled(false);
+      }
     };
 
     const handleScroll = () => {
+      const previousScrollTop = lastScrollTopRef.current;
+      const nextScrollTop = container.scrollTop;
+      lastScrollTopRef.current = nextScrollTop;
+      const didScrollTopChange =
+        previousScrollTop !== null && Math.abs(nextScrollTop - previousScrollTop) > 0.5;
       const nearBottom =
-        !canScroll(container) || distanceFromBottom(container) < CHAT_SCROLL_EDGE_THRESHOLD_PX;
-      const nearTop = container.scrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
+        container.scrollHeight - nextScrollTop - container.clientHeight <=
+        CHAT_SCROLL_EDGE_THRESHOLD_PX;
+      const nearTop = nextScrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
 
-      setIsNearBottom(nearBottom);
+      const shouldPreservePinnedState =
+        previousScrollTop !== null &&
+        isPinnedToBottomRef.current &&
+        !didScrollTopChange &&
+        !nearBottom;
+
+      const isEffectivelyPinned =
+        isBottomAutoFollowAnimationRef.current || nearBottom || shouldPreservePinnedState;
+
+      setIsNearBottom(isEffectivelyPinned);
       setIsNearTop(nearTop);
-
-      if (!canScroll(container)) {
-        if (userScrolledRef.current) {
-          setUserScrolledState(false);
-          updateOverflowAnchor();
-        }
-        return;
-      }
-
-      if (nearBottom) {
-        if (userScrolledRef.current) {
-          setUserScrolledState(false);
-          updateOverflowAnchor();
-        }
-        return;
-      }
-
-      if (!userScrolledRef.current && isAutoScrollEvent(container)) {
-        scrollToBottomNow(false);
-        return;
-      }
-
-      if (!userScrolledRef.current) {
-        setUserScrolledState(true);
-        updateOverflowAnchor();
-      }
+      isPinnedToBottomRef.current = isEffectivelyPinned;
+      syncUserScrolled(isEffectivelyPinned);
     };
 
-    updateOverflowAnchor();
     handleScroll();
-
     container.addEventListener("wheel", handleWheel, { passive: true });
-    container.addEventListener("pointerdown", handlePointerDown, { passive: true });
-    container.addEventListener("touchstart", handleTouchStart, { passive: true });
+    container.addEventListener("touchstart", registerUserScrollIntent, { passive: true });
+    container.addEventListener("pointerdown", registerUserScrollIntent, { passive: true });
     container.addEventListener("scroll", handleScroll, { passive: true });
-
     return () => {
       container.removeEventListener("wheel", handleWheel);
-      container.removeEventListener("pointerdown", handlePointerDown);
-      container.removeEventListener("touchstart", handleTouchStart);
+      container.removeEventListener("touchstart", registerUserScrollIntent);
+      container.removeEventListener("pointerdown", registerUserScrollIntent);
       container.removeEventListener("scroll", handleScroll);
     };
-  }, [
-    canScroll,
-    distanceFromBottom,
-    isAutoScrollEvent,
-    messagesContainerRef,
-    scrollToBottomNow,
-    setUserScrolledState,
-    stopFollowing,
-  ]);
+  }, [messagesContainerRef, syncUserScrolled]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -216,52 +385,33 @@ export function useAgentChatScrollController({
       return;
     }
 
-    container.style.overflowAnchor = userScrolled ? "auto" : "none";
-  }, [messagesContainerRef, userScrolled]);
-
-  useEffect(() => {
-    if (!isSessionWorking) {
-      return;
-    }
-
-    if (!userScrolledRef.current) {
-      scrollToBottomNow(true);
-    }
-  }, [isSessionWorking, scrollToBottomNow]);
-
-  useEffect(() => {
-    const content = messagesContentRef.current;
-    if (!content || typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const observer = new ResizeObserver(() => {
-      if (userScrolledRef.current) {
-        return;
-      }
-
-      scrollToBottomNow(false);
-    });
-    observer.observe(content);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [messagesContentRef, scrollToBottomNow]);
+    container.style.overflowAnchor = userScrolledRef.current ? "auto" : "none";
+  }, [messagesContainerRef]);
 
   useEffect(() => {
     return () => {
-      if (autoScrollTimerRef.current !== null) {
-        clearTimeout(autoScrollTimerRef.current);
+      if (sentinelUnlockFrameRef.current !== null) {
+        globalThis.cancelAnimationFrame(sentinelUnlockFrameRef.current);
       }
+      cancelScrollAnimation();
     };
-  }, []);
+  }, [cancelScrollAnimation]);
 
   return {
     isNearBottom,
     isNearTop,
     userScrolledRef,
     userScrollIntentVersionRef,
-    forceScrollToBottom: () => scrollToBottomNow(true),
+    isPinnedToBottomRef,
+    suppressSentinelsRef,
+    isUpdatingRef,
+    hasPendingScrollRequest: () => pendingScrollRequestRef.current !== null,
+    captureScrollAnchor,
+    syncBottomIfPinned,
+    scrollToBottomOnSend,
+    requestWindowScroll,
+    applyPendingScrollRequest,
+    setBottomAnchoredState,
+    setTopAnchoredState,
   };
 }
