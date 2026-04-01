@@ -75,13 +75,15 @@ const buildRuntimeHealthErrorMap = (
   ) as RepoRuntimeHealthMap;
 };
 
-const getSettledErrorDescriptions = (results: PromiseSettledResult<unknown>[]): string[] => {
-  return results.flatMap((result) => {
+const getSettledErrorDescriptions = (
+  results: Array<{ label: string; result: PromiseSettledResult<unknown> }>,
+): string[] => {
+  return results.flatMap(({ label, result }) => {
     if (result.status === "fulfilled") {
       return [];
     }
 
-    return [errorMessage(result.reason)];
+    return [`${label}: ${errorMessage(result.reason)}`];
   });
 };
 
@@ -188,9 +190,9 @@ export function useChecks({
         refreshRepoRuntimeHealthForRepo(activeRepo, true),
       ]);
       const unavailableDetails = getSettledErrorDescriptions([
-        runtimeResult,
-        beadsResult,
-        runtimeHealthResult,
+        { label: "runtime", result: runtimeResult },
+        { label: "beads", result: beadsResult },
+        { label: "runtime health", result: runtimeHealthResult },
       ]);
 
       if (unavailableDetails.length > 0) {

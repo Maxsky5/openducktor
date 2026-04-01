@@ -152,6 +152,20 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
   };
 };
 
+type HookHarness = ReturnType<typeof createHookHarness>;
+
+const waitForInitialChecksToSettle = async (harness: HookHarness) => {
+  await harness.mount();
+  await harness.waitFor((value) => {
+    return (
+      value.runtimeCheck !== null &&
+      value.activeBeadsCheck !== null &&
+      value.activeRepoRuntimeHealthByRuntime.opencode != null &&
+      value.isLoadingChecks === false
+    );
+  });
+};
+
 beforeAll(async () => {
   mock.module("sonner", () => ({
     toast: {
@@ -386,15 +400,7 @@ describe("use-checks", () => {
     let refreshPromise: Promise<void> | null = null;
 
     try {
-      await harness.mount();
-      await harness.waitFor((value) => {
-        return (
-          value.runtimeCheck !== null &&
-          value.activeBeadsCheck !== null &&
-          value.activeRepoRuntimeHealthByRuntime.opencode != null &&
-          value.isLoadingChecks === false
-        );
-      });
+      await waitForInitialChecksToSettle(harness);
       runtimeCheck.mockClear();
       beadsCheck.mockClear();
       checkRepoRuntimeHealthMock.mockClear();
@@ -465,7 +471,7 @@ describe("use-checks", () => {
       expect(runtimeCheck.mock.calls[0]).toEqual([false]);
       expect(runtimeCheck.mock.calls[1]).toEqual([true]);
       expect(toastError).toHaveBeenCalledWith("Diagnostics check unavailable", {
-        description: "runtime down",
+        description: "runtime: runtime down",
       });
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
@@ -510,15 +516,7 @@ describe("use-checks", () => {
     let refreshPromise: Promise<void> | null = null;
 
     try {
-      await harness.mount();
-      await harness.waitFor((value) => {
-        return (
-          value.runtimeCheck !== null &&
-          value.activeBeadsCheck !== null &&
-          value.activeRepoRuntimeHealthByRuntime.opencode != null &&
-          value.isLoadingChecks === false
-        );
-      });
+      await waitForInitialChecksToSettle(harness);
       runtimeCheck.mockClear();
       beadsCheck.mockClear();
       checkRepoRuntimeHealthMock.mockClear();
@@ -540,7 +538,7 @@ describe("use-checks", () => {
       await harness.waitFor((value) => value.isLoadingChecks === false);
 
       expect(toastError).toHaveBeenCalledWith("Diagnostics check unavailable", {
-        description: "runtime down | beads down",
+        description: "runtime: runtime down | beads: beads down",
       });
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
