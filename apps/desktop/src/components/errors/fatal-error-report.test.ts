@@ -1,0 +1,151 @@
+import { describe, expect, test } from "bun:test";
+import { buildFatalErrorReport } from "./fatal-error-report";
+
+if (typeof globalThis.PromiseRejectionEvent === "undefined") {
+  (globalThis as Record<string, unknown>).PromiseRejectionEvent =
+    class PromiseRejectionEvent extends Event {
+      readonly reason: unknown;
+      readonly promise: Promise<unknown>;
+      constructor(type: string, init: { reason?: unknown; promise: Promise<unknown> }) {
+        super(type);
+        this.reason = init.reason;
+        this.promise = init.promise;
+      }
+    };
+}
+
+describe("buildFatalErrorReport", () => {
+  describe("Error instances", () => {
+    test("extracts name, message, and stack from an Error", () => {
+      const error = new TypeError("Cannot read property 'x' of undefined");
+
+      const report = buildFatalErrorReport(error, "boundary");
+
+      expect(report.title).toBe("TypeError");
+      expect(report.message).toBe("Cannot read property 'x' of undefined");
+      expect(report.stack).toBeDefined();
+      expect(report.source).toBe("boundary");
+      expect(report.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    });
+
+    test("falls back to 'Error' title when name is empty", () => {
+      const error = new Error("something failed");
+      error.name = "";
+
+      const report = buildFatalErrorReport(error, "error");
+
+      expect(report.title).toBe("Error");
+    });
+  });
+
+  describe("ErrorEvent", () => {
+    test("unwraps inner Error from ErrorEvent", () => {
+      const inner = new RangeError("out of range");
+      const event = new ErrorEvent("error", {
+        error: inner,
+        message: "Uncaught RangeError: out of range",
+      });
+
+      const report = buildFatalErrorReport(event, "error");
+
+      expect(report.title).toBe("RangeError");
+      expect(report.message).toBe("out of range");
+      expect(report.stack).toBeDefined();
+      expect(report.source).toBe("error");
+    });
+
+    test("handles ErrorEvent without inner Error", () => {
+      const event = new ErrorEvent("error", {
+        message: "Script error.",
+      });
+
+      const report = buildFatalErrorReport(event, "error");
+
+      expect(report.title).toBe("Uncaught error");
+      expect(report.message).toBe("Script error.");
+      expect(report.stack).toBeUndefined();
+    });
+  });
+
+  describe("PromiseRejectionEvent", () => {
+    test("unwraps Error reason", () => {
+      const reason = new Error("async failure");
+      const event = new PromiseRejectionEvent("unhandledrejection", {
+        promise: Promise.resolve(),
+        reason,
+      });
+
+      const report = buildFatalErrorReport(event, "unhandledrejection");
+
+      expect(report.title).toBe("Error");
+      expect(report.message).toBe("async failure");
+      expect(report.source).toBe("unhandledrejection");
+    });
+
+    test("handles string reason", () => {
+      const event = new PromiseRejectionEvent("unhandledrejection", {
+        promise: Promise.resolve(),
+        reason: "something broke",
+      });
+
+      const report = buildFatalErrorReport(event, "unhandledrejection");
+
+      expect(report.title).toBe("Unhandled promise rejection");
+      expect(report.message).toBe("something broke");
+    });
+
+    test("handles non-string, non-Error reason", () => {
+      const event = new PromiseRejectionEvent("unhandledrejection", {
+        promise: Promise.resolve(),
+        reason: { code: 42 },
+      });
+
+      const report = buildFatalErrorReport(event, "unhandledrejection");
+
+      expect(report.title).toBe("Unhandled promise rejection");
+      expect(report.message).toBe('{"code":42}');
+    });
+  });
+
+  describe("string values", () => {
+    test("uses string directly as message", () => {
+      const report = buildFatalErrorReport("network timeout", "error");
+
+      expect(report.title).toBe("Error");
+      expect(report.message).toBe("network timeout");
+      expect(report.stack).toBeUndefined();
+    });
+  });
+
+  describe("unknown values", () => {
+    test("handles null", () => {
+      const report = buildFatalErrorReport(null, "boundary");
+
+      expect(report.title).toBe("Unknown error");
+      expect(report.message).toBe("null");
+    });
+
+    test("handles undefined", () => {
+      const report = buildFatalErrorReport(undefined, "boundary");
+
+      expect(report.title).toBe("Unknown error");
+    });
+
+    test("handles objects", () => {
+      const report = buildFatalErrorReport({ status: 500 }, "error");
+
+      expect(report.title).toBe("Unknown error");
+      expect(report.message).toBe('{"status":500}');
+    });
+
+    test("handles circular references gracefully", () => {
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+
+      const report = buildFatalErrorReport(circular, "error");
+
+      expect(report.title).toBe("Unknown error");
+      expect(report.message).toBe("[object Object]");
+    });
+  });
+});
