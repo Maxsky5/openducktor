@@ -49,14 +49,17 @@ export function FatalErrorPage({
           </p>
         </div>
 
-        <div className="mb-6 rounded-lg border border-border bg-muted/50 p-4">
-          <p className="text-sm font-medium text-foreground" data-testid="fatal-error-title">
+        <div className="mb-6 rounded-xl border border-destructive-border bg-destructive-surface px-4 py-3 text-sm text-destructive-muted shadow-sm">
+          <p
+            className="font-medium text-destructive-surface-foreground"
+            data-testid="fatal-error-title"
+          >
             {report.title}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground" data-testid="fatal-error-message">
+          <p className="mt-1" data-testid="fatal-error-message">
             {report.message}
           </p>
-          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="mt-2 flex items-center gap-2 text-xs text-destructive-muted">
             <span>{SOURCE_LABELS[report.source]}</span>
             <span aria-hidden="true">·</span>
             <time dateTime={report.timestamp}>{formatTimestamp(report.timestamp)}</time>
