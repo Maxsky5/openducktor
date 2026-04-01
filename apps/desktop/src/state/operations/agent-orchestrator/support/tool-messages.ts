@@ -122,6 +122,8 @@ export const normalizeSessionErrorMessage = (value: string): string => {
   }
 };
 
+// Keep this intentionally narrow and rely on stop intent as a second gate so
+// real runtime failures are not downgraded into user-stopped notices.
 const STOP_ABORT_SESSION_ERROR_PATTERN =
   /^(?:aborted|request aborted|operation aborted|the operation was aborted|this operation was aborted|cancel(?:led|ed)|request cancel(?:led|ed)|operation cancel(?:led|ed)|cancel(?:led|ed) by user|request cancel(?:led|ed) by user)$/i;
 

@@ -89,7 +89,7 @@ const toArticleClassName = (
   }
 
   if (isSessionNoticeMessage) {
-    return "my-2 rounded-md border border-cancelled-border bg-cancelled-surface px-3 py-2 text-cancelled-surface-foreground";
+    return "text-sm my-2 rounded-md border border-cancelled-border bg-cancelled-surface px-3 py-2 text-cancelled-surface-foreground";
   }
 
   return cn(
