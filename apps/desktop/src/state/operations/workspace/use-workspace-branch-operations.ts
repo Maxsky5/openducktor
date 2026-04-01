@@ -68,6 +68,17 @@ export function useWorkspaceBranchOperations({
     [clearBranchSyncDegraded],
   );
 
+  const applyCurrentBranchSnapshot = useCallback(
+    (current: GitCurrentBranch): void => {
+      setActiveBranch(current);
+      lastKnownBranchNameRef.current = current.name ?? null;
+      lastKnownDetachedRef.current = current.detached;
+      lastKnownRevisionRef.current = current.revision ?? null;
+      clearBranchSyncDegraded();
+    },
+    [clearBranchSyncDegraded],
+  );
+
   const clearBranchData = useCallback((): void => {
     branchRequestVersionRef.current += 1;
     lastKnownBranchNameRef.current = null;
@@ -170,22 +181,58 @@ export function useWorkspaceBranchOperations({
       }
 
       const previousBranch = activeBranch;
+      const repoPath = activeRepo;
       const requestVersion = ++branchRequestVersionRef.current;
       setIsSwitchingBranch(true);
 
       try {
-        const current = await hostClient.gitSwitchBranch(activeRepo, branchName);
-        const allBranches = await hostClient.gitGetBranches(activeRepo);
-        queryClient.setQueryData(gitQueryKeys.currentBranch(activeRepo), current);
-        queryClient.setQueryData(gitQueryKeys.branches(activeRepo), allBranches);
+        const current = await hostClient.gitSwitchBranch(repoPath, branchName);
 
-        if (branchRequestVersionRef.current !== requestVersion) {
+        if (
+          branchRequestVersionRef.current !== requestVersion ||
+          activeRepoRef.current !== repoPath
+        ) {
           return;
         }
 
-        applyBranchState(current, allBranches);
+        queryClient.setQueryData(gitQueryKeys.currentBranch(repoPath), current);
+        applyCurrentBranchSnapshot(current);
+
+        try {
+          const allBranches = await hostClient.gitGetBranches(repoPath);
+
+          if (
+            branchRequestVersionRef.current !== requestVersion ||
+            activeRepoRef.current !== repoPath
+          ) {
+            return;
+          }
+
+          queryClient.setQueryData(gitQueryKeys.branches(repoPath), allBranches);
+          setBranches(allBranches);
+        } catch (error) {
+          if (
+            branchRequestVersionRef.current !== requestVersion ||
+            activeRepoRef.current !== repoPath
+          ) {
+            return;
+          }
+
+          await queryClient.invalidateQueries({
+            queryKey: gitQueryKeys.branches(repoPath),
+            exact: true,
+            refetchType: "none",
+          });
+
+          toast.error("Branch switched, but failed to refresh branch list", {
+            description: errorMessage(error),
+          });
+        }
       } catch (error) {
-        if (branchRequestVersionRef.current !== requestVersion) {
+        if (
+          branchRequestVersionRef.current !== requestVersion ||
+          activeRepoRef.current !== repoPath
+        ) {
           return;
         }
 
@@ -204,7 +251,7 @@ export function useWorkspaceBranchOperations({
         }
       }
     },
-    [activeBranch, activeRepo, applyBranchState, hostClient, queryClient],
+    [activeBranch, activeRepo, applyCurrentBranchSnapshot, hostClient, queryClient],
   );
 
   const branchProbeController = useMemo<WorkspaceBranchProbeController>(

@@ -243,4 +243,94 @@ describe("use-workspace-branch-probe", () => {
       restoreBrowserGlobals();
     }
   });
+
+  test("ignores stale synced outcomes after the repo changes during branch refresh", async () => {
+    const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
+    const refreshDeferred = createDeferred<void>();
+    const setBranchSyncDegraded = mock((_value: boolean) => {});
+
+    workspaceHost.gitGetCurrentBranch = mock(async () => ({
+      name: "main",
+      detached: false,
+    }));
+
+    const rendered = render(
+      <ProbeHarness
+        activeRepo="/repo-a"
+        isSwitchingWorkspace={false}
+        isLoadingBranches={false}
+        isSwitchingBranch={false}
+        setBranchSyncDegraded={setBranchSyncDegraded}
+        refreshBranchesForRepo={async () => refreshDeferred.promise}
+      />,
+      { wrapper: IsolatedQueryWrapper },
+    );
+
+    try {
+      await triggerFocus();
+      rendered.rerender(
+        <ProbeHarness
+          activeRepo="/repo-b"
+          isSwitchingWorkspace={false}
+          isLoadingBranches={false}
+          isSwitchingBranch={false}
+          setBranchSyncDegraded={setBranchSyncDegraded}
+          refreshBranchesForRepo={async () => refreshDeferred.promise}
+        />,
+      );
+
+      refreshDeferred.resolve();
+      await flush();
+
+      expect(setBranchSyncDegraded).not.toHaveBeenCalled();
+    } finally {
+      rendered.unmount();
+      restoreBrowserGlobals();
+    }
+  });
+
+  test("ignores stale refresh failures after the repo changes during branch refresh", async () => {
+    const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
+    const refreshDeferred = createDeferred<void>();
+    const setBranchSyncDegraded = mock((_value: boolean) => {});
+
+    workspaceHost.gitGetCurrentBranch = mock(async () => ({
+      name: "main",
+      detached: false,
+    }));
+
+    const rendered = render(
+      <ProbeHarness
+        activeRepo="/repo-a"
+        isSwitchingWorkspace={false}
+        isLoadingBranches={false}
+        isSwitchingBranch={false}
+        setBranchSyncDegraded={setBranchSyncDegraded}
+        refreshBranchesForRepo={async () => refreshDeferred.promise}
+      />,
+      { wrapper: IsolatedQueryWrapper },
+    );
+
+    try {
+      await triggerFocus();
+      rendered.rerender(
+        <ProbeHarness
+          activeRepo="/repo-b"
+          isSwitchingWorkspace={false}
+          isLoadingBranches={false}
+          isSwitchingBranch={false}
+          setBranchSyncDegraded={setBranchSyncDegraded}
+          refreshBranchesForRepo={async () => refreshDeferred.promise}
+        />,
+      );
+
+      refreshDeferred.reject(new Error("refresh failed"));
+      await flush();
+
+      expect(setBranchSyncDegraded).not.toHaveBeenCalled();
+    } finally {
+      rendered.unmount();
+      restoreBrowserGlobals();
+    }
+  });
 });

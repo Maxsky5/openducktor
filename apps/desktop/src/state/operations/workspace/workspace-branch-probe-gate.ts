@@ -13,6 +13,7 @@ export const createProbeGateController = (): ProbeGateController => {
 
   return {
     begin: () => {
+      // Requires isInFlight() === false at the call site.
       const token = ++nextToken;
       activeToken = token;
       return token;

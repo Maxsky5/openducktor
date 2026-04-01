@@ -256,4 +256,72 @@ describe("use-workspace-branch-operations", () => {
       await harness.unmount();
     }
   });
+
+  test("keeps the switched branch when branch list refresh fails after checkout", async () => {
+    const branchListError = new Error("branch list unavailable");
+    const originalToastError = toast.error;
+    const toastError = mock(() => "toast-id");
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    workspaceHost.gitGetCurrentBranch = mock(async () => ({
+      name: "main",
+      detached: false,
+      revision: "abc123",
+    }));
+
+    const initialBranches = [
+      {
+        name: "main",
+        isCurrent: true,
+        isRemote: false,
+      },
+      {
+        name: "feature",
+        isCurrent: false,
+        isRemote: false,
+      },
+    ];
+    const gitGetBranches = mock(async () => initialBranches);
+    gitGetBranches.mockImplementationOnce(async () => initialBranches);
+    gitGetBranches.mockImplementationOnce(async () => {
+      throw branchListError;
+    });
+    workspaceHost.gitGetBranches = gitGetBranches;
+    workspaceHost.gitSwitchBranch = mock(async () => ({
+      name: "feature",
+      detached: false,
+      revision: "def456",
+    }));
+
+    const harness = createBranchHarness({
+      activeRepo: "/repo-a",
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+
+      await harness.run(async (value) => {
+        await value.switchBranch("feature");
+      });
+
+      expect(harness.getLatest().activeBranch).toEqual({
+        name: "feature",
+        detached: false,
+        revision: "def456",
+      });
+      expect(harness.getLatest().branches).toEqual(initialBranches);
+      expect(toastError).toHaveBeenCalledWith(
+        "Branch switched, but failed to refresh branch list",
+        {
+          description: "branch list unavailable",
+        },
+      );
+    } finally {
+      (toast as { error: typeof toast.error }).error = originalToastError;
+      await harness.unmount();
+    }
+  });
 });

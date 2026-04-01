@@ -1,5 +1,7 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
+import { gitQueryKeys, loadCurrentBranchFromQuery } from "../../queries/git";
 import { createProbeGateController } from "./workspace-branch-probe-gate";
 import {
   BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
@@ -41,6 +43,7 @@ export function useWorkspaceBranchProbe({
   branchProbeController,
   setBranchSyncDegraded,
 }: UseWorkspaceBranchProbeArgs): void {
+  const queryClient = useQueryClient();
   const probeGateRef = useRef(createProbeGateController());
   const lastProbeErrorToastAtRef = useRef<number | null>(null);
   const lastProbeErrorSignatureRef = useRef<string | null>(null);
@@ -117,7 +120,13 @@ export function useWorkspaceBranchProbe({
     const probeToken = probeGateRef.current.begin();
 
     try {
-      const current = await hostClient.gitGetCurrentBranch(repoPath);
+      await queryClient.invalidateQueries({
+        queryKey: gitQueryKeys.currentBranch(repoPath),
+        exact: true,
+        refetchType: "none",
+      });
+
+      const current = await loadCurrentBranchFromQuery(queryClient, repoPath, hostClient);
 
       if (branchProbeController.activeRepoRef.current !== repoPath) {
         return {
@@ -136,8 +145,23 @@ export function useWorkspaceBranchProbe({
       if (hasChanged) {
         try {
           await branchProbeController.refreshBranchesForRepo(repoPath);
+
+          if (branchProbeController.activeRepoRef.current !== repoPath) {
+            return {
+              status: "skipped",
+              reason: "repo_changed",
+            };
+          }
+
           return { status: "synced" };
         } catch (error) {
+          if (branchProbeController.activeRepoRef.current !== repoPath) {
+            return {
+              status: "skipped",
+              reason: "repo_changed",
+            };
+          }
+
           return {
             status: "degraded",
             error: classifyBranchProbeError(error, "branch_refresh"),
@@ -161,7 +185,7 @@ export function useWorkspaceBranchProbe({
     } finally {
       probeGateRef.current.finish(probeToken);
     }
-  }, [branchProbeController, hostClient]);
+  }, [branchProbeController, hostClient, queryClient]);
 
   const syncExternalBranchChange = useCallback(async (): Promise<void> => {
     const outcome = await probeExternalBranchChange();

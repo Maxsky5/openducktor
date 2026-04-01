@@ -85,7 +85,18 @@ export function useWorkspaceSelectionOperations({
   const applyWorkspaceRecord = useCallback(
     (record: WorkspaceRecord): void => {
       setWorkspaces((current) => {
-        const next = current.filter((entry) => entry.path !== record.path);
+        const next = current
+          .filter((entry) => entry.path !== record.path)
+          .map((entry) => {
+            if (!record.isActive || !entry.isActive) {
+              return entry;
+            }
+
+            return {
+              ...entry,
+              isActive: false,
+            };
+          });
         next.push(record);
         next.sort((left, right) => left.path.localeCompare(right.path));
         return next;
@@ -155,12 +166,16 @@ export function useWorkspaceSelectionOperations({
         setActiveRepo(repoPath);
 
         void loadRepoConfigFromQuery(queryClient, repoPath, hostClient)
-          .then((repoConfig) =>
-            hostClient.runtimeEnsure(
+          .then((repoConfig) => {
+            if (workspaceSwitchVersionRef.current !== switchVersion) {
+              return;
+            }
+
+            return hostClient.runtimeEnsure(
               repoPath,
               repoConfig?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND,
-            ),
-          )
+            );
+          })
           .catch((error) => {
             if (workspaceSwitchVersionRef.current !== switchVersion) {
               return;
