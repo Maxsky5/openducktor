@@ -4,9 +4,6 @@ import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestr
 export const CHAT_TURN_WINDOW_INIT = 10;
 /** Number of older user turns revealed per upward backfill step. */
 export const CHAT_TURN_WINDOW_BATCH = 8;
-export const CHAT_WINDOW_SIZE = 50;
-export const CHAT_OVERSCAN = 10;
-export const CHAT_SHIFT_SIZE = 20;
 
 export type AgentChatWindowRow =
   | {

@@ -18,6 +18,7 @@ import { getAgentChatThreadState } from "./agent-chat-thread-state";
 import {
   type AgentChatWindowRow,
   buildAgentChatWindowRows,
+  buildAgentChatWindowTurns,
   getAgentChatWindowRowsKey,
 } from "./agent-chat-thread-windowing";
 import { AgentSessionPermissionCard } from "./agent-session-permission-card";
@@ -32,6 +33,7 @@ import { ScrollToTopButton } from "./scroll-to-top-button";
 import { useAgentChatDeferredTranscript } from "./use-agent-chat-deferred-transcript";
 import { useAgentChatLoadingOverlay } from "./use-agent-chat-loading-overlay";
 import { useAgentChatRowMotion } from "./use-agent-chat-row-motion";
+import { useAgentChatTurnStaging } from "./use-agent-chat-turn-staging";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
 type AgentChatThreadMotionRowProps = {
@@ -56,11 +58,7 @@ type AgentChatTranscriptProps = {
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
   messagesContentRef: RefObject<HTMLDivElement | null>;
-  windowedRows: AgentChatWindowRow[];
-  windowStart: number;
-  hasHiddenRowsBelow: boolean;
-  topSentinelRef: (element: HTMLDivElement | null) => void;
-  bottomSentinelRef: (element: HTMLDivElement | null) => void;
+  renderedTurns: AgentChatRenderedTurn[];
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
   showRuntimeCheckingOverlay: boolean;
   showRuntimeBlockedCard: boolean;
@@ -68,6 +66,12 @@ type AgentChatTranscriptProps = {
   isLoadingChecks: boolean;
   onRefreshChecks: () => void;
   showLoadingOverlay: boolean;
+};
+
+type AgentChatRenderedTurn = {
+  key: string;
+  rows: AgentChatWindowRow[];
+  isActive: boolean;
 };
 
 type AgentChatBottomStackProps = {
@@ -88,6 +92,10 @@ type AgentChatBottomStackProps = {
 };
 
 const EMPTY_ROWS: AgentChatWindowRow[] = [];
+const TURN_CONTENT_VISIBILITY_STYLE = {
+  contentVisibility: "auto",
+  containIntrinsicSize: "auto 500px",
+} as const;
 
 const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
   row,
@@ -109,6 +117,35 @@ const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
   );
 });
 
+const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
+  turn,
+  sessionAgentColors,
+  sessionRole,
+  sessionWorkingDirectory,
+  resolveRowRef,
+}: {
+  turn: AgentChatRenderedTurn;
+  sessionAgentColors: Record<string, string>;
+  sessionRole: AgentSessionState["role"] | null;
+  sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
+  resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
+}): ReactElement {
+  return (
+    <div style={turn.isActive ? undefined : TURN_CONTENT_VISIBILITY_STYLE}>
+      {turn.rows.map((row) => (
+        <AgentChatThreadMotionRow
+          key={row.key}
+          row={row}
+          sessionRole={sessionRole}
+          sessionAgentColors={sessionAgentColors}
+          sessionWorkingDirectory={sessionWorkingDirectory}
+          resolveRowRef={resolveRowRef}
+        />
+      ))}
+    </div>
+  );
+});
+
 const AgentChatTranscript = memo(function AgentChatTranscript({
   hasSession,
   taskSelected,
@@ -123,11 +160,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   sessionWorkingDirectory,
   messagesContainerRef,
   messagesContentRef,
-  windowedRows,
-  windowStart,
-  hasHiddenRowsBelow,
-  topSentinelRef,
-  bottomSentinelRef,
+  renderedTurns,
   resolveRowRef,
   showRuntimeCheckingOverlay,
   showRuntimeBlockedCard,
@@ -206,22 +239,18 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
           </div>
         ) : null}
 
-        {hasSession ? (
-          <>
-            {windowStart > 0 ? <div ref={topSentinelRef} className="h-px" /> : null}
-            {windowedRows.map((row) => (
-              <AgentChatThreadMotionRow
-                key={row.key}
-                row={row}
+        {hasSession
+          ? renderedTurns.map((turn) => (
+              <AgentChatTurnGroup
+                key={turn.key}
+                turn={turn}
                 sessionRole={sessionRole}
                 sessionAgentColors={sessionAgentColors}
                 sessionWorkingDirectory={sessionWorkingDirectory}
                 resolveRowRef={resolveRowRef}
               />
-            ))}
-            {hasHiddenRowsBelow ? <div ref={bottomSentinelRef} className="h-px" /> : null}
-          </>
-        ) : null}
+            ))
+          : null}
       </div>
       {showLoadingOverlay ? (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-muted/85">
@@ -381,11 +410,8 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const {
     windowedRows,
     windowStart,
-    windowEnd,
     isNearBottom,
     isNearTop,
-    topSentinelRef,
-    bottomSentinelRef,
     scrollToBottom,
     scrollToTop,
     scrollToBottomOnSend,
@@ -419,6 +445,12 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   }, [sessionAgentColors, sessionSelectedModel?.profileId]);
   const sessionWorkingDirectory = session?.workingDirectory ?? null;
   const rowKeys = useMemo(() => windowedRows.map((row) => row.key), [windowedRows]);
+  const turns = useMemo(() => buildAgentChatWindowTurns(windowedRows), [windowedRows]);
+  const stagedTurns = useAgentChatTurnStaging({
+    activeSessionId,
+    windowStart,
+    turns,
+  });
   const rowRefByKeyRef = useRef<Map<string, (element: HTMLDivElement | null) => void>>(new Map());
   const { registerRowElement } = useAgentChatRowMotion({
     activeSessionId,
@@ -448,6 +480,27 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     },
     [registerRowElement],
   );
+  const activeTurnKey = useMemo(() => {
+    if (!session || !isSessionWorking) {
+      return null;
+    }
+
+    for (let index = session.messages.length - 1; index >= 0; index -= 1) {
+      const message = session.messages[index];
+      if (message?.role === "user") {
+        return `${session.sessionId}:${message.id}`;
+      }
+    }
+
+    return null;
+  }, [isSessionWorking, session]);
+  const renderedTurns = useMemo(() => {
+    return stagedTurns.map((turn) => ({
+      key: turn.key,
+      rows: windowedRows.slice(turn.start, turn.end + 1),
+      isActive: turn.key === activeTurnKey,
+    }));
+  }, [activeTurnKey, stagedTurns, windowedRows]);
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -465,13 +518,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         sessionWorkingDirectory={sessionWorkingDirectory}
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
-        windowedRows={rows.length > 0 && !hideTranscriptWhileHydrating ? windowedRows : EMPTY_ROWS}
-        windowStart={rows.length > 0 && !hideTranscriptWhileHydrating ? windowStart : 0}
-        hasHiddenRowsBelow={
-          rows.length > 0 && !hideTranscriptWhileHydrating && windowEnd < rows.length - 1
-        }
-        topSentinelRef={topSentinelRef}
-        bottomSentinelRef={bottomSentinelRef}
+        renderedTurns={rows.length > 0 && !hideTranscriptWhileHydrating ? renderedTurns : []}
         resolveRowRef={resolveRowRef}
         showRuntimeCheckingOverlay={showRuntimeCheckingOverlay}
         showRuntimeBlockedCard={showRuntimeBlockedCard}

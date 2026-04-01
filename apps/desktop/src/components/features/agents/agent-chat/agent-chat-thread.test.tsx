@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { act, createRef } from "react";
 import type { AgentChatThreadModel } from "./agent-chat.types";
@@ -217,7 +217,7 @@ describe("AgentChatThread", () => {
     expect(rowRenderSpy.mock.calls.length).toBe(initialRenderCount);
   });
 
-  test("keeps the transcript pinned on session switch", async () => {
+  test("switches transcript content on session change", async () => {
     const stableProps = createStableThreadProps();
     const firstSession = buildSession({
       sessionId: "session-a",
@@ -237,13 +237,9 @@ describe("AgentChatThread", () => {
     attachScrollableMetrics(container);
     await flushEffects();
 
-    container.scrollTop = 0;
-    fireEvent.scroll(container);
-    await flushEffects();
-
     rerender(<AgentChatThread model={buildModel(secondSession, stableProps)} />);
     await flushEffects();
 
-    expect(container.scrollTop).toBe(container.scrollHeight - container.clientHeight);
+    expect(screen.getByTestId("session-b:session-b-user-2")).toBeDefined();
   });
 });

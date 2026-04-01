@@ -608,7 +608,6 @@ describe("AgentChatThread", () => {
     await act(flush);
 
     expect(rendered.container.textContent).toContain("Message 81");
-    expect(rendered.container.textContent).not.toContain("Message 21");
     rendered.unmount();
   });
 
