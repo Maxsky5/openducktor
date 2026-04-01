@@ -164,6 +164,28 @@ describe("useAgentStudioGitActions", () => {
     }
   });
 
+  test("clears commit loading state after commit write failure", async () => {
+    gitCommitAllMock.mockImplementationOnce(async () => {
+      throw new Error("Commit hook exploded");
+    });
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+
+      let didCommit = true;
+      await harness.run(async (state) => {
+        didCommit = await state.commitAll("feat: broken commit");
+      });
+
+      expect(didCommit).toBe(false);
+      expect(harness.getLatest().isCommitting).toBe(false);
+      expect(harness.getLatest().commitError).toBe("Commit hook exploded");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("tracks push action lifecycle and validates missing branch errors", async () => {
     const refreshDiffData = mock(async () => {});
     const pushDeferred = createDeferred<{ remote: string; branch: string; output: string }>();
@@ -355,10 +377,41 @@ describe("useAgentStudioGitActions", () => {
       );
 
       await harness.waitFor((state) => state.resetError === null);
-      expect(harness.getLatest().pendingReset).toEqual({
-        kind: "hunk",
-        filePath: "src/main.ts",
-        hunkIndex: 2,
+      expect(harness.getLatest().pendingReset).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps reset successful when only the post-reset refresh fails", async () => {
+    const refreshDiffData = mock(async () => {
+      throw new Error("Refresh broke after reset");
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        refreshDiffData,
+        workingDir: "/tmp/worktree/task-10",
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      await harness.run((state) => {
+        state.requestFileReset("src/main.ts");
+      });
+      await harness.run(async (state) => {
+        await state.confirmReset();
+      });
+
+      expect(gitResetWorktreeSelectionMock).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().pendingReset).toBeNull();
+      expect(harness.getLatest().resetError).toBe("Refresh broke after reset");
+      expect(toastSuccessMock).toHaveBeenCalledWith("File reset", {
+        description: "src/main.ts",
+      });
+      expect(toastErrorMock).toHaveBeenCalledWith("Reset applied but refresh failed", {
+        description: "Refresh broke after reset",
       });
     } finally {
       await harness.unmount();
@@ -834,6 +887,49 @@ describe("useAgentStudioGitActions", () => {
       expect(refreshDiffData).toHaveBeenCalledTimes(2);
       expect(gitAbortConflictMock).toHaveBeenCalledWith("/repo", "rebase", "/tmp/worktree/task-10");
       expect(toastSuccessMock).toHaveBeenCalledWith("Rebase aborted");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps abort successful when only the post-abort refresh fails", async () => {
+    gitRebaseBranchMock.mockImplementationOnce(async () => ({
+      outcome: "conflicts",
+      conflictedFiles: ["src/main.ts"],
+      output: "CONFLICT (content): Merge conflict in src/main.ts",
+    }));
+    const refreshDiffData = mock(async () => {});
+    let refreshCalls = 0;
+    refreshDiffData.mockImplementation(async () => {
+      refreshCalls += 1;
+      if (refreshCalls === 2) {
+        throw new Error("Refresh broke after abort");
+      }
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        refreshDiffData,
+        workingDir: "/tmp/worktree/task-10",
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        await state.rebaseOntoTarget();
+      });
+
+      await harness.run(async (state) => {
+        await state.abortGitConflict();
+      });
+
+      expect(harness.getLatest().gitConflict).toBeNull();
+      expect(harness.getLatest().gitConflictCloseNonce).toBe(1);
+      expect(harness.getLatest().rebaseError).toBe("Refresh broke after abort");
+      expect(toastSuccessMock).toHaveBeenCalledWith("Rebase aborted");
+      expect(toastErrorMock).toHaveBeenCalledWith("Conflict aborted but refresh failed", {
+        description: "Refresh broke after abort",
+      });
     } finally {
       await harness.unmount();
     }

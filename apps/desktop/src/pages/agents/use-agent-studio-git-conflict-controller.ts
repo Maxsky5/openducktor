@@ -241,9 +241,18 @@ export function useAgentStudioGitConflictController({
         activeGitConflict.workingDir ?? workingDir ?? undefined,
       );
       clearActionErrors();
-      await refreshDiffData();
       dispatch({ type: "clear_local_conflict", closeModal: true });
       toast.success(getGitConflictCopy(activeGitConflict.operation).abortedToastTitle);
+
+      try {
+        await refreshDiffData();
+      } catch (error) {
+        const message = toErrorMessage(error, "Git conflict was aborted, but diff refresh failed.");
+        setRebaseError(message);
+        toast.error("Conflict aborted but refresh failed", {
+          description: message,
+        });
+      }
     } catch (error) {
       const message = toErrorMessage(error, "Failed to abort the git conflict.");
       setRebaseError(message);

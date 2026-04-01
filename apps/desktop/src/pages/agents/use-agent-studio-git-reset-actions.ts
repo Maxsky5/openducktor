@@ -56,6 +56,7 @@ export function useAgentStudioGitResetActions({
 
     if (previousSnapshotKey !== null && previousSnapshotKey !== worktreeStatusSnapshotKey) {
       setResetError(null);
+      setPendingReset(null);
     }
   }, [setResetError, worktreeStatusSnapshotKey]);
 
@@ -179,7 +180,6 @@ export function useAgentStudioGitResetActions({
       const result = await host.gitResetWorktreeSelection(built.request);
       clearActionErrors();
       setPendingReset(null);
-      await refreshDiffData();
       const affectedCount = result.affectedPaths.length;
       toast.success(pendingReset.kind === "file" ? "File reset" : "Hunk reset", {
         description:
@@ -187,6 +187,16 @@ export function useAgentStudioGitResetActions({
             ? result.affectedPaths[0]
             : `${affectedCount} paths updated in the worktree.`,
       });
+
+      try {
+        await refreshDiffData();
+      } catch (error) {
+        const message = toErrorMessage(error, "Reset was applied, but diff refresh failed.");
+        setResetError(message);
+        toast.error("Reset applied but refresh failed", {
+          description: message,
+        });
+      }
     } catch (error) {
       const message = toErrorMessage(error, "Reset failed.");
       setResetError(message);

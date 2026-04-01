@@ -48,22 +48,24 @@ export function useAgentStudioGitCommitActions({
       setIsCommitting(true);
       setCommitError(null);
       try {
-        await host.gitCommitAll(repoPath, trimmedMessage, workingDir ?? undefined);
-        clearActionErrors();
-      } catch (error) {
-        setCommitError(toErrorMessage(error, "Commit failed."));
-        return false;
-      }
+        try {
+          await host.gitCommitAll(repoPath, trimmedMessage, workingDir ?? undefined);
+          clearActionErrors();
+        } catch (error) {
+          setCommitError(toErrorMessage(error, "Commit failed."));
+          return false;
+        }
 
-      try {
-        await refreshDiffData();
-      } catch (error) {
-        setCommitError(toErrorMessage(error, "Diff refresh failed."));
+        try {
+          await refreshDiffData();
+        } catch (error) {
+          setCommitError(toErrorMessage(error, "Diff refresh failed."));
+        }
+
+        return true;
       } finally {
         setIsCommitting(false);
       }
-
-      return true;
     },
     [
       clearActionErrors,
