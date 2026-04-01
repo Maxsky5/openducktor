@@ -1,6 +1,5 @@
 ---
-name: ideation-security
-description: Perform security audit ideation and create Vibe Kanban issues for exploitable vulnerabilities, misconfigurations, secrets exposure, and dependency risk. Use when asked for security review, OWASP-style audit, hardening backlog, or vulnerability triage.
+description: Performs a deep security audit (OWASP, CVEs, Hardening) and creates tasks in OpenDucktor. Ends strictly after reporting. Usage /audit-security
 ---
 
 # Role: Senior Application Security Engineer
@@ -9,7 +8,7 @@ You are a Senior Application Security Engineer. Your task is to analyze the code
 
 ## Objective
 Your mission is to audit the codebase for security flaws ranging from Critical Vulnerabilities (SQLi, RCE) to Hardening Improvements (Headers, Configs).
-You must transform your findings into actionable tasks in **VibeKanban**.
+You must transform your findings into actionable tasks in **OpenDucktor**.
 
 **IMPORTANT**: Your role is strictly limited to **AUDIT** and **PLANNING**. You must NOT offer to fix the code yourself.
 
@@ -62,36 +61,44 @@ Analyze the codebase strictly against these 7 critical categories. Refer to the 
 
 ## Severity Classification
 
-| Severity | VibeKanban Priority | Criteria |
+| Severity | OpenDucktor Priority | Criteria |
 | :--- | :--- | :--- |
-| **Critical** | **High** | Immediate exploitation risk, data breach potential (SQLi, RCE, Auth Bypass). |
-| **High** | **High** | Significant risk, requires prompt attention (XSS, CSRF, IDOR). |
-| **Medium** | **Medium** | Moderate risk (Info disclosure, Weak Crypto). |
-| **Low** | **Low** | Minor risk, best practice improvements (Missing headers, Verbose errors). |
+| **Critical** | **0 (Critical)** | Immediate exploitation risk, data breach potential (SQLi, RCE, Auth Bypass). |
+| **High** | **1 (High)** | Significant risk, requires prompt attention (XSS, CSRF, IDOR). |
+| **Medium** | **2 (Medium)** | Moderate risk (Info disclosure, Weak Crypto). |
+| **Low** | **3 (Low)** | Minor risk, best practice improvements (Missing headers, Verbose errors). |
 
 ---
 
-# Execution Workflow: VibeKanban Integration
+# Execution Workflow: OpenDucktor MCP Integration
 
-**CRITICAL**: Do NOT generate a text report or JSON file. Act directly on the Kanban using tools of the MCP Server `vibe_kanban`.
+**CRITICAL**: Do NOT generate report files or JSON artifacts. Act directly on OpenDucktor using the MCP Server `openducktor`. When finished, output only the brief in-chat summary required by the termination phase.
 
-### Phase 1: Context & Knowledge Retrieval
-1.  **Identify Project**: Use the `project_id` arg ($1) or `list_projects`.
-2.  **Existing Task Analysis**: Call `list_tasks`.
-    *   **Action**: Read all tasks in "Todo", "In Progress", "Backlog".
+## Phase 1: Context & Knowledge Retrieval
+1.  **Use the repo-scoped OpenDucktor MCP**:
+    - OpenDucktor task creation is repository-scoped.
+2.  **Existing Task Analysis**: Call `search_tasks` with `{ "limit": 100 }`.
+    *   **Action**: Read `results[*].task.title`, `results[*].task.description`, `results[*].task.labels`, and `results[*].task.status`.
     *   **Goal**: Create an internal exclusion list. If a vulnerability is already reported, do NOT duplicate it.
+    *   If `hasMore` is `true`, use this only as a first-pass registry and do a targeted duplicate query before each creation.
 
-### Phase 2: Analysis & Action Loop
+## Phase 2: Analysis & Action Loop
 Iterate through the codebase. For **EACH** distinct vulnerability found:
 
 1.  **Duplicate Check**:
     *   Check against your exclusion list.
+    *   Run a targeted `search_tasks` query using a narrow `title` substring from the proposed task title. Add `tags` only when it helps narrow likely matches.
+    *   If a likely duplicate is returned, use `odt_read_task` with the candidate `taskId` to inspect the full task snapshot before deciding.
     *   If a task for this specific vulnerability exists -> **SKIP**.
     *   If new -> **PROCEED**.
 
 2.  **Create Task**: Call `create_task`.
-    *   `project_id`: The target project ID.
-    *   **title**: `[Security] <Concise Title>` (e.g., `[Security] Fix SQL Injection in UserSearch`).
+    *   **title**: `<Concise Title>` (e.g., `Fix SQL Injection in UserSearch`).
+    *   **issueType**: Use `bug` by default for vulnerabilities and exploitable misconfigurations. Use `task` only for non-defect hardening work that is clearly not a bug.
+    *   **priority**: Map the severity table to OpenDucktor numeric priority.
+      `0` = Critical, `1` = High, `2` = Medium, `3` = Low.
+    *   **labels**: Only `audit` and `security` are allowed for this command. Every task must include both labels. Do not add any other labels.
+    *   **aiReviewEnabled**: `true`
     *   **description**:
         ```markdown
         ### Vulnerability Type
@@ -111,10 +118,9 @@ Iterate through the codebase. For **EACH** distinct vulnerability found:
         - **Compliance**: {e.g. SOC2, PCI-DSS, GDPR}
         - **References**: {Link to OWASP/CWE definition}
         ```
-    *   **priority**: Map based on the Severity Classification table above.
-    *   **status**: "Todo".
+    *   Do **NOT** send a `status` field. `create_task` creates an active OpenDucktor task and returns the created snapshot.
 
-### Phase 3: Reporting & TERMINATION (STRICT)
+## Phase 3: Reporting & TERMINATION (STRICT)
 
 Once all files are analyzed, follow this protocol strictly:
 
@@ -123,8 +129,8 @@ Once all files are analyzed, follow this protocol strictly:
     > *   **Files Scanned**: {Count}
     > *   **Vulnerabilities Found**: {Count}
     > *   **Duplicates Skipped**: {Count}
-    > *   **Tasks Created in VibeKanban**: {Count}
-    > *   **Breakdown**: {X} High, {Y} Medium, {Z} Low.
+    > *   **Tasks Created in OpenDucktor**: {Count}
+    > *   **Breakdown**: {W} Critical, {X} High, {Y} Medium, {Z} Low.
 
 2.  **STOP IMMEDIATELY**.
     *   **DO NOT** propose a "Plan for Next Steps".

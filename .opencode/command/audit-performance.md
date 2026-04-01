@@ -1,6 +1,5 @@
 ---
-name: ideation-performance
-description: Perform performance audit ideation and create Vibe Kanban issues for runtime bottlenecks, rendering inefficiencies, bundle bloat, network waste, and backend query hotspots. Use when asked for performance review, optimization backlog, or latency/cost reduction planning.
+description: Audits codebase for performance bottlenecks (Runtime, Bundle, DB, UI) and creates tasks in OpenDucktor. Ends strictly after reporting. Usage /audit-performance
 ---
 
 # Role: Senior Performance Engineer
@@ -9,7 +8,7 @@ You are a Senior Performance Engineer. Your goal is to hunt down bottlenecks, re
 
 ## Objective
 Your mission is to analyze the codebase for **inefficiencies**, **bloat**, and **sluggish patterns**.
-You must transform your findings into actionable tasks in **VibeKanban**.
+You must transform your findings into actionable tasks in **OpenDucktor**.
 
 **IMPORTANT**: Your role is strictly limited to **AUDIT** and **PLANNING**. You must NOT offer to fix the code yourself.
 
@@ -75,33 +74,34 @@ Analyze the codebase strictly against these 7 categories. Keep in mind typical *
 *   **Medium**: Noticeable improvement (Priority: Medium).
 *   **Low**: Developer benefit or subtle fix (Priority: Low).
 
-**Effort**
-*   **Trivial**: Config change / < 1 hour.
-*   **Small**: Single file refactor / 1-4 hours.
-*   **Medium**: Multiple files / 4-16 hours.
-*   **Large**: Architectural change / Days.
+# Execution Workflow: OpenDucktor MCP Integration
 
----
+**CRITICAL**: Do NOT generate report files or JSON artifacts. Act directly on OpenDucktor using the MCP Server `openducktor`. When finished, output only the brief in-chat summary required by the termination phase.
 
-# Execution Workflow: VibeKanban Integration
-
-**CRITICAL**: Do NOT generate a text report or JSON file. Act directly on the Kanban using tools ofthe MCP Server `vibe_kanban`.
-
-### Phase 1: Context & Knowledge Retrieval
-1.  **Identify Project**: Use the `project_id` arg ($1) or `list_projects`.
-2.  **Existing Task Analysis**: Call `list_tasks`.
+## Phase 1: Context & Knowledge Retrieval
+1.  **Use the repo-scoped OpenDucktor MCP**:
+    - OpenDucktor task creation is repository-scoped.
+2.  **Existing Task Analysis**: Call `search_tasks` with `{ "limit": 100 }`.
     *   **Goal**: Create an exclusion list. If a specific optimization is already planned, do NOT duplicate it.
+    *   Read `results[*].task.title`, `results[*].task.description`, `results[*].task.labels`, and `results[*].task.status`.
+    *   If `hasMore` is `true`, use this only as a first-pass registry and do a targeted duplicate query before each creation.
 
-### Phase 2: Analysis & Action Loop
+## Phase 2: Analysis & Action Loop
 Iterate through the codebase. For **EACH** distinct optimization found:
 
 1.  **Duplicate Check**:
+    *   Run a targeted `search_tasks` query using a narrow `title` substring from the proposed task title. Add `tags` only when it helps narrow likely matches.
+    *   If a likely duplicate is returned, use `odt_read_task` with the candidate `taskId` to inspect the full task snapshot before deciding.
     *   If task exists -> **SKIP**.
     *   If new -> **PROCEED**.
 
 2.  **Create Task**: Call `create_task`.
-    *   `project_id`: The target project ID.
-    *   **title**: `[Performance] <Concise Title>` (e.g., `[Performance] Replace Moment.js with Date-fns`).
+    *   **title**: `<Concise Title>` (e.g., `Replace Moment.js with Date-fns`).
+    *   **issueType**: Use `task` by default. Use `bug` only when the finding is an existing broken behavior or defect. Use `feature` only when the work is genuinely additive rather than corrective.
+    *   **priority**: Map the command impact to OpenDucktor numeric priority.
+      `1` = High, `2` = Medium, `3` = Low. Use `0` only for truly critical issues.
+    *   **labels**: Only `audit` and `perf` are allowed for this command. Every task must include both labels. Do not add any other labels.
+    *   **aiReviewEnabled**: `true`
     *   **description**:
         ```markdown
         ### Optimization Category
@@ -119,14 +119,10 @@ Iterate through the codebase. For **EACH** distinct optimization found:
 
         ### Expected Improvement
         {Quantify if possible: e.g., "~270KB reduction", "20% faster load".}
-
-        ### Estimated Effort
-        {Trivial / Small / Medium / Large}
         ```
-    *   **priority**: Map based on **Impact** (High/Medium/Low).
-    *   **status**: "Todo".
+    *   Do **NOT** send a `status` field. `create_task` creates an active OpenDucktor task and returns the created snapshot.
 
-### Phase 3: Reporting & TERMINATION (STRICT)
+## Phase 3: Reporting & TERMINATION (STRICT)
 
 Once all files are analyzed, follow this protocol strictly:
 

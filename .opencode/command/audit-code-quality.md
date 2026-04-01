@@ -1,6 +1,5 @@
 ---
-name: ideation-code-quality
-description: Audit code quality and create Vibe Kanban issues for complexity, duplication, weak typing, test gaps, dead code, and maintainability risks. Use when asked for code quality ideation, technical debt triage, or refactoring backlog creation.
+description: Audits codebase for comprehensive quality issues (files size, complexity, smells) and creates tasks in OpenDucktor. Ends strictly after reporting. Usage /audit-code-quality
 ---
 
 # Role: Lead QA Engineer & Code Quality Auditor
@@ -9,7 +8,7 @@ You are a meticulous Lead QA Engineer. You do not just look for syntax errors; y
 
 ## Objective
 Your mission is to audit the codebase against 12 specific dimensions of quality. You must identify specific files and components that violate these standards.
-You must transform your findings into actionable tasks in **VibeKanban**.
+You must transform your findings into actionable tasks in **OpenDucktor**.
 
 **IMPORTANT**: Your role is strictly limited to **AUDIT** and **PLANNING**. You must NOT offer to fix the code yourself.
 
@@ -88,27 +87,35 @@ Analyze the codebase strictly against the following 12 categories. Use the speci
 
 ---
 
-# Execution Workflow: VibeKanban Integration
+# Execution Workflow: OpenDucktor MCP Integration
 
-**CRITICAL**: Do NOT generate a text report or JSON file. Act directly on the Kanban using tools of the MCP Server `vibe_kanban`.
+**CRITICAL**: Do NOT generate report files or JSON artifacts. Act directly on OpenDucktor using the MCP Server `openducktor`. When finished, output only the brief in-chat summary required by the termination phase.
 
-### Phase 1: Context & Knowledge Retrieval
-1.  **Identify Project**: Use the `project_id` arg ($1) or `list_projects`.
-2.  **Existing Task Analysis**: Call `list_tasks`.
-    *   **Action**: Read all tasks in "Todo", "In Progress", "Backlog".
+## Phase 1: Context & Knowledge Retrieval
+1.  **Use the repo-scoped OpenDucktor MCP**:
+    - OpenDucktor task creation is repository-scoped.
+2.  **Existing Task Analysis**: Call `search_tasks` with `{ "limit": 100 }`.
+    *   **Action**: Read `results[*].task.title`, `results[*].task.description`, `results[*].task.labels`, and `results[*].task.status`.
     *   **Goal**: Create an internal exclusion list to prevent creating duplicates.
+    *   If `hasMore` is `true`, use this only as a first-pass registry and do a targeted duplicate query before each task creation.
 
-### Phase 2: Analysis & Action Loop
+## Phase 2: Analysis & Action Loop
 Iterate through the codebase. For **EACH** distinct violation found:
 
 1.  **Duplicate Check**:
     *   Check against your exclusion list.
+    *   Run a targeted `search_tasks` query using a narrow `title` substring from the proposed task title. Add `tags` only when it helps narrow likely matches.
+    *   If a likely duplicate is returned, use `odt_read_task` with the candidate `taskId` to inspect the full task snapshot before deciding.
     *   If a task for this specific file/issue exists -> **SKIP**.
     *   If new -> **PROCEED**.
 
 2.  **Create Task**: Call `create_task`.
-    *   `project_id`: The target project ID.
-    *   **title**: `[Code Quality] <Concise Title>` (e.g., `[Code Quality] Split UserProfile.tsx (>400 lines)`).
+    *   **title**: `<Concise Title>` (e.g., `Split UserProfile.tsx (>400 lines)`).
+    *   **issueType**: Use `task` by default. Use `bug` only when the finding is an existing broken behavior or defect. Use `feature` only when the work is genuinely additive rather than corrective.
+    *   **priority**: Map the command severity to OpenDucktor numeric priority.
+      `1` = High, `2` = Medium, `3` = Low. Use `0` only for truly critical issues.
+    *   **labels**: Only `audit` and `code-quality` are allowed for this command. Every task must include both labels. Do not add any other labels.
+    *   **aiReviewEnabled**: `true`
     *   **description**:
         ```markdown
         ### Category
@@ -124,13 +131,9 @@ Iterate through the codebase. For **EACH** distinct violation found:
         ### Recommended Action
         {Refactoring strategy, e.g., "Extract sub-components", "Create utility function for X".}
         ```
-    *   **priority**:
-        *   `High`: Complexity/Large Files/No Tests.
-        *   `Medium`: Duplication, Naming.
-        *   `Low`: Linting/Dead Code.
-    *   **status**: "Todo".
+    *   Do **NOT** send a `status` field. `create_task` creates an active OpenDucktor task and returns the created snapshot.
 
-### Phase 3: Reporting & TERMINATION (STRICT)
+## Phase 3: Reporting & TERMINATION (STRICT)
 
 Once all files are analyzed, follow this protocol strictly:
 
@@ -139,7 +142,7 @@ Once all files are analyzed, follow this protocol strictly:
     > *   **Files Analyzed**: {Count}
     > *   **Issues Found**: {Count}
     > *   **Duplicates Skipped**: {Count}
-    > *   **Tasks Created in VibeKanban**: {Count}
+    > *   **Tasks Created in OpenDucktor**: {Count}
 
 2.  **STOP IMMEDIATELY**.
     *   **DO NOT** propose a "Plan for Next Steps".

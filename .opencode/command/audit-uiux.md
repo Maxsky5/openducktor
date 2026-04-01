@@ -1,6 +1,5 @@
 ---
-name: ideation-uiux
-description: Audit UI/UX and create Vibe Kanban issues for usability, accessibility, visual consistency, interaction states, and mobile responsiveness. Use when asked for UI/UX ideation, accessibility review, frontend polish audit, or UX issue backlog creation.
+description: Audits UI/UX using Chrome DevTools (Dynamic, Optional) AND Static Code Analysis (Mandatory). Creates tasks in OpenDucktor. Ends strictly. Usage /audit-uiux
 ---
 
 # 1. Role & Objective
@@ -48,9 +47,10 @@ Analyze the target against these 5 critical pillars:
 Follow this execution flow strictly.
 
 ## Phase 1: Context & Setup
-1.  **Resolve Project ID**: Use the argument `$1` or call tool `list_projects` of the MCP Server `vibe_kanban`.
-2.  **Fetch Existing Tasks**: Call tool `list_tasks`. Store the list of existing UI/UX tasks to avoid creating duplicates.
+1.  **Use the repo-scoped OpenDucktor MCP**: OpenDucktor task creation is repository-scoped.
+2.  **Fetch Existing Tasks**: Call tool `search_tasks` with `{ "limit": 100 }`. Store `results[*].task.title`, `results[*].task.description`, `results[*].task.labels`, and `results[*].task.status` so you can avoid creating duplicates.
 3.  **Discovery**: Check `AGENTS.md` or `package.json` to identify the local port (e.g., `http://localhost:3000`).
+4.  **Registry Caveat**: If `hasMore` is `true`, use the initial registry only as a first pass and do a targeted duplicate query before each creation.
 
 ## Phase 2: Dynamic Analysis (Optional - If Available)
 **Check Availability**: Do you have the tools `navigate_page` AND `take_screenshot`? Is the local server running?
@@ -82,15 +82,21 @@ Follow this execution flow strictly.
     *   Search for responsive prefixes (`md:`, `lg:`) or `@media` queries.
     *   *Finding*: If a complex grid/flex container has NO responsive modifiers, flag it as "Potentially Broken on Mobile".
 
-## Phase 4: VibeKanban Action
+## Phase 4: OpenDucktor Action
 Iterate through ALL findings (Dynamic + Static). For **EACH** distinct issue:
 
-1.  **Duplicate Check**: If task exists in Phase 1 list, SKIP IT.
+1.  **Duplicate Check**:
+    *   If task exists in Phase 1 list, do not trust that alone.
+    *   Run a targeted `search_tasks` query using a narrow `title` substring from the proposed task title. Add `tags` only when it helps narrow likely matches.
+    *   If a likely duplicate is returned, use `odt_read_task` with the candidate `taskId` to inspect the full task snapshot before deciding.
+    *   If task exists, SKIP IT.
 2.  **Task Creation**: Call tool `create_task`.
-    *   **project_id**: (From Phase 1)
-    *   **title**: `[UI/UX] <Concise Title>`
-    *   **priority**: `High` (Broken/A11y), `Medium` (UX Friction), `Low` (Polish).
-    *   **status**: "Todo"
+    *   **title**: `<Concise Title>`
+    *   **issueType**: Use `bug` for broken interaction, accessibility, layout, or responsiveness defects. Use `task` for design-system cleanup or polish work that is not a defect.
+    *   **priority**: Map command severity to OpenDucktor numeric priority.
+      `1` = High, `2` = Medium, `3` = Low. Use `0` only for truly critical issues.
+    *   **labels**: Only `audit`, `a11y`, `ui`, and `ux` are allowed for this command. Every task must include `audit`, then add only the applicable specialization labels from `a11y`, `ui`, and `ux`. Choose the narrowest matching label set for the finding.
+    *   **aiReviewEnabled**: `true`
     *   **description**:
         ```markdown
         ### Source
@@ -106,6 +112,7 @@ Iterate through ALL findings (Dynamic + Static). For **EACH** distinct issue:
         ### Proposed Solution
         {Specific CSS fix, Tailwind class addition, or Semantic HTML refactor}
         ```
+    *   Do **NOT** send a `status` field. `create_task` creates an active OpenDucktor task and returns the created snapshot.
 
 ## Phase 5: Strict Termination
 **CRITICAL**: Once the loop is finished:
