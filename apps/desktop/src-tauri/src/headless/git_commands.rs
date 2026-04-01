@@ -1,7 +1,8 @@
 use super::command_registry::CommandRegistry;
 use super::command_support::{
     deserialize_args, handle_repo_path_operation_blocking, invalidate_repo_worktree_cache,
-    request_error, run_headless_blocking, serialize_value, CommandResult, HeadlessState,
+    request_error, run_headless_blocking, serialize_value, CommandResult,
+    HeadlessCommandError, HeadlessState,
 };
 use crate::commands::git::{
     build_worktree_status_summary_with_snapshot, build_worktree_status_with_snapshot,
@@ -131,7 +132,7 @@ fn resolve_authorized_working_dir(
     state: &HeadlessState,
     repo_path: &str,
     working_dir: Option<&str>,
-) -> Result<String, super::command_support::HeadlessCommandError> {
+) -> Result<String, HeadlessCommandError> {
     state
         .service
         .resolve_authorized_repo_path(repo_path)
@@ -141,24 +142,20 @@ fn resolve_authorized_working_dir(
 
 fn require_git_commit_message(
     message: &str,
-) -> Result<String, super::command_support::HeadlessCommandError> {
+) -> Result<String, HeadlessCommandError> {
     let trimmed = message.trim();
     if trimmed.is_empty() {
-        return Err(super::command_support::HeadlessCommandError::bad_request(
-            "message is required",
-        ));
+        return Err(HeadlessCommandError::bad_request("message is required"));
     }
     Ok(trimmed.to_string())
 }
 
 fn require_git_rebase_target_branch(
     target_branch: &str,
-) -> Result<String, super::command_support::HeadlessCommandError> {
+) -> Result<String, HeadlessCommandError> {
     let trimmed = target_branch.trim();
     if trimmed.is_empty() {
-        return Err(super::command_support::HeadlessCommandError::bad_request(
-            "targetBranch is required",
-        ));
+        return Err(HeadlessCommandError::bad_request("targetBranch is required"));
     }
     Ok(trimmed.to_string())
 }

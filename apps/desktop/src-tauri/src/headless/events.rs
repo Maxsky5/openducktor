@@ -1,6 +1,6 @@
 use super::command_support::HeadlessCommandError;
 use axum::http::HeaderMap;
-use axum::response::sse::{Event, KeepAlive, Sse};
+use axum::response::sse::{Event, KeepAlive};
 use axum::response::IntoResponse;
 use host_application::{DevServerEmitter, RunEmitter};
 use std::collections::VecDeque;
@@ -40,38 +40,33 @@ impl HeadlessEventBus {
     }
 
     pub(super) fn emit(&self, payload: String) {
+        let mut recent = self
+            .recent
+            .lock()
+            .expect("headless::events::emit: browser event buffer should lock");
         let id = self.next_id.fetch_add(1, Ordering::SeqCst) + 1;
         let event = HeadlessEvent { id, payload };
-        {
-            let mut recent = self
-                .recent
-                .lock()
-                .expect("browser event buffer should lock");
-            recent.push_back(event.clone());
-            if recent.len() > self.capacity {
-                recent.pop_front();
-            }
+        recent.push_back(event.clone());
+        if recent.len() > self.capacity {
+            recent.pop_front();
         }
         let _ = self.sender.send(event);
     }
 
-    pub(super) fn replay_since(&self, last_seen_id: Option<u64>) -> Vec<HeadlessEvent> {
-        let Some(last_seen_id) = last_seen_id else {
-            return Vec::new();
-        };
-
-        self.recent
+    pub(super) fn subscribe_with_replay(
+        &self,
+        last_seen_id: Option<u64>,
+    ) -> (broadcast::Receiver<HeadlessEvent>, Vec<HeadlessEvent>) {
+        let recent = self
+            .recent
             .lock()
-            .expect("browser event buffer should lock")
-            .iter()
-            .filter(|event| event.id > last_seen_id)
-            .cloned()
-            .collect()
+            .expect("headless::events::subscribe_with_replay: browser event buffer should lock");
+        let receiver = self.sender.subscribe();
+        let replay = collect_replay_since(&recent, last_seen_id);
+
+        (receiver, replay)
     }
 
-    pub(super) fn subscribe(&self) -> broadcast::Receiver<HeadlessEvent> {
-        self.sender.subscribe()
-    }
 }
 
 pub(super) fn build_sse_response(
@@ -79,17 +74,16 @@ pub(super) fn build_sse_response(
     last_event_id: Option<u64>,
     stream_name: &'static str,
 ) -> impl IntoResponse {
+    let (receiver, replay) = bus.subscribe_with_replay(last_event_id);
     let replay_stream = tokio_stream::iter(
-        bus.replay_since(last_event_id)
-            .into_iter()
-            .map(|event| to_sse_event(&event)),
+        replay.into_iter().map(|event| to_sse_event(&event)),
     );
-    let live_stream = BroadcastStream::new(bus.subscribe())
+    let live_stream = BroadcastStream::new(receiver)
         .map(move |message| live_event_to_sse(message, stream_name));
     let stream: Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>> =
         Box::pin(replay_stream.chain(live_stream));
 
-    Sse::new(stream).keep_alive(KeepAlive::default())
+    axum::response::sse::Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
 pub(super) fn parse_last_event_id(
@@ -140,6 +134,21 @@ fn to_sse_event(event: &HeadlessEvent) -> Result<Event, Infallible> {
     Ok(Event::default()
         .id(event.id.to_string())
         .data(event.payload.clone()))
+}
+
+fn collect_replay_since(
+    recent: &VecDeque<HeadlessEvent>,
+    last_seen_id: Option<u64>,
+) -> Vec<HeadlessEvent> {
+    let Some(last_seen_id) = last_seen_id else {
+        return Vec::new();
+    };
+
+    recent
+        .iter()
+        .filter(|event| event.id > last_seen_id)
+        .cloned()
+        .collect()
 }
 
 fn live_event_to_sse(
@@ -193,13 +202,32 @@ mod tests {
         bus.emit("second".to_string());
         bus.emit("third".to_string());
 
-        let replayed = bus.replay_since(Some(1));
+        let (_receiver, replayed) = bus.subscribe_with_replay(Some(1));
 
         assert_eq!(replayed.len(), 2);
         assert_eq!(replayed[0].id, 2);
         assert_eq!(replayed[0].payload, "second");
         assert_eq!(replayed[1].id, 3);
         assert_eq!(replayed[1].payload, "third");
+    }
+
+    #[tokio::test]
+    async fn subscribe_with_replay_receives_new_events_after_replaying_buffered_events() {
+        let bus = HeadlessEventBus::new(4);
+        bus.emit("first".to_string());
+        bus.emit("second".to_string());
+
+        let (mut receiver, replayed) = bus.subscribe_with_replay(Some(1));
+
+        assert_eq!(replayed.len(), 1);
+        assert_eq!(replayed[0].id, 2);
+        assert_eq!(replayed[0].payload, "second");
+
+        bus.emit("third".to_string());
+
+        let live = receiver.recv().await.expect("subscribed receiver should get new events");
+        assert_eq!(live.id, 3);
+        assert_eq!(live.payload, "third");
     }
 
     #[test]
