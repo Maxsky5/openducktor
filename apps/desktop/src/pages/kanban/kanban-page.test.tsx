@@ -424,6 +424,8 @@ describe("KanbanPage session start modal flow", () => {
         updateAgentSessionModel: updateAgentSessionModelMock,
       }),
       useTasksState: () => ({
+        isForegroundLoadingTasks: false,
+        isRefreshingTasksInBackground: false,
         tasks: [currentTaskFixture],
         runs: [],
         isLoadingTasks: false,

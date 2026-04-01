@@ -29,7 +29,101 @@ const createDeferred = <T,>() => {
   };
 };
 
+const createIntervalController = () => {
+  let nextIntervalId = 1;
+  const callbacks = new Map<number, () => void>();
+  const originalSetInterval = globalThis.setInterval.bind(globalThis);
+  const originalClearInterval = globalThis.clearInterval.bind(globalThis);
+
+  globalThis.setInterval = ((handler: TimerHandler) => {
+    if (typeof handler !== "function") {
+      throw new Error("Expected interval handler to be a function in lifecycle tests");
+    }
+
+    const intervalId = nextIntervalId;
+    nextIntervalId += 1;
+    callbacks.set(intervalId, handler as () => void);
+    return intervalId as unknown as ReturnType<typeof setInterval>;
+  }) as unknown as typeof setInterval;
+
+  globalThis.clearInterval = ((intervalId: ReturnType<typeof setInterval>) => {
+    callbacks.delete(intervalId as unknown as number);
+  }) as unknown as typeof clearInterval;
+
+  return {
+    tick(): void {
+      for (const callback of [...callbacks.values()]) {
+        callback();
+      }
+    },
+    restore(): void {
+      globalThis.setInterval = originalSetInterval;
+      globalThis.clearInterval = originalClearInterval;
+    },
+  };
+};
+
+type WindowEventTargetOverride = typeof globalThis & {
+  addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void;
+  removeEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void;
+  dispatchEvent: (event: Event) => boolean;
+};
+
+const createVisibilityStateController = () => {
+  let visibilityState: DocumentVisibilityState = "visible";
+  const windowTarget = new EventTarget();
+  const originalVisibilityState = Object.getOwnPropertyDescriptor(document, "visibilityState");
+  const originalDocumentDispatchEventDescriptor = Object.getOwnPropertyDescriptor(
+    document,
+    "dispatchEvent",
+  );
+  const originalAddEventListener = globalThis.addEventListener.bind(globalThis);
+  const originalRemoveEventListener = globalThis.removeEventListener.bind(globalThis);
+  const originalDispatchEvent = globalThis.dispatchEvent.bind(globalThis);
+
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => visibilityState,
+  });
+
+  Object.defineProperty(document, "dispatchEvent", {
+    configurable: true,
+    writable: true,
+    value: EventTarget.prototype.dispatchEvent.bind(document),
+  });
+  (globalThis as WindowEventTargetOverride).addEventListener =
+    windowTarget.addEventListener.bind(windowTarget);
+  (globalThis as WindowEventTargetOverride).removeEventListener =
+    windowTarget.removeEventListener.bind(windowTarget);
+  (globalThis as WindowEventTargetOverride).dispatchEvent =
+    windowTarget.dispatchEvent.bind(windowTarget);
+
+  return {
+    set(value: DocumentVisibilityState) {
+      visibilityState = value;
+    },
+    restore() {
+      if (originalVisibilityState) {
+        Object.defineProperty(document, "visibilityState", originalVisibilityState);
+      } else {
+        Reflect.deleteProperty(document, "visibilityState");
+      }
+      if (originalDocumentDispatchEventDescriptor) {
+        Object.defineProperty(document, "dispatchEvent", originalDocumentDispatchEventDescriptor);
+      } else {
+        Reflect.deleteProperty(document, "dispatchEvent");
+      }
+      (globalThis as WindowEventTargetOverride).addEventListener = originalAddEventListener;
+      (globalThis as WindowEventTargetOverride).removeEventListener = originalRemoveEventListener;
+      (globalThis as WindowEventTargetOverride).dispatchEvent = originalDispatchEvent;
+    },
+  };
+};
+
+let visibilityStateController: ReturnType<typeof createVisibilityStateController>;
+
 beforeEach(() => {
+  visibilityStateController = createVisibilityStateController();
   mock.module("@/lib/host-client", () => ({
     createHostBridge: () => ({
       client: createTauriHostClient(async () => {
@@ -83,6 +177,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  visibilityStateController.restore();
   mock.restore();
 });
 
@@ -112,6 +207,7 @@ describe("useAppLifecycle", () => {
           beadsError: null,
         })),
         refreshTaskData,
+        refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
       } satisfies HookArgs,
     });
@@ -207,6 +303,7 @@ describe("useAppLifecycle", () => {
         beadsError: null,
       })),
       refreshTaskData: mock(async () => taskLoadDeferred.promise),
+      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
     };
 
@@ -243,6 +340,147 @@ describe("useAppLifecycle", () => {
     }
   });
 
+  test("runs periodic PR sync only while visible and restarts the cadence on visibility changes", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const refreshTasksWithOptions = mock(async () => {});
+    const baseArgs: HookArgs = {
+      activeRepo: "/repo",
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => {}),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo: mock(async () => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      })),
+      refreshTaskData: mock(async () => {}),
+      refreshTasksWithOptions,
+      clearBranchData: mock(() => {}),
+      pullRequestSyncIntervalMs: 20,
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
+
+    const intervalController = createIntervalController();
+    visibilityStateController.set("hidden");
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    try {
+      await harness.mount();
+
+      expect(refreshTasksWithOptions).not.toHaveBeenCalled();
+
+      await harness.run(() => {
+        visibilityStateController.set("visible");
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      expect(refreshTasksWithOptions).not.toHaveBeenCalled();
+
+      intervalController.tick();
+      await harness.waitFor(() => refreshTasksWithOptions.mock.calls.length === 1, 1000);
+
+      const visibleCallCount = refreshTasksWithOptions.mock.calls.length;
+      expect(visibleCallCount).toBeGreaterThan(0);
+      expect(refreshTasksWithOptions).toHaveBeenCalledWith({ trigger: "scheduled" });
+
+      await harness.run(() => {
+        visibilityStateController.set("hidden");
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      intervalController.tick();
+
+      expect(refreshTasksWithOptions).toHaveBeenCalledTimes(visibleCallCount);
+
+      await harness.run(() => {
+        visibilityStateController.set("visible");
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      expect(refreshTasksWithOptions).toHaveBeenCalledTimes(visibleCallCount);
+
+      intervalController.tick();
+      await harness.waitFor(
+        () => refreshTasksWithOptions.mock.calls.length === visibleCallCount + 1,
+        1000,
+      );
+
+      expect(refreshTasksWithOptions.mock.calls.length).toBeGreaterThan(visibleCallCount);
+    } finally {
+      await harness.unmount();
+      intervalController.restore();
+    }
+  });
+
+  test("switches the periodic PR sync timer when the active repo changes", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const refreshTasksForRepoA = mock(async () => {});
+    const refreshTasksForRepoB = mock(async () => {});
+    const baseArgs: HookArgs = {
+      activeRepo: "/repo-a",
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => {}),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo: mock(async () => ({
+        beadsOk: true,
+        beadsPath: "/repo-a/.beads",
+        beadsError: null,
+      })),
+      refreshTaskData: mock(async () => {}),
+      refreshTasksWithOptions: refreshTasksForRepoA,
+      clearBranchData: mock(() => {}),
+      pullRequestSyncIntervalMs: 20,
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
+
+    const intervalController = createIntervalController();
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    try {
+      await harness.mount();
+
+      intervalController.tick();
+      await harness.waitFor(() => refreshTasksForRepoA.mock.calls.length === 1, 1000);
+
+      const repoACallCount = refreshTasksForRepoA.mock.calls.length;
+      expect(repoACallCount).toBeGreaterThan(0);
+      expect(refreshTasksForRepoB).not.toHaveBeenCalled();
+
+      await harness.update({
+        args: {
+          ...baseArgs,
+          activeRepo: "/repo-b",
+          refreshTasksWithOptions: refreshTasksForRepoB,
+        },
+      });
+
+      intervalController.tick();
+      await harness.waitFor(() => refreshTasksForRepoB.mock.calls.length === 1, 1000);
+
+      expect(refreshTasksForRepoA).toHaveBeenCalledTimes(repoACallCount);
+      expect(refreshTasksForRepoB.mock.calls.length).toBeGreaterThan(0);
+    } finally {
+      await harness.unmount();
+      intervalController.restore();
+    }
+  });
+
   test("does not block repo diagnostics load on branch refresh completion", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
@@ -272,6 +510,7 @@ describe("useAppLifecycle", () => {
         beadsError: null,
       })),
       refreshTaskData: mock(async () => taskLoadDeferred.promise),
+      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
     };
 
@@ -340,6 +579,7 @@ describe("useAppLifecycle", () => {
         beadsError: null,
       })),
       refreshTaskData: mock(async () => taskDeferred.promise),
+      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
     };
 
@@ -410,6 +650,7 @@ describe("useAppLifecycle", () => {
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
       refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
       refreshTaskData: mock(async () => taskDeferred.promise),
+      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
       beadsPreparationToastDelayMs: 5,
     };
@@ -476,6 +717,7 @@ describe("useAppLifecycle", () => {
         beadsError: null,
       })),
       refreshTaskData: mock(async () => taskDeferred.promise),
+      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
       beadsPreparationToastDelayMs: 5,
     };
@@ -531,6 +773,7 @@ describe("useAppLifecycle", () => {
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
       refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
       refreshTaskData: mock(async () => {}),
+      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
       beadsPreparationToastDelayMs: 15,
     };
@@ -589,6 +832,7 @@ describe("useAppLifecycle", () => {
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
       refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
       refreshTaskData: mock(async () => {}),
+      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
       beadsPreparationToastDelayMs: 5,
     };

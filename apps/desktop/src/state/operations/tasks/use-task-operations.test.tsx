@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
+import { isKanbanForegroundLoading } from "@/pages/kanban/use-kanban-page-models";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { documentQueryKeys } from "../../queries/documents";
@@ -151,7 +152,13 @@ const createHookHarness = (initialArgs: HookArgs) => {
 type TaskAndKanbanHarnessState = {
   operations: ReturnType<typeof useTaskOperations>;
   kanbanTasks: TaskCard[];
+  isPendingKanban: boolean;
   isFetchingKanban: boolean;
+};
+
+type ScheduledKanbanRefetchScenario = {
+  initialTasks: TaskCard[];
+  expectedVisibleTaskId: string | undefined;
 };
 
 const createTaskAndKanbanHarness = (initialArgs: HookArgs, doneVisibleDays = 1) => {
@@ -168,6 +175,7 @@ const createTaskAndKanbanHarness = (initialArgs: HookArgs, doneVisibleDays = 1) 
     latest = {
       operations,
       kanbanTasks: args.activeRepo ? (kanbanTaskListQuery.data ?? []) : [],
+      isPendingKanban: args.activeRepo !== null && kanbanTaskListQuery.isPending,
       isFetchingKanban:
         args.activeRepo !== null &&
         (kanbanTaskListQuery.isPending || kanbanTaskListQuery.isFetching),
@@ -212,6 +220,117 @@ const createTaskAndKanbanHarness = (initialArgs: HookArgs, doneVisibleDays = 1) 
       await sharedHarness.unmount();
     },
   };
+};
+
+const assertScheduledKanbanRefetchStaysBackground = async ({
+  initialTasks,
+  expectedVisibleTaskId,
+}: ScheduledKanbanRefetchScenario): Promise<void> => {
+  const repoPullRequestSyncDeferred = createDeferred<{ ok: boolean }>();
+  let repoTaskListCallCount = 0;
+  let kanbanTaskListCallCount = 0;
+  let runsListCallCount = 0;
+  const repoTaskRefreshDeferred = createDeferred<TaskCard[]>();
+  const kanbanRefreshDeferred = createDeferred<TaskCard[]>();
+  const runsRefreshDeferred = createDeferred<RunSummary[]>();
+  const repoPullRequestSync = mock(async () => repoPullRequestSyncDeferred.promise);
+  const tasksList = mock(async (_repoPath: string, doneVisibleDays?: number) => {
+    if (typeof doneVisibleDays === "number") {
+      kanbanTaskListCallCount += 1;
+      return kanbanTaskListCallCount === 1 ? initialTasks : kanbanRefreshDeferred.promise;
+    }
+
+    repoTaskListCallCount += 1;
+    return repoTaskListCallCount === 1 ? initialTasks : repoTaskRefreshDeferred.promise;
+  });
+  const runsList = mock(async (): Promise<RunSummary[]> => {
+    runsListCallCount += 1;
+    return runsListCallCount === 1 ? [] : runsRefreshDeferred.promise;
+  });
+
+  const original = {
+    repoPullRequestSync: host.repoPullRequestSync,
+    tasksList: host.tasksList,
+    runsList: host.runsList,
+  };
+  host.repoPullRequestSync = repoPullRequestSync;
+  host.tasksList = tasksList;
+  host.runsList = runsList;
+
+  const harness = createTaskAndKanbanHarness({
+    activeRepo: "/repo",
+    refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+      beadsOk: true,
+      beadsPath: "/repo/.beads",
+      beadsError: null,
+    }),
+  });
+
+  try {
+    await harness.mount();
+    await harness.waitFor(
+      (value) =>
+        !value.isPendingKanban &&
+        !value.isFetchingKanban &&
+        value.kanbanTasks[0]?.id === expectedVisibleTaskId &&
+        value.kanbanTasks.length === initialTasks.length,
+      1000,
+    );
+
+    let scheduledRefreshPromise: Promise<void> | null = null;
+    await harness.run((value) => {
+      scheduledRefreshPromise = value.operations.refreshTasksWithOptions({ trigger: "scheduled" });
+    });
+
+    await harness.run(async () => {
+      repoPullRequestSyncDeferred.resolve({ ok: true });
+    });
+    await harness.waitFor(
+      (value) => !value.isPendingKanban && value.isFetchingKanban && kanbanTaskListCallCount >= 2,
+      1000,
+    );
+
+    if (!scheduledRefreshPromise) {
+      throw new Error("Expected scheduled refresh promise to be created");
+    }
+
+    const latest = harness.getLatest();
+    const foregroundLoading = isKanbanForegroundLoading({
+      hasActiveRepo: true,
+      isForegroundLoadingTasks: latest.operations.isForegroundLoadingTasks,
+      isSettingsPending: false,
+      doneVisibleDays: 1,
+      isKanbanPending: latest.isPendingKanban,
+    });
+
+    expect(repoTaskListCallCount).toBeGreaterThanOrEqual(2);
+    expect(latest.operations.isForegroundLoadingTasks).toBe(false);
+    expect(latest.operations.isRefreshingTasksInBackground).toBe(true);
+    expect(foregroundLoading).toBe(false);
+    expect(foregroundLoading && latest.kanbanTasks.length === 0).toBe(false);
+    expect(latest.kanbanTasks[0]?.id).toBe(expectedVisibleTaskId);
+
+    await harness.run(async () => {
+      repoTaskRefreshDeferred.resolve(initialTasks);
+      kanbanRefreshDeferred.resolve(initialTasks);
+      runsRefreshDeferred.resolve([]);
+      await scheduledRefreshPromise;
+    });
+
+    await harness.waitFor(
+      (value) => !value.operations.isRefreshingTasksInBackground && !value.isFetchingKanban,
+      1000,
+    );
+  } finally {
+    repoPullRequestSyncDeferred.resolve({ ok: true });
+    repoTaskRefreshDeferred.resolve(initialTasks);
+    kanbanRefreshDeferred.resolve(initialTasks);
+    runsRefreshDeferred.resolve([]);
+    await harness.unmount();
+    host.repoPullRequestSync = original.repoPullRequestSync;
+    host.tasksList = original.tasksList;
+    host.runsList = original.runsList;
+  }
 };
 
 describe("use-task-operations", () => {
@@ -505,10 +624,62 @@ describe("use-task-operations", () => {
     }
   });
 
-  test("refreshTasks continues loading task data when pull request sync fails", async () => {
+  test("refreshTasks stops before task data refresh when pull request sync fails", async () => {
     const repoPullRequestSync = mock(async () => {
       throw new Error("gh auth expired");
     });
+    const tasksList = mock(async () => [makeTask("A", "open")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+
+    const original = {
+      repoPullRequestSync: host.repoPullRequestSync,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+      toastError: toast.error,
+    };
+    host.repoPullRequestSync = repoPullRequestSync;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.id === "A");
+      tasksList.mockClear();
+      runsList.mockClear();
+
+      await harness.run(async (value) => {
+        await value.refreshTasks();
+      });
+
+      expect(repoPullRequestSync).toHaveBeenCalledWith("/repo");
+      expect(tasksList).not.toHaveBeenCalled();
+      expect(runsList).not.toHaveBeenCalled();
+      expect(toastError).toHaveBeenCalledWith("Failed to refresh tasks", {
+        description: "Task store unavailable. gh auth expired",
+      });
+    } finally {
+      await harness.unmount();
+      host.repoPullRequestSync = original.repoPullRequestSync;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+      toast.error = original.toastError;
+    }
+  });
+
+  test("scheduled and manual refresh join the same in-flight repo sync", async () => {
+    const repoPullRequestSyncDeferred = createDeferred<{ ok: boolean }>();
+    const repoPullRequestSync = mock(async () => repoPullRequestSyncDeferred.promise);
     const tasksList = mock(async () => [makeTask("A", "open")]);
     const runsList = mock(async (): Promise<RunSummary[]> => []);
 
@@ -532,18 +703,363 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
-      await harness.run(async (value) => {
-        await value.refreshTasks();
+      await harness.waitFor((value) => value.tasks[0]?.id === "A");
+      tasksList.mockClear();
+      runsList.mockClear();
+
+      let scheduledRefreshPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        scheduledRefreshPromise = value.refreshTasksWithOptions({ trigger: "scheduled" });
       });
 
-      expect(repoPullRequestSync).toHaveBeenCalledWith("/repo");
-      expect(tasksList).toHaveBeenCalledWith("/repo");
-      expect(harness.getLatest().tasks.map((task) => task.id)).toEqual(["A"]);
+      expect(repoPullRequestSync).toHaveBeenCalledTimes(1);
+
+      let manualRefreshPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        manualRefreshPromise = value.refreshTasks();
+      });
+      await harness.waitFor((value) => value.isLoadingTasks, 1000);
+
+      expect(repoPullRequestSync).toHaveBeenCalledTimes(1);
+
+      if (!scheduledRefreshPromise || !manualRefreshPromise) {
+        throw new Error("Expected both refresh promises to be created");
+      }
+
+      await harness.run(async () => {
+        repoPullRequestSyncDeferred.resolve({ ok: true });
+        await Promise.all([scheduledRefreshPromise, manualRefreshPromise]);
+      });
+      await harness.waitFor((value) => !value.isLoadingTasks, 1000);
+
+      expect(tasksList).toHaveBeenCalledTimes(1);
+      expect(runsList).toHaveBeenCalledTimes(1);
+    } finally {
+      repoPullRequestSyncDeferred.resolve({ ok: true });
+      await harness.unmount();
+      host.repoPullRequestSync = original.repoPullRequestSync;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
+  test("scheduled and manual refresh share one toast when the joined repo sync fails", async () => {
+    const repoPullRequestSyncDeferred = createDeferred<{ ok: boolean }>();
+    const repoPullRequestSync = mock(async () => repoPullRequestSyncDeferred.promise);
+    const tasksList = mock(async () => [makeTask("A", "open")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+    const consoleWarn = mock(() => {});
+
+    const original = {
+      repoPullRequestSync: host.repoPullRequestSync,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+      toastError: toast.error,
+      consoleWarn: console.warn,
+    };
+    host.repoPullRequestSync = repoPullRequestSync;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    console.warn = consoleWarn as unknown as typeof console.warn;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.id === "A");
+
+      let scheduledRefreshPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        scheduledRefreshPromise = value.refreshTasksWithOptions({ trigger: "scheduled" });
+      });
+
+      let manualRefreshPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        manualRefreshPromise = value.refreshTasks();
+      });
+      await harness.waitFor((value) => value.isLoadingTasks, 1000);
+
+      if (!scheduledRefreshPromise || !manualRefreshPromise) {
+        throw new Error("Expected both refresh promises to be created");
+      }
+
+      await harness.run(async () => {
+        repoPullRequestSyncDeferred.reject(new Error("gh auth expired"));
+        await Promise.all([scheduledRefreshPromise, manualRefreshPromise]);
+      });
+      await harness.waitFor((value) => !value.isLoadingTasks, 1000);
+
+      expect(toastError).toHaveBeenCalledTimes(1);
+      expect(toastError).toHaveBeenCalledWith("Failed to refresh tasks", {
+        description: "Task store unavailable. gh auth expired",
+      });
+      expect(consoleWarn).toHaveBeenCalledTimes(1);
+      expect(consoleWarn).toHaveBeenCalledWith(TASK_REFRESH_WARNING, {
+        repoPath: "/repo",
+        trigger: "scheduled",
+        description: "Task store unavailable. gh auth expired",
+        error: "gh auth expired",
+      });
+    } finally {
+      repoPullRequestSyncDeferred.resolve({ ok: true });
+      await harness.unmount();
+      host.repoPullRequestSync = original.repoPullRequestSync;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+      toast.error = original.toastError;
+      console.warn = original.consoleWarn;
+    }
+  });
+
+  test("an earlier manual refresh cannot clear a later repo refresh loading state", async () => {
+    const repoARefreshDeferred = createDeferred<{ ok: boolean }>();
+    const repoBRefreshDeferred = createDeferred<{ ok: boolean }>();
+    const repoPullRequestSync = mock(async (repoPath: string) => {
+      if (repoPath === "/repo-a") {
+        return repoARefreshDeferred.promise;
+      }
+
+      if (repoPath === "/repo-b") {
+        return repoBRefreshDeferred.promise;
+      }
+
+      throw new Error(`Unexpected repo path ${repoPath}`);
+    });
+    const tasksList = mock(async (repoPath: string) => {
+      if (repoPath === "/repo-a") {
+        return [makeTask("A", "open")];
+      }
+
+      return [makeTask("B", "open")];
+    });
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      repoPullRequestSync: host.repoPullRequestSync,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.repoPullRequestSync = repoPullRequestSync;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo-a/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.id === "A", 1000);
+
+      let repoAManualRefresh: Promise<void> | null = null;
+      await harness.run((value) => {
+        repoAManualRefresh = value.refreshTasks();
+      });
+      await harness.waitFor((value) => value.isLoadingTasks, 1000);
+
+      await harness.updateArgs({
+        activeRepo: "/repo-b",
+        refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+          beadsOk: true,
+          beadsPath: "/repo-b/.beads",
+          beadsError: null,
+        }),
+      });
+      await harness.waitFor((value) => value.tasks[0]?.id === "B", 1000);
+      await harness.waitFor((value) => !value.isLoadingTasks, 1000);
+
+      let repoBManualRefresh: Promise<void> | null = null;
+      await harness.run((value) => {
+        repoBManualRefresh = value.refreshTasks();
+      });
+      await harness.waitFor((value) => value.isLoadingTasks, 1000);
+
+      if (!repoAManualRefresh || !repoBManualRefresh) {
+        throw new Error("Expected both manual refresh promises to be created");
+      }
+
+      await harness.run(async () => {
+        repoARefreshDeferred.resolve({ ok: true });
+        await repoAManualRefresh;
+      });
+
+      expect(harness.getLatest().isLoadingTasks).toBe(true);
+
+      await harness.run(async () => {
+        repoBRefreshDeferred.resolve({ ok: true });
+        await repoBManualRefresh;
+      });
+      await harness.waitFor((value) => !value.isLoadingTasks, 1000);
+    } finally {
+      repoARefreshDeferred.resolve({ ok: true });
+      repoBRefreshDeferred.resolve({ ok: true });
+      await harness.unmount();
+      host.repoPullRequestSync = original.repoPullRequestSync;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
+  test("scheduled refresh keeps task loading state in background while repo data refetch is in flight", async () => {
+    const repoPullRequestSyncDeferred = createDeferred<{ ok: boolean }>();
+    const repoPullRequestSync = mock(async () => repoPullRequestSyncDeferred.promise);
+    const tasksList = mock(async () => [makeTask("A", "open")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      repoPullRequestSync: host.repoPullRequestSync,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.repoPullRequestSync = repoPullRequestSync;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.id === "A");
+      tasksList.mockClear();
+      runsList.mockClear();
+
+      let scheduledRefreshPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        scheduledRefreshPromise = value.refreshTasksWithOptions({ trigger: "scheduled" });
+      });
+
+      expect(harness.getLatest().isLoadingTasks).toBe(false);
+      expect(repoPullRequestSync).toHaveBeenCalledTimes(1);
+
+      if (!scheduledRefreshPromise) {
+        throw new Error("Expected scheduled refresh promise to be created");
+      }
+
+      await harness.run(async () => {
+        repoPullRequestSyncDeferred.resolve({ ok: true });
+        await scheduledRefreshPromise;
+      });
+
+      expect(harness.getLatest().isLoadingTasks).toBe(false);
+      expect(tasksList).toHaveBeenCalledTimes(1);
+      expect(runsList).toHaveBeenCalledTimes(1);
+    } finally {
+      repoPullRequestSyncDeferred.resolve({ ok: true });
+      await harness.unmount();
+      host.repoPullRequestSync = original.repoPullRequestSync;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
+  test("scheduled refresh keeps an empty kanban board out of foreground loading during post-sync refetch", async () => {
+    await assertScheduledKanbanRefetchStaysBackground({
+      initialTasks: [],
+      expectedVisibleTaskId: undefined,
+    });
+  });
+
+  test("scheduled refresh keeps visible kanban tasks out of foreground loading during post-sync refetch", async () => {
+    await assertScheduledKanbanRefetchStaysBackground({
+      initialTasks: [makeTask("A", "open")],
+      expectedVisibleTaskId: "A",
+    });
+  });
+
+  test("scheduled refresh dedupes repeated identical failures and resets after success", async () => {
+    let shouldFailPullRequestSync = true;
+    const repoPullRequestSync = mock(async () => {
+      if (shouldFailPullRequestSync) {
+        throw new Error("gh auth expired");
+      }
+
+      return { ok: true };
+    });
+    const tasksList = mock(async () => [makeTask("A", "open")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+    const consoleWarn = mock(() => {});
+
+    const original = {
+      repoPullRequestSync: host.repoPullRequestSync,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+      toastError: toast.error,
+      consoleWarn: console.warn,
+    };
+    host.repoPullRequestSync = repoPullRequestSync;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    console.warn = consoleWarn as unknown as typeof console.warn;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.id === "A");
+      toastError.mockClear();
+
+      await harness.run(async (value) => {
+        await value.refreshTasksWithOptions({ trigger: "scheduled" });
+      });
+      await harness.run(async (value) => {
+        await value.refreshTasksWithOptions({ trigger: "scheduled" });
+      });
+
+      expect(toastError).toHaveBeenCalledTimes(1);
+      expect(toastError).toHaveBeenCalledWith("Failed to refresh tasks", {
+        description: "Task store unavailable. gh auth expired",
+      });
+      expect(consoleWarn).toHaveBeenCalledTimes(2);
+
+      shouldFailPullRequestSync = false;
+      await harness.run(async (value) => {
+        await value.refreshTasksWithOptions({ trigger: "scheduled" });
+      });
+
+      shouldFailPullRequestSync = true;
+      await harness.run(async (value) => {
+        await value.refreshTasksWithOptions({ trigger: "scheduled" });
+      });
+
+      expect(toastError).toHaveBeenCalledTimes(2);
+      expect(consoleWarn).toHaveBeenCalledTimes(3);
     } finally {
       await harness.unmount();
       host.repoPullRequestSync = original.repoPullRequestSync;
       host.tasksList = original.tasksList;
       host.runsList = original.runsList;
+      toast.error = original.toastError;
+      console.warn = original.consoleWarn;
     }
   });
 

@@ -12,7 +12,7 @@ export function AppLifecycleStateProvider({ children }: PropsWithChildren): Reac
   const { activeRepo } = useActiveRepoContext();
   const { refreshWorkspaces, refreshBranches, clearBranchData } = useWorkspaceOperationsContext();
   const { refreshRuntimeCheck, refreshBeadsCheckForRepo } = useChecksOperationsContext();
-  const { refreshTaskData } = useTaskControlContext();
+  const { refreshTaskData, refreshTasksWithOptions } = useTaskControlContext();
   const { setEvents, setRunCompletionSignal } = useDelegationEventsContext();
 
   useAppLifecycle({
@@ -24,6 +24,7 @@ export function AppLifecycleStateProvider({ children }: PropsWithChildren): Reac
     refreshRuntimeCheck,
     refreshBeadsCheckForRepo,
     refreshTaskData,
+    refreshTasksWithOptions,
     clearBranchData,
   });
 

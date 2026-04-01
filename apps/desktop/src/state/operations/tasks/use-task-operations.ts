@@ -11,6 +11,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import type { TaskRefreshOptions } from "@/state/app-state-contexts";
 import { documentQueryKeys } from "@/state/queries/documents";
 import { refreshRepoTaskViewsFromQuery } from "@/state/queries/task-view-sync";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
@@ -32,6 +33,8 @@ type UseTaskOperationsArgs = {
 type UseTaskOperationsResult = {
   tasks: TaskCard[];
   runs: RunSummary[];
+  isForegroundLoadingTasks: boolean;
+  isRefreshingTasksInBackground: boolean;
   isLoadingTasks: boolean;
   detectingPullRequestTaskId: string | null;
   linkingMergedPullRequestTaskId: string | null;
@@ -40,6 +43,7 @@ type UseTaskOperationsResult = {
   setIsLoadingTasks: (value: boolean) => void;
   clearTaskData: () => void;
   refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
+  refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
   refreshTasks: () => Promise<void>;
   syncPullRequests: (taskId: string) => Promise<void>;
   linkMergedPullRequest: () => Promise<void>;
@@ -60,6 +64,8 @@ type TaskMutationRefreshStrategy =
   | { kind: "repo" }
   | { kind: "task"; taskId: string }
   | { kind: "remove-task"; taskIds: string[] };
+
+const TASK_REFRESH_WARNING = "Pull request sync failed during task refresh";
 
 const collectTaskDeletionIds = (
   tasks: TaskCard[],
@@ -100,6 +106,12 @@ export function useTaskOperations({
 }: UseTaskOperationsArgs): UseTaskOperationsResult {
   const queryClient = useQueryClient();
   const [isManualLoadingTasks, setIsManualLoadingTasks] = useState(false);
+  const manualRefreshTokenRef = useRef(0);
+  const inFlightTaskRefreshRef = useRef<{ repoPath: string; promise: Promise<void> } | null>(null);
+  const lastTaskRefreshToastRef = useRef<{
+    repoPath: string;
+    description: string;
+  } | null>(null);
   const [detectingPullRequestTaskId, setDetectingPullRequestTaskId] = useState<string | null>(null);
   const [linkingMergedPullRequestTaskId, setLinkingMergedPullRequestTaskId] = useState<
     string | null
@@ -119,7 +131,9 @@ export function useTaskOperations({
     const previousActiveRepo = activeRepoRef.current;
     activeRepoRef.current = activeRepo;
     if (previousActiveRepo !== activeRepo) {
+      manualRefreshTokenRef.current += 1;
       setIsManualLoadingTasks(false);
+      lastTaskRefreshToastRef.current = null;
       setDetectingPullRequestTaskId(null);
       setLinkingMergedPullRequestTaskId(null);
       setUnlinkingPullRequestTaskId(null);
@@ -136,6 +150,37 @@ export function useTaskOperations({
       );
     },
     [queryClient],
+  );
+
+  const runRepoTaskRefresh = useCallback(
+    async (repoPath: string): Promise<void> => {
+      const beads = await refreshBeadsCheckForRepo(repoPath, false);
+      if (!beads.beadsOk) {
+        throw new Error(beads.beadsError ?? "Beads store is not initialized for this repository.");
+      }
+
+      await host.repoPullRequestSync(repoPath);
+      await refreshTaskData(repoPath);
+    },
+    [refreshBeadsCheckForRepo, refreshTaskData],
+  );
+
+  const getRepoTaskRefreshPromise = useCallback(
+    (repoPath: string): { promise: Promise<void>; joinedExisting: boolean } => {
+      const inFlightRefresh = inFlightTaskRefreshRef.current;
+      if (inFlightRefresh && inFlightRefresh.repoPath === repoPath) {
+        return { promise: inFlightRefresh.promise, joinedExisting: true };
+      }
+
+      const promise = runRepoTaskRefresh(repoPath).finally(() => {
+        if (inFlightTaskRefreshRef.current?.promise === promise) {
+          inFlightTaskRefreshRef.current = null;
+        }
+      });
+      inFlightTaskRefreshRef.current = { repoPath, promise };
+      return { promise, joinedExisting: false };
+    },
+    [runRepoTaskRefresh],
   );
 
   const refreshTaskMutationViews = useCallback(
@@ -188,34 +233,65 @@ export function useTaskOperations({
     [activeRepo, refreshTaskMutationViews],
   );
 
-  const refreshTasks = useCallback(async (): Promise<void> => {
-    if (!activeRepo) {
-      return;
-    }
-
-    setIsManualLoadingTasks(true);
-    try {
-      const beads = await refreshBeadsCheckForRepo(activeRepo, false);
-      if (!beads.beadsOk) {
-        const details = beads.beadsError ?? "Beads store is not initialized for this repository.";
-        toast.error("Task store unavailable", { description: details });
+  const refreshTasksWithOptions = useCallback(
+    async (options?: TaskRefreshOptions): Promise<void> => {
+      if (!activeRepo) {
         return;
       }
 
-      try {
-        await host.repoPullRequestSync(activeRepo);
-      } catch (error) {
-        console.warn("Pull request sync failed during task refresh", errorMessage(error));
+      const repoPath = activeRepo;
+      const trigger = options?.trigger ?? "manual";
+      let manualRefreshToken: number | null = null;
+      if (trigger === "manual") {
+        manualRefreshTokenRef.current += 1;
+        manualRefreshToken = manualRefreshTokenRef.current;
+        setIsManualLoadingTasks(true);
       }
-      await refreshTaskData(activeRepo);
-    } catch (error) {
-      toast.error("Failed to refresh tasks", {
-        description: summarizeTaskLoadError(error),
-      });
-    } finally {
-      setIsManualLoadingTasks(false);
-    }
-  }, [activeRepo, refreshBeadsCheckForRepo, refreshTaskData]);
+
+      const { promise, joinedExisting } = getRepoTaskRefreshPromise(repoPath);
+
+      try {
+        await promise;
+        lastTaskRefreshToastRef.current = null;
+      } catch (error) {
+        const description = summarizeTaskLoadError(error);
+        if (!joinedExisting) {
+          console.warn(TASK_REFRESH_WARNING, {
+            repoPath,
+            trigger,
+            description,
+            error: errorMessage(error),
+          });
+        }
+
+        const lastToast = lastTaskRefreshToastRef.current;
+        const shouldDeduplicateToast =
+          lastToast?.repoPath === repoPath &&
+          lastToast.description === description &&
+          (trigger === "scheduled" || joinedExisting);
+
+        if (!shouldDeduplicateToast) {
+          lastTaskRefreshToastRef.current = { repoPath, description };
+          toast.error("Failed to refresh tasks", {
+            description,
+          });
+        }
+      } finally {
+        if (
+          trigger === "manual" &&
+          manualRefreshToken !== null &&
+          manualRefreshTokenRef.current === manualRefreshToken
+        ) {
+          setIsManualLoadingTasks(false);
+        }
+      }
+    },
+    [activeRepo, getRepoTaskRefreshPromise],
+  );
+
+  const refreshTasks = useCallback(async (): Promise<void> => {
+    await refreshTasksWithOptions({ trigger: "manual" });
+  }, [refreshTasksWithOptions]);
 
   const syncPullRequests = useCallback(
     async (taskId: string): Promise<void> => {
@@ -489,7 +565,9 @@ export function useTaskOperations({
   );
 
   const clearTaskData = useCallback(() => {
+    manualRefreshTokenRef.current += 1;
     setIsManualLoadingTasks(false);
+    lastTaskRefreshToastRef.current = null;
     setDetectingPullRequestTaskId(null);
     setLinkingMergedPullRequestTaskId(null);
     setUnlinkingPullRequestTaskId(null);
@@ -498,13 +576,17 @@ export function useTaskOperations({
 
   const tasks = activeRepo ? (repoTaskDataQuery.data?.tasks ?? []) : [];
   const runs = activeRepo ? (repoTaskDataQuery.data?.runs ?? []) : [];
-  const isLoadingTasks =
-    isManualLoadingTasks ||
-    (activeRepo !== null && (repoTaskDataQuery.isPending || repoTaskDataQuery.isFetching));
+  const isForegroundLoadingTasks =
+    isManualLoadingTasks || (activeRepo !== null && repoTaskDataQuery.isPending);
+  const isRefreshingTasksInBackground =
+    activeRepo !== null && repoTaskDataQuery.isFetching && !isForegroundLoadingTasks;
+  const isLoadingTasks = isForegroundLoadingTasks;
 
   return {
     tasks,
     runs,
+    isForegroundLoadingTasks,
+    isRefreshingTasksInBackground,
     isLoadingTasks,
     detectingPullRequestTaskId,
     linkingMergedPullRequestTaskId,
@@ -513,6 +595,7 @@ export function useTaskOperations({
     setIsLoadingTasks: setIsManualLoadingTasks,
     clearTaskData,
     refreshTaskData,
+    refreshTasksWithOptions,
     refreshTasks,
     syncPullRequests,
     linkMergedPullRequest,

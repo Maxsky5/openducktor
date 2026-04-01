@@ -3,10 +3,12 @@ import { type Dispatch, type SetStateAction, useEffect, useLayoutEffect, useRef 
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
+import type { TaskRefreshOptions } from "@/state/app-state-contexts";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import { prependRunEvent } from "./app-lifecycle-model";
 
 const BEADS_PREPARATION_TOAST_DELAY_MS = 1_000;
+const PULL_REQUEST_SYNC_INTERVAL_MS = 5 * 60 * 1_000;
 
 type UseAppLifecycleArgs = {
   activeRepo: string | null;
@@ -23,8 +25,10 @@ type UseAppLifecycleArgs = {
     beadsError?: string | null;
   }>;
   refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
+  refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
   clearBranchData: () => void;
   beadsPreparationToastDelayMs?: number;
+  pullRequestSyncIntervalMs?: number;
 };
 
 export function useAppLifecycle({
@@ -36,17 +40,21 @@ export function useAppLifecycle({
   refreshRuntimeCheck,
   refreshBeadsCheckForRepo,
   refreshTaskData,
+  refreshTasksWithOptions,
   clearBranchData,
   beadsPreparationToastDelayMs = BEADS_PREPARATION_TOAST_DELAY_MS,
+  pullRequestSyncIntervalMs = PULL_REQUEST_SYNC_INTERVAL_MS,
 }: UseAppLifecycleArgs): void {
   const repoLoadVersionRef = useRef(0);
   const activeRepoRef = useRef(activeRepo);
   const refreshTaskDataRef = useRef(refreshTaskData);
+  const refreshTasksWithOptionsRef = useRef(refreshTasksWithOptions);
 
   useLayoutEffect(() => {
     activeRepoRef.current = activeRepo;
     refreshTaskDataRef.current = refreshTaskData;
-  }, [activeRepo, refreshTaskData]);
+    refreshTasksWithOptionsRef.current = refreshTasksWithOptions;
+  }, [activeRepo, refreshTaskData, refreshTasksWithOptions]);
 
   useEffect(() => {
     Promise.allSettled([refreshWorkspaces(), refreshRuntimeCheck(false)]).then(
@@ -218,4 +226,42 @@ export function useAppLifecycle({
     refreshRuntimeCheck,
     refreshTaskData,
   ]);
+
+  useEffect(() => {
+    if (!activeRepo || typeof document === "undefined") {
+      return;
+    }
+
+    let pullRequestSyncIntervalId: ReturnType<typeof setInterval> | null = null;
+
+    const clearPullRequestSyncInterval = (): void => {
+      if (pullRequestSyncIntervalId !== null) {
+        clearInterval(pullRequestSyncIntervalId);
+        pullRequestSyncIntervalId = null;
+      }
+    };
+
+    const restartPullRequestSyncInterval = (): void => {
+      clearPullRequestSyncInterval();
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      pullRequestSyncIntervalId = setInterval(() => {
+        void refreshTasksWithOptionsRef.current({ trigger: "scheduled" });
+      }, pullRequestSyncIntervalMs);
+    };
+
+    const handleVisibilityChange = (): void => {
+      restartPullRequestSyncInterval();
+    };
+
+    restartPullRequestSyncInterval();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearPullRequestSyncInterval();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [activeRepo, pullRequestSyncIntervalMs]);
 }

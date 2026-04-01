@@ -95,6 +95,8 @@ describe("app-state-context-values", () => {
       refreshChecks: async () => {},
     };
     const tasksValue: TasksStateContextValue = {
+      isForegroundLoadingTasks: false,
+      isRefreshingTasksInBackground: false,
       isLoadingTasks: false,
       detectingPullRequestTaskId: null,
       linkingMergedPullRequestTaskId: null,

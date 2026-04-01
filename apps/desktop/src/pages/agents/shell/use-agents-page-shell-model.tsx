@@ -74,7 +74,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     useChecksOperationsContext();
   const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
   const {
-    isLoadingTasks,
+    isForegroundLoadingTasks,
     tasks,
     runs,
     syncPullRequests,
@@ -151,7 +151,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const selection = useAgentStudioSelectionController({
     activeRepo,
     tasks,
-    isLoadingTasks,
+    isLoadingTasks: isForegroundLoadingTasks,
     sessions,
     taskIdParam,
     sessionParam,
@@ -235,7 +235,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   ]);
 
   useAgentStudioQuerySessionSync({
-    isLoadingTasks,
+    isLoadingTasks: isForegroundLoadingTasks,
     tasks,
     taskIdParam,
     sessionParam,
@@ -252,6 +252,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     selection: {
       ...selection,
       contextSwitchVersion,
+      isLoadingTasks: isForegroundLoadingTasks,
     },
     readiness,
     draftStateKey,

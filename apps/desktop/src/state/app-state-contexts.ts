@@ -75,8 +75,13 @@ export type TaskDataContextValue = {
   runs: RunSummary[];
 };
 
+export type TaskRefreshOptions = {
+  trigger?: "manual" | "scheduled";
+};
+
 export type TaskControlContextValue = {
   refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
+  refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
   clearTaskData: () => void;
   setIsLoadingTasks: (value: boolean) => void;
 };
