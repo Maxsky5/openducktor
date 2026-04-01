@@ -133,6 +133,37 @@ describe("useAgentStudioGitActions", () => {
     }
   });
 
+  test("returns success when the commit completes but diff refresh fails", async () => {
+    const refreshDiffData = mock(async () => {
+      throw new Error("Refresh exploded");
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        refreshDiffData,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      let didCommit = false;
+      await harness.run(async (state) => {
+        didCommit = await state.commitAll("feat: preserve commit success");
+      });
+
+      expect(didCommit).toBe(true);
+      expect(gitCommitAllMock).toHaveBeenCalledWith(
+        "/repo",
+        "feat: preserve commit success",
+        undefined,
+      );
+      expect(refreshDiffData).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().commitError).toBe("Refresh exploded");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("tracks push action lifecycle and validates missing branch errors", async () => {
     const refreshDiffData = mock(async () => {});
     const pushDeferred = createDeferred<{ remote: string; branch: string; output: string }>();
@@ -923,6 +954,8 @@ describe("useAgentStudioGitActions", () => {
         remote: "origin",
         branch: "feature/task-10",
         output: "non-fast-forward",
+        repoPath: "/repo",
+        workingDir: "/tmp/worktree/task-10",
       });
       expect(refreshDiffData).toHaveBeenCalledTimes(0);
 
@@ -937,6 +970,58 @@ describe("useAgentStudioGitActions", () => {
       });
       expect(refreshDiffData).toHaveBeenCalledTimes(1);
       expect(harness.getLatest().pendingForcePush).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reuses the originally rejected target when confirming force push", async () => {
+    gitPushBranchMock
+      .mockImplementationOnce(async () => ({
+        outcome: "rejected_non_fast_forward",
+        remote: "origin",
+        branch: "feature/task-10",
+        output: "non-fast-forward",
+      }))
+      .mockImplementationOnce(async () => ({
+        outcome: "pushed",
+        remote: "origin",
+        branch: "feature/task-10",
+        output: "done",
+      }));
+    const refreshDiffData = mock(async () => {});
+    const harness = createHookHarness(
+      createBaseArgs({
+        refreshDiffData,
+        workingDir: "/tmp/worktree/task-10",
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      await harness.run(async (state) => {
+        await state.pushBranch();
+      });
+
+      await harness.update(
+        createBaseArgs({
+          repoPath: "/repo-2",
+          branch: "feature/task-11",
+          refreshDiffData,
+          workingDir: "/tmp/worktree/task-11",
+        }),
+      );
+
+      await harness.run(async (state) => {
+        await state.confirmForcePush();
+      });
+
+      expect(gitPushBranchMock).toHaveBeenNthCalledWith(2, "/repo", "feature/task-10", {
+        setUpstream: true,
+        forceWithLease: true,
+        workingDir: "/tmp/worktree/task-10",
+      });
     } finally {
       await harness.unmount();
     }

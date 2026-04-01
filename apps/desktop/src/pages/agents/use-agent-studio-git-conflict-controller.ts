@@ -67,6 +67,17 @@ const initialState: GitConflictControllerState = {
   gitConflictCloseNonce: 0,
 };
 
+const haveSameConflictedFiles = (left: string[], right: string[]): boolean => {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const sortedLeft = [...left].sort();
+  const sortedRight = [...right].sort();
+
+  return sortedLeft.every((filePath, index) => filePath === sortedRight[index]);
+};
+
 function gitConflictControllerReducer(
   state: GitConflictControllerState,
   action: GitConflictControllerAction,
@@ -171,11 +182,10 @@ export function useAgentStudioGitConflictController({
     }
 
     if (detectedConflictedFiles.length > 0) {
-      const conflictedFilesChanged =
-        state.localConflict.conflictedFiles.length !== detectedConflictedFiles.length ||
-        state.localConflict.conflictedFiles.some(
-          (filePath, index) => filePath !== detectedConflictedFiles[index],
-        );
+      const conflictedFilesChanged = !haveSameConflictedFiles(
+        state.localConflict.conflictedFiles,
+        detectedConflictedFiles,
+      );
 
       if (conflictedFilesChanged) {
         dispatch({

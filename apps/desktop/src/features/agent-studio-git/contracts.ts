@@ -52,6 +52,8 @@ export type AgentStudioPendingForcePush = {
   remote: string;
   branch: string;
   output: string;
+  repoPath: string;
+  workingDir: string | null;
 };
 
 export type AgentStudioPendingPullRebase = {

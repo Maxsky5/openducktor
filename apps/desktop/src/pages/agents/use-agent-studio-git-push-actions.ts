@@ -18,6 +18,12 @@ type UseAgentStudioGitPushActionsArgs = {
   setPushError: (message: string | null) => void;
 };
 
+type GitPushTarget = {
+  repoPath: string;
+  branch: string;
+  workingDir: string | null;
+};
+
 export function useAgentStudioGitPushActions({
   repoPath,
   workingDir,
@@ -33,7 +39,7 @@ export function useAgentStudioGitPushActions({
   );
 
   const pushBranchInternal = useCallback(
-    async (options?: { forceWithLease?: boolean }): Promise<void> => {
+    async (options?: { forceWithLease?: boolean; target?: GitPushTarget }): Promise<void> => {
       if (isPushing) {
         return;
       }
@@ -41,12 +47,16 @@ export function useAgentStudioGitPushActions({
         return;
       }
 
-      if (!repoPath) {
+      const resolvedRepoPath = options?.target?.repoPath ?? repoPath;
+      const resolvedBranch = options?.target?.branch ?? branch;
+      const resolvedWorkingDir = options?.target?.workingDir ?? workingDir;
+
+      if (!resolvedRepoPath) {
         setPushError("Cannot push because no repository is selected.");
         return;
       }
 
-      if (!branch) {
+      if (!resolvedBranch) {
         setPushError("Cannot push because current branch is unavailable.");
         return;
       }
@@ -55,10 +65,10 @@ export function useAgentStudioGitPushActions({
       setIsPushing(true);
       setPushError(null);
       try {
-        const pushResult = await host.gitPushBranch(repoPath, branch, {
+        const pushResult = await host.gitPushBranch(resolvedRepoPath, resolvedBranch, {
           setUpstream: true,
           forceWithLease,
-          ...(workingDir != null ? { workingDir } : {}),
+          ...(resolvedWorkingDir != null ? { workingDir: resolvedWorkingDir } : {}),
         });
 
         if (pushResult.outcome === "rejected_non_fast_forward") {
@@ -73,6 +83,8 @@ export function useAgentStudioGitPushActions({
             remote: pushResult.remote,
             branch: pushResult.branch,
             output: pushResult.output,
+            repoPath: resolvedRepoPath,
+            workingDir: resolvedWorkingDir,
           });
           return;
         }
@@ -117,8 +129,14 @@ export function useAgentStudioGitPushActions({
       return;
     }
 
+    const confirmedTarget = {
+      repoPath: pendingForcePush.repoPath,
+      branch: pendingForcePush.branch,
+      workingDir: pendingForcePush.workingDir,
+    } satisfies GitPushTarget;
+
     setPendingForcePush(null);
-    await pushBranchInternal({ forceWithLease: true });
+    await pushBranchInternal({ forceWithLease: true, target: confirmedTarget });
   }, [pendingForcePush, pushBranchInternal]);
 
   const cancelForcePush = useCallback((): void => {

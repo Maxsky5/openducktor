@@ -1033,6 +1033,8 @@ describe("AgentStudioGitPanel", () => {
               remote: "origin",
               branch: "feature/task-11",
               output: "non-fast-forward",
+              repoPath: "/repo",
+              workingDir: "/tmp/worktree",
             },
             pendingPullRebase: {
               branch: "feature/task-11",
