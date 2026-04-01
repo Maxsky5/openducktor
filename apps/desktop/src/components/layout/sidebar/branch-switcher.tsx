@@ -53,9 +53,11 @@ export function BranchSwitcher(): ReactElement | null {
           }
 
           setPendingBranchValue(nextBranch);
-          void switchBranch(nextBranch).finally(() => {
-            setPendingBranchValue(null);
-          });
+          void switchBranch(nextBranch)
+            .catch(() => undefined)
+            .finally(() => {
+              setPendingBranchValue(null);
+            });
         }}
       />
       {branchSyncDegraded ? (

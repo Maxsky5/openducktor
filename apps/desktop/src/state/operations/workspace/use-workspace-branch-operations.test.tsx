@@ -257,7 +257,7 @@ describe("use-workspace-branch-operations", () => {
     }
   });
 
-  test("keeps the switched branch when branch list refresh fails after checkout", async () => {
+  test("keeps the switched branch and rejects when branch list refresh fails after checkout", async () => {
     const branchListError = new Error("branch list unavailable");
     const originalToastError = toast.error;
     const toastError = mock(() => "toast-id");
@@ -303,8 +303,13 @@ describe("use-workspace-branch-operations", () => {
         await value.refreshBranches();
       });
 
+      let caughtError: unknown = null;
       await harness.run(async (value) => {
-        await value.switchBranch("feature");
+        try {
+          await value.switchBranch("feature");
+        } catch (error) {
+          caughtError = error;
+        }
       });
 
       expect(harness.getLatest().activeBranch).toEqual({
@@ -313,6 +318,7 @@ describe("use-workspace-branch-operations", () => {
         revision: "def456",
       });
       expect(harness.getLatest().branches).toEqual(initialBranches);
+      expect(caughtError).toBe(branchListError);
       expect(toastError).toHaveBeenCalledWith(
         "Branch switched, but failed to refresh branch list",
         {

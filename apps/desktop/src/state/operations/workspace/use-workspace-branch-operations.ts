@@ -186,7 +186,28 @@ export function useWorkspaceBranchOperations({
       setIsSwitchingBranch(true);
 
       try {
-        const current = await hostClient.gitSwitchBranch(repoPath, branchName);
+        let current: GitCurrentBranch;
+
+        try {
+          current = await hostClient.gitSwitchBranch(repoPath, branchName);
+        } catch (error) {
+          if (
+            branchRequestVersionRef.current !== requestVersion ||
+            activeRepoRef.current !== repoPath
+          ) {
+            return;
+          }
+
+          setActiveBranch(previousBranch);
+          lastKnownBranchNameRef.current = previousBranch?.name ?? null;
+          lastKnownDetachedRef.current = previousBranch?.detached ?? null;
+          lastKnownRevisionRef.current = previousBranch?.revision ?? null;
+
+          toast.error("Failed to switch branch", {
+            description: errorMessage(error),
+          });
+          return;
+        }
 
         if (
           branchRequestVersionRef.current !== requestVersion ||
@@ -199,7 +220,13 @@ export function useWorkspaceBranchOperations({
         applyCurrentBranchSnapshot(current);
 
         try {
-          const allBranches = await hostClient.gitGetBranches(repoPath);
+          await queryClient.invalidateQueries({
+            queryKey: gitQueryKeys.branches(repoPath),
+            exact: true,
+            refetchType: "none",
+          });
+
+          const allBranches = await loadRepoBranchesFromQuery(queryClient, repoPath, hostClient);
 
           if (
             branchRequestVersionRef.current !== requestVersion ||
@@ -218,32 +245,12 @@ export function useWorkspaceBranchOperations({
             return;
           }
 
-          await queryClient.invalidateQueries({
-            queryKey: gitQueryKeys.branches(repoPath),
-            exact: true,
-            refetchType: "none",
-          });
-
           toast.error("Branch switched, but failed to refresh branch list", {
             description: errorMessage(error),
           });
-        }
-      } catch (error) {
-        if (
-          branchRequestVersionRef.current !== requestVersion ||
-          activeRepoRef.current !== repoPath
-        ) {
-          return;
-        }
 
-        setActiveBranch(previousBranch);
-        lastKnownBranchNameRef.current = previousBranch?.name ?? null;
-        lastKnownDetachedRef.current = previousBranch?.detached ?? null;
-        lastKnownRevisionRef.current = previousBranch?.revision ?? null;
-
-        toast.error("Failed to switch branch", {
-          description: errorMessage(error),
-        });
+          throw error;
+        }
       } finally {
         if (branchRequestVersionRef.current === requestVersion) {
           setIsSwitchingBranch(false);
