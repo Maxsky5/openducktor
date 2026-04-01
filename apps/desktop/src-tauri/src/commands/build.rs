@@ -279,12 +279,14 @@ pub async fn repo_pull_request_sync(
     state: State<'_, AppState>,
     repo_path: String,
 ) -> Result<serde_json::Value, String> {
-    as_error(
-        state
-            .service
+    let service = state.service.clone();
+    let result = run_service_blocking("repo_pull_request_sync", move || {
+        service
             .repo_pull_request_sync(&repo_path)
-            .map(|ok| serde_json::json!({ "ok": ok })),
-    )
+            .map(|ok| serde_json::json!({ "ok": ok }))
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]

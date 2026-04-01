@@ -26,6 +26,7 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
     clearTaskData,
     refreshTaskData,
     refreshTasks,
+    refreshTasksWithOptions,
     syncPullRequests,
     linkMergedPullRequest,
     cancelLinkMergedPullRequest,
@@ -105,10 +106,11 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
   const taskControlValue = useMemo<TaskControlContextValue>(
     () => ({
       refreshTaskData,
+      refreshTasksWithOptions,
       clearTaskData,
       setIsLoadingTasks,
     }),
-    [clearTaskData, refreshTaskData, setIsLoadingTasks],
+    [clearTaskData, refreshTaskData, refreshTasksWithOptions, setIsLoadingTasks],
   );
 
   return (
