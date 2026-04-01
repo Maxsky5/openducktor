@@ -14,6 +14,13 @@ import {
   SYSTEM_PROMPT_PREFIX,
 } from "./agent-chat-message-card-model";
 
+const SESSION_NOTICE_TONE_CLASS_NAMES = {
+  cancelled:
+    "text-sm my-2 rounded-md border border-cancelled-border bg-cancelled-surface px-3 py-2 text-cancelled-surface-foreground",
+  error:
+    "text-sm my-2 rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-destructive-surface-foreground",
+} as const;
+
 type AgentChatMessageCardViewModelInput = {
   message: AgentChatMessage;
   sessionRole: AgentRole | null;
@@ -90,9 +97,7 @@ const toArticleClassName = (
 
   if (isSessionNoticeMessage) {
     const sessionNoticeTone = meta?.kind === "session_notice" ? meta.tone : "cancelled";
-    return sessionNoticeTone === "error"
-      ? "text-sm my-2 rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-destructive-surface-foreground"
-      : "text-sm my-2 rounded-md border border-cancelled-border bg-cancelled-surface px-3 py-2 text-cancelled-surface-foreground";
+    return SESSION_NOTICE_TONE_CLASS_NAMES[sessionNoticeTone];
   }
 
   return cn(

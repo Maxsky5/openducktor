@@ -380,31 +380,48 @@ export const handleSessionTodosUpdated = (
   );
 };
 
-const buildUserStoppedNoticeMessage = (timestamp: string) => ({
+const buildSessionNoticeMessage = ({
+  timestamp,
+  content,
+  tone,
+  reason,
+  title,
+}: {
+  timestamp: string;
+  content: string;
+  tone: "cancelled" | "error";
+  reason: "user_stopped" | "session_error";
+  title: string;
+}) => ({
   id: crypto.randomUUID(),
   role: "system" as const,
-  content: "Session stopped at your request.",
+  content,
   timestamp,
   meta: {
     kind: "session_notice" as const,
-    tone: "cancelled" as const,
-    reason: "user_stopped" as const,
-    title: "Stopped",
+    tone,
+    reason,
+    title,
   },
 });
 
-const buildSessionErrorNoticeMessage = (timestamp: string, message: string) => ({
-  id: crypto.randomUUID(),
-  role: "system" as const,
-  content: message,
-  timestamp,
-  meta: {
-    kind: "session_notice" as const,
-    tone: "error" as const,
-    reason: "session_error" as const,
+const buildUserStoppedNoticeMessage = (timestamp: string) =>
+  buildSessionNoticeMessage({
+    timestamp,
+    content: "Session stopped at your request.",
+    tone: "cancelled",
+    reason: "user_stopped",
+    title: "Stopped",
+  });
+
+const buildSessionErrorNoticeMessage = (timestamp: string, message: string) =>
+  buildSessionNoticeMessage({
+    timestamp,
+    content: message,
+    tone: "error",
+    reason: "session_error",
     title: "Error",
-  },
-});
+  });
 
 const settleTerminalMessages = (
   messages: SessionLifecycleEventContext["store"]["sessionsRef"]["current"][string]["messages"],
