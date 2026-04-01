@@ -18,14 +18,14 @@ struct OptionalRepoPathArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeListArgs {
-    runtime_kind: String,
+    runtime_kind: AgentRuntimeKind,
     repo_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeEnsureArgs {
-    runtime_kind: String,
+    runtime_kind: AgentRuntimeKind,
     repo_path: String,
 }
 
@@ -261,7 +261,7 @@ async fn handle_runtime_list(state: &HeadlessState, args: Value) -> CommandResul
     let service = state.service.clone();
     serialize_value(
         run_headless_blocking("runtime_list", move || {
-            service.runtime_list(&runtime_kind, repo_path.as_deref())
+            service.runtime_list(runtime_kind.as_str(), repo_path.as_deref())
         })
         .await?,
     )
@@ -295,11 +295,43 @@ async fn handle_runtime_ensure(state: &HeadlessState, args: Value) -> CommandRes
     let service = state.service.clone();
     serialize_value(
         crate::run_service_blocking_tokio("runtime_ensure", move || {
-            service.runtime_ensure(&runtime_kind, &repo_path)
+            service.runtime_ensure(runtime_kind.as_str(), &repo_path)
         })
         .await
         .map_err(service_error)?,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn runtime_list_args_reject_invalid_runtime_kind() {
+        let error = deserialize_args::<RuntimeListArgs>(json!({
+            "runtimeKind": "invalid",
+            "repoPath": "/repo"
+        }))
+        .expect_err("invalid runtime kind should fail at transport boundary");
+
+        assert_eq!(error.status, axum::http::StatusCode::BAD_REQUEST);
+        assert!(error.message.contains("Invalid arguments:"));
+        assert!(error.message.contains("invalid"));
+    }
+
+    #[test]
+    fn runtime_ensure_args_reject_invalid_runtime_kind() {
+        let error = deserialize_args::<RuntimeEnsureArgs>(json!({
+            "runtimeKind": "invalid",
+            "repoPath": "/repo"
+        }))
+        .expect_err("invalid runtime kind should fail at transport boundary");
+
+        assert_eq!(error.status, axum::http::StatusCode::BAD_REQUEST);
+        assert!(error.message.contains("Invalid arguments:"));
+        assert!(error.message.contains("invalid"));
+    }
 }
 
 fn handle_agent_sessions_list(state: &HeadlessState, args: Value) -> CommandResult {

@@ -21,11 +21,13 @@ impl CommandRegistry {
     where
         F: for<'a> Fn(&'a HeadlessState, Value) -> CommandFuture<'a> + Send + Sync + 'static,
     {
-        if self.handlers.insert(command, Box::new(handler)).is_some() {
+        if self.handlers.contains_key(command) {
             return Err(format!(
                 "duplicate browser backend command registration: {command}"
             ));
         }
+
+        self.handlers.insert(command, Box::new(handler));
 
         Ok(())
     }
@@ -161,6 +163,25 @@ mod tests {
             .expect_err("duplicate registration should fail");
 
         assert_eq!(error, "duplicate browser backend command registration: test_command");
+        assert!(registry.contains("test_command"));
+    }
+
+    #[tokio::test]
+    async fn duplicate_registration_keeps_original_handler() {
+        let mut registry = CommandRegistry::default();
+        registry
+            .register("test_command", |_, _| Box::pin(async { Ok(json!({ "value": "first" })) }))
+            .expect("first registration should succeed");
+        registry
+            .register("test_command", |_, _| Box::pin(async { Ok(json!({ "value": "second" })) }))
+            .expect_err("duplicate registration should fail");
+
+        let fixture = test_state_fixture(registry);
+        let payload = dispatch_command(&fixture.state, "test_command", json!({}))
+            .await
+            .expect("original handler should remain registered");
+
+        assert_eq!(payload, json!({ "value": "first" }));
     }
 
     #[tokio::test]
