@@ -809,6 +809,21 @@ describe("agent-orchestrator-session-events", () => {
         "session-1": buildSession({
           role: "build",
           stopRequestedAt: "2026-02-22T08:00:09.000Z",
+          messages: [
+            {
+              id: "tool-running",
+              role: "tool",
+              content: "Tool todowrite running...",
+              timestamp: "2026-02-22T08:00:08.000Z",
+              meta: {
+                kind: "tool",
+                partId: "part-tool-running",
+                callId: "call-tool-running",
+                tool: "todowrite",
+                status: "running",
+              },
+            },
+          ],
           pendingPermissions: [
             {
               requestId: "perm-1",
@@ -868,6 +883,16 @@ describe("agent-orchestrator-session-events", () => {
       reason: "user_stopped",
       title: "Stopped",
     });
+    const toolMessage = sessionsRef.current["session-1"]?.messages.find(
+      (message) => message.id === "tool-running",
+    );
+    expect(toolMessage?.meta?.kind).toBe("tool");
+    if (toolMessage?.meta?.kind !== "tool") {
+      throw new Error("Expected tool metadata");
+    }
+    expect(toolMessage.meta.status).toBe("error");
+    expect(toolMessage.meta.error).toBe("Aborted");
+    expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
     expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
     expect(
       sessionsRef.current["session-1"]?.messages.some((message) =>
@@ -976,6 +1001,21 @@ describe("agent-orchestrator-session-events", () => {
         "session-1": buildSession({
           role: "build",
           stopRequestedAt: "2026-02-22T08:00:09.000Z",
+          messages: [
+            {
+              id: "tool-running",
+              role: "tool",
+              content: "Tool todowrite running...",
+              timestamp: "2026-02-22T08:00:08.000Z",
+              meta: {
+                kind: "tool",
+                partId: "part-tool-running",
+                callId: "call-tool-running",
+                tool: "todowrite",
+                status: "running",
+              },
+            },
+          ],
           pendingPermissions: [
             {
               requestId: "perm-1",
@@ -1049,10 +1089,93 @@ describe("agent-orchestrator-session-events", () => {
       reason: "user_stopped",
       title: "Stopped",
     });
+    const toolMessage = sessionsRef.current["session-1"]?.messages.find(
+      (message) => message.id === "tool-running",
+    );
+    expect(toolMessage?.meta?.kind).toBe("tool");
+    if (toolMessage?.meta?.kind !== "tool") {
+      throw new Error("Expected tool metadata");
+    }
+    expect(toolMessage.meta.status).toBe("error");
+    expect(toolMessage.meta.error).toBe("Session stopped at your request.");
     expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
     expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
     expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
     expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+  });
+
+  test("keeps real failures on the error path even when stop intent was set", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          role: "build",
+          stopRequestedAt: "2026-02-22T08:00:09.000Z",
+        }),
+      },
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "session_error",
+      sessionId: "session-1",
+      message: "Permission denied",
+      timestamp: "2026-02-22T08:00:10.000Z",
+    });
+
+    expect(sessionsRef.current["session-1"]?.status).toBe("error");
+    expect(
+      sessionsRef.current["session-1"]?.messages.some((message) =>
+        message.content.includes("Session stopped at your request."),
+      ),
+    ).toBe(false);
+    expect(
+      sessionsRef.current["session-1"]?.messages.some((message) =>
+        message.content.includes("Session error: Permission denied"),
+      ),
+    ).toBe(true);
   });
 
   test("finalizes assistant draft through status transitions", () => {

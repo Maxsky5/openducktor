@@ -339,6 +339,21 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         "session-1": buildSession({
           role: "build",
           runId: null,
+          messages: [
+            {
+              id: "tool-running",
+              role: "tool",
+              content: "Tool todowrite running...",
+              timestamp: "2026-02-22T08:00:08.000Z",
+              meta: {
+                kind: "tool",
+                partId: "part-tool-running",
+                callId: "call-tool-running",
+                tool: "todowrite",
+                status: "running",
+              },
+            },
+          ],
           pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: ["*"] }],
         }),
       },
@@ -418,6 +433,15 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         reason: "user_stopped",
         title: "Stopped",
       });
+      const toolMessage = sessionsRef.current["session-1"]?.messages.find(
+        (message) => message.id === "tool-running",
+      );
+      expect(toolMessage?.meta?.kind).toBe("tool");
+      if (toolMessage?.meta?.kind !== "tool") {
+        throw new Error("Expected tool metadata");
+      }
+      expect(toolMessage.meta.status).toBe("error");
+      expect(toolMessage.meta.error).toBe("Session stopped at your request.");
       expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
       expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
     } finally {
