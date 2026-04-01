@@ -16,8 +16,10 @@ const reactActEnvironment = globalThis as typeof globalThis & {
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
 type WorkspaceHostClient = NonNullable<Parameters<typeof useWorkspaceOperations>[0]["hostClient"]>;
+type SettingsSnapshotHostClient = NonNullable<Parameters<typeof settingsSnapshotQueryOptions>[0]>;
+type WorkspaceIntegrationHostClient = WorkspaceHostClient & SettingsSnapshotHostClient;
 
-const createWorkspaceHostClient = (): WorkspaceHostClient =>
+const createWorkspaceHostClient = (): WorkspaceIntegrationHostClient =>
   ({
     workspaceList: async () => [],
     workspaceAdd: async (repoPath: string) => workspace(repoPath),
@@ -46,7 +48,7 @@ const createWorkspaceHostClient = (): WorkspaceHostClient =>
     gitSwitchBranch: async () => {
       throw new Error("gitSwitchBranch not configured");
     },
-  }) as WorkspaceHostClient;
+  }) as WorkspaceIntegrationHostClient;
 
 let workspaceHost = createWorkspaceHostClient();
 
