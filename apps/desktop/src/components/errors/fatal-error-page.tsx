@@ -90,19 +90,19 @@ export function FatalErrorPage({
         <div className="flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
-            onClick={onRetry}
-            className="inline-flex h-9 flex-1 cursor-pointer items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-            data-testid="fatal-error-retry"
-          >
-            Try again
-          </button>
-          <button
-            type="button"
             onClick={onNavigateToKanban}
             className="inline-flex h-9 flex-1 cursor-pointer items-center justify-center rounded-md border border-input bg-card px-4 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             data-testid="fatal-error-go-kanban"
           >
             Go to Kanban
+          </button>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="inline-flex h-9 flex-1 cursor-pointer items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            data-testid="fatal-error-retry"
+          >
+            Reload app
           </button>
         </div>
       </div>
