@@ -434,20 +434,37 @@ impl AppService {
         flight: &Arc<OpencodeSessionStatusFlight>,
         outcome: &CachedOpencodeSessionStatusProbeOutcome,
     ) -> Result<()> {
-        {
-            let mut state = flight
-                .state
-                .lock()
-                .map_err(|_| anyhow!("OpenCode session status coordination state lock poisoned"))?;
-            *state = OpencodeSessionStatusFlightState::Finished(outcome.clone());
-        }
-        flight.condvar.notify_all();
+        let mut poisoned = false;
 
-        let mut flights = self
-            .opencode_session_status_flights
-            .lock()
-            .map_err(|_| anyhow!("OpenCode session status coordination registry lock poisoned"))?;
-        flights.remove(target);
+        {
+            let mut state = match flight.state.lock() {
+                Ok(state) => state,
+                Err(poisoned_state) => {
+                    poisoned = true;
+                    poisoned_state.into_inner()
+                }
+            };
+            *state = OpencodeSessionStatusFlightState::Finished(outcome.clone());
+            flight.condvar.notify_all();
+        }
+
+        {
+            let mut flights = match self.opencode_session_status_flights.lock() {
+                Ok(flights) => flights,
+                Err(poisoned_flights) => {
+                    poisoned = true;
+                    poisoned_flights.into_inner()
+                }
+            };
+            flights.remove(target);
+        }
+
+        if poisoned {
+            return Err(anyhow!(
+                "OpenCode session status coordination state lock poisoned"
+            ));
+        }
+
         Ok(())
     }
 
@@ -495,8 +512,10 @@ impl AppService {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppService, OpencodeSessionStatus, OpencodeSessionStatusProbeTarget,
-        has_live_opencode_session_status, load_opencode_session_statuses,
+        AppService, CachedOpencodeSessionStatusProbeOutcome, OpencodeSessionStatus,
+        OpencodeSessionStatusFlightGuard, OpencodeSessionStatusMap,
+        OpencodeSessionStatusProbeTarget, has_live_opencode_session_status,
+        load_opencode_session_statuses,
     };
     use crate::app_service::test_support::build_service_with_state;
     use anyhow::Result;
@@ -738,6 +757,78 @@ mod tests {
         assert!(first_error.to_string().contains("HTTP 500"));
         assert!(second_error.to_string().contains("HTTP 500"));
         assert_eq!(connections.load(Ordering::SeqCst), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn session_status_flight_guard_finishes_waiters_when_dropped_uncompleted() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
+            &AgentRuntimeKind::Opencode.route_for_port(1234),
+            "/tmp/runtime-flight-guard",
+        );
+        let (flight, is_leader) = service.acquire_opencode_session_status_flight(&target)?;
+        assert!(is_leader);
+
+        {
+            let _guard = OpencodeSessionStatusFlightGuard::new(&service, &target, flight.clone());
+        }
+
+        let outcome = AppService::wait_for_opencode_session_status_flight(&flight)?;
+        let error = outcome
+            .into_result()
+            .expect_err("dropped leader should finish waiters with an error");
+        assert!(
+            error
+                .to_string()
+                .contains("OpenCode session status probe aborted unexpectedly")
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn complete_opencode_session_status_flight_recovers_poisoned_state_and_removes_entry()
+    -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
+            &AgentRuntimeKind::Opencode.route_for_port(1235),
+            "/tmp/runtime-flight-poison",
+        );
+        let (flight, is_leader) = service.acquire_opencode_session_status_flight(&target)?;
+        assert!(is_leader);
+
+        let poison_handle = thread::spawn({
+            let flight = flight.clone();
+            move || {
+                let _lock = flight
+                    .state
+                    .lock()
+                    .expect("flight state should be available for poisoning");
+                panic!("poison session status flight state");
+            }
+        });
+        assert!(poison_handle.join().is_err());
+
+        let error = service
+            .complete_opencode_session_status_flight(
+                &target,
+                &flight,
+                &CachedOpencodeSessionStatusProbeOutcome::Statuses(OpencodeSessionStatusMap::new()),
+            )
+            .expect_err("poisoned completion should surface an error");
+        assert!(
+            error
+                .to_string()
+                .contains("OpenCode session status coordination state lock poisoned")
+        );
+
+        let flights = service
+            .opencode_session_status_flights
+            .lock()
+            .expect("status flights lock should remain available");
+        assert!(flights.is_empty());
+
         Ok(())
     }
 
