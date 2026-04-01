@@ -9,6 +9,7 @@ import {
   useRef,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { isTauriRuntime } from "@/lib/runtime";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { resolveAgentAccentColor } from "../agent-accent-color";
@@ -59,6 +60,7 @@ type AgentChatTranscriptProps = {
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
   messagesContentRef: RefObject<HTMLDivElement | null>;
   renderedTurns: AgentChatRenderedTurn[];
+  allowTurnContainment: boolean;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
   showRuntimeCheckingOverlay: boolean;
   showRuntimeBlockedCard: boolean;
@@ -123,15 +125,17 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   sessionRole,
   sessionWorkingDirectory,
   resolveRowRef,
+  allowTurnContainment,
 }: {
   turn: AgentChatRenderedTurn;
   sessionAgentColors: Record<string, string>;
   sessionRole: AgentSessionState["role"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
+  allowTurnContainment: boolean;
 }): ReactElement {
   return (
-    <div style={turn.isActive ? undefined : TURN_CONTENT_VISIBILITY_STYLE}>
+    <div style={!allowTurnContainment || turn.isActive ? undefined : TURN_CONTENT_VISIBILITY_STYLE}>
       {turn.rows.map((row) => (
         <AgentChatThreadMotionRow
           key={row.key}
@@ -161,6 +165,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   messagesContainerRef,
   messagesContentRef,
   renderedTurns,
+  allowTurnContainment,
   resolveRowRef,
   showRuntimeCheckingOverlay,
   showRuntimeBlockedCard,
@@ -248,6 +253,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
                 sessionAgentColors={sessionAgentColors}
                 sessionWorkingDirectory={sessionWorkingDirectory}
                 resolveRowRef={resolveRowRef}
+                allowTurnContainment={allowTurnContainment}
               />
             ))
           : null}
@@ -501,6 +507,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       isActive: turn.key === activeTurnKey,
     }));
   }, [activeTurnKey, stagedTurns, windowedRows]);
+  const allowTurnContainment = !isTauriRuntime();
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -519,6 +526,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
         renderedTurns={rows.length > 0 && !hideTranscriptWhileHydrating ? renderedTurns : []}
+        allowTurnContainment={allowTurnContainment}
         resolveRowRef={resolveRowRef}
         showRuntimeCheckingOverlay={showRuntimeCheckingOverlay}
         showRuntimeBlockedCard={showRuntimeBlockedCard}

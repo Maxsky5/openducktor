@@ -1,7 +1,7 @@
 const TAURI_INTERNALS_FLAG = "__TAURI_INTERNALS__";
 
 export const isTauriRuntime = (): boolean => {
-  return typeof window !== "undefined" && TAURI_INTERNALS_FLAG in window;
+  return typeof globalThis.window !== "undefined" && TAURI_INTERNALS_FLAG in globalThis.window;
 };
 
 export const assertTauriRuntime = (feature: string): void => {
