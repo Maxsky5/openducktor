@@ -168,4 +168,79 @@ describe("use-workspace-branch-probe", () => {
       restoreBrowserGlobals();
     }
   });
+
+  test("keeps the new repo probe gate active when a stale repo probe finishes", async () => {
+    const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
+    const repoAProbe = createDeferred<{ name: string | undefined; detached: boolean }>();
+    const repoBProbe = createDeferred<{ name: string | undefined; detached: boolean }>();
+    const setBranchSyncDegraded = mock((_value: boolean) => {});
+    const gitGetCurrentBranch = mock(async () => {
+      const callIndex = gitGetCurrentBranch.mock.calls.length;
+
+      if (callIndex === 1) {
+        return repoAProbe.promise;
+      }
+
+      if (callIndex === 2) {
+        return repoBProbe.promise;
+      }
+
+      return {
+        name: "main",
+        detached: false,
+      };
+    });
+
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
+
+    const rendered = render(
+      <ProbeHarness
+        activeRepo="/repo-a"
+        isSwitchingWorkspace={false}
+        isLoadingBranches={false}
+        isSwitchingBranch={false}
+        setBranchSyncDegraded={setBranchSyncDegraded}
+      />,
+      { wrapper: IsolatedQueryWrapper },
+    );
+
+    try {
+      await triggerFocus();
+      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(1);
+
+      rendered.rerender(
+        <ProbeHarness
+          activeRepo="/repo-b"
+          isSwitchingWorkspace={false}
+          isLoadingBranches={false}
+          isSwitchingBranch={false}
+          setBranchSyncDegraded={setBranchSyncDegraded}
+        />,
+      );
+
+      await triggerFocus();
+      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(2);
+
+      repoAProbe.resolve({
+        name: "main",
+        detached: false,
+      });
+      await flush();
+
+      await triggerFocus();
+      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(2);
+
+      repoBProbe.resolve({
+        name: "main",
+        detached: false,
+      });
+      await flush();
+
+      await triggerFocus();
+      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(3);
+    } finally {
+      rendered.unmount();
+      restoreBrowserGlobals();
+    }
+  });
 });

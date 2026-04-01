@@ -41,6 +41,8 @@ export function useWorkspaceBranchProbe({
   setBranchSyncDegraded,
 }: UseWorkspaceBranchProbeArgs): void {
   const branchSyncInFlightRef = useRef(false);
+  const nextProbeTokenRef = useRef(0);
+  const activeProbeTokenRef = useRef<number | null>(null);
   const lastProbeErrorToastAtRef = useRef<number | null>(null);
   const lastProbeErrorSignatureRef = useRef<string | null>(null);
   const previousActiveRepoRef = useRef(activeRepo);
@@ -61,6 +63,7 @@ export function useWorkspaceBranchProbe({
 
     previousActiveRepoRef.current = activeRepo;
     branchSyncInFlightRef.current = false;
+    activeProbeTokenRef.current = null;
     lastProbeErrorToastAtRef.current = null;
     lastProbeErrorSignatureRef.current = null;
   }, [activeRepo]);
@@ -113,6 +116,8 @@ export function useWorkspaceBranchProbe({
       };
     }
 
+    const probeToken = ++nextProbeTokenRef.current;
+    activeProbeTokenRef.current = probeToken;
     branchSyncInFlightRef.current = true;
 
     try {
@@ -158,7 +163,10 @@ export function useWorkspaceBranchProbe({
         error: classifyBranchProbeError(error, "current_branch_probe"),
       };
     } finally {
-      branchSyncInFlightRef.current = false;
+      if (activeProbeTokenRef.current === probeToken) {
+        branchSyncInFlightRef.current = false;
+        activeProbeTokenRef.current = null;
+      }
     }
   }, [branchProbeController, hostClient]);
 
