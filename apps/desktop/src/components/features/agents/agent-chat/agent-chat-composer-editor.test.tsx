@@ -6,6 +6,14 @@ import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
 import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fixtures";
 
 let AgentChatComposerEditor: typeof import("./agent-chat-composer-editor").AgentChatComposerEditor;
+const renderMockEditableTextContent = (text: string): string => {
+  if (text.length === 0) {
+    return "\u200B";
+  }
+
+  return text.endsWith("\n") ? `${text}\u200B` : text;
+};
+
 const setCaretOffsetWithinElementMock = mock((element: HTMLElement, logicalOffset: number) => {
   const selection =
     element.ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
@@ -15,7 +23,9 @@ const setCaretOffsetWithinElementMock = mock((element: HTMLElement, logicalOffse
 
   let textNode = element.firstChild;
   if (!(textNode instanceof Text)) {
-    textNode = element.ownerDocument.createTextNode((element.textContent ?? "") || "\u200B");
+    textNode = element.ownerDocument.createTextNode(
+      renderMockEditableTextContent((element.textContent ?? "").replace(/\u200B/g, "")),
+    );
     element.replaceChildren(textNode);
   }
 
@@ -38,6 +48,7 @@ beforeAll(async () => {
     EMPTY_TEXT_SEGMENT_SENTINEL: "\u200B",
     readEditableTextContent: (element: HTMLElement): string =>
       (element.textContent ?? "").replace(/\u200B/g, ""),
+    renderEditableTextContent: renderMockEditableTextContent,
     getCaretOffsetWithinElement: getCaretOffsetWithinElementMock,
     insertTextAtCaretWithinElement: (
       element: HTMLElement,
@@ -153,7 +164,7 @@ const collapseSelectionOnEditorRoot = (container: HTMLElement): HTMLElement => {
 const expectComposerText = async (container: HTMLElement, text: string): Promise<void> => {
   await waitFor(() => {
     const contentRoot = container.querySelector("[data-composer-content-root]");
-    expect(contentRoot?.textContent).toBe(text);
+    expect((contentRoot?.textContent ?? "").replace(/\u200B/g, "")).toBe(text);
   });
 };
 
@@ -650,6 +661,18 @@ describe("AgentChatComposerEditor", () => {
     fireEvent.keyDown(editorRoot, { key: "Enter", shiftKey: true });
 
     await expectComposerText(rendered.container, "hello\n");
+  });
+
+  test("renders a trailing sentinel after the first shift-enter so the final blank line is visible", async () => {
+    resetSelectionMocks();
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "hello");
+    fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+
+    await waitFor(() => {
+      expect(getLastTextSegment(rendered.container).textContent).toBe("hello\n\u200B");
+    });
   });
 
   test("renders empty trailing text segments as inline blocks for caret placement after slash chips", async () => {

@@ -4,12 +4,18 @@ export const readEditableTextContent = (element: HTMLElement): string => {
   return (element.textContent ?? "").split(EMPTY_TEXT_SEGMENT_SENTINEL).join("");
 };
 
+export const renderEditableTextContent = (text: string): string => {
+  if (text.length === 0) {
+    return EMPTY_TEXT_SEGMENT_SENTINEL;
+  }
+
+  return text.endsWith("\n") ? `${text}${EMPTY_TEXT_SEGMENT_SENTINEL}` : text;
+};
+
 const normalizeEditableTextNode = (element: HTMLElement): Text => {
   const ownerDocument = element.ownerDocument;
   const normalizedText = readEditableTextContent(element);
-  const textNode = ownerDocument.createTextNode(
-    normalizedText.length > 0 ? normalizedText : EMPTY_TEXT_SEGMENT_SENTINEL,
-  );
+  const textNode = ownerDocument.createTextNode(renderEditableTextContent(normalizedText));
   element.replaceChildren(textNode);
   return textNode;
 };
