@@ -154,13 +154,18 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
 
 type HookHarness = ReturnType<typeof createHookHarness>;
 
-const waitForInitialChecksToSettle = async (harness: HookHarness) => {
+const waitForInitialChecksToSettle = async (
+  harness: HookHarness,
+  runtimeKinds: RuntimeKind[] = ["opencode"],
+) => {
   await harness.mount();
   await harness.waitFor((value) => {
     return (
       value.runtimeCheck !== null &&
       value.activeBeadsCheck !== null &&
-      value.activeRepoRuntimeHealthByRuntime.opencode != null &&
+      runtimeKinds.every(
+        (runtimeKind) => value.activeRepoRuntimeHealthByRuntime[runtimeKind] != null,
+      ) &&
       value.isLoadingChecks === false
     );
   });
@@ -545,6 +550,82 @@ describe("use-checks", () => {
       await harness.unmount();
       host.runtimeCheck = original.runtimeCheck;
       host.beadsCheck = original.beadsCheck;
+    }
+  });
+
+  test("refreshChecks times out hung probes and clears loading state", async () => {
+    let runtimeCallCount = 0;
+    let beadsCallCount = 0;
+    const beadsDeferred = createDeferred<BeadsCheck>();
+    const runtimeCheck = mock(async (_force?: boolean): Promise<RuntimeCheck> => {
+      runtimeCallCount += 1;
+      if (runtimeCallCount === 1) {
+        return makeRuntimeCheck();
+      }
+      throw new Error("runtime down");
+    });
+    const beadsCheck = mock(async (): Promise<BeadsCheck> => {
+      beadsCallCount += 1;
+      return beadsCallCount === 1 ? makeBeadsCheck() : beadsDeferred.promise;
+    });
+    repoHealthHandler = async () => makeRepoHealth();
+
+    const original = {
+      runtimeCheck: host.runtimeCheck,
+      beadsCheck: host.beadsCheck,
+    };
+    const originalSetTimeout = globalThis.setTimeout;
+    const originalClearTimeout = globalThis.clearTimeout;
+    const setTimeoutMock = mock((handler: TimerHandler, _delay?: number) => {
+      if (typeof handler !== "function") {
+        throw new Error("Expected timeout callback function");
+      }
+      return originalSetTimeout(() => {
+        handler();
+      }, 0);
+    });
+    const clearTimeoutMock = mock((timeoutId: ReturnType<typeof globalThis.setTimeout>) => {
+      originalClearTimeout(timeoutId);
+    });
+
+    host.runtimeCheck = runtimeCheck;
+    host.beadsCheck = beadsCheck;
+    globalThis.setTimeout = setTimeoutMock as unknown as typeof globalThis.setTimeout;
+    globalThis.clearTimeout = clearTimeoutMock as unknown as typeof globalThis.clearTimeout;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+
+    let refreshPromise: Promise<void> | null = null;
+
+    try {
+      await waitForInitialChecksToSettle(harness);
+      runtimeCheck.mockClear();
+      beadsCheck.mockClear();
+      checkRepoRuntimeHealthMock.mockClear();
+
+      await harness.run((value) => {
+        refreshPromise = value.refreshChecks();
+      });
+      await harness.waitFor((value) => value.isLoadingChecks === true);
+      await harness.run(async () => {
+        await refreshPromise;
+      });
+      await harness.waitFor((value) => value.isLoadingChecks === false);
+
+      expect(toastError).toHaveBeenCalledWith("Diagnostics check unavailable", {
+        description: "runtime: runtime down | beads: Timed out after 5000ms",
+      });
+      expect(harness.getLatest().isLoadingChecks).toBe(false);
+    } finally {
+      await harness.unmount();
+      host.runtimeCheck = original.runtimeCheck;
+      host.beadsCheck = original.beadsCheck;
+      globalThis.setTimeout = originalSetTimeout;
+      globalThis.clearTimeout = originalClearTimeout;
+      beadsDeferred.reject(new Error("cleanup"));
     }
   });
 

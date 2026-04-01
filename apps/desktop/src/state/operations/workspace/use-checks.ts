@@ -19,7 +19,6 @@ import {
   repoRuntimeHealthQueryOptions,
   runtimeCheckQueryOptions,
 } from "../../queries/checks";
-import { host } from "../shared/host";
 
 type UseChecksArgs = {
   activeRepo: string | null;
@@ -119,9 +118,12 @@ export function useChecks({
   const refreshRuntimeCheck = useCallback(
     async (force = false): Promise<RuntimeCheck> => {
       if (force) {
-        const check = await host.runtimeCheck(true);
-        queryClient.setQueryData(checksQueryKeys.runtime(), check);
-        return check;
+        await queryClient.invalidateQueries({
+          queryKey: checksQueryKeys.runtime(),
+          exact: true,
+          refetchType: "none",
+        });
+        return queryClient.fetchQuery(runtimeCheckQueryOptions(true));
       }
 
       return loadRuntimeCheckFromQuery(queryClient);
@@ -233,8 +235,6 @@ export function useChecks({
         ].join(" | ");
         toast.error("Diagnostics check failed", { description: details });
       }
-    } catch (error) {
-      toast.error("Diagnostics check unavailable", { description: errorMessage(error) });
     } finally {
       setIsManualLoadingChecks(false);
     }
