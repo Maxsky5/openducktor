@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+import { AppCrashShell } from "@/components/errors/app-crash-shell";
 import { applyThemeToDocument } from "@/components/layout/theme-dom";
 import { appQueryClient } from "@/lib/query-client";
 import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
@@ -15,9 +16,11 @@ if (!rootElement) {
 const renderApp = (): void => {
   createRoot(rootElement).render(
     <StrictMode>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <AppCrashShell>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </AppCrashShell>
     </StrictMode>,
   );
 };
