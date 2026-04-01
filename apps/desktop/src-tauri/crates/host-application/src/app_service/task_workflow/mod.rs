@@ -17,4 +17,4 @@ mod task_context;
 mod task_deletion_service;
 mod task_service;
 
-pub(crate) use cleanup_plans::{normalize_path_for_comparison, normalize_path_key};
+pub(crate) use cleanup_plans::normalize_path_for_comparison;

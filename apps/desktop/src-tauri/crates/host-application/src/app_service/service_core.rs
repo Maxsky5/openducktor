@@ -25,6 +25,41 @@ impl RuntimeEnsureFlight {
     }
 }
 
+pub(super) struct OpencodeSessionStatusFlight {
+    pub(super) state: Mutex<OpencodeSessionStatusFlightState>,
+    pub(super) condvar: Condvar,
+}
+
+pub(super) enum OpencodeSessionStatusFlightState {
+    Loading,
+    Finished(CachedOpencodeSessionStatusProbeOutcome),
+}
+
+impl OpencodeSessionStatusFlight {
+    pub(super) fn new() -> Self {
+        Self {
+            state: Mutex::new(OpencodeSessionStatusFlightState::Loading),
+            condvar: Condvar::new(),
+        }
+    }
+}
+
+pub(super) struct OpencodeSessionStatusProbeLimiter {
+    pub(super) active: Mutex<usize>,
+    pub(super) condvar: Condvar,
+    pub(super) max_concurrent: usize,
+}
+
+impl OpencodeSessionStatusProbeLimiter {
+    pub(super) fn new(max_concurrent: usize) -> Self {
+        Self {
+            active: Mutex::new(0),
+            condvar: Condvar::new(),
+            max_concurrent,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct AppService {
     pub(super) task_store: Arc<dyn TaskStore>,
@@ -35,6 +70,11 @@ pub struct AppService {
     pub(super) agent_runtimes: Arc<Mutex<HashMap<String, AgentRuntimeProcess>>>,
     pub(super) tracked_opencode_processes: Arc<Mutex<HashMap<u32, usize>>>,
     pub(super) runtime_ensure_flights: Arc<Mutex<HashMap<String, Arc<RuntimeEnsureFlight>>>>,
+    pub(super) opencode_session_status_cache:
+        Arc<Mutex<HashMap<OpencodeSessionStatusProbeTarget, CachedOpencodeSessionStatusProbe>>>,
+    pub(super) opencode_session_status_flights:
+        Arc<Mutex<HashMap<OpencodeSessionStatusProbeTarget, Arc<OpencodeSessionStatusFlight>>>>,
+    pub(super) opencode_session_status_probe_limiter: Arc<OpencodeSessionStatusProbeLimiter>,
     pub(super) opencode_process_registry_path: PathBuf,
     pub(super) instance_pid: u32,
     pub(super) initialized_repos: Arc<Mutex<HashSet<String>>>,
@@ -72,6 +112,17 @@ pub(crate) struct RuntimeCleanupTarget {
 pub(crate) struct CachedRuntimeCheck {
     pub(super) checked_at: Instant,
     pub(super) value: RuntimeCheck,
+}
+
+pub(crate) struct CachedOpencodeSessionStatusProbe {
+    pub(super) checked_at: Instant,
+    pub(super) outcome: CachedOpencodeSessionStatusProbeOutcome,
+}
+
+#[derive(Clone)]
+pub(crate) enum CachedOpencodeSessionStatusProbeOutcome {
+    Statuses(OpencodeSessionStatusMap),
+    ActionableError(String),
 }
 
 pub(crate) struct DevServerGroupRuntime {
@@ -119,6 +170,11 @@ impl AppService {
             agent_runtimes: Arc::new(Mutex::new(HashMap::new())),
             tracked_opencode_processes: Arc::new(Mutex::new(HashMap::new())),
             runtime_ensure_flights: Arc::new(Mutex::new(HashMap::new())),
+            opencode_session_status_cache: Arc::new(Mutex::new(HashMap::new())),
+            opencode_session_status_flights: Arc::new(Mutex::new(HashMap::new())),
+            opencode_session_status_probe_limiter: Arc::new(
+                OpencodeSessionStatusProbeLimiter::new(4),
+            ),
             opencode_process_registry_path,
             instance_pid,
             initialized_repos: Arc::new(Mutex::new(HashSet::new())),
