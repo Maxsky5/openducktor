@@ -28,6 +28,7 @@ Files:
 - `lifecycle/repo-session-hydration-service.ts`
 - `lifecycle/session-hydration-operations.ts`
 - `lifecycle/load-sessions.ts`
+- `lifecycle/load-sessions-stages.ts`
 - `lifecycle/reattach-live-session.ts`
 - `lifecycle/live-agent-session-cache.ts`
 - `lifecycle/hydration-runtime-resolution.ts`
@@ -126,11 +127,17 @@ Must not own:
 
 `lifecycle/load-sessions.ts`
 
-- Implements hydration mechanics:
+- Composition entrypoint for session loading intents.
+- Owns stale-guard setup, requested-history dedupe, and stage ordering.
+
+`lifecycle/load-sessions-stages.ts`
+
+- Implements the typed hydration stages used by `load-sessions.ts`:
   - persisted record merge
-  - requested history load
-  - runtime pending-input load
-  - runtime route reuse when a live session is already attached
+  - runtime resolution planning
+  - prompt/prelude assembly
+  - live reconciliation
+  - requested-history hydration
 
 `lifecycle/reattach-live-session.ts`
 

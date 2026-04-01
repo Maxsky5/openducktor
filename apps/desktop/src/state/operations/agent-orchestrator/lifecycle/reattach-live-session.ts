@@ -1,17 +1,16 @@
-import type { AgentSessionRecord, RuntimeKind, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
 import type { AgentRuntimeConnection, LiveAgentSessionSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
 import type { ResolvedHydrationRuntime } from "./hydration-runtime-resolution";
+
+const STALE_REPO_ABORT = Symbol("stale-repo-abort");
 
 type CreateReattachLiveSessionArgs = {
   adapter: {
     hasSession?: (sessionId: string) => boolean;
   };
   repoPath: string;
-  taskId: string;
-  taskRef: { current: TaskCard[] };
-  sessionsRef: { current: Record<string, AgentSessionState> };
   updateSession: (
     sessionId: string,
     updater: (current: AgentSessionState) => AgentSessionState,
@@ -37,35 +36,45 @@ type CreateReattachLiveSessionArgs = {
 export const createReattachLiveSession = ({
   adapter,
   repoPath,
-  taskId: _taskId,
-  taskRef: _taskRef,
-  sessionsRef: _sessionsRef,
   updateSession,
   attachSessionListener,
   promptOverrides,
   resolveHydrationRuntime,
   listLiveAgentSessions,
   resumeMissingLiveSession,
-  isStaleRepoOperation: _isStaleRepoOperation,
+  isStaleRepoOperation,
   toLiveSessionState,
 }: CreateReattachLiveSessionArgs) => {
+  const awaitUnlessStale = async <T>(
+    operation: Promise<T>,
+  ): Promise<T | typeof STALE_REPO_ABORT> => {
+    const result = await operation;
+    return isStaleRepoOperation() ? STALE_REPO_ABORT : result;
+  };
+
   return async (record: AgentSessionRecord): Promise<boolean> => {
     if (typeof adapter.hasSession !== "function" || !attachSessionListener) {
       return false;
     }
 
-    const runtimeResolution = await resolveHydrationRuntime(record);
+    const runtimeResolution = await awaitUnlessStale(resolveHydrationRuntime(record));
+    if (runtimeResolution === STALE_REPO_ABORT) {
+      return false;
+    }
     if (!runtimeResolution.ok) {
       return false;
     }
 
     const externalSessionId = record.externalSessionId ?? record.sessionId;
     const attachedExistingSession = adapter.hasSession(record.sessionId);
-    const liveAgentSessions = await listLiveAgentSessions(
-      runtimeResolution.runtimeKind,
-      runtimeResolution.runtimeConnection,
-      [record.workingDirectory],
+    const liveAgentSessions = await awaitUnlessStale(
+      listLiveAgentSessions(runtimeResolution.runtimeKind, runtimeResolution.runtimeConnection, [
+        record.workingDirectory,
+      ]),
     );
+    if (liveAgentSessions === STALE_REPO_ABORT) {
+      return false;
+    }
     const liveSession = liveAgentSessions.find(
       (session) => session.externalSessionId === externalSessionId,
     );
@@ -81,13 +90,21 @@ export const createReattachLiveSession = ({
           `Cannot reattach live session ${record.sessionId} without a resumeMissingLiveSession handler.`,
         );
       }
-      await resumeMissingLiveSession({
-        record,
-        runtimeKind: runtimeResolution.runtimeKind,
-        runtimeConnection: runtimeResolution.runtimeConnection,
-      });
+      const resumeResult = await awaitUnlessStale(
+        resumeMissingLiveSession({
+          record,
+          runtimeKind: runtimeResolution.runtimeKind,
+          runtimeConnection: runtimeResolution.runtimeConnection,
+        }),
+      );
+      if (resumeResult === STALE_REPO_ABORT) {
+        return false;
+      }
     }
 
+    if (isStaleRepoOperation()) {
+      return false;
+    }
     attachSessionListener(repoPath, record.sessionId);
     updateSession(
       record.sessionId,

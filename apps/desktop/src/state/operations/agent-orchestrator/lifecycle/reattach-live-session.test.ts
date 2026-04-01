@@ -53,9 +53,6 @@ describe("reattach-live-session", () => {
         hasSession: () => false,
       },
       repoPath: "/tmp/repo",
-      taskId: "task-1",
-      taskRef: { current: [] },
-      sessionsRef: { current: { "session-1": sessionStateFixture } },
       updateSession: (sessionId, updater) => {
         if (sessionId !== "session-1") {
           return;
@@ -113,9 +110,6 @@ describe("reattach-live-session", () => {
         hasSession: () => true,
       },
       repoPath: "/tmp/repo",
-      taskId: "task-1",
-      taskRef: { current: [] },
-      sessionsRef: { current: { "session-1": sessionStateFixture } },
       updateSession: (sessionId, updater) => {
         if (sessionId !== "session-1") {
           return;
@@ -145,5 +139,122 @@ describe("reattach-live-session", () => {
 
     expect(reattached).toBe(false);
     expect(state.pendingPermissions).toEqual(sessionStateFixture.pendingPermissions);
+  });
+
+  test("does not attach or update when the repo becomes stale after resume", async () => {
+    let state = sessionStateFixture;
+    let attachedSessionId: string | null = null;
+    let stale = false;
+    let resumeCalls = 0;
+
+    const reattachLiveSession = createReattachLiveSession({
+      adapter: {
+        hasSession: () => false,
+      },
+      repoPath: "/tmp/repo",
+      updateSession: (sessionId, updater) => {
+        if (sessionId !== "session-1") {
+          return;
+        }
+        state = updater(state);
+      },
+      attachSessionListener: (_repoPath, sessionId) => {
+        attachedSessionId = sessionId;
+      },
+      promptOverrides: {},
+      resolveHydrationRuntime: async () => ({
+        ok: true,
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+        },
+      }),
+      resumeMissingLiveSession: async () => {
+        resumeCalls += 1;
+        stale = true;
+      },
+      listLiveAgentSessions: async () => [
+        {
+          externalSessionId: "external-1",
+          title: "Session",
+          role: "build",
+          scenario: "build_implementation_start",
+          startedAt: "2026-03-22T12:00:00.000Z",
+          status: { type: "busy" },
+          pendingPermissions: [],
+          pendingQuestions: [],
+          workingDirectory: "/tmp/repo/worktree",
+        },
+      ],
+      isStaleRepoOperation: () => stale,
+      toLiveSessionState: () => "running",
+    });
+
+    const reattached = await reattachLiveSession(sessionRecordFixture);
+
+    expect(resumeCalls).toBe(1);
+    expect(reattached).toBe(false);
+    expect(attachedSessionId).toBeNull();
+    expect(state).toEqual(sessionStateFixture);
+  });
+
+  test("does not resume when the repo becomes stale after live lookup", async () => {
+    let stale = false;
+    let resumeCalls = 0;
+
+    const reattachLiveSession = createReattachLiveSession({
+      adapter: {
+        hasSession: () => false,
+      },
+      repoPath: "/tmp/repo",
+      updateSession: () => {
+        throw new Error("should not update stale session");
+      },
+      attachSessionListener: () => {
+        throw new Error("should not attach stale session");
+      },
+      promptOverrides: {},
+      resolveHydrationRuntime: async () => ({
+        ok: true,
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+        },
+      }),
+      resumeMissingLiveSession: async () => {
+        resumeCalls += 1;
+      },
+      listLiveAgentSessions: async () => {
+        stale = true;
+        return [
+          {
+            externalSessionId: "external-1",
+            title: "Session",
+            role: "build",
+            scenario: "build_implementation_start",
+            startedAt: "2026-03-22T12:00:00.000Z",
+            status: { type: "busy" },
+            pendingPermissions: [],
+            pendingQuestions: [],
+            workingDirectory: "/tmp/repo/worktree",
+          },
+        ];
+      },
+      isStaleRepoOperation: () => stale,
+      toLiveSessionState: () => "running",
+    });
+
+    const reattached = await reattachLiveSession(sessionRecordFixture);
+
+    expect(reattached).toBe(false);
+    expect(resumeCalls).toBe(0);
   });
 });
