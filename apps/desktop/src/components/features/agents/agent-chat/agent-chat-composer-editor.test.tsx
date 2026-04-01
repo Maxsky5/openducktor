@@ -139,6 +139,24 @@ const getLastTextSegment = (container: HTMLElement): HTMLElement => {
   return editable;
 };
 
+const collapseSelectionOnEditorRoot = (container: HTMLElement): HTMLElement => {
+  const editorRoot = getEditorRoot(container);
+  const collapsedRange = document.createRange();
+  collapsedRange.setStart(editorRoot, 0);
+  collapsedRange.collapse(true);
+  const selection = globalThis.getSelection?.();
+  selection?.removeAllRanges();
+  selection?.addRange(collapsedRange);
+  return editorRoot;
+};
+
+const expectComposerText = async (container: HTMLElement, text: string): Promise<void> => {
+  await waitFor(() => {
+    const contentRoot = container.querySelector("[data-composer-content-root]");
+    expect(contentRoot?.textContent).toBe(text);
+  });
+};
+
 const typeIntoEditor = (container: HTMLElement, value: string): HTMLElement => {
   const editable = getLastTextSegment(container);
   editable.textContent = value;
@@ -582,10 +600,7 @@ describe("AgentChatComposerEditor", () => {
     const editable = typeIntoEditor(rendered.container, "hello");
     fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
 
-    await waitFor(() => {
-      const updatedEditable = rendered.container.querySelector("[data-composer-content-root]");
-      expect(updatedEditable?.textContent).toBe("hello\n");
-    });
+    await expectComposerText(rendered.container, "hello\n");
   });
 
   test("inserts a newline from beforeinput line-break events", async () => {
@@ -604,10 +619,7 @@ describe("AgentChatComposerEditor", () => {
       }),
     );
 
-    await waitFor(() => {
-      const updatedEditable = rendered.container.querySelector("[data-composer-content-root]");
-      expect(updatedEditable?.textContent).toBe("hello\n");
-    });
+    await expectComposerText(rendered.container, "hello\n");
   });
 
   test("falls back to the last known caret offset when shift-enter keydown loses selection", async () => {
@@ -621,10 +633,7 @@ describe("AgentChatComposerEditor", () => {
 
     fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
 
-    await waitFor(() => {
-      const updatedEditable = rendered.container.querySelector("[data-composer-content-root]");
-      expect(updatedEditable?.textContent).toBe("hello\n");
-    });
+    await expectComposerText(rendered.container, "hello\n");
   });
 
   test("repairs the first shift-enter when selection is collapsed on the editor root", async () => {
@@ -637,20 +646,10 @@ describe("AgentChatComposerEditor", () => {
       />,
     );
 
-    const editorRoot = getEditorRoot(rendered.container);
-    const collapsedRange = document.createRange();
-    collapsedRange.setStart(editorRoot, 0);
-    collapsedRange.collapse(true);
-    const selection = globalThis.getSelection?.();
-    selection?.removeAllRanges();
-    selection?.addRange(collapsedRange);
-
+    const editorRoot = collapseSelectionOnEditorRoot(rendered.container);
     fireEvent.keyDown(editorRoot, { key: "Enter", shiftKey: true });
 
-    await waitFor(() => {
-      const updatedEditable = rendered.container.querySelector("[data-composer-content-root]");
-      expect(updatedEditable?.textContent).toBe("hello\n");
-    });
+    await expectComposerText(rendered.container, "hello\n");
   });
 
   test("renders empty trailing text segments as inline blocks for caret placement after slash chips", async () => {
