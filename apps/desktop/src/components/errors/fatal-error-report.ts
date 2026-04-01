@@ -3,6 +3,8 @@ export interface FatalErrorReport {
   message: string;
   /** Present only when the original caught value carried a stack trace. */
   stack: string | undefined;
+  componentStack?: string;
+  location?: string;
   source: "boundary" | "error" | "unhandledrejection";
   /** ISO-8601 timestamp. */
   timestamp: string;
@@ -29,11 +31,13 @@ export function buildFatalErrorReport(
 
   if (value instanceof ErrorEvent) {
     const inner = value.error;
+    const location = formatErrorLocation(value);
     if (inner instanceof Error) {
       return {
         title: inner.name || "Error",
         message: inner.message,
         stack: inner.stack,
+        ...(location ? { location } : {}),
         source,
         timestamp,
       };
@@ -42,6 +46,7 @@ export function buildFatalErrorReport(
       title: "Uncaught error",
       message: value.message || String(inner ?? value),
       stack: undefined,
+      ...(location ? { location } : {}),
       source,
       timestamp,
     };
@@ -107,6 +112,9 @@ export function logFatalError(
     timestamp: report.timestamp,
     rawValue,
   };
+  if (report.location) {
+    context.location = report.location;
+  }
   if (componentStack) {
     context.componentStack = componentStack;
   }
@@ -118,6 +126,31 @@ export function logFatalError(
     report.message,
     context,
   );
+}
+
+function formatErrorLocation(event: ErrorEvent): string | undefined {
+  const line = event.lineno > 0 ? event.lineno : null;
+  const column = event.colno > 0 ? event.colno : null;
+
+  if (event.filename) {
+    if (line === null) {
+      return event.filename;
+    }
+    if (column === null) {
+      return `${event.filename}:${line}`;
+    }
+    return `${event.filename}:${line}:${column}`;
+  }
+
+  if (line === null) {
+    return undefined;
+  }
+
+  if (column === null) {
+    return `line ${line}`;
+  }
+
+  return `line ${line}, column ${column}`;
 }
 
 function safeStringify(value: unknown): string {

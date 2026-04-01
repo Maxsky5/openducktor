@@ -54,6 +54,19 @@ describe("buildFatalErrorReport", () => {
       expect(report.source).toBe("error");
     });
 
+    test("captures source location from ErrorEvent", () => {
+      const event = new ErrorEvent("error", {
+        error: new Error("boom"),
+        filename: "http://localhost:1420/src/main.tsx",
+        lineno: 42,
+        colno: 7,
+      });
+
+      const report = buildFatalErrorReport(event, "error");
+
+      expect(report.location).toBe("http://localhost:1420/src/main.tsx:42:7");
+    });
+
     test("handles ErrorEvent without inner Error", () => {
       const event = new ErrorEvent("error", {
         message: "Script error.",

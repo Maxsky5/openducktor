@@ -20,9 +20,7 @@ export class AppErrorBoundary extends Component<Props, State> {
   override componentDidCatch(error: Error, info: ErrorInfo): void {
     const report = buildFatalErrorReport(error, "boundary");
     if (info.componentStack) {
-      report.stack = [report.stack, "Component stack:", info.componentStack]
-        .filter(Boolean)
-        .join("\n");
+      report.componentStack = info.componentStack;
     }
     logFatalError(report, error, info.componentStack ?? undefined);
     this.props.onCrash(report);

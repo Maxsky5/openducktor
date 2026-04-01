@@ -19,6 +19,7 @@ export function FatalErrorPage({
   onNavigateToKanban,
 }: FatalErrorPageProps): ReactElement {
   const [showDetails, setShowDetails] = useState(false);
+  const detailSections = getDetailSections(report);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
@@ -66,7 +67,7 @@ export function FatalErrorPage({
           </div>
         </div>
 
-        {report.stack && (
+        {detailSections.length > 0 && (
           <div className="mb-6">
             <button
               type="button"
@@ -77,12 +78,28 @@ export function FatalErrorPage({
               {showDetails ? "Hide details" : "Show details"}
             </button>
             {showDetails && (
-              <pre
-                className="mt-2 max-h-48 overflow-auto rounded-md border border-border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground"
-                data-testid="fatal-error-stack"
+              <div
+                className="mt-2 space-y-3 rounded-md border border-border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground"
+                data-testid="fatal-error-details"
               >
-                {report.stack}
-              </pre>
+                {detailSections.map((section) => (
+                  <div key={section.label} className="space-y-1">
+                    <p className="font-medium text-foreground">{section.label}</p>
+                    {section.kind === "pre" ? (
+                      <pre
+                        className="overflow-auto whitespace-pre-wrap"
+                        data-testid={section.testId}
+                      >
+                        {section.value}
+                      </pre>
+                    ) : (
+                      <p className="break-all" data-testid={section.testId}>
+                        {section.value}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -108,6 +125,54 @@ export function FatalErrorPage({
       </div>
     </div>
   );
+}
+
+function getDetailSections(report: FatalErrorReport): Array<{
+  kind: "pre" | "text";
+  label: string;
+  value: string;
+  testId: string;
+}> {
+  const sections: Array<{ kind: "pre" | "text"; label: string; value: string; testId: string }> =
+    [];
+
+  if (hasMeaningfulStack(report.stack)) {
+    sections.push({
+      kind: "pre",
+      label: "JavaScript stack",
+      value: report.stack,
+      testId: "fatal-error-stack",
+    });
+  }
+
+  if (report.componentStack) {
+    sections.push({
+      kind: "pre",
+      label: "React component stack",
+      value: report.componentStack,
+      testId: "fatal-error-component-stack",
+    });
+  }
+
+  if (report.location) {
+    sections.push({
+      kind: "text",
+      label: "Location",
+      value: report.location,
+      testId: "fatal-error-location",
+    });
+  }
+
+  return sections;
+}
+
+function hasMeaningfulStack(stack: string | undefined): stack is string {
+  if (!stack) {
+    return false;
+  }
+
+  const normalized = stack.replace(/\s+/g, "");
+  return normalized !== "" && !/^@+$/.test(normalized);
 }
 
 function formatTimestamp(iso: string): string {
