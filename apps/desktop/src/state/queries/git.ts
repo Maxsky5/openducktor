@@ -7,10 +7,10 @@ import type {
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
 
-type GitQueryHost = Pick<
-  typeof host,
-  "gitGetBranches" | "gitGetCurrentBranch" | "gitGetWorktreeStatus" | "gitGetWorktreeStatusSummary"
->;
+type GitBranchesQueryHost = Pick<typeof host, "gitGetBranches">;
+type GitCurrentBranchQueryHost = Pick<typeof host, "gitGetCurrentBranch">;
+type GitWorktreeStatusQueryHost = Pick<typeof host, "gitGetWorktreeStatus">;
+type GitWorktreeStatusSummaryQueryHost = Pick<typeof host, "gitGetWorktreeStatusSummary">;
 
 const BRANCH_DATA_STALE_TIME_MS = 60_000;
 const WORKTREE_STATUS_STALE_TIME_MS = 5_000;
@@ -49,14 +49,20 @@ export const gitQueryKeys = {
     ] as const,
 };
 
-export const repoBranchesQueryOptions = (repoPath: string, hostClient: GitQueryHost = host) =>
+export const repoBranchesQueryOptions = (
+  repoPath: string,
+  hostClient: GitBranchesQueryHost = host,
+) =>
   queryOptions({
     queryKey: gitQueryKeys.branches(repoPath),
     queryFn: (): Promise<GitBranch[]> => hostClient.gitGetBranches(repoPath),
     staleTime: BRANCH_DATA_STALE_TIME_MS,
   });
 
-const currentBranchQueryOptions = (repoPath: string, hostClient: GitQueryHost = host) =>
+const currentBranchQueryOptions = (
+  repoPath: string,
+  hostClient: GitCurrentBranchQueryHost = host,
+) =>
   queryOptions({
     queryKey: gitQueryKeys.currentBranch(repoPath),
     queryFn: (): Promise<GitCurrentBranch> => hostClient.gitGetCurrentBranch(repoPath),
@@ -68,7 +74,7 @@ const worktreeStatusQueryOptions = (
   targetBranch: string,
   diffScope: "target" | "uncommitted",
   workingDir: string | null,
-  hostClient: GitQueryHost = host,
+  hostClient: GitWorktreeStatusQueryHost = host,
 ) =>
   queryOptions({
     queryKey: gitQueryKeys.worktreeStatus(repoPath, targetBranch, diffScope, workingDir),
@@ -82,7 +88,7 @@ const worktreeStatusSummaryQueryOptions = (
   targetBranch: string,
   diffScope: "target" | "uncommitted",
   workingDir: string | null,
-  hostClient: GitQueryHost = host,
+  hostClient: GitWorktreeStatusSummaryQueryHost = host,
 ) =>
   queryOptions({
     queryKey: gitQueryKeys.worktreeStatusSummary(repoPath, targetBranch, diffScope, workingDir),
@@ -99,13 +105,13 @@ const worktreeStatusSummaryQueryOptions = (
 export const loadRepoBranchesFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
-  hostClient?: GitQueryHost,
+  hostClient?: GitBranchesQueryHost,
 ): Promise<GitBranch[]> => queryClient.fetchQuery(repoBranchesQueryOptions(repoPath, hostClient));
 
 export const loadCurrentBranchFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
-  hostClient?: GitQueryHost,
+  hostClient?: GitCurrentBranchQueryHost,
 ): Promise<GitCurrentBranch> =>
   queryClient.fetchQuery(currentBranchQueryOptions(repoPath, hostClient));
 
@@ -118,7 +124,7 @@ export const loadWorktreeStatusFromQuery = (
   options?: {
     force?: boolean;
   },
-  hostClient?: GitQueryHost,
+  hostClient?: GitWorktreeStatusQueryHost,
 ): Promise<GitWorktreeStatus> => {
   const queryKey = gitQueryKeys.worktreeStatus(repoPath, targetBranch, diffScope, workingDir);
 
@@ -141,7 +147,7 @@ export const loadWorktreeStatusSummaryFromQuery = (
   options?: {
     force?: boolean;
   },
-  hostClient?: GitQueryHost,
+  hostClient?: GitWorktreeStatusSummaryQueryHost,
 ): Promise<GitWorktreeStatusSummary> => {
   const queryKey = gitQueryKeys.worktreeStatusSummary(
     repoPath,

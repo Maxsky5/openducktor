@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { useRef } from "react";
+import { toast } from "sonner";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { useWorkspaceBranchOperations } from "./use-workspace-branch-operations";
 import {
@@ -7,7 +8,7 @@ import {
   createWorkspaceHostClient,
   flush,
   IsolatedQueryWrapper,
-} from "./workspace-operations-test-utils";
+} from "./workspace-hook-test-utils";
 import type { PreparedRepoSwitch } from "./workspace-operations-types";
 
 let workspaceHost = createWorkspaceHostClient();
@@ -196,6 +197,62 @@ describe("use-workspace-branch-operations", () => {
 
       expect(gitSwitchBranch).not.toHaveBeenCalled();
     } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("restores the prior branch snapshot and reports the error when switching fails", async () => {
+    const switchError = new Error("branch checkout failed");
+    const originalToastError = toast.error;
+    const toastError = mock(() => "toast-id");
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    workspaceHost.gitGetCurrentBranch = mock(async () => ({
+      name: "main",
+      detached: false,
+      revision: "abc123",
+    }));
+    workspaceHost.gitGetBranches = mock(async () => [
+      {
+        name: "main",
+        isCurrent: true,
+        isRemote: false,
+      },
+      {
+        name: "feature",
+        isCurrent: false,
+        isRemote: false,
+      },
+    ]);
+    workspaceHost.gitSwitchBranch = mock(async () => {
+      throw switchError;
+    });
+
+    const harness = createBranchHarness({
+      activeRepo: "/repo-a",
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+
+      await harness.run(async (value) => {
+        await value.switchBranch("feature");
+      });
+
+      expect(harness.getLatest().activeBranch).toEqual({
+        name: "main",
+        detached: false,
+        revision: "abc123",
+      });
+      expect(harness.getLatest().isSwitchingBranch).toBe(false);
+      expect(toastError).toHaveBeenCalledWith("Failed to switch branch", {
+        description: "branch checkout failed",
+      });
+    } finally {
+      (toast as { error: typeof toast.error }).error = originalToastError;
       await harness.unmount();
     }
   });

@@ -7,7 +7,7 @@ import {
   createWorkspaceRuntimeSummary,
   IsolatedQueryWrapper,
   workspace,
-} from "./workspace-operations-test-utils";
+} from "./workspace-hook-test-utils";
 import type { PreparedRepoSwitch } from "./workspace-operations-types";
 
 let workspaceHost = createWorkspaceHostClient();

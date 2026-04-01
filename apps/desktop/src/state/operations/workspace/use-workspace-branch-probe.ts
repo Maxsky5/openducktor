@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
+import { createProbeGateController } from "./workspace-branch-probe-gate";
 import {
   BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
   type BranchProbeError,
@@ -12,7 +13,7 @@ import {
 } from "./workspace-operations-model";
 import type {
   WorkspaceBranchProbeController,
-  WorkspaceOperationsHostClient,
+  WorkspaceBranchProbeHostClient,
 } from "./workspace-operations-types";
 
 type UseWorkspaceBranchProbeArgs = {
@@ -20,7 +21,7 @@ type UseWorkspaceBranchProbeArgs = {
   isSwitchingWorkspace: boolean;
   isLoadingBranches: boolean;
   isSwitchingBranch: boolean;
-  hostClient: WorkspaceOperationsHostClient;
+  hostClient: WorkspaceBranchProbeHostClient;
   branchProbeController: WorkspaceBranchProbeController;
   setBranchSyncDegraded: (value: boolean) => void;
 };
@@ -40,9 +41,7 @@ export function useWorkspaceBranchProbe({
   branchProbeController,
   setBranchSyncDegraded,
 }: UseWorkspaceBranchProbeArgs): void {
-  const branchSyncInFlightRef = useRef(false);
-  const nextProbeTokenRef = useRef(0);
-  const activeProbeTokenRef = useRef<number | null>(null);
+  const probeGateRef = useRef(createProbeGateController());
   const lastProbeErrorToastAtRef = useRef<number | null>(null);
   const lastProbeErrorSignatureRef = useRef<string | null>(null);
   const previousActiveRepoRef = useRef(activeRepo);
@@ -62,8 +61,7 @@ export function useWorkspaceBranchProbe({
     }
 
     previousActiveRepoRef.current = activeRepo;
-    branchSyncInFlightRef.current = false;
-    activeProbeTokenRef.current = null;
+    probeGateRef.current.reset();
     lastProbeErrorToastAtRef.current = null;
     lastProbeErrorSignatureRef.current = null;
   }, [activeRepo]);
@@ -100,7 +98,7 @@ export function useWorkspaceBranchProbe({
         isSwitchingWorkspace: probeGatesRef.current.isSwitchingWorkspace,
         isSwitchingBranch: probeGatesRef.current.isSwitchingBranch,
         isLoadingBranches: probeGatesRef.current.isLoadingBranches,
-        isSyncInFlight: branchSyncInFlightRef.current,
+        isSyncInFlight: probeGateRef.current.isInFlight(),
       })
     ) {
       return {
@@ -116,9 +114,7 @@ export function useWorkspaceBranchProbe({
       };
     }
 
-    const probeToken = ++nextProbeTokenRef.current;
-    activeProbeTokenRef.current = probeToken;
-    branchSyncInFlightRef.current = true;
+    const probeToken = probeGateRef.current.begin();
 
     try {
       const current = await hostClient.gitGetCurrentBranch(repoPath);
@@ -163,10 +159,7 @@ export function useWorkspaceBranchProbe({
         error: classifyBranchProbeError(error, "current_branch_probe"),
       };
     } finally {
-      if (activeProbeTokenRef.current === probeToken) {
-        branchSyncInFlightRef.current = false;
-        activeProbeTokenRef.current = null;
-      }
+      probeGateRef.current.finish(probeToken);
     }
   }, [branchProbeController, hostClient]);
 

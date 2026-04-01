@@ -2,13 +2,13 @@ import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { render } from "@testing-library/react";
 import { useMemo, useRef } from "react";
 import { useWorkspaceBranchProbe } from "./use-workspace-branch-probe";
+import { createBrowserListenerHarness } from "./workspace-browser-test-utils";
 import {
-  createBrowserListenerHarness,
   createDeferred,
   createWorkspaceHostClient,
   flush,
   IsolatedQueryWrapper,
-} from "./workspace-operations-test-utils";
+} from "./workspace-hook-test-utils";
 
 let workspaceHost = createWorkspaceHostClient();
 const noopRefreshBranchesForRepo = async (): Promise<void> => {};

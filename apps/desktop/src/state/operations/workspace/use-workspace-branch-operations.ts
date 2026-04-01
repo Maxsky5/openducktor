@@ -14,13 +14,13 @@ import {
 } from "./workspace-operations-model";
 import type {
   PreparedRepoSwitchRef,
+  WorkspaceBranchOperationsHostClient,
   WorkspaceBranchProbeController,
-  WorkspaceOperationsHostClient,
 } from "./workspace-operations-types";
 
 type UseWorkspaceBranchOperationsArgs = {
   activeRepo: string | null;
-  hostClient: WorkspaceOperationsHostClient;
+  hostClient: WorkspaceBranchOperationsHostClient;
   preparedRepoSwitchRef: PreparedRepoSwitchRef;
   clearBranchSyncDegraded: () => void;
 };

@@ -12,7 +12,7 @@ import {
 import { normalizeRepoPath } from "./workspace-operations-model";
 import type {
   PreparedRepoSwitchRef,
-  WorkspaceOperationsHostClient,
+  WorkspaceSelectionOperationsHostClient,
 } from "./workspace-operations-types";
 
 type UseWorkspaceSelectionOperationsArgs = {
@@ -20,7 +20,7 @@ type UseWorkspaceSelectionOperationsArgs = {
   clearTaskData: () => void;
   clearActiveBeadsCheck: () => void;
   clearBranchData: () => void;
-  hostClient: WorkspaceOperationsHostClient;
+  hostClient: WorkspaceSelectionOperationsHostClient;
   preparedRepoSwitchRef: PreparedRepoSwitchRef;
   activeRepo: string | null;
 };

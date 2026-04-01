@@ -2,20 +2,20 @@ import type { GitBranch, GitCurrentBranch, WorkspaceRecord } from "@openducktor/
 import type { MutableRefObject } from "react";
 import type { host } from "../shared/host";
 
-export type WorkspaceOperationsHostClient = Pick<
+export type WorkspaceBranchOperationsHostClient = Pick<
   typeof host,
-  | "gitGetBranches"
-  | "gitGetCurrentBranch"
-  | "gitGetWorktreeStatus"
-  | "gitGetWorktreeStatusSummary"
-  | "gitSwitchBranch"
-  | "runtimeEnsure"
-  | "workspaceAdd"
-  | "workspaceGetRepoConfig"
-  | "workspaceGetSettingsSnapshot"
-  | "workspaceList"
-  | "workspaceSelect"
+  "gitGetBranches" | "gitGetCurrentBranch" | "gitSwitchBranch"
 >;
+
+export type WorkspaceBranchProbeHostClient = Pick<typeof host, "gitGetCurrentBranch">;
+
+export type WorkspaceSelectionOperationsHostClient = Pick<
+  typeof host,
+  "runtimeEnsure" | "workspaceAdd" | "workspaceGetRepoConfig" | "workspaceList" | "workspaceSelect"
+>;
+
+export type WorkspaceOperationsHostClient = WorkspaceBranchOperationsHostClient &
+  WorkspaceSelectionOperationsHostClient;
 
 export type UseWorkspaceOperationsArgs = {
   activeRepo: string | null;
