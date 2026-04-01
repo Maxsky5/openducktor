@@ -218,9 +218,7 @@ mod tests {
             .header(CONTENT_TYPE, "application/json")
             .body(Body::from("{not-json"))
             .expect("request should build");
-        let args = Json::<Value>::from_request(request, &())
-            .await
-            .map_err(Into::into);
+        let args = Json::<Value>::from_request(request, &()).await;
 
         let response = invoke_handler(
             Path("workspace_list".to_string()),
