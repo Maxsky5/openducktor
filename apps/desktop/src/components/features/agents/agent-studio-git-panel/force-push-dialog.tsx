@@ -11,6 +11,8 @@ type ForcePushDialogProps = {
   onConfirm: () => void;
 };
 
+const INFO_INLINE_CODE_CLASS_NAME = `${INLINE_CODE_CLASS_NAME} border-info-border bg-info-surface/60 text-info-surface-foreground`;
+
 export const ForcePushDialog = memo(function ForcePushDialog({
   pendingForcePush,
   isPushing,
@@ -61,14 +63,12 @@ export const ForcePushDialog = memo(function ForcePushDialog({
           className="rounded-xl border border-info-border bg-info-surface px-4 py-4 text-info-surface-foreground"
           data-testid="agent-studio-git-force-push-safety-note"
         >
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-info-surface-foreground">
-            Retry mode
-          </p>
-          <p className="mt-2 text-sm leading-6 text-info-surface-foreground">
-            The retry uses <code className={INLINE_CODE_CLASS_NAME}>--force-with-lease</code>. Git
-            checks that the remote branch still points to the commit you last fetched. If someone
-            pushed in the meantime, the retry fails instead of overwriting their work. This panel
-            never uses <code className={INLINE_CODE_CLASS_NAME}>--force</code>.
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em]">Retry mode</p>
+          <p className="mt-2 text-sm leading-6">
+            The retry uses <code className={INFO_INLINE_CODE_CLASS_NAME}>--force-with-lease</code>.
+            Git checks that the remote branch still points to the commit you last fetched. If
+            someone pushed in the meantime, the retry fails instead of overwriting their work. This
+            panel never uses <code className={INFO_INLINE_CODE_CLASS_NAME}>--force</code>.
           </p>
         </div>
 

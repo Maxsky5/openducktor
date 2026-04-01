@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import { act } from "react";
+import { ForcePushDialog } from "./force-push-dialog";
 
 (
   globalThis as typeof globalThis & {
@@ -9,14 +10,19 @@ import { act } from "react";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("ForcePushDialog", () => {
-  let ForcePushDialog: typeof import("./force-push-dialog")["ForcePushDialog"];
+  let rendered: ReturnType<typeof render> | null = null;
 
-  beforeEach(async () => {
-    ({ ForcePushDialog } = await import("./force-push-dialog"));
+  afterEach(async () => {
+    if (rendered) {
+      await act(async () => {
+        rendered?.unmount();
+      });
+      rendered = null;
+    }
   });
 
   test("uses the info surface styling and body spacing for the safety content", async () => {
-    const rendered = render(
+    rendered = render(
       <ForcePushDialog
         pendingForcePush={{
           remote: "origin",
@@ -33,14 +39,18 @@ describe("ForcePushDialog", () => {
 
     const body = screen.getByTestId("agent-studio-git-force-push-body");
     const safetyNote = screen.getByTestId("agent-studio-git-force-push-safety-note");
+    const leaseCode = screen.getByText("--force-with-lease");
+    const forceCode = screen.getByText("--force");
 
     expect(body.className).toContain("space-y-4");
     expect(safetyNote.className).toContain("border-info-border");
     expect(safetyNote.className).toContain("bg-info-surface");
     expect(safetyNote.className).toContain("text-info-surface-foreground");
-
-    await act(async () => {
-      rendered.unmount();
-    });
+    expect(leaseCode.className).toContain("border-info-border");
+    expect(leaseCode.className).toContain("bg-info-surface/60");
+    expect(leaseCode.className).toContain("text-info-surface-foreground");
+    expect(forceCode.className).toContain("border-info-border");
+    expect(forceCode.className).toContain("bg-info-surface/60");
+    expect(forceCode.className).toContain("text-info-surface-foreground");
   });
 });
