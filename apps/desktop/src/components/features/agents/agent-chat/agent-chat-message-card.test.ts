@@ -850,4 +850,46 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("flex shrink-0 items-center justify-end gap-2 self-end");
     expect(html).not.toContain("flex min-w-0 flex-wrap items-center gap-2");
   });
+
+  test("renders attachment chips in the user footer row alongside queued metadata", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "user-attachment-queued",
+          role: "user",
+          content: "please review this screenshot",
+          timestamp: "2026-02-22T10:31:00.000Z",
+          meta: {
+            kind: "user",
+            state: "queued",
+            parts: [
+              {
+                kind: "text",
+                text: "please review this screenshot",
+              },
+              {
+                kind: "attachment",
+                attachment: {
+                  id: "attachment-1",
+                  path: "/tmp/screenshot.png",
+                  name: "screenshot.png",
+                  kind: "image",
+                  mime: "image/png",
+                },
+              },
+            ],
+          },
+        },
+        sessionRole: "build",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("Queued");
+    expect(html).toContain("screenshot.png");
+    expect(html).toContain("mt-2 flex items-end justify-between gap-3");
+    expect(html).toContain("flex min-w-0 flex-wrap items-center gap-2");
+    expect(html).toContain("flex shrink-0 items-center justify-end gap-2 self-end");
+  });
 });

@@ -304,4 +304,20 @@ mod tests {
             .expect("response body should read");
         assert_eq!(body.as_ref(), b"preview-bytes");
     }
+
+    #[tokio::test]
+    async fn local_attachment_preview_handler_returns_not_found_for_missing_files() {
+        let fixture = test_state_fixture();
+        let preview_path = fixture.root.join("missing.png");
+
+        let error = local_attachment_preview_handler(Query(LocalAttachmentPreviewQuery {
+            path: preview_path.to_string_lossy().into_owned(),
+            mime: Some("image/png".to_string()),
+        }))
+        .await
+        .expect_err("missing preview path should fail");
+
+        assert_eq!(error.status, StatusCode::NOT_FOUND);
+        assert!(error.message.contains("Failed to stat local attachment preview"));
+    }
 }

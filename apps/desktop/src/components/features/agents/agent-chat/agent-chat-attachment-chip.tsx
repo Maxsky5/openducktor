@@ -1,6 +1,6 @@
 import type { AgentAttachmentReference } from "@openducktor/core";
 import { FileAudio2, FileText, Film, Image as ImageIcon, LoaderCircle, X } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +30,10 @@ const ATTACHMENT_ICON = {
   pdf: FileText,
 } as const;
 
+const readPreviewLoadFailureMessage = (attachmentName: string): string => {
+  return `Attachment preview is unavailable because "${attachmentName}" could not be read from its original local path.`;
+};
+
 const readPreviewUrlForAttachment = (attachment: DraftAttachmentLike): string | null => {
   if (attachment.file && isPreviewableAttachmentKind(attachment.kind)) {
     return URL.createObjectURL(attachment.file);
@@ -58,6 +62,12 @@ export function AgentChatAttachmentChip({
   const Icon = ATTACHMENT_ICON[attachment.kind];
 
   const objectPreviewUrl = useMemo(() => readPreviewUrlForAttachment(attachment), [attachment]);
+
+  const markPreviewUnavailable = useCallback(() => {
+    setDialogOpen(false);
+    setResolvedPreviewSrc(null);
+    setPreviewError(readPreviewLoadFailureMessage(attachment.name));
+  }, [attachment.name]);
 
   useEffect(() => {
     return () => {
@@ -113,6 +123,7 @@ export function AgentChatAttachmentChip({
 
   const effectiveError = error ?? previewError;
   const canOpenPreview = previewable && Boolean(resolvedPreviewSrc) && !effectiveError;
+  const showResolvedPreview = Boolean(resolvedPreviewSrc) && !previewError;
 
   const handleOpenPreview = (): void => {
     if (canOpenPreview) {
@@ -156,20 +167,22 @@ export function AgentChatAttachmentChip({
             onClick={handleOpenPreview}
           >
             <div className="flex aspect-video items-center justify-center bg-muted">
-              {resolvedPreviewSrc ? (
+              {showResolvedPreview ? (
                 attachment.kind === "image" ? (
                   <img
-                    src={resolvedPreviewSrc}
+                    src={resolvedPreviewSrc ?? undefined}
                     alt={attachment.name}
                     className="h-full w-full object-cover"
+                    onError={markPreviewUnavailable}
                   />
                 ) : (
                   <video
-                    src={resolvedPreviewSrc}
+                    src={resolvedPreviewSrc ?? undefined}
                     className="h-full w-full object-cover"
                     muted
                     playsInline
                     preload="metadata"
+                    onError={markPreviewUnavailable}
                   >
                     <track kind="captions" />
                   </video>
@@ -199,7 +212,7 @@ export function AgentChatAttachmentChip({
         ) : null}
       </div>
 
-      {previewable && resolvedPreviewSrc ? (
+      {previewable && resolvedPreviewSrc && !effectiveError ? (
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="max-w-[min(96vw,72rem)] border-border bg-background">
             <DialogHeader>
@@ -214,6 +227,7 @@ export function AgentChatAttachmentChip({
                   src={resolvedPreviewSrc}
                   alt={attachment.name}
                   className="max-h-[75vh] w-full object-contain"
+                  onError={markPreviewUnavailable}
                 />
               ) : (
                 <video
@@ -221,6 +235,7 @@ export function AgentChatAttachmentChip({
                   className="max-h-[75vh] w-full object-contain"
                   controls
                   autoPlay
+                  onError={markPreviewUnavailable}
                 >
                   <track kind="captions" />
                 </video>

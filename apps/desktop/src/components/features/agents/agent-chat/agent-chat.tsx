@@ -106,7 +106,11 @@ export function AgentChat({
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {header}
       <div className="min-h-0 flex-1 bg-muted">
-        <div ref={dropTargetRef} className="relative flex h-full min-h-0 flex-col">
+        <div
+          ref={dropTargetRef}
+          data-testid="agent-chat-drop-target"
+          className="relative flex h-full min-h-0 flex-col"
+        >
           {isDraggingFiles ? (
             <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/85 p-6">
               <div className="rounded-xl border border-primary bg-card px-6 py-5 text-center shadow-xl">
