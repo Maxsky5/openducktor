@@ -108,12 +108,15 @@ pub async fn build_stop(
     app: AppHandle,
     run_id: String,
 ) -> Result<serde_json::Value, String> {
-    as_error(
-        state
-            .service
-            .build_stop(&run_id, run_emitter(app))
-            .map(|ok| serde_json::json!({ "ok": ok })),
-    )
+    let service = state.service.clone();
+    let emitter = run_emitter(app);
+    let result = run_service_blocking("build_stop", move || {
+        service
+            .build_stop(&run_id, emitter)
+            .map(|ok| serde_json::json!({ "ok": ok }))
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -123,12 +126,15 @@ pub async fn build_cleanup(
     run_id: String,
     mode: CleanupMode,
 ) -> Result<serde_json::Value, String> {
-    as_error(
-        state
-            .service
-            .build_cleanup(&run_id, mode, run_emitter(app))
-            .map(|ok| serde_json::json!({ "ok": ok })),
-    )
+    let service = state.service.clone();
+    let emitter = run_emitter(app);
+    let result = run_service_blocking("build_cleanup", move || {
+        service
+            .build_cleanup(&run_id, mode, emitter)
+            .map(|ok| serde_json::json!({ "ok": ok }))
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -309,5 +315,7 @@ pub async fn runs_list(
     state: State<'_, AppState>,
     repo_path: Option<String>,
 ) -> Result<Vec<RunSummary>, String> {
-    as_error(state.service.runs_list(repo_path.as_deref()))
+    let service = state.service.clone();
+    let result = run_service_blocking("runs_list", move || service.runs_list(repo_path.as_deref())).await;
+    as_error(result)
 }

@@ -96,15 +96,11 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     registry.register("build_respond", |state, args| {
         Box::pin(async move { handle_build_respond(state, args) })
     })?;
-    registry.register("build_stop", |state, args| {
-        Box::pin(async move { handle_build_stop(state, args) })
-    })?;
+    registry.register("build_stop", |state, args| Box::pin(handle_build_stop(state, args)))?;
     registry.register("build_cleanup", |state, args| {
-        Box::pin(async move { handle_build_cleanup(state, args) })
+        Box::pin(handle_build_cleanup(state, args))
     })?;
-    registry.register("runs_list", |state, args| {
-        Box::pin(async move { handle_runs_list(state, args) })
-    })?;
+    registry.register("runs_list", |state, args| Box::pin(handle_runs_list(state, args)))?;
     registry.register("runtime_definitions_list", |state, _| {
         Box::pin(handle_runtime_definitions_list(state))
     })?;
@@ -214,32 +210,40 @@ fn handle_build_respond(state: &HeadlessState, args: Value) -> CommandResult {
     }))
 }
 
-fn handle_build_stop(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_build_stop(state: &HeadlessState, args: Value) -> CommandResult {
     let BuildStopArgs { run_id } = deserialize_args(args)?;
+    let service = state.service.clone();
+    let emitter = make_emitter(state.events.clone());
     Ok(json!({
-        "ok": state
-            .service
-            .build_stop(&run_id, make_emitter(state.events.clone()))
-            .map_err(service_error)?
+        "ok": crate::run_service_blocking_tokio("build_stop", move || {
+            service.build_stop(&run_id, emitter)
+        })
+        .await
+        .map_err(service_error)?
     }))
 }
 
-fn handle_build_cleanup(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_build_cleanup(state: &HeadlessState, args: Value) -> CommandResult {
     let BuildCleanupArgs { run_id, mode } = deserialize_args(args)?;
+    let service = state.service.clone();
+    let emitter = make_emitter(state.events.clone());
     Ok(json!({
-        "ok": state
-            .service
-            .build_cleanup(&run_id, mode, make_emitter(state.events.clone()))
-            .map_err(service_error)?
+        "ok": crate::run_service_blocking_tokio("build_cleanup", move || {
+            service.build_cleanup(&run_id, mode, emitter)
+        })
+        .await
+        .map_err(service_error)?
     }))
 }
 
-fn handle_runs_list(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_runs_list(state: &HeadlessState, args: Value) -> CommandResult {
     let OptionalRepoPathArgs { repo_path } = deserialize_args(args)?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .runs_list(repo_path.as_deref())
+        crate::run_service_blocking_tokio("runs_list", move || {
+            service.runs_list(repo_path.as_deref())
+        })
+        .await
             .map_err(service_error)?,
     )
 }
