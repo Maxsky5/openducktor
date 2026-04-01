@@ -347,6 +347,11 @@ describe("opencode-sdk-adapter", () => {
       workingDirectory: "/repo",
     });
     expect(files).toHaveBeenCalledTimes(1);
+    expect(files).toHaveBeenCalledWith({
+      directory: "/repo",
+      limit: 20,
+      query: "src",
+    });
     expect(results).toEqual([
       {
         id: "src",

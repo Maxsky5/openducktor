@@ -223,12 +223,12 @@ describe("applyComposerDraftEdit", () => {
           },
           "file-account",
         ),
-        createTextSegment("are consistents?", "text-after"),
+        createTextSegment("are consistent?", "text-after"),
       ],
     };
 
     expect(draftToSerializedText(draft)).toBe(
-      "And now tell me if @apps/api/src/routes/members.ts and @apps/web/src/routes/_authenticated/account.tsx are consistents?",
+      "And now tell me if @apps/api/src/routes/members.ts and @apps/web/src/routes/_authenticated/account.tsx are consistent?",
     );
   });
 

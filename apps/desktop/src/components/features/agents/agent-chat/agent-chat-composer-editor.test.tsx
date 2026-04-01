@@ -477,11 +477,9 @@ describe("AgentChatComposerEditor", () => {
 
     const editable = typeIntoEditor(rendered.container, "hello");
     fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
-    editable.textContent = "hello\n";
-    fireEvent.input(editable);
 
     await waitFor(() => {
-      const updatedEditable = rendered.container.querySelector('[contenteditable="true"]');
+      const updatedEditable = rendered.container.querySelector("[data-composer-content-root]");
       expect(updatedEditable?.textContent).toBe("hello\n");
     });
   });
@@ -501,11 +499,9 @@ describe("AgentChatComposerEditor", () => {
         data: null,
       }),
     );
-    editable.textContent = "hello\n";
-    fireEvent.input(editable);
 
     await waitFor(() => {
-      const updatedEditable = rendered.container.querySelector('[contenteditable="true"]');
+      const updatedEditable = rendered.container.querySelector("[data-composer-content-root]");
       expect(updatedEditable?.textContent).toBe("hello\n");
     });
   });
@@ -520,11 +516,9 @@ describe("AgentChatComposerEditor", () => {
       .mockImplementationOnce(() => null);
 
     fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
-    editable.textContent = "hello\n";
-    fireEvent.input(editable);
 
     await waitFor(() => {
-      const updatedEditable = rendered.container.querySelector('[contenteditable="true"]');
+      const updatedEditable = rendered.container.querySelector("[data-composer-content-root]");
       expect(updatedEditable?.textContent).toBe("hello\n");
     });
   });

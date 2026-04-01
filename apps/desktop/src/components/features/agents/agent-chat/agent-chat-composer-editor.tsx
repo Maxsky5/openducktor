@@ -12,7 +12,13 @@ import {
   readEditableTextContent,
 } from "./agent-chat-composer-selection";
 import { AgentChatComposerSlashMenu } from "./agent-chat-composer-slash-menu";
-import { getAgentChatInlineFileReferenceChipMarkup } from "./agent-chat-file-reference-chip";
+import {
+  AGENT_CHAT_FILE_REFERENCE_CHIP_BASE_CLASS_NAME,
+  AGENT_CHAT_FILE_REFERENCE_CHIP_ICON_CLASS_NAME,
+  AGENT_CHAT_FILE_REFERENCE_CHIP_LABEL_CLASS_NAME,
+  type AgentChatFileReferenceChipFile,
+} from "./agent-chat-file-reference-chip";
+import { getAgentChatFileReferenceIconMarkup } from "./agent-chat-file-reference-icon";
 import { useAgentChatComposerEditor } from "./use-agent-chat-composer-editor";
 
 const escapeHtml = (value: string): string => {
@@ -22,6 +28,19 @@ const escapeHtml = (value: string): string => {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+};
+
+const buildComposerFileReferenceChipMarkup = (
+  file: AgentChatFileReferenceChipFile,
+  segmentId: string,
+): string => {
+  return `<span contenteditable="false" data-chip-segment-id="${escapeHtml(segmentId)}" data-segment-id="${escapeHtml(segmentId)}" data-file-reference-path="${escapeHtml(file.path)}" class="${escapeHtml(
+    cn(AGENT_CHAT_FILE_REFERENCE_CHIP_BASE_CLASS_NAME, "mr-2 max-w-full align-middle"),
+  )}"><span class="${escapeHtml(AGENT_CHAT_FILE_REFERENCE_CHIP_ICON_CLASS_NAME)}">${getAgentChatFileReferenceIconMarkup(
+    file.kind,
+  )}</span><span class="${escapeHtml(AGENT_CHAT_FILE_REFERENCE_CHIP_LABEL_CLASS_NAME)}">${escapeHtml(
+    file.name,
+  )}</span></span>`;
 };
 
 const COMPOSER_FILE_REFERENCE_TOOLTIP_OFFSET = 8;
@@ -72,14 +91,7 @@ const buildComposerContentMarkup = (draft: AgentChatComposerDraft): string => {
       const nextSegment = draft.segments[index + 1];
 
       if (segment.kind === "file_reference") {
-        return getAgentChatInlineFileReferenceChipMarkup({
-          file: segment.file,
-          className: "mr-2 align-middle",
-          "data-chip-segment-id": segment.id,
-          "data-segment-id": segment.id,
-          "data-file-reference-path": segment.file.path,
-          contentEditable: "false",
-        });
+        return buildComposerFileReferenceChipMarkup(segment.file, segment.id);
       }
 
       if (segment.kind === "slash_command") {

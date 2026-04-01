@@ -196,7 +196,7 @@ const readRenderableUserMessageText = (
   fallbackText: string,
 ): string => {
   const visibleText = readVisibleUserMessageText(parts);
-  if (visibleText.trim().length > 0) {
+  if (visibleText.length > 0) {
     return visibleText;
   }
   return fallbackText;
@@ -224,27 +224,12 @@ const readInlineUserFileReferenceRanges = (
     .sort((left, right) => left.start - right.start);
 };
 
-const pushUserMessageTextNode = (
-  nodes: ReactNode[],
-  text: string,
-  key: string,
-  options?: {
-    trimStart?: boolean;
-    trimEnd?: boolean;
-  },
-): void => {
-  let value = text;
-  if (options?.trimStart) {
-    value = value.trimStart();
-  }
-  if (options?.trimEnd) {
-    value = value.trimEnd();
-  }
-  if (value.length === 0) {
+const pushUserMessageTextNode = (nodes: ReactNode[], text: string, key: string): void => {
+  if (text.length === 0) {
     return;
   }
 
-  nodes.push(<Fragment key={key}>{value}</Fragment>);
+  nodes.push(<Fragment key={key}>{text}</Fragment>);
 };
 
 const renderUserMessageInlineContent = (
@@ -256,7 +241,7 @@ const renderUserMessageInlineContent = (
   const renderedInlineFileReferences = new Set<AgentUserMessageDisplayPart>();
 
   if (inlineRanges.length === 0) {
-    pushUserMessageTextNode(nodes, rawText, "text", { trimStart: true, trimEnd: true });
+    pushUserMessageTextNode(nodes, rawText, "text");
   } else {
     let cursor = 0;
 
@@ -265,9 +250,7 @@ const renderUserMessageInlineContent = (
         continue;
       }
 
-      pushUserMessageTextNode(nodes, rawText.slice(cursor, range.start), `text-${cursor}`, {
-        trimStart: nodes.length === 0,
-      });
+      pushUserMessageTextNode(nodes, rawText.slice(cursor, range.start), `text-${cursor}`);
       nodes.push(
         <AgentChatFileReferenceChip
           key={`file-${range.part.file.id}-${range.start}`}
@@ -280,10 +263,7 @@ const renderUserMessageInlineContent = (
       cursor = range.end;
     }
 
-    pushUserMessageTextNode(nodes, rawText.slice(cursor), `text-${cursor}`, {
-      trimStart: nodes.length === 0,
-      trimEnd: true,
-    });
+    pushUserMessageTextNode(nodes, rawText.slice(cursor), `text-${cursor}`);
   }
 
   for (const part of parts) {
@@ -291,9 +271,6 @@ const renderUserMessageInlineContent = (
       continue;
     }
 
-    if (nodes.length > 0) {
-      nodes.push(<Fragment key={`space-${part.file.id}`}> </Fragment>);
-    }
     nodes.push(
       <AgentChatFileReferenceChip
         key={`file-${part.file.id}-unanchored`}

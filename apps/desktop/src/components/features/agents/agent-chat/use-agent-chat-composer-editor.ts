@@ -669,6 +669,34 @@ export const useAgentChatComposerEditor = ({
     ],
   );
 
+  const insertNewlineAtSelectionTarget = useCallback(
+    (selectionTarget: TextSelectionTarget | null) => {
+      const resolvedSelectionTarget = resolveTextSelectionTarget(
+        latestDraftRef.current,
+        selectionTarget ?? rememberedSelectionRef.current,
+      );
+      if (!resolvedSelectionTarget) {
+        return false;
+      }
+
+      const didApply = applyEditResult(
+        applyComposerDraftEdit(latestDraftRef.current, {
+          type: "insert_newline",
+          segmentId: resolvedSelectionTarget.segmentId,
+          caretOffset: resolvedSelectionTarget.offset,
+        }),
+      );
+      if (!didApply) {
+        return false;
+      }
+
+      setSlashMenuState(null);
+      closeFileMenu();
+      return true;
+    },
+    [applyEditResult, closeFileMenu],
+  );
+
   const selectSlashCommand = useCallback(
     (command: AgentSlashCommand) => {
       if (!slashMenuState) {
@@ -793,10 +821,25 @@ export const useAgentChatComposerEditor = ({
         return;
       }
 
+      event.preventDefault();
       setSlashMenuState(null);
       closeFileMenu();
+
+      void insertNewlineAtSelectionTarget(
+        activeSelection
+          ? {
+              segmentId: activeSelection.segmentId,
+              offset: activeSelection.caretOffset ?? activeSelection.text.length,
+            }
+          : rememberedSelectionRef.current,
+      );
     },
-    [closeFileMenu, rememberSelectionTarget, repairCollapsedSelection],
+    [
+      closeFileMenu,
+      insertNewlineAtSelectionTarget,
+      rememberSelectionTarget,
+      repairCollapsedSelection,
+    ],
   );
 
   const handleEditorFocus = useCallback(
@@ -914,8 +957,15 @@ export const useAgentChatComposerEditor = ({
       }
 
       if (event.key === "Enter" && event.shiftKey) {
-        setSlashMenuState(null);
-        closeFileMenu();
+        event.preventDefault();
+        void insertNewlineAtSelectionTarget(
+          activeSelection
+            ? {
+                segmentId: activeSelection.segmentId,
+                offset: activeSelection.caretOffset ?? activeSelection.text.length,
+              }
+            : rememberedSelectionRef.current,
+        );
         return;
       }
 
@@ -969,6 +1019,7 @@ export const useAgentChatComposerEditor = ({
       fileMenuState,
       filteredSlashCommands,
       focusTextSegmentWithMemory,
+      insertNewlineAtSelectionTarget,
       onSend,
       repairCollapsedSelection,
       selectFileSearchResult,

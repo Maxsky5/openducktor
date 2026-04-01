@@ -246,6 +246,42 @@ describe("message-execution", () => {
     expect(command).not.toHaveBeenCalled();
   });
 
+  test("encodes file URLs for special characters and relative paths", async () => {
+    const { session, promptAsync } = createSession();
+
+    await sendUserMessage({
+      session,
+      request: {
+        sessionId: "session-1",
+        parts: [
+          {
+            kind: "file_reference",
+            file: {
+              id: "file-special",
+              path: "docs/guide?#.md",
+              name: "guide?#.md",
+              kind: "default",
+            },
+          },
+        ],
+      },
+      tools: {},
+    });
+
+    expect(promptAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: [
+          { type: "text", text: "@docs/guide?#.md" },
+          expect.objectContaining({
+            type: "file",
+            url: "file:///repo/docs/guide%3F%23.md",
+            filename: "guide?#.md",
+          }),
+        ],
+      }),
+    );
+  });
+
   test("uses media mime types for image and video file references", async () => {
     const { session, promptAsync } = createSession();
 

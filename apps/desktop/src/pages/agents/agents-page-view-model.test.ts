@@ -336,6 +336,11 @@ describe("agents-page-view-model", () => {
     expect(model.thread.showThinkingMessages).toBe(true);
     expect(model.thread.readinessState).toBe("ready");
     expect(model.composer.contextUsage).toEqual({ totalTokens: 10, contextWindow: 100 });
+    expect(model.composer.supportsSlashCommands).toBe(true);
+    expect(model.composer.supportsFileSearch).toBe(true);
+    expect(model.composer.canStopSession).toBe(true);
+    expect(model.composer.waitingInputPlaceholder).toBeNull();
+    expect(model.composer.sessionAgentColors).toEqual({});
 
     model.thread.onRefreshChecks();
     model.thread.onKickoff();

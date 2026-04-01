@@ -1,8 +1,10 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
-import type {
-  AgentModelSelection,
-  AgentUserMessageDisplayPart,
-  AgentUserMessageSourceText,
+import {
+  type AgentModelSelection,
+  type AgentUserMessageDisplayPart,
+  type AgentUserMessagePart,
+  type AgentUserMessageSourceText,
+  serializeAgentUserMessagePartsToText,
 } from "@openducktor/core";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import { asUnknownRecord, readRecordProp, readUnknownProp } from "./guards";
@@ -102,21 +104,18 @@ export const normalizeUserMessageDisplayParts = (parts: Part[]): AgentUserMessag
 };
 
 export const hasVisibleUserTextDisplayPart = (parts: AgentUserMessageDisplayPart[]): boolean => {
-  return parts.some(
-    (part) => part.kind === "text" && !part.synthetic && part.text.trim().length > 0,
-  );
+  return parts.some((part) => part.kind === "text" && !part.synthetic && part.text.length > 0);
 };
 
 export const ensureVisibleUserTextDisplayParts = (
   parts: AgentUserMessageDisplayPart[],
   fallbackText: string,
 ): AgentUserMessageDisplayPart[] => {
-  const normalizedFallbackText = fallbackText.trim();
-  if (hasVisibleUserTextDisplayPart(parts) || normalizedFallbackText.length === 0) {
+  if (hasVisibleUserTextDisplayPart(parts) || fallbackText.length === 0) {
     return parts;
   }
 
-  return [{ kind: "text", text: normalizedFallbackText }, ...parts];
+  return [{ kind: "text", text: fallbackText }, ...parts];
 };
 
 export const readVisibleUserTextFromDisplayParts = (
@@ -128,22 +127,20 @@ export const readVisibleUserTextFromDisplayParts = (
         part.kind === "text" && !part.synthetic,
     )
     .map((part) => part.text)
-    .join("")
-    .trim();
+    .join("");
   if (visibleText.length > 0) {
     return visibleText;
   }
 
-  return parts
-    .flatMap((part) =>
-      part.kind === "file_reference" && part.sourceText?.value
-        ? [{ start: part.sourceText.start, value: part.sourceText.value }]
-        : [],
-    )
-    .sort((left, right) => left.start - right.start)
-    .map((part) => part.value)
-    .join("")
-    .trim();
+  const userMessageParts = parts.flatMap<AgentUserMessagePart>((part) => {
+    if (part.kind === "text") {
+      return part.synthetic ? [] : [{ kind: "text", text: part.text }];
+    }
+
+    return [{ kind: "file_reference", file: part.file }];
+  });
+
+  return serializeAgentUserMessagePartsToText(userMessageParts);
 };
 
 export const readTextFromMessageInfo = (info: unknown): string => {
@@ -156,7 +153,7 @@ export const readTextFromMessageInfo = (info: unknown): string => {
     readUnknownProp(record, "text") ??
     readUnknownProp(record, "content") ??
     readUnknownProp(readRecordProp(record, "message"), "text");
-  return typeof direct === "string" ? direct.trim() : "";
+  return typeof direct === "string" ? direct : "";
 };
 
 export const sanitizeAssistantMessage = (rawMessage: string): string => rawMessage.trim();

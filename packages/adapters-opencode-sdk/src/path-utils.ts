@@ -1,5 +1,24 @@
 const normalizeSeparators = (path: string): string => path.replace(/\\+/g, "/");
 
+const isWindowsDrivePath = (path: string): boolean => /^[A-Za-z]:\//.test(path);
+
+const normalizePathForComparison = (path: string): string => {
+  return isWindowsDrivePath(path) ? path.toLowerCase() : path;
+};
+
+const encodeFilePathForUrl = (path: string): string => {
+  return path
+    .split("/")
+    .map((segment, index) => {
+      if (segment.length === 0) {
+        return index === 0 ? "" : segment;
+      }
+      return encodeURIComponent(segment);
+    })
+    .join("/")
+    .replace(/^([A-Za-z])%3A\//, "$1:/");
+};
+
 const trimTrailingSeparators = (path: string): string => {
   const trimmed = path.replace(/\/+$/g, "");
   return trimmed.length > 0 ? trimmed : path;
@@ -29,14 +48,20 @@ export const toProjectRelativePath = (path: string, workingDirectory: string): s
     return normalizedPath;
   }
 
-  if (normalizedPath === normalizedWorkingDirectory) {
+  const comparablePath = normalizePathForComparison(normalizedPath);
+  const comparableWorkingDirectory = normalizePathForComparison(normalizedWorkingDirectory);
+
+  if (comparablePath === comparableWorkingDirectory) {
     return normalizedPath;
   }
 
   const workingDirectoryPrefix = normalizedWorkingDirectory.endsWith("/")
     ? normalizedWorkingDirectory
     : `${normalizedWorkingDirectory}/`;
-  if (normalizedPath.startsWith(workingDirectoryPrefix)) {
+  const comparableWorkingDirectoryPrefix = comparableWorkingDirectory.endsWith("/")
+    ? comparableWorkingDirectory
+    : `${comparableWorkingDirectory}/`;
+  if (comparablePath.startsWith(comparableWorkingDirectoryPrefix)) {
     return normalizedPath.slice(workingDirectoryPrefix.length);
   }
 
@@ -60,7 +85,16 @@ export const resolveAgainstWorkingDirectory = (workingDirectory: string, path: s
 };
 
 export const toFileUrl = (path: string): string => {
-  const normalizedPath = normalizeSeparators(path);
-  const filePath = /^[A-Za-z]:\//.test(normalizedPath) ? `/${normalizedPath}` : normalizedPath;
-  return `file://${encodeURI(filePath)}`;
+  const normalizedPath = normalizeSeparators(path.trim());
+  if (!isAbsolutePath(normalizedPath)) {
+    throw new Error("OpenCode file URLs require an absolute path.");
+  }
+
+  const absolutePath = normalizedPath;
+
+  if (isWindowsDrivePath(absolutePath)) {
+    return `file:///${encodeFilePathForUrl(absolutePath)}`;
+  }
+
+  return `file://${encodeFilePathForUrl(absolutePath)}`;
 };

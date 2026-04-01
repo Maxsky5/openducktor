@@ -62,7 +62,6 @@ export function AgentChatComposerSlashMenu({
                   event.preventDefault();
                   onSelectCommand(command);
                 }}
-                onClick={() => onSelectCommand(command)}
               >
                 <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                   <Terminal className="size-3.5" />

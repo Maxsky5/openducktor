@@ -41,7 +41,7 @@ describe("message-normalizers", () => {
 
   test("readTextFromMessageInfo resolves nested message text", () => {
     expect(readTextFromMessageInfo({ message: { text: "  From nested info  " } })).toBe(
-      "From nested info",
+      "  From nested info  ",
     );
     expect(readTextFromMessageInfo(null)).toBe("");
   });
@@ -218,6 +218,55 @@ describe("message-normalizers", () => {
         },
       ]),
     ).toBe("@src/only.ts");
+
+    expect(
+      readVisibleUserTextFromDisplayParts([
+        { kind: "text", text: "  keep boundary whitespace  " },
+        {
+          kind: "text",
+          text: "ignored synthetic",
+          synthetic: true,
+        },
+      ]),
+    ).toBe("  keep boundary whitespace  ");
+
+    expect(
+      readVisibleUserTextFromDisplayParts([
+        {
+          kind: "file_reference",
+          file: {
+            id: "file-3",
+            path: "src/alpha.ts",
+            name: "alpha.ts",
+            kind: "code",
+          },
+          sourceText: {
+            value: "@src/alpha.ts",
+            start: 0,
+            end: 13,
+          },
+        },
+        {
+          kind: "file_reference",
+          file: {
+            id: "file-4",
+            path: "src/beta.ts",
+            name: "beta.ts",
+            kind: "code",
+          },
+          sourceText: {
+            value: "@src/beta.ts",
+            start: 13,
+            end: 25,
+          },
+        },
+        {
+          kind: "text",
+          text: "ignored synthetic",
+          synthetic: true,
+        },
+      ]),
+    ).toBe("@src/alpha.ts @src/beta.ts");
   });
 
   test("sanitizeAssistantMessage trims surrounding whitespace", () => {

@@ -243,6 +243,8 @@ export const historyToChatMessages = (
   let previousUserTimestampMs: number | null = null;
 
   for (const message of history) {
+    const userDisplayParts = message.role === "user" ? (message.displayParts ?? []) : [];
+
     for (const part of message.parts) {
       const partMessage = historyPartToChatMessage(message, part);
       if (partMessage) {
@@ -250,9 +252,8 @@ export const historyToChatMessages = (
       }
     }
 
-    const content = message.text.trim();
-    const shouldRenderPrimaryMessage =
-      content.length > 0 || (message.role === "user" && message.displayParts.length > 0);
+    const content = message.text;
+    const shouldRenderPrimaryMessage = content.length > 0 || userDisplayParts.length > 0;
     if (shouldRenderPrimaryMessage) {
       const isFinalAssistantMessage = isFinalAssistantHistoryMessage(message);
       const assistantDurationMs = assistantDurationFromHistory(message, previousUserTimestampMs);
@@ -267,7 +268,7 @@ export const historyToChatMessages = (
           isFinalAssistantMessage ? message.totalTokens : undefined,
         );
       } else if (message.role === "user") {
-        meta = userMessageMeta(message.model, message.state, message.displayParts);
+        meta = userMessageMeta(message.model, message.state, userDisplayParts);
       }
 
       next.push({
@@ -279,7 +280,7 @@ export const historyToChatMessages = (
       });
     }
 
-    if (message.role === "user" && (content.length > 0 || message.displayParts.length > 0)) {
+    if (message.role === "user" && (content.length > 0 || userDisplayParts.length > 0)) {
       const parsed = Date.parse(message.timestamp);
       previousUserTimestampMs = Number.isNaN(parsed) ? previousUserTimestampMs : parsed;
     }

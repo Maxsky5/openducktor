@@ -1,6 +1,5 @@
 import type { AgentFileSearchResultKind } from "@openducktor/core";
-import { type ComponentProps, createElement, type ReactElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import type { ComponentProps, ReactElement } from "react";
 import { Badge, badgeVariants } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -56,12 +55,6 @@ export function AgentChatInlineFileReferenceChip({
     </Badge>
   );
 }
-
-export const getAgentChatInlineFileReferenceChipMarkup = (
-  props: AgentChatInlineFileReferenceChipProps,
-): string => {
-  return renderToStaticMarkup(createElement(AgentChatInlineFileReferenceChip, props));
-};
 
 export function AgentChatFileReferenceChip({
   file,
