@@ -1,9 +1,8 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { cleanup, render } from "@testing-library/react";
 import { createElement, createRef } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { buildMessage, buildSession, TEST_ROLE_OPTIONS } from "./agent-chat-test-fixtures";
-
-let AgentChatThread: typeof import("./agent-chat-thread").AgentChatThread;
+import { AgentChatThread } from "./agent-chat-thread";
 
 const buildBaseModel = () => ({
   isSessionWorking: false,
@@ -52,22 +51,18 @@ const buildLongSession = (sessionId: string, count = 80) => {
   });
 };
 
-beforeAll(async () => {
-  mock.module("@/lib/runtime", () => ({
-    isTauriRuntime: () => true,
-    assertTauriRuntime: () => {},
-  }));
-
-  ({ AgentChatThread } = await import("./agent-chat-thread"));
-});
-
-afterAll(() => {
-  mock.restore();
+afterEach(() => {
+  const runtimeWindow = globalThis.window as Window & { __TAURI_INTERNALS__?: object };
+  delete runtimeWindow.__TAURI_INTERNALS__;
+  cleanup();
 });
 
 describe("AgentChatThread Tauri runtime", () => {
   test("disables turn containment in the Tauri runtime", () => {
-    const html = renderToStaticMarkup(
+    const runtimeWindow = globalThis.window as Window & { __TAURI_INTERNALS__?: object };
+    runtimeWindow.__TAURI_INTERNALS__ = {};
+
+    const rendered = render(
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
@@ -76,7 +71,7 @@ describe("AgentChatThread Tauri runtime", () => {
       }),
     );
 
-    expect(html).not.toContain("content-visibility:auto");
-    expect(html).not.toContain("contain-intrinsic-size:auto 500px");
+    expect(rendered.container.querySelector('[style*="content-visibility"]')).toBeNull();
+    expect(rendered.container.querySelector('[style*="contain-intrinsic-size"]')).toBeNull();
   });
 });
