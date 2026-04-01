@@ -641,6 +641,35 @@ export const useAgentChatComposerEditor = ({
     [rememberSelectionTarget, repairCollapsedSelection, syncMenusForSelectionTarget],
   );
 
+  const resolveSelectionTargetForLineBreak = useCallback(
+    (
+      root: HTMLDivElement,
+      sourceDraft: AgentChatComposerDraft,
+      activeSelection: ActiveTextSelection | null,
+    ): TextSelectionTarget | null => {
+      if (activeSelection) {
+        return resolveTextSelectionTarget(sourceDraft, {
+          segmentId: activeSelection.segmentId,
+          offset: activeSelection.caretOffset ?? activeSelection.text.length,
+        });
+      }
+
+      const repairedSelection = repairCollapsedSelection(root, sourceDraft);
+      if (repairedSelection) {
+        return resolveTextSelectionTarget(sourceDraft, {
+          segmentId: repairedSelection.segmentId,
+          offset: repairedSelection.caretOffset ?? repairedSelection.text.length,
+        });
+      }
+
+      return (
+        resolveTextSelectionTarget(sourceDraft, rememberedSelectionRef.current) ??
+        getLastTextSelectionTarget(sourceDraft)
+      );
+    },
+    [repairCollapsedSelection],
+  );
+
   useEffect(() => {
     if (!disabled && supportsSlashCommands) {
       return;
@@ -876,12 +905,7 @@ export const useAgentChatComposerEditor = ({
       closeFileMenu();
 
       void insertNewlineAtSelectionTarget(
-        activeSelection
-          ? {
-              segmentId: activeSelection.segmentId,
-              offset: activeSelection.caretOffset ?? activeSelection.text.length,
-            }
-          : rememberedSelectionRef.current,
+        resolveSelectionTargetForLineBreak(event.currentTarget, sourceDraft, activeSelection),
       );
     },
     [
@@ -890,6 +914,7 @@ export const useAgentChatComposerEditor = ({
       insertNewlineAtSelectionTarget,
       rememberSelectionTarget,
       repairCollapsedSelection,
+      resolveSelectionTargetForLineBreak,
     ],
   );
 
@@ -1019,12 +1044,7 @@ export const useAgentChatComposerEditor = ({
       if (event.key === "Enter" && event.shiftKey) {
         event.preventDefault();
         void insertNewlineAtSelectionTarget(
-          activeSelection
-            ? {
-                segmentId: activeSelection.segmentId,
-                offset: activeSelection.caretOffset ?? activeSelection.text.length,
-              }
-            : rememberedSelectionRef.current,
+          resolveSelectionTargetForLineBreak(root, sourceDraft, activeSelection),
         );
         return;
       }
@@ -1083,6 +1103,7 @@ export const useAgentChatComposerEditor = ({
       insertNewlineAtSelectionTarget,
       onSend,
       repairCollapsedSelection,
+      resolveSelectionTargetForLineBreak,
       selectFileSearchResult,
       selectSlashCommand,
       slashMenuState,

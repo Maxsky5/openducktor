@@ -6,7 +6,28 @@ import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
 import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fixtures";
 
 let AgentChatComposerEditor: typeof import("./agent-chat-composer-editor").AgentChatComposerEditor;
-const setCaretOffsetWithinElementMock = mock(() => {});
+const setCaretOffsetWithinElementMock = mock((element: HTMLElement, logicalOffset: number) => {
+  const selection =
+    element.ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
+  if (!selection) {
+    return;
+  }
+
+  let textNode = element.firstChild;
+  if (!(textNode instanceof Text)) {
+    textNode = element.ownerDocument.createTextNode((element.textContent ?? "") || "\u200B");
+    element.replaceChildren(textNode);
+  }
+
+  const textContent = textNode.textContent ?? "";
+  const boundedOffset =
+    textContent === "\u200B" ? 1 : Math.max(0, Math.min(logicalOffset, textContent.length));
+  const range = element.ownerDocument.createRange();
+  range.setStart(textNode, boundedOffset);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+});
 const getCaretOffsetWithinElementMock = mock(
   (element: HTMLElement): number | null =>
     (element.textContent ?? "").replace(/\u200B/g, "").length,
@@ -599,6 +620,32 @@ describe("AgentChatComposerEditor", () => {
       .mockImplementationOnce(() => null);
 
     fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+
+    await waitFor(() => {
+      const updatedEditable = rendered.container.querySelector("[data-composer-content-root]");
+      expect(updatedEditable?.textContent).toBe("hello\n");
+    });
+  });
+
+  test("repairs the first shift-enter when selection is collapsed on the editor root", async () => {
+    resetSelectionMocks();
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        initialDraft={createComposerDraft("hello")}
+      />,
+    );
+
+    const editorRoot = getEditorRoot(rendered.container);
+    const collapsedRange = document.createRange();
+    collapsedRange.setStart(editorRoot, 0);
+    collapsedRange.collapse(true);
+    const selection = globalThis.getSelection?.();
+    selection?.removeAllRanges();
+    selection?.addRange(collapsedRange);
+
+    fireEvent.keyDown(editorRoot, { key: "Enter", shiftKey: true });
 
     await waitFor(() => {
       const updatedEditable = rendered.container.querySelector("[data-composer-content-root]");
