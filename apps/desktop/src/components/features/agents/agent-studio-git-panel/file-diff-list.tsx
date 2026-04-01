@@ -4,6 +4,8 @@ import { memo, type ReactElement, useMemo } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { PRELOAD_DIFF_LIMIT } from "./constants";
+import { DiffPreloadQueue } from "./diff-preload-queue";
 import { FileDiffEntryWithMemo } from "./file-diff-entry";
 
 type FileDiffListProps = {
@@ -112,6 +114,13 @@ export const FileDiffList = memo(function FileDiffList({
           </span>
         </div>
       </div>
+
+      <DiffPreloadQueue
+        fileDiffs={fileDiffs}
+        expandedFiles={expandedFiles}
+        limit={PRELOAD_DIFF_LIMIT}
+      />
+
       {fileDiffs.map((diff) => (
         <FileDiffEntryWithMemo
           key={diff.file}

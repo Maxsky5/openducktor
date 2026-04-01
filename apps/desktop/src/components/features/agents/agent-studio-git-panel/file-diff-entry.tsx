@@ -2,7 +2,10 @@ import type { FileDiff } from "@openducktor/contracts";
 import { AlertTriangle, ChevronDown, ChevronRight, FileText, Undo2 } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
-import { PierreDiffViewer } from "@/components/features/agents/pierre-diff-viewer";
+import {
+  PierreDiffPreloader,
+  PierreDiffViewer,
+} from "@/components/features/agents/pierre-diff-viewer";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -51,6 +54,10 @@ function FileDiffEntry({
 
   return (
     <div className="min-w-0 max-w-full">
+      {isExpanded && hasDiffContent ? (
+        <PierreDiffPreloader patch={diff.diff} filePath={diff.file} />
+      ) : null}
+
       <div className="flex items-center gap-1 px-3 py-1.5 transition-colors hover:bg-muted/50">
         <button
           type="button"
