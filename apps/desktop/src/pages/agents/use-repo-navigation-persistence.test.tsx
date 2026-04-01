@@ -38,6 +38,31 @@ const createMemoryStorage = (): StorageLike => {
   };
 };
 
+const createRecordingStorage = () => {
+  const store = new Map<string, string>();
+  const writes: Array<{ key: string; value: string }> = [];
+
+  const storage: StorageLike = {
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => {
+      writes.push({ key, value });
+      store.set(key, value);
+    },
+    removeItem: (key) => {
+      store.delete(key);
+    },
+    clear: () => {
+      store.clear();
+    },
+    key: (index) => Array.from(store.keys())[index] ?? null,
+    get length() {
+      return store.size;
+    },
+  };
+
+  return { storage, writes };
+};
+
 const createThrowingStorage = (args: {
   throwOnGetItem?: boolean;
   throwOnSetItem?: boolean;
@@ -81,14 +106,16 @@ const useHookHarness = ({ activeRepo, initialNavigation }: HookArgs) => {
     },
   );
 
-  const { persistenceError, retryPersistenceRestore } = useRepoNavigationPersistence({
-    activeRepo,
-    navigation,
-    setNavigation,
-  });
+  const { isRepoNavigationBoundaryPending, persistenceError, retryPersistenceRestore } =
+    useRepoNavigationPersistence({
+      activeRepo,
+      navigation,
+      setNavigation,
+    });
 
   return {
     navigation,
+    isRepoNavigationBoundaryPending,
     persistenceError,
     retryPersistenceRestore,
     setNavigation,
@@ -349,6 +376,63 @@ describe("useRepoNavigationPersistence", () => {
       await harness.waitFor((state) => state.navigation.taskId === "task-from-repo-b");
 
       expect(harness.getLatest().persistenceError).toBeNull();
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
+  test("clears stale repo navigation before restoring and persisting the next repo context", async () => {
+    const { storage, writes } = createRecordingStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: storage,
+    });
+
+    try {
+      storage.setItem(
+        toContextStorageKey("/repo-b"),
+        JSON.stringify({
+          taskId: "task-b",
+          role: "planner",
+          sessionId: "session-b",
+        }),
+      );
+
+      const harness = createHookHarness({
+        activeRepo: "/repo-a",
+        initialNavigation: {
+          taskId: "task-a",
+          sessionId: "session-a",
+          role: "build",
+          scenario: "build_implementation_start",
+        },
+      });
+
+      await harness.mount();
+
+      await harness.update({
+        activeRepo: "/repo-b",
+      });
+
+      await harness.waitFor((state) => state.navigation.taskId === "task-b");
+
+      expect(harness.getLatest().isRepoNavigationBoundaryPending).toBeFalse();
+      expect(harness.getLatest().navigation).toEqual({
+        taskId: "task-b",
+        sessionId: "session-b",
+        role: "planner",
+        scenario: null,
+      });
+
+      const repoBWrites = writes.filter((entry) => entry.key === toContextStorageKey("/repo-b"));
+      expect(repoBWrites.some((entry) => entry.value.includes("task-a"))).toBeFalse();
+      expect(repoBWrites.some((entry) => entry.value.includes("session-a"))).toBeFalse();
+
       await harness.unmount();
     } finally {
       Object.defineProperty(globalThis, "localStorage", {

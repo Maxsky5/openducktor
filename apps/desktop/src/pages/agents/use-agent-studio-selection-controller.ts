@@ -20,6 +20,7 @@ import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 type UseAgentStudioSelectionControllerArgs = {
   activeRepo: string | null;
+  isRepoNavigationBoundaryPending: boolean;
   agentStudioReadinessState: AgentStudioReadinessState;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
@@ -147,6 +148,7 @@ export const buildSessionsByTaskIdWithCache = (
 
 export function useAgentStudioSelectionController({
   activeRepo,
+  isRepoNavigationBoundaryPending,
   agentStudioReadinessState,
   tasks,
   isLoadingTasks,
@@ -164,6 +166,15 @@ export function useAgentStudioSelectionController({
   onContextSwitchIntent,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
   const sessionsByTaskSortCacheRef = useRef<SessionsByTaskSortCache>(new Map());
+  const effectiveTaskIdParam = isRepoNavigationBoundaryPending ? "" : taskIdParam;
+  const effectiveSessionParam = isRepoNavigationBoundaryPending ? null : sessionParam;
+  const effectiveHasExplicitRoleParam = isRepoNavigationBoundaryPending
+    ? false
+    : hasExplicitRoleParam;
+  const effectiveRoleFromQuery: AgentRole = isRepoNavigationBoundaryPending
+    ? "spec"
+    : roleFromQuery;
+  const effectiveScenarioFromQuery = isRepoNavigationBoundaryPending ? null : scenarioFromQuery;
 
   const tasksById = useMemo(() => {
     return new Map(tasks.map((task) => [task.id, task]));
@@ -183,12 +194,12 @@ export function useAgentStudioSelectionController({
   }, [sessions]);
 
   const selectedSessionById = useMemo(
-    () => (sessionParam ? (sessionsById.get(sessionParam) ?? null) : null),
-    [sessionParam, sessionsById],
+    () => (effectiveSessionParam ? (sessionsById.get(effectiveSessionParam) ?? null) : null),
+    [effectiveSessionParam, sessionsById],
   );
 
   const taskId = resolveAgentStudioTaskId({
-    taskIdParam,
+    taskIdParam: effectiveTaskIdParam,
     selectedSessionById,
   });
 
@@ -207,19 +218,19 @@ export function useAgentStudioSelectionController({
   const activeSession = useMemo(() => {
     return resolveAgentStudioSessionSelection({
       sessionsForTask,
-      sessionParam,
-      hasExplicitRoleParam,
-      roleFromQuery,
+      sessionParam: effectiveSessionParam,
+      hasExplicitRoleParam: effectiveHasExplicitRoleParam,
+      roleFromQuery: effectiveRoleFromQuery,
       selectedTask,
-      fallbackRole: roleFromQuery,
-      scenarioFromQuery,
+      fallbackRole: effectiveRoleFromQuery,
+      scenarioFromQuery: effectiveScenarioFromQuery,
     }).activeSession;
   }, [
-    hasExplicitRoleParam,
-    roleFromQuery,
-    scenarioFromQuery,
+    effectiveHasExplicitRoleParam,
+    effectiveRoleFromQuery,
+    effectiveScenarioFromQuery,
+    effectiveSessionParam,
     selectedTask,
-    sessionParam,
     sessionsForTask,
   ]);
   const hydratedActiveSession = useAgentStudioActiveSessionRuntimeData({
@@ -288,34 +299,34 @@ export function useAgentStudioSelectionController({
   }, [sessionsByTaskId, viewTaskId]);
 
   const viewSessionParam = useMemo(() => {
-    if (!sessionParam) {
+    if (!effectiveSessionParam) {
       return null;
     }
 
     const belongsToViewTask = viewSessionsForTask.some(
-      (session) => session.sessionId === sessionParam,
+      (session) => session.sessionId === effectiveSessionParam,
     );
-    return belongsToViewTask ? sessionParam : null;
-  }, [sessionParam, viewSessionsForTask]);
+    return belongsToViewTask ? effectiveSessionParam : null;
+  }, [effectiveSessionParam, viewSessionsForTask]);
 
   const isViewTaskDetachedFromQuery = Boolean(viewTaskId && taskId && viewTaskId !== taskId);
-  const hasViewRoleSelection = hasExplicitRoleParam && !isViewTaskDetachedFromQuery;
+  const hasViewRoleSelection = effectiveHasExplicitRoleParam && !isViewTaskDetachedFromQuery;
 
   const viewSelection = useMemo(() => {
     return resolveAgentStudioSessionSelection({
       sessionsForTask: viewSessionsForTask,
       sessionParam: viewSessionParam,
       hasExplicitRoleParam: hasViewRoleSelection,
-      roleFromQuery,
+      roleFromQuery: effectiveRoleFromQuery,
       selectedTask: viewSelectedTask,
-      fallbackRole: isViewTaskDetachedFromQuery ? "spec" : roleFromQuery,
-      scenarioFromQuery,
+      fallbackRole: isViewTaskDetachedFromQuery ? "spec" : effectiveRoleFromQuery,
+      scenarioFromQuery: effectiveScenarioFromQuery,
     });
   }, [
     hasViewRoleSelection,
     isViewTaskDetachedFromQuery,
-    roleFromQuery,
-    scenarioFromQuery,
+    effectiveRoleFromQuery,
+    effectiveScenarioFromQuery,
     viewSelectedTask,
     viewSessionParam,
     viewSessionsForTask,

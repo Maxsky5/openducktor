@@ -164,6 +164,26 @@ export const isSameNavigationState = (
   );
 };
 
+export const clearAgentStudioNavigationState = (
+  current: AgentStudioNavigationState,
+): AgentStudioNavigationState => {
+  return {
+    ...current,
+    taskId: "",
+    sessionId: null,
+    role: null,
+    scenario: null,
+  };
+};
+
+export const hasAgentStudioNavigationSelection = (
+  navigation: AgentStudioNavigationState,
+): boolean => {
+  return Boolean(
+    navigation.taskId || navigation.sessionId || navigation.role || navigation.scenario,
+  );
+};
+
 export const parsePersistedContext = (raw: string): PersistedAgentStudioContext => {
   let parsed: unknown;
   try {

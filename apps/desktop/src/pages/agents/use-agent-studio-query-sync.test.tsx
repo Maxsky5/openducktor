@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { useState } from "react";
 import type { SetURLSearchParams } from "react-router-dom";
 import {
   createHookHarness as createSharedHookHarness,
@@ -38,6 +39,38 @@ const createMemoryStorage = (): StorageLike => {
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioQuerySync, initialProps);
+
+const createStatefulQuerySyncHarness = (
+  initialProps: Pick<HookArgs, "activeRepo"> & { initialSearchParams: string },
+) =>
+  createSharedHookHarness(
+    ({
+      activeRepo,
+      initialSearchParams,
+    }: Pick<HookArgs, "activeRepo"> & {
+      initialSearchParams: string;
+    }) => {
+      const [searchParams, setSearchParamsState] = useState(
+        () => new URLSearchParams(initialSearchParams),
+      );
+      const setSearchParams: SetURLSearchParams = (nextInit) => {
+        if (nextInit instanceof URLSearchParams) {
+          setSearchParamsState(new URLSearchParams(nextInit));
+          return;
+        }
+
+        throw new Error("Expected URLSearchParams update in test harness");
+      };
+
+      return useAgentStudioQuerySync({
+        activeRepo,
+        navigationType: "REPLACE",
+        searchParams,
+        setSearchParams,
+      });
+    },
+    initialProps,
+  );
 
 describe("useAgentStudioQuerySync", () => {
   test("parses initial search params and syncs updates through a root-owned URL effect", async () => {
@@ -248,6 +281,53 @@ describe("useAgentStudioQuerySync", () => {
       expect(latest.sessionParam).toBe("session-from-url");
       expect(latest.roleFromQuery).toBe("spec");
       expect(latest.hasExplicitRoleParam).toBe(true);
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
+  test("clears stale URL authority on repo switch before restoring the next repo context", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      memoryStorage.setItem(
+        toContextStorageKey("/repo-b"),
+        JSON.stringify({
+          taskId: "task-from-repo-b",
+          role: "planner",
+          sessionId: "session-from-repo-b",
+        }),
+      );
+
+      const harness = createStatefulQuerySyncHarness({
+        activeRepo: "/repo-a",
+        initialSearchParams: "task=task-from-repo-a&session=session-from-repo-a&agent=build",
+      });
+
+      await harness.mount();
+
+      await harness.update({
+        activeRepo: "/repo-b",
+        initialSearchParams: "task=task-from-repo-a&session=session-from-repo-a&agent=build",
+      });
+
+      await harness.waitFor((state) => state.taskIdParam === "task-from-repo-b");
+
+      const latest = harness.getLatest();
+      expect(latest.isRepoNavigationBoundaryPending).toBeFalse();
+      expect(latest.taskIdParam).toBe("task-from-repo-b");
+      expect(latest.sessionParam).toBe("session-from-repo-b");
+      expect(latest.roleFromQuery).toBe("planner");
+
       await harness.unmount();
     } finally {
       Object.defineProperty(globalThis, "localStorage", {

@@ -29,6 +29,7 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useHookHarness, initialProps);
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
+  isRepoNavigationBoundaryPending: false,
   isLoadingTasks: false,
   tasks: [createTask("task-1")],
   taskIdParam: "task-1",
@@ -104,6 +105,29 @@ describe("useAgentStudioQuerySessionSync", () => {
         taskIdParam: "missing-task",
         sessionParam: "session-2",
         taskId: "",
+        scheduleQueryUpdate,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      expect(scheduleQueryUpdate).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("skips query reconciliation while repo navigation boundary reset is pending", async () => {
+    const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
+    const selectedSession = createSession("task-2", "session-2");
+    const harness = createHookHarness(
+      createBaseArgs({
+        isRepoNavigationBoundaryPending: true,
+        tasks: [createTask("task-1"), createTask("task-2")],
+        taskIdParam: "task-1",
+        sessionParam: "session-2",
+        selectedSessionById: selectedSession,
+        taskId: "task-1",
         scheduleQueryUpdate,
       }),
     );

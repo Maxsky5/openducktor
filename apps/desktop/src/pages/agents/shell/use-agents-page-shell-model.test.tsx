@@ -33,6 +33,7 @@ type QuerySyncState = {
   hasExplicitRoleParam: boolean;
   roleFromQuery: "planner";
   scenarioFromQuery: "planner_initial";
+  isRepoNavigationBoundaryPending: boolean;
   navigationPersistenceError: Error | null;
   retryNavigationPersistence: typeof retryNavigationPersistence;
   updateQuery: typeof updateQuery;
@@ -158,6 +159,7 @@ let querySyncState: QuerySyncState = {
   hasExplicitRoleParam: false,
   roleFromQuery: "planner" as const,
   scenarioFromQuery: "planner_initial" as const,
+  isRepoNavigationBoundaryPending: false,
   navigationPersistenceError: new Error("navigation failed"),
   retryNavigationPersistence,
   updateQuery,
@@ -382,6 +384,7 @@ beforeEach(async () => {
     hasExplicitRoleParam: false,
     roleFromQuery: "planner",
     scenarioFromQuery: "planner_initial",
+    isRepoNavigationBoundaryPending: false,
     navigationPersistenceError: new Error("navigation failed"),
     retryNavigationPersistence,
     updateQuery,
