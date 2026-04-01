@@ -5,6 +5,10 @@ mod snapshot;
 pub(crate) use authorization::{
     invalidate_worktree_resolution_cache_for_repo, resolve_working_dir,
 };
+#[cfg(test)]
+pub(crate) use authorization::{
+    authorized_worktree_cache, cache_key, read_worktree_state_token, AuthorizedWorktreeCacheEntry,
+};
 pub use command_handlers::{
     git_abort_conflict, git_commit_all, git_commits_ahead_behind, git_create_worktree,
     git_get_branches, git_get_current_branch, git_get_diff, git_get_status,

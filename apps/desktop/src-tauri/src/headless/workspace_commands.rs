@@ -170,25 +170,25 @@ async fn handle_workspace_select(state: &HeadlessState, args: Value) -> CommandR
 
 fn handle_workspace_update_repo_config(state: &HeadlessState, args: Value) -> CommandResult {
     let WorkspaceUpdateRepoConfigArgs { repo_path, config } = deserialize_args(args)?;
-    serialize_value(
-        state
-            .service
-            .workspace_merge_repo_config(
-                &repo_path,
-                RepoConfigUpdate {
-                    default_runtime_kind: config.default_runtime_kind,
-                    worktree_base_path: config.worktree_base_path,
-                    branch_prefix: config.branch_prefix,
-                    default_target_branch: config.default_target_branch,
-                    git: config.git,
-                    dev_servers: config.dev_servers,
-                    worktree_file_copies: config.worktree_file_copies,
-                    prompt_overrides: config.prompt_overrides,
-                    agent_defaults: config.agent_defaults,
-                },
-            )
-            .map_err(service_error)?,
-    )
+    let updated = state
+        .service
+        .workspace_merge_repo_config(
+            &repo_path,
+            RepoConfigUpdate {
+                default_runtime_kind: config.default_runtime_kind,
+                worktree_base_path: config.worktree_base_path,
+                branch_prefix: config.branch_prefix,
+                default_target_branch: config.default_target_branch,
+                git: config.git,
+                dev_servers: config.dev_servers,
+                worktree_file_copies: config.worktree_file_copies,
+                prompt_overrides: config.prompt_overrides,
+                agent_defaults: config.agent_defaults,
+            },
+        )
+        .map_err(service_error)?;
+    super::command_support::invalidate_repo_worktree_cache(&repo_path)?;
+    serialize_value(updated)
 }
 
 async fn handle_workspace_save_repo_settings(state: &HeadlessState, args: Value) -> CommandResult {
@@ -197,6 +197,7 @@ async fn handle_workspace_save_repo_settings(state: &HeadlessState, args: Value)
         settings,
     } = deserialize_args(args)?;
     let service = state.service.clone();
+    let repo_path_for_worker = repo_path.clone();
     let confirmation_port = HeadlessHookTrustConfirmationPort;
     let update = RepoSettingsUpdate {
         default_runtime_kind: settings.default_runtime_kind,
@@ -211,13 +212,13 @@ async fn handle_workspace_save_repo_settings(state: &HeadlessState, args: Value)
         prompt_overrides: settings.prompt_overrides,
         agent_defaults: settings.agent_defaults,
     };
-    serialize_value(
-        run_service_blocking_tokio("workspace_save_repo_settings", move || {
-            service.workspace_save_repo_settings(&repo_path, update, &confirmation_port)
-        })
-        .await
-        .map_err(service_error)?,
-    )
+    let updated = run_service_blocking_tokio("workspace_save_repo_settings", move || {
+        service.workspace_save_repo_settings(&repo_path_for_worker, update, &confirmation_port)
+    })
+    .await
+    .map_err(service_error)?;
+    super::command_support::invalidate_repo_worktree_cache(&repo_path)?;
+    serialize_value(updated)
 }
 
 fn handle_workspace_update_repo_hooks(state: &HeadlessState, args: Value) -> CommandResult {
@@ -276,24 +277,27 @@ async fn handle_workspace_save_settings_snapshot(
         repos,
         global_prompt_overrides,
     } = snapshot;
-    serialize_value(
-        run_service_blocking_tokio("workspace_save_settings_snapshot", move || {
-            service.workspace_save_settings_snapshot(
-                WorkspaceSettingsSnapshotUpdate {
-                    theme,
-                    git,
-                    chat,
-                    kanban,
-                    autopilot,
-                    repos,
-                    global_prompt_overrides,
-                },
-                &confirmation_port,
-            )
-        })
-        .await
-        .map_err(service_error)?,
-    )
+    let repo_paths_to_invalidate = repos.keys().cloned().collect::<Vec<_>>();
+    let updated = run_service_blocking_tokio("workspace_save_settings_snapshot", move || {
+        service.workspace_save_settings_snapshot(
+            WorkspaceSettingsSnapshotUpdate {
+                theme,
+                git,
+                chat,
+                kanban,
+                autopilot,
+                repos,
+                global_prompt_overrides,
+            },
+            &confirmation_port,
+        )
+    })
+    .await
+    .map_err(service_error)?;
+    for repo_path in &repo_paths_to_invalidate {
+        super::command_support::invalidate_repo_worktree_cache(repo_path)?;
+    }
+    serialize_value(updated)
 }
 
 async fn handle_workspace_set_trusted_hooks(
