@@ -415,6 +415,35 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain(">System<");
   });
 
+  test("renders session error notices as destructive cards", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "session-notice-error",
+          role: "system",
+          content: "Our servers are currently overloaded. Please try again later.",
+          timestamp: "2026-02-22T10:21:50.000Z",
+          meta: {
+            kind: "session_notice",
+            tone: "error",
+            reason: "session_error",
+            title: "Error",
+          },
+        },
+        sessionRole: "build",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("border-destructive-border");
+    expect(html).toContain("bg-destructive-surface");
+    expect(html).toContain("Our servers are currently overloaded. Please try again later.");
+    expect(html).toContain("Error");
+    expect(html).not.toContain("border-cancelled-border");
+    expect(html).not.toContain(">System<");
+  });
+
   test("renders system prompt as expandable card", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {

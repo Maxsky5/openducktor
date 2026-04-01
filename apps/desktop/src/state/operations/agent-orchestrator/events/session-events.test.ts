@@ -701,7 +701,7 @@ describe("agent-orchestrator-session-events", () => {
     ).toBe(true);
   });
 
-  test("clears pending requests when session_error is received", () => {
+  test("records session_error as an error notice and clears pending requests", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_sessionId, handler) => {
@@ -785,11 +785,14 @@ describe("agent-orchestrator-session-events", () => {
     expect(sessionsRef.current["session-1"]?.status).toBe("error");
     expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
     expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
-    expect(
-      sessionsRef.current["session-1"]?.messages.some((message) =>
-        message.content.includes("Session error: Aborted"),
-      ),
-    ).toBe(true);
+    const lastMessage = sessionsRef.current["session-1"]?.messages.at(-1);
+    expect(lastMessage?.content).toBe("Aborted");
+    expect(lastMessage?.meta).toEqual({
+      kind: "session_notice",
+      tone: "error",
+      reason: "session_error",
+      title: "Error",
+    });
   });
 
   test("renders a cancelled session notice when a user-requested stop aborts", () => {
@@ -1171,11 +1174,14 @@ describe("agent-orchestrator-session-events", () => {
         message.content.includes("Session stopped at your request."),
       ),
     ).toBe(false);
-    expect(
-      sessionsRef.current["session-1"]?.messages.some((message) =>
-        message.content.includes("Session error: Permission denied"),
-      ),
-    ).toBe(true);
+    const lastMessage = sessionsRef.current["session-1"]?.messages.at(-1);
+    expect(lastMessage?.content).toBe("Permission denied");
+    expect(lastMessage?.meta).toEqual({
+      kind: "session_notice",
+      tone: "error",
+      reason: "session_error",
+      title: "Error",
+    });
   });
 
   test("finalizes assistant draft through status transitions", () => {

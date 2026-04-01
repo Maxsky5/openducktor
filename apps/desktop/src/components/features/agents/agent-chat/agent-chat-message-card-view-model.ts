@@ -89,7 +89,10 @@ const toArticleClassName = (
   }
 
   if (isSessionNoticeMessage) {
-    return "text-sm my-2 rounded-md border border-cancelled-border bg-cancelled-surface px-3 py-2 text-cancelled-surface-foreground";
+    const sessionNoticeTone = meta?.kind === "session_notice" ? meta.tone : "cancelled";
+    return sessionNoticeTone === "error"
+      ? "text-sm my-2 rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-destructive-surface-foreground"
+      : "text-sm my-2 rounded-md border border-cancelled-border bg-cancelled-surface px-3 py-2 text-cancelled-surface-foreground";
   }
 
   return cn(

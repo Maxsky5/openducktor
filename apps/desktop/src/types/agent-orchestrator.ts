@@ -71,8 +71,8 @@ export type AgentChatMessageMeta =
     }
   | {
       kind: "session_notice";
-      tone: "cancelled";
-      reason: "user_stopped";
+      tone: "cancelled" | "error";
+      reason: "user_stopped" | "session_error";
       title: string;
     };
 

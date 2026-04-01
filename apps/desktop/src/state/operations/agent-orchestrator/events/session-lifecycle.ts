@@ -393,6 +393,19 @@ const buildUserStoppedNoticeMessage = (timestamp: string) => ({
   },
 });
 
+const buildSessionErrorNoticeMessage = (timestamp: string, message: string) => ({
+  id: crypto.randomUUID(),
+  role: "system" as const,
+  content: message,
+  timestamp,
+  meta: {
+    kind: "session_notice" as const,
+    tone: "error" as const,
+    reason: "session_error" as const,
+    title: "Error",
+  },
+});
+
 const settleTerminalMessages = (
   messages: SessionLifecycleEventContext["store"]["sessionsRef"]["current"][string]["messages"],
   timestamp: string,
@@ -452,12 +465,7 @@ export const handleSessionError = (
                 outcome: "error",
                 errorMessage: sessionErrorMessage,
               }),
-              {
-                id: crypto.randomUUID(),
-                role: "system" as const,
-                content: `Session error: ${sessionErrorMessage}`,
-                timestamp: event.timestamp,
-              },
+              buildSessionErrorNoticeMessage(event.timestamp, sessionErrorMessage),
             ],
       };
     },
