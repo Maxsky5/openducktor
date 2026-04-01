@@ -166,7 +166,6 @@ export function useAgentChatWindow({
     scrollToTop: () => {
       const container = messagesContainerRef.current;
       if (container) {
-        // Prevent browser anchor compensation from undoing the explicit jump to top.
         container.style.overflowAnchor = "none";
       }
 

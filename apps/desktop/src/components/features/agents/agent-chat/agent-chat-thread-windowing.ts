@@ -100,11 +100,7 @@ export function getAgentChatWindowRowsKey(
 ): string {
   const signatureParts: string[] = [
     session.sessionId,
-    session.status,
     showThinkingMessages ? "thinking:on" : "thinking:off",
-    session.draftReasoningText,
-    session.draftReasoningMessageId ?? "",
-    String(session.pendingQuestions.length),
   ];
 
   for (const message of session.messages) {

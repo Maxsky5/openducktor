@@ -8,7 +8,6 @@ import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 const baseProps = {
   sessionAgentColors: {},
   sessionRole: "spec" as const,
-  sessionSelectedModel: null,
   sessionWorkingDirectory: "/repo",
 };
 

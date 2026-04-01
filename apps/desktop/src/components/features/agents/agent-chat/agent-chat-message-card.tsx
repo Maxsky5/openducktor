@@ -1,5 +1,5 @@
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import type { ReactElement } from "react";
+import { memo, type ReactElement } from "react";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { MessageBody, MessageHeader } from "./agent-chat-message-card-content";
 import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-view-model";
@@ -7,12 +7,12 @@ import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-vi
 type AgentChatMessageCardProps = {
   message: AgentChatMessage;
   sessionRole: AgentRole | null;
-  sessionSelectedModel: AgentModelSelection | null;
+  sessionSelectedModel?: AgentModelSelection | null;
   sessionAgentColors?: Record<string, string>;
   sessionWorkingDirectory?: string | null | undefined;
 };
 
-export function AgentChatMessageCard({
+export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   message,
   sessionRole,
   sessionSelectedModel,
@@ -22,7 +22,7 @@ export function AgentChatMessageCard({
   const vm = buildAgentChatMessageCardViewModel({
     message,
     sessionRole,
-    sessionSelectedModel,
+    sessionSelectedModel: sessionSelectedModel ?? null,
     sessionAgentColors,
   });
 
@@ -45,4 +45,4 @@ export function AgentChatMessageCard({
       />
     </article>
   );
-}
+});

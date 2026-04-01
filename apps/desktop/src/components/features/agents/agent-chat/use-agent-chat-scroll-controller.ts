@@ -17,6 +17,7 @@ type UseAgentChatScrollControllerResult = {
 };
 
 const AUTO_SCROLL_MARK_TTL_MS = 1500;
+
 export function useAgentChatScrollController({
   messagesContainerRef,
   messagesContentRef,
