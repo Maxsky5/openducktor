@@ -50,6 +50,7 @@ describe("AgentStudioTaskTabs", () => {
     expect(html).toContain("after:bg-card");
     expect(html).toContain("overflow-x-auto");
     expect(html).toContain("hide-scrollbar");
+    expect(html).toContain("max-w-full overflow-x-auto");
     expect(html).not.toContain("overflow-y-visible");
     expect(html).not.toContain("rounded-full border");
     expect(html).not.toContain("bg-card/80");

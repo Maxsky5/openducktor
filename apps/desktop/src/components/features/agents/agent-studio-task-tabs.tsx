@@ -106,84 +106,86 @@ export function AgentStudioTaskTabs({
   return (
     <div className="bg-studio-chrome px-2 pt-1.5 pb-0">
       <div className="flex min-w-0 items-center gap-1">
-        <div className="hide-scrollbar min-w-0 flex-1 overflow-x-auto">
-          <div className="inline-flex h-10 min-w-max items-center gap-1 px-2">
-            {hasAnyTab ? (
-              <TabsList
-                aria-label="Agent Studio task tabs"
-                className="h-auto min-h-10 w-max justify-start gap-1 rounded-none bg-transparent p-0"
-              >
-                {tabs.map((tab) => (
-                  <div
-                    key={tab.taskId}
-                    data-active={tab.isActive ? "true" : "false"}
-                    className={cn(
-                      "group relative z-1 inline-flex h-10 shrink-0 items-center gap-1 rounded-t-[10px] pl-2 pr-1",
-                      "transition-colors",
-                      tab.isActive
-                        ? "z-10 border-input border-b-transparent bg-card text-foreground hover:bg-card after:absolute after:right-0 after:bottom-0 after:left-0 after:h-px after:bg-card"
-                        : "border-input border-b-input bg-secondary text-foreground hover:bg-muted",
-                    )}
-                  >
-                    <TabsTrigger
-                      id={`agent-studio-tab-${tab.taskId}`}
-                      value={tab.taskId}
-                      className={cn(
-                        "h-9 max-w-[19rem] cursor-pointer justify-start gap-2 rounded-t-[8px] border-none bg-transparent px-0 pr-1 text-sm font-medium leading-none",
-                        "text-inherit data-[state=active]:bg-transparent data-[state=active]:text-inherit data-[state=active]:shadow-none",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                      )}
-                    >
-                      <span
-                        role="img"
-                        aria-label={statusLabelByTab(tab.status)}
-                        title={statusLabelByTab(tab.status)}
-                        className="inline-flex size-5 shrink-0 items-center justify-center"
-                      >
-                        {statusIconByTab(tab.status)}
-                      </span>
-                      <span className="max-w-52 truncate">{tab.taskTitle}</span>
-                    </TabsTrigger>
-                    <button
-                      type="button"
-                      className={cn(
-                        "mr-1 cursor-pointer rounded-md p-1 text-muted-foreground transition hover:bg-secondary hover:text-foreground",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                        "opacity-60 group-hover:opacity-100 data-[active=true]:opacity-100",
-                      )}
+        <div className="flex min-w-0 flex-1 items-center gap-1">
+          <div className="hide-scrollbar min-w-0 max-w-full overflow-x-auto">
+            <div className="inline-flex h-10 min-w-max items-center gap-1 px-2">
+              {hasAnyTab ? (
+                <TabsList
+                  aria-label="Agent Studio task tabs"
+                  className="h-auto min-h-10 w-max justify-start gap-1 rounded-none bg-transparent p-0"
+                >
+                  {tabs.map((tab) => (
+                    <div
+                      key={tab.taskId}
                       data-active={tab.isActive ? "true" : "false"}
-                      tabIndex={tab.isActive ? 0 : -1}
-                      aria-label={`Close tab for ${tab.taskTitle}`}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        onCloseTab(tab.taskId);
-                      }}
+                      className={cn(
+                        "group relative z-1 inline-flex h-10 shrink-0 items-center gap-1 rounded-t-[10px] pl-2 pr-1",
+                        "transition-colors",
+                        tab.isActive
+                          ? "z-10 border-input border-b-transparent bg-card text-foreground hover:bg-card after:absolute after:right-0 after:bottom-0 after:left-0 after:h-px after:bg-card"
+                          : "border-input border-b-input bg-secondary text-foreground hover:bg-muted",
+                      )}
                     >
-                      <X className="size-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </TabsList>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Open a task tab to start working with an agent.
-              </p>
-            )}
+                      <TabsTrigger
+                        id={`agent-studio-tab-${tab.taskId}`}
+                        value={tab.taskId}
+                        className={cn(
+                          "h-9 max-w-[19rem] cursor-pointer justify-start gap-2 rounded-t-[8px] border-none bg-transparent px-0 pr-1 text-sm font-medium leading-none",
+                          "text-inherit data-[state=active]:bg-transparent data-[state=active]:text-inherit data-[state=active]:shadow-none",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                        )}
+                      >
+                        <span
+                          role="img"
+                          aria-label={statusLabelByTab(tab.status)}
+                          title={statusLabelByTab(tab.status)}
+                          className="inline-flex size-5 shrink-0 items-center justify-center"
+                        >
+                          {statusIconByTab(tab.status)}
+                        </span>
+                        <span className="max-w-52 truncate">{tab.taskTitle}</span>
+                      </TabsTrigger>
+                      <button
+                        type="button"
+                        className={cn(
+                          "mr-1 cursor-pointer rounded-md p-1 text-muted-foreground transition hover:bg-secondary hover:text-foreground",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                          "opacity-60 group-hover:opacity-100 data-[active=true]:opacity-100",
+                        )}
+                        data-active={tab.isActive ? "true" : "false"}
+                        tabIndex={tab.isActive ? 0 : -1}
+                        aria-label={`Close tab for ${tab.taskTitle}`}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          onCloseTab(tab.taskId);
+                        }}
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </TabsList>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Open a task tab to start working with an agent.
+                </p>
+              )}
+            </div>
           </div>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label="Open new task tab"
+            className="h-10 w-10 shrink-0 rounded-md border-none border-transparent bg-transparent p-0 text-studio-chrome-foreground shadow-none hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            disabled={!canOpenCreateDialog}
+            onClick={() => setIsCreateDialogOpen(true)}
+          >
+            <Plus className="size-[1.4rem]" />
+            <span className="sr-only">New Tab</span>
+          </Button>
         </div>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          aria-label="Open new task tab"
-          className="h-10 w-10 shrink-0 rounded-md border-none border-transparent bg-transparent p-0 text-studio-chrome-foreground shadow-none hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-          disabled={!canOpenCreateDialog}
-          onClick={() => setIsCreateDialogOpen(true)}
-        >
-          <Plus className="size-[1.4rem]" />
-          <span className="sr-only">New Tab</span>
-        </Button>
         {rightPanelToggleModel ? (
           <div className="flex shrink-0 items-center pl-0.5">
             <AgentStudioRightPanelToggleButton model={rightPanelToggleModel} />
