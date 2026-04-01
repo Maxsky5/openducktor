@@ -53,9 +53,6 @@ describe("reattach-live-session", () => {
         hasSession: () => false,
       },
       repoPath: "/tmp/repo",
-      taskId: "task-1",
-      taskRef: { current: [] },
-      sessionsRef: { current: { "session-1": sessionStateFixture } },
       updateSession: (sessionId, updater) => {
         if (sessionId !== "session-1") {
           return;
@@ -113,9 +110,6 @@ describe("reattach-live-session", () => {
         hasSession: () => true,
       },
       repoPath: "/tmp/repo",
-      taskId: "task-1",
-      taskRef: { current: [] },
-      sessionsRef: { current: { "session-1": sessionStateFixture } },
       updateSession: (sessionId, updater) => {
         if (sessionId !== "session-1") {
           return;
@@ -158,9 +152,6 @@ describe("reattach-live-session", () => {
         hasSession: () => false,
       },
       repoPath: "/tmp/repo",
-      taskId: "task-1",
-      taskRef: { current: [] },
-      sessionsRef: { current: { "session-1": sessionStateFixture } },
       updateSession: (sessionId, updater) => {
         if (sessionId !== "session-1") {
           return;
@@ -220,9 +211,6 @@ describe("reattach-live-session", () => {
         hasSession: () => false,
       },
       repoPath: "/tmp/repo",
-      taskId: "task-1",
-      taskRef: { current: [] },
-      sessionsRef: { current: { "session-1": sessionStateFixture } },
       updateSession: () => {
         throw new Error("should not update stale session");
       },

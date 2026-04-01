@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type {
+  AgentSessionRecord,
+  RuntimeInstanceSummary,
+  RuntimeKind,
+  TaskCard,
+} from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { liveAgentSessionLookupKey, runtimeWorkingDirectoryKey } from "./live-agent-session-cache";
 import {
+  createHydrationPromptAssemblerStage,
+  createRuntimeResolutionPlannerStage,
   hydrateSessionRecordsStage,
   preparePersistedSessionMergeStage,
   type SessionLoadIntent,
@@ -90,6 +99,51 @@ const createStateHarness = (sessions: Record<string, AgentSessionState>) => {
     getState: () => state,
   };
 };
+
+const taskFixture: TaskCard = {
+  id: "task-1",
+  title: "Refactor loader",
+  description: "Split hydration into explicit stages",
+  notes: "",
+  status: "ready_for_dev",
+  priority: 2,
+  issueType: "task",
+  aiReviewEnabled: true,
+  availableActions: [],
+  labels: [],
+  subtaskIds: [],
+  documentSummary: {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
+  agentWorkflows: {
+    spec: { required: false, canSkip: true, available: false, completed: false },
+    planner: { required: false, canSkip: true, available: false, completed: false },
+    builder: { required: true, canSkip: false, available: false, completed: false },
+    qa: { required: false, canSkip: true, available: false, completed: false },
+  },
+  updatedAt: "2026-03-01T09:00:00.000Z",
+  createdAt: "2026-03-01T09:00:00.000Z",
+};
+
+const createRuntime = (
+  workingDirectory: string,
+  runtimeKind: RuntimeKind = "opencode",
+): RuntimeInstanceSummary => ({
+  kind: runtimeKind,
+  runtimeId: "runtime-1",
+  repoPath: "/tmp/repo",
+  taskId: null,
+  role: "workspace",
+  workingDirectory,
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:4444",
+  },
+  startedAt: "2026-03-01T09:00:00.000Z",
+  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+});
 
 describe("load-sessions-stages", () => {
   test("uses the in-memory requested session record without reloading persisted sessions", async () => {
@@ -205,5 +259,162 @@ describe("load-sessions-stages", () => {
 
     expect(promptLoads).toBe(0);
     expect(stateHarness.getState()["session-1"]?.historyHydrationState).toBe("failed");
+  });
+
+  test("runtime planner reuses current hydrated runtime and preloaded live snapshots", async () => {
+    const workingDirectory = "/tmp/repo/worktree";
+    const stateHarness = createStateHarness({
+      "session-1": createSession({
+        runtimeKind: "opencode",
+        runtimeId: "runtime-current",
+        runId: "run-current",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory,
+      }),
+    });
+    const liveSnapshot = {
+      externalSessionId: "external-1",
+      title: "Builder Session",
+      role: "build",
+      scenario: "build_implementation_start",
+      startedAt: "2026-03-01T09:00:00.000Z",
+      status: { type: "busy" as const },
+      pendingPermissions: [],
+      pendingQuestions: [],
+      workingDirectory,
+    };
+    let snapshotLoads = 0;
+
+    const planner = await createRuntimeResolutionPlannerStage({
+      intent: createIntent({
+        mode: "requested_history",
+        requestedSessionId: "session-1",
+        requestedHistoryKey: "/tmp/repo::task-1::session-1",
+        shouldHydrateRequestedSession: true,
+        historyPolicy: "requested_only",
+      }),
+      options: {
+        preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+          ["opencode", [createRuntime(workingDirectory)]],
+        ]),
+        preloadedRuntimeConnectionsByKey: new Map([
+          [
+            runtimeWorkingDirectoryKey("opencode", workingDirectory),
+            { endpoint: "http://127.0.0.1:4444", workingDirectory },
+          ],
+        ]),
+        preloadedLiveAgentSessionsByKey: new Map([
+          [
+            liveAgentSessionLookupKey("opencode", "http://127.0.0.1:4444", workingDirectory),
+            [liveSnapshot],
+          ],
+        ]),
+        allowRuntimeEnsure: false,
+      },
+      adapter: {
+        hasSession: () => false,
+        loadSessionHistory: async () => [],
+        resumeSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
+        listLiveAgentSessionSnapshots: async () => {
+          snapshotLoads += 1;
+          return [];
+        },
+      },
+      sessionsRef: stateHarness.sessionsRef,
+      recordsToHydrate: [createRecord({ role: "planner", workingDirectory })],
+      historyHydrationSessionIds: new Set(["session-1"]),
+    });
+
+    const reusedResolution = planner.readCurrentHydratedRuntimeResolution(
+      createRecord({ role: "planner", workingDirectory }),
+    );
+
+    expect(reusedResolution).toEqual({
+      ok: true,
+      runtimeKind: "opencode",
+      runtimeId: "runtime-current",
+      runId: "run-current",
+      runtimeEndpoint: "http://127.0.0.1:4444",
+      runtimeConnection: {
+        endpoint: "http://127.0.0.1:4444",
+        workingDirectory,
+      },
+    });
+
+    const snapshot = await planner.loadLiveAgentSessionSnapshot(
+      createRecord({ role: "planner", workingDirectory }),
+      {
+        ok: true,
+        runtimeKind: "opencode",
+        runtimeId: "runtime-current",
+        runId: "run-current",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:4444",
+          workingDirectory,
+        },
+      },
+    );
+
+    expect(snapshot).toEqual(liveSnapshot);
+    expect(snapshotLoads).toBe(0);
+  });
+
+  test("prompt assembler omits system prompt when the task is unavailable", async () => {
+    const assembler = createHydrationPromptAssemblerStage({
+      taskId: "task-1",
+      taskRef: { current: [] },
+    });
+
+    const prelude = await assembler.buildHydrationPreludeMessages({
+      record: createRecord({ role: "planner", scenario: "planner_initial" }),
+      resolvedScenario: "planner_initial",
+      promptOverrides: {},
+    });
+    const systemPrompt = await assembler.buildHydrationSystemPrompt({
+      record: createRecord({ role: "planner", scenario: "planner_initial" }),
+      resolvedScenario: "planner_initial",
+      promptOverrides: {},
+    });
+
+    expect(systemPrompt).toBe("");
+    expect(prelude).toHaveLength(1);
+    expect(prelude[0]).toMatchObject({
+      id: "history:session-start:session-1",
+      content: "Session started (planner - planner_initial)",
+    });
+  });
+
+  test("prompt assembler builds system prompt and header messages when the task exists", async () => {
+    const assembler = createHydrationPromptAssemblerStage({
+      taskId: "task-1",
+      taskRef: { current: [taskFixture] },
+    });
+
+    const systemPrompt = await assembler.buildHydrationSystemPrompt({
+      record: createRecord({ role: "planner", scenario: "planner_initial" }),
+      resolvedScenario: "planner_initial",
+      promptOverrides: {},
+    });
+    const prelude = await assembler.buildHydrationPreludeMessages({
+      record: createRecord({ role: "planner", scenario: "planner_initial" }),
+      resolvedScenario: "planner_initial",
+      promptOverrides: {},
+    });
+
+    expect(systemPrompt.length).toBeGreaterThan(0);
+    expect(prelude).toHaveLength(2);
+    expect(prelude[1]).toMatchObject({
+      id: "history:system-prompt:session-1",
+      content: `System prompt:\n\n${systemPrompt}`,
+    });
   });
 });

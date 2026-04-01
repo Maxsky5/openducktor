@@ -119,8 +119,6 @@ export type LiveReconciliationStageInput = {
   intent: SessionLoadIntent;
   options?: AgentSessionLoadOptions;
   adapter: SessionLifecycleAdapter;
-  taskRef: MutableRefObject<TaskCard[]>;
-  sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
   updateSession: UpdateSession;
   attachSessionListener?: (repoPath: string, sessionId: string) => void;
   isStaleRepoOperation: () => boolean;
@@ -582,8 +580,6 @@ export const reconcileLiveSessionsStage = async ({
   intent,
   options,
   adapter,
-  taskRef,
-  sessionsRef,
   updateSession,
   attachSessionListener,
   isStaleRepoOperation,
@@ -615,9 +611,6 @@ export const reconcileLiveSessionsStage = async ({
   const maybeResumeLiveRecord = createReattachLiveSession({
     adapter,
     repoPath: intent.repoPath,
-    taskId: intent.taskId,
-    taskRef,
-    sessionsRef,
     updateSession,
     ...(attachSessionListener ? { attachSessionListener } : {}),
     promptOverrides: EMPTY_PROMPT_OVERRIDES,

@@ -153,8 +153,6 @@ export const createLoadAgentSessions = ({
         intent,
         ...(options ? { options } : {}),
         adapter,
-        taskRef,
-        sessionsRef,
         updateSession,
         ...(attachSessionListener ? { attachSessionListener } : {}),
         isStaleRepoOperation,
