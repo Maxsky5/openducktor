@@ -9,6 +9,7 @@ const ROW_HEIGHT_PX = 40;
 const rowRenderSpy = mock(({ rowKey }: { rowKey: string }) => <div data-testid={rowKey} />);
 
 let AgentChatThread: typeof import("./agent-chat-thread").AgentChatThread;
+let registerRowElement: (rowKey: string) => (element: HTMLDivElement | null) => void;
 
 class MockResizeObserver implements ResizeObserver {
   observe(): void {}
@@ -18,7 +19,7 @@ class MockResizeObserver implements ResizeObserver {
   disconnect(): void {}
 }
 
-const registerRowElement = (() => {
+const createRegisterRowElement = () => {
   const callbackByKey = new Map<string, (element: HTMLDivElement | null) => void>();
 
   return (rowKey: string) => {
@@ -31,7 +32,7 @@ const registerRowElement = (() => {
     callbackByKey.set(rowKey, next);
     return next;
   };
-})();
+};
 
 const flushEffects = async (): Promise<void> => {
   await act(async () => {
@@ -176,6 +177,7 @@ describe("AgentChatThread", () => {
 
   beforeEach(() => {
     globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    registerRowElement = createRegisterRowElement();
   });
 
   afterEach(() => {

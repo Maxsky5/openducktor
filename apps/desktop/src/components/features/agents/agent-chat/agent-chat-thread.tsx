@@ -111,7 +111,6 @@ const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
       <AgentChatThreadRow
         row={row}
         sessionRole={sessionRole}
-        sessionSelectedModel={null}
         sessionAgentColors={sessionAgentColors}
         sessionWorkingDirectory={sessionWorkingDirectory}
       />

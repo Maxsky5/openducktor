@@ -10,7 +10,6 @@ type AgentChatWindowRowProps = {
   row: AgentChatWindowRow;
   sessionAgentColors: Record<string, string>;
   sessionRole: AgentSessionState["role"] | null;
-  sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
 };
 
@@ -18,7 +17,6 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   row,
   sessionAgentColors,
   sessionRole,
-  sessionSelectedModel: _sessionSelectedModel,
   sessionWorkingDirectory,
 }: AgentChatWindowRowProps): ReactElement {
   switch (row.kind) {

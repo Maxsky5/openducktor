@@ -75,14 +75,6 @@ export function useAgentChatTurnStaging({
     };
   }, [activeSessionId, turns.length, windowStart]);
 
-  useEffect(() => {
-    return () => {
-      if (frameRef.current !== null) {
-        globalThis.cancelAnimationFrame(frameRef.current);
-      }
-    };
-  }, []);
-
   return useMemo(() => {
     if (count >= turns.length) {
       return turns;
