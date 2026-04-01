@@ -820,6 +820,100 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("an earlier manual refresh cannot clear a later repo refresh loading state", async () => {
+    const repoARefreshDeferred = createDeferred<{ ok: boolean }>();
+    const repoBRefreshDeferred = createDeferred<{ ok: boolean }>();
+    const repoPullRequestSync = mock(async (repoPath: string) => {
+      if (repoPath === "/repo-a") {
+        return repoARefreshDeferred.promise;
+      }
+
+      if (repoPath === "/repo-b") {
+        return repoBRefreshDeferred.promise;
+      }
+
+      throw new Error(`Unexpected repo path ${repoPath}`);
+    });
+    const tasksList = mock(async (repoPath: string) => {
+      if (repoPath === "/repo-a") {
+        return [makeTask("A", "open")];
+      }
+
+      return [makeTask("B", "open")];
+    });
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      repoPullRequestSync: host.repoPullRequestSync,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.repoPullRequestSync = repoPullRequestSync;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo-a/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.id === "A", 1000);
+
+      let repoAManualRefresh: Promise<void> | null = null;
+      await harness.run((value) => {
+        repoAManualRefresh = value.refreshTasks();
+      });
+      await harness.waitFor((value) => value.isLoadingTasks, 1000);
+
+      await harness.updateArgs({
+        activeRepo: "/repo-b",
+        refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+          beadsOk: true,
+          beadsPath: "/repo-b/.beads",
+          beadsError: null,
+        }),
+      });
+      await harness.waitFor((value) => value.tasks[0]?.id === "B", 1000);
+      await harness.waitFor((value) => !value.isLoadingTasks, 1000);
+
+      let repoBManualRefresh: Promise<void> | null = null;
+      await harness.run((value) => {
+        repoBManualRefresh = value.refreshTasks();
+      });
+      await harness.waitFor((value) => value.isLoadingTasks, 1000);
+
+      if (!repoAManualRefresh || !repoBManualRefresh) {
+        throw new Error("Expected both manual refresh promises to be created");
+      }
+
+      await harness.run(async () => {
+        repoARefreshDeferred.resolve({ ok: true });
+        await repoAManualRefresh;
+      });
+
+      expect(harness.getLatest().isLoadingTasks).toBe(true);
+
+      await harness.run(async () => {
+        repoBRefreshDeferred.resolve({ ok: true });
+        await repoBManualRefresh;
+      });
+      await harness.waitFor((value) => !value.isLoadingTasks, 1000);
+    } finally {
+      repoARefreshDeferred.resolve({ ok: true });
+      repoBRefreshDeferred.resolve({ ok: true });
+      await harness.unmount();
+      host.repoPullRequestSync = original.repoPullRequestSync;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
   test("scheduled refresh keeps task loading state in background while repo data refetch is in flight", async () => {
     const repoPullRequestSyncDeferred = createDeferred<{ ok: boolean }>();
     const repoPullRequestSync = mock(async () => repoPullRequestSyncDeferred.promise);

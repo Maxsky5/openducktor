@@ -106,6 +106,7 @@ export function useTaskOperations({
 }: UseTaskOperationsArgs): UseTaskOperationsResult {
   const queryClient = useQueryClient();
   const [isManualLoadingTasks, setIsManualLoadingTasks] = useState(false);
+  const manualRefreshTokenRef = useRef(0);
   const inFlightTaskRefreshRef = useRef<{ repoPath: string; promise: Promise<void> } | null>(null);
   const lastTaskRefreshToastRef = useRef<{
     repoPath: string;
@@ -130,6 +131,7 @@ export function useTaskOperations({
     const previousActiveRepo = activeRepoRef.current;
     activeRepoRef.current = activeRepo;
     if (previousActiveRepo !== activeRepo) {
+      manualRefreshTokenRef.current += 1;
       setIsManualLoadingTasks(false);
       lastTaskRefreshToastRef.current = null;
       setDetectingPullRequestTaskId(null);
@@ -239,7 +241,10 @@ export function useTaskOperations({
 
       const repoPath = activeRepo;
       const trigger = options?.trigger ?? "manual";
+      let manualRefreshToken: number | null = null;
       if (trigger === "manual") {
+        manualRefreshTokenRef.current += 1;
+        manualRefreshToken = manualRefreshTokenRef.current;
         setIsManualLoadingTasks(true);
       }
 
@@ -272,7 +277,11 @@ export function useTaskOperations({
           });
         }
       } finally {
-        if (trigger === "manual") {
+        if (
+          trigger === "manual" &&
+          manualRefreshToken !== null &&
+          manualRefreshTokenRef.current === manualRefreshToken
+        ) {
           setIsManualLoadingTasks(false);
         }
       }
@@ -556,6 +565,7 @@ export function useTaskOperations({
   );
 
   const clearTaskData = useCallback(() => {
+    manualRefreshTokenRef.current += 1;
     setIsManualLoadingTasks(false);
     lastTaskRefreshToastRef.current = null;
     setDetectingPullRequestTaskId(null);

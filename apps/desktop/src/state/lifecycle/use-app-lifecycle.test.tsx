@@ -29,6 +29,40 @@ const createDeferred = <T,>() => {
   };
 };
 
+const createIntervalController = () => {
+  let nextIntervalId = 1;
+  const callbacks = new Map<number, () => void>();
+  const originalSetInterval = globalThis.setInterval.bind(globalThis);
+  const originalClearInterval = globalThis.clearInterval.bind(globalThis);
+
+  globalThis.setInterval = ((handler: TimerHandler) => {
+    if (typeof handler !== "function") {
+      throw new Error("Expected interval handler to be a function in lifecycle tests");
+    }
+
+    const intervalId = nextIntervalId;
+    nextIntervalId += 1;
+    callbacks.set(intervalId, handler as () => void);
+    return intervalId as unknown as ReturnType<typeof setInterval>;
+  }) as unknown as typeof setInterval;
+
+  globalThis.clearInterval = ((intervalId: ReturnType<typeof setInterval>) => {
+    callbacks.delete(intervalId as unknown as number);
+  }) as unknown as typeof clearInterval;
+
+  return {
+    tick(): void {
+      for (const callback of [...callbacks.values()]) {
+        callback();
+      }
+    },
+    restore(): void {
+      globalThis.setInterval = originalSetInterval;
+      globalThis.clearInterval = originalClearInterval;
+    },
+  };
+};
+
 type WindowEventTargetOverride = typeof globalThis & {
   addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void;
   removeEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void;
@@ -334,15 +368,12 @@ describe("useAppLifecycle", () => {
       return null;
     };
 
+    const intervalController = createIntervalController();
     visibilityStateController.set("hidden");
     const harness = createSharedHookHarness(Harness, { args: baseArgs });
 
     try {
       await harness.mount();
-
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 15));
-      });
 
       expect(refreshTasksWithOptions).not.toHaveBeenCalled();
 
@@ -353,9 +384,8 @@ describe("useAppLifecycle", () => {
 
       expect(refreshTasksWithOptions).not.toHaveBeenCalled();
 
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      });
+      intervalController.tick();
+      await harness.waitFor(() => refreshTasksWithOptions.mock.calls.length === 1, 1000);
 
       const visibleCallCount = refreshTasksWithOptions.mock.calls.length;
       expect(visibleCallCount).toBeGreaterThan(0);
@@ -366,9 +396,7 @@ describe("useAppLifecycle", () => {
         document.dispatchEvent(new Event("visibilitychange"));
       });
 
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      });
+      intervalController.tick();
 
       expect(refreshTasksWithOptions).toHaveBeenCalledTimes(visibleCallCount);
 
@@ -379,13 +407,16 @@ describe("useAppLifecycle", () => {
 
       expect(refreshTasksWithOptions).toHaveBeenCalledTimes(visibleCallCount);
 
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      });
+      intervalController.tick();
+      await harness.waitFor(
+        () => refreshTasksWithOptions.mock.calls.length === visibleCallCount + 1,
+        1000,
+      );
 
       expect(refreshTasksWithOptions.mock.calls.length).toBeGreaterThan(visibleCallCount);
     } finally {
       await harness.unmount();
+      intervalController.restore();
     }
   });
 
@@ -418,14 +449,14 @@ describe("useAppLifecycle", () => {
       return null;
     };
 
+    const intervalController = createIntervalController();
     const harness = createSharedHookHarness(Harness, { args: baseArgs });
 
     try {
       await harness.mount();
 
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      });
+      intervalController.tick();
+      await harness.waitFor(() => refreshTasksForRepoA.mock.calls.length === 1, 1000);
 
       const repoACallCount = refreshTasksForRepoA.mock.calls.length;
       expect(repoACallCount).toBeGreaterThan(0);
@@ -439,14 +470,14 @@ describe("useAppLifecycle", () => {
         },
       });
 
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      });
+      intervalController.tick();
+      await harness.waitFor(() => refreshTasksForRepoB.mock.calls.length === 1, 1000);
 
       expect(refreshTasksForRepoA).toHaveBeenCalledTimes(repoACallCount);
       expect(refreshTasksForRepoB.mock.calls.length).toBeGreaterThan(0);
     } finally {
       await harness.unmount();
+      intervalController.restore();
     }
   });
 
