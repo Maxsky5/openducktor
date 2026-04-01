@@ -533,6 +533,52 @@ describe("useAgentStudioTaskTabs", () => {
     }
   });
 
+  test("suppresses fallback routing while repo navigation boundary is pending", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      memoryStorage.setItem(
+        toTabsStorageKey("/repo-b"),
+        toPersistedTaskTabs({
+          tabs: ["task-b"],
+          activeTaskId: "task-b",
+        }),
+      );
+
+      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const harness = createHookHarness({
+        activeRepo: "/repo-b",
+        isRepoNavigationBoundaryPending: true,
+        taskId: "",
+        selectedTask: null,
+        tasks: [createTask("task-b")],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map([["task-b", createSession("task-b", "session-b")]]),
+        updateQuery: (updates) => {
+          updateCalls.push(updates);
+        },
+        clearComposerInput: () => {},
+      });
+
+      await harness.mount();
+
+      expect(updateCalls).toHaveLength(0);
+      expect(harness.getLatest().activeTaskTabId).toBe("task-b");
+
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
   test("restores repo-scoped fallback tabs when switching away and back", async () => {
     const memoryStorage = createMemoryStorage();
     await withMockedLocalStorage(memoryStorage, async () => {

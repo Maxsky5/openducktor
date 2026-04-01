@@ -33,6 +33,7 @@ const toClearTaskQueryUpdate = (): QueryUpdate => ({
 
 export function useAgentStudioTaskTabs(args: {
   activeRepo: string | null;
+  isRepoNavigationBoundaryPending?: boolean;
   taskId: string;
   selectedTask: TaskCard | null;
   tasks: TaskCard[];
@@ -53,6 +54,7 @@ export function useAgentStudioTaskTabs(args: {
 } {
   const {
     activeRepo,
+    isRepoNavigationBoundaryPending = false,
     taskId,
     selectedTask,
     tasks,
@@ -101,6 +103,7 @@ export function useAgentStudioTaskTabs(args: {
 
   const { tabTaskIds, activeTaskTabId, handleSelectTab } = useTaskTabSelection({
     activeRepo,
+    isRepoNavigationBoundaryPending,
     taskId: taskIdForTabs,
     openTaskTabs: selectableOpenTaskTabs,
     persistedActiveTaskId,

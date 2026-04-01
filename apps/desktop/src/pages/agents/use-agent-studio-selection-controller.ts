@@ -273,6 +273,7 @@ export function useAgentStudioSelectionController({
     handleCloseTab,
   } = useAgentStudioTaskTabs({
     activeRepo,
+    isRepoNavigationBoundaryPending,
     taskId,
     selectedTask,
     tasks,
