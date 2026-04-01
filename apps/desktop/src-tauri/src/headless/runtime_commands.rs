@@ -302,6 +302,36 @@ async fn handle_runtime_ensure(state: &HeadlessState, args: Value) -> CommandRes
     )
 }
 
+fn handle_agent_sessions_list(state: &HeadlessState, args: Value) -> CommandResult {
+    handle_repo_task_operation(args, |repo_path, task_id| {
+        state.service.agent_sessions_list(&repo_path, &task_id)
+    })
+}
+
+fn handle_agent_sessions_list_bulk(state: &HeadlessState, args: Value) -> CommandResult {
+    let AgentSessionsListBulkArgs { repo_path, task_ids } = deserialize_args(args)?;
+    serialize_value(
+        state
+            .service
+            .agent_sessions_list_bulk(&repo_path, &task_ids)
+            .map_err(service_error)?,
+    )
+}
+
+fn handle_agent_session_upsert(state: &HeadlessState, args: Value) -> CommandResult {
+    let AgentSessionUpsertArgs {
+        repo_path,
+        task_id,
+        session,
+    } = deserialize_args(args)?;
+    Ok(json!({
+        "ok": state
+            .service
+            .agent_session_upsert(&repo_path, &task_id, session)
+            .map_err(service_error)?
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -332,34 +362,4 @@ mod tests {
         assert!(error.message.contains("Invalid arguments:"));
         assert!(error.message.contains("invalid"));
     }
-}
-
-fn handle_agent_sessions_list(state: &HeadlessState, args: Value) -> CommandResult {
-    handle_repo_task_operation(args, |repo_path, task_id| {
-        state.service.agent_sessions_list(&repo_path, &task_id)
-    })
-}
-
-fn handle_agent_sessions_list_bulk(state: &HeadlessState, args: Value) -> CommandResult {
-    let AgentSessionsListBulkArgs { repo_path, task_ids } = deserialize_args(args)?;
-    serialize_value(
-        state
-            .service
-            .agent_sessions_list_bulk(&repo_path, &task_ids)
-            .map_err(service_error)?,
-    )
-}
-
-fn handle_agent_session_upsert(state: &HeadlessState, args: Value) -> CommandResult {
-    let AgentSessionUpsertArgs {
-        repo_path,
-        task_id,
-        session,
-    } = deserialize_args(args)?;
-    Ok(json!({
-        "ok": state
-            .service
-            .agent_session_upsert(&repo_path, &task_id, session)
-            .map_err(service_error)?
-    }))
 }
