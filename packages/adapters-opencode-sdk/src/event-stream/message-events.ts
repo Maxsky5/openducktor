@@ -11,7 +11,6 @@ import {
 import {
   ensureVisibleUserTextDisplayParts,
   extractMessageTotalTokens,
-  hasVisibleUserTextDisplayPart,
   normalizeUserMessageDisplayParts,
   readMessageModelSelection,
   readTextFromMessageInfo,
@@ -319,9 +318,8 @@ const emitKnownUserMessage = (
     knownDisplayParts.length > 0 ? knownDisplayParts : (metadata?.displayParts ?? []),
     fallbackText,
   );
-  const visible = hasVisibleUserTextDisplayPart(displayParts)
-    ? readVisibleUserTextFromDisplayParts(displayParts)
-    : fallbackText || readVisibleUserTextFromDisplayParts(displayParts) || "";
+  const textFromParts = readVisibleUserTextFromDisplayParts(displayParts);
+  const visible = textFromParts.length > 0 ? textFromParts : fallbackText;
   if (visible.trim().length === 0 && displayParts.length === 0) {
     return false;
   }
@@ -645,8 +643,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
         : (currentMetadata?.displayParts ?? []),
       fallbackText,
     );
-    const hasVisibleText = hasVisibleUserTextDisplayPart(displayParts);
-    const textFromParts = hasVisibleText ? readVisibleUserTextFromDisplayParts(displayParts) : "";
+    const textFromParts = readVisibleUserTextFromDisplayParts(displayParts);
     const visible = textFromParts.length > 0 ? textFromParts : fallbackText;
     if (visible.trim().length === 0 && displayParts.length === 0) {
       return true;
@@ -795,9 +792,8 @@ const handleMessagePartUpdatedEvent = (event: Event, runtime: EventStreamRuntime
       normalizedDisplayParts.length > 0 ? normalizedDisplayParts : (metadata?.displayParts ?? []),
       fallbackText,
     );
-    const visible = hasVisibleUserTextDisplayPart(displayParts)
-      ? readVisibleUserTextFromDisplayParts(displayParts)
-      : fallbackText || readVisibleUserTextFromDisplayParts(displayParts) || "";
+    const textFromParts = readVisibleUserTextFromDisplayParts(displayParts);
+    const visible = textFromParts.length > 0 ? textFromParts : fallbackText;
     if (visible.trim().length > 0 || displayParts.length > 0) {
       session?.messageMetadataById.set(messageId, {
         timestamp: metadata?.timestamp ?? runtime.now(),

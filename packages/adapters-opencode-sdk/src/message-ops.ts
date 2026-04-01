@@ -11,7 +11,6 @@ import { unwrapData } from "./data-utils";
 import {
   ensureVisibleUserTextDisplayParts,
   extractMessageTotalTokens,
-  hasVisibleUserTextDisplayPart,
   normalizeUserMessageDisplayParts,
   readMessageModelSelection,
   readTextFromMessageInfo,
@@ -183,9 +182,7 @@ export const loadSessionHistory = async (
           : [];
       const rawTextFromParts =
         entry.info.role === "user"
-          ? hasVisibleUserTextDisplayPart(displayParts)
-            ? readVisibleUserTextFromDisplayParts(displayParts)
-            : ""
+          ? readVisibleUserTextFromDisplayParts(displayParts)
           : readTextFromParts(entry.parts);
       const rawText = rawTextFromParts.length > 0 ? rawTextFromParts : infoText;
       const text = entry.info.role === "assistant" ? sanitizeAssistantMessage(rawText) : rawText;
