@@ -74,7 +74,7 @@ Analyze the codebase strictly against these 7 critical categories. Refer to the 
 
 **CRITICAL**: Do NOT generate a text report or JSON file. Act directly on OpenDucktor using the MCP Server `openducktor`.
 
-### Phase 1: Context & Knowledge Retrieval
+## Phase 1: Context & Knowledge Retrieval
 1.  **Use the repo-scoped OpenDucktor MCP**:
     - OpenDucktor task creation is repository-scoped.
 2.  **Existing Task Analysis**: Call `search_tasks` with `{ "limit": 100 }`.
@@ -82,7 +82,7 @@ Analyze the codebase strictly against these 7 critical categories. Refer to the 
     *   **Goal**: Create an internal exclusion list. If a vulnerability is already reported, do NOT duplicate it.
     *   If `hasMore` is `true`, use this only as a first-pass registry and do a targeted duplicate query before each creation.
 
-### Phase 2: Analysis & Action Loop
+## Phase 2: Analysis & Action Loop
 Iterate through the codebase. For **EACH** distinct vulnerability found:
 
 1.  **Duplicate Check**:
@@ -120,7 +120,7 @@ Iterate through the codebase. For **EACH** distinct vulnerability found:
         ```
     *   Do **NOT** send a `status` field. `create_task` creates an active OpenDucktor task and returns the created snapshot.
 
-### Phase 3: Reporting & TERMINATION (STRICT)
+## Phase 3: Reporting & TERMINATION (STRICT)
 
 Once all files are analyzed, follow this protocol strictly:
 
@@ -130,7 +130,7 @@ Once all files are analyzed, follow this protocol strictly:
     > *   **Vulnerabilities Found**: {Count}
     > *   **Duplicates Skipped**: {Count}
     > *   **Tasks Created in OpenDucktor**: {Count}
-    > *   **Breakdown**: {X} High, {Y} Medium, {Z} Low.
+    > *   **Breakdown**: {W} Critical, {X} High, {Y} Medium, {Z} Low.
 
 2.  **STOP IMMEDIATELY**.
     *   **DO NOT** propose a "Plan for Next Steps".

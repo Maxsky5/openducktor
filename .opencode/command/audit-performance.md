@@ -74,19 +74,11 @@ Analyze the codebase strictly against these 7 categories. Keep in mind typical *
 *   **Medium**: Noticeable improvement (Priority: Medium).
 *   **Low**: Developer benefit or subtle fix (Priority: Low).
 
-**Effort**
-*   **Trivial**: Config change / < 1 hour.
-*   **Small**: Single file refactor / 1-4 hours.
-*   **Medium**: Multiple files / 4-16 hours.
-*   **Large**: Architectural change / Days.
-
----
-
 # Execution Workflow: OpenDucktor MCP Integration
 
 **CRITICAL**: Do NOT generate a text report or JSON file. Act directly on OpenDucktor using the MCP Server `openducktor`.
 
-### Phase 1: Context & Knowledge Retrieval
+## Phase 1: Context & Knowledge Retrieval
 1.  **Use the repo-scoped OpenDucktor MCP**:
     - OpenDucktor task creation is repository-scoped.
 2.  **Existing Task Analysis**: Call `search_tasks` with `{ "limit": 100 }`.
@@ -94,7 +86,7 @@ Analyze the codebase strictly against these 7 categories. Keep in mind typical *
     *   Read `results[*].task.title`, `results[*].task.description`, `results[*].task.labels`, and `results[*].task.status`.
     *   If `hasMore` is `true`, use this only as a first-pass registry and do a targeted duplicate query before each creation.
 
-### Phase 2: Analysis & Action Loop
+## Phase 2: Analysis & Action Loop
 Iterate through the codebase. For **EACH** distinct optimization found:
 
 1.  **Duplicate Check**:
@@ -130,7 +122,7 @@ Iterate through the codebase. For **EACH** distinct optimization found:
         ```
     *   Do **NOT** send a `status` field. `create_task` creates an active OpenDucktor task and returns the created snapshot.
 
-### Phase 3: Reporting & TERMINATION (STRICT)
+## Phase 3: Reporting & TERMINATION (STRICT)
 
 Once all files are analyzed, follow this protocol strictly:
 

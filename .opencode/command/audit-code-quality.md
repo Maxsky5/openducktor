@@ -91,7 +91,7 @@ Analyze the codebase strictly against the following 12 categories. Use the speci
 
 **CRITICAL**: Do NOT generate a text report or JSON file. Act directly on OpenDucktor using the MCP Server `openducktor`.
 
-### Phase 1: Context & Knowledge Retrieval
+## Phase 1: Context & Knowledge Retrieval
 1.  **Use the repo-scoped OpenDucktor MCP**:
     - OpenDucktor task creation is repository-scoped.
 2.  **Existing Task Analysis**: Call `search_tasks` with `{ "limit": 100 }`.
@@ -99,7 +99,7 @@ Analyze the codebase strictly against the following 12 categories. Use the speci
     *   **Goal**: Create an internal exclusion list to prevent creating duplicates.
     *   If `hasMore` is `true`, use this only as a first-pass registry and do a targeted duplicate query before each task creation.
 
-### Phase 2: Analysis & Action Loop
+## Phase 2: Analysis & Action Loop
 Iterate through the codebase. For **EACH** distinct violation found:
 
 1.  **Duplicate Check**:
@@ -133,7 +133,7 @@ Iterate through the codebase. For **EACH** distinct violation found:
         ```
     *   Do **NOT** send a `status` field. `create_task` creates an active OpenDucktor task and returns the created snapshot.
 
-### Phase 3: Reporting & TERMINATION (STRICT)
+## Phase 3: Reporting & TERMINATION (STRICT)
 
 Once all files are analyzed, follow this protocol strictly:
 

@@ -43,7 +43,7 @@ Analyze the codebase strictly against the following detailed criteria. Ignorance
 
 **CRITICAL**: Do NOT generate a text report or JSON file. You must act directly on OpenDucktor using the MCP Server `openducktor`.
 
-### Phase 1: Context & Knowledge Retrieval
+## Phase 1: Context & Knowledge Retrieval
 1.  **Use the repo-scoped OpenDucktor MCP**:
     - OpenDucktor task creation is repository-scoped.
 2.  **Existing Task Analysis (Anti-Duplicate)**:
@@ -52,7 +52,7 @@ Analyze the codebase strictly against the following detailed criteria. Ignorance
     - Store this as your initial "Existing Issues Registry".
     - If `hasMore` is `true`, treat this registry as a coarse pre-filter only and rely on a targeted duplicate check before every creation.
 
-### Phase 2: Analysis & Action Loop
+## Phase 2: Analysis & Action Loop
 Iterate through the codebase finding by finding. For **EACH** distinct improvement identified:
 
 1.  **Duplicate Check**:
@@ -88,7 +88,7 @@ Iterate through the codebase finding by finding. For **EACH** distinct improveme
             ```
     - Do **NOT** send a `status` field. `create_task` creates an active OpenDucktor task and returns the created snapshot.
 
-### Phase 3: Reporting & TERMINATION (STRICT)
+## Phase 3: Reporting & TERMINATION (STRICT)
 
 Once all tasks are created, follow this protocol strictly:
 
