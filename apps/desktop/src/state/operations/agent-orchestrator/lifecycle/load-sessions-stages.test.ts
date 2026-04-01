@@ -100,7 +100,7 @@ const createStateHarness = (sessions: Record<string, AgentSessionState>) => {
   };
 };
 
-const taskFixture: TaskCard = {
+const createTaskFixture = (): TaskCard => ({
   id: "task-1",
   title: "Refactor loader",
   description: "Split hydration into explicit stages",
@@ -125,7 +125,7 @@ const taskFixture: TaskCard = {
   },
   updatedAt: "2026-03-01T09:00:00.000Z",
   createdAt: "2026-03-01T09:00:00.000Z",
-};
+});
 
 const createRuntime = (
   workingDirectory: string,
@@ -259,6 +259,106 @@ describe("load-sessions-stages", () => {
 
     expect(promptLoads).toBe(0);
     expect(stateHarness.getState()["session-1"]?.historyHydrationState).toBe("failed");
+  });
+
+  test("skips requested-history failure updates when the repo becomes stale during runtime resolution", async () => {
+    let stale = false;
+    const initialSession = createSession({ historyHydrationState: "hydrating" });
+    const stateHarness = createStateHarness({ "session-1": initialSession });
+
+    await hydrateSessionRecordsStage({
+      adapter: {
+        hasSession: () => false,
+        listLiveAgentSessionSnapshots: async () => [],
+        loadSessionHistory: async () => [],
+        resumeSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
+      },
+      setSessionsById: stateHarness.setSessionsById,
+      updateSession: stateHarness.updateSession,
+      isStaleRepoOperation: () => stale,
+      recordsToHydrate: [createRecord()],
+      historyHydrationSessionIds: new Set(["session-1"]),
+      runtimePlanner: {
+        readCurrentHydratedRuntimeResolution: () => null,
+        resolveHydrationRuntime: async () => {
+          stale = true;
+          return {
+            ok: false,
+            runtimeKind: "opencode",
+            reason: "No live runtime found for working directory /tmp/repo/worktree.",
+          };
+        },
+        loadLiveAgentSessionSnapshot: async () => null,
+      },
+      promptAssembler: {
+        buildHydrationPreludeMessages: async () => [],
+        buildHydrationSystemPrompt: async () => "",
+      },
+      getRepoPromptOverrides: async () => ({}),
+    });
+
+    expect(stateHarness.getState()["session-1"]).toEqual(initialSession);
+  });
+
+  test("skips runtime projection when the repo becomes stale during runtime resolution", async () => {
+    let stale = false;
+    const initialSession = createSession();
+    const stateHarness = createStateHarness({ "session-1": initialSession });
+
+    await hydrateSessionRecordsStage({
+      adapter: {
+        hasSession: () => false,
+        listLiveAgentSessionSnapshots: async () => [],
+        loadSessionHistory: async () => [],
+        resumeSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
+      },
+      setSessionsById: stateHarness.setSessionsById,
+      updateSession: stateHarness.updateSession,
+      isStaleRepoOperation: () => stale,
+      recordsToHydrate: [createRecord()],
+      historyHydrationSessionIds: new Set(),
+      runtimePlanner: {
+        readCurrentHydratedRuntimeResolution: () => null,
+        resolveHydrationRuntime: async () => {
+          stale = true;
+          return {
+            ok: true,
+            runtimeKind: "opencode",
+            runtimeId: "runtime-1",
+            runId: null,
+            runtimeEndpoint: "http://127.0.0.1:4444",
+            runtimeConnection: {
+              endpoint: "http://127.0.0.1:4444",
+              workingDirectory: "/tmp/repo/worktree",
+            },
+          };
+        },
+        loadLiveAgentSessionSnapshot: async () => null,
+      },
+      promptAssembler: {
+        buildHydrationPreludeMessages: async () => [],
+        buildHydrationSystemPrompt: async () => "",
+      },
+      getRepoPromptOverrides: async () => ({}),
+    });
+
+    expect(stateHarness.getState()["session-1"]).toEqual(initialSession);
   });
 
   test("runtime planner reuses current hydrated runtime and preloaded live snapshots", async () => {
@@ -396,7 +496,7 @@ describe("load-sessions-stages", () => {
   test("prompt assembler builds system prompt and header messages when the task exists", async () => {
     const assembler = createHydrationPromptAssemblerStage({
       taskId: "task-1",
-      taskRef: { current: [taskFixture] },
+      taskRef: { current: [createTaskFixture()] },
     });
 
     const systemPrompt = await assembler.buildHydrationSystemPrompt({

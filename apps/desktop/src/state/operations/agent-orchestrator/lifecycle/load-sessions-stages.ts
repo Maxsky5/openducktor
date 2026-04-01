@@ -43,7 +43,7 @@ export type UpdateSession = (
 
 export type SessionLifecycleAdapter = Pick<
   AgentEnginePort,
-  "hasSession" | "loadSessionHistory" | "resumeSession" | "listLiveAgentSessionSnapshots"
+  "hasSession" | "loadSessionHistory" | "resumeSession"
 > & {
   listLiveAgentSessionSnapshots?: AgentEnginePort["listLiveAgentSessionSnapshots"];
 };
@@ -623,6 +623,9 @@ export const reconcileLiveSessionsStage = async ({
       }),
     resumeMissingLiveSession: async ({ record, runtimeKind, runtimeConnection }) => {
       const promptOverrides = await getRepoPromptOverrides();
+      if (isStaleRepoOperation()) {
+        return;
+      }
       const resolvedScenario = record.scenario ?? defaultScenarioForRole(record.role);
       const selectedModel = normalizePersistedSelection(record.selectedModel);
       const systemPrompt = await promptAssembler.buildHydrationSystemPrompt({
@@ -630,6 +633,9 @@ export const reconcileLiveSessionsStage = async ({
         resolvedScenario,
         promptOverrides,
       });
+      if (isStaleRepoOperation()) {
+        return;
+      }
 
       await adapter.resumeSession({
         sessionId: record.sessionId,
@@ -729,6 +735,9 @@ export const hydrateSessionRecordsStage = async ({
     const runtimeResolution =
       (shouldHydrateHistory ? runtimePlanner.readCurrentHydratedRuntimeResolution(record) : null) ??
       (await runtimePlanner.resolveHydrationRuntime(record));
+    if (isStaleRepoOperation()) {
+      return;
+    }
     if (!runtimeResolution.ok) {
       if (shouldHydrateHistory) {
         updateSession(

@@ -149,7 +149,7 @@ export const createLoadAgentSessions = ({
       });
       const promptAssembler = createHydrationPromptAssemblerStage({ taskId, taskRef });
 
-      await reconcileLiveSessionsStage({
+      const { reattachedSessionIds } = await reconcileLiveSessionsStage({
         intent,
         ...(options ? { options } : {}),
         adapter,
@@ -165,13 +165,24 @@ export const createLoadAgentSessions = ({
         return;
       }
 
+      const effectiveHistoryHydrationSessionIds = new Set(historyHydrationSessionIds);
+      if (intent.historyPolicy === "live_if_empty") {
+        for (const sessionId of reattachedSessionIds) {
+          const currentSession = sessionsRef.current[sessionId];
+          if (!currentSession || currentSession.messages.length > 0) {
+            continue;
+          }
+          effectiveHistoryHydrationSessionIds.add(sessionId);
+        }
+      }
+
       await hydrateSessionRecordsStage({
         adapter,
         setSessionsById,
         updateSession,
         isStaleRepoOperation,
         recordsToHydrate,
-        historyHydrationSessionIds,
+        historyHydrationSessionIds: effectiveHistoryHydrationSessionIds,
         runtimePlanner,
         promptAssembler,
         getRepoPromptOverrides,
