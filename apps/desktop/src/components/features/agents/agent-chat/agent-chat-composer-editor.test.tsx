@@ -135,6 +135,30 @@ const typeIntoEditor = (container: HTMLElement, value: string): HTMLElement => {
   return getLastTextSegment(container);
 };
 
+const selectAllComposerContents = (container: HTMLElement): HTMLElement => {
+  const editorRoot = getEditorRoot(container);
+  fireEvent.keyDown(editorRoot, {
+    key: "a",
+    metaKey: true,
+  });
+  return editorRoot;
+};
+
+const selectComposerContentRange = (container: HTMLElement): HTMLElement => {
+  const editorRoot = getEditorRoot(container);
+  const contentRoot = container.querySelector("[data-composer-content-root]");
+  if (!(contentRoot instanceof HTMLElement)) {
+    throw new Error("Expected composer content root");
+  }
+
+  const range = document.createRange();
+  range.selectNodeContents(contentRoot);
+  const selection = globalThis.getSelection?.();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  return editorRoot;
+};
+
 describe("AgentChatComposerEditor", () => {
   test("shows the slash-command error state after typing a slash trigger", async () => {
     const rendered = render(
@@ -469,6 +493,65 @@ describe("AgentChatComposerEditor", () => {
     fireEvent.keyDown(editable, { key: "Backspace" });
 
     expect(setCaretOffsetWithinElementMock).toHaveBeenCalledWith(editable, 0);
+  });
+
+  test("restores the placeholder after clearing a full composer selection with backspace", async () => {
+    resetSelectionMocks();
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    typeIntoEditor(rendered.container, "hello");
+    expect(screen.queryByText("Type a message")).toBeNull();
+
+    selectAllComposerContents(rendered.container);
+    const editorRoot = selectComposerContentRange(rendered.container);
+    fireEvent.keyDown(editorRoot, { key: "Backspace" });
+
+    await waitFor(() => {
+      expect(screen.getByText("Type a message")).toBeDefined();
+      expect(rendered.container.querySelector("[data-composer-content-root]")?.textContent).toBe(
+        "\u200B",
+      );
+    });
+  });
+
+  test("stays operable after clearing a full selection and remounting another session", async () => {
+    resetSelectionMocks();
+    const rendered = render(
+      <EditorHarness
+        key="session-a"
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        initialDraft={createComposerDraft("hello")}
+      />,
+    );
+
+    selectAllComposerContents(rendered.container);
+    const editorRoot = selectComposerContentRange(rendered.container);
+    fireEvent.keyDown(editorRoot, { key: "Backspace" });
+
+    await waitFor(() => {
+      expect(screen.getByText("Type a message")).toBeDefined();
+    });
+
+    expect(() => {
+      rendered.rerender(
+        <EditorHarness
+          key="session-b"
+          slashCommands={COMMANDS}
+          slashCommandsError={null}
+          initialDraft={createComposerDraft("next")}
+        />,
+      );
+    }).not.toThrow();
+
+    typeIntoEditor(rendered.container, "next session");
+
+    await waitFor(() => {
+      expect(screen.queryByText("Type a message")).toBeNull();
+      expect(rendered.container.querySelector("[data-composer-content-root]")?.textContent).toBe(
+        "next session",
+      );
+    });
   });
 
   test("inserts a newline on the first shift-enter", async () => {

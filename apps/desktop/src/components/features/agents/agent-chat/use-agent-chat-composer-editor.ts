@@ -17,6 +17,7 @@ import {
   type AgentChatComposerDraft,
   type AgentChatComposerDraftEditResult,
   applyComposerDraftEdit,
+  createEmptyComposerDraft,
   createTextSegment,
   draftHasMeaningfulContent,
   normalizeComposerDraft,
@@ -234,6 +235,23 @@ const selectComposerContents = (root: HTMLElement): boolean => {
   selection.removeAllRanges();
   selection.addRange(range);
   return true;
+};
+
+const isComposerContentFullySelected = (root: HTMLElement): boolean => {
+  const contentRoot = getComposerContentRoot(root);
+  const selection = root.ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
+  if (!contentRoot || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    return false;
+  }
+
+  const selectionRange = selection.getRangeAt(0);
+  const fullRange = root.ownerDocument.createRange();
+  fullRange.selectNodeContents(contentRoot);
+
+  return (
+    selectionRange.compareBoundaryPoints(Range.START_TO_START, fullRange) === 0 &&
+    selectionRange.compareBoundaryPoints(Range.END_TO_END, fullRange) === 0
+  );
 };
 
 const getClosestTextSegmentElement = (node: Node | null, root: HTMLElement): HTMLElement | null => {
@@ -697,6 +715,29 @@ export const useAgentChatComposerEditor = ({
     [applyEditResult, closeFileMenu],
   );
 
+  const clearComposerContents = useCallback(() => {
+    const nextDraft = createEmptyComposerDraft();
+    const firstSegment = nextDraft.segments[0];
+    if (!firstSegment || firstSegment.kind !== "text") {
+      return false;
+    }
+
+    const didApply = applyEditResult({
+      draft: nextDraft,
+      focusTarget: {
+        segmentId: firstSegment.id,
+        offset: 0,
+      },
+    });
+    if (!didApply) {
+      return false;
+    }
+
+    setSlashMenuState(null);
+    closeFileMenu();
+    return true;
+  }, [applyEditResult, closeFileMenu]);
+
   const selectSlashCommand = useCallback(
     (command: AgentSlashCommand) => {
       if (!slashMenuState) {
@@ -818,6 +859,15 @@ export const useAgentChatComposerEditor = ({
       }
 
       if (inputType !== "insertLineBreak" && inputType !== "insertParagraph") {
+        if (
+          (inputType === "deleteContentBackward" ||
+            inputType === "deleteContentForward" ||
+            inputType === "deleteByCut") &&
+          isComposerContentFullySelected(event.currentTarget)
+        ) {
+          event.preventDefault();
+          void clearComposerContents();
+        }
         return;
       }
 
@@ -835,6 +885,7 @@ export const useAgentChatComposerEditor = ({
       );
     },
     [
+      clearComposerContents,
       closeFileMenu,
       insertNewlineAtSelectionTarget,
       rememberSelectionTarget,
@@ -887,6 +938,15 @@ export const useAgentChatComposerEditor = ({
         if (selectComposerContents(root)) {
           event.preventDefault();
         }
+        return;
+      }
+
+      if (
+        (event.key === "Backspace" || event.key === "Delete") &&
+        isComposerContentFullySelected(root)
+      ) {
+        event.preventDefault();
+        void clearComposerContents();
         return;
       }
 
@@ -1015,6 +1075,7 @@ export const useAgentChatComposerEditor = ({
       activeSlashIndex,
       applyEditResult,
       closeFileMenu,
+      clearComposerContents,
       disabled,
       fileMenuState,
       filteredSlashCommands,
