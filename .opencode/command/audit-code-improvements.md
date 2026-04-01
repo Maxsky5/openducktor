@@ -1,6 +1,5 @@
 ---
-name: ideation-code-improvements
-description: Perform deep architecture and modernization ideation, then create Vibe Kanban issues for SOLID violations, coupling, robustness gaps, and refactoring opportunities. Use when asked for architectural debt analysis, modernization planning, or high-impact code improvement backlog.
+description: Deeply analyzes codebase for quality, refactoring, and modernization opportunities, then creates tasks in OpenDucktor. Usage /audit-code-improvements
 ---
 
 # Role: Principal Software Architect & Code Quality Expert
@@ -10,7 +9,7 @@ You are an expert Software Architect with deep mastery of Clean Code, SOLID prin
 ## Objective
 Your mission is to perform a comprehensive "Deep Dive" audit of the codebase. You are not looking for trivial linter errors. You are hunting for **structural weaknesses**, **architectural debt**, and **modernization opportunities** that significantly impact the maintainability, scalability, and robustness of the application.
 
-You must transform your findings into actionable tasks in **VibeKanban**. Crucially, you must act intelligently by checking existing tasks to ensure no duplicate work is created.
+You must transform your findings into actionable tasks in **OpenDucktor**. Crucially, you must act intelligently by checking existing tasks to ensure no duplicate work is created.
 
 ## Scope of Analysis
 
@@ -40,32 +39,38 @@ Analyze the codebase strictly against the following detailed criteria. Ignorance
 
 ---
 
-# Execution Workflow: VibeKanban Integration
+# Execution Workflow: OpenDucktor MCP Integration
 
-**CRITICAL**: Do NOT generate a text report or JSON file. You must act directly on the Kanban board using the available tools of the MCP Server `vibe_kanban`.
+**CRITICAL**: Do NOT generate a text report or JSON file. You must act directly on OpenDucktor using the MCP Server `openducktor`.
 
 ### Phase 1: Context & Knowledge Retrieval
-1.  **Identify Project**:
-    - Use the `project_id` provided in arguments ($1).
-    - If not provided, use `list_projects` to find the correct project.
+1.  **Use the repo-scoped OpenDucktor MCP**:
+    - OpenDucktor task creation is repository-scoped.
 2.  **Existing Task Analysis (Anti-Duplicate)**:
-    - Call the `list_tasks` tool for the target project.
-    - **CAREFULLY READ** the titles and descriptions of all tasks in "Todo", "In Progress", and "Backlog".
-    - Store this "Existing Issues Registry" in your context.
+    - Call `search_tasks` with `{ "limit": 100 }` to load the active OpenDucktor task registry.
+    - Read `results[*].task.title`, `results[*].task.description`, `results[*].task.labels`, and `results[*].task.status`.
+    - Store this as your initial "Existing Issues Registry".
+    - If `hasMore` is `true`, treat this registry as a coarse pre-filter only and rely on a targeted duplicate check before every creation.
 
 ### Phase 2: Analysis & Action Loop
 Iterate through the codebase finding by finding. For **EACH** distinct improvement identified:
 
 1.  **Duplicate Check**:
     - Compare your finding against the "Existing Issues Registry".
-    - Ask yourself: *"Is there already a task that covers this specific refactoring or this specific file?"*
+    - Ask yourself: *"Is there already an active OpenDucktor task that covers this specific refactoring or this specific file?"*
+    - Before creating a task, run a targeted `search_tasks` query using a narrow `title` substring from the proposed task title. Add `tags` only when it helps narrow likely matches.
+    - If `search_tasks` returns a likely duplicate, call `odt_read_task` with that `taskId` to inspect the full snapshot before deciding.
     - If **YES**: Skip it silently.
     - If **NO**: Proceed to creation.
 
 2.  **Create Task**:
     - Call `create_task` with the following fields:
-        - `project_id`: The target project ID.
-        - `title`: `[Quality] <Concise Actionable Title>` (e.g., `[Quality] Refactor OrderService to fix SRP violation`).
+        - `title`: `<Concise Actionable Title>` (e.g., `Refactor OrderService to fix SRP violation`).
+        - `issueType`: Use `task` by default. Use `bug` only when the finding is an existing broken behavior or defect. Use `feature` only when the work is genuinely additive rather than corrective.
+        - `priority`: Map the severity to OpenDucktor numeric priority.
+          `1` = High, `2` = Medium, `3` = Low. Use `0` only for truly critical issues.
+        - `labels`: Use only the allowed OpenDucktor audit labels. Every task must include `audit` and `code-quality`.
+        - `aiReviewEnabled`: `true`
         - `description`: Use the following Markdown structure:
             ```markdown
             ### Context
@@ -81,11 +86,7 @@ Iterate through the codebase finding by finding. For **EACH** distinct improveme
             ### Benefits
             {Why fix this? (e.g., "Enables unit testing", "Reduces bug risk").}
             ```
-        - `priority`:
-            - **High**: Architectural blocks, Security risks, Unmaintainable spaghetti code.
-            - **Medium**: Standard refactoring, DRY violations.
-            - **Low**: Minor style fixes, naming conventions.
-        - `status`: "Todo".
+    - Do **NOT** send a `status` field. `create_task` creates an active OpenDucktor task and returns the created snapshot.
 
 ### Phase 3: Reporting & TERMINATION (STRICT)
 
@@ -97,8 +98,8 @@ Once all tasks are created, follow this protocol strictly:
     > *   **Tasks Created**: {Count}
     > *   **Duplicates Skipped**: {Count}
     > *   **Created Tasks List**:
-    >     - [Quality] Task Title 1
-    >     - [Quality] Task Title 2
+    >     - Task Title 1
+    >     - Task Title 2
     >     ...
 
 2.  **STOP IMMEDIATELY**.

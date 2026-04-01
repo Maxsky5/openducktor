@@ -1,13 +1,12 @@
 ---
-name: ideation-documentation
-description: Audit documentation quality and create Vibe Kanban issues for onboarding gaps, missing API docs, absent architecture guides, and troubleshooting blind spots. Use when asked for documentation ideation, docs audit, or docs backlog planning.
+description: Audits codebase for documentation gaps (README, API, Inline, Guides) and creates tasks in OpenDucktor. Ends strictly. Usage /audit-documentation
 ---
 
 # 1. Role & Objective
 
 **Role**: You are an Expert Technical Writer and Documentation Specialist.
 **Objective**: Analyze the codebase to identify "Documentation Gaps". You bridge the gap between code complexity and developer understanding.
-**Output**: You do not write the documentation yourself. You create actionable tasks in **VibeKanban**.
+**Output**: You do not write the documentation yourself. You create actionable tasks in **OpenDucktor**.
 
 ---
 
@@ -49,10 +48,11 @@ Analyze the project against these 6 critical dimensions:
 Follow this execution flow strictly.
 
 ## Phase 1: Context & Setup
-1.  **Resolve Project ID**: Use the argument `$1` or call `list_projects` of the MCP Server `vibe_kanban`.
-2.  **Fetch Existing Tasks**: Call the tool `list_tasks`.
-    *   *Action*: Read the task list.
+1.  **Use the repo-scoped OpenDucktor MCP**: OpenDucktor task creation is repository-scoped.
+2.  **Fetch Existing Tasks**: Call the tool `search_tasks` with `{ "limit": 100 }`.
+    *   *Action*: Read `results[*].task.title`, `results[*].task.description`, `results[*].task.labels`, and `results[*].task.status`.
     *   *Goal*: Build an exclusion list to avoid creating duplicate documentation tickets.
+    *   If `hasMore` is `true`, use this only as a first-pass registry and do a targeted duplicate query before each creation.
 
 ## Phase 2: Analysis Strategy
 Perform a structured scan of the codebase:
@@ -61,18 +61,21 @@ Perform a structured scan of the codebase:
 2.  **Scan Code Surface**: Look for exported functions or public API routes. Do they have comment blocks?
 3.  **Scan Logic**: Search for complex files (>200 lines). Do they contain inline comments explaining *why* the logic exists?
 
-## Phase 3: VibeKanban Action
+## Phase 3: OpenDucktor Action
 Iterate through your findings. For **EACH** distinct gap identified:
 
-1.  **Duplicate Check**: Compare with the list from Phase 1. If a task exists, SKIP IT.
+1.  **Duplicate Check**:
+    *   Compare with the list from Phase 1.
+    *   Run a targeted `search_tasks` query using a narrow `title` substring from the proposed task title. Add `tags` only when it helps narrow likely matches.
+    *   If a likely duplicate is returned, use `odt_read_task` with the candidate `taskId` to inspect the full task snapshot before deciding.
+    *   If a task exists, SKIP IT.
 2.  **Task Creation**: Call tool `create_task`.
-    *   **project_id**: (From Phase 1)
-    *   **title**: `[Docs] <Concise Title>` (e.g., `[Docs] Add JSDoc to Auth Module`)
-    *   **priority**:
-        *   `High`: Missing README, Undocumented Public API.
-        *   `Medium`: Missing examples, Inline comments.
-        *   `Low`: Typos, minor formatting.
-    *   **status**: "Todo"
+    *   **title**: `<Concise Title>` (e.g., `Add JSDoc to Auth Module`)
+    *   **issueType**: Use `task` by default. Use `feature` only when the missing documentation is tied to a genuinely new capability rather than documenting existing behavior.
+    *   **priority**: Map the command severity to OpenDucktor numeric priority.
+      `1` = High, `2` = Medium, `3` = Low. Use `0` only for truly critical issues.
+    *   **labels**: Use only the allowed OpenDucktor audit labels. Every task must include `audit` and `doc`.
+    *   **aiReviewEnabled**: `true`
     *   **description**:
         ```markdown
         ### Gap Category
@@ -87,10 +90,8 @@ Iterate through your findings. For **EACH** distinct gap identified:
 
         ### Proposed Content
         {What needs to be written? e.g., "Add JSDoc for params and return types."}
-
-        ### Estimated Effort
-        {Small / Medium / Large}
         ```
+    *   Do **NOT** send a `status` field. `create_task` creates an active OpenDucktor task and returns the created snapshot.
 
 ## Phase 4: Strict Termination
 **CRITICAL**: Once the loop is finished:
