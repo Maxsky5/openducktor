@@ -1,6 +1,7 @@
 use super::command_registry::{build_registry, dispatch_command};
 use super::command_support::{HeadlessCommandError, HeadlessState};
 use super::events::{build_sse_response, parse_last_event_id, HeadlessEventBus};
+use crate::commands::workspace::is_staged_local_attachment_path;
 use crate::{
     startup_phase_service_bootstrap, startup_phase_shutdown_hooks, startup_phase_tracing,
 };
@@ -116,7 +117,6 @@ async fn invoke_handler(
 #[derive(Deserialize)]
 struct LocalAttachmentPreviewQuery {
     path: String,
-    mime: Option<String>,
 }
 
 async fn local_attachment_preview_handler(
@@ -133,12 +133,24 @@ async fn local_attachment_preview_handler(
             status: StatusCode::BAD_REQUEST,
         });
     }
+    let allowed = is_staged_local_attachment_path(&path).map_err(|error| HeadlessCommandError {
+        message: error,
+        status: StatusCode::INTERNAL_SERVER_ERROR,
+    })?;
+    if !allowed {
+        return Err(HeadlessCommandError {
+            message:
+                "Local attachment preview is only available for staged attachment files."
+                    .to_string(),
+            status: StatusCode::FORBIDDEN,
+        });
+    }
 
     let bytes = tokio::fs::read(&path).await.map_err(|error| HeadlessCommandError {
         message: format!("Failed to read local attachment preview: {error}"),
         status: StatusCode::INTERNAL_SERVER_ERROR,
     })?;
-    let mime = query.mime.unwrap_or_else(|| "application/octet-stream".to_string());
+    let mime = mime_guess::from_path(&path).first_or_octet_stream().to_string();
 
     Response::builder()
         .status(StatusCode::OK)
@@ -197,6 +209,7 @@ fn parse_origin_header(origin: &str) -> anyhow::Result<HeaderValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::workspace::stage_local_attachment_to_temp;
     use axum::body::{to_bytes, Body};
     use axum::extract::FromRequest;
     use axum::http::header::CONTENT_TYPE;
@@ -283,13 +296,12 @@ mod tests {
 
     #[tokio::test]
     async fn local_attachment_preview_handler_returns_file_bytes() {
-        let fixture = test_state_fixture();
-        let preview_path = fixture.root.join("preview.png");
-        fs::write(&preview_path, b"preview-bytes").expect("preview fixture should write");
+        let _fixture = test_state_fixture();
+        let preview_path = stage_local_attachment_to_temp("preview.png", "cHJldmlldy1ieXRlcw==")
+            .expect("preview fixture should stage");
 
         let response = local_attachment_preview_handler(Query(LocalAttachmentPreviewQuery {
             path: preview_path.to_string_lossy().into_owned(),
-            mime: Some("image/png".to_string()),
         }))
         .await
         .expect("preview request should succeed");
@@ -307,17 +319,37 @@ mod tests {
 
     #[tokio::test]
     async fn local_attachment_preview_handler_returns_not_found_for_missing_files() {
-        let fixture = test_state_fixture();
-        let preview_path = fixture.root.join("missing.png");
+        let _fixture = test_state_fixture();
+        let preview_path = std::env::temp_dir()
+            .join("openducktor-local-attachments")
+            .join("missing.png");
 
         let error = local_attachment_preview_handler(Query(LocalAttachmentPreviewQuery {
             path: preview_path.to_string_lossy().into_owned(),
-            mime: Some("image/png".to_string()),
         }))
         .await
         .expect_err("missing preview path should fail");
 
         assert_eq!(error.status, StatusCode::NOT_FOUND);
         assert!(error.message.contains("Failed to stat local attachment preview"));
+    }
+
+    #[tokio::test]
+    async fn local_attachment_preview_handler_rejects_nonstaged_paths() {
+        let fixture = test_state_fixture();
+        let preview_path = fixture.root.join("outside-staging.png");
+        fs::write(&preview_path, b"preview-bytes").expect("preview fixture should write");
+
+        let error = local_attachment_preview_handler(Query(LocalAttachmentPreviewQuery {
+            path: preview_path.to_string_lossy().into_owned(),
+        }))
+        .await
+        .expect_err("non-staged preview path should fail");
+
+        assert_eq!(error.status, StatusCode::FORBIDDEN);
+        assert_eq!(
+            error.message,
+            "Local attachment preview is only available for staged attachment files."
+        );
     }
 }

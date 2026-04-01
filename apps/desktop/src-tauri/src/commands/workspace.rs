@@ -8,7 +8,7 @@ use host_application::{
     RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate,
 };
 use host_infra_system::HookSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 #[cfg(test)]
 use tauri::Manager;
 use tauri::{AppHandle, State};
@@ -19,6 +19,25 @@ use uuid::Uuid;
 #[serde(rename_all = "camelCase")]
 pub struct StagedLocalAttachmentPayload {
     pub path: String,
+}
+
+const LOCAL_ATTACHMENT_STAGE_DIR_NAME: &str = "openducktor-local-attachments";
+
+pub(crate) fn local_attachment_stage_dir() -> PathBuf {
+    std::env::temp_dir().join(LOCAL_ATTACHMENT_STAGE_DIR_NAME)
+}
+
+pub(crate) fn is_staged_local_attachment_path(path: &Path) -> Result<bool, String> {
+    let allowed_dir = local_attachment_stage_dir();
+    if !allowed_dir.exists() {
+        return Ok(false);
+    }
+
+    let canonical_allowed_dir = std::fs::canonicalize(&allowed_dir)
+        .map_err(|error| format!("Failed to resolve staged attachment directory: {error}"))?;
+    let canonical_path = std::fs::canonicalize(path)
+        .map_err(|error| format!("Failed to resolve staged attachment path: {error}"))?;
+    Ok(canonical_path.starts_with(canonical_allowed_dir))
 }
 
 fn sanitize_attachment_filename(name: &str) -> String {
@@ -41,7 +60,7 @@ pub(crate) fn stage_local_attachment_to_temp(name: &str, base64_data: &str) -> R
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(base64_data)
         .map_err(|error| format!("Failed to decode attachment payload: {error}"))?;
-    let attachment_dir = std::env::temp_dir().join("openducktor-local-attachments");
+    let attachment_dir = local_attachment_stage_dir();
     std::fs::create_dir_all(&attachment_dir)
         .map_err(|error| format!("Failed to prepare attachment staging directory: {error}"))?;
     let file_name = format!(

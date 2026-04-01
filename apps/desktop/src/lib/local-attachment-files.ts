@@ -23,23 +23,29 @@ export const stageLocalAttachmentFile = async (file: File): Promise<string> => {
   return staged.path;
 };
 
-export const resolveLocalAttachmentPreviewSrc = async (
+export const buildBrowserLocalAttachmentPreviewUrl = (
+  browserBackendUrl: string,
   path: string,
-  mime?: string,
-): Promise<string> => {
+): string => {
+  const baseUrl = browserBackendUrl.replace(/\/$/, "");
+  const query = new URLSearchParams({ path });
+  return `${baseUrl}/local-attachment-preview?${query.toString()}`;
+};
+
+export const resolveLocalAttachmentPreviewSrc = async (path: string): Promise<string> => {
+  const trimmedPath = path.trim();
+  if (trimmedPath.length === 0) {
+    throw new Error("Attachment preview is unavailable because the local file path is missing.");
+  }
+
   if (isBrowserAppMode()) {
-    const baseUrl = getBrowserBackendUrl().replace(/\/$/, "");
-    const query = new URLSearchParams({ path });
-    if (mime?.trim()) {
-      query.set("mime", mime);
-    }
-    return `${baseUrl}/local-attachment-preview?${query.toString()}`;
+    return buildBrowserLocalAttachmentPreviewUrl(getBrowserBackendUrl(), trimmedPath);
   }
 
   if (isTauriRuntime()) {
     const api = await import("@tauri-apps/api/core");
-    return api.convertFileSrc(path);
+    return api.convertFileSrc(trimmedPath);
   }
 
-  return path;
+  return trimmedPath;
 };

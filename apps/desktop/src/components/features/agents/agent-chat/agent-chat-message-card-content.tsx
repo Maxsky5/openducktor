@@ -401,6 +401,7 @@ export const MessageBody = ({
                 {userAttachments.map((part) => (
                   <AgentChatAttachmentChip
                     key={part.attachment.id}
+                    variant="transcript"
                     attachment={part.attachment}
                     className="w-32"
                   />

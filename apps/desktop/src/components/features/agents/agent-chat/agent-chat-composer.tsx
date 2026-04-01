@@ -441,9 +441,9 @@ export const AgentChatComposer = forwardRef<
             {(draft.attachments ?? []).map((attachment) => (
               <AgentChatAttachmentChip
                 key={attachment.id}
+                variant="draft"
                 attachment={attachment}
                 error={attachmentErrors[attachment.id] ?? null}
-                removable
                 onRemove={() => {
                   setDraft((currentDraft) => {
                     const nextDraft = removeAttachmentFromDraft(currentDraft, attachment.id);

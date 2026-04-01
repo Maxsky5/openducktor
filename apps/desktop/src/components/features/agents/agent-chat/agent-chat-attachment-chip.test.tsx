@@ -17,6 +17,7 @@ describe("AgentChatAttachmentChip", () => {
 
     render(
       <AgentChatAttachmentChip
+        variant="draft"
         attachment={{
           id: "attachment-1",
           name: "preview.png",
@@ -24,10 +25,16 @@ describe("AgentChatAttachmentChip", () => {
           mime: "image/png",
           file: new File(["image"], "preview.png", { type: "image/png" }),
         }}
+        onRemove={() => {}}
       />,
     );
 
-    const previewButton = await screen.findByRole("button", { name: /preview.png/i });
+    const previewButton = screen
+      .getAllByRole("button")
+      .find((button) => button.getAttribute("aria-label") === null);
+    if (!previewButton) {
+      throw new Error("Expected preview button");
+    }
     fireEvent.click(previewButton);
     await screen.findByText("Image preview");
 

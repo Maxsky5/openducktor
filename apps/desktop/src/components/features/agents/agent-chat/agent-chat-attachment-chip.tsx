@@ -1,6 +1,6 @@
 import type { AgentAttachmentReference } from "@openducktor/core";
 import { FileAudio2, FileText, Film, Image as ImageIcon, LoaderCircle, X } from "lucide-react";
-import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactElement } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,18 +10,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { resolveLocalAttachmentPreviewSrc } from "@/lib/local-attachment-files";
 import { cn } from "@/lib/utils";
-import { isPreviewableAttachmentKind } from "./agent-chat-attachments";
-
-type DraftAttachmentLike = {
-  id: string;
-  name: string;
-  kind: AgentAttachmentReference["kind"];
-  mime?: string;
-  path?: string;
-  file?: File;
-};
+import {
+  type AgentChatAttachmentPreviewTarget,
+  useAgentChatAttachmentPreview,
+} from "./use-agent-chat-attachment-preview";
 
 const ATTACHMENT_ICON = {
   image: ImageIcon,
@@ -30,110 +23,50 @@ const ATTACHMENT_ICON = {
   pdf: FileText,
 } as const;
 
-const readPreviewLoadFailureMessage = (attachmentName: string): string => {
-  return `Attachment preview is unavailable because "${attachmentName}" could not be read from its original local path.`;
-};
-
-const readPreviewUrlForAttachment = (attachment: DraftAttachmentLike): string | null => {
-  if (attachment.file && isPreviewableAttachmentKind(attachment.kind)) {
-    return URL.createObjectURL(attachment.file);
-  }
-  return null;
-};
-
-export function AgentChatAttachmentChip({
-  attachment,
-  error,
-  removable = false,
-  onRemove,
-  className,
-}: {
-  attachment: AgentAttachmentReference | DraftAttachmentLike;
+type DraftAttachmentChipProps = {
+  variant: "draft";
+  attachment: AgentChatAttachmentPreviewTarget;
   error?: string | null;
-  removable?: boolean;
-  onRemove?: () => void;
+  onRemove: () => void;
   className?: string;
-}): ReactElement {
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [resolvedPreviewSrc, setResolvedPreviewSrc] = useState<string | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [isResolvingPreview, setIsResolvingPreview] = useState(false);
-  const previewable = isPreviewableAttachmentKind(attachment.kind);
+};
+
+type TranscriptAttachmentChipProps = {
+  variant: "transcript";
+  attachment: AgentAttachmentReference;
+  className?: string;
+};
+
+export function AgentChatAttachmentChip(
+  props: DraftAttachmentChipProps | TranscriptAttachmentChipProps,
+): ReactElement {
+  const { variant, attachment, className } = props;
   const Icon = ATTACHMENT_ICON[attachment.kind];
-
-  const objectPreviewUrl = useMemo(() => readPreviewUrlForAttachment(attachment), [attachment]);
-
-  const markPreviewUnavailable = useCallback(() => {
-    setDialogOpen(false);
-    setResolvedPreviewSrc(null);
-    setPreviewError(readPreviewLoadFailureMessage(attachment.name));
-  }, [attachment.name]);
-
-  useEffect(() => {
-    return () => {
-      if (objectPreviewUrl) {
-        URL.revokeObjectURL(objectPreviewUrl);
-      }
-    };
-  }, [objectPreviewUrl]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!previewable || objectPreviewUrl) {
-      setResolvedPreviewSrc(objectPreviewUrl ?? null);
-      setPreviewError(null);
-      setIsResolvingPreview(false);
-      return;
-    }
-    if (!attachment.path) {
-      setResolvedPreviewSrc(null);
-      setPreviewError("Attachment preview is unavailable because the local file path is missing.");
-      setIsResolvingPreview(false);
-      return;
-    }
-
-    setIsResolvingPreview(true);
-    setPreviewError(null);
-    void resolveLocalAttachmentPreviewSrc(attachment.path, attachment.mime)
-      .then((src) => {
-        if (cancelled) {
-          return;
-        }
-        setResolvedPreviewSrc(src);
-      })
-      .catch((resolveError) => {
-        if (cancelled) {
-          return;
-        }
-        setResolvedPreviewSrc(null);
-        setPreviewError(
-          resolveError instanceof Error ? resolveError.message : String(resolveError),
-        );
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsResolvingPreview(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [attachment.mime, attachment.path, objectPreviewUrl, previewable]);
-
-  const effectiveError = error ?? previewError;
-  const canOpenPreview = previewable && Boolean(resolvedPreviewSrc) && !effectiveError;
-  const showResolvedPreview = Boolean(resolvedPreviewSrc) && !previewError;
+  const draftProps = variant === "draft" ? props : null;
+  const {
+    dialogOpen,
+    setDialogOpen,
+    resolvedPreviewSrc,
+    effectiveError,
+    isResolvingPreview,
+    previewable,
+    showResolvedPreview,
+    requestPreviewOpen,
+    markPreviewUnavailable,
+  } = useAgentChatAttachmentPreview({
+    attachment,
+    externalError: draftProps?.error ?? null,
+  });
+  const removable = variant === "draft";
+  const onRemove = draftProps?.onRemove ?? null;
 
   const handleOpenPreview = (): void => {
-    if (canOpenPreview) {
-      setDialogOpen(true);
+    const previewError = requestPreviewOpen();
+    if (!previewError) {
       return;
     }
     toast.error("Unable to open attachment preview", {
-      description:
-        effectiveError ??
-        "The attachment preview is not available because the local file could not be resolved.",
+      description: previewError,
     });
   };
 
