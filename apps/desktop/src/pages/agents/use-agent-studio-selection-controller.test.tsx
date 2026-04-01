@@ -40,6 +40,7 @@ const createHookHarness = (initialProps: HookArgs) =>
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeRepo: null,
+  isRepoNavigationBoundaryPending: false,
   agentStudioReadinessState: "ready",
   tasks: [createTask("task-1"), createTask("task-2")],
   isLoadingTasks: false,
@@ -144,6 +145,51 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.activeSession?.sessionId).toBe("session-2");
       expect(latest.viewTaskId).toBe("task-2");
       expect(latest.viewActiveSession?.sessionId).toBe("session-2");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("suppresses stale query task and session selection while repo boundary reset is pending", async () => {
+    const readSessionModelCatalog = mock(async () => emptyCatalog);
+    const readSessionTodos = mock(async () => []);
+    const hydrateRequestedTaskSessionHistory = mock(async () => {});
+    const staleSession = createSession("task-1", "session-1", {
+      runtimeKind: "opencode",
+      runtimeEndpoint: "http://runtime",
+      workingDirectory: "/repo-a",
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "running",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        isRepoNavigationBoundaryPending: true,
+        sessions: [staleSession],
+        taskIdParam: "task-1",
+        sessionParam: "session-1",
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+        scenarioFromQuery: "build_implementation_start",
+        readSessionModelCatalog,
+        readSessionTodos,
+        hydrateRequestedTaskSessionHistory,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.selectedSessionById).toBeNull();
+      expect(latest.taskId).toBe("");
+      expect(latest.selectedTask).toBeNull();
+      expect(latest.activeSession).toBeNull();
+      expect(latest.viewTaskId).toBe("");
+      expect(latest.viewActiveSession).toBeNull();
+      expect(readSessionModelCatalog).toHaveBeenCalledTimes(0);
+      expect(readSessionTodos).toHaveBeenCalledTimes(0);
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
     }

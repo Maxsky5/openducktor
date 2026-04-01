@@ -2,10 +2,19 @@ import { describe, expect, test } from "bun:test";
 import { useState } from "react";
 import { type AgentStudioNavigationState, toContextStorageKey } from "./agent-studio-navigation";
 import {
+  createMemoryStorage,
+  seedRepoNavigationContexts,
+  type TestStorageLike,
+  withMockedLocalStorage,
+} from "./agent-studio-repo-persistence-test-utils";
+import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { useRepoNavigationPersistence } from "./use-repo-navigation-persistence";
+import {
+  resolveRepoNavigationBoundaryPhase,
+  useRepoNavigationPersistence,
+} from "./use-repo-navigation-persistence";
 
 enableReactActEnvironment();
 
@@ -14,15 +23,14 @@ type HookArgs = {
   initialNavigation?: AgentStudioNavigationState;
 };
 
-type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem" | "clear" | "key"> & {
-  readonly length: number;
-};
-
-const createMemoryStorage = (): StorageLike => {
+const createRecordingStorage = () => {
   const store = new Map<string, string>();
-  return {
+  const writes: Array<{ key: string; value: string }> = [];
+
+  const storage: TestStorageLike = {
     getItem: (key) => store.get(key) ?? null,
     setItem: (key, value) => {
+      writes.push({ key, value });
       store.set(key, value);
     },
     removeItem: (key) => {
@@ -36,35 +44,37 @@ const createMemoryStorage = (): StorageLike => {
       return store.size;
     },
   };
+
+  return { storage, writes };
 };
 
 const createThrowingStorage = (args: {
   throwOnGetItem?: boolean;
   throwOnSetItem?: boolean;
   message?: string;
-}): StorageLike => {
+}): TestStorageLike => {
   const store = new Map<string, string>();
   const message = args.message ?? "storage unavailable";
   return {
-    getItem: (key) => {
+    getItem: (key: string) => {
       if (args.throwOnGetItem) {
         throw new Error(message);
       }
       return store.get(key) ?? null;
     },
-    setItem: (key, value) => {
+    setItem: (key: string, value: string) => {
       if (args.throwOnSetItem) {
         throw new Error(message);
       }
       store.set(key, value);
     },
-    removeItem: (key) => {
+    removeItem: (key: string) => {
       store.delete(key);
     },
     clear: () => {
       store.clear();
     },
-    key: (index) => Array.from(store.keys())[index] ?? null,
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
     get length() {
       return store.size;
     },
@@ -81,14 +91,16 @@ const useHookHarness = ({ activeRepo, initialNavigation }: HookArgs) => {
     },
   );
 
-  const { persistenceError, retryPersistenceRestore } = useRepoNavigationPersistence({
-    activeRepo,
-    navigation,
-    setNavigation,
-  });
+  const { isRepoNavigationBoundaryPending, persistenceError, retryPersistenceRestore } =
+    useRepoNavigationPersistence({
+      activeRepo,
+      navigation,
+      setNavigation,
+    });
 
   return {
     navigation,
+    isRepoNavigationBoundaryPending,
     persistenceError,
     retryPersistenceRestore,
     setNavigation,
@@ -99,6 +111,23 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useHookHarness, initialProps);
 
 describe("useRepoNavigationPersistence", () => {
+  test("treats the first render after a repo change as boundary-pending before effects run", () => {
+    expect(
+      resolveRepoNavigationBoundaryPhase({
+        activeRepo: "/repo-b",
+        lastActiveRepo: "/repo-a",
+        boundaryRepo: null,
+      }),
+    ).toBe("detecting");
+    expect(
+      resolveRepoNavigationBoundaryPhase({
+        activeRepo: "/repo-a",
+        lastActiveRepo: "/repo-a",
+        boundaryRepo: null,
+      }),
+    ).toBe("idle");
+  });
+
   test("restores persisted repo context when navigation has no explicit task selection", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;
@@ -137,6 +166,41 @@ describe("useRepoNavigationPersistence", () => {
         value: originalStorage,
       });
     }
+  });
+
+  test("does not override explicit role-only selection with persisted repo context", async () => {
+    const memoryStorage = createMemoryStorage();
+    await withMockedLocalStorage(memoryStorage, async () => {
+      seedRepoNavigationContexts(memoryStorage, {
+        "/repo": {
+          taskId: "task-from-context",
+          role: "qa",
+          sessionId: "session-from-context",
+          scenario: "qa_review",
+        },
+      });
+
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+        initialNavigation: {
+          taskId: "",
+          sessionId: null,
+          role: "planner",
+          scenario: "planner_initial",
+        },
+      });
+
+      await harness.mount();
+
+      expect(harness.getLatest().navigation).toEqual({
+        taskId: "",
+        sessionId: null,
+        role: "planner",
+        scenario: "planner_initial",
+      });
+
+      await harness.unmount();
+    });
   });
 
   test("flushes pending persistence during unmount cleanup", async () => {
@@ -356,6 +420,118 @@ describe("useRepoNavigationPersistence", () => {
         value: originalStorage,
       });
     }
+  });
+
+  test("clears stale repo navigation before restoring and persisting the next repo context", async () => {
+    const { storage, writes } = createRecordingStorage();
+    await withMockedLocalStorage(storage, async () => {
+      storage.setItem(
+        toContextStorageKey("/repo-b"),
+        JSON.stringify({
+          taskId: "task-b",
+          role: "planner",
+          sessionId: "session-b",
+        }),
+      );
+
+      const harness = createHookHarness({
+        activeRepo: "/repo-a",
+        initialNavigation: {
+          taskId: "task-a",
+          sessionId: "session-a",
+          role: "build",
+          scenario: "build_implementation_start",
+        },
+      });
+
+      await harness.mount();
+
+      await harness.update({
+        activeRepo: "/repo-b",
+      });
+
+      await harness.waitFor((state) => state.navigation.taskId === "task-b");
+
+      expect(harness.getLatest().isRepoNavigationBoundaryPending).toBeFalse();
+      expect(harness.getLatest().navigation).toEqual({
+        taskId: "task-b",
+        sessionId: "session-b",
+        role: "planner",
+        scenario: null,
+      });
+
+      const repoBWrites = writes.filter((entry) => entry.key === toContextStorageKey("/repo-b"));
+      expect(repoBWrites.some((entry) => entry.value.includes("task-a"))).toBeFalse();
+      expect(repoBWrites.some((entry) => entry.value.includes("session-a"))).toBeFalse();
+
+      await harness.unmount();
+    });
+  });
+
+  test("restores repo-scoped context when switching back to a previous repository", async () => {
+    const memoryStorage = createMemoryStorage();
+    await withMockedLocalStorage(memoryStorage, async () => {
+      seedRepoNavigationContexts(memoryStorage, {
+        "/repo-a": { taskId: "task-a", role: "spec", sessionId: "session-a" },
+        "/repo-b": { taskId: "task-b", role: "planner", sessionId: "session-b" },
+      });
+
+      const harness = createHookHarness({
+        activeRepo: "/repo-a",
+      });
+
+      await harness.mount();
+      await harness.waitFor((state) => state.navigation.taskId === "task-a");
+
+      await harness.update({
+        activeRepo: "/repo-b",
+      });
+      await harness.waitFor((state) => state.navigation.taskId === "task-b");
+
+      await harness.update({
+        activeRepo: "/repo-a",
+      });
+      await harness.waitFor((state) => state.navigation.taskId === "task-a");
+
+      expect(harness.getLatest().navigation).toEqual({
+        taskId: "task-a",
+        sessionId: "session-a",
+        role: "spec",
+        scenario: null,
+      });
+
+      await harness.unmount();
+    });
+  });
+
+  test("rapid repo changes leave the final repository context restored", async () => {
+    const memoryStorage = createMemoryStorage();
+    await withMockedLocalStorage(memoryStorage, async () => {
+      seedRepoNavigationContexts(memoryStorage, {
+        "/repo-a": { taskId: "task-a", role: "spec", sessionId: "session-a" },
+        "/repo-b": { taskId: "task-b", role: "planner", sessionId: "session-b" },
+      });
+
+      const harness = createHookHarness({
+        activeRepo: "/repo-a",
+      });
+
+      await harness.mount();
+      await harness.waitFor((state) => state.navigation.taskId === "task-a");
+
+      await harness.update({ activeRepo: "/repo-b" });
+      await harness.update({ activeRepo: "/repo-a" });
+      await harness.waitFor((state) => state.navigation.taskId === "task-a");
+
+      expect(harness.getLatest().navigation).toEqual({
+        taskId: "task-a",
+        sessionId: "session-a",
+        role: "spec",
+        scenario: null,
+      });
+
+      await harness.unmount();
+    });
   });
 
   test("surfaces actionable error when context storage persistence fails and allows retry", async () => {

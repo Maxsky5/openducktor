@@ -1,5 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
+  createMemoryStorage,
+  seedRepoTaskTabs,
+  type TestStorageLike,
+  withMockedLocalStorage,
+} from "./agent-studio-repo-persistence-test-utils";
+import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
@@ -13,35 +19,11 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioTaskTabs>[0];
 
-type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem" | "clear" | "key"> & {
-  readonly length: number;
-};
-
-const createMemoryStorage = (): StorageLike => {
-  const store = new Map<string, string>();
-  return {
-    getItem: (key) => store.get(key) ?? null,
-    setItem: (key, value) => {
-      store.set(key, value);
-    },
-    removeItem: (key) => {
-      store.delete(key);
-    },
-    clear: () => {
-      store.clear();
-    },
-    key: (index) => Array.from(store.keys())[index] ?? null,
-    get length() {
-      return store.size;
-    },
-  };
-};
-
 const createThrowingStorage = (args: {
   throwOnGetItem?: boolean;
   throwOnSetItem?: boolean;
   message?: string;
-}): StorageLike => {
+}): TestStorageLike => {
   const store = new Map<string, string>();
   const message = args.message ?? "storage unavailable";
   return {
@@ -549,6 +531,100 @@ describe("useAgentStudioTaskTabs", () => {
         value: originalStorage,
       });
     }
+  });
+
+  test("suppresses fallback routing while repo navigation boundary is pending", async () => {
+    const memoryStorage = createMemoryStorage();
+    await withMockedLocalStorage(memoryStorage, async () => {
+      memoryStorage.setItem(
+        toTabsStorageKey("/repo-b"),
+        toPersistedTaskTabs({
+          tabs: ["task-b"],
+          activeTaskId: "task-b",
+        }),
+      );
+
+      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const harness = createHookHarness({
+        activeRepo: "/repo-b",
+        isRepoNavigationBoundaryPending: true,
+        taskId: "",
+        selectedTask: null,
+        tasks: [createTask("task-b")],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map([["task-b", createSession("task-b", "session-b")]]),
+        updateQuery: (updates) => {
+          updateCalls.push(updates);
+        },
+        clearComposerInput: () => {},
+      });
+
+      await harness.mount();
+
+      expect(updateCalls).toHaveLength(0);
+      expect(harness.getLatest().activeTaskTabId).toBe("task-b");
+
+      await harness.unmount();
+    });
+  });
+
+  test("restores repo-scoped fallback tabs when switching away and back", async () => {
+    const memoryStorage = createMemoryStorage();
+    await withMockedLocalStorage(memoryStorage, async () => {
+      seedRepoTaskTabs(memoryStorage, {
+        "/repo-a": { tabs: ["task-a"], activeTaskId: "task-a" },
+        "/repo-b": { tabs: ["task-b"], activeTaskId: "task-b" },
+      });
+
+      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const harness = createHookHarness({
+        activeRepo: "/repo-a",
+        taskId: "",
+        selectedTask: null,
+        tasks: [createTask("task-a")],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map([["task-a", createSession("task-a", "session-a")]]),
+        updateQuery: (updates) => {
+          updateCalls.push(updates);
+        },
+        clearComposerInput: () => {},
+      });
+
+      await harness.mount();
+      await harness.waitFor(() => updateCalls.length === 1);
+
+      await harness.update({
+        activeRepo: "/repo-b",
+        taskId: "",
+        selectedTask: null,
+        tasks: [createTask("task-b")],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map([["task-b", createSession("task-b", "session-b")]]),
+        updateQuery: (updates) => {
+          updateCalls.push(updates);
+        },
+        clearComposerInput: () => {},
+      });
+      await harness.waitFor(() => updateCalls.length === 2);
+
+      await harness.update({
+        activeRepo: "/repo-a",
+        taskId: "",
+        selectedTask: null,
+        tasks: [createTask("task-a")],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map([["task-a", createSession("task-a", "session-a-2")]]),
+        updateQuery: (updates) => {
+          updateCalls.push(updates);
+        },
+        clearComposerInput: () => {},
+      });
+      await harness.waitFor(() => updateCalls.length === 3);
+
+      expect(updateCalls.map((call) => call.task)).toEqual(["task-a", "task-b", "task-a"]);
+
+      await harness.unmount();
+    });
   });
 
   test("removes a task tab when the selected task becomes closed and routes to the first remaining tab", async () => {

@@ -5,6 +5,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { AGENT_STUDIO_QUERY_KEYS, type AgentStudioQueryUpdate } from "./agent-studio-navigation";
 
 type UseAgentStudioQuerySessionSyncArgs = {
+  isRepoNavigationBoundaryPending: boolean;
   isLoadingTasks: boolean;
   tasks: TaskCard[];
   taskIdParam: string;
@@ -18,6 +19,7 @@ type UseAgentStudioQuerySessionSyncArgs = {
 };
 
 export function useAgentStudioQuerySessionSync({
+  isRepoNavigationBoundaryPending,
   isLoadingTasks,
   tasks,
   taskIdParam,
@@ -30,6 +32,9 @@ export function useAgentStudioQuerySessionSync({
   scheduleQueryUpdate,
 }: UseAgentStudioQuerySessionSyncArgs): void {
   useEffect(() => {
+    if (isRepoNavigationBoundaryPending) {
+      return;
+    }
     if (isLoadingTasks) {
       return;
     }
@@ -47,16 +52,30 @@ export function useAgentStudioQuerySessionSync({
       [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
       [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
     });
-  }, [isLoadingTasks, scheduleQueryUpdate, selectedSessionById, sessionParam, taskIdParam, tasks]);
+  }, [
+    isLoadingTasks,
+    isRepoNavigationBoundaryPending,
+    scheduleQueryUpdate,
+    selectedSessionById,
+    sessionParam,
+    taskIdParam,
+    tasks,
+  ]);
 
   useEffect(() => {
+    if (isRepoNavigationBoundaryPending) {
+      return;
+    }
     if (!selectedSessionById || taskIdParam) {
       return;
     }
     scheduleQueryUpdate({ [AGENT_STUDIO_QUERY_KEYS.task]: selectedSessionById.taskId });
-  }, [scheduleQueryUpdate, selectedSessionById, taskIdParam]);
+  }, [isRepoNavigationBoundaryPending, scheduleQueryUpdate, selectedSessionById, taskIdParam]);
 
   useEffect(() => {
+    if (isRepoNavigationBoundaryPending) {
+      return;
+    }
     if (!sessionParam) {
       return;
     }
@@ -71,9 +90,19 @@ export function useAgentStudioQuerySessionSync({
       return;
     }
     scheduleQueryUpdate({ [AGENT_STUDIO_QUERY_KEYS.session]: undefined });
-  }, [isActiveTaskHydrated, scheduleQueryUpdate, selectedSessionById, sessionParam, taskId]);
+  }, [
+    isActiveTaskHydrated,
+    isRepoNavigationBoundaryPending,
+    scheduleQueryUpdate,
+    selectedSessionById,
+    sessionParam,
+    taskId,
+  ]);
 
   useEffect(() => {
+    if (isRepoNavigationBoundaryPending) {
+      return;
+    }
     if (!activeSession) {
       return;
     }
@@ -97,5 +126,12 @@ export function useAgentStudioQuerySessionSync({
       return;
     }
     scheduleQueryUpdate(updates);
-  }, [activeSession, roleFromQuery, scheduleQueryUpdate, sessionParam, taskIdParam]);
+  }, [
+    activeSession,
+    isRepoNavigationBoundaryPending,
+    roleFromQuery,
+    scheduleQueryUpdate,
+    sessionParam,
+    taskIdParam,
+  ]);
 }

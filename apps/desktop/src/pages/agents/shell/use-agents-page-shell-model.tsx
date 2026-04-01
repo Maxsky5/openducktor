@@ -115,6 +115,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     hasExplicitRoleParam,
     roleFromQuery,
     scenarioFromQuery,
+    isRepoNavigationBoundaryPending,
     navigationPersistenceError,
     retryNavigationPersistence,
     updateQuery,
@@ -150,6 +151,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
 
   const selection = useAgentStudioSelectionController({
     activeRepo,
+    isRepoNavigationBoundaryPending,
     tasks,
     isLoadingTasks: isForegroundLoadingTasks,
     sessions,
@@ -235,6 +237,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   ]);
 
   useAgentStudioQuerySessionSync({
+    isRepoNavigationBoundaryPending,
     isLoadingTasks: isForegroundLoadingTasks,
     tasks,
     taskIdParam,

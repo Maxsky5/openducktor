@@ -6,6 +6,7 @@ type SetState<T> = Dispatch<SetStateAction<T>>;
 
 type UseTaskTabSelectionArgs = {
   activeRepo: string | null;
+  isRepoNavigationBoundaryPending: boolean;
   taskId: string;
   openTaskTabs: string[];
   persistedActiveTaskId: string | null;
@@ -28,6 +29,7 @@ type UseTaskTabSelectionResult = {
 export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSelectionResult {
   const {
     activeRepo,
+    isRepoNavigationBoundaryPending,
     taskId,
     openTaskTabs,
     persistedActiveTaskId,
@@ -70,7 +72,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
   }, [intentActiveTaskId, setIntentActiveTaskId, tabTaskIds, taskId]);
 
   useEffect(() => {
-    if (!activeRepo || tabsStorageHydratedRepo !== activeRepo) {
+    if (!activeRepo || tabsStorageHydratedRepo !== activeRepo || isRepoNavigationBoundaryPending) {
       return;
     }
     if (taskId || tabTaskIds.length === 0) {
@@ -91,6 +93,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     navigateToTaskIntent(fallbackTaskId);
   }, [
     activeRepo,
+    isRepoNavigationBoundaryPending,
     navigateToTaskIntent,
     persistedActiveTaskId,
     tabTaskIds,
@@ -99,10 +102,10 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
   ]);
 
   useEffect(() => {
-    if (!activeRepo || taskId) {
+    if (!activeRepo || taskId || isRepoNavigationBoundaryPending) {
       appliedFallbackKeyRef.current = null;
     }
-  }, [activeRepo, taskId]);
+  }, [activeRepo, isRepoNavigationBoundaryPending, taskId]);
 
   const handleSelectTab = useCallback(
     (nextTaskId: string): void => {

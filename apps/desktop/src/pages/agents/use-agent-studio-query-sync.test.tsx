@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { useState } from "react";
 import type { SetURLSearchParams } from "react-router-dom";
+import {
+  createMemoryStorage,
+  seedRepoNavigationContexts,
+  withMockedLocalStorage,
+} from "./agent-studio-repo-persistence-test-utils";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -12,32 +18,40 @@ enableReactActEnvironment();
 type HookArgs = Parameters<typeof useAgentStudioQuerySync>[0];
 type SearchParamsCall = Parameters<SetURLSearchParams>;
 
-type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem" | "clear" | "key"> & {
-  readonly length: number;
-};
-
-const createMemoryStorage = (): StorageLike => {
-  const store = new Map<string, string>();
-  return {
-    getItem: (key) => store.get(key) ?? null,
-    setItem: (key, value) => {
-      store.set(key, value);
-    },
-    removeItem: (key) => {
-      store.delete(key);
-    },
-    clear: () => {
-      store.clear();
-    },
-    key: (index) => Array.from(store.keys())[index] ?? null,
-    get length() {
-      return store.size;
-    },
-  };
-};
-
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioQuerySync, initialProps);
+
+const createStatefulQuerySyncHarness = (
+  initialProps: Pick<HookArgs, "activeRepo"> & { initialSearchParams: string },
+) =>
+  createSharedHookHarness(
+    ({
+      activeRepo,
+      initialSearchParams,
+    }: Pick<HookArgs, "activeRepo"> & {
+      initialSearchParams: string;
+    }) => {
+      const [searchParams, setSearchParamsState] = useState(
+        () => new URLSearchParams(initialSearchParams),
+      );
+      const setSearchParams: SetURLSearchParams = (nextInit) => {
+        if (nextInit instanceof URLSearchParams) {
+          setSearchParamsState(new URLSearchParams(nextInit));
+          return;
+        }
+
+        throw new Error("Expected URLSearchParams update in test harness");
+      };
+
+      return useAgentStudioQuerySync({
+        activeRepo,
+        navigationType: "REPLACE",
+        searchParams,
+        setSearchParams,
+      });
+    },
+    initialProps,
+  );
 
 describe("useAgentStudioQuerySync", () => {
   test("parses initial search params and syncs updates through a root-owned URL effect", async () => {
@@ -255,6 +269,102 @@ describe("useAgentStudioQuerySync", () => {
         value: originalStorage,
       });
     }
+  });
+
+  test("clears stale URL authority on repo switch before restoring the next repo context", async () => {
+    const memoryStorage = createMemoryStorage();
+    await withMockedLocalStorage(memoryStorage, async () => {
+      memoryStorage.setItem(
+        toContextStorageKey("/repo-b"),
+        JSON.stringify({
+          taskId: "task-from-repo-b",
+          role: "planner",
+          sessionId: "session-from-repo-b",
+        }),
+      );
+
+      const harness = createStatefulQuerySyncHarness({
+        activeRepo: "/repo-a",
+        initialSearchParams: "task=task-from-repo-a&session=session-from-repo-a&agent=build",
+      });
+
+      await harness.mount();
+
+      await harness.update({
+        activeRepo: "/repo-b",
+        initialSearchParams: "task=task-from-repo-a&session=session-from-repo-a&agent=build",
+      });
+
+      await harness.waitFor((state) => state.taskIdParam === "task-from-repo-b");
+
+      const latest = harness.getLatest();
+      expect(latest.isRepoNavigationBoundaryPending).toBeFalse();
+      expect(latest.taskIdParam).toBe("task-from-repo-b");
+      expect(latest.sessionParam).toBe("session-from-repo-b");
+      expect(latest.roleFromQuery).toBe("planner");
+
+      await harness.unmount();
+    });
+  });
+
+  test("restores repo-scoped URL context when switching back to a previous repository", async () => {
+    const memoryStorage = createMemoryStorage();
+    await withMockedLocalStorage(memoryStorage, async () => {
+      seedRepoNavigationContexts(memoryStorage, {
+        "/repo-a": { taskId: "task-a", role: "spec", sessionId: "session-a" },
+        "/repo-b": { taskId: "task-b", role: "planner", sessionId: "session-b" },
+      });
+
+      const harness = createStatefulQuerySyncHarness({
+        activeRepo: "/repo-a",
+        initialSearchParams: "",
+      });
+
+      await harness.mount();
+      await harness.waitFor((state) => state.taskIdParam === "task-a");
+
+      await harness.update({ activeRepo: "/repo-b", initialSearchParams: "" });
+      await harness.waitFor((state) => state.taskIdParam === "task-b");
+
+      await harness.update({ activeRepo: "/repo-a", initialSearchParams: "" });
+      await harness.waitFor((state) => state.taskIdParam === "task-a");
+
+      const latest = harness.getLatest();
+      expect(latest.taskIdParam).toBe("task-a");
+      expect(latest.sessionParam).toBe("session-a");
+      expect(latest.roleFromQuery).toBe("spec");
+
+      await harness.unmount();
+    });
+  });
+
+  test("rapid repo changes keep the final repository context authoritative", async () => {
+    const memoryStorage = createMemoryStorage();
+    await withMockedLocalStorage(memoryStorage, async () => {
+      seedRepoNavigationContexts(memoryStorage, {
+        "/repo-a": { taskId: "task-a", role: "spec", sessionId: "session-a" },
+        "/repo-b": { taskId: "task-b", role: "planner", sessionId: "session-b" },
+      });
+
+      const harness = createStatefulQuerySyncHarness({
+        activeRepo: "/repo-a",
+        initialSearchParams: "",
+      });
+
+      await harness.mount();
+      await harness.waitFor((state) => state.taskIdParam === "task-a");
+
+      await harness.update({ activeRepo: "/repo-b", initialSearchParams: "" });
+      await harness.update({ activeRepo: "/repo-a", initialSearchParams: "" });
+      await harness.waitFor((state) => state.taskIdParam === "task-a");
+
+      const latest = harness.getLatest();
+      expect(latest.taskIdParam).toBe("task-a");
+      expect(latest.sessionParam).toBe("session-a");
+      expect(latest.roleFromQuery).toBe("spec");
+
+      await harness.unmount();
+    });
   });
 
   test("flushes pending context persistence on unmount cleanup", async () => {

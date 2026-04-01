@@ -22,6 +22,7 @@ export function useAgentStudioQuerySync({
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   scenarioFromQuery: AgentScenario | null;
+  isRepoNavigationBoundaryPending: boolean;
   navigationPersistenceError: Error | null;
   retryNavigationPersistence: () => void;
   updateQuery: (updates: AgentStudioQueryUpdate) => void;
@@ -32,11 +33,12 @@ export function useAgentStudioQuerySync({
     setSearchParams,
   });
 
-  const { persistenceError, retryPersistenceRestore } = useRepoNavigationPersistence({
-    activeRepo,
-    navigation,
-    setNavigation,
-  });
+  const { isRepoNavigationBoundaryPending, persistenceError, retryPersistenceRestore } =
+    useRepoNavigationPersistence({
+      activeRepo,
+      navigation,
+      setNavigation,
+    });
 
   const hasExplicitRoleParam = navigation.role !== null;
   const roleFromQuery: AgentRole = navigation.role ?? "spec";
@@ -47,6 +49,7 @@ export function useAgentStudioQuerySync({
     hasExplicitRoleParam,
     roleFromQuery,
     scenarioFromQuery: navigation.scenario,
+    isRepoNavigationBoundaryPending,
     navigationPersistenceError: persistenceError,
     retryNavigationPersistence: retryPersistenceRestore,
     updateQuery,
