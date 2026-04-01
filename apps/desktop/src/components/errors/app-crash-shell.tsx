@@ -11,28 +11,32 @@ export function AppCrashShell({ children }: AppCrashShellProps): ReactElement {
   const [fatalReport, setFatalReport] = useState<FatalErrorReport | null>(null);
   const [resetKey, setResetKey] = useState(0);
 
-  const reportRef = useRef(fatalReport);
-  reportRef.current = fatalReport;
+  const reportRef = useRef<FatalErrorReport | null>(null);
 
-  const handleCrash = useCallback((report: FatalErrorReport) => {
-    if (reportRef.current !== null) return;
-    setFatalReport(report);
-  }, []);
+  const reportFatal = useCallback(
+    (report: FatalErrorReport, rawValue: unknown, componentStack?: string): void => {
+      if (reportRef.current !== null) return;
+      reportRef.current = report;
+      logFatalError(report, rawValue, componentStack);
+      setFatalReport(report);
+    },
+    [],
+  );
 
   useEffect(() => {
     const onError = (event: Event): void => {
       if (reportRef.current !== null) return;
-      if (!(event instanceof ErrorEvent) || !event.error) return;
+      if (!(event instanceof ErrorEvent) || event.error == null) return;
+      event.preventDefault();
       const report = buildFatalErrorReport(event, "error");
-      logFatalError(report, event);
-      setFatalReport(report);
+      reportFatal(report, event);
     };
 
     const onUnhandledRejection = (event: PromiseRejectionEvent): void => {
       if (reportRef.current !== null) return;
+      event.preventDefault();
       const report = buildFatalErrorReport(event, "unhandledrejection");
-      logFatalError(report, event);
-      setFatalReport(report);
+      reportFatal(report, event);
     };
 
     window.addEventListener("error", onError as EventListener);
@@ -42,9 +46,10 @@ export function AppCrashShell({ children }: AppCrashShellProps): ReactElement {
       window.removeEventListener("error", onError as EventListener);
       window.removeEventListener("unhandledrejection", onUnhandledRejection);
     };
-  }, []);
+  }, [reportFatal]);
 
   const handleRetry = useCallback(() => {
+    reportRef.current = null;
     setFatalReport(null);
     setResetKey((k) => k + 1);
   }, []);
@@ -64,7 +69,7 @@ export function AppCrashShell({ children }: AppCrashShellProps): ReactElement {
   }
 
   return (
-    <AppErrorBoundary key={resetKey} onCrash={handleCrash}>
+    <AppErrorBoundary key={resetKey} onCrash={reportFatal}>
       {children}
     </AppErrorBoundary>
   );

@@ -1,18 +1,8 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { ensurePromiseRejectionEventPolyfill } from "@/test-utils/promise-rejection-event-polyfill";
 import { buildFatalErrorReport, logFatalError } from "./fatal-error-report";
 
-if (typeof globalThis.PromiseRejectionEvent === "undefined") {
-  (globalThis as Record<string, unknown>).PromiseRejectionEvent =
-    class PromiseRejectionEvent extends Event {
-      readonly reason: unknown;
-      readonly promise: Promise<unknown>;
-      constructor(type: string, init: { reason?: unknown; promise: Promise<unknown> }) {
-        super(type);
-        this.reason = init.reason;
-        this.promise = init.promise;
-      }
-    };
-}
+ensurePromiseRejectionEventPolyfill();
 
 describe("buildFatalErrorReport", () => {
   describe("Error instances", () => {

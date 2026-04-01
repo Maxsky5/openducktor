@@ -1,20 +1,10 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { lazy, Suspense } from "react";
+import { ensurePromiseRejectionEventPolyfill } from "@/test-utils/promise-rejection-event-polyfill";
 import { AppCrashShell } from "./app-crash-shell";
 
-if (typeof globalThis.PromiseRejectionEvent === "undefined") {
-  (globalThis as Record<string, unknown>).PromiseRejectionEvent =
-    class PromiseRejectionEvent extends Event {
-      readonly reason: unknown;
-      readonly promise: Promise<unknown>;
-      constructor(type: string, init: { reason?: unknown; promise: Promise<unknown> }) {
-        super(type);
-        this.reason = init.reason;
-        this.promise = init.promise;
-      }
-    };
-}
+ensurePromiseRejectionEventPolyfill();
 
 const originalConsoleError = console.error;
 let consoleErrorMock: ReturnType<typeof mock>;
@@ -122,6 +112,29 @@ describe("AppCrashShell", () => {
       expect(screen.getByTestId("fatal-error-title").textContent).toBe("TypeError");
     });
 
+    test("captures ErrorEvent with a falsy thrown payload", async () => {
+      render(
+        <AppCrashShell>
+          <div data-testid="healthy-app">App is running</div>
+        </AppCrashShell>,
+      );
+
+      act(() => {
+        const errorEvent = new ErrorEvent("error", {
+          error: 0,
+          message: "",
+        });
+        window.dispatchEvent(errorEvent);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("fatal-error-title")).toBeDefined();
+      });
+
+      expect(screen.getByTestId("fatal-error-title").textContent).toBe("Uncaught error");
+      expect(screen.getByTestId("fatal-error-message").textContent).toBe("0");
+    });
+
     test("captures unhandled rejection events", async () => {
       render(
         <AppCrashShell>
@@ -142,6 +155,54 @@ describe("AppCrashShell", () => {
       });
 
       expect(screen.getByTestId("fatal-error-message").textContent).toBe("Unhandled async error");
+    });
+
+    test("prevents default handling for fatal browser error events", async () => {
+      render(
+        <AppCrashShell>
+          <div data-testid="healthy-app">App is running</div>
+        </AppCrashShell>,
+      );
+
+      const errorEvent = new ErrorEvent("error", {
+        cancelable: true,
+        error: new Error("prevent default"),
+        message: "Uncaught Error",
+      });
+
+      act(() => {
+        window.dispatchEvent(errorEvent);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("fatal-error-title")).toBeDefined();
+      });
+
+      expect(errorEvent.defaultPrevented).toBe(true);
+    });
+
+    test("prevents default handling for fatal unhandled rejection events", async () => {
+      render(
+        <AppCrashShell>
+          <div data-testid="healthy-app">App is running</div>
+        </AppCrashShell>,
+      );
+
+      const rejectionEvent = new PromiseRejectionEvent("unhandledrejection", {
+        cancelable: true,
+        promise: Promise.resolve(),
+        reason: new Error("prevent duplicate rejection logging"),
+      });
+
+      act(() => {
+        window.dispatchEvent(rejectionEvent);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("fatal-error-title")).toBeDefined();
+      });
+
+      expect(rejectionEvent.defaultPrevented).toBe(true);
     });
 
     test("ignores duplicate errors when already in fatal state", async () => {
@@ -172,6 +233,70 @@ describe("AppCrashShell", () => {
       });
 
       expect(screen.getByTestId("fatal-error-message").textContent).toBe("First error");
+    });
+
+    test("keeps the first fatal report when multiple errors fire in the same tick", async () => {
+      render(
+        <AppCrashShell>
+          <div data-testid="healthy-app">App is running</div>
+        </AppCrashShell>,
+      );
+
+      act(() => {
+        window.dispatchEvent(
+          new ErrorEvent("error", {
+            error: new Error("First same-tick error"),
+            message: "first",
+          }),
+        );
+        window.dispatchEvent(
+          new ErrorEvent("error", {
+            error: new Error("Second same-tick error"),
+            message: "second",
+          }),
+        );
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("fatal-error-message")).toBeDefined();
+      });
+
+      expect(screen.getByTestId("fatal-error-message").textContent).toBe("First same-tick error");
+    });
+
+    test("captures a new fatal event immediately after retry clears the shell", async () => {
+      render(
+        <AppCrashShell>
+          <div data-testid="healthy-app">App is running</div>
+        </AppCrashShell>,
+      );
+
+      act(() => {
+        window.dispatchEvent(
+          new ErrorEvent("error", {
+            error: new Error("First fatal event"),
+            message: "first",
+          }),
+        );
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("fatal-error-retry")).toBeDefined();
+      });
+
+      act(() => {
+        fireEvent.click(screen.getByTestId("fatal-error-retry"));
+        window.dispatchEvent(
+          new ErrorEvent("error", {
+            error: new Error("Second fatal event"),
+            message: "second",
+          }),
+        );
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("fatal-error-message").textContent).toBe("Second fatal event");
+      });
     });
   });
 

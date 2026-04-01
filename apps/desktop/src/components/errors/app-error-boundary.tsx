@@ -1,9 +1,9 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { buildFatalErrorReport, type FatalErrorReport, logFatalError } from "./fatal-error-report";
+import { buildFatalErrorReport, type FatalErrorReport } from "./fatal-error-report";
 
 interface Props {
   children: ReactNode;
-  onCrash: (report: FatalErrorReport) => void;
+  onCrash: (report: FatalErrorReport, error: unknown, componentStack?: string) => void;
 }
 
 interface State {
@@ -22,8 +22,7 @@ export class AppErrorBoundary extends Component<Props, State> {
     if (info.componentStack) {
       report.componentStack = info.componentStack;
     }
-    logFatalError(report, error, info.componentStack ?? undefined);
-    this.props.onCrash(report);
+    this.props.onCrash(report, error, info.componentStack ?? undefined);
   }
 
   override render(): ReactNode {
