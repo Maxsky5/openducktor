@@ -384,25 +384,38 @@ const buildSessionNoticeMessage = ({
   timestamp,
   content,
   tone,
-  reason,
   title,
-}: {
-  timestamp: string;
-  content: string;
-  tone: "cancelled" | "error";
-  reason: "user_stopped" | "session_error";
-  title: string;
-}) => ({
+}:
+  | {
+      timestamp: string;
+      content: string;
+      tone: "cancelled";
+      title: string;
+    }
+  | {
+      timestamp: string;
+      content: string;
+      tone: "error";
+      title: string;
+    }) => ({
   id: crypto.randomUUID(),
   role: "system" as const,
   content,
   timestamp,
-  meta: {
-    kind: "session_notice" as const,
-    tone,
-    reason,
-    title,
-  },
+  meta:
+    tone === "cancelled"
+      ? {
+          kind: "session_notice" as const,
+          tone: "cancelled" as const,
+          reason: "user_stopped" as const,
+          title,
+        }
+      : {
+          kind: "session_notice" as const,
+          tone: "error" as const,
+          reason: "session_error" as const,
+          title,
+        },
 });
 
 const buildUserStoppedNoticeMessage = (timestamp: string) =>
@@ -410,7 +423,6 @@ const buildUserStoppedNoticeMessage = (timestamp: string) =>
     timestamp,
     content: "Session stopped at your request.",
     tone: "cancelled",
-    reason: "user_stopped",
     title: "Stopped",
   });
 
@@ -419,7 +431,6 @@ const buildSessionErrorNoticeMessage = (timestamp: string, message: string) =>
     timestamp,
     content: message,
     tone: "error",
-    reason: "session_error",
     title: "Error",
   });
 
