@@ -76,7 +76,7 @@ Analyze the codebase strictly against these 7 categories. Keep in mind typical *
 
 # Execution Workflow: OpenDucktor MCP Integration
 
-**CRITICAL**: Do NOT generate a text report or JSON file. Act directly on OpenDucktor using the MCP Server `openducktor`.
+**CRITICAL**: Do NOT generate report files or JSON artifacts. Act directly on OpenDucktor using the MCP Server `openducktor`. When finished, output only the brief in-chat summary required by the termination phase.
 
 ## Phase 1: Context & Knowledge Retrieval
 1.  **Use the repo-scoped OpenDucktor MCP**:
@@ -100,7 +100,7 @@ Iterate through the codebase. For **EACH** distinct optimization found:
     *   **issueType**: Use `task` by default. Use `bug` only when the finding is an existing broken behavior or defect. Use `feature` only when the work is genuinely additive rather than corrective.
     *   **priority**: Map the command impact to OpenDucktor numeric priority.
       `1` = High, `2` = Medium, `3` = Low. Use `0` only for truly critical issues.
-    *   **labels**: Use only the allowed OpenDucktor audit labels. Every task must include `audit` and `perf`.
+    *   **labels**: Only `audit` and `perf` are allowed for this command. Every task must include both labels. Do not add any other labels.
     *   **aiReviewEnabled**: `true`
     *   **description**:
         ```markdown

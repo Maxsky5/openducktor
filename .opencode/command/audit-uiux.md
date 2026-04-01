@@ -95,7 +95,7 @@ Iterate through ALL findings (Dynamic + Static). For **EACH** distinct issue:
     *   **issueType**: Use `bug` for broken interaction, accessibility, layout, or responsiveness defects. Use `task` for design-system cleanup or polish work that is not a defect.
     *   **priority**: Map command severity to OpenDucktor numeric priority.
       `1` = High, `2` = Medium, `3` = Low. Use `0` only for truly critical issues.
-    *   **labels**: Use only the allowed OpenDucktor audit labels. Every task must include `audit` plus the applicable specialization labels from `a11y`, `ui`, and `ux`. Choose the narrowest matching label set for the finding.
+    *   **labels**: Only `audit`, `a11y`, `ui`, and `ux` are allowed for this command. Every task must include `audit`, then add only the applicable specialization labels from `a11y`, `ui`, and `ux`. Choose the narrowest matching label set for the finding.
     *   **aiReviewEnabled**: `true`
     *   **description**:
         ```markdown

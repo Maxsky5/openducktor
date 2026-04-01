@@ -41,7 +41,7 @@ Analyze the codebase strictly against the following detailed criteria. Ignorance
 
 # Execution Workflow: OpenDucktor MCP Integration
 
-**CRITICAL**: Do NOT generate a text report or JSON file. You must act directly on OpenDucktor using the MCP Server `openducktor`.
+**CRITICAL**: Do NOT generate report files or JSON artifacts. You must act directly on OpenDucktor using the MCP Server `openducktor`. When finished, output only the brief in-chat summary required by the termination phase.
 
 ## Phase 1: Context & Knowledge Retrieval
 1.  **Use the repo-scoped OpenDucktor MCP**:
@@ -69,7 +69,7 @@ Iterate through the codebase finding by finding. For **EACH** distinct improveme
         - `issueType`: Use `task` by default. Use `bug` only when the finding is an existing broken behavior or defect. Use `feature` only when the work is genuinely additive rather than corrective.
         - `priority`: Map the severity to OpenDucktor numeric priority.
           `1` = High, `2` = Medium, `3` = Low. Use `0` only for truly critical issues.
-        - `labels`: Use only the allowed OpenDucktor audit labels. Every task must include `audit` and `code-quality`.
+        - `labels`: Only `audit` and `code-quality` are allowed for this command. Every task must include both labels. Do not add any other labels.
         - `aiReviewEnabled`: `true`
         - `description`: Use the following Markdown structure:
             ```markdown

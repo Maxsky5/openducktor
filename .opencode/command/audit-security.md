@@ -72,7 +72,7 @@ Analyze the codebase strictly against these 7 critical categories. Refer to the 
 
 # Execution Workflow: OpenDucktor MCP Integration
 
-**CRITICAL**: Do NOT generate a text report or JSON file. Act directly on OpenDucktor using the MCP Server `openducktor`.
+**CRITICAL**: Do NOT generate report files or JSON artifacts. Act directly on OpenDucktor using the MCP Server `openducktor`. When finished, output only the brief in-chat summary required by the termination phase.
 
 ## Phase 1: Context & Knowledge Retrieval
 1.  **Use the repo-scoped OpenDucktor MCP**:
@@ -97,7 +97,7 @@ Iterate through the codebase. For **EACH** distinct vulnerability found:
     *   **issueType**: Use `bug` by default for vulnerabilities and exploitable misconfigurations. Use `task` only for non-defect hardening work that is clearly not a bug.
     *   **priority**: Map the severity table to OpenDucktor numeric priority.
       `0` = Critical, `1` = High, `2` = Medium, `3` = Low.
-    *   **labels**: Use only the allowed OpenDucktor audit labels. Every task must include `audit` and `security`.
+    *   **labels**: Only `audit` and `security` are allowed for this command. Every task must include both labels. Do not add any other labels.
     *   **aiReviewEnabled**: `true`
     *   **description**:
         ```markdown

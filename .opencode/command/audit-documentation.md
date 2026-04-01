@@ -74,7 +74,7 @@ Iterate through your findings. For **EACH** distinct gap identified:
     *   **issueType**: Use `task` by default. Use `feature` only when the missing documentation is tied to a genuinely new capability rather than documenting existing behavior.
     *   **priority**: Map the command severity to OpenDucktor numeric priority.
       `1` = High, `2` = Medium, `3` = Low. Use `0` only for truly critical issues.
-    *   **labels**: Use only the allowed OpenDucktor audit labels. Every task must include `audit` and `doc`.
+    *   **labels**: Only `audit` and `doc` are allowed for this command. Every task must include both labels. Do not add any other labels.
     *   **aiReviewEnabled**: `true`
     *   **description**:
         ```markdown
