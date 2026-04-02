@@ -4,11 +4,16 @@ use super::command_support::{
     serialize_value, service_error, CommandResult, HeadlessHookTrustConfirmationPort,
     HeadlessState, RepoPathArgs,
 };
+use crate::commands::workspace::{
+    resolve_staged_local_attachment_path, stage_local_attachment_to_temp,
+    ResolvedLocalAttachmentPayload, StagedLocalAttachmentPayload,
+};
 use crate::run_service_blocking_tokio;
 use crate::{
     RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload,
     SettingsSnapshotResponsePayload,
 };
+use anyhow::anyhow;
 use host_application::{RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate};
 use serde::Deserialize;
 use serde_json::Value;
@@ -59,6 +64,21 @@ struct WorkspaceSetTrustedHooksArgs {
     trusted: bool,
     challenge_nonce: Option<String>,
     challenge_fingerprint: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceStageLocalAttachmentArgs {
+    name: String,
+    #[allow(dead_code)]
+    mime: Option<String>,
+    base64_data: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceResolveLocalAttachmentPathArgs {
+    path: String,
 }
 
 pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), String> {
@@ -135,6 +155,12 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     })?;
     registry.register("workspace_set_trusted_hooks", |state, args| {
         Box::pin(handle_workspace_set_trusted_hooks(state, args))
+    })?;
+    registry.register("workspace_stage_local_attachment", |_state, args| {
+        Box::pin(async move { handle_workspace_stage_local_attachment(args) })
+    })?;
+    registry.register("workspace_resolve_local_attachment_path", |_state, args| {
+        Box::pin(async move { handle_workspace_resolve_local_attachment_path(args) })
     })?;
     registry.register("set_theme", |state, args| {
         Box::pin(async move { handle_set_theme(state, args) })
@@ -259,6 +285,35 @@ async fn handle_workspace_update_global_git_config(
     .await
     .map_err(service_error)?;
     Ok(Value::Null)
+}
+
+fn handle_workspace_stage_local_attachment(args: Value) -> CommandResult {
+    let WorkspaceStageLocalAttachmentArgs {
+        name,
+        mime: _mime,
+        base64_data,
+    } = deserialize_args(args)?;
+    if name.trim().is_empty() {
+        return Err(service_error(anyhow!("Attachment name is required.")));
+    }
+    if base64_data.trim().is_empty() {
+        return Err(service_error(anyhow!("Attachment payload is required.")));
+    }
+
+    let path = stage_local_attachment_to_temp(&name, &base64_data)
+        .map_err(|error| service_error(anyhow!(error)))?;
+    serialize_value(StagedLocalAttachmentPayload {
+        path: path.to_string_lossy().into_owned(),
+    })
+}
+
+fn handle_workspace_resolve_local_attachment_path(args: Value) -> CommandResult {
+    let WorkspaceResolveLocalAttachmentPathArgs { path } = deserialize_args(args)?;
+    let resolved = resolve_staged_local_attachment_path(&path)
+        .map_err(|error| service_error(anyhow!(error)))?;
+    serialize_value(ResolvedLocalAttachmentPayload {
+        path: resolved.to_string_lossy().into_owned(),
+    })
 }
 
 async fn handle_workspace_save_settings_snapshot(

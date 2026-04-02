@@ -26,6 +26,7 @@ const createTask = (overrides = {}) => createTaskCardFixture(overrides);
 
 const createComposerDraft = (text: string): AgentChatComposerDraft => ({
   segments: [createTextSegment(text)],
+  attachments: [],
 });
 
 const createSession = (overrides = {}) => createAgentSessionFixture(overrides);
@@ -172,6 +173,7 @@ const createBaseArgs = (): HookArgs => {
     scenario: "spec_initial",
     activeSession: null,
     selectedModelSelection: null,
+    selectedModelDescriptor: null,
     sessionsForTask: [],
     selectedTask: createTask(),
     agentStudioReady: true,
@@ -550,10 +552,11 @@ describe("useAgentStudioSessionActions", () => {
     let sendPromise: Promise<boolean | undefined> | undefined;
     await harness.run(async (state) => {
       sendPromise = state.onSend(draft);
-      expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
-        { kind: "text", text: "  hello world  " },
-      ]);
     });
+    await harness.waitFor(() => sendAgentMessage.mock.calls.length === 1);
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+      { kind: "text", text: "  hello world  " },
+    ]);
     expect(harness.getLatest().isSending).toBe(true);
 
     await harness.run(async () => {

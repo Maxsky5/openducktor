@@ -288,6 +288,8 @@ fn startup_phase_command_registration(
         workspace_save_repo_settings,
         workspace_update_repo_hooks,
         workspace_prepare_trusted_hooks_challenge,
+        workspace_stage_local_attachment,
+        workspace_resolve_local_attachment_path,
         workspace_get_repo_config,
         workspace_detect_github_repository,
         workspace_get_settings_snapshot,

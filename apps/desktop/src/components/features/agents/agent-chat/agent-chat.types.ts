@@ -1,5 +1,6 @@
 import type {
   AgentFileSearchResult,
+  AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
   AgentSlashCommand,
@@ -63,6 +64,7 @@ export type AgentChatComposerModel = {
   waitingInputPlaceholder?: string | null;
   isModelSelectionPending: boolean;
   selectedModelSelection: AgentModelSelection | null;
+  selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;

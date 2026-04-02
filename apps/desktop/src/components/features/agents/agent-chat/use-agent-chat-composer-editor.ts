@@ -17,7 +17,6 @@ import {
   type AgentChatComposerDraft,
   type AgentChatComposerDraftEditResult,
   applyComposerDraftEdit,
-  createEmptyComposerDraft,
   createTextSegment,
   draftHasMeaningfulContent,
   normalizeComposerDraft,
@@ -355,6 +354,7 @@ const parseComposerDraftFromRoot = (
 
   return normalizeComposerDraft({
     segments: nextSegments.length > 0 ? nextSegments : [createTextSegment("")],
+    attachments: previousDraft.attachments ?? [],
   });
 };
 
@@ -773,7 +773,10 @@ export const useAgentChatComposerEditor = ({
   );
 
   const clearComposerContents = useCallback(() => {
-    const nextDraft = createEmptyComposerDraft();
+    const nextDraft = normalizeComposerDraft({
+      segments: [createTextSegment("")],
+      attachments: latestDraftRef.current.attachments ?? [],
+    });
     const firstSegment = nextDraft.segments[0];
     if (!firstSegment || firstSegment.kind !== "text") {
       return false;

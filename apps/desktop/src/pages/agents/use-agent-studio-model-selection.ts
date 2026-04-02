@@ -74,6 +74,7 @@ type UseAgentStudioModelSelectionArgs = {
 type AgentStudioModelSelectionState = {
   selectionForNewSession: AgentModelSelection | null;
   selectedModelSelection: AgentModelSelection | null;
+  selectedModelDescriptor: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
@@ -628,6 +629,7 @@ export function useAgentStudioModelSelection({
   return {
     selectionForNewSession,
     selectedModelSelection,
+    selectedModelDescriptor: selectedModelEntry,
     isSelectionCatalogLoading,
     supportsSlashCommands,
     supportsFileSearch,

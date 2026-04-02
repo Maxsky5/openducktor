@@ -2,15 +2,136 @@ use crate::{
     as_error, run_service_blocking, AppState, RepoConfigPayload, RepoSettingsPayload,
     SettingsSnapshotPayload, SettingsSnapshotResponsePayload,
 };
+use base64::Engine;
 use host_application::{
     HookTrustConfirmationPort, HookTrustConfirmationRequest, PreparedHookTrustChallenge,
     RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate,
 };
 use host_infra_system::HookSet;
+use std::path::{Path, PathBuf};
 #[cfg(test)]
 use tauri::Manager;
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use uuid::Uuid;
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StagedLocalAttachmentPayload {
+    pub path: String,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedLocalAttachmentPayload {
+    pub path: String,
+}
+
+const LOCAL_ATTACHMENT_STAGE_DIR_NAME: &str = "openducktor-local-attachments";
+
+pub(crate) fn local_attachment_stage_dir() -> PathBuf {
+    std::env::temp_dir().join(LOCAL_ATTACHMENT_STAGE_DIR_NAME)
+}
+
+pub(crate) fn is_staged_local_attachment_path(path: &Path) -> Result<bool, String> {
+    let allowed_dir = local_attachment_stage_dir();
+    if !allowed_dir.exists() {
+        return Ok(false);
+    }
+
+    let canonical_allowed_dir = std::fs::canonicalize(&allowed_dir)
+        .map_err(|error| format!("Failed to resolve staged attachment directory: {error}"))?;
+    let canonical_path = std::fs::canonicalize(path)
+        .map_err(|error| format!("Failed to resolve staged attachment path: {error}"))?;
+    Ok(canonical_path.starts_with(canonical_allowed_dir))
+}
+
+fn sanitize_attachment_filename(name: &str) -> String {
+    let sanitized = name
+        .chars()
+        .map(|character| match character {
+            '/' | '\\' | ':' | '\0' => '_',
+            _ => character,
+        })
+        .collect::<String>();
+    let trimmed = sanitized.trim().trim_matches('.');
+    if trimmed.is_empty() {
+        "attachment.bin".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+pub(crate) fn stage_local_attachment_to_temp(name: &str, base64_data: &str) -> Result<PathBuf, String> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64_data)
+        .map_err(|error| format!("Failed to decode attachment payload: {error}"))?;
+    let attachment_dir = local_attachment_stage_dir();
+    std::fs::create_dir_all(&attachment_dir)
+        .map_err(|error| format!("Failed to prepare attachment staging directory: {error}"))?;
+    let file_name = format!(
+        "{}-{}",
+        Uuid::new_v4(),
+        sanitize_attachment_filename(name)
+    );
+    let path = attachment_dir.join(file_name);
+    std::fs::write(&path, bytes)
+        .map_err(|error| format!("Failed to stage local attachment: {error}"))?;
+    Ok(path)
+}
+
+pub(crate) fn resolve_staged_local_attachment_path(path_or_name: &str) -> Result<PathBuf, String> {
+    let trimmed = path_or_name.trim();
+    if trimmed.is_empty() {
+        return Err("Attachment path is required.".to_string());
+    }
+
+    let candidate_path = PathBuf::from(trimmed);
+    if candidate_path.is_absolute() {
+        if is_staged_local_attachment_path(&candidate_path)? {
+            return Ok(candidate_path);
+        }
+        return Err("Attachment path is not a staged local attachment.".to_string());
+    }
+
+    let attachment_dir = local_attachment_stage_dir();
+    let entries = std::fs::read_dir(&attachment_dir)
+        .map_err(|error| format!("Failed to read attachment staging directory: {error}"))?;
+    let suffix = format!("-{trimmed}");
+    let mut matches = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("Failed to read staged attachment entry: {error}"))?;
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if name == trimmed || name.ends_with(&suffix) {
+            matches.push(path);
+        }
+    }
+
+    match matches.len() {
+        0 => Err(format!("No staged local attachment matches '{trimmed}'.")),
+        1 => Ok(matches.remove(0)),
+        _ => {
+            let mut ranked_matches = matches
+                .into_iter()
+                .map(|path| {
+                    let modified = std::fs::metadata(&path)
+                        .and_then(|metadata| metadata.modified())
+                        .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+                    (modified, path)
+                })
+                .collect::<Vec<_>>();
+            ranked_matches.sort_by(|left, right| right.0.cmp(&left.0));
+            ranked_matches
+                .into_iter()
+                .map(|(_, path)| path)
+                .next()
+                .ok_or_else(|| format!("No staged local attachment matches '{trimmed}'."))
+        }
+    }
+}
 
 #[tauri::command]
 pub async fn workspace_list(
@@ -35,6 +156,35 @@ pub async fn workspace_select(
     let selected = as_error(state.service.workspace_select(&repo_path))?;
     super::git::invalidate_worktree_resolution_cache_for_repo(&repo_path)?;
     Ok(selected)
+}
+
+#[tauri::command]
+pub async fn workspace_stage_local_attachment(
+    name: String,
+    _mime: Option<String>,
+    base64_data: String,
+) -> Result<StagedLocalAttachmentPayload, String> {
+    if name.trim().is_empty() {
+        return Err("Attachment name is required.".to_string());
+    }
+    if base64_data.trim().is_empty() {
+        return Err("Attachment payload is required.".to_string());
+    }
+
+    let path = stage_local_attachment_to_temp(&name, &base64_data)?;
+    Ok(StagedLocalAttachmentPayload {
+        path: path.to_string_lossy().into_owned(),
+    })
+}
+
+#[tauri::command]
+pub async fn workspace_resolve_local_attachment_path(
+    path: String,
+) -> Result<ResolvedLocalAttachmentPayload, String> {
+    let resolved = resolve_staged_local_attachment_path(&path)?;
+    Ok(ResolvedLocalAttachmentPayload {
+        path: resolved.to_string_lossy().into_owned(),
+    })
 }
 
 #[tauri::command]
@@ -368,7 +518,8 @@ impl<R: tauri::Runtime> HookTrustConfirmationPort for TauriHookTrustConfirmation
 #[cfg(test)]
 mod tests {
     use super::{
-        format_hook_list, sanitize_hook_preview, workspace_detect_github_repository,
+        format_hook_list, resolve_staged_local_attachment_path, sanitize_hook_preview,
+        stage_local_attachment_to_temp, workspace_detect_github_repository,
         workspace_prepare_trusted_hooks_challenge, workspace_save_repo_settings,
         workspace_save_settings_snapshot, workspace_set_trusted_hooks,
         workspace_update_repo_config,
@@ -425,6 +576,51 @@ mod tests {
             std::env::temp_dir().join(format!("openducktor-workspace-command-{prefix}-{nanos}"));
         fs::create_dir_all(&root).expect("test root should be created");
         root
+    }
+
+    #[test]
+    fn resolve_staged_local_attachment_path_matches_filename_tokens() {
+        let unique_name = format!(
+            "Screenshot-2026-03-16-at-23.48.30-{}.png",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock should be after unix epoch")
+                .as_nanos()
+        );
+        let path = stage_local_attachment_to_temp(
+            &unique_name,
+            "cHJldmlldy1ieXRlcw==",
+        )
+        .expect("attachment should stage");
+
+        let resolved = resolve_staged_local_attachment_path(&unique_name)
+            .expect("filename token should resolve to staged path");
+
+        assert_eq!(resolved, path);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn resolve_staged_local_attachment_path_prefers_newest_filename_match() {
+        let duplicate_name = format!(
+            "Screenshot-2026-03-16-at-23.48.30-dup-{}.png",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock should be after unix epoch")
+                .as_nanos()
+        );
+        let older = stage_local_attachment_to_temp(&duplicate_name, "b2xkZXI=")
+            .expect("older attachment should stage");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let newer = stage_local_attachment_to_temp(&duplicate_name, "bmV3ZXI=")
+            .expect("newer attachment should stage");
+
+        let resolved = resolve_staged_local_attachment_path(&duplicate_name)
+            .expect("duplicate filename token should resolve");
+
+        assert_eq!(resolved, newer);
+        let _ = fs::remove_file(older);
+        let _ = fs::remove_file(newer);
     }
 
     fn run_git(args: &[&str], cwd: &Path) {

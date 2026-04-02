@@ -8,12 +8,14 @@ type UseAgentChatTurnStagingArgs = {
   activeSessionId: string | null;
   windowStart: number;
   turns: AgentChatWindowTurn[];
+  disabled?: boolean;
 };
 
 export function useAgentChatTurnStaging({
   activeSessionId,
   windowStart,
   turns,
+  disabled = false,
 }: UseAgentChatTurnStagingArgs): AgentChatWindowTurn[] {
   const [count, setCount] = useState(turns.length);
   const frameRef = useRef<number | null>(null);
@@ -27,6 +29,7 @@ export function useAgentChatTurnStaging({
     }
 
     const shouldStage =
+      !disabled &&
       activeSessionId !== null &&
       windowStart > 0 &&
       turns.length > STAGE_INIT &&
@@ -73,7 +76,7 @@ export function useAgentChatTurnStaging({
         frameRef.current = null;
       }
     };
-  }, [activeSessionId, turns.length, windowStart]);
+  }, [activeSessionId, disabled, turns.length, windowStart]);
 
   return useMemo(() => {
     if (count >= turns.length) {

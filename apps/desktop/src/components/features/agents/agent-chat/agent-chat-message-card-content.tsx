@@ -8,6 +8,7 @@ import { Fragment, lazy, type ReactElement, type ReactNode, Suspense } from "rea
 import type { MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { AgentChatFileReferenceChip } from "./agent-chat-file-reference-chip";
 import { hasMarkdownSyntaxHint } from "./agent-chat-markdown-hints";
 import {
@@ -383,14 +384,32 @@ export const MessageBody = ({
   if (message.role === "user") {
     const isQueuedUserMessage = meta?.kind === "user" && meta.state === "queued";
     const userParts = meta?.kind === "user" ? (meta.parts ?? []) : [];
+    const userAttachments = userParts.filter(
+      (part): part is Extract<AgentUserMessageDisplayPart, { kind: "attachment" }> =>
+        part.kind === "attachment",
+    );
     const userText = readRenderableUserMessageText(userParts, message.content);
     const userContent = renderUserMessageInlineContent(userText, userParts);
 
     return (
       <>
         {userContent}
-        {isQueuedUserMessage || timeLabel ? (
-          <div className="mt-2 flex items-end justify-end gap-2">
+        {userAttachments.length > 0 || isQueuedUserMessage || timeLabel ? (
+          <div className="mt-2 flex items-end justify-between gap-3">
+            {userAttachments.length > 0 ? (
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                {userAttachments.map((part) => (
+                  <AgentChatAttachmentChip
+                    key={part.attachment.id}
+                    variant="transcript"
+                    attachment={part.attachment}
+                    className="w-32"
+                  />
+                ))}
+              </div>
+            ) : (
+              <div />
+            )}
             <div className="flex shrink-0 items-center justify-end gap-2 self-end">
               {isQueuedUserMessage ? (
                 <span className="rounded-full border border-pending-border bg-pending-surface px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-pending-surface-foreground">

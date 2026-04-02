@@ -62,6 +62,7 @@ export type AgentModelDescriptor = {
   variants: string[];
   contextWindow?: number;
   outputLimit?: number;
+  attachmentSupport?: AgentModelAttachmentSupport;
 };
 
 export type AgentDescriptor = {
@@ -105,6 +106,23 @@ export type AgentFileReference = {
 
 export type AgentFileSearchResult = AgentFileReference;
 
+export type AgentAttachmentKind = "image" | "audio" | "video" | "pdf";
+
+export type AgentModelAttachmentSupport = {
+  image: boolean;
+  audio: boolean;
+  video: boolean;
+  pdf: boolean;
+};
+
+export type AgentAttachmentReference = {
+  id: string;
+  path: string;
+  name: string;
+  kind: AgentAttachmentKind;
+  mime?: string;
+};
+
 export type AgentUserMessagePart =
   | {
       kind: "text";
@@ -117,6 +135,10 @@ export type AgentUserMessagePart =
   | {
       kind: "file_reference";
       file: AgentFileReference;
+    }
+  | {
+      kind: "attachment";
+      attachment: AgentAttachmentReference;
     };
 
 export type AgentUserMessageSourceText = {
@@ -135,6 +157,10 @@ export type AgentUserMessageDisplayPart =
       kind: "file_reference";
       file: AgentFileReference;
       sourceText?: AgentUserMessageSourceText;
+    }
+  | {
+      kind: "attachment";
+      attachment: AgentAttachmentReference;
     };
 
 export type AgentUserMessagePromptFileReference = {

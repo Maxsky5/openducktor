@@ -252,6 +252,7 @@ type UseAgentStudioComposerModelArgs = {
   isStarting: boolean;
   chatContextUsage: AgentChatModel["composer"]["contextUsage"];
   selectedModelSelection: AgentModelSelection | null;
+  selectedModelDescriptor?: AgentChatModel["composer"]["selectedModelDescriptor"];
   isSelectionCatalogLoading: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
@@ -291,6 +292,7 @@ export const useAgentStudioComposerModel = ({
   isStarting,
   chatContextUsage,
   selectedModelSelection,
+  selectedModelDescriptor,
   isSelectionCatalogLoading,
   supportsSlashCommands,
   supportsFileSearch,
@@ -355,6 +357,7 @@ export const useAgentStudioComposerModel = ({
         waitingInputPlaceholder,
         isModelSelectionPending,
         selectedModelSelection,
+        ...(selectedModelDescriptor !== undefined ? { selectedModelDescriptor } : {}),
         isSelectionCatalogLoading,
         supportsSlashCommands,
         supportsFileSearch,
@@ -407,6 +410,7 @@ export const useAgentStudioComposerModel = ({
       resizeComposerEditor,
       scrollToBottomOnSendRef,
       selectedModelSelection,
+      selectedModelDescriptor,
       selectedRoleAvailable,
       selectedRoleReadOnlyReason,
       slashCommandCatalog,

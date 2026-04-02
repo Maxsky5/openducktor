@@ -105,7 +105,149 @@ describe("message-normalizers", () => {
     ]);
   });
 
-  test("normalizes css and media file reference kinds consistently", () => {
+  test("normalizes local multimodal file parts into attachment display parts", () => {
+    const parts: Part[] = [
+      {
+        id: "image-1",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "file",
+        mime: "image/png",
+        filename: "diagram.png",
+        url: "file:///tmp/diagram.png",
+      } as Part,
+      {
+        id: "audio-1",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "file",
+        mime: "audio/mpeg",
+        filename: "meeting.mp3",
+        url: "file:///tmp/meeting.mp3",
+      } as Part,
+      {
+        id: "video-1",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "file",
+        mime: "video/mp4",
+        filename: "demo.mp4",
+        url: "file:///tmp/demo.mp4",
+      } as Part,
+      {
+        id: "pdf-1",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "file",
+        mime: "application/pdf",
+        filename: "spec.pdf",
+        url: "file:///tmp/spec.pdf",
+      } as Part,
+    ];
+
+    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+      {
+        kind: "attachment",
+        attachment: {
+          id: "image-1",
+          path: "/tmp/diagram.png",
+          name: "diagram.png",
+          kind: "image",
+          mime: "image/png",
+        },
+      },
+      {
+        kind: "attachment",
+        attachment: {
+          id: "audio-1",
+          path: "/tmp/meeting.mp3",
+          name: "meeting.mp3",
+          kind: "audio",
+          mime: "audio/mpeg",
+        },
+      },
+      {
+        kind: "attachment",
+        attachment: {
+          id: "video-1",
+          path: "/tmp/demo.mp4",
+          name: "demo.mp4",
+          kind: "video",
+          mime: "video/mp4",
+        },
+      },
+      {
+        kind: "attachment",
+        attachment: {
+          id: "pdf-1",
+          path: "/tmp/spec.pdf",
+          name: "spec.pdf",
+          kind: "pdf",
+          mime: "application/pdf",
+        },
+      },
+    ]);
+  });
+
+  test("preserves raw filesystem paths returned in attachment urls", () => {
+    const parts: Part[] = [
+      {
+        id: "image-raw-path",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "file",
+        mime: "image/png",
+        filename: "Screenshot 2026-04-01 at 00.33.32.png",
+        url: "/var/folders/example/Screenshot 2026-04-01 at 00.33.32.png",
+      } as Part,
+    ];
+
+    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+      {
+        kind: "attachment",
+        attachment: {
+          id: "image-raw-path",
+          path: "/var/folders/example/Screenshot 2026-04-01 at 00.33.32.png",
+          name: "Screenshot 2026-04-01 at 00.33.32.png",
+          kind: "image",
+          mime: "image/png",
+        },
+      },
+    ]);
+  });
+
+  test("falls back to source file path for attachments when the runtime omits a file url", () => {
+    const parts: Part[] = [
+      {
+        id: "image-source-path",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "file",
+        mime: "image/png",
+        filename: "Screenshot 2026-04-01 at 00.33.32.png",
+        url: "",
+        source: {
+          type: "file",
+          path: "/var/folders/example/Screenshot 2026-04-01 at 00.33.32.png",
+        },
+      } as Part,
+    ];
+
+    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+      {
+        kind: "attachment",
+        attachment: {
+          id: "image-source-path",
+          path: "/var/folders/example/Screenshot 2026-04-01 at 00.33.32.png",
+          name: "Screenshot 2026-04-01 at 00.33.32.png",
+          kind: "image",
+          mime: "image/png",
+        },
+      },
+    ]);
+  });
+
+  test("normalizes only supported media file attachments without inline source text", () => {
     const parts: Part[] = [
       {
         id: "file-1",
@@ -150,30 +292,23 @@ describe("message-normalizers", () => {
 
     expect(normalizeUserMessageDisplayParts(parts)).toEqual([
       {
-        kind: "file_reference",
-        file: {
-          id: "file-1",
-          path: "src/styles.scss",
-          name: "styles.scss",
-          kind: "css",
-        },
-      },
-      {
-        kind: "file_reference",
-        file: {
+        kind: "attachment",
+        attachment: {
           id: "file-2",
-          path: "assets/preview.webp",
+          path: "/repo/assets/preview.webp",
           name: "preview.webp",
           kind: "image",
+          mime: "image/webp",
         },
       },
       {
-        kind: "file_reference",
-        file: {
+        kind: "attachment",
+        attachment: {
           id: "file-3",
-          path: "recordings/demo.webm",
+          path: "/repo/recordings/demo.webm",
           name: "demo.webm",
           kind: "video",
+          mime: "video/webm",
         },
       },
     ]);
@@ -203,6 +338,16 @@ describe("message-normalizers", () => {
     expect(
       readVisibleUserTextFromDisplayParts([
         {
+          kind: "attachment",
+          attachment: {
+            id: "attachment-1",
+            path: "/tmp/diagram.png",
+            name: "diagram.png",
+            kind: "image",
+            mime: "image/png",
+          },
+        },
+        {
           kind: "file_reference",
           file: {
             id: "file-2",
@@ -218,6 +363,21 @@ describe("message-normalizers", () => {
         },
       ]),
     ).toBe("@src/only.ts");
+
+    expect(
+      readVisibleUserTextFromDisplayParts([
+        {
+          kind: "attachment",
+          attachment: {
+            id: "attachment-2",
+            path: "/tmp/spec.pdf",
+            name: "spec.pdf",
+            kind: "pdf",
+            mime: "application/pdf",
+          },
+        },
+      ]),
+    ).toBe("");
 
     expect(
       readVisibleUserTextFromDisplayParts([

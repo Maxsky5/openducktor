@@ -53,6 +53,14 @@ describe("payload-mappers", () => {
                 context: 200_000,
                 output: 32_000,
               },
+              capabilities: {
+                input: {
+                  image: true,
+                  audio: false,
+                  video: true,
+                  pdf: false,
+                },
+              },
               variants: {
                 high: {},
                 low: {},
@@ -77,6 +85,48 @@ describe("payload-mappers", () => {
         variants: ["high", "low"],
         contextWindow: 200_000,
         outputLimit: 32_000,
+        attachmentSupport: {
+          image: true,
+          audio: false,
+          video: true,
+          pdf: false,
+        },
+      },
+    ]);
+  });
+
+  test("mapProviderListToCatalog falls back to modality arrays when capability flags are absent", () => {
+    const catalog = mapProviderListToCatalog({
+      providers: [
+        {
+          id: "anthropic",
+          name: "Anthropic",
+          models: {
+            "claude-sonnet": {
+              name: "Claude Sonnet",
+              modalities: {
+                input: ["text", "pdf", "image"],
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    expect(catalog.models).toEqual([
+      {
+        id: "anthropic/claude-sonnet",
+        providerId: "anthropic",
+        providerName: "Anthropic",
+        modelId: "claude-sonnet",
+        modelName: "Claude Sonnet",
+        variants: [],
+        attachmentSupport: {
+          image: true,
+          audio: false,
+          video: false,
+          pdf: true,
+        },
       },
     ]);
   });
