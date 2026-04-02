@@ -462,6 +462,301 @@ describe("agent-orchestrator-session-events", () => {
     expect(userMessages[0].meta.state).toBe("read");
   });
 
+  test("flushes queued non-immediate events in a single session commit", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ status: "starting" }),
+      },
+    };
+    let updateSessionCalls = 0;
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      updateSessionCalls += 1;
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    const unsubscribe = attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      eventBatchWindowMs: 25,
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "session_started",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:00.000Z",
+      message: "Started",
+    });
+    handleEvent({
+      type: "session_todos_updated",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:01.000Z",
+      todos: [
+        {
+          id: "todo-1",
+          content: "Investigate live performance",
+          status: "in_progress",
+          priority: "high",
+        },
+      ],
+    });
+
+    expect(updateSessionCalls).toBe(0);
+
+    unsubscribe();
+
+    expect(updateSessionCalls).toBe(1);
+    expect(sessionsRef.current["session-1"]?.status).toBe("running");
+    expect(sessionsRef.current["session-1"]?.messages).toHaveLength(1);
+    expect(sessionsRef.current["session-1"]?.todos).toEqual([
+      {
+        id: "todo-1",
+        content: "Investigate live performance",
+        status: "in_progress",
+        priority: "high",
+      },
+    ]);
+  });
+
+  test("flushes queued work before applying an immediate event", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ status: "starting" }),
+      },
+    };
+    let updateSessionCalls = 0;
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      updateSessionCalls += 1;
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      eventBatchWindowMs: 25,
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "session_started",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:00.000Z",
+      message: "Started",
+    });
+    expect(updateSessionCalls).toBe(0);
+
+    handleEvent({
+      type: "user_message",
+      sessionId: "session-1",
+      messageId: "user-message-1",
+      timestamp: "2026-02-22T08:00:01.000Z",
+      message: "Continue",
+      parts: [{ kind: "text", text: "Continue" }],
+      state: "read",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+    });
+
+    expect(updateSessionCalls).toBe(2);
+    expect(sessionsRef.current["session-1"]?.messages.map((message) => message.role)).toEqual([
+      "system",
+      "user",
+    ]);
+  });
+
+  test("collapses adjacent assistant stream chunks inside one queued flush", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ status: "running", role: "build" }),
+      },
+    };
+    let updateSessionCalls = 0;
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      updateSessionCalls += 1;
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      eventBatchWindowMs: 25,
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_delta",
+      sessionId: "session-1",
+      channel: "text",
+      messageId: "assistant-1",
+      delta: "Hello",
+      timestamp: "2026-02-22T08:00:01.000Z",
+    });
+    handleEvent({
+      type: "assistant_delta",
+      sessionId: "session-1",
+      channel: "text",
+      messageId: "assistant-1",
+      delta: " world",
+      timestamp: "2026-02-22T08:00:02.000Z",
+    });
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:03.000Z",
+      part: {
+        kind: "reasoning",
+        messageId: "assistant-1",
+        partId: "reasoning-1",
+        text: "Draft reasoning",
+        completed: false,
+      },
+    });
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:04.000Z",
+      part: {
+        kind: "reasoning",
+        messageId: "assistant-1",
+        partId: "reasoning-1",
+        text: "Draft reasoning refined",
+        completed: false,
+      },
+    });
+    handleEvent({
+      type: "user_message",
+      sessionId: "session-1",
+      messageId: "user-1",
+      timestamp: "2026-02-22T08:00:05.000Z",
+      message: "Continue",
+      parts: [{ kind: "text", text: "Continue" }],
+      state: "read",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+    });
+
+    expect(updateSessionCalls).toBe(2);
+    const assistantMessage = sessionsRef.current["session-1"]?.messages.find(
+      (message) => message.id === "assistant-1",
+    );
+    expect(assistantMessage?.content).toBe("Hello world");
+  });
+
   test("auto-rejects mutating permissions for read-only roles", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const replyPermission = mock(

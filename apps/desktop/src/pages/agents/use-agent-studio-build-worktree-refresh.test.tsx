@@ -228,4 +228,47 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
       await harness.unmount();
     }
   });
+
+  test("refreshes when a same-id tool row transitions to completed", async () => {
+    const baseCompletedMessage = createCompletedToolSession("apply_patch", "tool-transition")
+      .messages[0];
+    if (!baseCompletedMessage?.meta || baseCompletedMessage.meta.kind !== "tool") {
+      throw new Error("Expected completed tool message fixture");
+    }
+
+    const pendingToolMessage = {
+      ...baseCompletedMessage,
+      meta: {
+        ...baseCompletedMessage.meta,
+        status: "running" as const,
+      },
+    };
+    const baseArgs = {
+      ...createBaseArgs(),
+      activeSession: createAgentSessionFixture({
+        sessionId: "build-session-1",
+        role: "build",
+        messages: [pendingToolMessage],
+      }),
+    };
+    const harness = createHookHarness(baseArgs);
+
+    try {
+      await harness.mount();
+      expect(refreshWorktreeMock).not.toHaveBeenCalled();
+
+      await harness.update({
+        ...baseArgs,
+        activeSession: createAgentSessionFixture({
+          sessionId: "build-session-1",
+          role: "build",
+          messages: [baseCompletedMessage],
+        }),
+      });
+
+      expect(refreshWorktreeMock).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

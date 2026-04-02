@@ -1,7 +1,7 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
 import { sanitizeStreamingText } from "../support/core";
-import { upsertMessage } from "../support/messages";
+import { findMessageById, upsertMessage } from "../support/messages";
 import type {
   DraftChannel,
   SessionEvent,
@@ -114,7 +114,7 @@ const resolvePartModelSelection = (
   current: AgentSessionState,
   messageId: string,
 ): AgentSessionState["selectedModel"] | null => {
-  const existingMessage = current.messages.find((entry) => entry.id === messageId);
+  const existingMessage = findMessageById(current.messages, messageId);
   if (existingMessage?.meta?.kind === "assistant") {
     if (!existingMessage.meta.providerId || !existingMessage.meta.modelId) {
       return null;
@@ -156,7 +156,7 @@ const upsertLiveAssistantMessage = ({
     };
   }
 
-  const existingMessage = current.messages.find((entry) => entry.id === messageId);
+  const existingMessage = findMessageById(current.messages, messageId);
   const assistantMeta =
     existingMessage?.meta?.kind === "assistant"
       ? existingMessage.meta

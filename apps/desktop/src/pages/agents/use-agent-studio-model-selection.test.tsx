@@ -912,4 +912,53 @@ describe("useAgentStudioModelSelection", () => {
       await harness.unmount();
     }
   });
+
+  test("keeps live context usage stable when only session messages change", async () => {
+    const contextUsage = {
+      totalTokens: 44,
+      contextWindow: 150_000,
+      outputLimit: 4_096,
+      providerId: "openai",
+      modelId: "gpt-5",
+    };
+    const activeSession = createActiveSession({
+      contextUsage,
+      messages: [createAssistantMessage({ totalTokens: 12, contextWindow: 10_000 })],
+    });
+    const harness = createHookHarness(createBaseProps({ activeSession }));
+
+    try {
+      await harness.mount();
+      const previousUsage = harness.getLatest().activeSessionContextUsage;
+
+      await harness.update(
+        createBaseProps({
+          activeSession: {
+            ...activeSession,
+            messages: [
+              ...activeSession.messages,
+              {
+                id: "tool-1",
+                role: "tool",
+                content: "apply_patch",
+                timestamp: "2026-02-20T10:01:00.000Z",
+                meta: {
+                  kind: "tool",
+                  partId: "part-tool-1",
+                  callId: "call-tool-1",
+                  tool: "apply_patch",
+                  status: "running",
+                },
+              },
+            ],
+            contextUsage,
+          },
+        }),
+      );
+
+      expect(harness.getLatest().activeSessionContextUsage).toBe(previousUsage);
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

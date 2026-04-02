@@ -152,6 +152,10 @@ export function useAgentStudioModelSelection({
   const previousActiveRepoRef = useRef<string | null>(activeRepo);
   const previousRepoForDefaultsRef = useRef<string | null>(activeRepo);
   const previousRepoSettingsRef = useRef<RepoSettingsInput | null>(repoSettings);
+  const activeSessionContextUsageCacheRef = useRef<{
+    key: string;
+    value: NonNullable<AgentStudioContextUsage>;
+  } | null>(null);
   const [isAwaitingRepoSettingsForActiveRepo, setIsAwaitingRepoSettingsForActiveRepo] =
     useState(false);
   const [draftSelectionByRole, setDraftSelectionByRole] =
@@ -540,26 +544,51 @@ export function useAgentStudioModelSelection({
     return map;
   }, [selectionCatalog]);
 
-  const activeSessionMessages = activeSession?.messages;
+  const activeSessionMessages = activeSession?.messages ?? null;
+  const activeSessionLiveContextUsage = activeSession?.contextUsage ?? null;
+  const activeSessionMessagesForContextUsage =
+    activeSessionLiveContextUsage && activeSessionLiveContextUsage.totalTokens > 0
+      ? null
+      : activeSessionMessages;
   const activeSessionModelCatalog = activeSession?.modelCatalog;
   const activeSessionModelDescriptorByKey = useMemo(() => {
     return toModelDescriptorByKey(activeSessionModelCatalog ?? null);
   }, [activeSessionModelCatalog]);
 
   const activeSessionContextUsage = useMemo<AgentStudioContextUsage>(() => {
-    return extractLatestContextUsage({
-      messages: activeSessionMessages,
-      ...(activeSession?.contextUsage !== undefined
-        ? { liveContextUsage: activeSession.contextUsage }
+    const nextUsage = extractLatestContextUsage({
+      messages: activeSessionMessagesForContextUsage,
+      ...(activeSessionLiveContextUsage !== null
+        ? { liveContextUsage: activeSessionLiveContextUsage }
         : {}),
       modelDescriptorByKey: activeSessionModelDescriptorByKey,
       ...(typeof selectedModelEntry?.contextWindow === "number"
         ? { fallbackContextWindow: selectedModelEntry.contextWindow }
         : {}),
     });
+
+    if (nextUsage === null) {
+      activeSessionContextUsageCacheRef.current = null;
+      return null;
+    }
+
+    const nextKey = [
+      nextUsage.totalTokens,
+      nextUsage.contextWindow,
+      nextUsage.outputLimit ?? "",
+    ].join(":");
+    if (activeSessionContextUsageCacheRef.current?.key === nextKey) {
+      return activeSessionContextUsageCacheRef.current.value;
+    }
+
+    activeSessionContextUsageCacheRef.current = {
+      key: nextKey,
+      value: nextUsage,
+    };
+    return nextUsage;
   }, [
-    activeSession?.contextUsage,
-    activeSessionMessages,
+    activeSessionLiveContextUsage,
+    activeSessionMessagesForContextUsage,
     activeSessionModelDescriptorByKey,
     selectedModelEntry?.contextWindow,
   ]);

@@ -28,6 +28,7 @@ export type AttachAgentSessionListenerParams = {
   adapter: SessionEventAdapter;
   repoPath: string;
   sessionId: string;
+  eventBatchWindowMs?: number;
   sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
   draftRawBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;
   draftSourceBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<DraftSource>>>;

@@ -3,6 +3,7 @@ import { normalizeOdtWorkflowToolName } from "@openducktor/core";
 import { useEffect, useRef } from "react";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { findFirstChangedMessageIndex } from "./agent-session-message-diff";
 import { extractCompletionTimestamp, parseTimestamp } from "./agents-page-selection";
 
 type UseAgentStudioDocumentsArgs = {
@@ -72,6 +73,8 @@ export function useAgentStudioDocuments({
   const documentContextKey = `${taskId}:${activeSession?.sessionId ?? ""}`;
   const processedDocumentToolEventsRef = useRef(new Set<string>());
   const refreshedTaskVersionsRef = useRef(new Set<string>());
+  const previousSessionIdRef = useRef<string | null>(null);
+  const previousMessagesRef = useRef<AgentSessionState["messages"] | null>(null);
   const taskDocumentVersionKey =
     taskId && selectedTask
       ? [
@@ -92,6 +95,8 @@ export function useAgentStudioDocuments({
   useEffect(() => {
     processedDocumentToolEventsRef.current.clear();
     refreshedTaskVersionsRef.current.clear();
+    previousSessionIdRef.current = null;
+    previousMessagesRef.current = null;
   }, [documentContextKey]);
 
   useEffect(() => {
@@ -110,11 +115,22 @@ export function useAgentStudioDocuments({
   }, [reloadDocument, taskDocumentVersionKey, taskId]);
 
   useEffect(() => {
-    if (!activeSession || !taskId) {
+    if (!activeSession || !taskId || !activeRepo) {
       return;
     }
 
-    for (let index = 0; index < activeSession.messages.length; index += 1) {
+    const firstChangedMessageIndex =
+      previousSessionIdRef.current !== activeSession.sessionId
+        ? 0
+        : findFirstChangedMessageIndex(previousMessagesRef.current, activeSession.messages);
+
+    if (firstChangedMessageIndex < 0) {
+      previousSessionIdRef.current = activeSession.sessionId;
+      previousMessagesRef.current = activeSession.messages;
+      return;
+    }
+
+    for (let index = firstChangedMessageIndex; index < activeSession.messages.length; index += 1) {
       const message = activeSession.messages[index];
       if (!message) {
         continue;
@@ -135,9 +151,6 @@ export function useAgentStudioDocuments({
         qaDoc,
       });
       if (!target) {
-        continue;
-      }
-      if (!activeRepo) {
         continue;
       }
 
@@ -172,6 +185,9 @@ export function useAgentStudioDocuments({
         processedDocumentToolEventsRef.current.add(eventKey);
       }
     }
+
+    previousSessionIdRef.current = activeSession.sessionId;
+    previousMessagesRef.current = activeSession.messages;
   }, [
     activeRepo,
     activeSession,

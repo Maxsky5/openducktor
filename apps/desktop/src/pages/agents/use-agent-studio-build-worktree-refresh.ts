@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { isReadOnlyShellCommand, isSafeReadToolName } from "@/state/operations/permission-policy";
 
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { findFirstChangedMessageIndex } from "./agent-session-message-diff";
 
 type UseAgentStudioBuildWorktreeRefreshArgs = {
   viewRole: string | null;
@@ -64,6 +65,18 @@ const canToolAffectWorktree = (meta: ToolMessageMeta): boolean => {
   return true;
 };
 
+const seedProcessedToolMessageKeys = (session: AgentSessionState): Set<string> =>
+  new Set(
+    session.messages.flatMap((message) => {
+      const meta = message.meta;
+      if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
+        return [];
+      }
+
+      return [`${session.sessionId}:${message.id}`];
+    }),
+  );
+
 export function useAgentStudioBuildWorktreeRefresh({
   viewRole,
   activeSession,
@@ -72,6 +85,7 @@ export function useAgentStudioBuildWorktreeRefresh({
 }: UseAgentStudioBuildWorktreeRefreshArgs): void {
   const processedToolMessageKeysRef = useRef(new Set<string>());
   const previousSessionIdRef = useRef<string | null>(null);
+  const previousMessagesRef = useRef<AgentSessionState["messages"] | null>(null);
   const wasSessionHistoryHydratingRef = useRef(false);
 
   useEffect(() => {
@@ -86,36 +100,34 @@ export function useAgentStudioBuildWorktreeRefresh({
 
     if (previousSessionIdRef.current !== activeSession.sessionId) {
       previousSessionIdRef.current = activeSession.sessionId;
-      processedToolMessageKeysRef.current = new Set(
-        activeSession.messages.flatMap((message) => {
-          const meta = message.meta;
-          if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
-            return [];
-          }
-
-          return [`${activeSession.sessionId}:${message.id}`];
-        }),
-      );
+      previousMessagesRef.current = activeSession.messages;
+      processedToolMessageKeysRef.current = seedProcessedToolMessageKeys(activeSession);
       return;
     }
 
     if (wasSessionHistoryHydratingRef.current) {
       wasSessionHistoryHydratingRef.current = false;
-      processedToolMessageKeysRef.current = new Set(
-        activeSession.messages.flatMap((message) => {
-          const meta = message.meta;
-          if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
-            return [];
-          }
+      previousMessagesRef.current = activeSession.messages;
+      processedToolMessageKeysRef.current = seedProcessedToolMessageKeys(activeSession);
+      return;
+    }
 
-          return [`${activeSession.sessionId}:${message.id}`];
-        }),
-      );
+    const firstChangedMessageIndex = findFirstChangedMessageIndex(
+      previousMessagesRef.current,
+      activeSession.messages,
+    );
+    if (firstChangedMessageIndex < 0) {
+      previousMessagesRef.current = activeSession.messages;
       return;
     }
 
     let shouldRefresh = false;
-    for (const message of activeSession.messages) {
+    for (let index = firstChangedMessageIndex; index < activeSession.messages.length; index += 1) {
+      const message = activeSession.messages[index];
+      if (!message) {
+        continue;
+      }
+
       const meta = message.meta;
       if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
         continue;
@@ -131,6 +143,8 @@ export function useAgentStudioBuildWorktreeRefresh({
         shouldRefresh = true;
       }
     }
+
+    previousMessagesRef.current = activeSession.messages;
 
     if (shouldRefresh) {
       refreshWorktree();
