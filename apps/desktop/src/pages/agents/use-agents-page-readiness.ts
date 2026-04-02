@@ -1,10 +1,43 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { useChecksState } from "@/state";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import type {
   AgentStudioOrchestrationReadinessContext,
   AgentStudioOrchestrationSelectionContext,
 } from "./use-agent-studio-orchestration-controller";
+
+const buildTimeoutBlockedReason = (label: string, detail: string | null): string => {
+  if (!detail) {
+    return `${label} is not yet available. Retrying automatically.`;
+  }
+
+  return `${label} is not yet available. Retrying automatically. Latest detail: ${detail}`;
+};
+
+const getBlockedRuntimeReason = (
+  runtimeLabel: string,
+  runtimeHealth: RepoRuntimeHealthCheck | null,
+): string | null => {
+  if (!runtimeHealth) {
+    return null;
+  }
+
+  if (runtimeHealth.runtimeOk === false) {
+    return runtimeHealth.runtimeFailureKind === "timeout"
+      ? buildTimeoutBlockedReason(`${runtimeLabel} runtime`, runtimeHealth.runtimeError)
+      : runtimeHealth.runtimeError;
+  }
+
+  if (runtimeHealth.mcpOk === false) {
+    const detail = runtimeHealth.mcpServerError ?? runtimeHealth.mcpError;
+    return runtimeHealth.mcpFailureKind === "timeout"
+      ? buildTimeoutBlockedReason(`${runtimeLabel} OpenDucktor MCP`, detail)
+      : detail;
+  }
+
+  return null;
+};
 
 type UseRunCompletionRecoverySignalArgs = {
   activeSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
@@ -129,8 +162,9 @@ export function useAgentStudioReadiness({
     }
 
     return (
-      blockedRuntimeHealth?.runtimeError ??
-      blockedRuntimeHealth?.mcpError ??
+      (blockedRuntimeDefinition
+        ? getBlockedRuntimeReason(blockedRuntimeDefinition.label, blockedRuntimeHealth)
+        : null) ??
       (runtimeDefinitions.length === 0
         ? "No agent runtimes are available."
         : "No configured runtime is ready for Agent Studio.")

@@ -441,7 +441,7 @@ pub struct OpencodeStartupReadinessConfig {
 }
 
 const fn default_opencode_startup_timeout_ms() -> u64 {
-    8_000
+    15_000
 }
 const fn default_opencode_startup_connect_timeout_ms() -> u64 {
     250

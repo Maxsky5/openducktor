@@ -7,13 +7,17 @@ import type {
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
-import type { RepoRuntimeHealthCheck, RepoRuntimeHealthMap } from "@/types/diagnostics";
+import {
+  classifyRepoRuntimeFailure,
+  type RepoRuntimeHealthCheck,
+  type RepoRuntimeHealthMap,
+} from "@/types/diagnostics";
 import { host } from "../operations/host";
 
 const RUNTIME_CHECK_STALE_TIME_MS = 5 * 60_000;
 const BEADS_CHECK_STALE_TIME_MS = 60_000;
 const RUNTIME_HEALTH_STALE_TIME_MS = 60_000;
-const DIAGNOSTICS_QUERY_TIMEOUT_MS = 5_000;
+const DIAGNOSTICS_QUERY_TIMEOUT_MS = 15_000;
 
 const buildRuntimeHealthErrorCheck = (
   runtimeHealthError: string,
@@ -21,9 +25,11 @@ const buildRuntimeHealthErrorCheck = (
 ): RepoRuntimeHealthCheck => ({
   runtimeOk: false,
   runtimeError: runtimeHealthError,
+  runtimeFailureKind: classifyRepoRuntimeFailure(runtimeHealthError),
   runtime: null,
   mcpOk: false,
   mcpError: runtimeHealthError,
+  mcpFailureKind: classifyRepoRuntimeFailure(runtimeHealthError),
   mcpServerName: ODT_MCP_SERVER_NAME,
   mcpServerStatus: null,
   mcpServerError: runtimeHealthError,

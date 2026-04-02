@@ -181,7 +181,7 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) -> Result<()> {
 pub(super) fn normalize_opencode_startup_readiness_config(
     config: &mut OpencodeStartupReadinessConfig,
 ) {
-    config.timeout_ms = config.timeout_ms.clamp(250, 120_000);
+    config.timeout_ms = config.timeout_ms.clamp(15_000, 120_000);
     config.connect_timeout_ms = config.connect_timeout_ms.clamp(25, 10_000);
     config.initial_retry_delay_ms = config.initial_retry_delay_ms.clamp(5, 5_000);
     config.max_retry_delay_ms = config.max_retry_delay_ms.clamp(10, 10_000);

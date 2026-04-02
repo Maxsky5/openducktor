@@ -5,11 +5,16 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
-import type { RepoRuntimeHealthCheck, RepoRuntimeHealthMap } from "@/types/diagnostics";
+import {
+  classifyRepoRuntimeFailure,
+  type RepoRuntimeFailureKind,
+  type RepoRuntimeHealthCheck,
+  type RepoRuntimeHealthMap,
+} from "@/types/diagnostics";
 import {
   beadsCheckQueryOptions,
   checksQueryKeys,
@@ -49,6 +54,16 @@ type UseChecksResult = {
   clearActiveRepoRuntimeHealth: () => void;
 };
 
+type DiagnosticsToastIssue = {
+  id: string;
+  title: string;
+  description: string;
+  severity: Exclude<RepoRuntimeFailureKind, null>;
+};
+
+const RUNTIME_HEALTH_TIMEOUT_RETRY_DELAY_MS = 2_000;
+const MANUAL_DIAGNOSTICS_UNAVAILABLE_TOAST_ID = "diagnostics:manual-unavailable";
+
 const buildRuntimeHealthErrorMap = (
   runtimeDefinitions: RuntimeDescriptor[],
   runtimeHealthError: string,
@@ -60,9 +75,11 @@ const buildRuntimeHealthErrorMap = (
       {
         runtimeOk: false,
         runtimeError: runtimeHealthError,
+        runtimeFailureKind: classifyRepoRuntimeFailure(runtimeHealthError),
         runtime: null,
         mcpOk: false,
         mcpError: runtimeHealthError,
+        mcpFailureKind: classifyRepoRuntimeFailure(runtimeHealthError),
         mcpServerName: ODT_MCP_SERVER_NAME,
         mcpServerStatus: null,
         mcpServerError: runtimeHealthError,
@@ -94,6 +111,44 @@ const getSettledValue = <T>(result: PromiseSettledResult<T>): T => {
   return result.value;
 };
 
+const buildTimeoutToastDescription = (label: string, detail: string | null): string => {
+  if (!detail) {
+    return `${label} is not yet available. Retrying automatically.`;
+  }
+
+  return `${label} is not yet available. Retrying automatically. Latest detail: ${detail}`;
+};
+
+const buildErrorToastDescription = (label: string, detail: string | null): string => {
+  return detail ?? `${label} is unavailable.`;
+};
+
+const buildRuntimeHealthToastIssue = ({
+  id,
+  label,
+  detail,
+  failureKind,
+}: {
+  id: string;
+  label: string;
+  detail: string | null;
+  failureKind: Exclude<RepoRuntimeFailureKind, null>;
+}): DiagnosticsToastIssue => {
+  return failureKind === "timeout"
+    ? {
+        id,
+        title: `${label} not yet available`,
+        description: buildTimeoutToastDescription(label, detail),
+        severity: failureKind,
+      }
+    : {
+        id,
+        title: `${label} unavailable`,
+        description: buildErrorToastDescription(label, detail),
+        severity: failureKind,
+      };
+};
+
 export function useChecks({
   activeRepo,
   runtimeDefinitions,
@@ -101,6 +156,10 @@ export function useChecks({
 }: UseChecksArgs): UseChecksResult {
   const queryClient = useQueryClient();
   const [isManualLoadingChecks, setIsManualLoadingChecks] = useState(false);
+  const issueSignaturesRef = useRef(new Map<string, string>());
+  const runtimeHealthRetryTimeoutRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(
+    null,
+  );
   const runtimeCheckQuery = useQuery(runtimeCheckQueryOptions());
   const beadsCheckQuery = useQuery({
     ...beadsCheckQueryOptions(activeRepo ?? "__disabled__"),
@@ -194,57 +253,29 @@ export function useChecks({
       const unavailableDetails = getSettledErrorDescriptions([
         { label: "runtime", result: runtimeResult },
         { label: "beads", result: beadsResult },
-        { label: "runtime health", result: runtimeHealthResult },
       ]);
 
       if (unavailableDetails.length > 0) {
         toast.error("Diagnostics check unavailable", {
+          id: MANUAL_DIAGNOSTICS_UNAVAILABLE_TOAST_ID,
           description: unavailableDetails.join(" | "),
+          duration: Number.POSITIVE_INFINITY,
         });
         return;
       }
 
+      toast.dismiss(MANUAL_DIAGNOSTICS_UNAVAILABLE_TOAST_ID);
+
       const runtime = getSettledValue(runtimeResult);
       const beads = getSettledValue(beadsResult);
-      const runtimeHealthByRuntime = getSettledValue(runtimeHealthResult);
-      const runtimesHealthy = runtime.runtimes.every((runtimeEntry) => runtimeEntry.ok);
-      const runtimeHealthEntries = runtimeDefinitions.map(
-        (definition) => runtimeHealthByRuntime[definition.kind],
-      );
-      const runtimeServersHealthy = runtimeHealthEntries.every(
-        (entry) => entry?.runtimeOk !== false,
-      );
-      const runtimeMcpHealthy = runtimeDefinitions.every((definition) => {
-        const health = runtimeHealthByRuntime[definition.kind];
-        if (!definition.capabilities.supportsMcpStatus) {
-          return true;
-        }
-        return health?.mcpOk !== false;
-      });
-      if (
-        !runtime.gitOk ||
-        !runtimesHealthy ||
-        !beads.beadsOk ||
-        !runtimeServersHealthy ||
-        !runtimeMcpHealthy
-      ) {
-        const details = [
-          ...runtime.errors,
-          ...(beads.beadsError ? [`beads: ${beads.beadsError}`] : []),
-          ...runtimeHealthEntries.flatMap((entry) => entry?.errors ?? []),
-        ].join(" | ");
-        toast.error("Diagnostics check failed", { description: details });
+      getSettledValue(runtimeHealthResult);
+      if (runtime.gitOk && beads.beadsOk) {
+        toast.dismiss(MANUAL_DIAGNOSTICS_UNAVAILABLE_TOAST_ID);
       }
     } finally {
       setIsManualLoadingChecks(false);
     }
-  }, [
-    activeRepo,
-    refreshBeadsCheckForRepo,
-    refreshRepoRuntimeHealthForRepo,
-    refreshRuntimeCheck,
-    runtimeDefinitions,
-  ]);
+  }, [activeRepo, refreshBeadsCheckForRepo, refreshRepoRuntimeHealthForRepo, refreshRuntimeCheck]);
 
   const hasCachedBeadsCheck = useCallback(
     (repoPath: string): boolean => {
@@ -318,6 +349,134 @@ export function useChecks({
     runtimeHealthQuery.error,
     runtimeHealthQuery.errorUpdatedAt,
   ]);
+  const runtimeHealthToastIssues = useMemo((): DiagnosticsToastIssue[] => {
+    if (activeRepo === null) {
+      return [];
+    }
+
+    return runtimeDefinitions.flatMap((definition) => {
+      const runtimeHealth = activeRepoRuntimeHealthByRuntime[definition.kind];
+      if (!runtimeHealth) {
+        return [];
+      }
+
+      if (runtimeHealth.runtimeOk === false && runtimeHealth.runtimeFailureKind !== null) {
+        return [
+          buildRuntimeHealthToastIssue({
+            id: `diagnostics:runtime:${definition.kind}`,
+            label: `${definition.label} runtime`,
+            detail: runtimeHealth.runtimeError,
+            failureKind: runtimeHealth.runtimeFailureKind,
+          }),
+        ];
+      }
+
+      if (
+        definition.capabilities.supportsMcpStatus &&
+        runtimeHealth.mcpOk === false &&
+        runtimeHealth.mcpFailureKind !== null
+      ) {
+        return [
+          buildRuntimeHealthToastIssue({
+            id: `diagnostics:mcp:${definition.kind}`,
+            label: `${definition.label} OpenDucktor MCP`,
+            detail: runtimeHealth.mcpServerError ?? runtimeHealth.mcpError,
+            failureKind: runtimeHealth.mcpFailureKind,
+          }),
+        ];
+      }
+
+      return [];
+    });
+  }, [activeRepo, activeRepoRuntimeHealthByRuntime, runtimeDefinitions]);
+  const hasRuntimeHealthTimeoutIssue = runtimeHealthToastIssues.some(
+    (issue) => issue.severity === "timeout",
+  );
+
+  useEffect(() => {
+    const nextIssueIds = new Set(runtimeHealthToastIssues.map((issue) => issue.id));
+
+    for (const issueId of [...issueSignaturesRef.current.keys()]) {
+      if (nextIssueIds.has(issueId)) {
+        continue;
+      }
+
+      toast.dismiss(issueId);
+      issueSignaturesRef.current.delete(issueId);
+    }
+
+    for (const issue of runtimeHealthToastIssues) {
+      const signature = `${issue.severity}:${issue.title}:${issue.description}`;
+      if (issueSignaturesRef.current.get(issue.id) === signature) {
+        continue;
+      }
+
+      if (issue.severity === "timeout") {
+        toast(issue.title, {
+          id: issue.id,
+          description: issue.description,
+          duration: Number.POSITIVE_INFINITY,
+        });
+      } else {
+        toast.error(issue.title, {
+          id: issue.id,
+          description: issue.description,
+          duration: Number.POSITIVE_INFINITY,
+        });
+      }
+
+      issueSignaturesRef.current.set(issue.id, signature);
+    }
+  }, [runtimeHealthToastIssues]);
+
+  useEffect(() => {
+    if (runtimeHealthRetryTimeoutRef.current !== null) {
+      globalThis.clearTimeout(runtimeHealthRetryTimeoutRef.current);
+      runtimeHealthRetryTimeoutRef.current = null;
+    }
+
+    if (
+      activeRepo === null ||
+      !hasRuntimeHealthTimeoutIssue ||
+      runtimeHealthQuery.isFetching ||
+      runtimeDefinitions.length === 0
+    ) {
+      return;
+    }
+
+    runtimeHealthRetryTimeoutRef.current = globalThis.setTimeout(() => {
+      runtimeHealthRetryTimeoutRef.current = null;
+      void refreshRepoRuntimeHealthForRepo(activeRepo, true).catch(() => undefined);
+    }, RUNTIME_HEALTH_TIMEOUT_RETRY_DELAY_MS);
+
+    return () => {
+      if (runtimeHealthRetryTimeoutRef.current !== null) {
+        globalThis.clearTimeout(runtimeHealthRetryTimeoutRef.current);
+        runtimeHealthRetryTimeoutRef.current = null;
+      }
+    };
+  }, [
+    activeRepo,
+    hasRuntimeHealthTimeoutIssue,
+    refreshRepoRuntimeHealthForRepo,
+    runtimeDefinitions.length,
+    runtimeHealthQuery.isFetching,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (runtimeHealthRetryTimeoutRef.current !== null) {
+        globalThis.clearTimeout(runtimeHealthRetryTimeoutRef.current);
+      }
+
+      for (const issueId of issueSignaturesRef.current.keys()) {
+        toast.dismiss(issueId);
+      }
+      toast.dismiss(MANUAL_DIAGNOSTICS_UNAVAILABLE_TOAST_ID);
+      issueSignaturesRef.current.clear();
+    };
+  }, []);
+
   const isLoadingChecks =
     isManualLoadingChecks ||
     runtimeCheckQuery.isFetching ||

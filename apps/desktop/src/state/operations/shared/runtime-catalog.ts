@@ -15,7 +15,7 @@ import { errorMessage } from "@/lib/errors";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import { appQueryClient } from "@/lib/query-client";
 import { ensureRuntimeListFromQuery } from "@/state/queries/runtime";
-import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
+import { classifyRepoRuntimeFailure, type RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { host } from "./host";
 
 type RuntimeMcpServerStatus = {
@@ -109,12 +109,15 @@ const toRuntimeUnavailableHealthCheck = (
   checkedAt: string,
 ): RepoRuntimeHealthCheck => {
   const unavailableMessage = "Runtime is unavailable, so MCP cannot be verified.";
+  const runtimeFailureKind = classifyRepoRuntimeFailure(runtimeError);
   return {
     runtimeOk: false,
     runtimeError,
+    runtimeFailureKind,
     runtime: null,
     mcpOk: false,
     mcpError: unavailableMessage,
+    mcpFailureKind: runtimeFailureKind,
     mcpServerName: ODT_MCP_SERVER_NAME,
     mcpServerStatus: null,
     mcpServerError: unavailableMessage,
@@ -129,12 +132,15 @@ const toMcpStatusFailedHealthCheck = (
   mcpError: string,
   checkedAt: string,
 ): RepoRuntimeHealthCheck => {
+  const mcpFailureKind = classifyRepoRuntimeFailure(mcpError);
   return {
     runtimeOk: true,
     runtimeError: null,
+    runtimeFailureKind: null,
     runtime,
     mcpOk: false,
     mcpError,
+    mcpFailureKind,
     mcpServerName: ODT_MCP_SERVER_NAME,
     mcpServerStatus: null,
     mcpServerError: mcpError,
@@ -151,9 +157,11 @@ const toRepoRuntimeHealthCheckWithoutMcpStatus = (
   return {
     runtimeOk: true,
     runtimeError: null,
+    runtimeFailureKind: null,
     runtime,
     mcpOk: true,
     mcpError: null,
+    mcpFailureKind: null,
     mcpServerName: ODT_MCP_SERVER_NAME,
     mcpServerStatus: null,
     mcpServerError: null,
@@ -180,9 +188,11 @@ const toRepoRuntimeHealthCheck = ({
   return {
     runtimeOk: true,
     runtimeError: null,
+    runtimeFailureKind: null,
     runtime,
     mcpOk,
     mcpError,
+    mcpFailureKind: classifyRepoRuntimeFailure(mcpError),
     mcpServerName: ODT_MCP_SERVER_NAME,
     mcpServerStatus,
     mcpServerError: mcpServerError ?? null,

@@ -138,9 +138,11 @@ describe("buildDiagnosticsPanelModel", () => {
         opencode: {
           runtimeOk: true,
           runtimeError: null,
+          runtimeFailureKind: null,
           runtime: runtimeSummary,
           mcpOk: true,
           mcpError: null,
+          mcpFailureKind: null,
           mcpServerName: "openducktor",
           mcpServerStatus: "connected",
           mcpServerError: null,
@@ -195,9 +197,11 @@ describe("buildDiagnosticsPanelModel", () => {
         opencode: {
           runtimeOk: true,
           runtimeError: null,
+          runtimeFailureKind: null,
           runtime: runtimeSummary,
           mcpOk: true,
           mcpError: null,
+          mcpFailureKind: null,
           mcpServerName: "openducktor",
           mcpServerStatus: "connected",
           mcpServerError: null,
@@ -257,9 +261,11 @@ describe("buildDiagnosticsPanelModel", () => {
         opencode: {
           runtimeOk: true,
           runtimeError: null,
+          runtimeFailureKind: null,
           runtime: runtimeSummary,
           mcpOk: true,
           mcpError: null,
+          mcpFailureKind: null,
           mcpServerName: "openducktor",
           mcpServerStatus: "connected",
           mcpServerError: null,
@@ -323,9 +329,11 @@ describe("buildDiagnosticsPanelModel", () => {
         opencode: {
           runtimeOk: false,
           runtimeError: "runtime failed",
+          runtimeFailureKind: "error",
           runtime: null,
           mcpOk: false,
           mcpError: "mcp unavailable",
+          mcpFailureKind: "error",
           mcpServerName: "openducktor",
           mcpServerStatus: null,
           mcpServerError: "server unavailable",
@@ -390,9 +398,11 @@ describe("buildDiagnosticsPanelModel", () => {
         opencode: {
           runtimeOk: true,
           runtimeError: null,
+          runtimeFailureKind: null,
           runtime: runtimeSummary,
           mcpOk: false,
           mcpError: "mcp unavailable",
+          mcpFailureKind: "error",
           mcpServerName: "openducktor",
           mcpServerStatus: null,
           mcpServerError: null,
@@ -406,5 +416,63 @@ describe("buildDiagnosticsPanelModel", () => {
 
     const mcpSection = model.sections.find((section) => section.key === "mcp:opencode");
     expect(mcpSection?.errors).toEqual(["mcp unavailable"]);
+  });
+
+  test("shows timeout-specific badges and messages while runtime health is warming up", () => {
+    const model = buildDiagnosticsPanelModel({
+      activeRepo: "/repo",
+      activeWorkspace: {
+        path: "/repo",
+        isActive: true,
+        hasConfig: true,
+        configuredWorktreeBasePath: "/worktrees",
+        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+        effectiveWorktreeBasePath: "/worktrees",
+      },
+      runtimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        ghOk: true,
+        ghVersion: "gh version 2.73.0",
+        ghAuthOk: true,
+        ghAuthLogin: "octocat",
+        ghAuthError: null,
+        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
+        errors: [],
+      },
+      beadsCheck: {
+        beadsOk: true,
+        beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
+        beadsError: null,
+      },
+      runtimeHealthByRuntime: {
+        opencode: {
+          runtimeOk: false,
+          runtimeError: "Timed out waiting for OpenCode runtime startup readiness",
+          runtimeFailureKind: "timeout",
+          runtime: null,
+          mcpOk: false,
+          mcpError: "Runtime is unavailable, so MCP cannot be verified.",
+          mcpFailureKind: "timeout",
+          mcpServerName: "openducktor",
+          mcpServerStatus: null,
+          mcpServerError: "Runtime is unavailable, so MCP cannot be verified.",
+          availableToolIds: [],
+          checkedAt: "2026-02-20T12:01:00.000Z",
+          errors: ["Timed out waiting for OpenCode runtime startup readiness"],
+        },
+      },
+      isLoadingChecks: false,
+    });
+
+    const runtimeSection = model.sections.find((section) => section.key === "runtime:opencode");
+    const mcpSection = model.sections.find((section) => section.key === "mcp:opencode");
+
+    expect(runtimeSection?.badge).toEqual({ label: "Starting", variant: "warning" });
+    expect(runtimeSection?.errors[0]).toContain("Retrying automatically");
+    expect(mcpSection?.badge).toEqual({ label: "Retrying", variant: "warning" });
   });
 });

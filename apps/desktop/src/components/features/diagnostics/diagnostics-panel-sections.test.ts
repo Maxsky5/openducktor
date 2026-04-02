@@ -61,6 +61,7 @@ describe("DiagnosticsPanelSections", () => {
         opencode: {
           runtimeOk: true,
           runtimeError: null,
+          runtimeFailureKind: null,
           runtime: {
             kind: "opencode",
             runtimeId: "runtime-1",
@@ -77,6 +78,7 @@ describe("DiagnosticsPanelSections", () => {
           },
           mcpOk: true,
           mcpError: null,
+          mcpFailureKind: null,
           mcpServerName: "openducktor",
           mcpServerStatus: "connected",
           mcpServerError: null,
@@ -135,9 +137,11 @@ describe("DiagnosticsPanelSections", () => {
         opencode: {
           runtimeOk: false,
           runtimeError: "runtime failed",
+          runtimeFailureKind: "error",
           runtime: null,
           mcpOk: false,
           mcpError: "mcp unavailable",
+          mcpFailureKind: "error",
           mcpServerName: "openducktor",
           mcpServerStatus: null,
           mcpServerError: "server unavailable",
