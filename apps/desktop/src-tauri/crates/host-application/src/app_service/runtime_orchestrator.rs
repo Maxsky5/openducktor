@@ -2,7 +2,7 @@ mod registry;
 mod startup;
 
 use super::AppService;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use host_domain::{
     AgentRuntimeKind, RunState, RunSummary, RuntimeDescriptor, RuntimeInstanceSummary, RuntimeRole,
 };
@@ -42,6 +42,85 @@ pub(super) struct SpawnedRuntimeServer {
     port: u16,
     child: Child,
     opencode_process_guard: super::TrackedOpencodeProcessGuard,
+}
+
+#[derive(Clone)]
+struct RunExposureCandidate {
+    summary: RunSummary,
+    repo_path: String,
+    task_id: String,
+    worktree_path: String,
+}
+
+impl RunExposureCandidate {
+    fn from_run(run: &super::RunProcess) -> Self {
+        Self {
+            summary: run.summary.clone(),
+            repo_path: run.repo_path.clone(),
+            task_id: run.task_id.clone(),
+            worktree_path: run.worktree_path.clone(),
+        }
+    }
+
+    fn requires_live_session_check(&self) -> bool {
+        matches!(
+            self.summary.state,
+            RunState::Starting
+                | RunState::Running
+                | RunState::Blocked
+                | RunState::AwaitingDoneConfirmation
+        )
+    }
+}
+
+struct RunExposurePlan {
+    summary: RunSummary,
+    external_session_ids: Vec<String>,
+    probe_target: Option<super::OpencodeSessionStatusProbeTarget>,
+}
+
+impl RunExposurePlan {
+    fn without_probe(summary: RunSummary) -> Self {
+        Self {
+            summary,
+            external_session_ids: Vec::new(),
+            probe_target: None,
+        }
+    }
+
+    fn with_probe(
+        summary: RunSummary,
+        external_session_ids: Vec<String>,
+        probe_target: super::OpencodeSessionStatusProbeTarget,
+    ) -> Self {
+        Self {
+            summary,
+            external_session_ids,
+            probe_target: Some(probe_target),
+        }
+    }
+
+    fn is_visible(
+        &self,
+        statuses_by_target: &HashMap<
+            super::OpencodeSessionStatusProbeTarget,
+            super::OpencodeSessionStatusMap,
+        >,
+    ) -> Result<bool> {
+        let Some(probe_target) = self.probe_target.as_ref() else {
+            return Ok(true);
+        };
+
+        let statuses = statuses_by_target.get(probe_target).ok_or_else(|| {
+            anyhow!(
+                "Missing cached OpenCode session statuses for run {}",
+                self.summary.run_id
+            )
+        })?;
+        Ok(self.external_session_ids.iter().any(|external_session_id| {
+            super::has_live_opencode_session_status(statuses, external_session_id)
+        }))
+    }
 }
 
 struct RuntimeEnsureFlightGuard<'a> {
@@ -289,10 +368,7 @@ impl AppService {
             .runs
             .lock()
             .map_err(|_| anyhow!("Run state lock poisoned"))?;
-        let mut runtime_statuses_by_worktree = HashMap::new();
-        let mut sessions_by_repo_task = HashMap::new();
-
-        let mut list = runs
+        let run_candidates = runs
             .values()
             .filter(|run| {
                 if let Some(path_key) = repo_key_filter.as_deref() {
@@ -304,20 +380,91 @@ impl AppService {
                     true
                 }
             })
-            .filter_map(|run| {
-                match self.should_expose_run(
-                    run,
-                    &mut runtime_statuses_by_worktree,
-                    &mut sessions_by_repo_task,
-                ) {
-                    Ok(true) => Some(Ok(run.summary.clone())),
-                    Ok(false) => None,
-                    Err(error) => Some(Err(error)),
-                }
-            })
-            .collect::<Result<Vec<_>>>()?;
+            .map(RunExposureCandidate::from_run)
+            .collect::<Vec<_>>();
+        drop(runs);
+
+        let (exposure_plans, probe_targets) = self.build_run_exposure_plans(run_candidates)?;
+        let statuses_by_target =
+            self.load_cached_opencode_session_statuses_for_targets(&probe_targets)?;
+        let mut list = self.visible_run_summaries(exposure_plans, &statuses_by_target)?;
 
         list.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+        Ok(list)
+    }
+
+    fn build_run_exposure_plans(
+        &self,
+        run_candidates: Vec<RunExposureCandidate>,
+    ) -> Result<(
+        Vec<RunExposurePlan>,
+        Vec<super::OpencodeSessionStatusProbeTarget>,
+    )> {
+        let mut sessions_by_repo_task = HashMap::new();
+        let mut exposure_plans = Vec::with_capacity(run_candidates.len());
+        let mut probe_targets = Vec::new();
+
+        for run in run_candidates {
+            if !run.requires_live_session_check() {
+                exposure_plans.push(RunExposurePlan::without_probe(run.summary));
+                continue;
+            }
+
+            let sessions = self.sessions_for_run_candidate(&run, &mut sessions_by_repo_task)?;
+            let external_session_ids = collect_build_external_session_ids_for_run(&run, sessions);
+
+            if external_session_ids.is_empty() {
+                exposure_plans.push(RunExposurePlan::without_probe(run.summary));
+                continue;
+            }
+
+            let probe_target = super::OpencodeSessionStatusProbeTarget::for_runtime_route(
+                &run.summary.runtime_route,
+                run.worktree_path.as_str(),
+            );
+            probe_targets.push(probe_target.clone());
+            exposure_plans.push(RunExposurePlan::with_probe(
+                run.summary,
+                external_session_ids,
+                probe_target,
+            ));
+        }
+
+        Ok((exposure_plans, probe_targets))
+    }
+
+    fn sessions_for_run_candidate<'a>(
+        &self,
+        run: &RunExposureCandidate,
+        sessions_by_repo_task: &'a mut HashMap<String, Vec<host_domain::AgentSessionDocument>>,
+    ) -> Result<&'a [host_domain::AgentSessionDocument]> {
+        let session_cache_key = format!("{}::{}", run.repo_path, run.task_id);
+        if !sessions_by_repo_task.contains_key(session_cache_key.as_str()) {
+            let sessions =
+                self.agent_sessions_list(run.repo_path.as_str(), run.task_id.as_str())?;
+            sessions_by_repo_task.insert(session_cache_key.clone(), sessions);
+        }
+
+        sessions_by_repo_task
+            .get(session_cache_key.as_str())
+            .map(Vec::as_slice)
+            .ok_or_else(|| anyhow!("Missing cached agent sessions for {}", session_cache_key))
+    }
+
+    fn visible_run_summaries(
+        &self,
+        exposure_plans: Vec<RunExposurePlan>,
+        statuses_by_target: &HashMap<
+            super::OpencodeSessionStatusProbeTarget,
+            super::OpencodeSessionStatusMap,
+        >,
+    ) -> Result<Vec<RunSummary>> {
+        let mut list = Vec::new();
+        for plan in exposure_plans {
+            if plan.is_visible(statuses_by_target)? {
+                list.push(plan.summary);
+            }
+        }
         Ok(list)
     }
 
@@ -404,100 +551,43 @@ impl AppService {
             other => Err(anyhow!("Unsupported agent runtime kind: {other}")),
         }
     }
+}
 
-    fn should_expose_run(
-        &self,
-        run: &super::RunProcess,
-        runtime_statuses_by_worktree: &mut HashMap<String, super::OpencodeSessionStatusMap>,
-        sessions_by_repo_task: &mut HashMap<String, Vec<host_domain::AgentSessionDocument>>,
-    ) -> Result<bool> {
-        if !matches!(
-            run.summary.state,
-            RunState::Starting
-                | RunState::Running
-                | RunState::Blocked
-                | RunState::AwaitingDoneConfirmation
-        ) {
-            return Ok(true);
-        }
-
-        let session_cache_key = format!("{}::{}", run.repo_path, run.task_id);
-        if !sessions_by_repo_task.contains_key(session_cache_key.as_str()) {
-            let sessions =
-                self.agent_sessions_list(run.repo_path.as_str(), run.task_id.as_str())?;
-            sessions_by_repo_task.insert(session_cache_key.clone(), sessions);
-        }
-        let sessions = sessions_by_repo_task
-            .get(session_cache_key.as_str())
-            .ok_or_else(|| anyhow!("Missing cached agent sessions for {}", session_cache_key))?;
-        let external_session_ids = sessions
-            .iter()
-            .filter(|session| session.role.trim() == "build")
-            .filter(|session| session.runtime_kind.trim() == run.summary.runtime_kind.as_str())
-            .filter(|session| {
-                super::task_workflow::normalize_path_for_comparison(
-                    session.working_directory.as_str(),
-                ) == super::task_workflow::normalize_path_for_comparison(run.worktree_path.as_str())
-            })
-            .filter_map(|session| {
-                session
-                    .external_session_id
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .map(str::to_string)
-            })
-            .collect::<Vec<_>>();
-
-        if external_session_ids.is_empty() {
-            return Ok(true);
-        }
-
-        let worktree_key = super::task_workflow::normalize_path_key(run.worktree_path.as_str());
-        if !runtime_statuses_by_worktree.contains_key(worktree_key.as_str()) {
-            let statuses = match run.summary.runtime_kind {
-                AgentRuntimeKind::Opencode => {
-                    match super::load_opencode_session_statuses(
-                        &run.summary.runtime_route,
-                        run.worktree_path.as_str(),
-                    ) {
-                        Ok(statuses) => statuses,
-                        Err(error)
-                            if super::is_unreachable_opencode_session_status_error(&error) =>
-                        {
-                            super::OpencodeSessionStatusMap::new()
-                        }
-                        Err(error) => return Err(error),
-                    }
-                }
-            };
-            runtime_statuses_by_worktree.insert(worktree_key.clone(), statuses);
-        }
-        let statuses = runtime_statuses_by_worktree
-            .get(worktree_key.as_str())
-            .ok_or_else(|| {
-                anyhow!(
-                    "Missing cached OpenCode session statuses for {}",
-                    worktree_key
-                )
-            })?;
-        Ok(external_session_ids.iter().any(|external_session_id| {
-            super::has_live_opencode_session_status(statuses, external_session_id)
-        }))
-    }
+fn collect_build_external_session_ids_for_run(
+    run: &RunExposureCandidate,
+    sessions: &[host_domain::AgentSessionDocument],
+) -> Vec<String> {
+    sessions
+        .iter()
+        .filter(|session| session.role.trim() == "build")
+        .filter(|session| session.runtime_kind.trim() == run.summary.runtime_kind.as_str())
+        .filter(|session| {
+            super::task_workflow::normalize_path_for_comparison(session.working_directory.as_str())
+                == super::task_workflow::normalize_path_for_comparison(run.worktree_path.as_str())
+        })
+        .filter_map(|session| {
+            session
+                .external_session_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        })
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::{AppService, RuntimeEnsureFlightGuard};
-    use crate::app_service::test_support::{build_service_with_state, make_task};
     use crate::app_service::RunProcess;
-    use anyhow::{anyhow, Result};
+    use crate::app_service::test_support::{build_service_with_state, make_task};
+    use anyhow::{Result, anyhow};
     use host_domain::{AgentRuntimeKind, AgentSessionDocument, RunSummary, TaskStatus};
     use host_infra_system::RepoConfig;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::thread;
+    use std::time::{Duration, Instant};
 
     fn spawn_opencode_session_status_server(
         response_body: &'static str,
@@ -513,6 +603,31 @@ mod tests {
             if let Ok((mut stream, _)) = listener.accept() {
                 let mut request_buffer = [0_u8; 4096];
                 let _ = stream.read(&mut request_buffer);
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.flush();
+            }
+        });
+        Ok((port, handle))
+    }
+
+    fn spawn_delayed_opencode_session_status_server(
+        response_body: String,
+        delay: Duration,
+    ) -> Result<(u16, std::thread::JoinHandle<()>)> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let port = listener.local_addr()?.port();
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            response_body.len(),
+            response_body
+        );
+        let handle = std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut request_buffer = [0_u8; 4096];
+                let _ = stream.read(&mut request_buffer);
+                if !delay.is_zero() {
+                    std::thread::sleep(delay);
+                }
                 let _ = stream.write_all(response.as_bytes());
                 let _ = stream.flush();
             }
@@ -539,9 +654,11 @@ mod tests {
 
         let error = AppService::wait_for_runtime_ensure_flight(&flight)
             .expect_err("dropped leader should finish waiters with an error");
-        assert!(error
-            .to_string()
-            .contains("Runtime ensure aborted unexpectedly"));
+        assert!(
+            error
+                .to_string()
+                .contains("Runtime ensure aborted unexpectedly")
+        );
 
         Ok(())
     }
@@ -574,9 +691,11 @@ mod tests {
                 &Err(anyhow!("simulated startup failure")),
             )
             .expect_err("poisoned completion should surface an error");
-        assert!(error
-            .to_string()
-            .contains("Runtime ensure coordination state lock poisoned"));
+        assert!(
+            error
+                .to_string()
+                .contains("Runtime ensure coordination state lock poisoned")
+        );
 
         let flights = service
             .runtime_ensure_flights
@@ -719,6 +838,93 @@ mod tests {
     }
 
     #[test]
+    fn module_runs_list_batches_unique_slow_status_probes() -> Result<()> {
+        let tasks = (0..6)
+            .map(|index| {
+                make_task(
+                    format!("task-{index}").as_str(),
+                    "task",
+                    TaskStatus::InProgress,
+                )
+            })
+            .collect::<Vec<_>>();
+        let (service, task_state, _git_state) = build_service_with_state(tasks);
+        let mut server_handles = Vec::new();
+        let mut sessions = Vec::new();
+
+        for index in 0..6 {
+            let (port, server_handle) = spawn_delayed_opencode_session_status_server(
+                format!(r#"{{"external-build-session-{index}":{{"type":"busy"}}}}"#),
+                Duration::from_millis(300),
+            )?;
+            server_handles.push(server_handle);
+            sessions.push(AgentSessionDocument {
+                session_id: format!("build-session-{index}"),
+                external_session_id: Some(format!("external-build-session-{index}")),
+                role: "build".to_string(),
+                scenario: "build_implementation_start".to_string(),
+                started_at: "2026-03-17T11:00:00Z".to_string(),
+                runtime_kind: "opencode".to_string(),
+                working_directory: format!("/tmp/repo/worktree-{index}"),
+                selected_model: None,
+            });
+
+            service
+                .runs
+                .lock()
+                .expect("run state lock poisoned")
+                .insert(
+                    format!("run-{index}"),
+                    RunProcess {
+                        summary: RunSummary {
+                            run_id: format!("run-{index}"),
+                            runtime_kind: AgentRuntimeKind::Opencode,
+                            runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                                endpoint: format!("http://127.0.0.1:{port}"),
+                            },
+                            repo_path: "/tmp/repo".to_string(),
+                            task_id: format!("task-{index}"),
+                            branch: format!("odt/task-{index}"),
+                            worktree_path: format!("/tmp/repo/worktree-{index}"),
+                            port,
+                            state: host_domain::RunState::Running,
+                            last_message: None,
+                            started_at: format!("2026-03-17T11:00:0{index}Z"),
+                        },
+                        child: None,
+                        _opencode_process_guard: None,
+                        repo_path: "/tmp/repo".to_string(),
+                        task_id: format!("task-{index}"),
+                        worktree_path: format!("/tmp/repo/worktree-{index}"),
+                        repo_config: RepoConfig::default(),
+                    },
+                );
+        }
+
+        task_state
+            .lock()
+            .expect("task store lock poisoned")
+            .agent_sessions = sessions;
+
+        let started_at = Instant::now();
+        let runs = service.runs_list(Some("/tmp/repo"))?;
+        let elapsed = started_at.elapsed();
+
+        for server_handle in server_handles {
+            server_handle
+                .join()
+                .expect("status server thread should finish");
+        }
+
+        assert_eq!(runs.len(), 6);
+        assert!(
+            elapsed < Duration::from_millis(1200),
+            "expected bounded parallel latency, observed {elapsed:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn module_runtime_stop_reports_missing_runtime() {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
 
@@ -726,9 +932,11 @@ mod tests {
             .runtime_stop("missing-runtime")
             .expect_err("stopping unknown runtime should fail");
 
-        assert!(error
-            .to_string()
-            .contains("Runtime not found: missing-runtime"));
+        assert!(
+            error
+                .to_string()
+                .contains("Runtime not found: missing-runtime")
+        );
     }
 
     #[test]
