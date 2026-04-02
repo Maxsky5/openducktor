@@ -1,5 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { prepareQueuedSessionEvents } from "./session-event-batching";
+import type { SessionEvent } from "./session-event-types";
 import { attachAgentSessionListener, type SessionEventAdapter } from "./session-events";
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
@@ -31,6 +33,162 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
 });
 
 describe("agent-orchestrator-session-events", () => {
+  test("centralizes assistant batch coalescing rules in one reducer", () => {
+    const prepared = prepareQueuedSessionEvents([
+      {
+        type: "assistant_delta",
+        sessionId: "session-1",
+        channel: "text",
+        messageId: "assistant-1",
+        delta: "Hello",
+        timestamp: "2026-02-22T08:00:01.000Z",
+      },
+      {
+        type: "session_status",
+        sessionId: "session-1",
+        status: { type: "busy" },
+        timestamp: "2026-02-22T08:00:01.500Z",
+      },
+      {
+        type: "assistant_delta",
+        sessionId: "session-1",
+        channel: "text",
+        messageId: "assistant-1",
+        delta: " world",
+        timestamp: "2026-02-22T08:00:02.000Z",
+      },
+      {
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:03.000Z",
+        part: {
+          kind: "reasoning",
+          messageId: "assistant-1",
+          partId: "reasoning-1",
+          text: "Draft reasoning",
+          completed: false,
+        },
+      },
+      {
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:04.000Z",
+        part: {
+          kind: "reasoning",
+          messageId: "assistant-1",
+          partId: "reasoning-1",
+          text: "Draft reasoning refined",
+          completed: false,
+        },
+      },
+      {
+        type: "assistant_message",
+        sessionId: "session-1",
+        messageId: "assistant-1",
+        timestamp: "2026-02-22T08:00:05.000Z",
+        message: "Final answer",
+      },
+    ] satisfies SessionEvent[]);
+
+    expect(prepared).toEqual([
+      {
+        type: "session_status",
+        sessionId: "session-1",
+        status: { type: "busy" },
+        timestamp: "2026-02-22T08:00:01.500Z",
+      },
+      {
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:04.000Z",
+        part: {
+          kind: "reasoning",
+          messageId: "assistant-1",
+          partId: "reasoning-1",
+          text: "Draft reasoning refined",
+          completed: false,
+        },
+      },
+      {
+        type: "assistant_message",
+        sessionId: "session-1",
+        messageId: "assistant-1",
+        timestamp: "2026-02-22T08:00:05.000Z",
+        message: "Final answer",
+      },
+    ]);
+  });
+
+  test("keeps per-type replacement behavior configurable inside the central reducer", () => {
+    const prepared = prepareQueuedSessionEvents([
+      {
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        part: {
+          kind: "tool",
+          messageId: "assistant-1",
+          partId: "tool-1",
+          callId: "call-1",
+          tool: "bash",
+          status: "running",
+          input: { command: "pwd" },
+        },
+      },
+      {
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:02.000Z",
+        part: {
+          kind: "tool",
+          messageId: "assistant-1",
+          partId: "tool-1",
+          callId: "call-1",
+          tool: "bash",
+          status: "completed",
+          input: { command: "pwd" },
+          output: "/tmp/repo",
+        },
+      },
+      {
+        type: "session_todos_updated",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:03.000Z",
+        todos: [{ id: "todo-1", content: "Do it", status: "pending", priority: "high" }],
+      },
+      {
+        type: "session_todos_updated",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:04.000Z",
+        todos: [{ id: "todo-1", content: "Do it", status: "completed", priority: "high" }],
+      },
+    ] satisfies SessionEvent[]);
+
+    expect(prepared).toEqual([
+      {
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:02.000Z",
+        part: {
+          kind: "tool",
+          messageId: "assistant-1",
+          partId: "tool-1",
+          callId: "call-1",
+          tool: "bash",
+          status: "completed",
+          input: { command: "pwd" },
+          output: "/tmp/repo",
+        },
+      },
+      {
+        type: "session_todos_updated",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:04.000Z",
+        todos: [{ id: "todo-1", content: "Do it", status: "completed", priority: "high" }],
+      },
+    ]);
+  });
+
   test("records inputReadyAtMs when tool input first becomes meaningful", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {

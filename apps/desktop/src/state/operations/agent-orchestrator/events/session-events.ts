@@ -1,3 +1,4 @@
+import { isImmediateSessionEvent, prepareQueuedSessionEvents } from "./session-event-batching";
 import type {
   AttachAgentSessionListenerParams,
   SessionEvent,
@@ -28,91 +29,6 @@ const hasSessionStateChanges = (current: object, next: object): boolean => {
   }
 
   return false;
-};
-
-const queuedEventKey = (event: SessionEvent): string | null => {
-  switch (event.type) {
-    case "assistant_delta":
-      return `assistant_delta:${event.channel}:${event.messageId}`;
-    case "assistant_part":
-      return `assistant_part:${event.part.kind}:${event.part.messageId}:${event.part.partId}`;
-    case "assistant_message":
-      return `assistant_message:${event.messageId}`;
-    case "session_started":
-    case "session_status":
-    case "session_todos_updated":
-      return event.type;
-    case "user_message":
-    case "permission_required":
-    case "question_required":
-    case "session_error":
-    case "session_idle":
-    case "session_finished":
-    case "tool_call":
-    case "tool_result":
-      return null;
-  }
-};
-
-const removeSupersededQueuedEvents = (merged: SessionEvent[], event: SessionEvent): void => {
-  if (event.type !== "assistant_message") {
-    return;
-  }
-
-  for (let index = merged.length - 1; index >= 0; index -= 1) {
-    const candidate = merged[index];
-    if (!candidate) {
-      continue;
-    }
-
-    if (candidate.type === "assistant_delta" && candidate.messageId === event.messageId) {
-      merged.splice(index, 1);
-      continue;
-    }
-
-    if (
-      candidate.type === "assistant_part" &&
-      candidate.part.messageId === event.messageId &&
-      candidate.part.kind === "text"
-    ) {
-      merged.splice(index, 1);
-    }
-  }
-};
-
-const mergeQueuedEvents = (events: SessionEvent[]): SessionEvent[] => {
-  const merged: SessionEvent[] = [];
-  const eventIndexByKey = new Map<string, number>();
-
-  for (const event of events) {
-    removeSupersededQueuedEvents(merged, event);
-
-    const key = queuedEventKey(event);
-    if (!key) {
-      merged.push(event);
-      continue;
-    }
-
-    const existingIndex = eventIndexByKey.get(key);
-    if (existingIndex === undefined) {
-      eventIndexByKey.set(key, merged.length);
-      merged.push(event);
-      continue;
-    }
-
-    const existing = merged[existingIndex];
-    if (existing?.type === "assistant_delta" && event.type === "assistant_delta") {
-      merged[existingIndex] = {
-        ...event,
-        delta: `${existing.delta}${event.delta}`,
-      };
-      continue;
-    }
-
-    merged[existingIndex] = event;
-  }
-
-  return merged;
 };
 
 const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionEvent): void => {
@@ -159,27 +75,6 @@ const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionE
   }
 };
 
-const isImmediateSessionEvent = (event: SessionEvent): boolean => {
-  switch (event.type) {
-    case "user_message":
-    case "permission_required":
-    case "question_required":
-    case "session_error":
-    case "session_idle":
-    case "session_finished":
-      return true;
-    case "assistant_message":
-    case "session_started":
-    case "assistant_delta":
-    case "assistant_part":
-    case "session_status":
-    case "session_todos_updated":
-    case "tool_call":
-    case "tool_result":
-      return false;
-  }
-};
-
 export const attachAgentSessionListener = (
   context: AttachAgentSessionListenerParams,
 ): (() => void) => {
@@ -198,7 +93,7 @@ export const attachAgentSessionListener = (
       return;
     }
 
-    const eventsToHandle = mergeQueuedEvents(queuedEvents);
+    const eventsToHandle = prepareQueuedSessionEvents(queuedEvents);
     queuedEvents = [];
 
     const batchedSessionsRef = {
