@@ -50,15 +50,6 @@ type OpenCodePromptPart =
       };
     };
 
-const toAttachmentSource = (
-  path: string,
-): NonNullable<Extract<OpenCodePromptPart, { type: "file" }>["source"]> => {
-  return {
-    type: "file",
-    path,
-  } as unknown as NonNullable<Extract<OpenCodePromptPart, { type: "file" }>["source"]>;
-};
-
 const toCommandModelInput = (
   modelInput: ReturnType<typeof normalizeModelInput>,
 ): string | undefined => {
@@ -119,7 +110,6 @@ const toPromptParts = (
           mime: part.attachment.mime,
           url: toFileUrl(resolveAgainstWorkingDirectory(workingDirectory, normalizedPath)),
           filename: part.attachment.name,
-          source: toAttachmentSource(normalizedPath),
         },
       ];
     }),

@@ -297,13 +297,29 @@ describe("message-execution", () => {
           mime: "image/png",
           url: "file:///tmp/diagram.png",
           filename: "diagram.png",
-          source: {
-            type: "file",
-            path: "/tmp/diagram.png",
-          },
         },
       ],
     });
+  });
+
+  test("omits file source metadata for local attachments so the runtime accepts the payload schema", async () => {
+    const { session, promptAsync } = createSession();
+
+    await sendUserMessage({
+      session,
+      request: {
+        sessionId: "session-1",
+        parts: [{ kind: "attachment", attachment: IMAGE_ATTACHMENT }],
+      },
+      tools: {},
+    });
+
+    const promptRequest = promptAsync.mock.calls[0]?.[0] as
+      | { parts?: Array<{ type: string; source?: unknown }> }
+      | undefined;
+    const attachmentPart = promptRequest?.parts?.find((part) => part.type === "file");
+    expect(attachmentPart).toBeDefined();
+    expect(attachmentPart?.source).toBeUndefined();
   });
 
   test("encodes file URLs for special characters and relative paths", async () => {
