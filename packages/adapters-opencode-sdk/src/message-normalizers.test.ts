@@ -189,6 +189,33 @@ describe("message-normalizers", () => {
     ]);
   });
 
+  test("preserves raw filesystem paths returned in attachment urls", () => {
+    const parts: Part[] = [
+      {
+        id: "image-raw-path",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "file",
+        mime: "image/png",
+        filename: "Screenshot 2026-04-01 at 00.33.32.png",
+        url: "/var/folders/example/Screenshot 2026-04-01 at 00.33.32.png",
+      } as Part,
+    ];
+
+    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+      {
+        kind: "attachment",
+        attachment: {
+          id: "image-raw-path",
+          path: "/var/folders/example/Screenshot 2026-04-01 at 00.33.32.png",
+          name: "Screenshot 2026-04-01 at 00.33.32.png",
+          kind: "image",
+          mime: "image/png",
+        },
+      },
+    ]);
+  });
+
   test("normalizes only supported media file attachments without inline source text", () => {
     const parts: Part[] = [
       {

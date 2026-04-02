@@ -24,8 +24,16 @@ const readPathBasename = (filePath: string): string => {
 };
 
 const readFilePathFromUrl = (url: string): string | null => {
+  const trimmedUrl = url.trim();
+  if (trimmedUrl.length === 0) {
+    return null;
+  }
+  if (trimmedUrl.startsWith("/") || /^[A-Za-z]:[\\/]/.test(trimmedUrl)) {
+    return trimmedUrl;
+  }
+
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(trimmedUrl);
     if (parsed.protocol !== "file:") {
       return null;
     }

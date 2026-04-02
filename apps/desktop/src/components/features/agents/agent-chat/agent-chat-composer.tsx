@@ -441,13 +441,6 @@ export const AgentChatComposer = forwardRef<
             className={composerAccentColor ? "border-l-4" : undefined}
             style={composerAccentColor ? { borderLeftColor: composerAccentColor } : undefined}
           >
-            <div className="flex items-center gap-2 border-b border-input/80 px-3 py-2">
-              <Paperclip className="size-4 text-muted-foreground" />
-              <p className="text-[13px] font-semibold text-foreground">Attachments</p>
-              <p className="text-[11px] font-medium text-muted-foreground">
-                {(draft.attachments ?? []).length}
-              </p>
-            </div>
             <div className="px-3 pb-3 pt-3">
               <div className="flex flex-wrap gap-3">
                 {(draft.attachments ?? []).map((attachment) => (
