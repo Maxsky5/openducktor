@@ -106,6 +106,7 @@ export function AgentChatAttachmentChip(
           "relative flex min-w-0 flex-col overflow-hidden rounded-lg border bg-card",
           effectiveError ? "border-destructive bg-destructive/5" : "border-border",
           previewable ? "w-40" : "max-w-full min-w-0",
+          previewable ? "cursor-pointer" : undefined,
           className,
         )}
       >
@@ -125,7 +126,7 @@ export function AgentChatAttachmentChip(
         {previewable ? (
           <button
             type="button"
-            className="flex w-full flex-col text-left"
+            className="flex w-full cursor-pointer flex-col text-left"
             onClick={handleOpenPreview}
           >
             <div className="flex h-24 max-h-24 items-center justify-center overflow-hidden bg-muted">
