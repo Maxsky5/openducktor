@@ -7,11 +7,7 @@ import type {
 } from "@openducktor/contracts";
 import { runtimeLabelFor } from "@/lib/agent-runtime";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
-import {
-  classifyRepoRuntimeFailure,
-  type RepoRuntimeFailureKind,
-  type RepoRuntimeHealthMap,
-} from "@/types/diagnostics";
+import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "@/types/diagnostics";
 import {
   buildDiagnosticsSummary,
   type DiagnosticsSummary,
@@ -54,6 +50,8 @@ type BuildDiagnosticsPanelModelInput = {
   runtimeDefinitionsError: string | null;
   runtimeCheck: RuntimeCheck | null;
   beadsCheck: BeadsCheck | null;
+  runtimeCheckFailureKind: RepoRuntimeFailureKind;
+  beadsCheckFailureKind: RepoRuntimeFailureKind;
   runtimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingChecks: boolean;
 };
@@ -109,6 +107,8 @@ export const buildDiagnosticsPanelModel = (
     runtimeDefinitionsError,
     runtimeCheck,
     beadsCheck,
+    runtimeCheckFailureKind,
+    beadsCheckFailureKind,
     runtimeHealthByRuntime,
     isLoadingChecks,
   } = input;
@@ -123,8 +123,6 @@ export const buildDiagnosticsPanelModel = (
   const isRuntimeHealthPending = runtimeDefinitions.some(
     (definition) => runtimeHealthByRuntime[definition.kind] === undefined,
   );
-  const runtimeCheckFailureKind = classifyRepoRuntimeFailure(runtimeCheck?.errors[0] ?? null);
-  const beadsFailureKind = classifyRepoRuntimeFailure(beadsCheck?.beadsError ?? null);
 
   const criticalReasons: string[] = [];
   if (activeRepo) {
@@ -361,13 +359,15 @@ export const buildDiagnosticsPanelModel = (
       label:
         beadsCheck === null
           ? "Checking"
-          : beadsFailureKind === "timeout"
+          : beadsCheckFailureKind === "timeout"
             ? "Retrying"
             : beadsCheck.beadsOk
               ? "Ready"
               : "Unavailable",
       variant:
-        beadsFailureKind === "timeout" ? "warning" : healthVariant(beadsCheck?.beadsOk ?? null),
+        beadsCheckFailureKind === "timeout"
+          ? "warning"
+          : healthVariant(beadsCheck?.beadsOk ?? null),
     },
     rows:
       activeRepo && beadsCheck?.beadsPath
@@ -381,7 +381,7 @@ export const buildDiagnosticsPanelModel = (
           ]
         : [],
     errors:
-      beadsFailureKind === "timeout"
+      beadsCheckFailureKind === "timeout"
         ? [buildTimeoutDiagnosticsMessage("Beads store", beadsCheck?.beadsError ?? null)]
         : beadsCheck?.beadsError
           ? [beadsCheck.beadsError]

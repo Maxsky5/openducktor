@@ -31,7 +31,7 @@ import type {
   AgentUserMessagePart,
 } from "@openducktor/core";
 import type { AgentSessionLoadOptions, AgentSessionState } from "./agent-orchestrator";
-import type { RepoRuntimeHealthMap } from "./diagnostics";
+import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
 
 export type RepoAgentDefaultInput = {
   runtimeKind?: RuntimeKind;
@@ -86,6 +86,8 @@ export type WorkspaceStateContextValue = {
 export type ChecksStateContextValue = {
   runtimeCheck: RuntimeCheck | null;
   beadsCheck: BeadsCheck | null;
+  runtimeCheckFailureKind: RepoRuntimeFailureKind;
+  beadsCheckFailureKind: RepoRuntimeFailureKind;
   runtimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingChecks: boolean;
   refreshChecks: () => Promise<void>;

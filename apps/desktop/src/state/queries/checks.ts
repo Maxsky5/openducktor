@@ -7,7 +7,11 @@ import type {
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
-import type { RepoRuntimeHealthCheck, RepoRuntimeHealthMap } from "@/types/diagnostics";
+import type {
+  RepoRuntimeFailureKind,
+  RepoRuntimeHealthCheck,
+  RepoRuntimeHealthMap,
+} from "@/types/diagnostics";
 import { host } from "../operations/host";
 
 const RUNTIME_CHECK_STALE_TIME_MS = 5 * 60_000;
@@ -37,11 +41,38 @@ const buildRuntimeHealthErrorCheck = (
 const normalizeRuntimeKinds = (runtimeKinds: RuntimeKind[]): RuntimeKind[] =>
   [...runtimeKinds].sort();
 
+export class DiagnosticsQueryTimeoutError extends Error {
+  readonly failureKind = "timeout" as const;
+  readonly timeoutMs: number;
+
+  constructor(timeoutMs: number) {
+    super(`Timed out after ${timeoutMs}ms`);
+    this.name = "DiagnosticsQueryTimeoutError";
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+export const classifyDiagnosticsQueryError = (
+  error: unknown,
+): { message: string; failureKind: RepoRuntimeFailureKind } => {
+  if (error instanceof DiagnosticsQueryTimeoutError) {
+    return {
+      message: error.message,
+      failureKind: error.failureKind,
+    };
+  }
+
+  return {
+    message: errorMessage(error),
+    failureKind: "error",
+  };
+};
+
 const withDiagnosticsQueryTimeout = async <T>(promise: Promise<T>): Promise<T> => {
   let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
   const timeoutPromise = new Promise<never>((_resolve, reject) => {
     timeoutId = globalThis.setTimeout(() => {
-      reject(new Error(`Timed out after ${DIAGNOSTICS_QUERY_TIMEOUT_MS}ms`));
+      reject(new DiagnosticsQueryTimeoutError(DIAGNOSTICS_QUERY_TIMEOUT_MS));
     }, DIAGNOSTICS_QUERY_TIMEOUT_MS);
   });
 

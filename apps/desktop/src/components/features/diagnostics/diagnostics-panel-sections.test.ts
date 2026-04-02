@@ -15,6 +15,8 @@ describe("DiagnosticsPanelSections", () => {
       runtimeDefinitionsError: null,
       runtimeCheck: null,
       beadsCheck: null,
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {},
       isLoadingChecks: false,
     });
@@ -57,6 +59,8 @@ describe("DiagnosticsPanelSections", () => {
         beadsPath: "/Users/dev/.openducktor/beads/fairnest/.beads",
         beadsError: null,
       },
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: {
           runtimeOk: true,
@@ -133,6 +137,8 @@ describe("DiagnosticsPanelSections", () => {
         beadsPath: null,
         beadsError: "beads init failed",
       },
+      runtimeCheckFailureKind: "error",
+      beadsCheckFailureKind: "error",
       runtimeHealthByRuntime: {
         opencode: {
           runtimeOk: false,

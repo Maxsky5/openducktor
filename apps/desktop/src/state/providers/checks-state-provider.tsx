@@ -26,7 +26,9 @@ export function ChecksStateProvider({
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
   const {
     runtimeCheck,
+    runtimeCheckFailureKind,
     activeBeadsCheck,
+    beadsCheckFailureKind,
     activeRepoRuntimeHealthByRuntime,
     isLoadingChecks,
     setIsLoadingChecks,
@@ -50,15 +52,19 @@ export function ChecksStateProvider({
       buildChecksStateValue({
         runtimeCheck,
         beadsCheck: activeBeadsCheck,
+        runtimeCheckFailureKind,
+        beadsCheckFailureKind,
         runtimeHealthByRuntime: activeRepoRuntimeHealthByRuntime,
         isLoadingChecks,
         refreshChecks,
       }),
     [
       activeBeadsCheck,
+      beadsCheckFailureKind,
       activeRepoRuntimeHealthByRuntime,
       isLoadingChecks,
       refreshChecks,
+      runtimeCheckFailureKind,
       runtimeCheck,
     ],
   );

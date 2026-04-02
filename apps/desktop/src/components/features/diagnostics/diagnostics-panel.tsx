@@ -23,8 +23,15 @@ export function DiagnosticsPanel(): ReactElement {
     useRuntimeDefinitionsContext();
   const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
     useChecksOperationsContext();
-  const { runtimeCheck, beadsCheck, runtimeHealthByRuntime, refreshChecks, isLoadingChecks } =
-    useChecksState();
+  const {
+    runtimeCheck,
+    beadsCheck,
+    runtimeCheckFailureKind,
+    beadsCheckFailureKind,
+    runtimeHealthByRuntime,
+    refreshChecks,
+    isLoadingChecks,
+  } = useChecksState();
   const [isOpen, setOpen] = useState(false);
   const autoOpenedByRepoRef = useRef<Set<string>>(new Set());
 
@@ -38,6 +45,8 @@ export function DiagnosticsPanel(): ReactElement {
         runtimeDefinitionsError,
         runtimeCheck,
         beadsCheck,
+        runtimeCheckFailureKind,
+        beadsCheckFailureKind,
         runtimeHealthByRuntime,
         isLoadingChecks,
       }),
@@ -45,9 +54,11 @@ export function DiagnosticsPanel(): ReactElement {
       activeRepo,
       activeWorkspace,
       beadsCheck,
+      beadsCheckFailureKind,
       isLoadingChecks,
       isLoadingRuntimeDefinitions,
       runtimeCheck,
+      runtimeCheckFailureKind,
       runtimeDefinitions,
       runtimeDefinitionsError,
       runtimeHealthByRuntime,

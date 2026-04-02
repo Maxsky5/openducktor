@@ -30,6 +30,8 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeDefinitionsError: null,
       runtimeCheck: null,
       beadsCheck: null,
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {},
       isLoadingChecks: false,
     });
@@ -58,6 +60,8 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeDefinitionsError: null,
       runtimeCheck: null,
       beadsCheck: null,
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {},
       isLoadingChecks: true,
     });
@@ -96,6 +100,8 @@ describe("buildDiagnosticsPanelModel", () => {
         beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
         beadsError: null,
       },
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {},
       isLoadingChecks: false,
     });
@@ -134,6 +140,8 @@ describe("buildDiagnosticsPanelModel", () => {
         beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
         beadsError: null,
       },
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: {
           runtimeOk: true,
@@ -193,6 +201,8 @@ describe("buildDiagnosticsPanelModel", () => {
         beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
         beadsError: null,
       },
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: {
           runtimeOk: true,
@@ -257,6 +267,8 @@ describe("buildDiagnosticsPanelModel", () => {
         beadsPath: "/Users/dev/.openducktor/beads/fairnest/.beads",
         beadsError: null,
       },
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: {
           runtimeOk: true,
@@ -325,6 +337,8 @@ describe("buildDiagnosticsPanelModel", () => {
         beadsPath: null,
         beadsError: "beads init failed",
       },
+      runtimeCheckFailureKind: "error",
+      beadsCheckFailureKind: "error",
       runtimeHealthByRuntime: {
         opencode: {
           runtimeOk: false,
@@ -394,6 +408,8 @@ describe("buildDiagnosticsPanelModel", () => {
         beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
         beadsError: null,
       },
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: {
           runtimeOk: true,
@@ -448,6 +464,8 @@ describe("buildDiagnosticsPanelModel", () => {
         beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
         beadsError: null,
       },
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: {
           runtimeOk: false,
@@ -506,6 +524,8 @@ describe("buildDiagnosticsPanelModel", () => {
         beadsPath: null,
         beadsError: "Timed out after 15000ms",
       },
+      runtimeCheckFailureKind: "timeout",
+      beadsCheckFailureKind: "timeout",
       runtimeHealthByRuntime: {
         opencode: {
           runtimeOk: true,

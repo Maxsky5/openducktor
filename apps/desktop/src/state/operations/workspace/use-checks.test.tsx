@@ -713,6 +713,8 @@ describe("use-checks", () => {
         (value) =>
           value.runtimeCheck?.errors[0] === "Timed out after 15000ms" &&
           value.activeBeadsCheck?.beadsError === "Timed out after 15000ms" &&
+          value.runtimeCheckFailureKind === "timeout" &&
+          value.beadsCheckFailureKind === "timeout" &&
           value.isLoadingChecks === false,
         1000,
       );
