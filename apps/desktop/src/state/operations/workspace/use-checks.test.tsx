@@ -682,10 +682,15 @@ describe("use-checks", () => {
     };
     const originalSetTimeout = globalThis.setTimeout;
     const originalClearTimeout = globalThis.clearTimeout;
-    const setTimeoutMock = mock((handler: TimerHandler, _delay?: number) => {
+    const setTimeoutMock = mock((handler: TimerHandler, delay?: number) => {
       if (typeof handler !== "function") {
         throw new Error("Expected timeout callback function");
       }
+
+      if (delay === 2_000) {
+        return originalSetTimeout(() => {}, 60_000);
+      }
+
       return originalSetTimeout(() => {
         handler();
       }, 0);
