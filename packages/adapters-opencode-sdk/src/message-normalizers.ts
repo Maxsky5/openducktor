@@ -132,7 +132,9 @@ const normalizeFileReferencePart = (
   part: Extract<Part, { type: "file" }>,
 ): AgentUserMessageDisplayPart | null => {
   const source = part.source;
-  if (source?.type !== "file" || !source.text) {
+  const sourceTextValue = source?.type === "file" ? (source.text?.value?.trim() ?? "") : "";
+  const isRepoFileReference = sourceTextValue.startsWith("@");
+  if (source?.type !== "file" || !source.text || !isRepoFileReference) {
     return normalizeAttachmentPart(part);
   }
   const sourcePath = source?.type === "file" ? source.path.trim() : "";

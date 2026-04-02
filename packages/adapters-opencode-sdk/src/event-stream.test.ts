@@ -19,6 +19,17 @@ const IMAGE_ATTACHMENT_DISPLAY_PART = {
   },
 };
 
+const PDF_ATTACHMENT_DISPLAY_PART = {
+  kind: "attachment" as const,
+  attachment: {
+    id: "attachment-pdf-1",
+    path: "/tmp/local-brief.pdf",
+    name: "brief.pdf",
+    kind: "pdf" as const,
+    mime: "application/pdf",
+  },
+};
+
 const makeClientWithEvents = (events: Event[]): OpencodeClient => {
   return {
     global: {
@@ -780,6 +791,94 @@ describe("event-stream", () => {
           name: "Screenshot-2026-03-17-at-12.04.45.png",
           kind: "image",
           mime: "image/png",
+        }),
+      }),
+    );
+  });
+
+  test("keeps pdf attachment echoes out of inline file-reference rendering", async () => {
+    const { emitted } = await runEventStreamWithSession(
+      [
+        {
+          type: "message.updated",
+          properties: {
+            info: {
+              id: "msg-pdf-1",
+              role: "user",
+              text: "Summarize this PDF",
+              sessionID: "external-session-1",
+              time: {
+                created: Date.parse("2026-02-22T12:00:02.000Z"),
+              },
+              parts: [
+                {
+                  id: "part-text-1",
+                  sessionID: "external-session-1",
+                  messageID: "msg-pdf-1",
+                  type: "text",
+                  text: "Summarize this PDF",
+                },
+                {
+                  id: "part-file-1",
+                  sessionID: "external-session-1",
+                  messageID: "msg-pdf-1",
+                  type: "file",
+                  mime: "application/pdf",
+                  filename: "brief.pdf",
+                  url: "https://files.example.invalid/brief.pdf",
+                  source: {
+                    type: "file",
+                    path: "brief.pdf",
+                    text: {
+                      value: "brief.pdf",
+                      start: 0,
+                      end: 9,
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        } as unknown as Event,
+      ],
+      (nextSessionRecord) => {
+        nextSessionRecord.pendingQueuedUserMessages.push({
+          signature: buildQueuedRequestSignature(
+            [
+              { kind: "text", text: "Summarize this PDF" },
+              PDF_ATTACHMENT_DISPLAY_PART,
+            ] as AgentUserMessagePart[],
+            undefined,
+          ),
+          attachmentIdentitySignature: buildQueuedRequestAttachmentIdentitySignature(
+            [
+              { kind: "text", text: "Summarize this PDF" },
+              PDF_ATTACHMENT_DISPLAY_PART,
+            ] as AgentUserMessagePart[],
+            undefined,
+          ),
+          attachmentParts: [PDF_ATTACHMENT_DISPLAY_PART],
+        });
+      },
+    );
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    const userMessage = userMessages[0];
+    if (!userMessage || userMessage.type !== "user_message") {
+      throw new Error("Expected user_message event");
+    }
+
+    expect(userMessage.parts.filter((part) => part.kind === "attachment")).toHaveLength(1);
+    expect(userMessage.parts.filter((part) => part.kind === "file_reference")).toHaveLength(0);
+    expect(userMessage.parts).toContainEqual(
+      expect.objectContaining({
+        kind: "attachment",
+        attachment: expect.objectContaining({
+          path: "/tmp/local-brief.pdf",
+          name: "brief.pdf",
+          kind: "pdf",
+          mime: "application/pdf",
         }),
       }),
     );

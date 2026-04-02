@@ -189,6 +189,42 @@ describe("message-normalizers", () => {
     ]);
   });
 
+  test("keeps attachment echoes as attachments when runtime adds non-@ source text", () => {
+    const parts: Part[] = [
+      {
+        id: "pdf-runtime-echo",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "file",
+        mime: "application/pdf",
+        filename: "brief.pdf",
+        url: "file:///tmp/brief.pdf",
+        source: {
+          type: "file",
+          path: "brief.pdf",
+          text: {
+            value: "brief.pdf",
+            start: 0,
+            end: 9,
+          },
+        },
+      } as Part,
+    ];
+
+    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+      {
+        kind: "attachment",
+        attachment: {
+          id: "pdf-runtime-echo",
+          path: "/tmp/brief.pdf",
+          name: "brief.pdf",
+          kind: "pdf",
+          mime: "application/pdf",
+        },
+      },
+    ]);
+  });
+
   test("preserves raw filesystem paths returned in attachment urls", () => {
     const parts: Part[] = [
       {
