@@ -640,7 +640,7 @@ describe("agent-orchestrator-session-events", () => {
     ]);
   });
 
-  test("collapses adjacent assistant stream chunks inside one queued flush", () => {
+  test("collapses assistant stream chunks across a queued flush", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_sessionId, handler) => {
@@ -723,6 +723,13 @@ describe("agent-orchestrator-session-events", () => {
         text: "Draft reasoning",
         completed: false,
       },
+    });
+    handleEvent({
+      type: "session_status",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:04.500Z",
+      status: "running",
+      message: "Still running",
     });
     handleEvent({
       type: "assistant_part",

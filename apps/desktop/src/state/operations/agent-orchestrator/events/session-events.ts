@@ -30,38 +30,58 @@ const hasSessionStateChanges = (current: object, next: object): boolean => {
   return false;
 };
 
-const mergeAdjacentQueuedEvents = (events: SessionEvent[]): SessionEvent[] => {
+const queuedEventKey = (event: SessionEvent): string | null => {
+  switch (event.type) {
+    case "assistant_delta":
+      return `assistant_delta:${event.channel}:${event.messageId}`;
+    case "assistant_part":
+      return `assistant_part:${event.part.kind}:${event.part.messageId}:${event.part.partId}`;
+    case "assistant_message":
+      return `assistant_message:${event.messageId}`;
+    case "session_started":
+    case "session_status":
+    case "session_todos_updated":
+      return event.type;
+    case "user_message":
+    case "permission_required":
+    case "question_required":
+    case "session_error":
+    case "session_idle":
+    case "session_finished":
+    case "tool_call":
+    case "tool_result":
+      return null;
+  }
+};
+
+const mergeQueuedEvents = (events: SessionEvent[]): SessionEvent[] => {
   const merged: SessionEvent[] = [];
+  const eventIndexByKey = new Map<string, number>();
 
   for (const event of events) {
-    const previousEvent = merged[merged.length - 1];
+    const key = queuedEventKey(event);
+    if (!key) {
+      merged.push(event);
+      continue;
+    }
 
-    if (
-      previousEvent?.type === "assistant_delta" &&
-      event.type === "assistant_delta" &&
-      previousEvent.channel === event.channel &&
-      previousEvent.messageId === event.messageId
-    ) {
-      merged[merged.length - 1] = {
+    const existingIndex = eventIndexByKey.get(key);
+    if (existingIndex === undefined) {
+      eventIndexByKey.set(key, merged.length);
+      merged.push(event);
+      continue;
+    }
+
+    const existing = merged[existingIndex];
+    if (existing?.type === "assistant_delta" && event.type === "assistant_delta") {
+      merged[existingIndex] = {
         ...event,
-        delta: `${previousEvent.delta}${event.delta}`,
+        delta: `${existing.delta}${event.delta}`,
       };
       continue;
     }
 
-    if (
-      previousEvent?.type === "assistant_part" &&
-      event.type === "assistant_part" &&
-      previousEvent.part.kind === event.part.kind &&
-      previousEvent.part.messageId === event.part.messageId &&
-      previousEvent.part.partId === event.part.partId &&
-      (event.part.kind === "text" || event.part.kind === "reasoning")
-    ) {
-      merged[merged.length - 1] = event;
-      continue;
-    }
-
-    merged.push(event);
+    merged[existingIndex] = event;
   }
 
   return merged;
@@ -150,7 +170,7 @@ export const attachAgentSessionListener = (
       return;
     }
 
-    const eventsToHandle = mergeAdjacentQueuedEvents(queuedEvents);
+    const eventsToHandle = mergeQueuedEvents(queuedEvents);
     queuedEvents = [];
 
     const batchedSessionsRef = {
