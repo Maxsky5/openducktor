@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
 import type { AgentEvent } from "@openducktor/core";
 import { OpencodeSdkAdapter } from "./index";
+import type { SessionRecord } from "./types";
 import { buildQueuedRequestSignature } from "./user-message-signatures";
 
 const flushAsync = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
@@ -1488,6 +1489,94 @@ describe("OpencodeSdkAdapter", () => {
         },
       },
     ]);
+  });
+
+  test("loadSessionHistory preserves local attachment preview paths from the live session metadata", async () => {
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-user-attachment-1",
+            role: "user",
+            text: "Describe this screenshot",
+            time: { created: Date.parse("2026-02-17T11:59:00Z") },
+          },
+          parts: [
+            {
+              id: "file-attachment-1",
+              sessionID: "session-opencode-1",
+              messageID: "msg-user-attachment-1",
+              type: "file",
+              mime: "image/png",
+              filename: "Screenshot-2026-03-16-at-23.48.30.png",
+              url: "https://files.example.invalid/uploaded-image",
+            } as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const sessions = (adapter as unknown as { sessions: Map<string, SessionRecord> }).sessions;
+    sessions.set("session-1", {
+      externalSessionId: "session-opencode-1",
+      input: {
+        sessionId: "session-1",
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        runtimeConnection: defaultRuntimeConnection,
+        workingDirectory: "/repo",
+        taskId: "task-1",
+        role: "spec",
+        scenario: "spec_initial",
+        systemPrompt: "System prompt",
+      },
+      messageMetadataById: new Map([
+        [
+          "msg-user-attachment-1",
+          {
+            timestamp: "2026-02-17T11:59:00Z",
+            displayParts: [
+              {
+                kind: "attachment",
+                attachment: {
+                  id: "attachment-image-1",
+                  path: "/tmp/local-screenshot.png",
+                  name: "Screenshot-2026-03-16-at-23.48.30.png",
+                  kind: "image",
+                  mime: "image/png",
+                },
+              },
+            ],
+          },
+        ],
+      ]),
+    } as unknown as SessionRecord);
+
+    const history = await adapter.loadSessionHistory({
+      runtimeKind: "opencode",
+      runtimeConnection: defaultRuntimeConnection,
+      externalSessionId: "session-opencode-1",
+      limit: 100,
+    });
+
+    if (history[0]?.role !== "user") {
+      throw new Error("Expected user history entry");
+    }
+    expect(history[0].displayParts).toContainEqual(
+      expect.objectContaining({
+        kind: "attachment",
+        attachment: expect.objectContaining({
+          path: "/tmp/local-screenshot.png",
+          name: "Screenshot-2026-03-16-at-23.48.30.png",
+          kind: "image",
+          mime: "image/png",
+        }),
+      }),
+    );
   });
 
   test("maps message.updated events into assistant parts and assistant message", async () => {

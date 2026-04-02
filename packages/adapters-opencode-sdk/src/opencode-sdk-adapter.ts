@@ -388,10 +388,25 @@ export class OpencodeSdkAdapter
   async loadSessionHistory(
     input: LoadAgentSessionHistoryInput,
   ): Promise<AgentSessionHistoryMessage[]> {
+    const preservedDisplayPartsByMessageId = new Map(
+      [...this.sessions.values()]
+        .filter(
+          (session) =>
+            session.externalSessionId === input.externalSessionId &&
+            session.input.workingDirectory === input.runtimeConnection.workingDirectory,
+        )
+        .flatMap((session) =>
+          [...session.messageMetadataById.entries()].flatMap(([messageId, metadata]) =>
+            metadata.displayParts ? [[messageId, metadata.displayParts] as const] : [],
+          ),
+        ),
+    );
+
     return loadSessionHistory(this.createClient, this.now, {
       ...toRuntimeClientInput(input.runtimeConnection, "load session history"),
       externalSessionId: input.externalSessionId,
       ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
+      ...(preservedDisplayPartsByMessageId.size > 0 ? { preservedDisplayPartsByMessageId } : {}),
     });
   }
 

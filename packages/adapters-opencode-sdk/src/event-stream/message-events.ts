@@ -11,6 +11,7 @@ import {
 import {
   ensureVisibleUserTextDisplayParts,
   extractMessageTotalTokens,
+  mergePreservedAttachmentDisplayParts,
   normalizeUserMessageDisplayParts,
   readMessageModelSelection,
   readTextFromMessageInfo,
@@ -336,50 +337,6 @@ const emitKnownUserMessage = (
     state: input.state,
     ...(input.model ? { model: input.model } : {}),
   });
-};
-
-const mergePreservedAttachmentDisplayParts = (
-  displayParts: import("@openducktor/core").AgentUserMessageDisplayPart[],
-  preservedAttachmentParts: Extract<
-    import("@openducktor/core").AgentUserMessageDisplayPart,
-    { kind: "attachment" }
-  >[],
-): import("@openducktor/core").AgentUserMessageDisplayPart[] => {
-  if (preservedAttachmentParts.length === 0) {
-    return displayParts;
-  }
-
-  const remainingPreservedAttachments = [...preservedAttachmentParts];
-  const mergedParts = displayParts.map((part) => {
-    if (part.kind !== "attachment") {
-      return part;
-    }
-
-    const preservedIndex = remainingPreservedAttachments.findIndex(
-      (candidate) =>
-        candidate.attachment.name === part.attachment.name &&
-        candidate.attachment.kind === part.attachment.kind &&
-        (candidate.attachment.mime ?? "") === (part.attachment.mime ?? ""),
-    );
-    if (preservedIndex < 0) {
-      return part;
-    }
-
-    const preservedAttachment = remainingPreservedAttachments.splice(preservedIndex, 1)[0];
-    if (!preservedAttachment) {
-      return part;
-    }
-
-    return {
-      ...part,
-      attachment: {
-        ...part.attachment,
-        path: preservedAttachment.attachment.path,
-      },
-    };
-  });
-
-  return [...mergedParts, ...remainingPreservedAttachments];
 };
 
 const buildUserMessageSignature = (input: {
