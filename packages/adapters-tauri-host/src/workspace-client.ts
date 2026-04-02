@@ -73,6 +73,10 @@ export type StagedLocalAttachment = {
   path: string;
 };
 
+export type ResolvedLocalAttachment = {
+  path: string;
+};
+
 const parseTrustedHooksChallenge = (payload: unknown): TrustedHooksChallenge => {
   if (!payload || typeof payload !== "object") {
     throw new Error("Expected trusted hooks challenge payload from host command");
@@ -118,6 +122,10 @@ const parseStagedLocalAttachment = (payload: unknown): StagedLocalAttachment => 
   }
 
   return { path };
+};
+
+const parseResolvedLocalAttachment = (payload: unknown): ResolvedLocalAttachment => {
+  return parseStagedLocalAttachment(payload);
 };
 
 const workspaceList = async (invokeFn: InvokeFn): Promise<WorkspaceRecord[]> => {
@@ -252,6 +260,16 @@ const workspaceStageLocalAttachment = async (
   return parseStagedLocalAttachment(payload);
 };
 
+const workspaceResolveLocalAttachmentPath = async (
+  invokeFn: InvokeFn,
+  input: {
+    path: string;
+  },
+): Promise<ResolvedLocalAttachment> => {
+  const payload = await invokeFn("workspace_resolve_local_attachment_path", input);
+  return parseResolvedLocalAttachment(payload);
+};
+
 export class TauriWorkspaceClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
@@ -326,6 +344,12 @@ export class TauriWorkspaceClient {
     base64Data: string;
   }): Promise<StagedLocalAttachment> {
     return workspaceStageLocalAttachment(this.invokeFn, input);
+  }
+
+  async workspaceResolveLocalAttachmentPath(input: {
+    path: string;
+  }): Promise<ResolvedLocalAttachment> {
+    return workspaceResolveLocalAttachmentPath(this.invokeFn, input);
   }
 
   async setTheme(theme: string): Promise<void> {

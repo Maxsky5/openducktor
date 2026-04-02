@@ -21,6 +21,12 @@ pub struct StagedLocalAttachmentPayload {
     pub path: String,
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedLocalAttachmentPayload {
+    pub path: String,
+}
+
 const LOCAL_ATTACHMENT_STAGE_DIR_NAME: &str = "openducktor-local-attachments";
 
 pub(crate) fn local_attachment_stage_dir() -> PathBuf {
@@ -74,6 +80,43 @@ pub(crate) fn stage_local_attachment_to_temp(name: &str, base64_data: &str) -> R
     Ok(path)
 }
 
+pub(crate) fn resolve_staged_local_attachment_path(path_or_name: &str) -> Result<PathBuf, String> {
+    let trimmed = path_or_name.trim();
+    if trimmed.is_empty() {
+        return Err("Attachment path is required.".to_string());
+    }
+
+    let candidate_path = PathBuf::from(trimmed);
+    if candidate_path.is_absolute() {
+        if is_staged_local_attachment_path(&candidate_path)? {
+            return Ok(candidate_path);
+        }
+        return Err("Attachment path is not a staged local attachment.".to_string());
+    }
+
+    let attachment_dir = local_attachment_stage_dir();
+    let entries = std::fs::read_dir(&attachment_dir)
+        .map_err(|error| format!("Failed to read attachment staging directory: {error}"))?;
+    let suffix = format!("-{trimmed}");
+    let mut matches = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("Failed to read staged attachment entry: {error}"))?;
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if name == trimmed || name.ends_with(&suffix) {
+            matches.push(path);
+        }
+    }
+
+    match matches.len() {
+        0 => Err(format!("No staged local attachment matches '{trimmed}'.")),
+        1 => Ok(matches.remove(0)),
+        _ => Err(format!("Multiple staged local attachments match '{trimmed}'.")),
+    }
+}
+
 #[tauri::command]
 pub async fn workspace_list(
     state: State<'_, AppState>,
@@ -115,6 +158,16 @@ pub async fn workspace_stage_local_attachment(
     let path = stage_local_attachment_to_temp(&name, &base64_data)?;
     Ok(StagedLocalAttachmentPayload {
         path: path.to_string_lossy().into_owned(),
+    })
+}
+
+#[tauri::command]
+pub async fn workspace_resolve_local_attachment_path(
+    path: String,
+) -> Result<ResolvedLocalAttachmentPayload, String> {
+    let resolved = resolve_staged_local_attachment_path(&path)?;
+    Ok(ResolvedLocalAttachmentPayload {
+        path: resolved.to_string_lossy().into_owned(),
     })
 }
 
@@ -449,7 +502,8 @@ impl<R: tauri::Runtime> HookTrustConfirmationPort for TauriHookTrustConfirmation
 #[cfg(test)]
 mod tests {
     use super::{
-        format_hook_list, sanitize_hook_preview, workspace_detect_github_repository,
+        format_hook_list, resolve_staged_local_attachment_path, sanitize_hook_preview,
+        stage_local_attachment_to_temp, workspace_detect_github_repository,
         workspace_prepare_trusted_hooks_challenge, workspace_save_repo_settings,
         workspace_save_settings_snapshot, workspace_set_trusted_hooks,
         workspace_update_repo_config,
@@ -506,6 +560,28 @@ mod tests {
             std::env::temp_dir().join(format!("openducktor-workspace-command-{prefix}-{nanos}"));
         fs::create_dir_all(&root).expect("test root should be created");
         root
+    }
+
+    #[test]
+    fn resolve_staged_local_attachment_path_matches_filename_tokens() {
+        let unique_name = format!(
+            "Screenshot-2026-03-16-at-23.48.30-{}.png",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock should be after unix epoch")
+                .as_nanos()
+        );
+        let path = stage_local_attachment_to_temp(
+            &unique_name,
+            "cHJldmlldy1ieXRlcw==",
+        )
+        .expect("attachment should stage");
+
+        let resolved = resolve_staged_local_attachment_path(&unique_name)
+            .expect("filename token should resolve to staged path");
+
+        assert_eq!(resolved, path);
+        let _ = fs::remove_file(path);
     }
 
     fn run_git(args: &[&str], cwd: &Path) {

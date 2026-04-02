@@ -4,7 +4,10 @@ use super::command_support::{
     serialize_value, service_error, CommandResult, HeadlessHookTrustConfirmationPort,
     HeadlessState, RepoPathArgs,
 };
-use crate::commands::workspace::{stage_local_attachment_to_temp, StagedLocalAttachmentPayload};
+use crate::commands::workspace::{
+    resolve_staged_local_attachment_path, stage_local_attachment_to_temp,
+    ResolvedLocalAttachmentPayload, StagedLocalAttachmentPayload,
+};
 use crate::run_service_blocking_tokio;
 use crate::{
     RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload,
@@ -70,6 +73,12 @@ struct WorkspaceStageLocalAttachmentArgs {
     #[allow(dead_code)]
     mime: Option<String>,
     base64_data: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceResolveLocalAttachmentPathArgs {
+    path: String,
 }
 
 pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), String> {
@@ -149,6 +158,9 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     })?;
     registry.register("workspace_stage_local_attachment", |_state, args| {
         Box::pin(async move { handle_workspace_stage_local_attachment(args) })
+    })?;
+    registry.register("workspace_resolve_local_attachment_path", |_state, args| {
+        Box::pin(async move { handle_workspace_resolve_local_attachment_path(args) })
     })?;
     registry.register("set_theme", |state, args| {
         Box::pin(async move { handle_set_theme(state, args) })
@@ -292,6 +304,15 @@ fn handle_workspace_stage_local_attachment(args: Value) -> CommandResult {
         .map_err(|error| service_error(anyhow!(error)))?;
     serialize_value(StagedLocalAttachmentPayload {
         path: path.to_string_lossy().into_owned(),
+    })
+}
+
+fn handle_workspace_resolve_local_attachment_path(args: Value) -> CommandResult {
+    let WorkspaceResolveLocalAttachmentPathArgs { path } = deserialize_args(args)?;
+    let resolved = resolve_staged_local_attachment_path(&path)
+        .map_err(|error| service_error(anyhow!(error)))?;
+    serialize_value(ResolvedLocalAttachmentPayload {
+        path: resolved.to_string_lossy().into_owned(),
     })
 }
 

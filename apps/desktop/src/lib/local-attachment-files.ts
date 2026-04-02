@@ -2,6 +2,10 @@ import { getBrowserBackendUrl, isBrowserAppMode } from "@/lib/browser-mode";
 import { hostClient } from "@/lib/host-client";
 import { isTauriRuntime } from "@/lib/runtime";
 
+const isAbsoluteLocalAttachmentPath = (path: string): boolean => {
+  return path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path);
+};
+
 const bufferToBase64 = (buffer: ArrayBuffer): string => {
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -38,14 +42,18 @@ export const resolveLocalAttachmentPreviewSrc = async (path: string): Promise<st
     throw new Error("Attachment preview is unavailable because the local file path is missing.");
   }
 
+  const resolvedPath = isAbsoluteLocalAttachmentPath(trimmedPath)
+    ? trimmedPath
+    : (await hostClient.workspaceResolveLocalAttachmentPath({ path: trimmedPath })).path;
+
   if (isBrowserAppMode()) {
-    return buildBrowserLocalAttachmentPreviewUrl(getBrowserBackendUrl(), trimmedPath);
+    return buildBrowserLocalAttachmentPreviewUrl(getBrowserBackendUrl(), resolvedPath);
   }
 
   if (isTauriRuntime()) {
     const api = await import("@tauri-apps/api/core");
-    return api.convertFileSrc(trimmedPath);
+    return api.convertFileSrc(resolvedPath);
   }
 
-  return trimmedPath;
+  return resolvedPath;
 };
