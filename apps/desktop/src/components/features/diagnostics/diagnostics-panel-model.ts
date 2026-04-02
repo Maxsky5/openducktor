@@ -7,12 +7,9 @@ import type {
 } from "@openducktor/contracts";
 import { runtimeLabelFor } from "@/lib/agent-runtime";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
+import { buildTimeoutToastDescription } from "@/state/operations/workspace/check-diagnostics";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "@/types/diagnostics";
-import {
-  buildDiagnosticsSummary,
-  type DiagnosticsSummary,
-  healthVariant,
-} from "./diagnostics-model";
+import { buildDiagnosticsSummary, type DiagnosticsSummary } from "./diagnostics-model";
 
 export type DiagnosticKeyValueRowModel = {
   label: string;
@@ -56,14 +53,6 @@ type BuildDiagnosticsPanelModelInput = {
   isLoadingChecks: boolean;
 };
 
-const buildTimeoutDiagnosticsMessage = (label: string, detail: string | null): string => {
-  if (!detail) {
-    return `${label} is not yet available. Retrying automatically.`;
-  }
-
-  return `${label} is not yet available. Retrying automatically. Latest detail: ${detail}`;
-};
-
 const getFailureBadge = (
   ok: boolean | null,
   failureKind: RepoRuntimeFailureKind,
@@ -94,6 +83,30 @@ const getFailureBadge = (
     label: labels.error,
     variant: "danger",
   };
+};
+
+const buildFailureMessages = ({
+  label,
+  detail,
+  failureKind,
+  availabilityVerb,
+}: {
+  label: string;
+  detail: string | null;
+  failureKind: RepoRuntimeFailureKind;
+  availabilityVerb?: "is" | "are";
+}): string[] => {
+  if (failureKind === "timeout") {
+    return [
+      buildTimeoutToastDescription(
+        label,
+        detail,
+        availabilityVerb ? { availabilityVerb } : undefined,
+      ),
+    ];
+  }
+
+  return detail ? [detail] : [];
 };
 
 export const buildDiagnosticsPanelModel = (
@@ -204,28 +217,20 @@ export const buildDiagnosticsPanelModel = (
           label: runtimeEntry.kind,
           value: runtimeEntry.ok ? (runtimeEntry.version ?? "detected") : "missing",
         }));
+  const cliToolsHealthy =
+    runtimeCheck === null
+      ? null
+      : runtimeCheck.gitOk && runtimeCheck.runtimes.every((entry) => entry.ok);
 
   const cliToolsSection: DiagnosticsSectionModel = {
     key: "cli-tools",
     title: "CLI Tools",
-    badge: {
-      label:
-        runtimeCheck === null
-          ? "Checking"
-          : runtimeCheckFailureKind === "timeout"
-            ? "Retrying"
-            : runtimeCheck.gitOk && runtimeCheck.runtimes.every((entry) => entry.ok)
-              ? "Available"
-              : "Issue",
-      variant:
-        runtimeCheckFailureKind === "timeout"
-          ? "warning"
-          : healthVariant(
-              runtimeCheck === null
-                ? null
-                : runtimeCheck.gitOk && runtimeCheck.runtimes.every((entry) => entry.ok),
-            ),
-    },
+    badge: getFailureBadge(cliToolsHealthy, runtimeCheckFailureKind, {
+      healthy: "Available",
+      timeout: "Retrying",
+      error: "Issue",
+      checking: "Checking",
+    }),
     rows: runtimeCheck
       ? [
           { label: "Git", value: runtimeCheck.gitVersion ?? "missing" },
@@ -236,9 +241,12 @@ export const buildDiagnosticsPanelModel = (
     errors:
       runtimeDefinitionsError != null
         ? [runtimeDefinitionsError, ...(runtimeCheck?.errors ?? [])]
-        : runtimeCheckFailureKind === "timeout"
-          ? [buildTimeoutDiagnosticsMessage("CLI tools", runtimeCheck?.errors[0] ?? null)]
-          : (runtimeCheck?.errors ?? []),
+        : buildFailureMessages({
+            label: "CLI tools",
+            detail: runtimeCheck?.errors[0] ?? null,
+            failureKind: runtimeCheckFailureKind,
+            availabilityVerb: "are",
+          }),
     ...(runtimeCheck ? {} : { emptyMessage: "Runtime checks are loading..." }),
   };
 
@@ -278,17 +286,11 @@ export const buildDiagnosticsPanelModel = (
             },
           ]
         : [],
-      errors:
-        runtimeHealth?.runtimeError == null
-          ? []
-          : [
-              runtimeHealth.runtimeFailureKind === "timeout"
-                ? buildTimeoutDiagnosticsMessage(
-                    `${definition.label} runtime`,
-                    runtimeHealth.runtimeError,
-                  )
-                : runtimeHealth.runtimeError,
-            ],
+      errors: buildFailureMessages({
+        label: `${definition.label} runtime`,
+        detail: runtimeHealth?.runtimeError ?? null,
+        failureKind: runtimeHealth?.runtimeFailureKind ?? null,
+      }),
       ...(activeRepo
         ? runtimeHealth == null
           ? { emptyMessage: "Runtime health is loading..." }
@@ -331,17 +333,11 @@ export const buildDiagnosticsPanelModel = (
             },
           ]
         : [],
-      errors:
-        runtimeHealth?.mcpServerError || runtimeHealth?.mcpError
-          ? [
-              runtimeHealth.mcpFailureKind === "timeout"
-                ? buildTimeoutDiagnosticsMessage(
-                    `${definition.label} OpenDucktor MCP`,
-                    runtimeHealth.mcpServerError ?? runtimeHealth.mcpError,
-                  )
-                : (runtimeHealth.mcpServerError ?? runtimeHealth.mcpError ?? ""),
-            ]
-          : [],
+      errors: buildFailureMessages({
+        label: `${definition.label} OpenDucktor MCP`,
+        detail: runtimeHealth?.mcpServerError ?? runtimeHealth?.mcpError ?? null,
+        failureKind: runtimeHealth?.mcpFailureKind ?? null,
+      }),
       ...(activeRepo
         ? runtimeHealth == null
           ? { emptyMessage: "MCP health is loading..." }
@@ -355,20 +351,12 @@ export const buildDiagnosticsPanelModel = (
   const beadsStoreSection: DiagnosticsSectionModel = {
     key: "beads-store",
     title: "Beads Store",
-    badge: {
-      label:
-        beadsCheck === null
-          ? "Checking"
-          : beadsCheckFailureKind === "timeout"
-            ? "Retrying"
-            : beadsCheck.beadsOk
-              ? "Ready"
-              : "Unavailable",
-      variant:
-        beadsCheckFailureKind === "timeout"
-          ? "warning"
-          : healthVariant(beadsCheck?.beadsOk ?? null),
-    },
+    badge: getFailureBadge(beadsCheck?.beadsOk ?? null, beadsCheckFailureKind, {
+      healthy: "Ready",
+      timeout: "Retrying",
+      error: "Unavailable",
+      checking: "Checking",
+    }),
     rows:
       activeRepo && beadsCheck?.beadsPath
         ? [
@@ -380,12 +368,11 @@ export const buildDiagnosticsPanelModel = (
             },
           ]
         : [],
-    errors:
-      beadsCheckFailureKind === "timeout"
-        ? [buildTimeoutDiagnosticsMessage("Beads store", beadsCheck?.beadsError ?? null)]
-        : beadsCheck?.beadsError
-          ? [beadsCheck.beadsError]
-          : [],
+    errors: buildFailureMessages({
+      label: "Beads store",
+      detail: beadsCheck?.beadsError ?? null,
+      failureKind: beadsCheckFailureKind,
+    }),
     ...(activeRepo ? {} : { emptyMessage: "Select a repository first." }),
   };
 

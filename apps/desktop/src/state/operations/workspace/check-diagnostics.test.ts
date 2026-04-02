@@ -51,8 +51,10 @@ describe("check-diagnostics helpers", () => {
     const issues = buildDiagnosticsToastIssues({
       activeRepo: "/repo",
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      runtimeCheck: null,
       runtimeCheckError: "Timed out after 15000ms",
       runtimeCheckFailureKind: "timeout",
+      beadsCheck: null,
       beadsCheckError: "beads offline",
       beadsCheckFailureKind: "error",
       runtimeHealthByRuntime: {
@@ -69,6 +71,35 @@ describe("check-diagnostics helpers", () => {
         expect.objectContaining({ id: "diagnostics:cli-tools", severity: "timeout" }),
         expect.objectContaining({ id: "diagnostics:beads-store", severity: "error" }),
         expect.objectContaining({ id: "diagnostics:runtime:opencode", severity: "timeout" }),
+      ]),
+    );
+  });
+
+  test("restores unhealthy cli and beads payload toasts even without query failures", () => {
+    const issues = buildDiagnosticsToastIssues({
+      activeRepo: "/repo",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      runtimeCheck: buildRuntimeCheckErrorState([OPENCODE_RUNTIME_DESCRIPTOR], "git missing"),
+      runtimeCheckError: null,
+      runtimeCheckFailureKind: null,
+      beadsCheck: buildBeadsCheckErrorState("beads offline"),
+      beadsCheckError: null,
+      beadsCheckFailureKind: null,
+      runtimeHealthByRuntime: {},
+    });
+
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "diagnostics:cli-tools",
+          severity: "error",
+          description: "git missing",
+        }),
+        expect.objectContaining({
+          id: "diagnostics:beads-store",
+          severity: "error",
+          description: "beads offline",
+        }),
       ]),
     );
   });

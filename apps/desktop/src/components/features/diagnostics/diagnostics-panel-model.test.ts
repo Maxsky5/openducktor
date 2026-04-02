@@ -548,7 +548,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
     expect(model.isSummaryChecking).toBe(false);
     expect(model.sections[1]?.badge).toEqual({ label: "Retrying", variant: "warning" });
-    expect(model.sections[1]?.errors[0]).toContain("CLI tools is not yet available");
+    expect(model.sections[1]?.errors[0]).toContain("CLI tools are not yet available");
     expect(model.sections[4]?.badge).toEqual({ label: "Retrying", variant: "warning" });
     expect(model.sections[4]?.errors[0]).toContain("Beads store is not yet available");
   });

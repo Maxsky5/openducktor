@@ -164,6 +164,7 @@ type HookHarness = ReturnType<typeof createHookHarness>;
 const waitForInitialChecksToSettle = async (
   harness: HookHarness,
   runtimeKinds: RuntimeKind[] = ["opencode"],
+  timeoutMs = 1_000,
 ) => {
   await harness.mount();
   await harness.waitFor((value) => {
@@ -175,7 +176,7 @@ const waitForInitialChecksToSettle = async (
       ) &&
       value.isLoadingChecks === false
     );
-  });
+  }, timeoutMs);
 };
 
 beforeAll(async () => {
@@ -370,8 +371,8 @@ describe("use-checks", () => {
     });
 
     try {
-      await waitForInitialChecksToSettle(harness);
-      await harness.waitFor(() => toastError.mock.calls.length === 1);
+      await waitForInitialChecksToSettle(harness, ["opencode"], 1_000);
+      await harness.waitFor(() => toastError.mock.calls.length === 1, 1_000);
 
       expect(toastError).toHaveBeenCalledWith(
         "OpenCode OpenDucktor MCP unavailable",
@@ -388,6 +389,77 @@ describe("use-checks", () => {
 
       expect(toastError).not.toHaveBeenCalled();
       expect(harness.getLatest().isLoadingChecks).toBe(false);
+    } finally {
+      await harness.unmount();
+      host.runtimeCheck = original.runtimeCheck;
+      host.beadsCheck = original.beadsCheck;
+    }
+  });
+
+  test("shows cli and beads toasts for unhealthy successful payloads", async () => {
+    let runtimeCallCount = 0;
+    let beadsCallCount = 0;
+    const runtimeCheck = mock(async (): Promise<RuntimeCheck> => {
+      runtimeCallCount += 1;
+      return runtimeCallCount === 1
+        ? makeRuntimeCheck()
+        : makeRuntimeCheck({
+            gitOk: false,
+            gitVersion: null,
+            ghOk: false,
+            ghVersion: null,
+            ghAuthOk: false,
+            ghAuthLogin: null,
+            ghAuthError: "git missing",
+            runtimes: [{ kind: "opencode", ok: false, version: null }],
+            errors: ["git missing"],
+          });
+    });
+    const beadsCheck = mock(async (): Promise<BeadsCheck> => {
+      beadsCallCount += 1;
+      return beadsCallCount === 1
+        ? makeBeadsCheck()
+        : makeBeadsCheck({
+            beadsOk: false,
+            beadsPath: null,
+            beadsError: "beads offline",
+          });
+    });
+
+    const original = {
+      runtimeCheck: host.runtimeCheck,
+      beadsCheck: host.beadsCheck,
+    };
+    host.runtimeCheck = runtimeCheck;
+    host.beadsCheck = beadsCheck;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+
+    try {
+      await waitForInitialChecksToSettle(harness, ["opencode"], 1_000);
+      toastError.mockClear();
+
+      await harness.run(async (value) => {
+        await value.refreshChecks();
+      });
+
+      expect(toastError).toHaveBeenCalledWith(
+        "CLI tools unavailable",
+        expect.objectContaining({
+          id: "diagnostics:cli-tools",
+          description: "git missing",
+        }),
+      );
+      expect(toastError).toHaveBeenCalledWith(
+        "Beads store unavailable",
+        expect.objectContaining({
+          id: "diagnostics:beads-store",
+          description: "beads offline",
+        }),
+      );
     } finally {
       await harness.unmount();
       host.runtimeCheck = original.runtimeCheck;

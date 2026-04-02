@@ -54,7 +54,7 @@ export class DiagnosticsQueryTimeoutError extends Error {
 
 export const classifyDiagnosticsQueryError = (
   error: unknown,
-): { message: string; failureKind: RepoRuntimeFailureKind } => {
+): { message: string; failureKind: Exclude<RepoRuntimeFailureKind, null> } => {
   if (error instanceof DiagnosticsQueryTimeoutError) {
     return {
       message: error.message,
@@ -128,9 +128,14 @@ export const repoRuntimeHealthQueryOptions = (
     queryFn: async (): Promise<RepoRuntimeHealthMap> => {
       const checks = await Promise.all(
         runtimeDefinitions.map(async (definition) => {
-          const check = await checkRepoRuntimeHealth(repoPath, definition.kind).catch((error) =>
-            buildRuntimeHealthErrorCheck(errorMessage(error), new Date().toISOString()),
-          );
+          let check: RepoRuntimeHealthCheck;
+
+          try {
+            check = await checkRepoRuntimeHealth(repoPath, definition.kind);
+          } catch (error) {
+            check = buildRuntimeHealthErrorCheck(errorMessage(error), new Date().toISOString());
+          }
+
           return [definition.kind, check] as const;
         }),
       );

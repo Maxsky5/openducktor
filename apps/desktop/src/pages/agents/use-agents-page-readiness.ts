@@ -1,19 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { useChecksState } from "@/state";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { buildTimeoutToastDescription } from "@/state/operations/workspace/check-diagnostics";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import type {
   AgentStudioOrchestrationReadinessContext,
   AgentStudioOrchestrationSelectionContext,
 } from "./use-agent-studio-orchestration-controller";
-
-const buildTimeoutBlockedReason = (label: string, detail: string | null): string => {
-  if (!detail) {
-    return `${label} is not yet available. Retrying automatically.`;
-  }
-
-  return `${label} is not yet available. Retrying automatically. Latest detail: ${detail}`;
-};
 
 const getBlockedRuntimeReason = (
   runtimeLabel: string,
@@ -25,14 +18,14 @@ const getBlockedRuntimeReason = (
 
   if (runtimeHealth.runtimeOk === false) {
     return runtimeHealth.runtimeFailureKind === "timeout"
-      ? buildTimeoutBlockedReason(`${runtimeLabel} runtime`, runtimeHealth.runtimeError)
+      ? buildTimeoutToastDescription(`${runtimeLabel} runtime`, runtimeHealth.runtimeError)
       : runtimeHealth.runtimeError;
   }
 
   if (runtimeHealth.mcpOk === false) {
     const detail = runtimeHealth.mcpServerError ?? runtimeHealth.mcpError;
     return runtimeHealth.mcpFailureKind === "timeout"
-      ? buildTimeoutBlockedReason(`${runtimeLabel} OpenDucktor MCP`, detail)
+      ? buildTimeoutToastDescription(`${runtimeLabel} OpenDucktor MCP`, detail)
       : detail;
   }
 

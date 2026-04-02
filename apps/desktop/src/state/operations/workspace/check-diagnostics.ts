@@ -71,12 +71,22 @@ export const buildRuntimeHealthErrorMap = (
   ) as RepoRuntimeHealthMap;
 };
 
-export const buildTimeoutToastDescription = (label: string, detail: string | null): string => {
+type TimeoutMessageOptions = {
+  availabilityVerb?: "is" | "are";
+};
+
+export const buildTimeoutToastDescription = (
+  label: string,
+  detail: string | null,
+  options?: TimeoutMessageOptions,
+): string => {
+  const availabilityVerb = options?.availabilityVerb ?? "is";
+
   if (!detail) {
-    return `${label} is not yet available. Retrying automatically.`;
+    return `${label} ${availabilityVerb} not yet available. Retrying automatically.`;
   }
 
-  return `${label} is not yet available. Retrying automatically. Latest detail: ${detail}`;
+  return `${label} ${availabilityVerb} not yet available. Retrying automatically. Latest detail: ${detail}`;
 };
 
 const buildErrorToastDescription = (label: string, detail: string | null): string => {
@@ -98,7 +108,9 @@ const buildDiagnosticsToastIssue = ({
     ? {
         id,
         title: `${label} not yet available`,
-        description: buildTimeoutToastDescription(label, detail),
+        description: buildTimeoutToastDescription(label, detail, {
+          availabilityVerb: label === "CLI tools" ? "are" : "is",
+        }),
         severity: failureKind,
       }
     : {
@@ -112,16 +124,20 @@ const buildDiagnosticsToastIssue = ({
 export const buildDiagnosticsToastIssues = ({
   activeRepo,
   runtimeDefinitions,
+  runtimeCheck,
   runtimeCheckError,
   runtimeCheckFailureKind,
+  beadsCheck,
   beadsCheckError,
   beadsCheckFailureKind,
   runtimeHealthByRuntime,
 }: {
   activeRepo: string | null;
   runtimeDefinitions: RuntimeDescriptor[];
+  runtimeCheck: RuntimeCheck | null;
   runtimeCheckError: string | null;
   runtimeCheckFailureKind: RepoRuntimeFailureKind;
+  beadsCheck: BeadsCheck | null;
   beadsCheckError: string | null;
   beadsCheckFailureKind: RepoRuntimeFailureKind;
   runtimeHealthByRuntime: RepoRuntimeHealthMap;
@@ -132,24 +148,32 @@ export const buildDiagnosticsToastIssues = ({
 
   const issues: DiagnosticsToastIssue[] = [];
 
-  if (runtimeCheckError && runtimeCheckFailureKind !== null) {
+  const runtimeCheckDetail = runtimeCheckError ?? runtimeCheck?.errors[0] ?? null;
+  const runtimeCheckIssueSeverity =
+    runtimeCheckFailureKind ?? (runtimeCheck?.gitOk === false ? "error" : null);
+
+  if (runtimeCheckDetail && runtimeCheckIssueSeverity !== null) {
     issues.push(
       buildDiagnosticsToastIssue({
         id: "diagnostics:cli-tools",
         label: "CLI tools",
-        detail: runtimeCheckError,
-        failureKind: runtimeCheckFailureKind,
+        detail: runtimeCheckDetail,
+        failureKind: runtimeCheckIssueSeverity,
       }),
     );
   }
 
-  if (beadsCheckError && beadsCheckFailureKind !== null) {
+  const beadsCheckDetail = beadsCheckError ?? beadsCheck?.beadsError ?? null;
+  const beadsCheckIssueSeverity =
+    beadsCheckFailureKind ?? (beadsCheck?.beadsOk === false ? "error" : null);
+
+  if (beadsCheckDetail && beadsCheckIssueSeverity !== null) {
     issues.push(
       buildDiagnosticsToastIssue({
         id: "diagnostics:beads-store",
         label: "Beads store",
-        detail: beadsCheckError,
-        failureKind: beadsCheckFailureKind,
+        detail: beadsCheckDetail,
+        failureKind: beadsCheckIssueSeverity,
       }),
     );
   }

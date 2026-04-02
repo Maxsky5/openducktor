@@ -65,14 +65,6 @@ type UseChecksResult = {
 
 const RUNTIME_HEALTH_TIMEOUT_RETRY_DELAY_MS = 2_000;
 
-const getSettledValue = <T>(result: PromiseSettledResult<T>): T => {
-  if (result.status === "rejected") {
-    throw result.reason;
-  }
-
-  return result.value;
-};
-
 export function useChecks({
   activeRepo,
   runtimeDefinitions,
@@ -174,7 +166,10 @@ export function useChecks({
       ]);
       const runtime = runtimeResult.status === "fulfilled" ? runtimeResult.value : null;
       const beads = beadsResult.status === "fulfilled" ? beadsResult.value : null;
-      getSettledValue(runtimeHealthResult);
+      if (runtimeHealthResult.status === "rejected") {
+        throw runtimeHealthResult.reason;
+      }
+
       if (runtime && beads && runtime.gitOk && beads.beadsOk) {
         return;
       }
@@ -296,17 +291,21 @@ export function useChecks({
       buildDiagnosticsToastIssues({
         activeRepo,
         runtimeDefinitions,
+        runtimeCheck: runtimeCheckState,
         runtimeCheckError,
         runtimeCheckFailureKind,
+        beadsCheck: activeBeadsCheck,
         beadsCheckError,
         beadsCheckFailureKind,
         runtimeHealthByRuntime: activeRepoRuntimeHealthByRuntime,
       }),
     [
       activeRepo,
+      activeBeadsCheck,
       activeRepoRuntimeHealthByRuntime,
       beadsCheckError,
       beadsCheckFailureKind,
+      runtimeCheckState,
       runtimeCheckError,
       runtimeCheckFailureKind,
       runtimeDefinitions,
