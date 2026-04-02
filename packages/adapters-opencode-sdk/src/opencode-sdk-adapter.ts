@@ -390,11 +390,7 @@ export class OpencodeSdkAdapter
   ): Promise<AgentSessionHistoryMessage[]> {
     const preservedDisplayPartsByMessageId = new Map(
       [...this.sessions.values()]
-        .filter(
-          (session) =>
-            session.externalSessionId === input.externalSessionId &&
-            session.input.workingDirectory === input.runtimeConnection.workingDirectory,
-        )
+        .filter((session) => session.externalSessionId === input.externalSessionId)
         .flatMap((session) =>
           [...session.messageMetadataById.entries()].flatMap(([messageId, metadata]) =>
             metadata.displayParts ? [[messageId, metadata.displayParts] as const] : [],

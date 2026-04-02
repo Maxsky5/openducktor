@@ -1528,7 +1528,7 @@ describe("OpencodeSdkAdapter", () => {
         repoPath: "/repo",
         runtimeKind: "opencode",
         runtimeConnection: defaultRuntimeConnection,
-        workingDirectory: "/repo",
+        workingDirectory: "/repo/feature-worktree",
         taskId: "task-1",
         role: "spec",
         scenario: "spec_initial",
