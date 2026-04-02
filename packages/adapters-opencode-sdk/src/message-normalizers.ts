@@ -69,7 +69,8 @@ const normalizeSourceText = (value: unknown): AgentUserMessageSourceText | undef
 const normalizeAttachmentPart = (
   part: Extract<Part, { type: "file" }>,
 ): AgentUserMessageDisplayPart | null => {
-  const filePath = readFilePathFromUrl(part.url) ?? part.filename?.trim() ?? "";
+  const sourcePath = part.source?.type === "file" ? part.source.path.trim() : "";
+  const filePath = readFilePathFromUrl(part.url) ?? (sourcePath || part.filename?.trim() || "");
   if (filePath.length === 0 || !part.mime) {
     return null;
   }

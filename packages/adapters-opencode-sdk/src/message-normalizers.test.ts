@@ -216,6 +216,37 @@ describe("message-normalizers", () => {
     ]);
   });
 
+  test("falls back to source file path for attachments when the runtime omits a file url", () => {
+    const parts: Part[] = [
+      {
+        id: "image-source-path",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "file",
+        mime: "image/png",
+        filename: "Screenshot 2026-04-01 at 00.33.32.png",
+        url: "",
+        source: {
+          type: "file",
+          path: "/var/folders/example/Screenshot 2026-04-01 at 00.33.32.png",
+        },
+      } as Part,
+    ];
+
+    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+      {
+        kind: "attachment",
+        attachment: {
+          id: "image-source-path",
+          path: "/var/folders/example/Screenshot 2026-04-01 at 00.33.32.png",
+          name: "Screenshot 2026-04-01 at 00.33.32.png",
+          kind: "image",
+          mime: "image/png",
+        },
+      },
+    ]);
+  });
+
   test("normalizes only supported media file attachments without inline source text", () => {
     const parts: Part[] = [
       {

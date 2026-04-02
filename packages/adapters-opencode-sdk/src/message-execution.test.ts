@@ -297,6 +297,10 @@ describe("message-execution", () => {
           mime: "image/png",
           url: "file:///tmp/diagram.png",
           filename: "diagram.png",
+          source: {
+            type: "file",
+            path: "/tmp/diagram.png",
+          },
         },
       ],
     });
