@@ -197,7 +197,7 @@ const preparePromptSend = (request: SendAgentUserMessageInput): PreparedUserSend
 };
 
 const prepareSlashCommandSend = (
-  request: SendAgentUserMessageInput,
+  _request: SendAgentUserMessageInput,
   slashCommandRequest: SlashCommandExecutionRequest,
 ): PreparedUserSend => {
   return {
