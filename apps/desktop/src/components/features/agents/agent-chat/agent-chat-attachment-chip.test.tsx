@@ -57,6 +57,43 @@ describe("AgentChatAttachmentChip", () => {
     });
   });
 
+  test("does not poison preview opening when the inline thumbnail errors during rerender", async () => {
+    URL.createObjectURL = () => "blob:preview-inline.png";
+    URL.revokeObjectURL = () => {};
+
+    render(
+      <AgentChatAttachmentChip
+        variant="transcript"
+        attachment={{
+          id: "attachment-3",
+          path: "/tmp/preview-inline.png",
+          name: "preview-inline.png",
+          kind: "image",
+          mime: "image/png",
+        }}
+      />,
+    );
+
+    const thumbnailImage = await screen.findByAltText("preview-inline.png");
+    fireEvent.error(thumbnailImage);
+
+    expect(
+      screen.queryByText(
+        'Attachment preview is unavailable because "preview-inline.png" could not be read from its original local path.',
+      ),
+    ).toBeNull();
+
+    const previewButton = screen
+      .getAllByRole("button")
+      .find((button) => button.getAttribute("aria-label") === null);
+    if (!previewButton) {
+      throw new Error("Expected preview button");
+    }
+    fireEvent.click(previewButton);
+
+    await screen.findByText("Image preview");
+  });
+
   test("exposes the full attachment name on hover", () => {
     render(
       <AgentChatAttachmentChip

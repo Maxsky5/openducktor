@@ -1,6 +1,6 @@
 import type { AgentAttachmentReference } from "@openducktor/core";
 import { FileAudio2, FileText, Film, Image as ImageIcon, LoaderCircle, X } from "lucide-react";
-import type { ReactElement, SyntheticEvent } from "react";
+import { type ReactElement, type SyntheticEvent, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -78,8 +78,10 @@ export function AgentChatAttachmentChip(
   });
   const removable = variant === "draft";
   const onRemove = draftProps?.onRemove ?? null;
+  const [failedThumbnailSrc, setFailedThumbnailSrc] = useState<string | null>(null);
+  const thumbnailFailed = failedThumbnailSrc !== null && failedThumbnailSrc === resolvedPreviewSrc;
 
-  const handlePreviewMediaError = (
+  const handleDialogPreviewMediaError = (
     event: SyntheticEvent<HTMLImageElement | HTMLVideoElement>,
   ): void => {
     const failingSrc =
@@ -127,13 +129,20 @@ export function AgentChatAttachmentChip(
             onClick={handleOpenPreview}
           >
             <div className="flex h-24 max-h-24 items-center justify-center overflow-hidden bg-muted">
-              {showResolvedPreview ? (
+              {showResolvedPreview && !thumbnailFailed ? (
                 attachment.kind === "image" ? (
                   <img
                     src={resolvedPreviewSrc ?? undefined}
                     alt={attachment.name}
                     className="h-full w-full object-cover"
-                    onError={handlePreviewMediaError}
+                    onError={(event) => {
+                      setFailedThumbnailSrc(
+                        event.currentTarget.currentSrc ||
+                          event.currentTarget.getAttribute("src") ||
+                          resolvedPreviewSrc ||
+                          null,
+                      );
+                    }}
                   />
                 ) : (
                   <video
@@ -142,7 +151,14 @@ export function AgentChatAttachmentChip(
                     muted
                     playsInline
                     preload="metadata"
-                    onError={handlePreviewMediaError}
+                    onError={(event) => {
+                      setFailedThumbnailSrc(
+                        event.currentTarget.currentSrc ||
+                          event.currentTarget.getAttribute("src") ||
+                          resolvedPreviewSrc ||
+                          null,
+                      );
+                    }}
                   >
                     <track kind="captions" />
                   </video>
@@ -187,7 +203,7 @@ export function AgentChatAttachmentChip(
                   src={resolvedPreviewSrc}
                   alt={attachment.name}
                   className="max-h-[75vh] w-full object-contain"
-                  onError={handlePreviewMediaError}
+                  onError={handleDialogPreviewMediaError}
                 />
               ) : (
                 <video
@@ -195,7 +211,7 @@ export function AgentChatAttachmentChip(
                   className="max-h-[75vh] w-full object-contain"
                   controls
                   autoPlay
-                  onError={handlePreviewMediaError}
+                  onError={handleDialogPreviewMediaError}
                 >
                   <track kind="captions" />
                 </video>
