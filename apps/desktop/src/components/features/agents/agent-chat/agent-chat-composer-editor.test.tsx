@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import type { AgentFileSearchResult } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useRef, useState } from "react";
-import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
+import { type AgentChatComposerDraft, createComposerAttachment } from "./agent-chat-composer-draft";
 import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fixtures";
 
 let AgentChatComposerEditor: typeof import("./agent-chat-composer-editor").AgentChatComposerEditor;
@@ -107,21 +107,24 @@ const EditorHarness = ({
   const editorRef = useRef<HTMLDivElement>(null);
 
   return (
-    <AgentChatComposerEditor
-      draft={draft}
-      onDraftChange={setDraft}
-      placeholder="Type a message"
-      disabled={false}
-      editorRef={editorRef}
-      onEditorInput={() => {}}
-      onSend={onSend ?? (() => {})}
-      supportsSlashCommands={true}
-      supportsFileSearch={supportsFileSearch}
-      slashCommands={slashCommands}
-      slashCommandsError={slashCommandsError}
-      isSlashCommandsLoading={false}
-      searchFiles={searchFiles}
-    />
+    <>
+      <AgentChatComposerEditor
+        draft={draft}
+        onDraftChange={setDraft}
+        placeholder="Type a message"
+        disabled={false}
+        editorRef={editorRef}
+        onEditorInput={() => {}}
+        onSend={onSend ?? (() => {})}
+        supportsSlashCommands={true}
+        supportsFileSearch={supportsFileSearch}
+        slashCommands={slashCommands}
+        slashCommandsError={slashCommandsError}
+        isSlashCommandsLoading={false}
+        searchFiles={searchFiles}
+      />
+      <output data-testid="draft-state">{JSON.stringify(draft)}</output>
+    </>
   );
 };
 
@@ -561,6 +564,46 @@ describe("AgentChatComposerEditor", () => {
       expect(rendered.container.querySelector("[data-composer-content-root]")?.textContent).toBe(
         "\u200B",
       );
+    });
+  });
+
+  test("preserves staged attachments when clearing a full composer selection", async () => {
+    resetSelectionMocks();
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        initialDraft={{
+          segments: createComposerDraft("hello").segments,
+          attachments: [
+            createComposerAttachment(
+              {
+                name: "screenshot.png",
+                kind: "image",
+                mime: "image/png",
+                path: "/tmp/screenshot.png",
+              },
+              "attachment-1",
+            ),
+          ],
+        }}
+      />,
+    );
+
+    selectAllComposerContents(rendered.container);
+    const editorRoot = selectComposerContentRange(rendered.container);
+    fireEvent.keyDown(editorRoot, { key: "Backspace" });
+
+    await waitFor(() => {
+      const draftState = screen.getByTestId("draft-state").textContent;
+      if (!draftState) {
+        throw new Error("Expected draft state output");
+      }
+      const parsed = JSON.parse(draftState) as AgentChatComposerDraft;
+      expect(parsed.attachments).toHaveLength(1);
+      expect(parsed.attachments?.[0]?.name).toBe("screenshot.png");
+      expect(parsed.segments).toHaveLength(1);
+      expect(parsed.segments[0]).toMatchObject({ kind: "text", text: "" });
     });
   });
 

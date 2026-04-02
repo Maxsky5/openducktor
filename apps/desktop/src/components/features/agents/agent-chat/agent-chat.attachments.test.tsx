@@ -126,6 +126,6 @@ describe("AgentChat attachments", () => {
     await waitFor(() => {
       expect(screen.queryByText("Drop files to attach them")).toBeNull();
     });
-    await screen.findByText("brief.pdf");
+    await screen.findByTitle("brief.pdf");
   });
 });

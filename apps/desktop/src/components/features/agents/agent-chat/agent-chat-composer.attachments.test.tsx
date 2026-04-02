@@ -73,7 +73,7 @@ describe("AgentChatComposer attachments", () => {
       target: { files: [file] },
     });
 
-    await screen.findByText("brief.pdf");
+    await screen.findByTitle("brief.pdf");
     expect(
       screen.getByText("The selected model does not expose attachment capability data."),
     ).toBeDefined();
@@ -117,7 +117,7 @@ describe("AgentChatComposer attachments", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove brief.pdf" }));
 
     await waitFor(() => {
-      expect(screen.queryByText("brief.pdf")).toBeNull();
+      expect(screen.queryByTitle("brief.pdf")).toBeNull();
     });
     expect(
       screen.getByRole("button", { name: "Send message" }).getAttribute("disabled"),

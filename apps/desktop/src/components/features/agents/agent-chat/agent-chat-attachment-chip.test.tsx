@@ -56,4 +56,24 @@ describe("AgentChatAttachmentChip", () => {
       expect(screen.queryByText("Image preview")).toBeNull();
     });
   });
+
+  test("exposes the full attachment name on hover", () => {
+    render(
+      <AgentChatAttachmentChip
+        variant="draft"
+        attachment={{
+          id: "attachment-2",
+          name: "very-long-screenshot-file-name-that-should-truncate.png",
+          kind: "pdf",
+          mime: "application/pdf",
+          path: "/tmp/very-long-screenshot-file-name-that-should-truncate.png",
+        }}
+        onRemove={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByTitle("very-long-screenshot-file-name-that-should-truncate.png"),
+    ).toBeDefined();
+  });
 });

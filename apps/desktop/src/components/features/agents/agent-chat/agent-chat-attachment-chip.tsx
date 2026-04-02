@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   type AgentChatAttachmentPreviewTarget,
@@ -22,6 +23,23 @@ const ATTACHMENT_ICON = {
   video: Film,
   pdf: FileText,
 } as const;
+
+function AttachmentName({ name }: { name: string }): ReactElement {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="min-w-0 truncate text-xs text-foreground" title={name}>
+            {name}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          <p>{name}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 type DraftAttachmentChipProps = {
   variant: "draft";
@@ -108,7 +126,7 @@ export function AgentChatAttachmentChip(
             className="flex w-full flex-col text-left"
             onClick={handleOpenPreview}
           >
-            <div className="flex aspect-video items-center justify-center bg-muted">
+            <div className="flex h-24 max-h-24 items-center justify-center overflow-hidden bg-muted">
               {showResolvedPreview ? (
                 attachment.kind === "image" ? (
                   <img
@@ -137,13 +155,13 @@ export function AgentChatAttachmentChip(
             </div>
             <div className="flex items-center gap-2 px-3 py-2">
               <Icon className="size-4 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 truncate text-xs text-foreground">{attachment.name}</span>
+              <AttachmentName name={attachment.name} />
             </div>
           </button>
         ) : (
           <div className="flex items-center gap-2 px-3 py-2">
             <Icon className="size-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 truncate text-xs text-foreground">{attachment.name}</span>
+            <AttachmentName name={attachment.name} />
           </div>
         )}
 
