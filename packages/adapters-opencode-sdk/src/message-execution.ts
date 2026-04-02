@@ -1,4 +1,5 @@
 import {
+  type AgentUserMessageDisplayPart,
   buildAgentUserMessagePromptText,
   normalizeAgentUserMessageParts,
   type SendAgentUserMessageInput,
@@ -10,7 +11,10 @@ import { resolveAgainstWorkingDirectory, toFileUrl } from "./path-utils";
 import { normalizeModelInput, resolveAssistantResponseMessageId } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
 import type { SessionRecord } from "./types";
-import { buildQueuedRequestSignature } from "./user-message-signatures";
+import {
+  buildQueuedRequestAttachmentIdentitySignature,
+  buildQueuedRequestSignature,
+} from "./user-message-signatures";
 
 type SlashCommandExecutionRequest = {
   command: string;
@@ -230,6 +234,18 @@ const prepareSlashCommandSend = (
   };
 };
 
+const readQueuedAttachmentDisplayParts = (
+  parts: SendAgentUserMessageInput["parts"],
+): Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>[] => {
+  return parts.flatMap((part) => {
+    if (part.kind !== "attachment") {
+      return [];
+    }
+
+    return [{ kind: "attachment", attachment: part.attachment }];
+  });
+};
+
 export const sendUserMessage = async (input: {
   session: SessionRecord;
   request: SendAgentUserMessageInput;
@@ -246,9 +262,19 @@ export const sendUserMessage = async (input: {
   const shouldTrackAsQueued =
     input.session.activeAssistantMessageId !== null &&
     normalizeAgentUserMessageParts(input.request.parts).length > 0;
+  const queuedAttachmentParts = readQueuedAttachmentDisplayParts(input.request.parts);
   const queuedEntry = shouldTrackAsQueued
     ? {
         signature: buildQueuedRequestSignature(input.request.parts, model ?? undefined),
+        ...(queuedAttachmentParts.length > 0
+          ? {
+              attachmentIdentitySignature: buildQueuedRequestAttachmentIdentitySignature(
+                input.request.parts,
+                model ?? undefined,
+              ),
+            }
+          : {}),
+        ...(queuedAttachmentParts.length > 0 ? { attachmentParts: queuedAttachmentParts } : {}),
       }
     : null;
 

@@ -20,7 +20,10 @@ import {
 } from "../message-normalizers";
 import { toIsoFromEpoch } from "../session-runtime-utils";
 import { mapPartToAgentStreamPart } from "../stream-part-mapper";
-import { buildQueuedDisplaySignature } from "../user-message-signatures";
+import {
+  buildQueuedDisplayAttachmentIdentitySignature,
+  buildQueuedDisplaySignature,
+} from "../user-message-signatures";
 import {
   readEventInfo,
   readEventPart,
@@ -335,6 +338,50 @@ const emitKnownUserMessage = (
   });
 };
 
+const mergePreservedAttachmentDisplayParts = (
+  displayParts: import("@openducktor/core").AgentUserMessageDisplayPart[],
+  preservedAttachmentParts: Extract<
+    import("@openducktor/core").AgentUserMessageDisplayPart,
+    { kind: "attachment" }
+  >[],
+): import("@openducktor/core").AgentUserMessageDisplayPart[] => {
+  if (preservedAttachmentParts.length === 0) {
+    return displayParts;
+  }
+
+  const remainingPreservedAttachments = [...preservedAttachmentParts];
+  const mergedParts = displayParts.map((part) => {
+    if (part.kind !== "attachment") {
+      return part;
+    }
+
+    const preservedIndex = remainingPreservedAttachments.findIndex(
+      (candidate) =>
+        candidate.attachment.name === part.attachment.name &&
+        candidate.attachment.kind === part.attachment.kind &&
+        (candidate.attachment.mime ?? "") === (part.attachment.mime ?? ""),
+    );
+    if (preservedIndex < 0) {
+      return part;
+    }
+
+    const preservedAttachment = remainingPreservedAttachments.splice(preservedIndex, 1)[0];
+    if (!preservedAttachment) {
+      return part;
+    }
+
+    return {
+      ...part,
+      attachment: {
+        ...part.attachment,
+        path: preservedAttachment.attachment.path,
+      },
+    };
+  });
+
+  return [...mergedParts, ...remainingPreservedAttachments];
+};
+
 const buildUserMessageSignature = (input: {
   timestamp: string;
   message: string;
@@ -404,10 +451,10 @@ const takeQueuedUserSendMatch = (
   visible: string,
   parts: import("@openducktor/core").AgentUserMessageDisplayPart[],
   model: ReturnType<typeof readMessageModelSelection> | undefined,
-): boolean => {
+): import("../types").QueuedUserMessageSend | null => {
   const session = runtime.getSession(runtime.sessionId);
   if (!session || session.pendingQueuedUserMessages.length === 0) {
-    return false;
+    return null;
   }
 
   const signature = buildQueuedDisplaySignature({
@@ -415,15 +462,21 @@ const takeQueuedUserSendMatch = (
     parts,
     ...(model ? { model } : {}),
   });
+  const attachmentIdentitySignature = buildQueuedDisplayAttachmentIdentitySignature({
+    visible,
+    parts,
+    ...(model ? { model } : {}),
+  });
   const matchIndex = session.pendingQueuedUserMessages.findIndex(
-    (entry) => entry.signature === signature,
+    (entry) =>
+      entry.signature === signature ||
+      entry.attachmentIdentitySignature === attachmentIdentitySignature,
   );
   if (matchIndex < 0) {
-    return false;
+    return null;
   }
 
-  session.pendingQueuedUserMessages.splice(matchIndex, 1);
-  return true;
+  return session.pendingQueuedUserMessages.splice(matchIndex, 1)[0] ?? null;
 };
 
 const resolveUserMessageStateFromPendingAssistant = (
@@ -446,6 +499,7 @@ const resolveLiveUserMessageState = (
     parts: import("@openducktor/core").AgentUserMessageDisplayPart[];
     explicitState?: AgentUserMessageState;
     model?: ReturnType<typeof readMessageModelSelection>;
+    matchedQueuedSend?: import("../types").QueuedUserMessageSend | null;
   },
 ): AgentUserMessageState => {
   const session = runtime.getSession(runtime.sessionId);
@@ -453,12 +507,7 @@ const resolveLiveUserMessageState = (
     session,
     input.messageId,
   );
-  const matchedQueuedSend = takeQueuedUserSendMatch(
-    runtime,
-    input.visible,
-    input.parts,
-    input.model,
-  );
+  const matchedQueuedSend = input.matchedQueuedSend;
 
   if (matchedQueuedSend && pendingAssistantState === "queued") {
     return "queued";
@@ -631,10 +680,29 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     const currentMetadata = session?.messageMetadataById.get(messageId);
     const normalizedDisplayParts = normalizeUserMessageDisplayParts(userParts);
     const fallbackText = currentMetadata?.text ?? readTextFromMessageInfo(infoRecord);
+    const matchedQueuedSend = takeQueuedUserSendMatch(
+      runtime,
+      fallbackText,
+      normalizedDisplayParts,
+      messageModel,
+    );
+    const preservedAttachmentParts = [
+      ...(currentMetadata?.displayParts?.filter(
+        (
+          part,
+        ): part is Extract<
+          import("@openducktor/core").AgentUserMessageDisplayPart,
+          { kind: "attachment" }
+        > => part.kind === "attachment",
+      ) ?? []),
+      ...(matchedQueuedSend?.attachmentParts ?? []),
+    ];
+    const mergedDisplayParts = mergePreservedAttachmentDisplayParts(
+      normalizedDisplayParts,
+      preservedAttachmentParts,
+    );
     const displayParts = ensureVisibleUserTextDisplayParts(
-      normalizedDisplayParts.length > 0
-        ? normalizedDisplayParts
-        : (currentMetadata?.displayParts ?? []),
+      mergedDisplayParts.length > 0 ? mergedDisplayParts : (currentMetadata?.displayParts ?? []),
       fallbackText,
     );
     const textFromParts = readVisibleUserTextFromDisplayParts(displayParts);
@@ -665,6 +733,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
         messageId,
         visible,
         parts: displayParts,
+        matchedQueuedSend,
         ...(explicitState ? { explicitState } : {}),
         ...(messageModel ? { model: messageModel } : {}),
       }),
@@ -782,9 +851,22 @@ const handleMessagePartUpdatedEvent = (event: Event, runtime: EventStreamRuntime
     const normalizedDisplayParts = normalizeUserMessageDisplayParts(
       getKnownMessageParts(runtime, messageId),
     );
+    const preservedAttachmentParts =
+      metadata?.displayParts?.filter(
+        (
+          part,
+        ): part is Extract<
+          import("@openducktor/core").AgentUserMessageDisplayPart,
+          { kind: "attachment" }
+        > => part.kind === "attachment",
+      ) ?? [];
+    const mergedDisplayParts = mergePreservedAttachmentDisplayParts(
+      normalizedDisplayParts,
+      preservedAttachmentParts,
+    );
     const fallbackText = metadata?.text ?? "";
     const displayParts = ensureVisibleUserTextDisplayParts(
-      normalizedDisplayParts.length > 0 ? normalizedDisplayParts : (metadata?.displayParts ?? []),
+      mergedDisplayParts.length > 0 ? mergedDisplayParts : (metadata?.displayParts ?? []),
       fallbackText,
     );
     const textFromParts = readVisibleUserTextFromDisplayParts(displayParts);
@@ -805,6 +887,7 @@ const handleMessagePartUpdatedEvent = (event: Event, runtime: EventStreamRuntime
         messageId,
         visible,
         parts: displayParts,
+        matchedQueuedSend: null,
         ...(metadata?.model ? { model: metadata.model } : {}),
       }),
       ...(metadata?.model ? { model: metadata.model } : {}),

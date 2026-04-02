@@ -19,6 +19,8 @@ export type SessionInput = Omit<StartAgentSessionInput, "sessionId"> & {
 
 export type QueuedUserMessageSend = {
   signature: string;
+  attachmentIdentitySignature?: string;
+  attachmentParts?: Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>[];
 };
 
 export type SessionRecord = {

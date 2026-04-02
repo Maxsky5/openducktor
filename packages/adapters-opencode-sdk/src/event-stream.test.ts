@@ -3,7 +3,21 @@ import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
 import { subscribeOpencodeEvents } from "./event-stream";
 import type { SessionInput, SessionRecord } from "./types";
-import { buildQueuedRequestSignature } from "./user-message-signatures";
+import {
+  buildQueuedRequestAttachmentIdentitySignature,
+  buildQueuedRequestSignature,
+} from "./user-message-signatures";
+
+const IMAGE_ATTACHMENT_DISPLAY_PART = {
+  kind: "attachment" as const,
+  attachment: {
+    id: "attachment-image-1",
+    path: "/tmp/local-screenshot.png",
+    name: "Screenshot-2026-03-17-at-12.04.45.png",
+    kind: "image" as const,
+    mime: "image/png",
+  },
+};
 
 const makeClientWithEvents = (events: Event[]): OpencodeClient => {
   return {
@@ -680,6 +694,95 @@ describe("event-stream", () => {
     expect(sessionRecord.pendingQueuedUserMessages).toEqual([
       { signature: buildQueuedSignature("Ship it") },
     ]);
+  });
+
+  test("preserves queued local attachment preview paths when the runtime echoes a non-file attachment url", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession(
+      [
+        {
+          type: "message.updated",
+          properties: {
+            info: {
+              id: "msg-attachment-1",
+              role: "user",
+              sessionID: "external-session-1",
+              text: "Describe what is in this screenshot",
+              time: {
+                created: Date.parse("2026-02-22T12:00:02.000Z"),
+              },
+            },
+            parts: [
+              {
+                id: "part-text-1",
+                sessionID: "external-session-1",
+                messageID: "msg-attachment-1",
+                type: "text",
+                text: "Describe what is in this screenshot",
+              },
+              {
+                id: "part-file-1",
+                sessionID: "external-session-1",
+                messageID: "msg-attachment-1",
+                type: "file",
+                mime: "image/png",
+                filename: "Screenshot-2026-03-17-at-12.04.45.png",
+                url: "https://files.example.invalid/uploaded-image",
+              },
+            ],
+          },
+        } as unknown as Event,
+      ],
+      (nextSessionRecord) => {
+        nextSessionRecord.pendingQueuedUserMessages.push({
+          signature: buildQueuedRequestSignature(
+            [
+              { kind: "text", text: "Describe what is in this screenshot" },
+              IMAGE_ATTACHMENT_DISPLAY_PART,
+            ] as AgentUserMessagePart[],
+            undefined,
+          ),
+          attachmentIdentitySignature: buildQueuedRequestAttachmentIdentitySignature(
+            [
+              { kind: "text", text: "Describe what is in this screenshot" },
+              IMAGE_ATTACHMENT_DISPLAY_PART,
+            ] as AgentUserMessagePart[],
+            undefined,
+          ),
+          attachmentParts: [IMAGE_ATTACHMENT_DISPLAY_PART],
+        });
+      },
+    );
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    const userMessage = userMessages[0];
+    if (!userMessage || userMessage.type !== "user_message") {
+      throw new Error("Expected user_message event");
+    }
+    expect(userMessage.parts).toContainEqual(
+      expect.objectContaining({
+        kind: "attachment",
+        attachment: expect.objectContaining({
+          path: "/tmp/local-screenshot.png",
+          name: "Screenshot-2026-03-17-at-12.04.45.png",
+          kind: "image",
+          mime: "image/png",
+        }),
+      }),
+    );
+
+    const metadata = sessionRecord.messageMetadataById.get("msg-attachment-1");
+    expect(metadata?.displayParts).toContainEqual(
+      expect.objectContaining({
+        kind: "attachment",
+        attachment: expect.objectContaining({
+          path: "/tmp/local-screenshot.png",
+          name: "Screenshot-2026-03-17-at-12.04.45.png",
+          kind: "image",
+          mime: "image/png",
+        }),
+      }),
+    );
   });
 
   test("reconciles queued follow-ups when a newer assistant becomes pending", async () => {

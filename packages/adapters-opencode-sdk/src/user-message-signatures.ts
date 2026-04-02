@@ -26,6 +26,8 @@ type ComparableNonTextPart =
       mime?: string;
     };
 
+type AttachmentPathMode = "strict" | "identity";
+
 const buildComparableSignature = (input: {
   visible: string;
   nonTextParts: ComparableNonTextPart[];
@@ -46,6 +48,21 @@ export const buildQueuedRequestSignature = (
   parts: AgentUserMessagePart[],
   model?: AgentModelSelection,
 ): string => {
+  return buildQueuedRequestSignatureWithAttachmentPathMode(parts, model, "strict");
+};
+
+export const buildQueuedRequestAttachmentIdentitySignature = (
+  parts: AgentUserMessagePart[],
+  model?: AgentModelSelection,
+): string => {
+  return buildQueuedRequestSignatureWithAttachmentPathMode(parts, model, "identity");
+};
+
+const buildQueuedRequestSignatureWithAttachmentPathMode = (
+  parts: AgentUserMessagePart[],
+  model: AgentModelSelection | undefined,
+  attachmentPathMode: AttachmentPathMode,
+): string => {
   const normalizedParts = normalizeAgentUserMessageParts(parts);
   const promptText = buildAgentUserMessagePromptText(normalizedParts);
   const nonTextParts: ComparableNonTextPart[] = [
@@ -63,7 +80,7 @@ export const buildQueuedRequestSignature = (
       return [
         {
           kind: "attachment" as const,
-          path: part.attachment.path,
+          path: attachmentPathMode === "strict" ? part.attachment.path : "",
           name: part.attachment.name,
           attachmentKind: part.attachment.kind,
           ...(part.attachment.mime ? { mime: part.attachment.mime } : {}),
@@ -84,6 +101,25 @@ export const buildQueuedDisplaySignature = (input: {
   parts: AgentUserMessageDisplayPart[];
   model?: AgentModelSelection;
 }): string => {
+  return buildQueuedDisplaySignatureWithAttachmentPathMode(input, "strict");
+};
+
+export const buildQueuedDisplayAttachmentIdentitySignature = (input: {
+  visible: string;
+  parts: AgentUserMessageDisplayPart[];
+  model?: AgentModelSelection;
+}): string => {
+  return buildQueuedDisplaySignatureWithAttachmentPathMode(input, "identity");
+};
+
+const buildQueuedDisplaySignatureWithAttachmentPathMode = (
+  input: {
+    visible: string;
+    parts: AgentUserMessageDisplayPart[];
+    model?: AgentModelSelection;
+  },
+  attachmentPathMode: AttachmentPathMode,
+): string => {
   const nonTextParts = input.parts.flatMap((part): ComparableNonTextPart[] => {
     if (part.kind === "file_reference") {
       return [
@@ -99,7 +135,7 @@ export const buildQueuedDisplaySignature = (input: {
       return [
         {
           kind: "attachment",
-          path: part.attachment.path,
+          path: attachmentPathMode === "strict" ? part.attachment.path : "",
           name: part.attachment.name,
           attachmentKind: part.attachment.kind,
           ...(part.attachment.mime ? { mime: part.attachment.mime } : {}),
