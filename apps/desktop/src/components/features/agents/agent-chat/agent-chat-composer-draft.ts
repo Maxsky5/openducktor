@@ -460,7 +460,9 @@ export const resolveDraftToUserMessageParts = async (
 
   const attachmentParts = await Promise.all(
     (normalizeComposerDraft(draft).attachments ?? []).map(async (attachment) => {
-      const path = attachment.path ?? (await resolveAttachmentPath(attachment));
+      const path = attachment.file
+        ? await resolveAttachmentPath(attachment)
+        : (attachment.path ?? (await resolveAttachmentPath(attachment)));
       if (path.trim().length === 0) {
         throw new Error(`Attachment "${attachment.name}" is missing a local file path.`);
       }

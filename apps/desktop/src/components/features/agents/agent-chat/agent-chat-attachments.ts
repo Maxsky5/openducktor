@@ -92,24 +92,17 @@ const inferAttachmentMime = (name: string, mime?: string): string | undefined =>
   return ATTACHMENT_EXTENSION_MIME[readFileExtension(name)];
 };
 
-const readNonstandardBrowserFilePath = (file: File): string | undefined => {
-  const candidate = (file as File & { path?: unknown }).path;
-  return typeof candidate === "string" && candidate.trim().length > 0 ? candidate : undefined;
-};
-
 export const buildComposerAttachmentFromFile = (file: File): AgentChatComposerAttachment | null => {
   const kind = classifyAttachment({ name: file.name, mime: file.type });
   if (!kind) {
     return null;
   }
   const mime = inferAttachmentMime(file.name, file.type);
-  const path = readNonstandardBrowserFilePath(file);
 
   return createComposerAttachment({
     name: file.name,
     kind,
     ...(mime ? { mime } : {}),
-    ...(path ? { path } : {}),
     file,
   });
 };

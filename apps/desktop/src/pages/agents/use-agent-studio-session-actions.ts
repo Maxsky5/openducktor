@@ -261,11 +261,11 @@ export function useAgentStudioSessionActions({
         await sendAgentMessage(
           targetSessionId,
           await resolveDraftToUserMessageParts(draft, async (attachment) => {
-            if (attachment.path) {
-              return attachment.path;
-            }
             if (attachment.file) {
               return stageLocalAttachmentFile(attachment.file);
+            }
+            if (attachment.path) {
+              return attachment.path;
             }
             throw new Error(`Attachment "${attachment.name}" is missing local file data.`);
           }),

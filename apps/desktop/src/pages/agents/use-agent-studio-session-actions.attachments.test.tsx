@@ -227,4 +227,53 @@ describe("useAgentStudioSessionActions attachments", () => {
 
     await harness.unmount();
   });
+
+  test("stages attachments even when the browser file exposes an original local path", async () => {
+    const sendAgentMessage = mock(async () => {});
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      sendAgentMessage,
+    });
+    const file = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
+    const attachment = createComposerAttachment(
+      {
+        name: "brief.pdf",
+        kind: "pdf",
+        mime: "application/pdf",
+        path: "/Users/example/Desktop/brief.pdf",
+        file,
+      },
+      "attachment-path-file",
+    );
+    const draft: AgentChatComposerDraft = {
+      segments: [createTextSegment("please review")],
+      attachments: [attachment],
+    };
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await expect(state.onSend(draft)).resolves.toBe(true);
+    });
+
+    expect(stageLocalAttachmentFileMock).toHaveBeenCalledWith({
+      name: "brief.pdf",
+      mime: "application/pdf",
+      base64Data: "cGRm",
+    });
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+      { kind: "text", text: "please review" },
+      {
+        kind: "attachment",
+        attachment: {
+          id: "attachment-path-file",
+          name: "brief.pdf",
+          kind: "pdf",
+          mime: "application/pdf",
+          path: "/tmp/staged-brief.pdf",
+        },
+      },
+    ]);
+
+    await harness.unmount();
+  });
 });

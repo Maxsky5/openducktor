@@ -95,6 +95,16 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/80 px-2.5 py-2">
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="size-7 rounded-full border border-input bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="Add attachment"
+          onClick={onPickAttachments}
+        >
+          <Paperclip className="size-3.5" />
+        </Button>
         <div className="relative">
           <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Combobox
@@ -150,16 +160,6 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="size-8 rounded-full"
-          aria-label="Add attachment"
-          onClick={onPickAttachments}
-        >
-          <Paperclip className="size-3.5" />
-        </Button>
         {contextUsage ? (
           <div className="mr-3">
             <AgentContextUsageIndicator
@@ -436,31 +436,45 @@ export const AgentChatComposer = forwardRef<
         }}
       />
       {(draft.attachments ?? []).length > 0 ? (
-        <div className="mb-3 rounded-lg border border-border bg-card px-3 py-3">
-          <div className="flex flex-wrap gap-3">
-            {(draft.attachments ?? []).map((attachment) => (
-              <AgentChatAttachmentChip
-                key={attachment.id}
-                variant="draft"
-                attachment={attachment}
-                error={attachmentErrors[attachment.id] ?? null}
-                onRemove={() => {
-                  setDraft((currentDraft) => {
-                    const nextDraft = removeAttachmentFromDraft(currentDraft, attachment.id);
-                    latestDraftRef.current = nextDraft;
-                    return nextDraft;
-                  });
-                  onComposerEditorInput();
-                }}
-              />
-            ))}
+        <section className="mb-0 border border-input border-b-0 border-l-0 bg-card shadow-md">
+          <div
+            className={composerAccentColor ? "border-l-4" : undefined}
+            style={composerAccentColor ? { borderLeftColor: composerAccentColor } : undefined}
+          >
+            <div className="flex items-center gap-2 border-b border-input/80 px-3 py-2">
+              <Paperclip className="size-4 text-muted-foreground" />
+              <p className="text-[13px] font-semibold text-foreground">Attachments</p>
+              <p className="text-[11px] font-medium text-muted-foreground">
+                {(draft.attachments ?? []).length}
+              </p>
+            </div>
+            <div className="px-3 pb-3 pt-3">
+              <div className="flex flex-wrap gap-3">
+                {(draft.attachments ?? []).map((attachment) => (
+                  <AgentChatAttachmentChip
+                    key={attachment.id}
+                    variant="draft"
+                    attachment={attachment}
+                    error={attachmentErrors[attachment.id] ?? null}
+                    onRemove={() => {
+                      setDraft((currentDraft) => {
+                        const nextDraft = removeAttachmentFromDraft(currentDraft, attachment.id);
+                        latestDraftRef.current = nextDraft;
+                        return nextDraft;
+                      });
+                      onComposerEditorInput();
+                    }}
+                  />
+                ))}
+              </div>
+              {hasSlashAttachmentConflict ? (
+                <p className="mt-3 text-xs text-destructive">
+                  Remove attachments before running a slash command.
+                </p>
+              ) : null}
+            </div>
           </div>
-          {hasSlashAttachmentConflict ? (
-            <p className="mt-3 text-xs text-destructive">
-              Remove attachments before running a slash command.
-            </p>
-          ) : null}
-        </div>
+        </section>
       ) : null}
       <div
         className={

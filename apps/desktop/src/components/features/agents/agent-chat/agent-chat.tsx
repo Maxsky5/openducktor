@@ -1,5 +1,4 @@
 import {
-  type DragEvent,
   memo,
   type ReactElement,
   type ReactNode,
@@ -14,8 +13,20 @@ import { AgentChatThread } from "./agent-chat-thread";
 
 const MemoizedAgentChatThread = memo(AgentChatThread);
 
-const hasDraggedFiles = (event: DragEvent<HTMLDivElement>): boolean => {
-  return Array.from(event.dataTransfer?.types ?? []).includes("Files");
+const hasDraggedFiles = (dataTransfer: DataTransfer | null | undefined): boolean => {
+  if (!dataTransfer) {
+    return false;
+  }
+
+  if (dataTransfer.files.length > 0) {
+    return true;
+  }
+
+  if (Array.from(dataTransfer.items ?? []).some((item) => item.kind === "file")) {
+    return true;
+  }
+
+  return Array.from(dataTransfer.types ?? []).includes("Files");
 };
 
 export function AgentChat({
@@ -30,8 +41,8 @@ export function AgentChat({
   const dragDepthRef = useRef(0);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
 
-  const handleDragEnter = useCallback((event: DragEvent<HTMLDivElement>): void => {
-    if (!hasDraggedFiles(event)) {
+  const handleDragEnter = useCallback((event: DragEvent): void => {
+    if (!hasDraggedFiles(event.dataTransfer)) {
       return;
     }
     event.preventDefault();
@@ -39,16 +50,24 @@ export function AgentChat({
     setIsDraggingFiles(true);
   }, []);
 
-  const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>): void => {
-    if (!hasDraggedFiles(event)) {
-      return;
-    }
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-  }, []);
+  const handleDragOver = useCallback(
+    (event: DragEvent): void => {
+      if (!hasDraggedFiles(event.dataTransfer)) {
+        return;
+      }
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "copy";
+      }
+      if (!isDraggingFiles) {
+        setIsDraggingFiles(true);
+      }
+    },
+    [isDraggingFiles],
+  );
 
-  const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>): void => {
-    if (!hasDraggedFiles(event)) {
+  const handleDragLeave = useCallback((event: DragEvent): void => {
+    if (!hasDraggedFiles(event.dataTransfer)) {
       return;
     }
     event.preventDefault();
@@ -58,14 +77,14 @@ export function AgentChat({
     }
   }, []);
 
-  const handleDrop = useCallback((event: DragEvent<HTMLDivElement>): void => {
-    if (!hasDraggedFiles(event)) {
+  const handleDrop = useCallback((event: DragEvent): void => {
+    if (!hasDraggedFiles(event.dataTransfer)) {
       return;
     }
     event.preventDefault();
     dragDepthRef.current = 0;
     setIsDraggingFiles(false);
-    const files = Array.from(event.dataTransfer.files ?? []);
+    const files = Array.from(event.dataTransfer?.files ?? []);
     if (files.length > 0) {
       composerRef.current?.addFiles(files);
     }
@@ -77,28 +96,40 @@ export function AgentChat({
       return;
     }
 
-    const onDragEnter = (event: Event): void => {
-      handleDragEnter(event as unknown as DragEvent<HTMLDivElement>);
+    const onDragEnter = (event: DragEvent): void => {
+      handleDragEnter(event);
     };
-    const onDragOver = (event: Event): void => {
-      handleDragOver(event as unknown as DragEvent<HTMLDivElement>);
+    const onDragOver = (event: DragEvent): void => {
+      handleDragOver(event);
     };
-    const onDragLeave = (event: Event): void => {
-      handleDragLeave(event as unknown as DragEvent<HTMLDivElement>);
+    const onDragLeave = (event: DragEvent): void => {
+      handleDragLeave(event);
     };
-    const onDrop = (event: Event): void => {
-      handleDrop(event as unknown as DragEvent<HTMLDivElement>);
+    const onDrop = (event: DragEvent): void => {
+      handleDrop(event);
+    };
+    const onWindowDrop = (): void => {
+      dragDepthRef.current = 0;
+      setIsDraggingFiles(false);
+    };
+    const onWindowDragEnd = (): void => {
+      dragDepthRef.current = 0;
+      setIsDraggingFiles(false);
     };
 
     node.addEventListener("dragenter", onDragEnter);
     node.addEventListener("dragover", onDragOver);
     node.addEventListener("dragleave", onDragLeave);
     node.addEventListener("drop", onDrop);
+    window.addEventListener("drop", onWindowDrop);
+    window.addEventListener("dragend", onWindowDragEnd);
     return () => {
       node.removeEventListener("dragenter", onDragEnter);
       node.removeEventListener("dragover", onDragOver);
       node.removeEventListener("dragleave", onDragLeave);
       node.removeEventListener("drop", onDrop);
+      window.removeEventListener("drop", onWindowDrop);
+      window.removeEventListener("dragend", onWindowDragEnd);
     };
   }, [handleDragEnter, handleDragLeave, handleDragOver, handleDrop]);
 

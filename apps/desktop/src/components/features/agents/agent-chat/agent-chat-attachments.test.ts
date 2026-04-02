@@ -17,6 +17,7 @@ describe("agent-chat-attachments", () => {
       mime: "application/pdf",
       file,
     });
+    expect(attachment?.path).toBeUndefined();
   });
 
   test("rejects unsupported files", () => {
