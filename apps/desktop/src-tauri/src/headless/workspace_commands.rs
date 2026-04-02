@@ -1,8 +1,8 @@
 use super::command_registry::CommandRegistry;
 use super::command_support::{
     deserialize_args, handle_repo_path_operation, handle_repo_path_operation_blocking,
-    serialize_value, service_error, CommandResult, HeadlessHookTrustConfirmationPort,
-    HeadlessState, RepoPathArgs,
+    run_headless_blocking, serialize_value, service_error, CommandResult,
+    HeadlessHookTrustConfirmationPort, HeadlessState, RepoPathArgs,
 };
 use crate::commands::workspace::{
     resolve_staged_local_attachment_path, stage_local_attachment_to_temp,
@@ -157,10 +157,10 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
         Box::pin(handle_workspace_set_trusted_hooks(state, args))
     })?;
     registry.register("workspace_stage_local_attachment", |_state, args| {
-        Box::pin(async move { handle_workspace_stage_local_attachment(args) })
+        Box::pin(async move { handle_workspace_stage_local_attachment(args).await })
     })?;
     registry.register("workspace_resolve_local_attachment_path", |_state, args| {
-        Box::pin(async move { handle_workspace_resolve_local_attachment_path(args) })
+        Box::pin(async move { handle_workspace_resolve_local_attachment_path(args).await })
     })?;
     registry.register("set_theme", |state, args| {
         Box::pin(async move { handle_set_theme(state, args) })
@@ -287,7 +287,7 @@ async fn handle_workspace_update_global_git_config(
     Ok(Value::Null)
 }
 
-fn handle_workspace_stage_local_attachment(args: Value) -> CommandResult {
+async fn handle_workspace_stage_local_attachment(args: Value) -> CommandResult {
     let WorkspaceStageLocalAttachmentArgs {
         name,
         mime: _mime,
@@ -300,17 +300,21 @@ fn handle_workspace_stage_local_attachment(args: Value) -> CommandResult {
         return Err(service_error(anyhow!("Attachment payload is required.")));
     }
 
-    let path = stage_local_attachment_to_temp(&name, &base64_data)
-        .map_err(|error| service_error(anyhow!(error)))?;
+    let path = run_headless_blocking("workspace_stage_local_attachment", move || {
+        stage_local_attachment_to_temp(&name, &base64_data).map_err(anyhow::Error::msg)
+    })
+    .await?;
     serialize_value(StagedLocalAttachmentPayload {
         path: path.to_string_lossy().into_owned(),
     })
 }
 
-fn handle_workspace_resolve_local_attachment_path(args: Value) -> CommandResult {
+async fn handle_workspace_resolve_local_attachment_path(args: Value) -> CommandResult {
     let WorkspaceResolveLocalAttachmentPathArgs { path } = deserialize_args(args)?;
-    let resolved = resolve_staged_local_attachment_path(&path)
-        .map_err(|error| service_error(anyhow!(error)))?;
+    let resolved = run_headless_blocking("workspace_resolve_local_attachment_path", move || {
+        resolve_staged_local_attachment_path(&path).map_err(anyhow::Error::msg)
+    })
+    .await?;
     serialize_value(ResolvedLocalAttachmentPayload {
         path: resolved.to_string_lossy().into_owned(),
     })

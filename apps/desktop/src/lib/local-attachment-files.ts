@@ -3,7 +3,7 @@ import { hostClient } from "@/lib/host-client";
 import { isTauriRuntime } from "@/lib/runtime";
 
 const isAbsoluteLocalAttachmentPath = (path: string): boolean => {
-  return path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path);
+  return path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path) || path.startsWith("\\\\");
 };
 
 const bufferToBase64 = (buffer: ArrayBuffer): string => {

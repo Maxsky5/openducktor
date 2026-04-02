@@ -24,6 +24,12 @@ describe("local-attachment-files", () => {
     );
   });
 
+  test("resolveLocalAttachmentPreviewSrc treats UNC paths as absolute local paths", async () => {
+    await expect(resolveLocalAttachmentPreviewSrc("\\\\server\\share\\preview.png")).resolves.toBe(
+      "\\\\server\\share\\preview.png",
+    );
+  });
+
   test("resolveLocalAttachmentPreviewSrc resolves staged filename tokens before building browser preview urls", async () => {
     hostClient.workspaceResolveLocalAttachmentPath = mock(async ({ path }) => ({
       path: `/tmp/openducktor-local-attachments/uuid-${path}`,

@@ -80,6 +80,20 @@ export function AgentChatAttachmentChip(
   const onRemove = draftProps?.onRemove ?? null;
   const [failedThumbnailSrc, setFailedThumbnailSrc] = useState<string | null>(null);
   const thumbnailFailed = failedThumbnailSrc !== null && failedThumbnailSrc === resolvedPreviewSrc;
+  const showPreviewImage = showResolvedPreview && !thumbnailFailed && attachment.kind === "image";
+  const showPreviewVideo = showResolvedPreview && !thumbnailFailed && attachment.kind === "video";
+  const showPreviewLoader = isResolvingPreview;
+
+  const handleThumbnailError = (
+    event: SyntheticEvent<HTMLImageElement | HTMLVideoElement>,
+  ): void => {
+    setFailedThumbnailSrc(
+      event.currentTarget.currentSrc ||
+        event.currentTarget.getAttribute("src") ||
+        resolvedPreviewSrc ||
+        null,
+    );
+  };
 
   const handleDialogPreviewMediaError = (
     event: SyntheticEvent<HTMLImageElement | HTMLVideoElement>,
@@ -130,41 +144,25 @@ export function AgentChatAttachmentChip(
             onClick={handleOpenPreview}
           >
             <div className="flex h-24 max-h-24 items-center justify-center overflow-hidden bg-muted">
-              {showResolvedPreview && !thumbnailFailed ? (
-                attachment.kind === "image" ? (
-                  <img
-                    src={resolvedPreviewSrc ?? undefined}
-                    alt={attachment.name}
-                    className="h-full w-full object-cover"
-                    onError={(event) => {
-                      setFailedThumbnailSrc(
-                        event.currentTarget.currentSrc ||
-                          event.currentTarget.getAttribute("src") ||
-                          resolvedPreviewSrc ||
-                          null,
-                      );
-                    }}
-                  />
-                ) : (
-                  <video
-                    src={resolvedPreviewSrc ?? undefined}
-                    className="h-full w-full object-cover"
-                    muted
-                    playsInline
-                    preload="metadata"
-                    onError={(event) => {
-                      setFailedThumbnailSrc(
-                        event.currentTarget.currentSrc ||
-                          event.currentTarget.getAttribute("src") ||
-                          resolvedPreviewSrc ||
-                          null,
-                      );
-                    }}
-                  >
-                    <track kind="captions" />
-                  </video>
-                )
-              ) : isResolvingPreview ? (
+              {showPreviewImage ? (
+                <img
+                  src={resolvedPreviewSrc ?? undefined}
+                  alt={attachment.name}
+                  className="h-full w-full object-cover"
+                  onError={handleThumbnailError}
+                />
+              ) : showPreviewVideo ? (
+                <video
+                  src={resolvedPreviewSrc ?? undefined}
+                  className="h-full w-full object-cover"
+                  muted
+                  playsInline
+                  preload="metadata"
+                  onError={handleThumbnailError}
+                >
+                  <track kind="captions" />
+                </video>
+              ) : showPreviewLoader ? (
                 <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
               ) : (
                 <Icon className="size-5 text-muted-foreground" />

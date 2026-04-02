@@ -796,6 +796,80 @@ describe("event-stream", () => {
     );
   });
 
+  test("matches queued attachment sends when the runtime fills user parts through message.part.updated", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession(
+      [
+        {
+          type: "message.updated",
+          properties: {
+            info: {
+              id: "msg-attachment-partial-1",
+              role: "user",
+              sessionID: "external-session-1",
+              text: "Describe what is in this screenshot",
+              time: {
+                created: Date.parse("2026-02-22T12:00:02.000Z"),
+              },
+            },
+          },
+        } as unknown as Event,
+        {
+          type: "message.part.updated",
+          properties: {
+            part: {
+              id: "part-file-partial-1",
+              sessionID: "external-session-1",
+              messageID: "msg-attachment-partial-1",
+              type: "file",
+              mime: "image/png",
+              filename: "Screenshot-2026-03-17-at-12.04.45.png",
+              url: "https://files.example.invalid/uploaded-image",
+            },
+          },
+        } as unknown as Event,
+      ],
+      (nextSessionRecord) => {
+        nextSessionRecord.messageRoleById.set("msg-attachment-partial-1", "user");
+        nextSessionRecord.pendingQueuedUserMessages.push({
+          signature: buildQueuedRequestSignature(
+            [
+              { kind: "text", text: "Describe what is in this screenshot" },
+              IMAGE_ATTACHMENT_DISPLAY_PART,
+            ] as AgentUserMessagePart[],
+            undefined,
+          ),
+          attachmentIdentitySignature: buildQueuedRequestAttachmentIdentitySignature(
+            [
+              { kind: "text", text: "Describe what is in this screenshot" },
+              IMAGE_ATTACHMENT_DISPLAY_PART,
+            ] as AgentUserMessagePart[],
+            undefined,
+          ),
+          attachmentParts: [IMAGE_ATTACHMENT_DISPLAY_PART],
+        });
+      },
+    );
+
+    expect(sessionRecord.pendingQueuedUserMessages).toHaveLength(0);
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(2);
+    const latestUserMessage = userMessages[userMessages.length - 1];
+    if (!latestUserMessage || latestUserMessage.type !== "user_message") {
+      throw new Error("Expected user_message event");
+    }
+    expect(latestUserMessage.parts).toContainEqual(
+      expect.objectContaining({
+        kind: "attachment",
+        attachment: expect.objectContaining({
+          path: "/tmp/local-screenshot.png",
+          name: "Screenshot-2026-03-17-at-12.04.45.png",
+          kind: "image",
+          mime: "image/png",
+        }),
+      }),
+    );
+  });
+
   test("keeps pdf attachment echoes out of inline file-reference rendering", async () => {
     const { emitted } = await runEventStreamWithSession(
       [

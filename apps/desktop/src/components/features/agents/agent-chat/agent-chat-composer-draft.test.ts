@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   type AgentChatComposerDraft,
   applyComposerDraftEdit,
+  createComposerAttachment,
   createFileReferenceSegment,
   createSlashCommandSegment,
   createTextSegment,
@@ -211,6 +212,28 @@ describe("applyComposerDraftEdit", () => {
         expect.objectContaining({ id: "text-after", kind: "text", text: " after" }),
       ],
       attachments: [],
+    });
+  });
+
+  test("preserves attachments when normalizing an empty segment list", () => {
+    const attachment = createComposerAttachment(
+      {
+        name: "brief.pdf",
+        kind: "pdf",
+        mime: "application/pdf",
+        path: "/tmp/brief.pdf",
+      },
+      "attachment-1",
+    );
+
+    expect(
+      normalizeComposerDraft({
+        segments: [],
+        attachments: [attachment],
+      }),
+    ).toEqual({
+      segments: [expect.objectContaining({ kind: "text", text: "" })],
+      attachments: [attachment],
     });
   });
 

@@ -26,6 +26,32 @@ describe("agent-chat-attachments", () => {
     expect(buildComposerAttachmentFromFile(file)).toBeNull();
   });
 
+  test("rehydrates uncommon supported extensions from their path", () => {
+    const attachment = buildComposerAttachmentFromPath("/tmp/preview.avif");
+
+    expect(attachment).toMatchObject({
+      name: "preview.avif",
+      kind: "image",
+      mime: "image/avif",
+      path: "/tmp/preview.avif",
+    });
+  });
+
+  test("prefers persisted metadata when rebuilding from path", () => {
+    const attachment = buildComposerAttachmentFromPath("/tmp/blob.bin", {
+      name: "recording-from-runtime",
+      kind: "audio",
+      mime: "audio/ogg",
+    });
+
+    expect(attachment).toMatchObject({
+      name: "recording-from-runtime",
+      kind: "audio",
+      mime: "audio/ogg",
+      path: "/tmp/blob.bin",
+    });
+  });
+
   test("validates staged attachments against model capability data", () => {
     const pdfAttachment = buildComposerAttachmentFromPath("/tmp/brief.pdf");
     const imageAttachment = buildComposerAttachmentFromPath("/tmp/photo.png");

@@ -379,6 +379,8 @@ const emitKnownUserMessage = (
     timestamp: string;
     state: AgentUserMessageState;
     model?: ReturnType<typeof readMessageModelSelection>;
+    visible?: string;
+    displayParts?: import("@openducktor/core").AgentUserMessageDisplayPart[];
   },
 ): boolean => {
   const session = runtime.getSession(runtime.sessionId);
@@ -387,11 +389,13 @@ const emitKnownUserMessage = (
     getKnownMessageParts(runtime, input.messageId),
   );
   const fallbackText = metadata?.text ?? "";
-  const displayParts = ensureVisibleUserTextDisplayParts(
-    knownDisplayParts.length > 0 ? knownDisplayParts : (metadata?.displayParts ?? []),
-    fallbackText,
-  );
-  const textFromParts = readVisibleUserTextFromDisplayParts(displayParts);
+  const displayParts =
+    input.displayParts ??
+    ensureVisibleUserTextDisplayParts(
+      knownDisplayParts.length > 0 ? knownDisplayParts : (metadata?.displayParts ?? []),
+      fallbackText,
+    );
+  const textFromParts = input.visible ?? readVisibleUserTextFromDisplayParts(displayParts);
   const visible = textFromParts.length > 0 ? textFromParts : fallbackText;
   if (visible.trim().length === 0 && displayParts.length === 0) {
     return false;
@@ -705,10 +709,15 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     const currentMetadata = session?.messageMetadataById.get(messageId);
     const normalizedDisplayParts = normalizeUserMessageDisplayParts(userParts);
     const fallbackText = currentMetadata?.text ?? readTextFromMessageInfo(infoRecord);
-    const matchedQueuedSend = takeQueuedUserSendMatch(
-      runtime,
+    const initialVisibleUserMessage = buildVisibleUserMessage({
       fallbackText,
       normalizedDisplayParts,
+      ...(currentMetadata ? { metadata: currentMetadata } : {}),
+    });
+    const matchedQueuedSend = takeQueuedUserSendMatch(
+      runtime,
+      initialVisibleUserMessage.visible,
+      initialVisibleUserMessage.displayParts,
       messageModel,
     );
     const { displayParts, visible } = buildVisibleUserMessage({
@@ -860,10 +869,22 @@ const handleMessagePartUpdatedEvent = (event: Event, runtime: EventStreamRuntime
       getKnownMessageParts(runtime, messageId),
     );
     const fallbackText = metadata?.text ?? "";
+    const initialVisibleUserMessage = buildVisibleUserMessage({
+      fallbackText,
+      normalizedDisplayParts,
+      ...(metadata ? { metadata } : {}),
+    });
+    const matchedQueuedSend = takeQueuedUserSendMatch(
+      runtime,
+      initialVisibleUserMessage.visible,
+      initialVisibleUserMessage.displayParts,
+      metadata?.model,
+    );
     const { displayParts, visible } = buildVisibleUserMessage({
       fallbackText,
       normalizedDisplayParts,
       ...(metadata ? { metadata } : {}),
+      ...(matchedQueuedSend ? { matchedQueuedSend } : {}),
     });
     if (visible.trim().length > 0 || displayParts.length > 0) {
       persistUserMessageMetadata({
@@ -879,11 +900,13 @@ const handleMessagePartUpdatedEvent = (event: Event, runtime: EventStreamRuntime
     emitKnownUserMessage(runtime, {
       messageId,
       timestamp: metadata?.timestamp ?? runtime.now(),
+      visible,
+      displayParts,
       state: resolveLiveUserMessageState(runtime, {
         messageId,
         visible,
         parts: displayParts,
-        matchedQueuedSend: null,
+        matchedQueuedSend,
         ...(metadata?.model ? { model: metadata.model } : {}),
       }),
       ...(metadata?.model ? { model: metadata.model } : {}),

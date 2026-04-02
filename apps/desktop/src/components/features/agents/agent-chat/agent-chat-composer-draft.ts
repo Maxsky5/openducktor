@@ -198,7 +198,10 @@ export const normalizeComposerDraft = (draft: AgentChatComposerDraft): AgentChat
   }
 
   if (normalized.length === 0) {
-    return createEmptyComposerDraft();
+    return {
+      ...createEmptyComposerDraft(),
+      attachments: draft.attachments ?? [],
+    };
   }
 
   if (normalized[0]?.kind !== "text") {
@@ -500,9 +503,7 @@ export const draftHasMeaningfulContent = (draft: AgentChatComposerDraft): boolea
   });
 };
 
-export const draftHasSlashCommandSegment = (draft: AgentChatComposerDraft): boolean => {
-  return draft.segments.some((segment) => segment.kind === "slash_command");
-};
+export const draftHasSlashCommandSegment = hasExistingSlashCommandSegment;
 
 export const appendAttachmentsToDraft = (
   draft: AgentChatComposerDraft,

@@ -123,4 +123,30 @@ describe("AgentChatComposer attachments", () => {
       screen.getByRole("button", { name: "Send message" }).getAttribute("disabled"),
     ).not.toBeNull();
   });
+
+  test("ignores attachment intake while the composer is disabled", async () => {
+    const file = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
+    const { container } = render(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          isReadOnly: true,
+          readOnlyReason: "Read-only",
+        }}
+      />,
+    );
+
+    const attachmentInput = container.querySelector('input[type="file"]');
+    if (!(attachmentInput instanceof HTMLInputElement)) {
+      throw new Error("Expected hidden attachment input");
+    }
+
+    fireEvent.change(attachmentInput, {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTitle("brief.pdf")).toBeNull();
+    });
+  });
 });

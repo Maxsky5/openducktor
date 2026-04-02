@@ -3,6 +3,7 @@ import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import {
   type AgentChatComposerDraft,
+  createComposerAttachment,
   createTextSegment,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { clearAppQueryClient } from "@/lib/query-client";
@@ -27,6 +28,27 @@ const createTask = (overrides = {}) => createTaskCardFixture(overrides);
 const createComposerDraft = (text: string): AgentChatComposerDraft => ({
   segments: [createTextSegment(text)],
   attachments: [],
+});
+
+const createAttachmentDraft = (input: {
+  id: string;
+  name: string;
+  kind: "image" | "pdf";
+  mime: string;
+  path: string;
+}): AgentChatComposerDraft => ({
+  segments: [createTextSegment("please review")],
+  attachments: [
+    createComposerAttachment(
+      {
+        name: input.name,
+        kind: input.kind,
+        mime: input.mime,
+        path: input.path,
+      },
+      input.id,
+    ),
+  ],
 });
 
 const createSession = (overrides = {}) => createAgentSessionFixture(overrides);
@@ -553,7 +575,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.run(async (state) => {
       sendPromise = state.onSend(draft);
     });
-    await harness.waitFor(() => sendAgentMessage.mock.calls.length === 1);
+    await harness.waitFor(() => sendAgentMessage.mock.calls.length === 1, 1_000);
     expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
       { kind: "text", text: "  hello world  " },
     ]);
@@ -590,6 +612,106 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     expect(harness.getLatest().isSending).toBe(false);
+    await harness.unmount();
+  });
+
+  test("onSend allows path-backed attachments when the selected model descriptor supports them", async () => {
+    const sendAgentMessage = mock(async () => {});
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createSession({ sessionId: "session-existing" }),
+      selectedModelDescriptor: {
+        id: "openai/gpt-5",
+        providerId: "openai",
+        providerName: "OpenAI",
+        modelId: "gpt-5",
+        modelName: "GPT-5",
+        variants: ["default"],
+        contextWindow: 200_000,
+        outputLimit: 8_192,
+        attachmentSupport: {
+          image: false,
+          audio: false,
+          video: false,
+          pdf: true,
+        },
+      },
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await expect(
+        state.onSend(
+          createAttachmentDraft({
+            id: "pdf-attachment",
+            name: "brief.pdf",
+            kind: "pdf",
+            mime: "application/pdf",
+            path: "/tmp/brief.pdf",
+          }),
+        ),
+      ).resolves.toBe(true);
+    });
+
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+      { kind: "text", text: "please review" },
+      {
+        kind: "attachment",
+        attachment: {
+          id: "pdf-attachment",
+          name: "brief.pdf",
+          kind: "pdf",
+          mime: "application/pdf",
+          path: "/tmp/brief.pdf",
+        },
+      },
+    ]);
+
+    await harness.unmount();
+  });
+
+  test("onSend blocks path-backed attachments when the selected model descriptor rejects them", async () => {
+    const sendAgentMessage = mock(async () => {});
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createSession({ sessionId: "session-existing" }),
+      selectedModelDescriptor: {
+        id: "openai/gpt-5",
+        providerId: "openai",
+        providerName: "OpenAI",
+        modelId: "gpt-5",
+        modelName: "GPT-5",
+        variants: ["default"],
+        contextWindow: 200_000,
+        outputLimit: 8_192,
+        attachmentSupport: {
+          image: false,
+          audio: false,
+          video: false,
+          pdf: true,
+        },
+      },
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await expect(
+        state.onSend(
+          createAttachmentDraft({
+            id: "image-attachment",
+            name: "preview.png",
+            kind: "image",
+            mime: "image/png",
+            path: "/tmp/preview.png",
+          }),
+        ),
+      ).resolves.toBe(false);
+    });
+
+    expect(sendAgentMessage).not.toHaveBeenCalled();
+
     await harness.unmount();
   });
 

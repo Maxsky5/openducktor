@@ -460,6 +460,8 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const hasAttachmentMessages = useMemo(() => {
     return session?.messages.some(messageHasAttachmentDisplayParts) ?? false;
   }, [session]);
+  // Attachment-bearing sessions are kept fully materialized because staged turn reveal and
+  // containment can under-measure transcript height during hydration and break bottom pinning.
   const stagedTurns = useAgentChatTurnStaging({
     activeSessionId,
     windowStart,

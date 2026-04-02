@@ -5,10 +5,15 @@ import {
 } from "./agent-chat-composer-draft";
 
 const ATTACHMENT_EXTENSION_KIND: Record<string, AgentAttachmentKind> = {
+  ".avif": "image",
   ".png": "image",
   ".jpg": "image",
   ".jpeg": "image",
   ".gif": "image",
+  ".heic": "image",
+  ".heif": "image",
+  ".tif": "image",
+  ".tiff": "image",
   ".webp": "image",
   ".svg": "image",
   ".bmp": "image",
@@ -17,20 +22,29 @@ const ATTACHMENT_EXTENSION_KIND: Record<string, AgentAttachmentKind> = {
   ".m4a": "audio",
   ".aac": "audio",
   ".ogg": "audio",
+  ".oga": "audio",
+  ".opus": "audio",
   ".flac": "audio",
   ".mp4": "video",
+  ".m4v": "video",
   ".mov": "video",
   ".webm": "video",
+  ".ogv": "video",
   ".mkv": "video",
   ".avi": "video",
   ".pdf": "pdf",
 };
 
 const ATTACHMENT_EXTENSION_MIME: Record<string, string> = {
+  ".avif": "image/avif",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".gif": "image/gif",
+  ".heic": "image/heic",
+  ".heif": "image/heif",
+  ".tif": "image/tiff",
+  ".tiff": "image/tiff",
   ".webp": "image/webp",
   ".svg": "image/svg+xml",
   ".bmp": "image/bmp",
@@ -39,10 +53,14 @@ const ATTACHMENT_EXTENSION_MIME: Record<string, string> = {
   ".m4a": "audio/mp4",
   ".aac": "audio/aac",
   ".ogg": "audio/ogg",
+  ".oga": "audio/ogg",
+  ".opus": "audio/ogg",
   ".flac": "audio/flac",
   ".mp4": "video/mp4",
+  ".m4v": "video/x-m4v",
   ".mov": "video/quicktime",
   ".webm": "video/webm",
+  ".ogv": "video/ogg",
   ".mkv": "video/x-matroska",
   ".avi": "video/x-msvideo",
   ".pdf": "application/pdf",
@@ -109,13 +127,19 @@ export const buildComposerAttachmentFromFile = (file: File): AgentChatComposerAt
 
 export const buildComposerAttachmentFromPath = (
   path: string,
+  metadata?: Pick<AgentChatComposerAttachment, "kind" | "mime" | "name">,
 ): AgentChatComposerAttachment | null => {
-  const name = readAttachmentNameFromPath(path);
-  const kind = classifyAttachment({ name });
+  const name = metadata?.name ?? readAttachmentNameFromPath(path);
+  const kind =
+    metadata?.kind ??
+    classifyAttachment({
+      name,
+      ...(metadata?.mime ? { mime: metadata.mime } : {}),
+    });
   if (!kind) {
     return null;
   }
-  const mime = inferAttachmentMime(name);
+  const mime = inferAttachmentMime(name, metadata?.mime);
 
   return createComposerAttachment({
     name,

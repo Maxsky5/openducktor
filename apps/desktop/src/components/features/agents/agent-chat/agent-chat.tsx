@@ -39,6 +39,7 @@ export function AgentChat({
   const composerRef = useRef<AgentChatComposerHandle | null>(null);
   const dropTargetRef = useRef<HTMLDivElement | null>(null);
   const dragDepthRef = useRef(0);
+  const isDraggingFilesRef = useRef(false);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
 
   const handleDragEnter = useCallback((event: DragEvent): void => {
@@ -47,24 +48,21 @@ export function AgentChat({
     }
     event.preventDefault();
     dragDepthRef.current += 1;
+    isDraggingFilesRef.current = true;
     setIsDraggingFiles(true);
   }, []);
 
-  const handleDragOver = useCallback(
-    (event: DragEvent): void => {
-      if (!hasDraggedFiles(event.dataTransfer)) {
-        return;
-      }
-      event.preventDefault();
-      if (event.dataTransfer) {
-        event.dataTransfer.dropEffect = "copy";
-      }
-      if (!isDraggingFiles) {
-        setIsDraggingFiles(true);
-      }
-    },
-    [isDraggingFiles],
-  );
+  const handleDragOver = useCallback((event: DragEvent): void => {
+    if (!hasDraggedFiles(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+    isDraggingFilesRef.current = true;
+    setIsDraggingFiles(true);
+  }, []);
 
   const handleDragLeave = useCallback((event: DragEvent): void => {
     if (!hasDraggedFiles(event.dataTransfer)) {
@@ -73,6 +71,7 @@ export function AgentChat({
     event.preventDefault();
     dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
     if (dragDepthRef.current === 0) {
+      isDraggingFilesRef.current = false;
       setIsDraggingFiles(false);
     }
   }, []);
@@ -83,6 +82,7 @@ export function AgentChat({
     }
     event.preventDefault();
     dragDepthRef.current = 0;
+    isDraggingFilesRef.current = false;
     setIsDraggingFiles(false);
     const files = Array.from(event.dataTransfer?.files ?? []);
     if (files.length > 0) {
@@ -108,12 +108,31 @@ export function AgentChat({
     const onDrop = (event: DragEvent): void => {
       handleDrop(event);
     };
-    const onWindowDrop = (): void => {
+    const onWindowDragOver = (event: DragEvent): void => {
+      if (dragDepthRef.current === 0 && !isDraggingFilesRef.current) {
+        return;
+      }
+      if (!hasDraggedFiles(event.dataTransfer)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "copy";
+      }
+    };
+    const onWindowDrop = (event: DragEvent): void => {
+      if (hasDraggedFiles(event.dataTransfer)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
       dragDepthRef.current = 0;
+      isDraggingFilesRef.current = false;
       setIsDraggingFiles(false);
     };
     const onWindowDragEnd = (): void => {
       dragDepthRef.current = 0;
+      isDraggingFilesRef.current = false;
       setIsDraggingFiles(false);
     };
 
@@ -121,6 +140,7 @@ export function AgentChat({
     node.addEventListener("dragover", onDragOver);
     node.addEventListener("dragleave", onDragLeave);
     node.addEventListener("drop", onDrop);
+    window.addEventListener("dragover", onWindowDragOver);
     window.addEventListener("drop", onWindowDrop);
     window.addEventListener("dragend", onWindowDragEnd);
     return () => {
@@ -128,6 +148,7 @@ export function AgentChat({
       node.removeEventListener("dragover", onDragOver);
       node.removeEventListener("dragleave", onDragLeave);
       node.removeEventListener("drop", onDrop);
+      window.removeEventListener("dragover", onWindowDragOver);
       window.removeEventListener("drop", onWindowDrop);
       window.removeEventListener("dragend", onWindowDragEnd);
     };

@@ -49,8 +49,24 @@ export type AgentChatComposerHandle = {
   addFiles: (files: File[]) => void;
 };
 
+const truncateAttachmentDisplayName = (name: string, maxLength = 80): string => {
+  if (name.length <= maxLength) {
+    return name;
+  }
+  return `${name.slice(0, maxLength - 3)}...`;
+};
+
+const renderUnsupportedAttachmentDescription = (name: string): ReactElement => {
+  return (
+    <span>
+      <code>{truncateAttachmentDisplayName(name)}</code> is not an image, audio file, video, or PDF.
+    </span>
+  );
+};
+
 const AgentChatComposerControls = memo(function AgentChatComposerControls({
   onPickAttachments,
+  attachmentIntakeDisabled,
   selectedModelSelection,
   agentOptions,
   modelOptions,
@@ -72,6 +88,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   sendDisabled,
 }: {
   onPickAttachments: () => void;
+  attachmentIntakeDisabled: boolean;
   selectedModelSelection: AgentChatComposerModel["selectedModelSelection"];
   agentOptions: AgentChatComposerModel["agentOptions"];
   modelOptions: AgentChatComposerModel["modelOptions"];
@@ -101,6 +118,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
           variant="ghost"
           className="size-7 rounded-full border border-input bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
           aria-label="Add attachment"
+          disabled={attachmentIntakeDisabled}
           onClick={onPickAttachments}
         >
           <Paperclip className="size-3.5" />
@@ -248,6 +266,14 @@ export const AgentChatComposer = forwardRef<
   const latestSendDisabledRef = useRef(false);
   const latestOnSendRef = useRef(onSend);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const isSubmitting = (isSending && !isSessionWorking) || isStarting || isModelSelectionPending;
+  const isComposerInputDisabled =
+    !agentStudioReady ||
+    isReadOnly ||
+    isModelSelectionPending ||
+    isWaitingInput ||
+    Boolean(busySendBlockedReason);
+  const attachmentIntakeDisabled = isComposerInputDisabled || isSubmitting;
 
   useEffect(() => {
     void draftStateKey;
@@ -262,11 +288,15 @@ export const AgentChatComposer = forwardRef<
 
   const handleAddFiles = useCallback(
     (files: File[]): void => {
+      if (attachmentIntakeDisabled) {
+        return;
+      }
+
       const attachments = files.flatMap((file) => {
         const attachment = buildComposerAttachmentFromFile(file);
         if (!attachment) {
           toast.error("Unsupported attachment type", {
-            description: `${file.name} is not an image, audio file, video, or PDF.`,
+            description: renderUnsupportedAttachmentDescription(file.name),
           });
           return [];
         }
@@ -282,7 +312,7 @@ export const AgentChatComposer = forwardRef<
       });
       onComposerEditorInput();
     },
-    [onComposerEditorInput],
+    [attachmentIntakeDisabled, onComposerEditorInput],
   );
 
   useImperativeHandle(
@@ -294,8 +324,11 @@ export const AgentChatComposer = forwardRef<
   );
 
   const openAttachmentPicker = useCallback((): void => {
+    if (attachmentIntakeDisabled) {
+      return;
+    }
     attachmentInputRef.current?.click();
-  }, []);
+  }, [attachmentIntakeDisabled]);
 
   const attachmentErrors = useMemo(() => {
     return validateComposerAttachments(
@@ -324,7 +357,6 @@ export const AgentChatComposer = forwardRef<
   latestOnSendRef.current = onSend;
   latestSendDisabledRef.current = sendDisabled;
 
-  const isSubmitting = (isSending && !isSessionWorking) || isStarting || isModelSelectionPending;
   const selectorDisabled =
     !taskId || isSelectionCatalogLoading || isSubmitting || !agentStudioReady || isReadOnly;
 
@@ -387,7 +419,11 @@ export const AgentChatComposer = forwardRef<
         return;
       }
       scheduleComposerFocus();
-    } catch {
+    } catch (error) {
+      const description = error instanceof Error ? error.message : String(error);
+      toast.error("Unable to send message", {
+        description,
+      });
       setDraft((currentDraft) =>
         draftHasMeaningfulContent(currentDraft) ? currentDraft : submittedDraft,
       );
@@ -395,12 +431,6 @@ export const AgentChatComposer = forwardRef<
       scheduleComposerFocus();
     }
   }, [onComposerEditorInput, scheduleComposerFocus]);
-  const isComposerInputDisabled =
-    !agentStudioReady ||
-    isReadOnly ||
-    isModelSelectionPending ||
-    isWaitingInput ||
-    Boolean(busySendBlockedReason);
   let composerPlaceholder = "@ for files; / for commands; ! for shell";
   if (isReadOnly && readOnlyReason) {
     composerPlaceholder = readOnlyReason;
@@ -426,6 +456,7 @@ export const AgentChatComposer = forwardRef<
         type="file"
         multiple
         accept={CHAT_ATTACHMENT_ACCEPT}
+        disabled={attachmentIntakeDisabled}
         className="hidden"
         onChange={(event) => {
           const files = Array.from(event.target.files ?? []);
@@ -509,6 +540,7 @@ export const AgentChatComposer = forwardRef<
 
           <AgentChatComposerControls
             onPickAttachments={openAttachmentPicker}
+            attachmentIntakeDisabled={attachmentIntakeDisabled}
             selectedModelSelection={selectedModelSelection}
             agentOptions={agentOptions}
             modelOptions={modelOptions}

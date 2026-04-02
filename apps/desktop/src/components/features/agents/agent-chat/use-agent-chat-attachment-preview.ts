@@ -57,7 +57,9 @@ export const useAgentChatAttachmentPreview = ({
     };
   }, [attachment.file, previewable]);
 
-  latestPreviewSrcRef.current = resolvedPreviewSrc ?? objectPreviewUrl;
+  useEffect(() => {
+    latestPreviewSrcRef.current = resolvedPreviewSrc ?? objectPreviewUrl;
+  }, [objectPreviewUrl, resolvedPreviewSrc]);
 
   const markPreviewUnavailable: (failingSrc?: string) => void = useCallback(
     (failingSrc?: string) => {
@@ -120,6 +122,9 @@ export const useAgentChatAttachmentPreview = ({
   const showResolvedPreview = Boolean(resolvedPreviewSrc) && !previewError;
 
   const requestPreviewOpen = useCallback((): string | null => {
+    if (isResolvingPreview) {
+      return null;
+    }
     if (canOpenPreview) {
       setDialogOpen(true);
       return null;
@@ -129,7 +134,7 @@ export const useAgentChatAttachmentPreview = ({
       previewError ??
       "The attachment preview is not available because the local file could not be resolved."
     );
-  }, [canOpenPreview, previewError]);
+  }, [canOpenPreview, isResolvingPreview, previewError]);
 
   return {
     dialogOpen,

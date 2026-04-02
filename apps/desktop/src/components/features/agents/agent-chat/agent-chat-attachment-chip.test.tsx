@@ -38,10 +38,11 @@ describe("AgentChatAttachmentChip", () => {
     fireEvent.click(previewButton);
     await screen.findByText("Image preview");
 
-    const renderedImages = screen.getAllByAltText("preview.png");
-    const dialogImage = renderedImages[renderedImages.length - 1];
-    if (!dialogImage) {
-      throw new Error("Expected preview image in dialog");
+    const dialogImage = screen
+      .getAllByAltText("preview.png")
+      .find((image) => image.className.includes("object-contain"));
+    if (!(dialogImage instanceof HTMLElement)) {
+      throw new Error("Expected fullscreen preview image");
     }
     fireEvent.error(dialogImage);
 

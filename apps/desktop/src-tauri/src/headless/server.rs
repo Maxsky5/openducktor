@@ -18,6 +18,7 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio_util::io::ReaderStream;
 use tower_http::cors::CorsLayer;
 
 const DEFAULT_BROWSER_BACKEND_HOST: &str = "127.0.0.1";
@@ -146,16 +147,18 @@ async fn local_attachment_preview_handler(
         });
     }
 
-    let bytes = tokio::fs::read(&path).await.map_err(|error| HeadlessCommandError {
+    let file = tokio::fs::File::open(&path).await.map_err(|error| HeadlessCommandError {
         message: format!("Failed to read local attachment preview: {error}"),
         status: StatusCode::INTERNAL_SERVER_ERROR,
     })?;
     let mime = mime_guess::from_path(&path).first_or_octet_stream().to_string();
+    let stream = ReaderStream::new(file);
 
     Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, mime)
-        .body(axum::body::Body::from(bytes))
+        .header(header::CACHE_CONTROL, "no-store, private")
+        .body(axum::body::Body::from_stream(stream))
         .map_err(|error| HeadlessCommandError {
             message: format!("Failed to build local attachment preview response: {error}"),
             status: StatusCode::INTERNAL_SERVER_ERROR,
@@ -212,7 +215,7 @@ mod tests {
     use crate::commands::workspace::stage_local_attachment_to_temp;
     use axum::body::{to_bytes, Body};
     use axum::extract::FromRequest;
-    use axum::http::header::CONTENT_TYPE;
+    use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
     use axum::http::Request;
     use host_application::AppService;
     use host_domain::TaskStore;
@@ -310,6 +313,10 @@ mod tests {
         assert_eq!(
             response.headers().get(CONTENT_TYPE),
             Some(&HeaderValue::from_static("image/png"))
+        );
+        assert_eq!(
+            response.headers().get(CACHE_CONTROL),
+            Some(&HeaderValue::from_static("no-store, private"))
         );
         let body = to_bytes(response.into_body(), usize::MAX)
             .await

@@ -8,6 +8,7 @@ use host_application::{
     RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate,
 };
 use host_infra_system::HookSet;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 #[cfg(test)]
 use tauri::Manager;
@@ -28,6 +29,7 @@ pub struct ResolvedLocalAttachmentPayload {
 }
 
 const LOCAL_ATTACHMENT_STAGE_DIR_NAME: &str = "openducktor-local-attachments";
+const MAX_ATTACHMENT_LOOKUP_DISPLAY_LEN: usize = 128;
 
 pub(crate) fn local_attachment_stage_dir() -> PathBuf {
     std::env::temp_dir().join(LOCAL_ATTACHMENT_STAGE_DIR_NAME)
@@ -50,7 +52,8 @@ fn sanitize_attachment_filename(name: &str) -> String {
     let sanitized = name
         .chars()
         .map(|character| match character {
-            '/' | '\\' | ':' | '\0' => '_',
+            '/' | '\\' | ':' | '\0' | '*' | '?' | '"' | '<' | '>' | '|' | '%' => '_',
+            character if character.is_control() => '_',
             _ => character,
         })
         .collect::<String>();
@@ -60,6 +63,45 @@ fn sanitize_attachment_filename(name: &str) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+fn sanitize_attachment_lookup_token(path_or_name: &str) -> Result<String, String> {
+    let trimmed = path_or_name.trim();
+    if trimmed.is_empty() {
+        return Err("Attachment path is required.".to_string());
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed == "." || trimmed == ".." {
+        return Err("Attachment path must be a staged attachment filename token.".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
+fn format_attachment_lookup_display_name(token: &str) -> String {
+    let sanitized = token
+        .chars()
+        .map(|character| if character.is_control() { '_' } else { character })
+        .collect::<String>();
+    if sanitized.len() <= MAX_ATTACHMENT_LOOKUP_DISPLAY_LEN {
+        return sanitized;
+    }
+
+    let end = MAX_ATTACHMENT_LOOKUP_DISPLAY_LEN.saturating_sub(3);
+    format!("{}...", &sanitized[..end])
+}
+
+fn read_staged_attachment_original_name(path: &Path) -> Option<String> {
+    let name = path.file_name()?.to_str()?;
+    if name.len() <= 37 {
+        return Some(name.to_string());
+    }
+
+    let separator_index = name.char_indices().nth(36)?.0;
+    let (uuid_prefix, rest) = name.split_at(separator_index);
+    if !rest.starts_with('-') || Uuid::parse_str(uuid_prefix).is_err() {
+        return Some(name.to_string());
+    }
+
+    Some(rest[1..].to_string())
 }
 
 pub(crate) fn stage_local_attachment_to_temp(name: &str, base64_data: &str) -> Result<PathBuf, String> {
@@ -94,24 +136,33 @@ pub(crate) fn resolve_staged_local_attachment_path(path_or_name: &str) -> Result
         return Err("Attachment path is not a staged local attachment.".to_string());
     }
 
+    let lookup_token = sanitize_attachment_lookup_token(trimmed)?;
+    let display_name = format_attachment_lookup_display_name(&lookup_token);
+
     let attachment_dir = local_attachment_stage_dir();
-    let entries = std::fs::read_dir(&attachment_dir)
-        .map_err(|error| format!("Failed to read attachment staging directory: {error}"))?;
-    let suffix = format!("-{trimmed}");
+    let entries = match std::fs::read_dir(&attachment_dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            return Err(format!("No staged local attachment matches '{display_name}'."))
+        }
+        Err(error) => {
+            return Err(format!("Failed to read attachment staging directory: {error}"))
+        }
+    };
     let mut matches = Vec::new();
     for entry in entries {
         let entry = entry.map_err(|error| format!("Failed to read staged attachment entry: {error}"))?;
         let path = entry.path();
-        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+        let Some(name) = read_staged_attachment_original_name(&path) else {
             continue;
         };
-        if name == trimmed || name.ends_with(&suffix) {
+        if name == lookup_token {
             matches.push(path);
         }
     }
 
     match matches.len() {
-        0 => Err(format!("No staged local attachment matches '{trimmed}'.")),
+        0 => Err(format!("No staged local attachment matches '{display_name}'.")),
         1 => Ok(matches.remove(0)),
         _ => {
             let mut ranked_matches = matches
@@ -128,7 +179,7 @@ pub(crate) fn resolve_staged_local_attachment_path(path_or_name: &str) -> Result
                 .into_iter()
                 .map(|(_, path)| path)
                 .next()
-                .ok_or_else(|| format!("No staged local attachment matches '{trimmed}'."))
+                .ok_or_else(|| format!("No staged local attachment matches '{display_name}'."))
         }
     }
 }
@@ -171,7 +222,12 @@ pub async fn workspace_stage_local_attachment(
         return Err("Attachment payload is required.".to_string());
     }
 
-    let path = stage_local_attachment_to_temp(&name, &base64_data)?;
+    let path = as_error(
+        run_service_blocking("workspace_stage_local_attachment", move || {
+            stage_local_attachment_to_temp(&name, &base64_data).map_err(anyhow::Error::msg)
+        })
+        .await,
+    )?;
     Ok(StagedLocalAttachmentPayload {
         path: path.to_string_lossy().into_owned(),
     })
@@ -181,7 +237,12 @@ pub async fn workspace_stage_local_attachment(
 pub async fn workspace_resolve_local_attachment_path(
     path: String,
 ) -> Result<ResolvedLocalAttachmentPayload, String> {
-    let resolved = resolve_staged_local_attachment_path(&path)?;
+    let resolved = as_error(
+        run_service_blocking("workspace_resolve_local_attachment_path", move || {
+            resolve_staged_local_attachment_path(&path).map_err(anyhow::Error::msg)
+        })
+        .await,
+    )?;
     Ok(ResolvedLocalAttachmentPayload {
         path: resolved.to_string_lossy().into_owned(),
     })
@@ -621,6 +682,29 @@ mod tests {
         assert_eq!(resolved, newer);
         let _ = fs::remove_file(older);
         let _ = fs::remove_file(newer);
+    }
+
+    #[test]
+    fn resolve_staged_local_attachment_path_does_not_match_broader_suffixes() {
+        let target_name = format!(
+            "notes-{}.pdf",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock should be after unix epoch")
+                .as_nanos()
+        );
+        let broader_name = format!("meeting-{target_name}");
+        let broader = stage_local_attachment_to_temp(&broader_name, "YnJvYWRlcg==")
+            .expect("broader attachment should stage");
+
+        let error = resolve_staged_local_attachment_path(&target_name)
+            .expect_err("suffix-only match should not resolve");
+
+        assert_eq!(
+            error,
+            format!("No staged local attachment matches '{target_name}'.")
+        );
+        let _ = fs::remove_file(broader);
     }
 
     fn run_git(args: &[&str], cwd: &Path) {
