@@ -154,7 +154,7 @@ impl CachedOpencodeSessionStatusProbeOutcome {
     }
 }
 
-pub(crate) fn is_unreachable_opencode_session_status_error(error: &anyhow::Error) -> bool {
+fn is_unreachable_opencode_session_status_error(error: &anyhow::Error) -> bool {
     error.chain().any(|cause| {
         cause
             .downcast_ref::<std::io::Error>()
@@ -281,14 +281,15 @@ fn extract_http_response_body(response: &str) -> String {
         .unwrap_or_default()
 }
 
-fn collect_unique_probe_targets(
-    targets: &[OpencodeSessionStatusProbeTarget],
-) -> Vec<OpencodeSessionStatusProbeTarget> {
+pub(crate) fn dedupe_probe_targets<I>(targets: I) -> Vec<OpencodeSessionStatusProbeTarget>
+where
+    I: IntoIterator<Item = OpencodeSessionStatusProbeTarget>,
+{
     let mut unique_targets = Vec::new();
     let mut seen = HashSet::new();
     for target in targets {
         if seen.insert(target.clone()) {
-            unique_targets.push(target.clone());
+            unique_targets.push(target);
         }
     }
     unique_targets
@@ -296,12 +297,13 @@ fn collect_unique_probe_targets(
 
 impl AppService {
     pub(super) const OPENCODE_SESSION_STATUS_CACHE_TTL: Duration = Duration::from_secs(1);
+    const OPENCODE_SESSION_STATUS_BATCH_WORKER_LIMIT: usize = 16;
 
     pub(super) fn load_cached_opencode_session_statuses_for_targets(
         &self,
         targets: &[OpencodeSessionStatusProbeTarget],
     ) -> Result<HashMap<OpencodeSessionStatusProbeTarget, OpencodeSessionStatusMap>> {
-        let unique_targets = collect_unique_probe_targets(targets);
+        let unique_targets = dedupe_probe_targets(targets.iter().cloned());
 
         if unique_targets.is_empty() {
             return Ok(HashMap::new());
@@ -315,19 +317,21 @@ impl AppService {
         unique_targets: Vec<OpencodeSessionStatusProbeTarget>,
     ) -> Result<HashMap<OpencodeSessionStatusProbeTarget, OpencodeSessionStatusMap>> {
         let worker_count = unique_targets.len().min(
-            self.opencode_session_status_probe_limiter
-                .max_concurrent
-                .max(1),
+            Self::OPENCODE_SESSION_STATUS_BATCH_WORKER_LIMIT.max(
+                self.opencode_session_status_probe_limiter
+                    .max_concurrent
+                    .max(1),
+            ),
         );
-        let queue = Arc::new(Mutex::new(VecDeque::from(unique_targets)));
-        let results = Arc::new(Mutex::new(HashMap::new()));
+        let queue = Mutex::new(VecDeque::from(unique_targets));
+        let results = Mutex::new(HashMap::new());
 
         thread::scope(|scope| -> Result<()> {
             let mut handles = Vec::new();
             for _ in 0..worker_count {
                 let service = self;
-                let queue = Arc::clone(&queue);
-                let results = Arc::clone(&results);
+                let queue = &queue;
+                let results = &results;
                 handles.push(scope.spawn(move || -> Result<()> {
                     loop {
                         let target = {
@@ -362,9 +366,11 @@ impl AppService {
         let results = results
             .lock()
             .map_err(|_| anyhow!("OpenCode session status batch results lock poisoned"))?;
-        Ok(results.clone())
+        let mut results = results;
+        Ok(std::mem::take(&mut *results))
     }
 
+    #[cfg(test)]
     fn load_cached_opencode_session_statuses_for_target(
         &self,
         target: &OpencodeSessionStatusProbeTarget,
@@ -419,17 +425,15 @@ impl AppService {
         &self,
         target: &OpencodeSessionStatusProbeTarget,
     ) -> Result<Option<CachedOpencodeSessionStatusProbeOutcome>> {
+        let now = Instant::now();
         let mut cache = self
             .opencode_session_status_cache
             .lock()
             .map_err(|_| anyhow!("OpenCode session status cache lock poisoned"))?;
+        Self::prune_expired_opencode_session_status_cache(&mut cache, now);
         if let Some(entry) = cache.get(target) {
-            if entry.checked_at.elapsed() <= Self::OPENCODE_SESSION_STATUS_CACHE_TTL {
-                return Ok(Some(entry.outcome.clone()));
-            }
+            return Ok(Some(entry.outcome.clone()));
         }
-
-        cache.remove(target);
         Ok(None)
     }
 
@@ -438,18 +442,29 @@ impl AppService {
         target: &OpencodeSessionStatusProbeTarget,
         outcome: &CachedOpencodeSessionStatusProbeOutcome,
     ) -> Result<()> {
+        let now = Instant::now();
         let mut cache = self
             .opencode_session_status_cache
             .lock()
             .map_err(|_| anyhow!("OpenCode session status cache lock poisoned"))?;
+        Self::prune_expired_opencode_session_status_cache(&mut cache, now);
         cache.insert(
             target.clone(),
             CachedOpencodeSessionStatusProbe {
-                checked_at: Instant::now(),
+                checked_at: now,
                 outcome: outcome.clone(),
             },
         );
         Ok(())
+    }
+
+    fn prune_expired_opencode_session_status_cache(
+        cache: &mut HashMap<OpencodeSessionStatusProbeTarget, CachedOpencodeSessionStatusProbe>,
+        now: Instant,
+    ) {
+        cache.retain(|_, entry| {
+            now.duration_since(entry.checked_at) <= Self::OPENCODE_SESSION_STATUS_CACHE_TTL
+        });
     }
 
     fn acquire_opencode_session_status_flight(
@@ -553,8 +568,8 @@ impl AppService {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppService, CachedOpencodeSessionStatusProbeOutcome, OpencodeSessionStatus,
-        OpencodeSessionStatusFlightGuard, OpencodeSessionStatusMap,
+        AppService, CachedOpencodeSessionStatusProbe, CachedOpencodeSessionStatusProbeOutcome,
+        OpencodeSessionStatus, OpencodeSessionStatusFlightGuard, OpencodeSessionStatusMap,
         OpencodeSessionStatusProbeTarget, has_live_opencode_session_status,
         load_opencode_session_statuses,
     };
@@ -686,6 +701,56 @@ mod tests {
             .expect("status server thread should finish");
 
         assert_eq!(connections.load(Ordering::SeqCst), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn cached_probe_prunes_expired_entries_for_other_targets() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let (port, _connections, server_handle) = spawn_counting_status_server(
+            1,
+            Duration::ZERO,
+            Ok(r#"{"external-build-session":{"type":"busy"}}"#.to_string()),
+        )?;
+        let live_target = OpencodeSessionStatusProbeTarget::for_runtime_route(
+            &AgentRuntimeKind::Opencode.route_for_port(port),
+            "/tmp/repo-live",
+        );
+        let stale_target = OpencodeSessionStatusProbeTarget::for_runtime_route(
+            &AgentRuntimeKind::Opencode.route_for_port(9999),
+            "/tmp/repo-stale",
+        );
+
+        {
+            let mut cache = service
+                .opencode_session_status_cache
+                .lock()
+                .expect("status cache lock should be available");
+            cache.insert(
+                stale_target.clone(),
+                CachedOpencodeSessionStatusProbe {
+                    checked_at: Instant::now()
+                        - AppService::OPENCODE_SESSION_STATUS_CACHE_TTL
+                        - Duration::from_millis(10),
+                    outcome: CachedOpencodeSessionStatusProbeOutcome::Statuses(
+                        OpencodeSessionStatusMap::new(),
+                    ),
+                },
+            );
+        }
+
+        let statuses = service.load_cached_opencode_session_statuses_for_target(&live_target)?;
+        server_handle
+            .join()
+            .expect("status server thread should finish");
+
+        assert!(statuses.contains_key("external-build-session"));
+        let cache = service
+            .opencode_session_status_cache
+            .lock()
+            .expect("status cache lock should be available");
+        assert!(!cache.contains_key(&stale_target));
+        assert!(cache.contains_key(&live_target));
         Ok(())
     }
 

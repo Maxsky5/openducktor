@@ -1,6 +1,7 @@
 use super::cleanup_plans::{normalize_path_for_comparison, normalize_path_key};
 use crate::app_service::{
-    OpencodeSessionStatusMap, OpencodeSessionStatusProbeTarget, has_live_opencode_session_status,
+    OpencodeSessionStatusMap, OpencodeSessionStatusProbeTarget,
+    dedupe_opencode_session_status_probe_targets, has_live_opencode_session_status,
     service_core::AppService,
 };
 use anyhow::{Context, Result, anyhow};
@@ -496,14 +497,7 @@ fn select_fallback_probe_target(
 fn dedupe_probe_targets(
     targets: Vec<OpencodeSessionStatusProbeTarget>,
 ) -> Vec<OpencodeSessionStatusProbeTarget> {
-    let mut unique_targets = Vec::new();
-    let mut seen = HashSet::new();
-    for target in targets {
-        if seen.insert(target.clone()) {
-            unique_targets.push(target);
-        }
-    }
-    unique_targets
+    dedupe_opencode_session_status_probe_targets(targets)
 }
 
 fn parse_runtime_kind(value: &str) -> Option<AgentRuntimeKind> {

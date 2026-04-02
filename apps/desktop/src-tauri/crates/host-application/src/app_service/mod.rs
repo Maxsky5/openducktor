@@ -46,7 +46,9 @@ pub(crate) use opencode_runtime::{
     terminate_process_by_pid, wait_for_local_server_with_process, wait_for_process_exit_by_pid,
 };
 pub(crate) use opencode_session_status::{
-    OpencodeSessionStatusMap, OpencodeSessionStatusProbeTarget, has_live_opencode_session_status,
+    OpencodeSessionStatusMap, OpencodeSessionStatusProbeTarget,
+    dedupe_probe_targets as dedupe_opencode_session_status_probe_targets,
+    has_live_opencode_session_status,
 };
 pub(crate) use process_registry::TrackedOpencodeProcessGuard;
 #[cfg(test)]
