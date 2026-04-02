@@ -764,6 +764,112 @@ describe("agent-orchestrator-session-events", () => {
     expect(assistantMessage?.content).toBe("Hello world");
   });
 
+  test("prefers final assistant message over earlier streamed text in the same batch", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ status: "running", role: "build" }),
+      },
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      eventBatchWindowMs: 25,
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_delta",
+      sessionId: "session-1",
+      channel: "text",
+      messageId: "assistant-1",
+      delta: "Draft",
+      timestamp: "2026-02-22T08:00:01.000Z",
+    });
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.000Z",
+      part: {
+        kind: "text",
+        messageId: "assistant-1",
+        partId: "text-1",
+        text: "Draft refined",
+        completed: false,
+      },
+    });
+    handleEvent({
+      type: "assistant_message",
+      sessionId: "session-1",
+      messageId: "assistant-1",
+      timestamp: "2026-02-22T08:00:03.000Z",
+      message: "Final answer",
+      totalTokens: 321,
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+    });
+    handleEvent({
+      type: "user_message",
+      sessionId: "session-1",
+      messageId: "user-1",
+      timestamp: "2026-02-22T08:00:04.000Z",
+      message: "Continue",
+      parts: [{ kind: "text", text: "Continue" }],
+      state: "read",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+    });
+
+    const assistantMessage = sessionsRef.current["session-1"]?.messages.find(
+      (message) => message.id === "assistant-1",
+    );
+    expect(assistantMessage?.content).toBe("Final answer");
+  });
+
   test("auto-rejects mutating permissions for read-only roles", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const replyPermission = mock(

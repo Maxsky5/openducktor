@@ -12,6 +12,7 @@ import { AgentChatComposer, type AgentChatComposerHandle } from "./agent-chat-co
 import { AgentChatThread } from "./agent-chat-thread";
 
 const MemoizedAgentChatThread = memo(AgentChatThread);
+const MemoizedAgentChatComposer = memo(AgentChatComposer);
 
 const hasDraggedFiles = (dataTransfer: DataTransfer | null | undefined): boolean => {
   if (!dataTransfer) {
@@ -174,7 +175,7 @@ export function AgentChat({
             </div>
           ) : null}
           <MemoizedAgentChatThread model={model.thread} />
-          <AgentChatComposer ref={composerRef} model={model.composer} />
+          <MemoizedAgentChatComposer ref={composerRef} model={model.composer} />
         </div>
       </div>
     </div>

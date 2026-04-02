@@ -54,11 +54,39 @@ const queuedEventKey = (event: SessionEvent): string | null => {
   }
 };
 
+const removeSupersededQueuedEvents = (merged: SessionEvent[], event: SessionEvent): void => {
+  if (event.type !== "assistant_message") {
+    return;
+  }
+
+  for (let index = merged.length - 1; index >= 0; index -= 1) {
+    const candidate = merged[index];
+    if (!candidate) {
+      continue;
+    }
+
+    if (candidate.type === "assistant_delta" && candidate.messageId === event.messageId) {
+      merged.splice(index, 1);
+      continue;
+    }
+
+    if (
+      candidate.type === "assistant_part" &&
+      candidate.part.messageId === event.messageId &&
+      candidate.part.kind === "text"
+    ) {
+      merged.splice(index, 1);
+    }
+  }
+};
+
 const mergeQueuedEvents = (events: SessionEvent[]): SessionEvent[] => {
   const merged: SessionEvent[] = [];
   const eventIndexByKey = new Map<string, number>();
 
   for (const event of events) {
+    removeSupersededQueuedEvents(merged, event);
+
     const key = queuedEventKey(event);
     if (!key) {
       merged.push(event);
