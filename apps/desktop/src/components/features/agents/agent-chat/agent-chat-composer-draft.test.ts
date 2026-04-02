@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   type AgentChatComposerDraft,
   applyComposerDraftEdit,
+  createComposerAttachment,
   createFileReferenceSegment,
   createSlashCommandSegment,
   createTextSegment,
@@ -29,6 +30,7 @@ describe("applyComposerDraftEdit", () => {
   test("inserts a newline into a text segment and returns a focus target", () => {
     const draft: AgentChatComposerDraft = {
       segments: [createTextSegment("hello world", "text-1")],
+      attachments: [],
     };
 
     const result = applyComposerDraftEdit(draft, {
@@ -40,6 +42,7 @@ describe("applyComposerDraftEdit", () => {
     expect(result).toEqual({
       draft: {
         segments: [expect.objectContaining({ id: "text-1", kind: "text", text: "hello\n world" })],
+        attachments: [],
       },
       focusTarget: {
         segmentId: "text-1",
@@ -55,6 +58,7 @@ describe("applyComposerDraftEdit", () => {
         createSlashCommandSegment(COMMAND, "slash-1"),
         createTextSegment(" after", "text-after"),
       ],
+      attachments: [],
     };
 
     const result = applyComposerDraftEdit(draft, {
@@ -67,6 +71,7 @@ describe("applyComposerDraftEdit", () => {
         segments: [
           expect.objectContaining({ id: "text-before", kind: "text", text: "before  after" }),
         ],
+        attachments: [],
       },
       focusTarget: {
         segmentId: "text-before",
@@ -78,6 +83,7 @@ describe("applyComposerDraftEdit", () => {
   test("only exposes slash autocomplete at the beginning of the draft", () => {
     const draft: AgentChatComposerDraft = {
       segments: [createTextSegment("hello /compact", "text-1")],
+      attachments: [],
     };
 
     expect(readSlashTriggerMatchForDraft(draft, "text-1", 14)).toBeNull();
@@ -90,6 +96,7 @@ describe("applyComposerDraftEdit", () => {
         createSlashCommandSegment(COMMAND, "slash-1"),
         createTextSegment("/compact", "text-2"),
       ],
+      attachments: [],
     };
 
     expect(readSlashTriggerMatchForDraft(draft, "text-2", 8)).toBeNull();
@@ -102,6 +109,7 @@ describe("applyComposerDraftEdit", () => {
         createFileReferenceSegment(FILE, "file-1"),
         createTextSegment(" /compact", "text-2"),
       ],
+      attachments: [],
     };
 
     expect(readSlashTriggerMatchForDraft(draft, "text-2", 9)).toBeNull();
@@ -114,6 +122,7 @@ describe("applyComposerDraftEdit", () => {
         createFileReferenceSegment(FILE, "file-1"),
         createTextSegment("/compact", "text-2"),
       ],
+      attachments: [],
     };
 
     const result = applyComposerDraftEdit(draft, {
@@ -130,6 +139,7 @@ describe("applyComposerDraftEdit", () => {
   test("replaces an @query range with a file reference chip", () => {
     const draft: AgentChatComposerDraft = {
       segments: [createTextSegment("see @src/ma now", "text-1")],
+      attachments: [],
     };
 
     const result = applyComposerDraftEdit(draft, {
@@ -147,6 +157,7 @@ describe("applyComposerDraftEdit", () => {
           expect.objectContaining({ kind: "file_reference", file: FILE }),
           expect.objectContaining({ kind: "text", text: " now" }),
         ],
+        attachments: [],
       },
       focusTarget: {
         segmentId: expect.any(String),
@@ -162,6 +173,7 @@ describe("applyComposerDraftEdit", () => {
         createFileReferenceSegment(FILE, "file-1"),
         createTextSegment(" after", "text-after"),
       ],
+      attachments: [],
     };
 
     const result = applyComposerDraftEdit(draft, {
@@ -174,6 +186,7 @@ describe("applyComposerDraftEdit", () => {
         segments: [
           expect.objectContaining({ id: "text-before", kind: "text", text: "before  after" }),
         ],
+        attachments: [],
       },
       focusTarget: {
         segmentId: "text-before",
@@ -189,6 +202,7 @@ describe("applyComposerDraftEdit", () => {
         createFileReferenceSegment(FILE, "file-1"),
         createTextSegment(" after", "text-after"),
       ],
+      attachments: [],
     };
 
     expect(normalizeComposerDraft(draft)).toEqual({
@@ -197,6 +211,29 @@ describe("applyComposerDraftEdit", () => {
         expect.objectContaining({ id: "file-1", kind: "file_reference", file: FILE }),
         expect.objectContaining({ id: "text-after", kind: "text", text: " after" }),
       ],
+      attachments: [],
+    });
+  });
+
+  test("preserves attachments when normalizing an empty segment list", () => {
+    const attachment = createComposerAttachment(
+      {
+        name: "brief.pdf",
+        kind: "pdf",
+        mime: "application/pdf",
+        path: "/tmp/brief.pdf",
+      },
+      "attachment-1",
+    );
+
+    expect(
+      normalizeComposerDraft({
+        segments: [],
+        attachments: [attachment],
+      }),
+    ).toEqual({
+      segments: [expect.objectContaining({ kind: "text", text: "" })],
+      attachments: [attachment],
     });
   });
 
@@ -225,6 +262,7 @@ describe("applyComposerDraftEdit", () => {
         ),
         createTextSegment("are consistent?", "text-after"),
       ],
+      attachments: [],
     };
 
     expect(draftToSerializedText(draft)).toBe(
@@ -235,6 +273,7 @@ describe("applyComposerDraftEdit", () => {
   test("exposes file autocomplete in the middle of draft text", () => {
     const draft: AgentChatComposerDraft = {
       segments: [createTextSegment("hello @src/ma world", "text-1")],
+      attachments: [],
     };
 
     expect(readFileTriggerMatchForDraft(draft, "text-1", 13)).toEqual({
@@ -247,6 +286,7 @@ describe("applyComposerDraftEdit", () => {
   test("does not expose file autocomplete inside email-like text", () => {
     const draft: AgentChatComposerDraft = {
       segments: [createTextSegment("hello user@example.com", "text-1")],
+      attachments: [],
     };
 
     expect(readFileTriggerMatchForDraft(draft, "text-1", 18)).toBeNull();

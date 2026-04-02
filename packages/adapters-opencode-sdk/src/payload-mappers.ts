@@ -2,6 +2,8 @@ import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { asUnknownRecord, readArrayProp, readRecordProp, readUnknownProp } from "./guards";
 
+const ATTACHMENT_MODALITIES = ["image", "audio", "video", "pdf"] as const;
+
 const toFiniteNumber = (value: unknown): number | null => {
   if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value)) {
     return null;
@@ -67,6 +69,47 @@ export const toToolIdList = (payload: unknown): string[] => {
     .filter((entry) => entry.length > 0 && entry !== "invalid");
 };
 
+const normalizeModelAttachmentSupport = (
+  modelRecord: Record<string, unknown>,
+):
+  | {
+      image: boolean;
+      audio: boolean;
+      video: boolean;
+      pdf: boolean;
+    }
+  | undefined => {
+  const capabilities = readRecordProp(modelRecord, "capabilities");
+  const capabilitiesInput = capabilities ? readRecordProp(capabilities, "input") : undefined;
+  if (capabilities && capabilitiesInput) {
+    return {
+      image: readUnknownProp(capabilitiesInput, "image") === true,
+      audio: readUnknownProp(capabilitiesInput, "audio") === true,
+      video: readUnknownProp(capabilitiesInput, "video") === true,
+      pdf: readUnknownProp(capabilitiesInput, "pdf") === true,
+    };
+  }
+
+  const modalities = readRecordProp(modelRecord, "modalities");
+  const modalitiesInput = modalities ? readArrayProp(modalities, "input") : undefined;
+  if (modalitiesInput) {
+    const supported = new Set(
+      modalitiesInput.filter(
+        (entry): entry is (typeof ATTACHMENT_MODALITIES)[number] =>
+          typeof entry === "string" && ATTACHMENT_MODALITIES.includes(entry as never),
+      ),
+    );
+    return {
+      image: supported.has("image"),
+      audio: supported.has("audio"),
+      video: supported.has("video"),
+      pdf: supported.has("pdf"),
+    };
+  }
+
+  return undefined;
+};
+
 export const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog => {
   const payloadRecord = asUnknownRecord(payload);
   if (!payloadRecord) {
@@ -115,6 +158,7 @@ export const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog =>
         const contextWindow = limitRaw ? (toFiniteNumber(contextRaw) ?? undefined) : undefined;
         const outputLimit = limitRaw ? (toFiniteNumber(outputRaw) ?? undefined) : undefined;
         const variants = variantsRaw ? Object.keys(variantsRaw) : [];
+        const attachmentSupport = normalizeModelAttachmentSupport(modelRecord);
 
         return {
           id: `${providerId}/${modelId}`,
@@ -125,6 +169,7 @@ export const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog =>
           variants,
           ...(typeof contextWindow === "number" ? { contextWindow } : {}),
           ...(typeof outputLimit === "number" ? { outputLimit } : {}),
+          ...(attachmentSupport ? { attachmentSupport } : {}),
         };
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null);

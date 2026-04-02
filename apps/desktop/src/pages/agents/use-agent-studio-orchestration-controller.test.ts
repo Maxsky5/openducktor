@@ -83,6 +83,7 @@ const baseArgs: BuildArgs = {
   },
   modelSelection: {
     selectedModelSelection: null,
+    selectedModelDescriptor: null,
     isSelectionCatalogLoading: false,
     supportsSlashCommands: true,
     supportsFileSearch: true,

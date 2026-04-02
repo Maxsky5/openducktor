@@ -4,6 +4,7 @@ import type {
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
   AgentStreamPart,
+  AgentUserMessageDisplayPart,
   ReplyPermissionInput,
   ReplyQuestionInput,
 } from "@openducktor/core";
@@ -11,6 +12,7 @@ import { unwrapData } from "./data-utils";
 import {
   ensureVisibleUserTextDisplayParts,
   extractMessageTotalTokens,
+  mergePreservedAttachmentDisplayParts,
   normalizeUserMessageDisplayParts,
   readMessageModelSelection,
   readTextFromMessageInfo,
@@ -158,6 +160,7 @@ export const loadSessionHistory = async (
     workingDirectory: string;
     externalSessionId: string;
     limit?: number;
+    preservedDisplayPartsByMessageId?: Map<string, AgentUserMessageDisplayPart[]>;
   },
 ): Promise<AgentSessionHistoryMessage[]> => {
   const client = createClient({
@@ -176,7 +179,15 @@ export const loadSessionHistory = async (
       const displayParts =
         entry.info.role === "user"
           ? ensureVisibleUserTextDisplayParts(
-              normalizeUserMessageDisplayParts(entry.parts),
+              mergePreservedAttachmentDisplayParts(
+                normalizeUserMessageDisplayParts(entry.parts),
+                input.preservedDisplayPartsByMessageId
+                  ?.get(entry.info.id)
+                  ?.filter(
+                    (part): part is Extract<AgentUserMessageDisplayPart, { kind: "attachment" }> =>
+                      part.kind === "attachment",
+                  ) ?? [],
+              ),
               infoText,
             )
           : [];

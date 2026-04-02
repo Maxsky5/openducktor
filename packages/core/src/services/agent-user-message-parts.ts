@@ -5,14 +5,17 @@ import type {
 
 const WORDLIKE_TEXT_START_PATTERN = /[\p{L}\p{N}_]/u;
 
-const serializeAgentUserMessagePart = (part: AgentUserMessagePart): string => {
+const serializeAgentUserMessagePart = (part: AgentUserMessagePart): string | null => {
   if (part.kind === "text") {
     return part.text;
   }
   if (part.kind === "slash_command") {
     return `/${part.command.trigger}`;
   }
-  return `@${part.file.path}`;
+  if (part.kind === "file_reference") {
+    return `@${part.file.path}`;
+  }
+  return null;
 };
 
 const shouldInsertSyntheticSpaceBeforePart = (
@@ -42,6 +45,20 @@ const trimBoundaryTextPart = (
     ...part,
     text: edge === "start" ? part.text.trimStart() : part.text.trimEnd(),
   };
+};
+
+const collapseLeadingWhitespaceAfterSkippedPart = (
+  existingText: string,
+  nextText: string,
+  skippedStructuredPart: boolean,
+): string => {
+  if (!skippedStructuredPart) {
+    return nextText;
+  }
+  if (!/\s$/u.test(existingText)) {
+    return nextText;
+  }
+  return nextText.replace(/^\s+/u, "");
 };
 
 export const normalizeAgentUserMessageParts = (
@@ -85,13 +102,23 @@ export const serializeAgentUserMessagePartsToText = (parts: AgentUserMessagePart
   const normalized = normalizeAgentUserMessageParts(parts);
   let text = "";
   let previousPart: AgentUserMessagePart | null = null;
+  let skippedStructuredPart = false;
 
   for (const part of normalized) {
     if (shouldInsertSyntheticSpaceBeforePart(previousPart, part)) {
       text += " ";
     }
-    text += serializeAgentUserMessagePart(part);
+    const serializedPart = serializeAgentUserMessagePart(part);
+    if (serializedPart === null) {
+      skippedStructuredPart = true;
+      continue;
+    }
+    text +=
+      part.kind === "text"
+        ? collapseLeadingWhitespaceAfterSkippedPart(text, serializedPart, skippedStructuredPart)
+        : serializedPart;
     previousPart = part;
+    skippedStructuredPart = false;
   }
 
   return text;
@@ -107,6 +134,7 @@ export const buildAgentUserMessagePromptText = (
   let text = "";
   const fileReferences: AgentUserMessagePromptFileReference[] = [];
   let previousPart: AgentUserMessagePart | null = null;
+  let skippedStructuredPart = false;
 
   for (const part of normalized) {
     if (shouldInsertSyntheticSpaceBeforePart(previousPart, part)) {
@@ -115,9 +143,22 @@ export const buildAgentUserMessagePromptText = (
 
     const serializedPart = serializeAgentUserMessagePart(part);
 
+    if (serializedPart === null) {
+      skippedStructuredPart = true;
+      continue;
+    }
+
     if (part.kind === "text" || part.kind === "slash_command") {
-      text += serializedPart;
+      text +=
+        part.kind === "text"
+          ? collapseLeadingWhitespaceAfterSkippedPart(text, serializedPart, skippedStructuredPart)
+          : serializedPart;
       previousPart = part;
+      skippedStructuredPart = false;
+      continue;
+    }
+
+    if (part.kind !== "file_reference") {
       continue;
     }
 
@@ -132,6 +173,7 @@ export const buildAgentUserMessagePromptText = (
       },
     });
     previousPart = part;
+    skippedStructuredPart = false;
   }
 
   return { text, fileReferences };

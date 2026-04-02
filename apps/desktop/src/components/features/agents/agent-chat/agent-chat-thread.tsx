@@ -76,6 +76,12 @@ type AgentChatRenderedTurn = {
   isActive: boolean;
 };
 
+const messageHasAttachmentDisplayParts = (message: AgentChatMessage): boolean => {
+  return Boolean(
+    message.meta?.kind === "user" && message.meta.parts?.some((part) => part.kind === "attachment"),
+  );
+};
+
 type AgentChatBottomStackProps = {
   sessionId: string;
   pendingQuestions: AgentSessionState["pendingQuestions"];
@@ -451,10 +457,16 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const sessionWorkingDirectory = session?.workingDirectory ?? null;
   const rowKeys = useMemo(() => windowedRows.map((row) => row.key), [windowedRows]);
   const turns = useMemo(() => buildAgentChatWindowTurns(windowedRows), [windowedRows]);
+  const hasAttachmentMessages = useMemo(() => {
+    return session?.messages.some(messageHasAttachmentDisplayParts) ?? false;
+  }, [session]);
+  // Attachment-bearing sessions are kept fully materialized because staged turn reveal and
+  // containment can under-measure transcript height during hydration and break bottom pinning.
   const stagedTurns = useAgentChatTurnStaging({
     activeSessionId,
     windowStart,
     turns,
+    disabled: hasAttachmentMessages,
   });
   const rowRefByKeyRef = useRef<Map<string, (element: HTMLDivElement | null) => void>>(new Map());
   const { registerRowElement } = useAgentChatRowMotion({
@@ -506,7 +518,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       isActive: turn.key === activeTurnKey,
     }));
   }, [activeTurnKey, stagedTurns, windowedRows]);
-  const allowTurnContainment = !isTauriRuntime();
+  const allowTurnContainment = !isTauriRuntime() && !hasAttachmentMessages;
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">

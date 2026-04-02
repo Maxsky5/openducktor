@@ -11,6 +11,7 @@ import {
 import {
   ensureVisibleUserTextDisplayParts,
   extractMessageTotalTokens,
+  mergePreservedAttachmentDisplayParts,
   normalizeUserMessageDisplayParts,
   readMessageModelSelection,
   readTextFromMessageInfo,
@@ -20,6 +21,11 @@ import {
 } from "../message-normalizers";
 import { toIsoFromEpoch } from "../session-runtime-utils";
 import { mapPartToAgentStreamPart } from "../stream-part-mapper";
+import type { QueuedUserMessageSend, SessionMessageMetadata } from "../types";
+import {
+  buildQueuedDisplayAttachmentIdentitySignature,
+  buildQueuedDisplaySignature,
+} from "../user-message-signatures";
 import {
   readEventInfo,
   readEventPart,
@@ -205,6 +211,7 @@ const updateMessageMetadata = (
     text?: string;
     hasStopSignal?: boolean;
     totalTokens?: number;
+    displayParts?: SessionMessageMetadata["displayParts"];
   },
 ): void => {
   const session = runtime.getSession(runtime.sessionId);
@@ -219,6 +226,7 @@ const updateMessageMetadata = (
   const text = updates.text ?? previous?.text;
   const hasStopSignal = updates.hasStopSignal ?? previous?.hasStopSignal;
   const totalTokens = updates.totalTokens ?? previous?.totalTokens;
+  const displayParts = updates.displayParts ?? previous?.displayParts;
 
   session.messageMetadataById.set(messageId, {
     timestamp,
@@ -227,6 +235,71 @@ const updateMessageMetadata = (
     ...(text ? { text } : {}),
     ...(hasStopSignal !== undefined ? { hasStopSignal } : {}),
     ...(totalTokens !== undefined ? { totalTokens } : {}),
+    ...(displayParts ? { displayParts } : {}),
+  });
+};
+
+type UserDisplayPart = import("@openducktor/core").AgentUserMessageDisplayPart;
+type AttachmentDisplayPart = Extract<UserDisplayPart, { kind: "attachment" }>;
+
+const readPreservedAttachmentParts = (input: {
+  metadata?: SessionMessageMetadata;
+  matchedQueuedSend?: QueuedUserMessageSend | null;
+}): AttachmentDisplayPart[] => {
+  return [
+    ...(input.metadata?.displayParts?.filter(
+      (part): part is AttachmentDisplayPart => part.kind === "attachment",
+    ) ?? []),
+    ...(input.matchedQueuedSend?.attachmentParts ?? []),
+  ];
+};
+
+const buildVisibleUserMessage = (input: {
+  fallbackText: string;
+  normalizedDisplayParts: UserDisplayPart[];
+  metadata?: SessionMessageMetadata;
+  matchedQueuedSend?: QueuedUserMessageSend | null;
+}): {
+  displayParts: UserDisplayPart[];
+  visible: string;
+} => {
+  const mergedDisplayParts = mergePreservedAttachmentDisplayParts(
+    input.normalizedDisplayParts,
+    readPreservedAttachmentParts({
+      ...(input.metadata ? { metadata: input.metadata } : {}),
+      ...(input.matchedQueuedSend ? { matchedQueuedSend: input.matchedQueuedSend } : {}),
+    }),
+  );
+  const displayParts = ensureVisibleUserTextDisplayParts(
+    mergedDisplayParts.length > 0 ? mergedDisplayParts : (input.metadata?.displayParts ?? []),
+    input.fallbackText,
+  );
+  const textFromParts = readVisibleUserTextFromDisplayParts(displayParts);
+  return {
+    displayParts,
+    visible: textFromParts.length > 0 ? textFromParts : input.fallbackText,
+  };
+};
+
+const persistUserMessageMetadata = (input: {
+  session: ReturnType<EventStreamRuntime["getSession"]>;
+  messageId: string;
+  timestamp: string;
+  metadata?: SessionMessageMetadata;
+  model?: ReturnType<typeof readMessageModelSelection>;
+  visible: string;
+  displayParts: UserDisplayPart[];
+}): void => {
+  input.session?.messageMetadataById.set(input.messageId, {
+    timestamp: input.metadata?.timestamp ?? input.timestamp,
+    ...(input.model
+      ? { model: input.model }
+      : input.metadata?.model
+        ? { model: input.metadata.model }
+        : {}),
+    ...(input.metadata?.parentId ? { parentId: input.metadata.parentId } : {}),
+    text: input.visible,
+    ...(input.displayParts.length > 0 ? { displayParts: input.displayParts } : {}),
   });
 };
 
@@ -306,6 +379,8 @@ const emitKnownUserMessage = (
     timestamp: string;
     state: AgentUserMessageState;
     model?: ReturnType<typeof readMessageModelSelection>;
+    visible?: string;
+    displayParts?: import("@openducktor/core").AgentUserMessageDisplayPart[];
   },
 ): boolean => {
   const session = runtime.getSession(runtime.sessionId);
@@ -314,11 +389,13 @@ const emitKnownUserMessage = (
     getKnownMessageParts(runtime, input.messageId),
   );
   const fallbackText = metadata?.text ?? "";
-  const displayParts = ensureVisibleUserTextDisplayParts(
-    knownDisplayParts.length > 0 ? knownDisplayParts : (metadata?.displayParts ?? []),
-    fallbackText,
-  );
-  const textFromParts = readVisibleUserTextFromDisplayParts(displayParts);
+  const displayParts =
+    input.displayParts ??
+    ensureVisibleUserTextDisplayParts(
+      knownDisplayParts.length > 0 ? knownDisplayParts : (metadata?.displayParts ?? []),
+      fallbackText,
+    );
+  const textFromParts = input.visible ?? readVisibleUserTextFromDisplayParts(displayParts);
   const visible = textFromParts.length > 0 ? textFromParts : fallbackText;
   if (visible.trim().length === 0 && displayParts.length === 0) {
     return false;
@@ -398,44 +475,37 @@ const readExplicitUserMessageState = (
   return undefined;
 };
 
-const modelsMatch = (
-  left: ReturnType<typeof readMessageModelSelection> | undefined,
-  right: ReturnType<typeof readMessageModelSelection> | undefined,
-): boolean => {
-  if (!left && !right) {
-    return true;
-  }
-  if (!left || !right) {
-    return false;
-  }
-  return (
-    left.providerId === right.providerId &&
-    left.modelId === right.modelId &&
-    left.variant === right.variant &&
-    left.profileId === right.profileId
-  );
-};
-
 const takeQueuedUserSendMatch = (
   runtime: EventStreamRuntime,
   visible: string,
+  parts: import("@openducktor/core").AgentUserMessageDisplayPart[],
   model: ReturnType<typeof readMessageModelSelection> | undefined,
-): boolean => {
+): import("../types").QueuedUserMessageSend | null => {
   const session = runtime.getSession(runtime.sessionId);
   if (!session || session.pendingQueuedUserMessages.length === 0) {
-    return false;
+    return null;
   }
 
-  const normalizedVisible = visible.trim();
+  const signature = buildQueuedDisplaySignature({
+    visible,
+    parts,
+    ...(model ? { model } : {}),
+  });
+  const attachmentIdentitySignature = buildQueuedDisplayAttachmentIdentitySignature({
+    visible,
+    parts,
+    ...(model ? { model } : {}),
+  });
   const matchIndex = session.pendingQueuedUserMessages.findIndex(
-    (entry) => entry.content === normalizedVisible && modelsMatch(entry.model, model),
+    (entry) =>
+      entry.signature === signature ||
+      entry.attachmentIdentitySignature === attachmentIdentitySignature,
   );
   if (matchIndex < 0) {
-    return false;
+    return null;
   }
 
-  session.pendingQueuedUserMessages.splice(matchIndex, 1);
-  return true;
+  return session.pendingQueuedUserMessages.splice(matchIndex, 1)[0] ?? null;
 };
 
 const resolveUserMessageStateFromPendingAssistant = (
@@ -455,8 +525,10 @@ const resolveLiveUserMessageState = (
   input: {
     messageId: string;
     visible: string;
+    parts: import("@openducktor/core").AgentUserMessageDisplayPart[];
     explicitState?: AgentUserMessageState;
     model?: ReturnType<typeof readMessageModelSelection>;
+    matchedQueuedSend?: import("../types").QueuedUserMessageSend | null;
   },
 ): AgentUserMessageState => {
   const session = runtime.getSession(runtime.sessionId);
@@ -464,7 +536,7 @@ const resolveLiveUserMessageState = (
     session,
     input.messageId,
   );
-  const matchedQueuedSend = takeQueuedUserSendMatch(runtime, input.visible, input.model);
+  const matchedQueuedSend = input.matchedQueuedSend;
 
   if (matchedQueuedSend && pendingAssistantState === "queued") {
     return "queued";
@@ -637,28 +709,35 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     const currentMetadata = session?.messageMetadataById.get(messageId);
     const normalizedDisplayParts = normalizeUserMessageDisplayParts(userParts);
     const fallbackText = currentMetadata?.text ?? readTextFromMessageInfo(infoRecord);
-    const displayParts = ensureVisibleUserTextDisplayParts(
-      normalizedDisplayParts.length > 0
-        ? normalizedDisplayParts
-        : (currentMetadata?.displayParts ?? []),
+    const initialVisibleUserMessage = buildVisibleUserMessage({
       fallbackText,
+      normalizedDisplayParts,
+      ...(currentMetadata ? { metadata: currentMetadata } : {}),
+    });
+    const matchedQueuedSend = takeQueuedUserSendMatch(
+      runtime,
+      initialVisibleUserMessage.visible,
+      initialVisibleUserMessage.displayParts,
+      messageModel,
     );
-    const textFromParts = readVisibleUserTextFromDisplayParts(displayParts);
-    const visible = textFromParts.length > 0 ? textFromParts : fallbackText;
+    const { displayParts, visible } = buildVisibleUserMessage({
+      fallbackText,
+      normalizedDisplayParts,
+      ...(currentMetadata ? { metadata: currentMetadata } : {}),
+      ...(matchedQueuedSend ? { matchedQueuedSend } : {}),
+    });
     if (visible.trim().length === 0 && displayParts.length === 0) {
       return true;
     }
 
-    session?.messageMetadataById.set(messageId, {
-      timestamp: currentMetadata?.timestamp ?? messageTimestamp,
-      ...(messageModel
-        ? { model: messageModel }
-        : currentMetadata?.model
-          ? { model: currentMetadata.model }
-          : {}),
-      ...(currentMetadata?.parentId ? { parentId: currentMetadata.parentId } : {}),
-      text: visible,
-      ...(displayParts.length > 0 ? { displayParts } : {}),
+    persistUserMessageMetadata({
+      session,
+      messageId,
+      timestamp: messageTimestamp,
+      ...(currentMetadata ? { metadata: currentMetadata } : {}),
+      ...(messageModel ? { model: messageModel } : {}),
+      visible,
+      displayParts,
     });
 
     const explicitState = readExplicitUserMessageState(infoRecord, properties);
@@ -670,6 +749,8 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
       state: resolveLiveUserMessageState(runtime, {
         messageId,
         visible,
+        parts: displayParts,
+        matchedQueuedSend,
         ...(explicitState ? { explicitState } : {}),
         ...(messageModel ? { model: messageModel } : {}),
       }),
@@ -788,27 +869,44 @@ const handleMessagePartUpdatedEvent = (event: Event, runtime: EventStreamRuntime
       getKnownMessageParts(runtime, messageId),
     );
     const fallbackText = metadata?.text ?? "";
-    const displayParts = ensureVisibleUserTextDisplayParts(
-      normalizedDisplayParts.length > 0 ? normalizedDisplayParts : (metadata?.displayParts ?? []),
+    const initialVisibleUserMessage = buildVisibleUserMessage({
       fallbackText,
+      normalizedDisplayParts,
+      ...(metadata ? { metadata } : {}),
+    });
+    const matchedQueuedSend = takeQueuedUserSendMatch(
+      runtime,
+      initialVisibleUserMessage.visible,
+      initialVisibleUserMessage.displayParts,
+      metadata?.model,
     );
-    const textFromParts = readVisibleUserTextFromDisplayParts(displayParts);
-    const visible = textFromParts.length > 0 ? textFromParts : fallbackText;
+    const { displayParts, visible } = buildVisibleUserMessage({
+      fallbackText,
+      normalizedDisplayParts,
+      ...(metadata ? { metadata } : {}),
+      ...(matchedQueuedSend ? { matchedQueuedSend } : {}),
+    });
     if (visible.trim().length > 0 || displayParts.length > 0) {
-      session?.messageMetadataById.set(messageId, {
-        timestamp: metadata?.timestamp ?? runtime.now(),
+      persistUserMessageMetadata({
+        session,
+        messageId,
+        timestamp: runtime.now(),
+        ...(metadata ? { metadata } : {}),
         ...(metadata?.model ? { model: metadata.model } : {}),
-        ...(metadata?.parentId ? { parentId: metadata.parentId } : {}),
-        text: visible,
-        ...(displayParts.length > 0 ? { displayParts } : {}),
+        visible,
+        displayParts,
       });
     }
     emitKnownUserMessage(runtime, {
       messageId,
       timestamp: metadata?.timestamp ?? runtime.now(),
+      visible,
+      displayParts,
       state: resolveLiveUserMessageState(runtime, {
         messageId,
         visible,
+        parts: displayParts,
+        matchedQueuedSend,
         ...(metadata?.model ? { model: metadata.model } : {}),
       }),
       ...(metadata?.model ? { model: metadata.model } : {}),

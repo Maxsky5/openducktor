@@ -20,6 +20,14 @@ const createFileReference = () => ({
   kind: "code" as const,
 });
 
+const createAttachment = () => ({
+  id: "attachment-1",
+  path: "/tmp/diagram.png",
+  name: "diagram.png",
+  kind: "image" as const,
+  mime: "image/png",
+});
+
 describe("agent-user-message-parts", () => {
   test("merges adjacent text parts and trims only boundaries", () => {
     const command = createCommand();
@@ -53,6 +61,7 @@ describe("agent-user-message-parts", () => {
   test("detects meaningful parts only after normalization", () => {
     const command = createCommand();
     const file = createFileReference();
+    const attachment = createAttachment();
 
     expect(
       hasMeaningfulAgentUserMessageParts([
@@ -70,6 +79,12 @@ describe("agent-user-message-parts", () => {
       hasMeaningfulAgentUserMessageParts([
         { kind: "text", text: "   " },
         { kind: "file_reference", file },
+      ]),
+    ).toBe(true);
+    expect(
+      hasMeaningfulAgentUserMessageParts([
+        { kind: "text", text: "   " },
+        { kind: "attachment", attachment },
       ]),
     ).toBe(true);
   });
@@ -152,6 +167,7 @@ describe("agent-user-message-parts", () => {
 
   test("builds upstream prompt text with inline file-reference spans", () => {
     const file = createFileReference();
+    const attachment = createAttachment();
 
     expect(
       buildAgentUserMessagePromptText([
@@ -192,5 +208,40 @@ describe("agent-user-message-parts", () => {
         },
       ],
     });
+
+    expect(
+      buildAgentUserMessagePromptText([
+        { kind: "text", text: "review " },
+        { kind: "attachment", attachment },
+        { kind: "text", text: "with " },
+        { kind: "file_reference", file },
+      ]),
+    ).toEqual({
+      text: "review with @src/index.ts",
+      fileReferences: [
+        {
+          file,
+          sourceText: {
+            value: "@src/index.ts",
+            start: 12,
+            end: 25,
+          },
+        },
+      ],
+    });
+  });
+
+  test("does not flatten attachments into serialized prompt text", () => {
+    const attachment = createAttachment();
+
+    expect(
+      serializeAgentUserMessagePartsToText([
+        { kind: "text", text: "  describe " },
+        { kind: "attachment", attachment },
+        { kind: "text", text: " carefully  " },
+      ]),
+    ).toBe("describe carefully");
+
+    expect(serializeAgentUserMessagePartsToText([{ kind: "attachment", attachment }])).toBe("");
   });
 });

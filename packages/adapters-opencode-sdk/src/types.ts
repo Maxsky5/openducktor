@@ -18,8 +18,19 @@ export type SessionInput = Omit<StartAgentSessionInput, "sessionId"> & {
 };
 
 export type QueuedUserMessageSend = {
-  content: string;
+  signature: string;
+  attachmentIdentitySignature?: string;
+  attachmentParts?: Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>[];
+};
+
+export type SessionMessageMetadata = {
+  timestamp: string;
   model?: AgentModelSelection;
+  parentId?: string;
+  text?: string;
+  hasStopSignal?: boolean;
+  totalTokens?: number;
+  displayParts?: AgentUserMessageDisplayPart[];
 };
 
 export type SessionRecord = {
@@ -37,18 +48,7 @@ export type SessionRecord = {
   pendingQueuedUserMessages: QueuedUserMessageSend[];
   partsById: Map<string, import("@opencode-ai/sdk/v2/client").Part>;
   messageRoleById: Map<string, string>;
-  messageMetadataById: Map<
-    string,
-    {
-      timestamp: string;
-      model?: AgentModelSelection;
-      parentId?: string;
-      text?: string;
-      hasStopSignal?: boolean;
-      totalTokens?: number;
-      displayParts?: AgentUserMessageDisplayPart[];
-    }
-  >;
+  messageMetadataById: Map<string, SessionMessageMetadata>;
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
   /** Cached workflow tool selection (toolId -> enabled). */
   workflowToolSelectionCache?: Record<string, boolean>;

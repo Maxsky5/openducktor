@@ -1,14 +1,42 @@
-import { Bot, Brain, BrainCog, LoaderCircle, SendHorizontal, Square } from "lucide-react";
-import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Bot,
+  Brain,
+  BrainCog,
+  LoaderCircle,
+  Paperclip,
+  SendHorizontal,
+  Square,
+} from "lucide-react";
+import {
+  forwardRef,
+  memo,
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { toast } from "sonner";
 import { BorderRay } from "@/components/ui/border-ray";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { resolveAgentAccentColor } from "../agent-accent-color";
 import type { AgentChatComposerModel } from "./agent-chat.types";
+import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
+import {
+  buildComposerAttachmentFromFile,
+  CHAT_ATTACHMENT_ACCEPT,
+  validateComposerAttachments,
+} from "./agent-chat-attachments";
 import {
   type AgentChatComposerDraft,
+  appendAttachmentsToDraft,
   createEmptyComposerDraft,
   draftHasMeaningfulContent,
+  draftHasSlashCommandSegment,
+  removeAttachmentFromDraft,
 } from "./agent-chat-composer-draft";
 import { AgentChatComposerEditor } from "./agent-chat-composer-editor";
 import {
@@ -17,7 +45,28 @@ import {
 } from "./agent-chat-composer-selection";
 import { AgentContextUsageIndicator } from "./agent-context-usage-indicator";
 
+export type AgentChatComposerHandle = {
+  addFiles: (files: File[]) => void;
+};
+
+const truncateAttachmentDisplayName = (name: string, maxLength = 80): string => {
+  if (name.length <= maxLength) {
+    return name;
+  }
+  return `${name.slice(0, maxLength - 3)}...`;
+};
+
+const renderUnsupportedAttachmentDescription = (name: string): ReactElement => {
+  return (
+    <span>
+      <code>{truncateAttachmentDisplayName(name)}</code> is not an image, audio file, video, or PDF.
+    </span>
+  );
+};
+
 const AgentChatComposerControls = memo(function AgentChatComposerControls({
+  onPickAttachments,
+  attachmentIntakeDisabled,
   selectedModelSelection,
   agentOptions,
   modelOptions,
@@ -38,6 +87,8 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   showSubmittingState,
   sendDisabled,
 }: {
+  onPickAttachments: () => void;
+  attachmentIntakeDisabled: boolean;
   selectedModelSelection: AgentChatComposerModel["selectedModelSelection"];
   agentOptions: AgentChatComposerModel["agentOptions"];
   modelOptions: AgentChatComposerModel["modelOptions"];
@@ -61,6 +112,17 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/80 px-2.5 py-2">
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="size-7 rounded-full border border-input bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="Add attachment"
+          disabled={attachmentIntakeDisabled}
+          onClick={onPickAttachments}
+        >
+          <Paperclip className="size-3.5" />
+        </Button>
         <div className="relative">
           <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Combobox
@@ -156,7 +218,10 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   );
 });
 
-export function AgentChatComposer({ model }: { model: AgentChatComposerModel }): ReactElement {
+export const AgentChatComposer = forwardRef<
+  AgentChatComposerHandle,
+  { model: AgentChatComposerModel }
+>(function AgentChatComposer({ model }, ref): ReactElement {
   const {
     taskId,
     agentStudioReady,
@@ -172,6 +237,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     waitingInputPlaceholder,
     isModelSelectionPending,
     selectedModelSelection,
+    selectedModelDescriptor,
     isSelectionCatalogLoading,
     supportsSlashCommands,
     supportsFileSearch,
@@ -199,6 +265,15 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
   const latestDraftRef = useRef<AgentChatComposerDraft>(draft);
   const latestSendDisabledRef = useRef(false);
   const latestOnSendRef = useRef(onSend);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const isSubmitting = (isSending && !isSessionWorking) || isStarting || isModelSelectionPending;
+  const isComposerInputDisabled =
+    !agentStudioReady ||
+    isReadOnly ||
+    isModelSelectionPending ||
+    isWaitingInput ||
+    Boolean(busySendBlockedReason);
+  const attachmentIntakeDisabled = isComposerInputDisabled || isSubmitting;
 
   useEffect(() => {
     void draftStateKey;
@@ -211,6 +286,60 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     setDraft(nextDraft);
   }, []);
 
+  const handleAddFiles = useCallback(
+    (files: File[]): void => {
+      if (attachmentIntakeDisabled) {
+        return;
+      }
+
+      const attachments = files.flatMap((file) => {
+        const attachment = buildComposerAttachmentFromFile(file);
+        if (!attachment) {
+          toast.error("Unsupported attachment type", {
+            description: renderUnsupportedAttachmentDescription(file.name),
+          });
+          return [];
+        }
+        return [attachment];
+      });
+      if (attachments.length === 0) {
+        return;
+      }
+      setDraft((currentDraft) => {
+        const nextDraft = appendAttachmentsToDraft(currentDraft, attachments);
+        latestDraftRef.current = nextDraft;
+        return nextDraft;
+      });
+      onComposerEditorInput();
+    },
+    [attachmentIntakeDisabled, onComposerEditorInput],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      addFiles: handleAddFiles,
+    }),
+    [handleAddFiles],
+  );
+
+  const openAttachmentPicker = useCallback((): void => {
+    if (attachmentIntakeDisabled) {
+      return;
+    }
+    attachmentInputRef.current?.click();
+  }, [attachmentIntakeDisabled]);
+
+  const attachmentErrors = useMemo(() => {
+    return validateComposerAttachments(
+      draft.attachments ?? [],
+      selectedModelDescriptor?.attachmentSupport,
+    );
+  }, [draft.attachments, selectedModelDescriptor?.attachmentSupport]);
+  const hasBlockingAttachments = Object.keys(attachmentErrors).length > 0;
+  const hasSlashAttachmentConflict =
+    (draft.attachments ?? []).length > 0 && draftHasSlashCommandSegment(draft);
+
   const sendDisabled =
     (isSending && !isSessionWorking) ||
     isStarting ||
@@ -218,6 +347,8 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     Boolean(busySendBlockedReason) ||
     isModelSelectionPending ||
     isReadOnly ||
+    hasBlockingAttachments ||
+    hasSlashAttachmentConflict ||
     !taskId ||
     !draftHasMeaningfulContent(draft) ||
     !agentStudioReady;
@@ -226,7 +357,6 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
   latestOnSendRef.current = onSend;
   latestSendDisabledRef.current = sendDisabled;
 
-  const isSubmitting = (isSending && !isSessionWorking) || isStarting || isModelSelectionPending;
   const selectorDisabled =
     !taskId || isSelectionCatalogLoading || isSubmitting || !agentStudioReady || isReadOnly;
 
@@ -289,7 +419,11 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
         return;
       }
       scheduleComposerFocus();
-    } catch {
+    } catch (error) {
+      const description = error instanceof Error ? error.message : String(error);
+      toast.error("Unable to send message", {
+        description,
+      });
       setDraft((currentDraft) =>
         draftHasMeaningfulContent(currentDraft) ? currentDraft : submittedDraft,
       );
@@ -297,12 +431,6 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
       scheduleComposerFocus();
     }
   }, [onComposerEditorInput, scheduleComposerFocus]);
-  const isComposerInputDisabled =
-    !agentStudioReady ||
-    isReadOnly ||
-    isModelSelectionPending ||
-    isWaitingInput ||
-    Boolean(busySendBlockedReason);
   let composerPlaceholder = "@ for files; / for commands; ! for shell";
   if (isReadOnly && readOnlyReason) {
     composerPlaceholder = readOnlyReason;
@@ -323,6 +451,55 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
         void handleSubmit();
       }}
     >
+      <input
+        ref={attachmentInputRef}
+        type="file"
+        multiple
+        accept={CHAT_ATTACHMENT_ACCEPT}
+        disabled={attachmentIntakeDisabled}
+        className="hidden"
+        onChange={(event) => {
+          const files = Array.from(event.target.files ?? []);
+          if (files.length > 0) {
+            handleAddFiles(files);
+          }
+          event.currentTarget.value = "";
+        }}
+      />
+      {(draft.attachments ?? []).length > 0 ? (
+        <section className="mb-0 border border-input border-b-0 border-l-0 bg-card shadow-md">
+          <div
+            className={composerAccentColor ? "border-l-4" : undefined}
+            style={composerAccentColor ? { borderLeftColor: composerAccentColor } : undefined}
+          >
+            <div className="px-3 pb-3 pt-3">
+              <div className="flex flex-wrap gap-3">
+                {(draft.attachments ?? []).map((attachment) => (
+                  <AgentChatAttachmentChip
+                    key={attachment.id}
+                    variant="draft"
+                    attachment={attachment}
+                    error={attachmentErrors[attachment.id] ?? null}
+                    onRemove={() => {
+                      setDraft((currentDraft) => {
+                        const nextDraft = removeAttachmentFromDraft(currentDraft, attachment.id);
+                        latestDraftRef.current = nextDraft;
+                        return nextDraft;
+                      });
+                      onComposerEditorInput();
+                    }}
+                  />
+                ))}
+              </div>
+              {hasSlashAttachmentConflict ? (
+                <p className="mt-3 text-xs text-destructive">
+                  Remove attachments before running a slash command.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
       <div
         className={
           isWaitingInput
@@ -362,6 +539,8 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
           />
 
           <AgentChatComposerControls
+            onPickAttachments={openAttachmentPicker}
+            attachmentIntakeDisabled={attachmentIntakeDisabled}
             selectedModelSelection={selectedModelSelection}
             agentOptions={agentOptions}
             modelOptions={modelOptions}
@@ -386,4 +565,4 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
       </div>
     </form>
   );
-}
+});

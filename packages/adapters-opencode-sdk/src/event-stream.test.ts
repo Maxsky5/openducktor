@@ -1,8 +1,34 @@
 import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import type { AgentEvent } from "@openducktor/core";
+import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
 import { subscribeOpencodeEvents } from "./event-stream";
 import type { SessionInput, SessionRecord } from "./types";
+import {
+  buildQueuedRequestAttachmentIdentitySignature,
+  buildQueuedRequestSignature,
+} from "./user-message-signatures";
+
+const IMAGE_ATTACHMENT_DISPLAY_PART = {
+  kind: "attachment" as const,
+  attachment: {
+    id: "attachment-image-1",
+    path: "/tmp/local-screenshot.png",
+    name: "Screenshot-2026-03-17-at-12.04.45.png",
+    kind: "image" as const,
+    mime: "image/png",
+  },
+};
+
+const PDF_ATTACHMENT_DISPLAY_PART = {
+  kind: "attachment" as const,
+  attachment: {
+    id: "attachment-pdf-1",
+    path: "/tmp/local-brief.pdf",
+    name: "brief.pdf",
+    kind: "pdf" as const,
+    mime: "application/pdf",
+  },
+};
 
 const makeClientWithEvents = (events: Event[]): OpencodeClient => {
   return {
@@ -62,6 +88,11 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   messageMetadataById: new Map(),
   pendingDeltasByPartId: new Map(),
 });
+
+const buildQueuedSignature = (message: string, model?: AgentModelSelection | null): string => {
+  const parts: AgentUserMessagePart[] = [{ kind: "text", text: message }];
+  return buildQueuedRequestSignature(parts, model ?? undefined);
+};
 
 const runEventStreamWithSession = async (
   events: Event[],
@@ -566,7 +597,9 @@ describe("event-stream", () => {
         } as unknown as Event,
       ],
       (nextSessionRecord) => {
-        nextSessionRecord.pendingQueuedUserMessages.push({ content: "Ship it" });
+        nextSessionRecord.pendingQueuedUserMessages.push({
+          signature: buildQueuedSignature("Ship it"),
+        });
         nextSessionRecord.activeAssistantMessageId = null;
       },
     );
@@ -648,15 +681,15 @@ describe("event-stream", () => {
       (nextSessionRecord) => {
         nextSessionRecord.activeAssistantMessageId = "msg-100";
         nextSessionRecord.pendingQueuedUserMessages.push(
-          { content: "Ship it" },
+          { signature: buildQueuedSignature("Ship it") },
           {
-            content: "Ship it",
-            model: {
+            signature: buildQueuedSignature("Ship it", {
+              runtimeKind: "opencode",
               providerId: "openai",
               modelId: "gpt-5",
               profileId: "Hephaestus",
               variant: "high",
-            },
+            }),
           },
         );
       },
@@ -669,7 +702,260 @@ describe("event-stream", () => {
       messageId: "msg-200",
       state: "queued",
     });
-    expect(sessionRecord.pendingQueuedUserMessages).toEqual([{ content: "Ship it" }]);
+    expect(sessionRecord.pendingQueuedUserMessages).toEqual([
+      { signature: buildQueuedSignature("Ship it") },
+    ]);
+  });
+
+  test("preserves queued local attachment preview paths when the runtime echoes a non-file attachment url", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession(
+      [
+        {
+          type: "message.updated",
+          properties: {
+            info: {
+              id: "msg-attachment-1",
+              role: "user",
+              sessionID: "external-session-1",
+              text: "Describe what is in this screenshot",
+              time: {
+                created: Date.parse("2026-02-22T12:00:02.000Z"),
+              },
+            },
+            parts: [
+              {
+                id: "part-text-1",
+                sessionID: "external-session-1",
+                messageID: "msg-attachment-1",
+                type: "text",
+                text: "Describe what is in this screenshot",
+              },
+              {
+                id: "part-file-1",
+                sessionID: "external-session-1",
+                messageID: "msg-attachment-1",
+                type: "file",
+                mime: "image/png",
+                filename: "Screenshot-2026-03-17-at-12.04.45.png",
+                url: "https://files.example.invalid/uploaded-image",
+              },
+            ],
+          },
+        } as unknown as Event,
+      ],
+      (nextSessionRecord) => {
+        nextSessionRecord.pendingQueuedUserMessages.push({
+          signature: buildQueuedRequestSignature(
+            [
+              { kind: "text", text: "Describe what is in this screenshot" },
+              IMAGE_ATTACHMENT_DISPLAY_PART,
+            ] as AgentUserMessagePart[],
+            undefined,
+          ),
+          attachmentIdentitySignature: buildQueuedRequestAttachmentIdentitySignature(
+            [
+              { kind: "text", text: "Describe what is in this screenshot" },
+              IMAGE_ATTACHMENT_DISPLAY_PART,
+            ] as AgentUserMessagePart[],
+            undefined,
+          ),
+          attachmentParts: [IMAGE_ATTACHMENT_DISPLAY_PART],
+        });
+      },
+    );
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    const userMessage = userMessages[0];
+    if (!userMessage || userMessage.type !== "user_message") {
+      throw new Error("Expected user_message event");
+    }
+    expect(userMessage.parts).toContainEqual(
+      expect.objectContaining({
+        kind: "attachment",
+        attachment: expect.objectContaining({
+          path: "/tmp/local-screenshot.png",
+          name: "Screenshot-2026-03-17-at-12.04.45.png",
+          kind: "image",
+          mime: "image/png",
+        }),
+      }),
+    );
+
+    const metadata = sessionRecord.messageMetadataById.get("msg-attachment-1");
+    expect(metadata?.displayParts).toContainEqual(
+      expect.objectContaining({
+        kind: "attachment",
+        attachment: expect.objectContaining({
+          path: "/tmp/local-screenshot.png",
+          name: "Screenshot-2026-03-17-at-12.04.45.png",
+          kind: "image",
+          mime: "image/png",
+        }),
+      }),
+    );
+  });
+
+  test("matches queued attachment sends when the runtime fills user parts through message.part.updated", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession(
+      [
+        {
+          type: "message.updated",
+          properties: {
+            info: {
+              id: "msg-attachment-partial-1",
+              role: "user",
+              sessionID: "external-session-1",
+              text: "Describe what is in this screenshot",
+              time: {
+                created: Date.parse("2026-02-22T12:00:02.000Z"),
+              },
+            },
+          },
+        } as unknown as Event,
+        {
+          type: "message.part.updated",
+          properties: {
+            part: {
+              id: "part-file-partial-1",
+              sessionID: "external-session-1",
+              messageID: "msg-attachment-partial-1",
+              type: "file",
+              mime: "image/png",
+              filename: "Screenshot-2026-03-17-at-12.04.45.png",
+              url: "https://files.example.invalid/uploaded-image",
+            },
+          },
+        } as unknown as Event,
+      ],
+      (nextSessionRecord) => {
+        nextSessionRecord.messageRoleById.set("msg-attachment-partial-1", "user");
+        nextSessionRecord.pendingQueuedUserMessages.push({
+          signature: buildQueuedRequestSignature(
+            [
+              { kind: "text", text: "Describe what is in this screenshot" },
+              IMAGE_ATTACHMENT_DISPLAY_PART,
+            ] as AgentUserMessagePart[],
+            undefined,
+          ),
+          attachmentIdentitySignature: buildQueuedRequestAttachmentIdentitySignature(
+            [
+              { kind: "text", text: "Describe what is in this screenshot" },
+              IMAGE_ATTACHMENT_DISPLAY_PART,
+            ] as AgentUserMessagePart[],
+            undefined,
+          ),
+          attachmentParts: [IMAGE_ATTACHMENT_DISPLAY_PART],
+        });
+      },
+    );
+
+    expect(sessionRecord.pendingQueuedUserMessages).toHaveLength(0);
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(2);
+    const latestUserMessage = userMessages[userMessages.length - 1];
+    if (!latestUserMessage || latestUserMessage.type !== "user_message") {
+      throw new Error("Expected user_message event");
+    }
+    expect(latestUserMessage.parts).toContainEqual(
+      expect.objectContaining({
+        kind: "attachment",
+        attachment: expect.objectContaining({
+          path: "/tmp/local-screenshot.png",
+          name: "Screenshot-2026-03-17-at-12.04.45.png",
+          kind: "image",
+          mime: "image/png",
+        }),
+      }),
+    );
+  });
+
+  test("keeps pdf attachment echoes out of inline file-reference rendering", async () => {
+    const { emitted } = await runEventStreamWithSession(
+      [
+        {
+          type: "message.updated",
+          properties: {
+            info: {
+              id: "msg-pdf-1",
+              role: "user",
+              text: "Summarize this PDF",
+              sessionID: "external-session-1",
+              time: {
+                created: Date.parse("2026-02-22T12:00:02.000Z"),
+              },
+              parts: [
+                {
+                  id: "part-text-1",
+                  sessionID: "external-session-1",
+                  messageID: "msg-pdf-1",
+                  type: "text",
+                  text: "Summarize this PDF",
+                },
+                {
+                  id: "part-file-1",
+                  sessionID: "external-session-1",
+                  messageID: "msg-pdf-1",
+                  type: "file",
+                  mime: "application/pdf",
+                  filename: "brief.pdf",
+                  url: "https://files.example.invalid/brief.pdf",
+                  source: {
+                    type: "file",
+                    path: "brief.pdf",
+                    text: {
+                      value: "brief.pdf",
+                      start: 0,
+                      end: 9,
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        } as unknown as Event,
+      ],
+      (nextSessionRecord) => {
+        nextSessionRecord.pendingQueuedUserMessages.push({
+          signature: buildQueuedRequestSignature(
+            [
+              { kind: "text", text: "Summarize this PDF" },
+              PDF_ATTACHMENT_DISPLAY_PART,
+            ] as AgentUserMessagePart[],
+            undefined,
+          ),
+          attachmentIdentitySignature: buildQueuedRequestAttachmentIdentitySignature(
+            [
+              { kind: "text", text: "Summarize this PDF" },
+              PDF_ATTACHMENT_DISPLAY_PART,
+            ] as AgentUserMessagePart[],
+            undefined,
+          ),
+          attachmentParts: [PDF_ATTACHMENT_DISPLAY_PART],
+        });
+      },
+    );
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    const userMessage = userMessages[0];
+    if (!userMessage || userMessage.type !== "user_message") {
+      throw new Error("Expected user_message event");
+    }
+
+    expect(userMessage.parts.filter((part) => part.kind === "attachment")).toHaveLength(1);
+    expect(userMessage.parts.filter((part) => part.kind === "file_reference")).toHaveLength(0);
+    expect(userMessage.parts).toContainEqual(
+      expect.objectContaining({
+        kind: "attachment",
+        attachment: expect.objectContaining({
+          path: "/tmp/local-brief.pdf",
+          name: "brief.pdf",
+          kind: "pdf",
+          mime: "application/pdf",
+        }),
+      }),
+    );
   });
 
   test("reconciles queued follow-ups when a newer assistant becomes pending", async () => {
