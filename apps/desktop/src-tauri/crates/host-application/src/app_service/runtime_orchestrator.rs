@@ -79,6 +79,50 @@ struct RunExposurePlan {
     probe_target: Option<super::OpencodeSessionStatusProbeTarget>,
 }
 
+impl RunExposurePlan {
+    fn without_probe(summary: RunSummary) -> Self {
+        Self {
+            summary,
+            external_session_ids: Vec::new(),
+            probe_target: None,
+        }
+    }
+
+    fn with_probe(
+        summary: RunSummary,
+        external_session_ids: Vec<String>,
+        probe_target: super::OpencodeSessionStatusProbeTarget,
+    ) -> Self {
+        Self {
+            summary,
+            external_session_ids,
+            probe_target: Some(probe_target),
+        }
+    }
+
+    fn is_visible(
+        &self,
+        statuses_by_target: &HashMap<
+            super::OpencodeSessionStatusProbeTarget,
+            super::OpencodeSessionStatusMap,
+        >,
+    ) -> Result<bool> {
+        let Some(probe_target) = self.probe_target.as_ref() else {
+            return Ok(true);
+        };
+
+        let statuses = statuses_by_target.get(probe_target).ok_or_else(|| {
+            anyhow!(
+                "Missing cached OpenCode session statuses for run {}",
+                self.summary.run_id
+            )
+        })?;
+        Ok(self.external_session_ids.iter().any(|external_session_id| {
+            super::has_live_opencode_session_status(statuses, external_session_id)
+        }))
+    }
+}
+
 struct RuntimeEnsureFlightGuard<'a> {
     service: &'a AppService,
     runtime_kind: AgentRuntimeKind,
@@ -340,39 +384,37 @@ impl AppService {
             .collect::<Vec<_>>();
         drop(runs);
 
+        let (exposure_plans, probe_targets) = self.build_run_exposure_plans(run_candidates)?;
+        let statuses_by_target =
+            self.load_cached_opencode_session_statuses_for_targets(&probe_targets)?;
+        let mut list = self.visible_run_summaries(exposure_plans, &statuses_by_target)?;
+
+        list.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+        Ok(list)
+    }
+
+    fn build_run_exposure_plans(
+        &self,
+        run_candidates: Vec<RunExposureCandidate>,
+    ) -> Result<(
+        Vec<RunExposurePlan>,
+        Vec<super::OpencodeSessionStatusProbeTarget>,
+    )> {
         let mut sessions_by_repo_task = HashMap::new();
         let mut exposure_plans = Vec::with_capacity(run_candidates.len());
         let mut probe_targets = Vec::new();
 
         for run in run_candidates {
             if !run.requires_live_session_check() {
-                exposure_plans.push(RunExposurePlan {
-                    summary: run.summary,
-                    external_session_ids: Vec::new(),
-                    probe_target: None,
-                });
+                exposure_plans.push(RunExposurePlan::without_probe(run.summary));
                 continue;
             }
 
-            let session_cache_key = format!("{}::{}", run.repo_path, run.task_id);
-            if !sessions_by_repo_task.contains_key(session_cache_key.as_str()) {
-                let sessions =
-                    self.agent_sessions_list(run.repo_path.as_str(), run.task_id.as_str())?;
-                sessions_by_repo_task.insert(session_cache_key.clone(), sessions);
-            }
-            let sessions = sessions_by_repo_task
-                .get(session_cache_key.as_str())
-                .ok_or_else(|| {
-                    anyhow!("Missing cached agent sessions for {}", session_cache_key)
-                })?;
+            let sessions = self.sessions_for_run_candidate(&run, &mut sessions_by_repo_task)?;
             let external_session_ids = collect_build_external_session_ids_for_run(&run, sessions);
 
             if external_session_ids.is_empty() {
-                exposure_plans.push(RunExposurePlan {
-                    summary: run.summary,
-                    external_session_ids,
-                    probe_target: None,
-                });
+                exposure_plans.push(RunExposurePlan::without_probe(run.summary));
                 continue;
             }
 
@@ -381,36 +423,48 @@ impl AppService {
                 run.worktree_path.as_str(),
             );
             probe_targets.push(probe_target.clone());
-            exposure_plans.push(RunExposurePlan {
-                summary: run.summary,
+            exposure_plans.push(RunExposurePlan::with_probe(
+                run.summary,
                 external_session_ids,
-                probe_target: Some(probe_target),
-            });
+                probe_target,
+            ));
         }
 
-        let statuses_by_target =
-            self.load_cached_opencode_session_statuses_for_targets(&probe_targets)?;
+        Ok((exposure_plans, probe_targets))
+    }
+
+    fn sessions_for_run_candidate<'a>(
+        &self,
+        run: &RunExposureCandidate,
+        sessions_by_repo_task: &'a mut HashMap<String, Vec<host_domain::AgentSessionDocument>>,
+    ) -> Result<&'a [host_domain::AgentSessionDocument]> {
+        let session_cache_key = format!("{}::{}", run.repo_path, run.task_id);
+        if !sessions_by_repo_task.contains_key(session_cache_key.as_str()) {
+            let sessions =
+                self.agent_sessions_list(run.repo_path.as_str(), run.task_id.as_str())?;
+            sessions_by_repo_task.insert(session_cache_key.clone(), sessions);
+        }
+
+        sessions_by_repo_task
+            .get(session_cache_key.as_str())
+            .map(Vec::as_slice)
+            .ok_or_else(|| anyhow!("Missing cached agent sessions for {}", session_cache_key))
+    }
+
+    fn visible_run_summaries(
+        &self,
+        exposure_plans: Vec<RunExposurePlan>,
+        statuses_by_target: &HashMap<
+            super::OpencodeSessionStatusProbeTarget,
+            super::OpencodeSessionStatusMap,
+        >,
+    ) -> Result<Vec<RunSummary>> {
         let mut list = Vec::new();
         for plan in exposure_plans {
-            let Some(probe_target) = plan.probe_target.as_ref() else {
-                list.push(plan.summary);
-                continue;
-            };
-
-            let statuses = statuses_by_target.get(probe_target).ok_or_else(|| {
-                anyhow!(
-                    "Missing cached OpenCode session statuses for run {}",
-                    plan.summary.run_id
-                )
-            })?;
-            if plan.external_session_ids.iter().any(|external_session_id| {
-                super::has_live_opencode_session_status(statuses, external_session_id)
-            }) {
+            if plan.is_visible(statuses_by_target)? {
                 list.push(plan.summary);
             }
         }
-
-        list.sort_by(|a, b| b.started_at.cmp(&a.started_at));
         Ok(list)
     }
 

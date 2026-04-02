@@ -1,9 +1,9 @@
 use super::super::super::{
-    terminate_child_process, AgentRuntimeProcess, AppService, RuntimeCleanupTarget,
+    AgentRuntimeProcess, AppService, RuntimeCleanupTarget, terminate_child_process,
 };
 use super::super::{RuntimePostStartPolicy, RuntimeStartInput, SpawnedRuntimeServer};
-use anyhow::{anyhow, Result};
-use host_domain::{now_rfc3339, RuntimeInstanceSummary};
+use anyhow::{Result, anyhow};
+use host_domain::{RuntimeInstanceSummary, now_rfc3339};
 use std::collections::HashMap;
 use std::process::Child;
 use std::sync::MutexGuard;

@@ -122,7 +122,13 @@ pub(crate) struct CachedOpencodeSessionStatusProbe {
 #[derive(Clone)]
 pub(crate) enum CachedOpencodeSessionStatusProbeOutcome {
     Statuses(OpencodeSessionStatusMap),
-    ActionableError(String),
+    ActionableError(CachedOpencodeSessionStatusProbeError),
+}
+
+#[derive(Clone)]
+pub(crate) enum CachedOpencodeSessionStatusProbeError {
+    ProbeFailed(String),
+    ProbeAborted,
 }
 
 pub(crate) struct DevServerGroupRuntime {

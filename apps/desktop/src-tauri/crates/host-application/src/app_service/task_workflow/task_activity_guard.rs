@@ -1,10 +1,12 @@
 use super::cleanup_plans::{normalize_path_for_comparison, normalize_path_key};
 use crate::app_service::{
-    OpencodeSessionStatusProbeTarget, has_live_opencode_session_status, service_core::AppService,
+    OpencodeSessionStatusMap, OpencodeSessionStatusProbeTarget, has_live_opencode_session_status,
+    service_core::AppService,
 };
 use anyhow::{Context, Result, anyhow};
 use host_domain::{AgentRuntimeKind, AgentSessionDocument, RunState, RuntimeRole, RuntimeRoute};
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 pub(super) struct TaskActivityGuard<'a> {
     service: &'a AppService,
@@ -96,7 +98,44 @@ impl<'a> TaskActivityGuard<'a> {
         sessions: &[AgentSessionDocument],
     ) -> Result<TaskActiveWorkEvidence> {
         let normalized_repo = normalize_path_for_comparison(repo_path);
-        let candidate_runs = self
+        let candidate_runs = self.collect_candidate_runs(&normalized_repo, task_id)?;
+        let runtime_routes_by_worktree = collect_runtime_routes_by_worktree(&candidate_runs);
+        let repo_runtime_routes_by_kind = self.collect_repo_runtime_routes_by_kind(repo_path)?;
+        let probe_plan = self.build_probe_plan(
+            &candidate_runs,
+            sessions,
+            &runtime_routes_by_worktree,
+            &repo_runtime_routes_by_kind,
+        );
+
+        let primary_statuses_by_target = self
+            .service
+            .load_cached_opencode_session_statuses_for_targets(&probe_plan.primary_probe_targets)?;
+        let has_active_run =
+            self.evaluate_run_activity(&probe_plan.run_plans, &primary_statuses_by_target)?;
+
+        let fallback_probe_targets = probe_plan.fallback_probe_targets(&primary_statuses_by_target);
+        let fallback_statuses_by_target = self
+            .service
+            .load_cached_opencode_session_statuses_for_targets(&fallback_probe_targets)?;
+        let active_session_roles = self.collect_active_session_roles(
+            &probe_plan.session_plans,
+            &primary_statuses_by_target,
+            &fallback_statuses_by_target,
+        )?;
+
+        Ok(TaskActiveWorkEvidence {
+            has_active_run,
+            active_session_roles,
+        })
+    }
+
+    fn collect_candidate_runs(
+        &self,
+        normalized_repo: &Path,
+        task_id: &str,
+    ) -> Result<Vec<RunProbeCandidate>> {
+        Ok(self
             .service
             .runs
             .lock()
@@ -118,101 +157,43 @@ impl<'a> TaskActivityGuard<'a> {
                 runtime_route: run.summary.runtime_route.clone(),
                 worktree_path: run.worktree_path.clone(),
             })
-            .collect::<Vec<_>>();
-        let mut runtime_routes_by_worktree = HashMap::new();
-        let mut run_probe_plans = Vec::new();
+            .collect())
+    }
+
+    fn build_probe_plan(
+        &self,
+        candidate_runs: &[RunProbeCandidate],
+        sessions: &[AgentSessionDocument],
+        runtime_routes_by_worktree: &HashMap<String, RuntimeRoute>,
+        repo_runtime_routes_by_kind: &HashMap<AgentRuntimeKind, RuntimeRoute>,
+    ) -> TaskActivityProbePlan {
         let mut primary_probe_targets = Vec::new();
+        let run_plans = build_run_probe_plans(candidate_runs, sessions, &mut primary_probe_targets);
+        let session_plans = build_session_probe_plans(
+            sessions,
+            runtime_routes_by_worktree,
+            repo_runtime_routes_by_kind,
+            &mut primary_probe_targets,
+        );
 
-        for run_candidate in &candidate_runs {
-            runtime_routes_by_worktree.insert(
-                normalize_path_key(run_candidate.worktree_path.as_str()),
-                run_candidate.runtime_route.clone(),
-            );
-
-            let external_session_ids = collect_build_external_session_ids(run_candidate, sessions);
-            let primary_target = if external_session_ids.is_empty() {
-                None
-            } else {
-                let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-                    &run_candidate.runtime_route,
-                    run_candidate.worktree_path.as_str(),
-                );
-                primary_probe_targets.push(target.clone());
-                Some(target)
-            };
-            run_probe_plans.push(RunProbePlan {
-                worktree_path: run_candidate.worktree_path.clone(),
-                external_session_ids,
-                primary_target,
-            });
+        TaskActivityProbePlan {
+            run_plans,
+            session_plans,
+            primary_probe_targets,
         }
+    }
 
-        let repo_runtime_routes_by_kind = self.collect_repo_runtime_routes_by_kind(repo_path)?;
-        let mut session_probe_plans = Vec::new();
-        for session in sessions
-            .iter()
-            .filter(|session| matches!(session.role.as_str(), "build" | "qa"))
-        {
-            let external_session_id = session
-                .external_session_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty());
-            let Some(external_session_id) = external_session_id else {
-                continue;
-            };
-
-            let worktree_key = normalize_path_key(session.working_directory.as_str());
-            let fallback_runtime_kind = parse_runtime_kind(session.runtime_kind.as_str());
-            let worktree_runtime_route = runtime_routes_by_worktree.get(worktree_key.as_str());
-            let repo_runtime_route =
-                fallback_runtime_kind.and_then(|kind| repo_runtime_routes_by_kind.get(&kind));
-            let runtime_route = worktree_runtime_route.or(repo_runtime_route);
-            let Some(runtime_route) = runtime_route else {
-                continue;
-            };
-
-            let primary_target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-                runtime_route,
-                session.working_directory.as_str(),
-            );
-            primary_probe_targets.push(primary_target.clone());
-
-            let fallback_target = if let (Some(primary_route), Some(fallback_route)) =
-                (worktree_runtime_route, repo_runtime_route)
-            {
-                let primary_endpoint = runtime_route_endpoint(primary_route);
-                let fallback_endpoint = runtime_route_endpoint(fallback_route);
-                if primary_endpoint != fallback_endpoint {
-                    Some(OpencodeSessionStatusProbeTarget::for_runtime_route(
-                        fallback_route,
-                        session.working_directory.as_str(),
-                    ))
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-
-            session_probe_plans.push(SessionProbePlan {
-                worktree_key,
-                role: session.role.clone(),
-                external_session_id: external_session_id.to_string(),
-                primary_target,
-                fallback_target,
-            });
-        }
-
-        let primary_statuses_by_target = self
-            .service
-            .load_cached_opencode_session_statuses_for_targets(&primary_probe_targets)?;
-
-        let mut has_active_run = false;
-        for run_probe_plan in &run_probe_plans {
+    fn evaluate_run_activity(
+        &self,
+        run_plans: &[RunProbePlan],
+        primary_statuses_by_target: &HashMap<
+            OpencodeSessionStatusProbeTarget,
+            OpencodeSessionStatusMap,
+        >,
+    ) -> Result<bool> {
+        for run_probe_plan in run_plans {
             let Some(primary_target) = run_probe_plan.primary_target.as_ref() else {
-                has_active_run = true;
-                break;
+                return Ok(true);
             };
 
             let statuses = primary_statuses_by_target
@@ -230,74 +211,43 @@ impl<'a> TaskActivityGuard<'a> {
                     has_live_opencode_session_status(statuses, external_session_id)
                 })
             {
-                has_active_run = true;
-                break;
+                return Ok(true);
             }
         }
 
-        let fallback_probe_targets = session_probe_plans
-            .iter()
-            .filter_map(|session_probe_plan| {
-                let primary_statuses =
-                    primary_statuses_by_target.get(&session_probe_plan.primary_target)?;
-                if primary_statuses.is_empty() {
-                    session_probe_plan.fallback_target.clone()
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-        let fallback_statuses_by_target = self
-            .service
-            .load_cached_opencode_session_statuses_for_targets(&fallback_probe_targets)?;
+        Ok(false)
+    }
 
+    fn collect_active_session_roles(
+        &self,
+        session_plans: &[SessionProbePlan],
+        primary_statuses_by_target: &HashMap<
+            OpencodeSessionStatusProbeTarget,
+            OpencodeSessionStatusMap,
+        >,
+        fallback_statuses_by_target: &HashMap<
+            OpencodeSessionStatusProbeTarget,
+            OpencodeSessionStatusMap,
+        >,
+    ) -> Result<Vec<String>> {
         let mut active_roles = HashSet::new();
-        for session_probe_plan in session_probe_plans {
-            let primary_statuses = primary_statuses_by_target
-                .get(&session_probe_plan.primary_target)
-                .ok_or_else(|| {
-                    anyhow!(
-                        "Missing cached OpenCode session statuses for {}",
-                        session_probe_plan.worktree_key
-                    )
-                })?;
-            let statuses = if primary_statuses.is_empty() {
-                if let Some(fallback_target) = session_probe_plan.fallback_target.as_ref() {
-                    let fallback_statuses = fallback_statuses_by_target
-                        .get(fallback_target)
-                        .ok_or_else(|| {
-                            anyhow!(
-                                "Missing cached OpenCode session fallback statuses for {}",
-                                session_probe_plan.worktree_key
-                            )
-                        })?;
-                    if fallback_statuses.is_empty() {
-                        primary_statuses
-                    } else {
-                        fallback_statuses
-                    }
-                } else {
-                    primary_statuses
-                }
-            } else {
-                primary_statuses
-            };
-
+        for session_probe_plan in session_plans {
+            let statuses = resolve_session_statuses(
+                session_probe_plan,
+                primary_statuses_by_target,
+                fallback_statuses_by_target,
+            )?;
             if has_live_opencode_session_status(
                 statuses,
                 session_probe_plan.external_session_id.as_str(),
             ) {
-                active_roles.insert(session_probe_plan.role);
+                active_roles.insert(session_probe_plan.role.clone());
             }
         }
 
         let mut active_session_roles = active_roles.into_iter().collect::<Vec<_>>();
         active_session_roles.sort_unstable();
-
-        Ok(TaskActiveWorkEvidence {
-            has_active_run,
-            active_session_roles,
-        })
+        Ok(active_session_roles)
     }
 
     fn collect_repo_runtime_routes_by_kind(
@@ -355,6 +305,205 @@ impl TaskActiveWorkEvidence {
 
         blockers.join(", ")
     }
+}
+
+struct TaskActivityProbePlan {
+    run_plans: Vec<RunProbePlan>,
+    session_plans: Vec<SessionProbePlan>,
+    primary_probe_targets: Vec<OpencodeSessionStatusProbeTarget>,
+}
+
+impl TaskActivityProbePlan {
+    fn fallback_probe_targets(
+        &self,
+        primary_statuses_by_target: &HashMap<
+            OpencodeSessionStatusProbeTarget,
+            OpencodeSessionStatusMap,
+        >,
+    ) -> Vec<OpencodeSessionStatusProbeTarget> {
+        dedupe_probe_targets(
+            self.session_plans
+                .iter()
+                .filter_map(|session_probe_plan| {
+                    let primary_statuses =
+                        primary_statuses_by_target.get(&session_probe_plan.primary_target)?;
+                    if primary_statuses.is_empty() {
+                        session_probe_plan.fallback_target.clone()
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+        )
+    }
+}
+
+fn build_run_probe_plans(
+    candidate_runs: &[RunProbeCandidate],
+    sessions: &[AgentSessionDocument],
+    primary_probe_targets: &mut Vec<OpencodeSessionStatusProbeTarget>,
+) -> Vec<RunProbePlan> {
+    let mut run_plans = Vec::with_capacity(candidate_runs.len());
+    for run_candidate in candidate_runs {
+        let external_session_ids = collect_build_external_session_ids(run_candidate, sessions);
+        let primary_target = if external_session_ids.is_empty() {
+            None
+        } else {
+            let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
+                &run_candidate.runtime_route,
+                run_candidate.worktree_path.as_str(),
+            );
+            primary_probe_targets.push(target.clone());
+            Some(target)
+        };
+        run_plans.push(RunProbePlan {
+            worktree_path: run_candidate.worktree_path.clone(),
+            external_session_ids,
+            primary_target,
+        });
+    }
+    run_plans
+}
+
+fn build_session_probe_plans(
+    sessions: &[AgentSessionDocument],
+    runtime_routes_by_worktree: &HashMap<String, RuntimeRoute>,
+    repo_runtime_routes_by_kind: &HashMap<AgentRuntimeKind, RuntimeRoute>,
+    primary_probe_targets: &mut Vec<OpencodeSessionStatusProbeTarget>,
+) -> Vec<SessionProbePlan> {
+    let mut session_plans = Vec::new();
+    for session in sessions
+        .iter()
+        .filter(|session| matches!(session.role.as_str(), "build" | "qa"))
+    {
+        let external_session_id = session
+            .external_session_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let Some(external_session_id) = external_session_id else {
+            continue;
+        };
+
+        let worktree_key = normalize_path_key(session.working_directory.as_str());
+        let fallback_runtime_kind = parse_runtime_kind(session.runtime_kind.as_str());
+        let worktree_runtime_route = runtime_routes_by_worktree.get(worktree_key.as_str());
+        let repo_runtime_route =
+            fallback_runtime_kind.and_then(|kind| repo_runtime_routes_by_kind.get(&kind));
+        let runtime_route = worktree_runtime_route.or(repo_runtime_route);
+        let Some(runtime_route) = runtime_route else {
+            continue;
+        };
+
+        let primary_target = OpencodeSessionStatusProbeTarget::for_runtime_route(
+            runtime_route,
+            session.working_directory.as_str(),
+        );
+        primary_probe_targets.push(primary_target.clone());
+        let fallback_target = select_fallback_probe_target(
+            worktree_runtime_route,
+            repo_runtime_route,
+            session.working_directory.as_str(),
+        );
+
+        session_plans.push(SessionProbePlan {
+            worktree_key,
+            role: session.role.clone(),
+            external_session_id: external_session_id.to_string(),
+            primary_target,
+            fallback_target,
+        });
+    }
+    session_plans
+}
+
+fn collect_runtime_routes_by_worktree(
+    candidate_runs: &[RunProbeCandidate],
+) -> HashMap<String, RuntimeRoute> {
+    candidate_runs
+        .iter()
+        .map(|run_candidate| {
+            (
+                normalize_path_key(run_candidate.worktree_path.as_str()),
+                run_candidate.runtime_route.clone(),
+            )
+        })
+        .collect()
+}
+
+fn resolve_session_statuses<'a>(
+    session_probe_plan: &SessionProbePlan,
+    primary_statuses_by_target: &'a HashMap<
+        OpencodeSessionStatusProbeTarget,
+        OpencodeSessionStatusMap,
+    >,
+    fallback_statuses_by_target: &'a HashMap<
+        OpencodeSessionStatusProbeTarget,
+        OpencodeSessionStatusMap,
+    >,
+) -> Result<&'a OpencodeSessionStatusMap> {
+    let primary_statuses = primary_statuses_by_target
+        .get(&session_probe_plan.primary_target)
+        .ok_or_else(|| {
+            anyhow!(
+                "Missing cached OpenCode session statuses for {}",
+                session_probe_plan.worktree_key
+            )
+        })?;
+    if !primary_statuses.is_empty() {
+        return Ok(primary_statuses);
+    }
+
+    let Some(fallback_target) = session_probe_plan.fallback_target.as_ref() else {
+        return Ok(primary_statuses);
+    };
+    let fallback_statuses = fallback_statuses_by_target
+        .get(fallback_target)
+        .ok_or_else(|| {
+            anyhow!(
+                "Missing cached OpenCode session fallback statuses for {}",
+                session_probe_plan.worktree_key
+            )
+        })?;
+    if fallback_statuses.is_empty() {
+        Ok(primary_statuses)
+    } else {
+        Ok(fallback_statuses)
+    }
+}
+
+fn select_fallback_probe_target(
+    worktree_runtime_route: Option<&RuntimeRoute>,
+    repo_runtime_route: Option<&RuntimeRoute>,
+    working_directory: &str,
+) -> Option<OpencodeSessionStatusProbeTarget> {
+    let (Some(primary_route), Some(fallback_route)) = (worktree_runtime_route, repo_runtime_route)
+    else {
+        return None;
+    };
+    let primary_endpoint = runtime_route_endpoint(primary_route);
+    let fallback_endpoint = runtime_route_endpoint(fallback_route);
+    if primary_endpoint == fallback_endpoint {
+        return None;
+    }
+
+    Some(OpencodeSessionStatusProbeTarget::for_runtime_route(
+        fallback_route,
+        working_directory,
+    ))
+}
+
+fn dedupe_probe_targets(
+    targets: Vec<OpencodeSessionStatusProbeTarget>,
+) -> Vec<OpencodeSessionStatusProbeTarget> {
+    let mut unique_targets = Vec::new();
+    let mut seen = HashSet::new();
+    for target in targets {
+        if seen.insert(target.clone()) {
+            unique_targets.push(target);
+        }
+    }
+    unique_targets
 }
 
 fn parse_runtime_kind(value: &str) -> Option<AgentRuntimeKind> {

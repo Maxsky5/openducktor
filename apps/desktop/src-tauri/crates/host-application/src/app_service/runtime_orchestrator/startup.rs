@@ -1,10 +1,10 @@
 use super::super::{
-    spawn_opencode_server, wait_for_local_server_with_process, AppService,
-    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupEventContext,
-    StartupEventCorrelation, StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
+    AppService, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
+    STARTUP_CONFIG_INVALID_REASON, StartupEventContext, StartupEventCorrelation,
+    StartupEventPayload, spawn_opencode_server, wait_for_local_server_with_process,
 };
 use super::{RuntimeStartInput, SpawnedRuntimeServer};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use host_domain::{RuntimeRole, TASK_METADATA_NAMESPACE};
 use host_infra_system::pick_free_port;
 use std::path::Path;

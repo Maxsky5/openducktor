@@ -1,11 +1,12 @@
 use super::service_core::{
-    AppService, CachedOpencodeSessionStatusProbe, CachedOpencodeSessionStatusProbeOutcome,
-    OpencodeSessionStatusFlight, OpencodeSessionStatusFlightState,
-    OpencodeSessionStatusProbeLimiter,
+    AppService, CachedOpencodeSessionStatusProbe, CachedOpencodeSessionStatusProbeError,
+    CachedOpencodeSessionStatusProbeOutcome, OpencodeSessionStatusFlight,
+    OpencodeSessionStatusFlightState, OpencodeSessionStatusProbeLimiter,
 };
 use anyhow::{Context, Result, anyhow};
 use host_domain::RuntimeRoute;
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::fmt;
 use std::io::ErrorKind;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
@@ -92,7 +93,7 @@ impl Drop for OpencodeSessionStatusFlightGuard<'_> {
         }
 
         let aborted = CachedOpencodeSessionStatusProbeOutcome::ActionableError(
-            "OpenCode session status probe aborted unexpectedly".to_string(),
+            CachedOpencodeSessionStatusProbeError::ProbeAborted,
         );
         if let Err(error) = self.service.complete_opencode_session_status_flight(
             &self.target,
@@ -133,11 +134,22 @@ impl Drop for OpencodeSessionStatusProbePermit {
     }
 }
 
+impl fmt::Display for CachedOpencodeSessionStatusProbeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ProbeFailed(message) => formatter.write_str(message),
+            Self::ProbeAborted => {
+                formatter.write_str("OpenCode session status probe aborted unexpectedly")
+            }
+        }
+    }
+}
+
 impl CachedOpencodeSessionStatusProbeOutcome {
     fn into_result(&self) -> Result<OpencodeSessionStatusMap> {
         match self {
             Self::Statuses(statuses) => Ok(statuses.clone()),
-            Self::ActionableError(message) => Err(anyhow!(message.clone())),
+            Self::ActionableError(error) => Err(anyhow!(error.to_string())),
         }
     }
 }
@@ -269,6 +281,19 @@ fn extract_http_response_body(response: &str) -> String {
         .unwrap_or_default()
 }
 
+fn collect_unique_probe_targets(
+    targets: &[OpencodeSessionStatusProbeTarget],
+) -> Vec<OpencodeSessionStatusProbeTarget> {
+    let mut unique_targets = Vec::new();
+    let mut seen = HashSet::new();
+    for target in targets {
+        if seen.insert(target.clone()) {
+            unique_targets.push(target.clone());
+        }
+    }
+    unique_targets
+}
+
 impl AppService {
     pub(super) const OPENCODE_SESSION_STATUS_CACHE_TTL: Duration = Duration::from_secs(1);
 
@@ -276,18 +301,19 @@ impl AppService {
         &self,
         targets: &[OpencodeSessionStatusProbeTarget],
     ) -> Result<HashMap<OpencodeSessionStatusProbeTarget, OpencodeSessionStatusMap>> {
-        let mut unique_targets = Vec::new();
-        let mut seen = HashSet::new();
-        for target in targets {
-            if seen.insert(target.clone()) {
-                unique_targets.push(target.clone());
-            }
-        }
+        let unique_targets = collect_unique_probe_targets(targets);
 
         if unique_targets.is_empty() {
             return Ok(HashMap::new());
         }
 
+        self.resolve_status_batch(unique_targets)
+    }
+
+    fn resolve_status_batch(
+        &self,
+        unique_targets: Vec<OpencodeSessionStatusProbeTarget>,
+    ) -> Result<HashMap<OpencodeSessionStatusProbeTarget, OpencodeSessionStatusMap>> {
         let worker_count = unique_targets.len().min(
             self.opencode_session_status_probe_limiter
                 .max_concurrent
@@ -314,8 +340,9 @@ impl AppService {
                             return Ok(());
                         };
 
-                        let statuses =
-                            service.load_cached_opencode_session_statuses_for_target(&target)?;
+                        let statuses = service
+                            .resolve_cached_probe_outcome(&target)?
+                            .into_result()?;
                         let mut results = results.lock().map_err(|_| {
                             anyhow!("OpenCode session status batch results lock poisoned")
                         })?;
@@ -342,22 +369,36 @@ impl AppService {
         &self,
         target: &OpencodeSessionStatusProbeTarget,
     ) -> Result<OpencodeSessionStatusMap> {
+        self.resolve_cached_probe_outcome(target)?.into_result()
+    }
+
+    fn resolve_cached_probe_outcome(
+        &self,
+        target: &OpencodeSessionStatusProbeTarget,
+    ) -> Result<CachedOpencodeSessionStatusProbeOutcome> {
         if let Some(cached) = self.cached_opencode_session_status_outcome(target)? {
-            return cached.into_result();
+            return Ok(cached);
         }
 
         let (flight, is_leader) = self.acquire_opencode_session_status_flight(target)?;
         if !is_leader {
-            let awaited = Self::wait_for_opencode_session_status_flight(&flight)?;
-            return awaited.into_result();
+            return Self::wait_for_opencode_session_status_flight(&flight);
         }
 
+        self.resolve_leader_probe_outcome(target, flight)
+    }
+
+    fn resolve_leader_probe_outcome(
+        &self,
+        target: &OpencodeSessionStatusProbeTarget,
+        flight: Arc<OpencodeSessionStatusFlight>,
+    ) -> Result<CachedOpencodeSessionStatusProbeOutcome> {
         let mut flight_guard = OpencodeSessionStatusFlightGuard::new(self, target, flight);
         let _permit = self.acquire_opencode_session_status_probe_permit()?;
         let outcome = Self::probe_uncached_opencode_session_status_target(target);
         self.update_opencode_session_status_cache(target, &outcome)?;
         flight_guard.complete(&outcome)?;
-        outcome.into_result()
+        Ok(outcome)
     }
 
     fn probe_uncached_opencode_session_status_target(
@@ -368,9 +409,9 @@ impl AppService {
             Err(error) if is_unreachable_opencode_session_status_error(&error) => {
                 CachedOpencodeSessionStatusProbeOutcome::Statuses(OpencodeSessionStatusMap::new())
             }
-            Err(error) => {
-                CachedOpencodeSessionStatusProbeOutcome::ActionableError(error.to_string())
-            }
+            Err(error) => CachedOpencodeSessionStatusProbeOutcome::ActionableError(
+                CachedOpencodeSessionStatusProbeError::ProbeFailed(error.to_string()),
+            ),
         }
     }
 
@@ -756,6 +797,40 @@ mod tests {
 
         assert!(first_error.to_string().contains("HTTP 500"));
         assert!(second_error.to_string().contains("HTTP 500"));
+        assert_eq!(connections.load(Ordering::SeqCst), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn malformed_json_probe_failures_are_cached_inside_ttl() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let (port, connections, server_handle) =
+            spawn_counting_status_server(1, Duration::ZERO, Ok("{not-json}".to_string()))?;
+        let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
+            &AgentRuntimeKind::Opencode.route_for_port(port),
+            "/tmp/repo",
+        );
+
+        let first_error = service
+            .load_cached_opencode_session_statuses_for_target(&target)
+            .expect_err("parse failures should remain actionable");
+        let second_error = service
+            .load_cached_opencode_session_statuses_for_target(&target)
+            .expect_err("cached parse failures should remain actionable");
+        server_handle
+            .join()
+            .expect("status server thread should finish");
+
+        assert!(
+            first_error
+                .to_string()
+                .contains("Failed parsing OpenCode session status response")
+        );
+        assert!(
+            second_error
+                .to_string()
+                .contains("Failed parsing OpenCode session status response")
+        );
         assert_eq!(connections.load(Ordering::SeqCst), 1);
         Ok(())
     }
