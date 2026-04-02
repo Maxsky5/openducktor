@@ -9,10 +9,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
-import type {
-  RepoRuntimeFailureKind,
-  RepoRuntimeHealthCheck,
-  RepoRuntimeHealthMap,
+import {
+  classifyRepoRuntimeFailure,
+  type RepoRuntimeFailureKind,
+  type RepoRuntimeHealthCheck,
+  type RepoRuntimeHealthMap,
 } from "@/types/diagnostics";
 import {
   beadsCheckQueryOptions,
@@ -61,7 +62,31 @@ type DiagnosticsToastIssue = {
 };
 
 const RUNTIME_HEALTH_TIMEOUT_RETRY_DELAY_MS = 2_000;
-const MANUAL_DIAGNOSTICS_UNAVAILABLE_TOAST_ID = "diagnostics:manual-unavailable";
+
+const buildRuntimeCheckErrorState = (
+  runtimeDefinitions: RuntimeDescriptor[],
+  runtimeCheckError: string,
+): RuntimeCheck => ({
+  gitOk: false,
+  gitVersion: null,
+  ghOk: false,
+  ghVersion: null,
+  ghAuthOk: false,
+  ghAuthLogin: null,
+  ghAuthError: runtimeCheckError,
+  runtimes: runtimeDefinitions.map((definition) => ({
+    kind: definition.kind,
+    ok: false,
+    version: null,
+  })),
+  errors: [runtimeCheckError],
+});
+
+const buildBeadsCheckErrorState = (beadsCheckError: string): BeadsCheck => ({
+  beadsOk: false,
+  beadsPath: null,
+  beadsError: beadsCheckError,
+});
 
 const buildRuntimeHealthErrorMap = (
   runtimeDefinitions: RuntimeDescriptor[],
@@ -88,18 +113,6 @@ const buildRuntimeHealthErrorMap = (
       },
     ]),
   ) as RepoRuntimeHealthMap;
-};
-
-const getSettledErrorDescriptions = (
-  results: Array<{ label: string; result: PromiseSettledResult<unknown> }>,
-): string[] => {
-  return results.flatMap(({ label, result }) => {
-    if (result.status === "fulfilled") {
-      return [];
-    }
-
-    return [`${label}: ${errorMessage(result.reason)}`];
-  });
 };
 
 const getSettledValue = <T>(result: PromiseSettledResult<T>): T => {
@@ -156,9 +169,7 @@ export function useChecks({
   const queryClient = useQueryClient();
   const [isManualLoadingChecks, setIsManualLoadingChecks] = useState(false);
   const issueSignaturesRef = useRef(new Map<string, string>());
-  const runtimeHealthRetryTimeoutRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(
-    null,
-  );
+  const diagnosticsRetryTimeoutRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const runtimeCheckQuery = useQuery(runtimeCheckQueryOptions());
   const beadsCheckQuery = useQuery({
     ...beadsCheckQueryOptions(activeRepo ?? "__disabled__"),
@@ -249,27 +260,11 @@ export function useChecks({
         refreshBeadsCheckForRepo(activeRepo, true),
         refreshRepoRuntimeHealthForRepo(activeRepo, true),
       ]);
-      const unavailableDetails = getSettledErrorDescriptions([
-        { label: "runtime", result: runtimeResult },
-        { label: "beads", result: beadsResult },
-      ]);
-
-      if (unavailableDetails.length > 0) {
-        toast.error("Diagnostics check unavailable", {
-          id: MANUAL_DIAGNOSTICS_UNAVAILABLE_TOAST_ID,
-          description: unavailableDetails.join(" | "),
-          duration: Number.POSITIVE_INFINITY,
-        });
-        return;
-      }
-
-      toast.dismiss(MANUAL_DIAGNOSTICS_UNAVAILABLE_TOAST_ID);
-
-      const runtime = getSettledValue(runtimeResult);
-      const beads = getSettledValue(beadsResult);
+      const runtime = runtimeResult.status === "fulfilled" ? runtimeResult.value : null;
+      const beads = beadsResult.status === "fulfilled" ? beadsResult.value : null;
       getSettledValue(runtimeHealthResult);
-      if (runtime.gitOk && beads.beadsOk) {
-        toast.dismiss(MANUAL_DIAGNOSTICS_UNAVAILABLE_TOAST_ID);
+      if (runtime && beads && runtime.gitOk && beads.beadsOk) {
+        return;
       }
     } finally {
       setIsManualLoadingChecks(false);
@@ -348,52 +343,118 @@ export function useChecks({
     runtimeHealthQuery.error,
     runtimeHealthQuery.errorUpdatedAt,
   ]);
-  const runtimeHealthToastIssues = useMemo((): DiagnosticsToastIssue[] => {
+  const runtimeCheckError = runtimeCheckQuery.error ? errorMessage(runtimeCheckQuery.error) : null;
+  const runtimeCheckFailureKind = classifyRepoRuntimeFailure(runtimeCheckError);
+  const runtimeCheckState = useMemo((): RuntimeCheck | null => {
+    if (runtimeCheckQuery.data) {
+      return runtimeCheckQuery.data;
+    }
+
+    if (runtimeCheckError) {
+      return buildRuntimeCheckErrorState(runtimeDefinitions, runtimeCheckError);
+    }
+
+    return null;
+  }, [runtimeCheckError, runtimeCheckQuery.data, runtimeDefinitions]);
+  const beadsCheckError = beadsCheckQuery.error ? errorMessage(beadsCheckQuery.error) : null;
+  const beadsCheckFailureKind = classifyRepoRuntimeFailure(beadsCheckError);
+  const activeBeadsCheck = useMemo((): BeadsCheck | null => {
+    if (activeRepo === null) {
+      return null;
+    }
+
+    if (beadsCheckQuery.data) {
+      return beadsCheckQuery.data;
+    }
+
+    if (beadsCheckError) {
+      return buildBeadsCheckErrorState(beadsCheckError);
+    }
+
+    return null;
+  }, [activeRepo, beadsCheckError, beadsCheckQuery.data]);
+  const diagnosticsToastIssues = useMemo((): DiagnosticsToastIssue[] => {
     if (activeRepo === null) {
       return [];
     }
 
-    return runtimeDefinitions.flatMap((definition) => {
-      const runtimeHealth = activeRepoRuntimeHealthByRuntime[definition.kind];
-      if (!runtimeHealth) {
+    const issues: DiagnosticsToastIssue[] = [];
+
+    if (runtimeCheckError && runtimeCheckFailureKind !== null) {
+      issues.push(
+        buildRuntimeHealthToastIssue({
+          id: "diagnostics:cli-tools",
+          label: "CLI tools",
+          detail: runtimeCheckError,
+          failureKind: runtimeCheckFailureKind,
+        }),
+      );
+    }
+
+    if (beadsCheckError && beadsCheckFailureKind !== null) {
+      issues.push(
+        buildRuntimeHealthToastIssue({
+          id: "diagnostics:beads-store",
+          label: "Beads store",
+          detail: beadsCheckError,
+          failureKind: beadsCheckFailureKind,
+        }),
+      );
+    }
+
+    issues.push(
+      ...runtimeDefinitions.flatMap((definition) => {
+        const runtimeHealth = activeRepoRuntimeHealthByRuntime[definition.kind];
+        if (!runtimeHealth) {
+          return [];
+        }
+
+        if (runtimeHealth.runtimeOk === false && runtimeHealth.runtimeFailureKind !== null) {
+          return [
+            buildRuntimeHealthToastIssue({
+              id: `diagnostics:runtime:${definition.kind}`,
+              label: `${definition.label} runtime`,
+              detail: runtimeHealth.runtimeError,
+              failureKind: runtimeHealth.runtimeFailureKind,
+            }),
+          ];
+        }
+
+        if (
+          definition.capabilities.supportsMcpStatus &&
+          runtimeHealth.mcpOk === false &&
+          runtimeHealth.mcpFailureKind !== null
+        ) {
+          return [
+            buildRuntimeHealthToastIssue({
+              id: `diagnostics:mcp:${definition.kind}`,
+              label: `${definition.label} OpenDucktor MCP`,
+              detail: runtimeHealth.mcpServerError ?? runtimeHealth.mcpError,
+              failureKind: runtimeHealth.mcpFailureKind,
+            }),
+          ];
+        }
+
         return [];
-      }
+      }),
+    );
 
-      if (runtimeHealth.runtimeOk === false && runtimeHealth.runtimeFailureKind !== null) {
-        return [
-          buildRuntimeHealthToastIssue({
-            id: `diagnostics:runtime:${definition.kind}`,
-            label: `${definition.label} runtime`,
-            detail: runtimeHealth.runtimeError,
-            failureKind: runtimeHealth.runtimeFailureKind,
-          }),
-        ];
-      }
-
-      if (
-        definition.capabilities.supportsMcpStatus &&
-        runtimeHealth.mcpOk === false &&
-        runtimeHealth.mcpFailureKind !== null
-      ) {
-        return [
-          buildRuntimeHealthToastIssue({
-            id: `diagnostics:mcp:${definition.kind}`,
-            label: `${definition.label} OpenDucktor MCP`,
-            detail: runtimeHealth.mcpServerError ?? runtimeHealth.mcpError,
-            failureKind: runtimeHealth.mcpFailureKind,
-          }),
-        ];
-      }
-
-      return [];
-    });
-  }, [activeRepo, activeRepoRuntimeHealthByRuntime, runtimeDefinitions]);
-  const hasRuntimeHealthTimeoutIssue = runtimeHealthToastIssues.some(
+    return issues;
+  }, [
+    activeRepo,
+    activeRepoRuntimeHealthByRuntime,
+    beadsCheckError,
+    beadsCheckFailureKind,
+    runtimeCheckError,
+    runtimeCheckFailureKind,
+    runtimeDefinitions,
+  ]);
+  const hasDiagnosticsTimeoutIssue = diagnosticsToastIssues.some(
     (issue) => issue.severity === "timeout",
   );
 
   useEffect(() => {
-    const nextIssueIds = new Set(runtimeHealthToastIssues.map((issue) => issue.id));
+    const nextIssueIds = new Set(diagnosticsToastIssues.map((issue) => issue.id));
 
     for (const issueId of [...issueSignaturesRef.current.keys()]) {
       if (nextIssueIds.has(issueId)) {
@@ -404,7 +465,7 @@ export function useChecks({
       issueSignaturesRef.current.delete(issueId);
     }
 
-    for (const issue of runtimeHealthToastIssues) {
+    for (const issue of diagnosticsToastIssues) {
       const signature = `${issue.severity}:${issue.title}:${issue.description}`;
       if (issueSignaturesRef.current.get(issue.id) === signature) {
         continue;
@@ -426,52 +487,80 @@ export function useChecks({
 
       issueSignaturesRef.current.set(issue.id, signature);
     }
-  }, [runtimeHealthToastIssues]);
+  }, [diagnosticsToastIssues]);
 
   useEffect(() => {
-    if (runtimeHealthRetryTimeoutRef.current !== null) {
-      globalThis.clearTimeout(runtimeHealthRetryTimeoutRef.current);
-      runtimeHealthRetryTimeoutRef.current = null;
+    if (diagnosticsRetryTimeoutRef.current !== null) {
+      globalThis.clearTimeout(diagnosticsRetryTimeoutRef.current);
+      diagnosticsRetryTimeoutRef.current = null;
     }
 
+    const shouldRetryRuntimeCheckTimeout =
+      runtimeCheckFailureKind === "timeout" && !runtimeCheckQuery.isFetching;
+    const shouldRetryBeadsCheckTimeout =
+      activeRepo !== null && beadsCheckFailureKind === "timeout" && !beadsCheckQuery.isFetching;
+    const shouldRetryRuntimeHealthTimeout =
+      activeRepo !== null &&
+      hasDiagnosticsTimeoutIssue &&
+      runtimeDefinitions.length > 0 &&
+      !runtimeHealthQuery.isFetching;
+
     if (
-      activeRepo === null ||
-      !hasRuntimeHealthTimeoutIssue ||
-      runtimeHealthQuery.isFetching ||
-      runtimeDefinitions.length === 0
+      !shouldRetryRuntimeCheckTimeout &&
+      !shouldRetryBeadsCheckTimeout &&
+      !shouldRetryRuntimeHealthTimeout
     ) {
       return;
     }
 
-    runtimeHealthRetryTimeoutRef.current = globalThis.setTimeout(() => {
-      runtimeHealthRetryTimeoutRef.current = null;
-      void refreshRepoRuntimeHealthForRepo(activeRepo, true).catch(() => undefined);
+    diagnosticsRetryTimeoutRef.current = globalThis.setTimeout(() => {
+      diagnosticsRetryTimeoutRef.current = null;
+      const retries: Promise<unknown>[] = [];
+
+      if (shouldRetryRuntimeCheckTimeout) {
+        retries.push(refreshRuntimeCheck(true));
+      }
+
+      if (shouldRetryBeadsCheckTimeout && activeRepo !== null) {
+        retries.push(refreshBeadsCheckForRepo(activeRepo, true));
+      }
+
+      if (shouldRetryRuntimeHealthTimeout && activeRepo !== null) {
+        retries.push(refreshRepoRuntimeHealthForRepo(activeRepo, true));
+      }
+
+      void Promise.allSettled(retries);
     }, RUNTIME_HEALTH_TIMEOUT_RETRY_DELAY_MS);
 
     return () => {
-      if (runtimeHealthRetryTimeoutRef.current !== null) {
-        globalThis.clearTimeout(runtimeHealthRetryTimeoutRef.current);
-        runtimeHealthRetryTimeoutRef.current = null;
+      if (diagnosticsRetryTimeoutRef.current !== null) {
+        globalThis.clearTimeout(diagnosticsRetryTimeoutRef.current);
+        diagnosticsRetryTimeoutRef.current = null;
       }
     };
   }, [
     activeRepo,
-    hasRuntimeHealthTimeoutIssue,
+    beadsCheckFailureKind,
+    beadsCheckQuery.isFetching,
+    hasDiagnosticsTimeoutIssue,
+    refreshBeadsCheckForRepo,
     refreshRepoRuntimeHealthForRepo,
+    refreshRuntimeCheck,
+    runtimeCheckFailureKind,
+    runtimeCheckQuery.isFetching,
     runtimeDefinitions.length,
     runtimeHealthQuery.isFetching,
   ]);
 
   useEffect(() => {
     return () => {
-      if (runtimeHealthRetryTimeoutRef.current !== null) {
-        globalThis.clearTimeout(runtimeHealthRetryTimeoutRef.current);
+      if (diagnosticsRetryTimeoutRef.current !== null) {
+        globalThis.clearTimeout(diagnosticsRetryTimeoutRef.current);
       }
 
       for (const issueId of issueSignaturesRef.current.keys()) {
         toast.dismiss(issueId);
       }
-      toast.dismiss(MANUAL_DIAGNOSTICS_UNAVAILABLE_TOAST_ID);
       issueSignaturesRef.current.clear();
     };
   }, []);
@@ -484,8 +573,8 @@ export function useChecks({
         (runtimeDefinitions.length > 0 && runtimeHealthQuery.isFetching)));
 
   return {
-    runtimeCheck: runtimeCheckQuery.data ?? null,
-    activeBeadsCheck: activeRepo === null ? null : (beadsCheckQuery.data ?? null),
+    runtimeCheck: runtimeCheckState,
+    activeBeadsCheck,
     activeRepoRuntimeHealthByRuntime,
     isLoadingChecks,
     setIsLoadingChecks: setIsManualLoadingChecks,

@@ -501,10 +501,10 @@ describe("use-checks", () => {
       expect(runtimeCheck.mock.calls[0]).toEqual([false]);
       expect(runtimeCheck.mock.calls[1]).toEqual([true]);
       expect(toastError).toHaveBeenCalledWith(
-        "Diagnostics check unavailable",
+        "CLI tools unavailable",
         expect.objectContaining({
-          id: "diagnostics:manual-unavailable",
-          description: "runtime: runtime down",
+          id: "diagnostics:cli-tools",
+          description: "runtime down",
         }),
       );
       expect(harness.getLatest().isLoadingChecks).toBe(false);
@@ -572,11 +572,12 @@ describe("use-checks", () => {
       await harness.waitFor((value) => value.isLoadingChecks === false);
 
       expect(toastError).toHaveBeenCalledWith(
-        "Diagnostics check unavailable",
-        expect.objectContaining({
-          id: "diagnostics:manual-unavailable",
-          description: "runtime: runtime down | beads: beads down",
-        }),
+        "CLI tools unavailable",
+        expect.objectContaining({ id: "diagnostics:cli-tools", description: "runtime down" }),
+      );
+      expect(toastError).toHaveBeenCalledWith(
+        "Beads store unavailable",
+        expect.objectContaining({ id: "diagnostics:beads-store", description: "beads down" }),
       );
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
@@ -649,11 +650,15 @@ describe("use-checks", () => {
       await harness.waitFor((value) => value.isLoadingChecks === false);
 
       expect(toastError).toHaveBeenCalledWith(
-        "Diagnostics check unavailable",
+        "CLI tools unavailable",
         expect.objectContaining({
-          id: "diagnostics:manual-unavailable",
-          description: "runtime: runtime down | beads: Timed out after 15000ms",
+          id: "diagnostics:cli-tools",
+          description: "runtime down",
         }),
+      );
+      expect(toastMessage).toHaveBeenCalledWith(
+        "Beads store not yet available",
+        expect.objectContaining({ id: "diagnostics:beads-store" }),
       );
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
@@ -662,6 +667,71 @@ describe("use-checks", () => {
       host.beadsCheck = original.beadsCheck;
       globalThis.setTimeout = originalSetTimeout;
       globalThis.clearTimeout = originalClearTimeout;
+      beadsDeferred.reject(new Error("cleanup"));
+    }
+  });
+
+  test("projects runtime and beads query timeouts into concrete states instead of leaving checks pending", async () => {
+    const runtimeDeferred = createDeferred<RuntimeCheck>();
+    const beadsDeferred = createDeferred<BeadsCheck>();
+    const original = {
+      runtimeCheck: host.runtimeCheck,
+      beadsCheck: host.beadsCheck,
+    };
+    const originalSetTimeout = globalThis.setTimeout;
+    const originalClearTimeout = globalThis.clearTimeout;
+
+    host.runtimeCheck = mock(async () => runtimeDeferred.promise);
+    host.beadsCheck = mock(async () => beadsDeferred.promise);
+    repoHealthHandler = async () => makeRepoHealth();
+
+    globalThis.setTimeout = ((handler: TimerHandler, delay?: number) => {
+      if (typeof handler !== "function") {
+        throw new Error("Expected timeout callback function");
+      }
+
+      if (delay === 2_000) {
+        return originalSetTimeout(() => {}, 60_000);
+      }
+
+      return originalSetTimeout(() => {
+        handler();
+      }, 0);
+    }) as unknown as typeof globalThis.setTimeout;
+    globalThis.clearTimeout = ((timeoutId: ReturnType<typeof globalThis.setTimeout>) => {
+      originalClearTimeout(timeoutId);
+    }) as typeof globalThis.clearTimeout;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (value) =>
+          value.runtimeCheck?.errors[0] === "Timed out after 15000ms" &&
+          value.activeBeadsCheck?.beadsError === "Timed out after 15000ms" &&
+          value.isLoadingChecks === false,
+        1000,
+      );
+
+      expect(toastMessage).toHaveBeenCalledWith(
+        "CLI tools not yet available",
+        expect.objectContaining({ id: "diagnostics:cli-tools" }),
+      );
+      expect(toastMessage).toHaveBeenCalledWith(
+        "Beads store not yet available",
+        expect.objectContaining({ id: "diagnostics:beads-store" }),
+      );
+    } finally {
+      await harness.unmount();
+      host.runtimeCheck = original.runtimeCheck;
+      host.beadsCheck = original.beadsCheck;
+      globalThis.setTimeout = originalSetTimeout;
+      globalThis.clearTimeout = originalClearTimeout;
+      runtimeDeferred.reject(new Error("cleanup"));
       beadsDeferred.reject(new Error("cleanup"));
     }
   });

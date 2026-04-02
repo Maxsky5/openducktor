@@ -475,4 +475,61 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(runtimeSection?.errors[0]).toContain("Retrying automatically");
     expect(mcpSection?.badge).toEqual({ label: "Retrying", variant: "warning" });
   });
+
+  test("shows timeout-specific cli tools and beads states instead of leaving them checking", () => {
+    const model = buildDiagnosticsPanelModel({
+      activeRepo: "/repo",
+      activeWorkspace: {
+        path: "/repo",
+        isActive: true,
+        hasConfig: true,
+        configuredWorktreeBasePath: "/worktrees",
+        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+        effectiveWorktreeBasePath: "/worktrees",
+      },
+      runtimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        gitOk: false,
+        gitVersion: null,
+        ghOk: false,
+        ghVersion: null,
+        ghAuthOk: false,
+        ghAuthLogin: null,
+        ghAuthError: "Timed out after 15000ms",
+        runtimes: [{ kind: "opencode", ok: false, version: null }],
+        errors: ["Timed out after 15000ms"],
+      },
+      beadsCheck: {
+        beadsOk: false,
+        beadsPath: null,
+        beadsError: "Timed out after 15000ms",
+      },
+      runtimeHealthByRuntime: {
+        opencode: {
+          runtimeOk: true,
+          runtimeError: null,
+          runtimeFailureKind: null,
+          runtime: runtimeSummary,
+          mcpOk: true,
+          mcpError: null,
+          mcpFailureKind: null,
+          mcpServerName: "openducktor",
+          mcpServerStatus: "connected",
+          mcpServerError: null,
+          availableToolIds: [],
+          checkedAt: "2026-02-20T12:01:00.000Z",
+          errors: [],
+        },
+      },
+      isLoadingChecks: false,
+    });
+
+    expect(model.isSummaryChecking).toBe(false);
+    expect(model.sections[1]?.badge).toEqual({ label: "Retrying", variant: "warning" });
+    expect(model.sections[1]?.errors[0]).toContain("CLI tools is not yet available");
+    expect(model.sections[4]?.badge).toEqual({ label: "Retrying", variant: "warning" });
+    expect(model.sections[4]?.errors[0]).toContain("Beads store is not yet available");
+  });
 });

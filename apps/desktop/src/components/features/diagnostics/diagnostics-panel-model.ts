@@ -7,7 +7,11 @@ import type {
 } from "@openducktor/contracts";
 import { runtimeLabelFor } from "@/lib/agent-runtime";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
-import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "@/types/diagnostics";
+import {
+  classifyRepoRuntimeFailure,
+  type RepoRuntimeFailureKind,
+  type RepoRuntimeHealthMap,
+} from "@/types/diagnostics";
 import {
   buildDiagnosticsSummary,
   type DiagnosticsSummary,
@@ -119,6 +123,8 @@ export const buildDiagnosticsPanelModel = (
   const isRuntimeHealthPending = runtimeDefinitions.some(
     (definition) => runtimeHealthByRuntime[definition.kind] === undefined,
   );
+  const runtimeCheckFailureKind = classifyRepoRuntimeFailure(runtimeCheck?.errors[0] ?? null);
+  const beadsFailureKind = classifyRepoRuntimeFailure(beadsCheck?.beadsError ?? null);
 
   const criticalReasons: string[] = [];
   if (activeRepo) {
@@ -208,14 +214,19 @@ export const buildDiagnosticsPanelModel = (
       label:
         runtimeCheck === null
           ? "Checking"
-          : runtimeCheck.gitOk && runtimeCheck.runtimes.every((entry) => entry.ok)
-            ? "Available"
-            : "Issue",
-      variant: healthVariant(
-        runtimeCheck === null
-          ? null
-          : runtimeCheck.gitOk && runtimeCheck.runtimes.every((entry) => entry.ok),
-      ),
+          : runtimeCheckFailureKind === "timeout"
+            ? "Retrying"
+            : runtimeCheck.gitOk && runtimeCheck.runtimes.every((entry) => entry.ok)
+              ? "Available"
+              : "Issue",
+      variant:
+        runtimeCheckFailureKind === "timeout"
+          ? "warning"
+          : healthVariant(
+              runtimeCheck === null
+                ? null
+                : runtimeCheck.gitOk && runtimeCheck.runtimes.every((entry) => entry.ok),
+            ),
     },
     rows: runtimeCheck
       ? [
@@ -224,9 +235,12 @@ export const buildDiagnosticsPanelModel = (
           ...cliRuntimeRows,
         ]
       : [],
-    errors: runtimeDefinitionsError
-      ? [runtimeDefinitionsError, ...(runtimeCheck?.errors ?? [])]
-      : (runtimeCheck?.errors ?? []),
+    errors:
+      runtimeDefinitionsError != null
+        ? [runtimeDefinitionsError, ...(runtimeCheck?.errors ?? [])]
+        : runtimeCheckFailureKind === "timeout"
+          ? [buildTimeoutDiagnosticsMessage("CLI tools", runtimeCheck?.errors[0] ?? null)]
+          : (runtimeCheck?.errors ?? []),
     ...(runtimeCheck ? {} : { emptyMessage: "Runtime checks are loading..." }),
   };
 
@@ -344,8 +358,16 @@ export const buildDiagnosticsPanelModel = (
     key: "beads-store",
     title: "Beads Store",
     badge: {
-      label: beadsCheck === null ? "Checking" : beadsCheck.beadsOk ? "Ready" : "Unavailable",
-      variant: healthVariant(beadsCheck?.beadsOk ?? null),
+      label:
+        beadsCheck === null
+          ? "Checking"
+          : beadsFailureKind === "timeout"
+            ? "Retrying"
+            : beadsCheck.beadsOk
+              ? "Ready"
+              : "Unavailable",
+      variant:
+        beadsFailureKind === "timeout" ? "warning" : healthVariant(beadsCheck?.beadsOk ?? null),
     },
     rows:
       activeRepo && beadsCheck?.beadsPath
@@ -358,7 +380,12 @@ export const buildDiagnosticsPanelModel = (
             },
           ]
         : [],
-    errors: beadsCheck?.beadsError ? [beadsCheck.beadsError] : [],
+    errors:
+      beadsFailureKind === "timeout"
+        ? [buildTimeoutDiagnosticsMessage("Beads store", beadsCheck?.beadsError ?? null)]
+        : beadsCheck?.beadsError
+          ? [beadsCheck.beadsError]
+          : [],
     ...(activeRepo ? {} : { emptyMessage: "Select a repository first." }),
   };
 
