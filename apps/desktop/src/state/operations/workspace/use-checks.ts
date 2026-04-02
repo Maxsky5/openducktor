@@ -9,11 +9,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
-import {
-  classifyRepoRuntimeFailure,
-  type RepoRuntimeFailureKind,
-  type RepoRuntimeHealthCheck,
-  type RepoRuntimeHealthMap,
+import type {
+  RepoRuntimeFailureKind,
+  RepoRuntimeHealthCheck,
+  RepoRuntimeHealthMap,
 } from "@/types/diagnostics";
 import {
   beadsCheckQueryOptions,
@@ -75,11 +74,11 @@ const buildRuntimeHealthErrorMap = (
       {
         runtimeOk: false,
         runtimeError: runtimeHealthError,
-        runtimeFailureKind: classifyRepoRuntimeFailure(runtimeHealthError),
+        runtimeFailureKind: "error",
         runtime: null,
         mcpOk: false,
         mcpError: runtimeHealthError,
-        mcpFailureKind: classifyRepoRuntimeFailure(runtimeHealthError),
+        mcpFailureKind: "error",
         mcpServerName: ODT_MCP_SERVER_NAME,
         mcpServerStatus: null,
         mcpServerError: runtimeHealthError,
