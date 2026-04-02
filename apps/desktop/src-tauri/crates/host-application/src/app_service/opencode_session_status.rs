@@ -45,7 +45,7 @@ impl OpencodeSessionStatusProbeTarget {
         };
         Self {
             endpoint,
-            working_directory: working_directory.trim().to_string(),
+            working_directory: working_directory.to_string(),
         }
     }
 
@@ -640,6 +640,64 @@ mod tests {
                 .starts_with("GET /session/status?directory=%2Ftmp%2Frepo+path HTTP/1.1"),
             "unexpected request line: {captured_request}"
         );
+    }
+
+    #[test]
+    fn cached_probe_preserves_trailing_space_in_directory_query() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let port = listener.local_addr()?.port();
+        let request_line = Arc::new(Mutex::new(None::<String>));
+        let request_line_for_thread = Arc::clone(&request_line);
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("server should accept request");
+            let mut request_buffer = [0_u8; 4096];
+            let bytes_read = stream
+                .read(&mut request_buffer)
+                .expect("server should read request");
+            let request_text = String::from_utf8_lossy(&request_buffer[..bytes_read]);
+            let first_line = request_text.lines().next().unwrap_or_default().to_string();
+            *request_line_for_thread
+                .lock()
+                .expect("request line lock poisoned") = Some(first_line);
+
+            let body = r#"{"external-session":{"type":"busy"}}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream
+                .write_all(response.as_bytes())
+                .expect("server should write response");
+            stream.flush().expect("server should flush response");
+        });
+
+        let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
+            &AgentRuntimeKind::Opencode.route_for_port(port),
+            "/tmp/repo ",
+        );
+        assert_eq!(target.working_directory(), "/tmp/repo ");
+
+        let statuses = service.load_cached_opencode_session_statuses_for_target(&target)?;
+        assert!(matches!(
+            statuses.get("external-session"),
+            Some(OpencodeSessionStatus::Busy)
+        ));
+
+        server.join().expect("server thread should finish");
+        let captured_request = request_line
+            .lock()
+            .expect("request line lock poisoned")
+            .clone()
+            .expect("request line should be captured");
+        assert!(
+            captured_request.starts_with("GET /session/status?directory=%2Ftmp%2Frepo+ HTTP/1.1"),
+            "unexpected request line: {captured_request}"
+        );
+
+        Ok(())
     }
 
     #[test]
