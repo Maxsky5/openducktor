@@ -15,35 +15,14 @@ type HarnessProps = {
   windowStart: number;
 };
 
-type MockAnimation = Animation & {
-  addEventListener: ReturnType<typeof mock>;
-  cancel: ReturnType<typeof mock>;
-};
-
-type MockAnimatedElement = HTMLDivElement & {
-  animate: ReturnType<typeof mock>;
-  style: {
-    willChange: string;
-  };
-};
-
 const flush = async (): Promise<void> => {
   await Promise.resolve();
   await Promise.resolve();
 };
 
-const createMockAnimation = (): MockAnimation => {
-  return {
-    addEventListener: mock(() => undefined),
-    cancel: mock(() => undefined),
-  } as unknown as MockAnimation;
-};
-
 describe("useAgentChatRowMotion", () => {
-  const originalMatchMedia = globalThis.matchMedia;
   const originalWindow = (globalThis as { window?: unknown }).window;
   const originalAnimate = HTMLElement.prototype.animate;
-  let elementByKey: Map<string, MockAnimatedElement>;
 
   const Harness = ({ activeSessionId, rowKeys, windowStart }: HarnessProps) => {
     const { registerRowElement } = useAgentChatRowMotion({
@@ -66,31 +45,10 @@ describe("useAgentChatRowMotion", () => {
   };
 
   beforeEach(() => {
-    elementByKey = new Map();
     (globalThis as { window?: unknown }).window = globalThis;
-    globalThis.matchMedia = ((query: string) =>
-      ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        addListener: () => {},
-        removeListener: () => {},
-        dispatchEvent: () => false,
-      }) as MediaQueryList) as typeof matchMedia;
-
-    HTMLElement.prototype.animate = function (...args) {
-      const animation = createMockAnimation();
-      const element = this as MockAnimatedElement;
-      element.animate = mock(() => animation) as MockAnimatedElement["animate"];
-      element.animate(...args);
-      const rowKey = element.getAttribute("data-row-key");
-      if (rowKey) {
-        elementByKey.set(rowKey, element);
-      }
-      return animation;
-    };
+    HTMLElement.prototype.animate = mock(() => {
+      throw new Error("animate should not be called");
+    });
   });
 
   afterEach(() => {
@@ -99,11 +57,10 @@ describe("useAgentChatRowMotion", () => {
     } else {
       (globalThis as { window?: unknown }).window = originalWindow;
     }
-    globalThis.matchMedia = originalMatchMedia;
     HTMLElement.prototype.animate = originalAnimate;
   });
 
-  test("animates newly appended rows with fade-only timing", async () => {
+  test("does not animate newly appended rows", async () => {
     const rendered = render(
       createElement(Harness, {
         activeSessionId: "session-1",
@@ -124,16 +81,7 @@ describe("useAgentChatRowMotion", () => {
       await flush();
     });
 
-    const appendedRowElement = elementByKey.get("row-b");
-    if (!appendedRowElement) {
-      throw new Error("Expected appended row element");
-    }
-
-    expect(appendedRowElement.animate).toHaveBeenCalledWith([{ opacity: 0 }, { opacity: 1 }], {
-      duration: 1000,
-      easing: "linear",
-      fill: "both",
-    });
+    expect(HTMLElement.prototype.animate).not.toHaveBeenCalled();
 
     await act(async () => {
       rendered.unmount();
@@ -162,12 +110,7 @@ describe("useAgentChatRowMotion", () => {
       await flush();
     });
 
-    const prependedRowElement = rendered.container.querySelector('[data-row-key="row-a"]');
-    if (!prependedRowElement) {
-      throw new Error("Expected prepended row element");
-    }
-
-    expect(elementByKey.has("row-a")).toBe(false);
+    expect(HTMLElement.prototype.animate).not.toHaveBeenCalled();
 
     await act(async () => {
       rendered.unmount();
@@ -196,8 +139,7 @@ describe("useAgentChatRowMotion", () => {
       await flush();
     });
 
-    expect(elementByKey.has("row-a")).toBe(false);
-    expect(elementByKey.has("row-b")).toBe(false);
+    expect(HTMLElement.prototype.animate).not.toHaveBeenCalled();
 
     await act(async () => {
       rendered.unmount();

@@ -113,7 +113,6 @@ const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionE
 
 const isImmediateSessionEvent = (event: SessionEvent): boolean => {
   switch (event.type) {
-    case "assistant_message":
     case "user_message":
     case "permission_required":
     case "question_required":
@@ -121,6 +120,7 @@ const isImmediateSessionEvent = (event: SessionEvent): boolean => {
     case "session_idle":
     case "session_finished":
       return true;
+    case "assistant_message":
     case "session_started":
     case "assistant_delta":
     case "assistant_part":
