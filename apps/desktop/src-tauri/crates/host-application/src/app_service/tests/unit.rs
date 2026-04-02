@@ -2174,7 +2174,7 @@ fn opencode_startup_readiness_policy_uses_config_overrides() -> Result<()> {
     let runtime_config_store = RuntimeConfigStore::from_user_settings_store(&config_store);
     let config = RuntimeConfig {
         opencode_startup: OpencodeStartupReadinessConfig {
-            timeout_ms: 12_345,
+            timeout_ms: 15_345,
             connect_timeout_ms: 456,
             initial_retry_delay_ms: 33,
             max_retry_delay_ms: 99,
@@ -2189,7 +2189,7 @@ fn opencode_startup_readiness_policy_uses_config_overrides() -> Result<()> {
     });
     let service = AppService::new(task_store, config_store);
     let policy = service.opencode_startup_readiness_policy()?;
-    assert_eq!(policy.timeout, Duration::from_millis(12_345));
+    assert_eq!(policy.timeout, Duration::from_millis(15_345));
     assert_eq!(policy.connect_timeout, Duration::from_millis(456));
     assert_eq!(policy.initial_retry_delay, Duration::from_millis(33));
     assert_eq!(policy.max_retry_delay, Duration::from_millis(99));
