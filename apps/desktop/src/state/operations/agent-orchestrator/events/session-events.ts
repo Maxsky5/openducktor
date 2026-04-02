@@ -1,4 +1,4 @@
-import { isImmediateSessionEvent, prepareQueuedSessionEvents } from "./session-event-batching";
+import { createSessionEventBatcher, isImmediateSessionEvent } from "./session-event-batching";
 import type {
   AttachAgentSessionListenerParams,
   SessionEvent,
@@ -80,6 +80,7 @@ export const attachAgentSessionListener = (
 ): (() => void) => {
   const handlerContext = createSessionEventHandlerContext(context);
   const batchWindowMs = context.eventBatchWindowMs ?? SESSION_EVENT_BATCH_WINDOW_MS;
+  const batcher = createSessionEventBatcher();
   let queuedEvents: SessionEvent[] = [];
   let batchTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -93,8 +94,16 @@ export const attachAgentSessionListener = (
       return;
     }
 
-    const eventsToHandle = prepareQueuedSessionEvents(queuedEvents);
-    queuedEvents = [];
+    const { readyEvents, deferredEvents, nextDelayMs } =
+      batcher.prepareQueuedSessionEvents(queuedEvents);
+    queuedEvents = deferredEvents;
+
+    if (readyEvents.length === 0) {
+      if (queuedEvents.length > 0) {
+        scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
+      }
+      return;
+    }
 
     const batchedSessionsRef = {
       current: context.sessionsRef.current,
@@ -131,8 +140,12 @@ export const attachAgentSessionListener = (
       },
     });
 
-    for (const queuedEvent of eventsToHandle) {
+    for (const queuedEvent of readyEvents) {
       handleSessionEvent(batchedHandlerContext, queuedEvent);
+    }
+
+    if (queuedEvents.length > 0) {
+      scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
     }
 
     if (!hasBufferedSessionUpdate) {
@@ -151,8 +164,8 @@ export const attachAgentSessionListener = (
     );
   };
 
-  const scheduleQueuedFlush = (): void => {
-    if (batchWindowMs <= 0) {
+  const scheduleQueuedFlush = (delayMs = batchWindowMs): void => {
+    if (delayMs <= 0) {
       flushQueuedEvents();
       return;
     }
@@ -162,7 +175,7 @@ export const attachAgentSessionListener = (
     batchTimeoutId = setTimeout(() => {
       batchTimeoutId = null;
       flushQueuedEvents();
-    }, batchWindowMs);
+    }, delayMs);
   };
 
   const unsubscribe = context.adapter.subscribeEvents(context.sessionId, (event) => {

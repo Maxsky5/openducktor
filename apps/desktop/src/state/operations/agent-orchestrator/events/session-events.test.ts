@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { prepareQueuedSessionEvents } from "./session-event-batching";
+import { createSessionEventBatcher } from "./session-event-batching";
 import type { SessionEvent } from "./session-event-types";
 import { attachAgentSessionListener, type SessionEventAdapter } from "./session-events";
 
@@ -34,7 +34,8 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
 
 describe("agent-orchestrator-session-events", () => {
   test("centralizes assistant batch coalescing rules in one reducer", () => {
-    const prepared = prepareQueuedSessionEvents([
+    const batcher = createSessionEventBatcher();
+    const prepared = batcher.prepareQueuedSessionEvents([
       {
         type: "assistant_delta",
         sessionId: "session-1",
@@ -90,7 +91,7 @@ describe("agent-orchestrator-session-events", () => {
       },
     ] satisfies SessionEvent[]);
 
-    expect(prepared).toEqual([
+    expect(prepared.readyEvents).toEqual([
       {
         type: "session_status",
         sessionId: "session-1",
@@ -120,7 +121,8 @@ describe("agent-orchestrator-session-events", () => {
   });
 
   test("keeps per-type replacement behavior configurable inside the central reducer", () => {
-    const prepared = prepareQueuedSessionEvents([
+    const batcher = createSessionEventBatcher();
+    const prepared = batcher.prepareQueuedSessionEvents([
       {
         type: "assistant_part",
         sessionId: "session-1",
@@ -164,7 +166,7 @@ describe("agent-orchestrator-session-events", () => {
       },
     ] satisfies SessionEvent[]);
 
-    expect(prepared).toEqual([
+    expect(prepared.readyEvents).toEqual([
       {
         type: "assistant_part",
         sessionId: "session-1",
@@ -187,6 +189,66 @@ describe("agent-orchestrator-session-events", () => {
         todos: [{ id: "todo-1", content: "Do it", status: "completed", priority: "high" }],
       },
     ]);
+  });
+
+  test("defers repeated final assistant message snapshots within the emit gate", () => {
+    const batcher = createSessionEventBatcher();
+    const first = batcher.prepareQueuedSessionEvents([
+      {
+        type: "assistant_message",
+        sessionId: "session-1",
+        messageId: "assistant-1",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        message: "Final answer 1",
+      },
+    ] satisfies SessionEvent[]);
+
+    const second = batcher.prepareQueuedSessionEvents([
+      {
+        type: "assistant_message",
+        sessionId: "session-1",
+        messageId: "assistant-1",
+        timestamp: "2026-02-22T08:00:01.100Z",
+        message: "Final answer 2",
+      },
+    ] satisfies SessionEvent[]);
+
+    expect(first.readyEvents).toHaveLength(1);
+    expect(second.readyEvents).toHaveLength(0);
+    expect(second.deferredEvents).toHaveLength(1);
+  });
+
+  test("dedupes identical tool events in the central reducer", () => {
+    const batcher = createSessionEventBatcher();
+    const prepared = batcher.prepareQueuedSessionEvents([
+      {
+        type: "tool_call",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        call: {
+          tool: "odt_set_spec",
+          args: {
+            taskId: "task-1",
+            markdown: "# Spec",
+          },
+        },
+      },
+      {
+        type: "tool_call",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:02.000Z",
+        call: {
+          tool: "odt_set_spec",
+          args: {
+            taskId: "task-1",
+            markdown: "# Spec",
+          },
+        },
+      },
+    ] satisfies SessionEvent[]);
+
+    expect(prepared.readyEvents).toHaveLength(1);
+    expect(prepared.readyEvents[0]?.type).toBe("tool_call");
   });
 
   test("records inputReadyAtMs when tool input first becomes meaningful", () => {
