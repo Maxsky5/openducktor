@@ -146,7 +146,7 @@ impl fmt::Display for CachedOpencodeSessionStatusProbeError {
 }
 
 impl CachedOpencodeSessionStatusProbeOutcome {
-    fn into_result(&self) -> Result<OpencodeSessionStatusMap> {
+    fn to_result(&self) -> Result<OpencodeSessionStatusMap> {
         match self {
             Self::Statuses(statuses) => Ok(statuses.clone()),
             Self::ActionableError(error) => Err(anyhow!(error.to_string())),
@@ -344,9 +344,8 @@ impl AppService {
                             return Ok(());
                         };
 
-                        let statuses = service
-                            .resolve_cached_probe_outcome(&target)?
-                            .into_result()?;
+                        let statuses =
+                            service.resolve_cached_probe_outcome(&target)?.to_result()?;
                         let mut results = results.lock().map_err(|_| {
                             anyhow!("OpenCode session status batch results lock poisoned")
                         })?;
@@ -375,7 +374,7 @@ impl AppService {
         &self,
         target: &OpencodeSessionStatusProbeTarget,
     ) -> Result<OpencodeSessionStatusMap> {
-        self.resolve_cached_probe_outcome(target)?.into_result()
+        self.resolve_cached_probe_outcome(target)?.to_result()
     }
 
     fn resolve_cached_probe_outcome(
@@ -916,7 +915,7 @@ mod tests {
 
         let outcome = AppService::wait_for_opencode_session_status_flight(&flight)?;
         let error = outcome
-            .into_result()
+            .to_result()
             .expect_err("dropped leader should finish waiters with an error");
         assert!(
             error
