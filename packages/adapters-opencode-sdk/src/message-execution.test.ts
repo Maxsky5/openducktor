@@ -1,7 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import { __testExports, sendUserMessage } from "./message-execution";
 import type { SessionRecord } from "./types";
-import { buildQueuedRequestSignature } from "./user-message-signatures";
+import {
+  buildQueuedRequestAttachmentIdentitySignature,
+  buildQueuedRequestSignature,
+} from "./user-message-signatures";
 
 const COMMAND = {
   id: "compact",
@@ -300,6 +303,33 @@ describe("message-execution", () => {
         },
       ],
     });
+  });
+
+  test("tracks attachment sends for transcript reconciliation even when the assistant is idle", async () => {
+    const { session } = createSession();
+
+    await sendUserMessage({
+      session,
+      request: {
+        sessionId: "session-1",
+        parts: [{ kind: "attachment", attachment: IMAGE_ATTACHMENT }],
+      },
+      tools: {},
+    });
+
+    expect(session.pendingQueuedUserMessages).toEqual([
+      {
+        signature: buildQueuedRequestSignature(
+          [{ kind: "attachment", attachment: IMAGE_ATTACHMENT }],
+          undefined,
+        ),
+        attachmentIdentitySignature: buildQueuedRequestAttachmentIdentitySignature(
+          [{ kind: "attachment", attachment: IMAGE_ATTACHMENT }],
+          undefined,
+        ),
+        attachmentParts: [{ kind: "attachment", attachment: IMAGE_ATTACHMENT }],
+      },
+    ]);
   });
 
   test("omits file source metadata for local attachments so the runtime accepts the payload schema", async () => {

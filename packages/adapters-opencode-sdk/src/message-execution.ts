@@ -259,11 +259,11 @@ export const sendUserMessage = async (input: {
     : preparePromptSend(input.request);
   const pendingQueuedUserMessages = input.session.pendingQueuedUserMessages ?? [];
   input.session.pendingQueuedUserMessages = pendingQueuedUserMessages;
-  const shouldTrackAsQueued =
-    input.session.activeAssistantMessageId !== null &&
-    normalizeAgentUserMessageParts(input.request.parts).length > 0;
   const queuedAttachmentParts = readQueuedAttachmentDisplayParts(input.request.parts);
-  const queuedEntry = shouldTrackAsQueued
+  const shouldTrackPendingSend =
+    normalizeAgentUserMessageParts(input.request.parts).length > 0 &&
+    (input.session.activeAssistantMessageId !== null || queuedAttachmentParts.length > 0);
+  const queuedEntry = shouldTrackPendingSend
     ? {
         signature: buildQueuedRequestSignature(input.request.parts, model ?? undefined),
         ...(queuedAttachmentParts.length > 0
