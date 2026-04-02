@@ -1,6 +1,6 @@
 import type { AgentAttachmentReference } from "@openducktor/core";
 import { FileAudio2, FileText, Film, Image as ImageIcon, LoaderCircle, X } from "lucide-react";
-import type { ReactElement } from "react";
+import type { ReactElement, SyntheticEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +47,7 @@ export function AgentChatAttachmentChip(
     dialogOpen,
     setDialogOpen,
     resolvedPreviewSrc,
+    previewError,
     effectiveError,
     isResolvingPreview,
     previewable,
@@ -59,6 +60,14 @@ export function AgentChatAttachmentChip(
   });
   const removable = variant === "draft";
   const onRemove = draftProps?.onRemove ?? null;
+
+  const handlePreviewMediaError = (
+    event: SyntheticEvent<HTMLImageElement | HTMLVideoElement>,
+  ): void => {
+    const failingSrc =
+      event.currentTarget.currentSrc || event.currentTarget.getAttribute("src") || undefined;
+    markPreviewUnavailable(failingSrc);
+  };
 
   const handleOpenPreview = (): void => {
     const previewError = requestPreviewOpen();
@@ -106,7 +115,7 @@ export function AgentChatAttachmentChip(
                     src={resolvedPreviewSrc ?? undefined}
                     alt={attachment.name}
                     className="h-full w-full object-cover"
-                    onError={markPreviewUnavailable}
+                    onError={handlePreviewMediaError}
                   />
                 ) : (
                   <video
@@ -115,7 +124,7 @@ export function AgentChatAttachmentChip(
                     muted
                     playsInline
                     preload="metadata"
-                    onError={markPreviewUnavailable}
+                    onError={handlePreviewMediaError}
                   >
                     <track kind="captions" />
                   </video>
@@ -145,7 +154,7 @@ export function AgentChatAttachmentChip(
         ) : null}
       </div>
 
-      {previewable && resolvedPreviewSrc && !effectiveError ? (
+      {previewable && resolvedPreviewSrc && !previewError ? (
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="max-w-[min(96vw,72rem)] border-border bg-background">
             <DialogHeader>
@@ -160,7 +169,7 @@ export function AgentChatAttachmentChip(
                   src={resolvedPreviewSrc}
                   alt={attachment.name}
                   className="max-h-[75vh] w-full object-contain"
-                  onError={markPreviewUnavailable}
+                  onError={handlePreviewMediaError}
                 />
               ) : (
                 <video
@@ -168,7 +177,7 @@ export function AgentChatAttachmentChip(
                   className="max-h-[75vh] w-full object-contain"
                   controls
                   autoPlay
-                  onError={markPreviewUnavailable}
+                  onError={handlePreviewMediaError}
                 >
                   <track kind="captions" />
                 </video>
