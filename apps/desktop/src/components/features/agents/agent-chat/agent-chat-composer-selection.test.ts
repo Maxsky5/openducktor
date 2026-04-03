@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   getCaretOffsetWithinElement,
   setCaretOffsetWithinElement,
-} from "./agent-chat-composer-selection";
+} from "@/components/features/agents/agent-chat/agent-chat-composer-selection";
 
 const createSelectionHost = (): HTMLElement => {
   const root = document.createElement("div");

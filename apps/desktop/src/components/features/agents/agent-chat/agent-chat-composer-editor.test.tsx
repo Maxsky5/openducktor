@@ -14,6 +14,10 @@ const renderMockEditableTextContent = (text: string): string => {
   return text.endsWith("\n") ? `${text}\u200B` : text;
 };
 
+const readMockEditableTextContent = (element: HTMLElement): string => {
+  return (element.textContent ?? "").replace(/\u200B/g, "");
+};
+
 const setCaretOffsetWithinElementMock = mock((element: HTMLElement, logicalOffset: number) => {
   const selection =
     element.ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
@@ -23,15 +27,22 @@ const setCaretOffsetWithinElementMock = mock((element: HTMLElement, logicalOffse
 
   let textNode = element.firstChild;
   if (!(textNode instanceof Text)) {
-    textNode = element.ownerDocument.createTextNode(
-      renderMockEditableTextContent((element.textContent ?? "").replace(/\u200B/g, "")),
-    );
+    textNode = element.ownerDocument.createTextNode("");
     element.replaceChildren(textNode);
   }
 
+  textNode.textContent = renderMockEditableTextContent(readMockEditableTextContent(element));
   const textContent = textNode.textContent ?? "";
+  const logicalText = readMockEditableTextContent(element);
+  const boundedLogicalOffset = Math.max(0, Math.min(logicalOffset, logicalText.length));
   const boundedOffset =
-    textContent === "\u200B" ? 1 : Math.max(0, Math.min(logicalOffset, textContent.length));
+    textContent === "\u200B"
+      ? 1
+      : textContent.endsWith("\u200B") &&
+          logicalText.endsWith("\n") &&
+          boundedLogicalOffset === logicalText.length
+        ? textContent.length
+        : boundedLogicalOffset;
   const range = element.ownerDocument.createRange();
   range.setStart(textNode, boundedOffset);
   range.collapse(true);
@@ -46,8 +57,7 @@ const getCaretOffsetWithinElementMock = mock(
 beforeAll(async () => {
   mock.module("./agent-chat-composer-selection", () => ({
     EMPTY_TEXT_SEGMENT_SENTINEL: "\u200B",
-    readEditableTextContent: (element: HTMLElement): string =>
-      (element.textContent ?? "").replace(/\u200B/g, ""),
+    readEditableTextContent: readMockEditableTextContent,
     renderEditableTextContent: renderMockEditableTextContent,
     getCaretOffsetWithinElement: getCaretOffsetWithinElementMock,
     insertTextAtCaretWithinElement: (
@@ -64,6 +74,7 @@ beforeAll(async () => {
   }));
 
   ({ AgentChatComposerEditor } = await import("./agent-chat-composer-editor"));
+  mock.restore();
 });
 
 afterAll(() => {
