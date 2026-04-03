@@ -1,4 +1,4 @@
-import type { FailureKind } from "@openducktor/contracts";
+import { type FailureKind, failureKindSchema } from "@openducktor/contracts";
 
 type ResponseMetadata = {
   status?: unknown;
@@ -109,7 +109,8 @@ const readCodePropFromSources = (sources: unknown[], key: string): string | unde
 
 const readFailureKind = (value: unknown): OpenCodeRequestFailureKind | undefined => {
   const candidate = readUnknownProp(value, "failureKind");
-  return candidate === "timeout" || candidate === "error" ? candidate : undefined;
+  const result = failureKindSchema.safeParse(candidate);
+  return result.success ? result.data : undefined;
 };
 
 const classifyOpenCodeRequestFailureKind = (failure: {

@@ -23,6 +23,7 @@ import type {
   BuildContinuationTargetSource,
   ChatSettings,
   CommitsAheadBehind,
+  FailureKind,
   FileDiff,
   FileStatus,
   GitBranch,
@@ -305,6 +306,7 @@ type ExportedTypeContract = {
   GitConflictOperation: GitConflictOperation;
   FileDiff: FileDiff;
   FileStatus: FileStatus;
+  FailureKind: FailureKind;
   GitFileStatusCounts: GitFileStatusCounts;
   GitBranch: GitBranch;
   GitCurrentBranch: GitCurrentBranch;
