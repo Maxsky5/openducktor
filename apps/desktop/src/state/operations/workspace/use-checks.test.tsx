@@ -166,6 +166,8 @@ const captureDeferredRejection = <T,>(promise: Promise<T>): Promise<T> => {
   return promise;
 };
 
+const REFRESH_CHECKS_WAIT_TIMEOUT_MS = 1_000;
+
 const waitForInitialChecksToSettle = async (
   harness: HookHarness,
   runtimeKinds: RuntimeKind[] = ["opencode"],
@@ -515,7 +517,10 @@ describe("use-checks", () => {
       await harness.run((value) => {
         refreshPromise = captureDeferredRejection(value.refreshChecks());
       });
-      await harness.waitFor((value) => value.isLoadingChecks === true);
+      await harness.waitFor(
+        (value) => value.isLoadingChecks === true,
+        REFRESH_CHECKS_WAIT_TIMEOUT_MS,
+      );
 
       expect(runtimeCheck).toHaveBeenCalledTimes(1);
       expect(runtimeCheck.mock.calls[0]).toEqual([true]);
@@ -529,7 +534,10 @@ describe("use-checks", () => {
       await harness.run(async () => {
         await refreshPromise;
       });
-      await harness.waitFor((value) => value.isLoadingChecks === false);
+      await harness.waitFor(
+        (value) => value.isLoadingChecks === false,
+        REFRESH_CHECKS_WAIT_TIMEOUT_MS,
+      );
     } finally {
       await harness.unmount();
       host.runtimeCheck = original.runtimeCheck;
@@ -636,7 +644,10 @@ describe("use-checks", () => {
       await harness.run((value) => {
         refreshPromise = captureDeferredRejection(value.refreshChecks());
       });
-      await harness.waitFor((value) => value.isLoadingChecks === true);
+      await harness.waitFor(
+        (value) => value.isLoadingChecks === true,
+        REFRESH_CHECKS_WAIT_TIMEOUT_MS,
+      );
 
       runtimeDeferred.reject(new Error("runtime down"));
       await Promise.resolve();
@@ -647,7 +658,10 @@ describe("use-checks", () => {
       await harness.run(async () => {
         await expect(refreshPromise).rejects.toThrow("runtime down");
       });
-      await harness.waitFor((value) => value.isLoadingChecks === false);
+      await harness.waitFor(
+        (value) => value.isLoadingChecks === false,
+        REFRESH_CHECKS_WAIT_TIMEOUT_MS,
+      );
 
       expect(toastError).toHaveBeenCalledWith(
         "CLI tools unavailable",
@@ -726,11 +740,17 @@ describe("use-checks", () => {
       await harness.run((value) => {
         refreshPromise = captureDeferredRejection(value.refreshChecks());
       });
-      await harness.waitFor((value) => value.isLoadingChecks === true);
+      await harness.waitFor(
+        (value) => value.isLoadingChecks === true,
+        REFRESH_CHECKS_WAIT_TIMEOUT_MS,
+      );
       await harness.run(async () => {
         await expect(refreshPromise).rejects.toThrow("runtime down");
       });
-      await harness.waitFor((value) => value.isLoadingChecks === false);
+      await harness.waitFor(
+        (value) => value.isLoadingChecks === false,
+        REFRESH_CHECKS_WAIT_TIMEOUT_MS,
+      );
 
       expect(toastError).toHaveBeenCalledWith(
         "CLI tools unavailable",
