@@ -161,6 +161,11 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
 
 type HookHarness = ReturnType<typeof createHookHarness>;
 
+const captureDeferredRejection = <T,>(promise: Promise<T>): Promise<T> => {
+  void promise.catch(() => {});
+  return promise;
+};
+
 const waitForInitialChecksToSettle = async (
   harness: HookHarness,
   runtimeKinds: RuntimeKind[] = ["opencode"],
@@ -508,7 +513,7 @@ describe("use-checks", () => {
       checkRepoRuntimeHealthMock.mockClear();
 
       await harness.run((value) => {
-        refreshPromise = value.refreshChecks();
+        refreshPromise = captureDeferredRejection(value.refreshChecks());
       });
       await harness.waitFor((value) => value.isLoadingChecks === true);
 
@@ -629,7 +634,7 @@ describe("use-checks", () => {
       checkRepoRuntimeHealthMock.mockClear();
 
       await harness.run((value) => {
-        refreshPromise = value.refreshChecks();
+        refreshPromise = captureDeferredRejection(value.refreshChecks());
       });
       await harness.waitFor((value) => value.isLoadingChecks === true);
 
@@ -719,7 +724,7 @@ describe("use-checks", () => {
       checkRepoRuntimeHealthMock.mockClear();
 
       await harness.run((value) => {
-        refreshPromise = value.refreshChecks();
+        refreshPromise = captureDeferredRejection(value.refreshChecks());
       });
       await harness.waitFor((value) => value.isLoadingChecks === true);
       await harness.run(async () => {
