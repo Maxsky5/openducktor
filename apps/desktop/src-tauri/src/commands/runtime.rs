@@ -1,9 +1,25 @@
-use crate::{as_error, run_service_blocking, AppState};
+use crate::{as_error, run_service_blocking, runtime_ensure_failure_kind, AppState};
 use host_domain::{
     BeadsCheck, BuildContinuationTarget, RuntimeCheck, RuntimeDescriptor, RuntimeInstanceSummary,
     SystemCheck,
 };
 use tauri::State;
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeEnsureCommandError {
+    message: String,
+    failure_kind: Option<&'static str>,
+}
+
+impl RuntimeEnsureCommandError {
+    fn from_anyhow(error: anyhow::Error) -> Self {
+        Self {
+            message: format!("{error:#}"),
+            failure_kind: runtime_ensure_failure_kind(&error),
+        }
+    }
+}
 
 #[tauri::command]
 pub async fn system_check(
@@ -95,13 +111,13 @@ pub async fn runtime_ensure(
     state: State<'_, AppState>,
     runtime_kind: String,
     repo_path: String,
-) -> Result<RuntimeInstanceSummary, String> {
+) -> Result<RuntimeInstanceSummary, RuntimeEnsureCommandError> {
     let service = state.service.clone();
     let result = run_service_blocking("runtime_ensure", move || {
         service.runtime_ensure(&runtime_kind, &repo_path)
     })
     .await;
-    as_error(result)
+    result.map_err(RuntimeEnsureCommandError::from_anyhow)
 }
 
 #[cfg(test)]

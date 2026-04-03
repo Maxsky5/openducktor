@@ -1239,6 +1239,29 @@ describe("TauriHostClient", () => {
     );
   });
 
+  test("runtimeEnsure preserves structured timeout metadata from host failures", async () => {
+    const { client } = createClient((command) => {
+      if (command === "runtime_ensure") {
+        throw {
+          message: "OpenCode startup probe failed reason=timeout after 15000ms",
+          failureKind: "timeout",
+        };
+      }
+
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    try {
+      await client.runtimeEnsure("/repo", "opencode");
+      throw new Error("Expected runtimeEnsure to reject");
+    } catch (error) {
+      expect((error as { message?: unknown }).message).toBe(
+        "OpenCode startup probe failed reason=timeout after 15000ms",
+      );
+      expect((error as { failureKind?: unknown }).failureKind).toBe("timeout");
+    }
+  });
+
   test("agent session history commands use expected IPC routes", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "task_metadata_get") {

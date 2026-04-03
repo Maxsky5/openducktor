@@ -24,6 +24,7 @@ pub(super) struct HeadlessState {
 pub(super) struct HeadlessCommandError {
     pub(super) message: String,
     pub(super) status: StatusCode,
+    pub(super) failure_kind: Option<String>,
 }
 
 impl HeadlessCommandError {
@@ -31,6 +32,7 @@ impl HeadlessCommandError {
         Self {
             message: message.into(),
             status: StatusCode::BAD_REQUEST,
+            failure_kind: None,
         }
     }
 
@@ -38,6 +40,7 @@ impl HeadlessCommandError {
         Self {
             message: message.into(),
             status: StatusCode::INTERNAL_SERVER_ERROR,
+            failure_kind: None,
         }
     }
 
@@ -45,17 +48,26 @@ impl HeadlessCommandError {
         Self {
             message: message.into(),
             status: StatusCode::NOT_FOUND,
+            failure_kind: None,
         }
     }
 }
 
 impl IntoResponse for HeadlessCommandError {
     fn into_response(self) -> axum::response::Response {
+        let payload = match self.failure_kind {
+            Some(failure_kind) => json!({
+                "error": self.message,
+                "failureKind": failure_kind,
+            }),
+            None => json!({
+                "error": self.message,
+            }),
+        };
+
         (
             self.status,
-            Json(json!({
-                "error": self.message,
-            })),
+            Json(payload),
         )
             .into_response()
     }

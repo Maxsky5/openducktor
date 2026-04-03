@@ -36,6 +36,56 @@ export type BuildRespondInput =
   | { action: "approve" }
   | { action: "deny" }
   | { action: "message"; message: string };
+
+type RuntimeEnsureFailureKind = "timeout" | "error";
+
+class RuntimeEnsureError extends Error {
+  readonly failureKind: RuntimeEnsureFailureKind;
+
+  constructor(message: string, failureKind: RuntimeEnsureFailureKind, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "RuntimeEnsureError";
+    this.failureKind = failureKind;
+  }
+}
+
+const readUnknownProp = (value: unknown, key: string): unknown => {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  return (value as Record<string, unknown>)[key];
+};
+
+const readStringProp = (value: unknown, key: string): string | undefined => {
+  const candidate = readUnknownProp(value, key);
+  return typeof candidate === "string" && candidate.trim().length > 0 ? candidate : undefined;
+};
+
+const readRuntimeEnsureFailureKind = (value: unknown): RuntimeEnsureFailureKind | undefined => {
+  return value === "timeout" || value === "error" ? value : undefined;
+};
+
+const toRuntimeEnsureError = (error: unknown): RuntimeEnsureError | null => {
+  const payload = error instanceof Error ? error.cause : error;
+  const failureKind = readRuntimeEnsureFailureKind(readUnknownProp(payload, "failureKind"));
+  if (!failureKind) {
+    return null;
+  }
+
+  const message =
+    (error instanceof Error && error.message.trim().length > 0 ? error.message : undefined) ??
+    readStringProp(payload, "message") ??
+    readStringProp(payload, "error") ??
+    "Failed to ensure runtime.";
+
+  return new RuntimeEnsureError(
+    message,
+    failureKind,
+    error instanceof Error ? { cause: error } : undefined,
+  );
+};
+
 const systemCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<SystemCheck> => {
   const payload = await invokeFn("system_check", { repoPath });
   return systemCheckSchema.parse(payload);
@@ -94,11 +144,15 @@ const runtimeEnsure = async (
   repoPath: string,
   runtimeKind: RuntimeKind,
 ): Promise<RuntimeInstanceSummary> => {
-  const payload = await invokeFn("runtime_ensure", {
-    repoPath,
-    runtimeKind,
-  });
-  return runtimeInstanceSummarySchema.parse(payload);
+  try {
+    const payload = await invokeFn("runtime_ensure", {
+      repoPath,
+      runtimeKind,
+    });
+    return runtimeInstanceSummarySchema.parse(payload);
+  } catch (error) {
+    throw toRuntimeEnsureError(error) ?? error;
+  }
 };
 
 const buildStart = async (

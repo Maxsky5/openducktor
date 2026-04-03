@@ -4,6 +4,7 @@ use super::command_support::{
     serialize_value, service_error, CommandResult, HeadlessState, RepoTaskArgs,
 };
 use super::events::{make_dev_server_emitter, make_emitter};
+use crate::runtime_ensure_failure_kind;
 use host_application::{BuildResponseAction, CleanupMode};
 use host_domain::AgentRuntimeKind;
 use serde::Deserialize;
@@ -302,7 +303,12 @@ async fn handle_runtime_ensure(state: &HeadlessState, args: Value) -> CommandRes
             service.runtime_ensure(runtime_kind.as_str(), &repo_path)
         })
         .await
-        .map_err(service_error)?,
+        .map_err(|error| {
+            let failure_kind = runtime_ensure_failure_kind(&error).map(str::to_string);
+            let mut command_error = service_error(error);
+            command_error.failure_kind = failure_kind;
+            command_error
+        })?,
     )
 }
 

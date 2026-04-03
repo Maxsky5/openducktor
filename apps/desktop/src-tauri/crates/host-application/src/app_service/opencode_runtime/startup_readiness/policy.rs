@@ -85,11 +85,17 @@ impl OpencodeStartupWaitReport {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct OpencodeStartupWaitFailure {
+pub struct OpencodeStartupWaitFailure {
     pub port: u16,
     pub reason: &'static str,
     pub details: String,
-    pub report: OpencodeStartupWaitReport,
+    report: OpencodeStartupWaitReport,
+}
+
+impl OpencodeStartupWaitFailure {
+    pub(crate) fn report(&self) -> OpencodeStartupWaitReport {
+        self.report
+    }
 }
 
 impl std::fmt::Display for OpencodeStartupWaitFailure {

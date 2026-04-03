@@ -2,6 +2,7 @@ mod policy;
 mod probe_runtime;
 mod wait_loop;
 
+pub use policy::OpencodeStartupWaitFailure;
 pub(crate) use policy::{
     OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupCancelEpoch,
 };

@@ -12,22 +12,35 @@ type BrowserSseChannel = {
 const sseChannels = new Map<string, BrowserSseChannel>();
 let nextSseListenerId = 0;
 
-export const readBrowserLiveErrorMessage = async (response: Response): Promise<string> => {
+const readBrowserLiveErrorPayload = async (
+  response: Response,
+): Promise<{ message: string; payload: unknown | null }> => {
   const text = await response.text().catch(() => "");
   const trimmedText = text.trim();
 
   if (trimmedText) {
     try {
-      const payload = JSON.parse(trimmedText) as { error?: unknown };
+      const payload = JSON.parse(trimmedText) as { error?: unknown; message?: unknown };
       if (typeof payload.error === "string" && payload.error.trim()) {
-        return payload.error;
+        return { message: payload.error, payload };
+      }
+      if (typeof payload.message === "string" && payload.message.trim()) {
+        return { message: payload.message, payload };
       }
     } catch {}
 
-    return trimmedText;
+    return { message: trimmedText, payload: null };
   }
 
-  return `Browser backend request failed with status ${response.status}.`;
+  return {
+    message: `Browser backend request failed with status ${response.status}.`,
+    payload: null,
+  };
+};
+
+export const readBrowserLiveErrorMessage = async (response: Response): Promise<string> => {
+  const { message } = await readBrowserLiveErrorPayload(response);
+  return message;
 };
 
 const createHttpInvoke = () => {
@@ -43,7 +56,8 @@ const createHttpInvoke = () => {
     });
 
     if (!response.ok) {
-      throw new Error(await readBrowserLiveErrorMessage(response));
+      const { message, payload } = await readBrowserLiveErrorPayload(response);
+      throw new Error(message, payload ? { cause: payload } : undefined);
     }
 
     return (await response.json()) as T;

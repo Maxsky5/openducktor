@@ -127,16 +127,19 @@ async fn local_attachment_preview_handler(
     let metadata = tokio::fs::metadata(&path).await.map_err(|error| HeadlessCommandError {
         message: format!("Failed to stat local attachment preview: {error}"),
         status: StatusCode::NOT_FOUND,
+        failure_kind: None,
     })?;
     if !metadata.is_file() {
         return Err(HeadlessCommandError {
             message: "Local attachment preview path must reference a file".to_string(),
             status: StatusCode::BAD_REQUEST,
+            failure_kind: None,
         });
     }
     let allowed = is_staged_local_attachment_path(&path).map_err(|error| HeadlessCommandError {
         message: error,
         status: StatusCode::INTERNAL_SERVER_ERROR,
+        failure_kind: None,
     })?;
     if !allowed {
         return Err(HeadlessCommandError {
@@ -144,12 +147,14 @@ async fn local_attachment_preview_handler(
                 "Local attachment preview is only available for staged attachment files."
                     .to_string(),
             status: StatusCode::FORBIDDEN,
+            failure_kind: None,
         });
     }
 
     let file = tokio::fs::File::open(&path).await.map_err(|error| HeadlessCommandError {
         message: format!("Failed to read local attachment preview: {error}"),
         status: StatusCode::INTERNAL_SERVER_ERROR,
+        failure_kind: None,
     })?;
     let mime = mime_guess::from_path(&path).first_or_octet_stream().to_string();
     let stream = ReaderStream::new(file);
@@ -162,6 +167,7 @@ async fn local_attachment_preview_handler(
         .map_err(|error| HeadlessCommandError {
             message: format!("Failed to build local attachment preview response: {error}"),
             status: StatusCode::INTERNAL_SERVER_ERROR,
+            failure_kind: None,
         })
 }
 
@@ -169,6 +175,7 @@ fn json_rejection_error(error: JsonRejection) -> HeadlessCommandError {
     HeadlessCommandError {
         message: error.body_text(),
         status: error.status(),
+        failure_kind: None,
     }
 }
 

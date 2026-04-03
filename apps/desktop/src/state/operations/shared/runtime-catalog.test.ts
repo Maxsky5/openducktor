@@ -9,6 +9,12 @@ import { createRuntimeCatalogOperations } from "./runtime-catalog";
 
 type CatalogDependencies = Parameters<typeof createRuntimeCatalogOperations>[0];
 type RuntimeSummary = Awaited<ReturnType<CatalogDependencies["ensureRuntime"]>>;
+const withFailureKind = <T extends Error>(
+  error: T,
+  failureKind: "timeout" | "error",
+): T & {
+  failureKind: "timeout" | "error";
+} => Object.assign(error, { failureKind });
 
 const runtimeFixture: RuntimeSummary = {
   kind: "opencode",
@@ -317,7 +323,10 @@ describe("opencode-catalog", () => {
     const runtimeTimeoutOperations = createRuntimeCatalogOperations(
       createDeps({
         ensureRuntime: async () => {
-          throw new Error("Timed out waiting for OpenCode runtime startup readiness");
+          throw withFailureKind(
+            new Error("OpenCode startup probe failed reason=timeout after 15000ms"),
+            "timeout",
+          );
         },
       }),
     );
@@ -332,7 +341,10 @@ describe("opencode-catalog", () => {
     const mcpTimeoutOperations = createRuntimeCatalogOperations(
       createDeps({
         getMcpStatus: async () => {
-          throw new Error("OpenCode startup probe failed reason=timeout after 15000ms");
+          throw withFailureKind(
+            new Error("OpenCode startup probe failed reason=timeout after 15000ms"),
+            "timeout",
+          );
         },
       }),
     );

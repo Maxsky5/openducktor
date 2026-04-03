@@ -39,6 +39,7 @@ mod workspace_policy;
 
 pub(crate) use events::emit_event;
 pub(crate) use hook_security::{run_parsed_hook_command_allow_failure, validate_hook_trust};
+pub use opencode_runtime::OpencodeStartupWaitFailure;
 pub(crate) use opencode_runtime::{
     OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupCancelEpoch,
     opencode_server_parent_pid, process_exists, read_opencode_version,
