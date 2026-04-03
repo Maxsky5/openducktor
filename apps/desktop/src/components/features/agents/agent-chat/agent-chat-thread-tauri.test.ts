@@ -58,7 +58,7 @@ afterEach(() => {
 });
 
 describe("AgentChatThread Tauri runtime", () => {
-  test("disables turn containment in the Tauri runtime", () => {
+  test("keeps turn containment enabled in the Tauri runtime when no attachments are present", () => {
     const runtimeWindow = globalThis.window as Window & { __TAURI_INTERNALS__?: object };
     runtimeWindow.__TAURI_INTERNALS__ = {};
 
@@ -71,7 +71,7 @@ describe("AgentChatThread Tauri runtime", () => {
       }),
     );
 
-    expect(rendered.container.querySelector('[style*="content-visibility"]')).toBeNull();
-    expect(rendered.container.querySelector('[style*="contain-intrinsic-size"]')).toBeNull();
+    expect(rendered.container.querySelector('[style*="content-visibility"]')).not.toBeNull();
+    expect(rendered.container.querySelector('[style*="contain-intrinsic-size"]')).not.toBeNull();
   });
 });

@@ -16,7 +16,6 @@ import {
   useState,
 } from "react";
 import type { MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
-import { isTauriRuntime } from "@/lib/runtime";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
@@ -230,8 +229,7 @@ const REASONING_MARKDOWN_CLASS_NAME = cn(
 );
 
 const ReasoningMessage = ({ content, streaming }: ReasoningMessageProps): ReactElement => {
-  const shouldPaceStreamingText = streaming && !isTauriRuntime();
-  const pacedContent = usePacedStreamingText(content || "Thinking...", shouldPaceStreamingText);
+  const pacedContent = usePacedStreamingText(content || "Thinking...", streaming);
   const renderedContent = useDeferredValue(pacedContent);
   return (
     <div className="px-1 py-0.5 text-muted-foreground">
@@ -260,8 +258,7 @@ const AssistantMessage = ({
 }: AssistantMessageProps): ReactElement => {
   const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
   const streaming = assistantMeta?.isFinal !== true;
-  const shouldPaceStreamingText = streaming && !isTauriRuntime();
-  const pacedContent = usePacedStreamingText(message.content, shouldPaceStreamingText);
+  const pacedContent = usePacedStreamingText(message.content, streaming);
   const renderedContent = useDeferredValue(pacedContent);
   const footer = getAssistantFooterData(message);
   return (

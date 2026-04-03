@@ -9,7 +9,6 @@ import {
   useRef,
 } from "react";
 import { Button } from "@/components/ui/button";
-import { isTauriRuntime } from "@/lib/runtime";
 import { cn } from "@/lib/utils";
 import {
   findLastUserSessionMessage,
@@ -646,7 +645,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       isActive: turn.key === activeTurnKey,
     }));
   }, [activeTurnKey, stagedTurns]);
-  const allowTurnContainment = !isTauriRuntime() && !hasAttachmentMessages;
+  const allowTurnContainment = !hasAttachmentMessages;
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
