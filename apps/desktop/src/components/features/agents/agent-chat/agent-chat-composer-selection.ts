@@ -54,12 +54,12 @@ export const setCaretOffsetWithinElement = (element: HTMLElement, logicalOffset:
     textContent.endsWith(EMPTY_TEXT_SEGMENT_SENTINEL) &&
     logicalText.endsWith("\n") &&
     boundedLogicalOffset === logicalText.length;
-  const domOffset =
-    textContent === EMPTY_TEXT_SEGMENT_SENTINEL
-      ? 1
-      : shouldPlaceCaretAfterTrailingSentinel
-        ? textContent.length
-        : boundedLogicalOffset;
+  let domOffset = boundedLogicalOffset;
+  if (textContent === EMPTY_TEXT_SEGMENT_SENTINEL) {
+    domOffset = 1;
+  } else if (shouldPlaceCaretAfterTrailingSentinel) {
+    domOffset = textContent.length;
+  }
   const range = ownerDocument.createRange();
   range.setStart(textNode, domOffset);
   range.collapse(true);

@@ -35,14 +35,16 @@ const setCaretOffsetWithinElementMock = mock((element: HTMLElement, logicalOffse
   const textContent = textNode.textContent ?? "";
   const logicalText = readMockEditableTextContent(element);
   const boundedLogicalOffset = Math.max(0, Math.min(logicalOffset, logicalText.length));
-  const boundedOffset =
-    textContent === "\u200B"
-      ? 1
-      : textContent.endsWith("\u200B") &&
-          logicalText.endsWith("\n") &&
-          boundedLogicalOffset === logicalText.length
-        ? textContent.length
-        : boundedLogicalOffset;
+  let boundedOffset = boundedLogicalOffset;
+  if (textContent === "\u200B") {
+    boundedOffset = 1;
+  } else if (
+    textContent.endsWith("\u200B") &&
+    logicalText.endsWith("\n") &&
+    boundedLogicalOffset === logicalText.length
+  ) {
+    boundedOffset = textContent.length;
+  }
   const range = element.ownerDocument.createRange();
   range.setStart(textNode, boundedOffset);
   range.collapse(true);
