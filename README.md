@@ -71,6 +71,40 @@ bun install
 bun run tauri:dev
 ```
 
+### Start With The CEF Runtime
+
+Use the upstream `feat/cef` Rust CLI flow first:
+
+```sh
+bun run tauri:setup:cef
+```
+
+That command:
+
+- installs repo-local CEF tools into `.cargo-tools/`
+- exports CEF into the repo-local cache at `.cache/cef/`
+- clears the macOS quarantine attribute from the downloaded CEF bundle
+
+The CEF setup uses repo-local tool binaries and a repo-local CEF cache so contributors do not need machine-specific paths in their package scripts. The day-to-day `dev` and `build` commands are thin wrappers around the repo-local `cargo-tauri` binary.
+
+Then run:
+
+```sh
+bun run tauri:dev:cef
+```
+
+If you need a different CEF location temporarily, you can still override `CEF_PATH` when invoking the setup or run script directly.
+
+### Build A macOS CEF Bundle
+
+```sh
+bun run tauri:build:cef
+```
+
+This uses the upstream `cargo tauri build` CEF bundle path instead of a repo-local wrapper.
+
+If you run Cargo directly for CEF checks, use `--no-default-features --features cef` so the upstream Tauri dependency does not enable both `wry` and `cef` at the same time.
+
 ### Start in Browser Mode (allow agents to test what they are doing)
 
 ```sh

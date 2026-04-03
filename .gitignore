@@ -24,3 +24,5 @@ apps/desktop/src-tauri/crates/*/Cargo.lock
 .agents/skills/desloppify/
 scorecard.png
 packages/openducktor-mcp/tsconfig.tsbuildinfo
+.cache/cef/
+.cargo-tools/

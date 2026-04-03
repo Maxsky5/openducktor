@@ -1,0 +1,118 @@
+import { spawn } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { delimiter, join, resolve } from "node:path";
+
+const desktopRoot = process.cwd();
+const repoRoot = resolve(desktopRoot, "../..");
+const tauriRoot = resolve(desktopRoot, "src-tauri");
+const toolRoot = resolve(repoRoot, ".cargo-tools");
+const toolBinRoot = resolve(toolRoot, "bin");
+const cefPath = process.env.CEF_PATH ?? resolve(repoRoot, ".cache", "cef");
+const binaryExtension = process.platform === "win32" ? ".exe" : "";
+const exportCefDirPath = resolve(toolBinRoot, `export-cef-dir${binaryExtension}`);
+
+function cefVersion(): string {
+  const lockFilePath = resolve(tauriRoot, "Cargo.lock");
+  const lockFile = readFileSync(lockFilePath, "utf8");
+  const match = lockFile.match(/\[\[package\]\]\nname = "cef"\nversion = "([^"]+)"/m);
+
+  if (!match) {
+    throw new Error(`Could not resolve the cef crate version from ${lockFilePath}`);
+  }
+
+  return match[1];
+}
+
+function cargoHomeBinPath(): string {
+  return resolve(process.env.CARGO_HOME ?? join(homedir(), ".cargo"), "bin");
+}
+
+function commandEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    ...extra,
+    PATH: [toolBinRoot, cargoHomeBinPath(), process.env.PATH].filter(Boolean).join(delimiter),
+  };
+}
+
+function run(command: string, args: string[], env = commandEnv()): Promise<void> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const child = spawn(command, args, {
+      cwd: desktopRoot,
+      env,
+      stdio: "inherit",
+    });
+
+    child.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") {
+        rejectPromise(
+          new Error(
+            `Missing required command \`${command}\`. Install rustup and ensure it is available on PATH before running \`bun run tauri:setup:cef\`.`,
+          ),
+        );
+        return;
+      }
+
+      rejectPromise(error);
+    });
+    child.on("exit", (code, signal) => {
+      if (signal) {
+        process.kill(process.pid, signal);
+        return;
+      }
+      if (code === 0) {
+        resolvePromise();
+        return;
+      }
+      rejectPromise(new Error(`${command} ${args.join(" ")} exited with code ${code ?? 1}`));
+    });
+  });
+}
+
+await (async () => {
+  if (process.platform === "darwin") {
+    await run("rustup", ["target", "add", "x86_64-apple-darwin"]);
+  }
+
+  await run("rustup", [
+    "run",
+    "stable",
+    "cargo",
+    "install",
+    "--root",
+    toolRoot,
+    "tauri-cli",
+    "--git",
+    "https://github.com/tauri-apps/tauri",
+    "--branch",
+    "feat/cef",
+    "--force",
+  ]);
+
+  await run("rustup", [
+    "run",
+    "stable",
+    "cargo",
+    "install",
+    "--root",
+    toolRoot,
+    "export-cef-dir",
+    "--version",
+    cefVersion(),
+    "--force",
+  ]);
+
+  if (!existsSync(exportCefDirPath)) {
+    throw new Error(`Missing export-cef-dir at ${exportCefDirPath}`);
+  }
+
+  await run(exportCefDirPath, ["--force", cefPath]);
+
+  if (process.platform === "darwin") {
+    await run("xattr", ["-dr", "com.apple.quarantine", cefPath]);
+  }
+})().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+});

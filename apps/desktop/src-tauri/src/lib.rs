@@ -18,6 +18,11 @@ use tauri::{AppHandle, Emitter, RunEvent as TauriRunEvent};
 mod commands;
 mod headless;
 
+#[cfg(feature = "cef")]
+type TauriRuntime = tauri::Cef;
+#[cfg(not(feature = "cef"))]
+type TauriRuntime = tauri::Wry;
+
 use commands::agent_sessions::*;
 use commands::build::*;
 use commands::documents::*;
@@ -233,13 +238,13 @@ fn validate_startup_config(
     })?;
     Ok(())
 }
-pub(crate) fn run_emitter(app: AppHandle) -> RunEmitter {
+pub(crate) fn run_emitter<R: tauri::Runtime>(app: AppHandle<R>) -> RunEmitter {
     Arc::new(move |event: RunEvent| {
         let _ = app.emit("openducktor://run-event", event);
     })
 }
 
-pub(crate) fn dev_server_emitter(app: AppHandle) -> DevServerEmitter {
+pub(crate) fn dev_server_emitter<R: tauri::Runtime>(app: AppHandle<R>) -> DevServerEmitter {
     Arc::new(move |event: DevServerEvent| {
         let _ = app.emit("openducktor://dev-server-event", event);
     })
@@ -284,9 +289,9 @@ pub(crate) fn startup_phase_shutdown_hooks(service: Arc<AppService>) {
     install_shutdown_signal_handler(service);
 }
 
-fn startup_phase_command_registration(
-    builder: tauri::Builder<tauri::Wry>,
-) -> tauri::Builder<tauri::Wry> {
+fn startup_phase_command_registration<R: tauri::Runtime>(
+    builder: tauri::Builder<R>,
+) -> tauri::Builder<R> {
     builder.invoke_handler(tauri::generate_handler![
         system_check,
         open_external_url,
@@ -378,8 +383,17 @@ fn startup_phase_command_registration(
 
 fn startup_phase_build_tauri_app(
     service: Arc<AppService>,
-) -> anyhow::Result<tauri::App<tauri::Wry>> {
-    let builder = tauri::Builder::default()
+) -> anyhow::Result<tauri::App<TauriRuntime>> {
+    let builder = tauri::Builder::<TauriRuntime>::default();
+
+    #[cfg(all(feature = "cef", target_os = "macos", debug_assertions))]
+    let builder = builder.command_line_args([
+        ("--use-mock-keychain", None::<String>),
+        ("--password-store", Some("basic".to_string())),
+        ("--no-first-run", None::<String>),
+    ]);
+
+    let builder = builder
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             service,
@@ -394,7 +408,7 @@ fn startup_phase_build_tauri_app(
 
 fn startup_phase_exit_shutdown_handler(
     app_service: Arc<AppService>,
-) -> impl FnMut(&AppHandle, TauriRunEvent) {
+) -> impl FnMut(&AppHandle<TauriRuntime>, TauriRunEvent) {
     move |_handle, event| {
         if matches!(
             event,

@@ -10,9 +10,9 @@ use host_domain::{
 use tauri::{AppHandle, State};
 
 #[tauri::command]
-pub async fn build_start(
+pub async fn build_start<R: tauri::Runtime>(
     state: State<'_, AppState>,
-    app: AppHandle,
+    app: AppHandle<R>,
     repo_path: String,
     task_id: String,
     runtime_kind: AgentRuntimeKind,
@@ -41,9 +41,9 @@ pub async fn dev_server_get_state(
 }
 
 #[tauri::command]
-pub async fn dev_server_start(
+pub async fn dev_server_start<R: tauri::Runtime>(
     state: State<'_, AppState>,
-    app: AppHandle,
+    app: AppHandle<R>,
     repo_path: String,
     task_id: String,
 ) -> Result<DevServerGroupState, String> {
@@ -71,9 +71,9 @@ pub async fn dev_server_stop(
 }
 
 #[tauri::command]
-pub async fn dev_server_restart(
+pub async fn dev_server_restart<R: tauri::Runtime>(
     state: State<'_, AppState>,
-    app: AppHandle,
+    app: AppHandle<R>,
     repo_path: String,
     task_id: String,
 ) -> Result<DevServerGroupState, String> {
@@ -87,9 +87,9 @@ pub async fn dev_server_restart(
 }
 
 #[tauri::command]
-pub async fn build_respond(
+pub async fn build_respond<R: tauri::Runtime>(
     state: State<'_, AppState>,
-    app: AppHandle,
+    app: AppHandle<R>,
     run_id: String,
     action: BuildResponseAction,
     payload: Option<String>,
@@ -103,9 +103,9 @@ pub async fn build_respond(
 }
 
 #[tauri::command]
-pub async fn build_stop(
+pub async fn build_stop<R: tauri::Runtime>(
     state: State<'_, AppState>,
-    app: AppHandle,
+    app: AppHandle<R>,
     run_id: String,
 ) -> Result<serde_json::Value, String> {
     let service = state.service.clone();
@@ -120,9 +120,9 @@ pub async fn build_stop(
 }
 
 #[tauri::command]
-pub async fn build_cleanup(
+pub async fn build_cleanup<R: tauri::Runtime>(
     state: State<'_, AppState>,
-    app: AppHandle,
+    app: AppHandle<R>,
     run_id: String,
     mode: CleanupMode,
 ) -> Result<serde_json::Value, String> {
