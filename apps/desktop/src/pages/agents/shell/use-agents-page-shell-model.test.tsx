@@ -328,7 +328,6 @@ const registerModuleMocks = (): void => {
 };
 
 beforeEach(async () => {
-  mock.restore();
   registerModuleMocks();
   ({ useAgentsPageShellModel } = await import("./use-agents-page-shell-model"));
   workspaceState = {

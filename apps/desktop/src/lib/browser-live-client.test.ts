@@ -58,13 +58,13 @@ const originalFetch = globalThis.fetch;
 const loadBrowserLiveClient = () => import("./browser-live-client");
 
 beforeEach(() => {
-  mock.restore();
   FakeEventSource.reset();
   // @ts-expect-error test shim
   globalThis.EventSource = FakeEventSource;
 });
 
 afterEach(() => {
+  mock.restore();
   globalThis.EventSource = originalEventSource;
   globalThis.fetch = originalFetch;
 });

@@ -122,7 +122,6 @@ describe("useSettingsModalController", () => {
   };
 
   beforeEach(async () => {
-    mock.restore();
     registerModuleMocks();
     ({ useSettingsModalController } = await import("./use-settings-modal-controller"));
   });
