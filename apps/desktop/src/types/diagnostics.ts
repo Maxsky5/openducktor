@@ -1,6 +1,6 @@
-import type { RuntimeInstanceSummary } from "@openducktor/contracts";
+import type { FailureKind, RuntimeInstanceSummary } from "@openducktor/contracts";
 
-export type RepoRuntimeFailureKind = "timeout" | "error" | null;
+export type RepoRuntimeFailureKind = FailureKind | null;
 
 export type RepoRuntimeHealthCheck = {
   runtimeOk: boolean;

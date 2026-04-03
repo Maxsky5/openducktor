@@ -5,6 +5,8 @@ import {
   buildContinuationTargetSchema,
   type DevServerGroupState,
   devServerGroupStateSchema,
+  type FailureKind,
+  failureKindSchema,
   type PullRequest,
   pullRequestSchema,
   type RunSummary,
@@ -37,7 +39,7 @@ export type BuildRespondInput =
   | { action: "deny" }
   | { action: "message"; message: string };
 
-type RuntimeEnsureFailureKind = "timeout" | "error";
+type RuntimeEnsureFailureKind = FailureKind;
 
 type RuntimeEnsureErrorInit = {
   failureKind: RuntimeEnsureFailureKind;
@@ -73,7 +75,8 @@ const readStringProp = (value: unknown, key: string): string | undefined => {
 
 const readFailureKind = (value: unknown): RuntimeEnsureFailureKind | undefined => {
   const candidate = readUnknownProp(value, "failureKind");
-  return candidate === "timeout" || candidate === "error" ? candidate : undefined;
+  const result = failureKindSchema.safeParse(candidate);
+  return result.success ? result.data : undefined;
 };
 
 const buildRuntimeEnsureFailureSources = (error: unknown): unknown[] => {

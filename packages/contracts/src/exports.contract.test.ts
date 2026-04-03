@@ -23,6 +23,7 @@ import type {
   BuildContinuationTargetSource,
   ChatSettings,
   CommitsAheadBehind,
+  FailureKind,
   FileDiff,
   FileStatus,
   GitBranch,
@@ -147,6 +148,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "devServerScriptStateSchema",
   "devServerScriptStatusSchema",
   "DEFAULT_BRANCH_PREFIX",
+  "failureKindSchema",
   "gitCommitAllRequestSchema",
   "gitCommitAllResultSchema",
   "gitConflictAbortRequestSchema",
@@ -304,6 +306,7 @@ type ExportedTypeContract = {
   GitConflictOperation: GitConflictOperation;
   FileDiff: FileDiff;
   FileStatus: FileStatus;
+  FailureKind: FailureKind;
   GitFileStatusCounts: GitFileStatusCounts;
   GitBranch: GitBranch;
   GitCurrentBranch: GitCurrentBranch;
