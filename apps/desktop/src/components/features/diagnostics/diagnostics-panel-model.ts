@@ -7,7 +7,11 @@ import type {
 } from "@openducktor/contracts";
 import { runtimeLabelFor } from "@/lib/agent-runtime";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
-import { buildTimeoutToastDescription } from "@/state/operations/workspace/check-diagnostics";
+import {
+  buildTimeoutToastDescription,
+  hasBeadsCheckFailure,
+  hasRuntimeCheckFailure,
+} from "@/state/operations/workspace/check-diagnostics";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { buildDiagnosticsSummary, type DiagnosticsSummary } from "./diagnostics-model";
 
@@ -142,8 +146,12 @@ export const buildDiagnosticsPanelModel = (
     if (runtimeDefinitionsError) {
       criticalReasons.push(runtimeDefinitionsError);
     }
-    if (runtimeCheck && (!runtimeCheck.gitOk || runtimeCheck.runtimes.some((entry) => !entry.ok))) {
-      criticalReasons.push("Runtime CLI checks failing");
+    if (hasRuntimeCheckFailure(runtimeCheck)) {
+      criticalReasons.push(
+        runtimeCheckFailureKind === "timeout"
+          ? "Runtime CLI checks still retrying"
+          : "Runtime CLI checks failing",
+      );
     }
     for (const { definition, runtimeHealth } of runtimeEntries) {
       if (runtimeHealth?.runtimeOk === false) {
@@ -161,8 +169,12 @@ export const buildDiagnosticsPanelModel = (
         );
       }
     }
-    if (beadsCheck?.beadsOk === false) {
-      criticalReasons.push("Beads store unavailable");
+    if (hasBeadsCheckFailure(beadsCheck)) {
+      criticalReasons.push(
+        beadsCheckFailureKind === "timeout"
+          ? "Beads store still retrying"
+          : "Beads store unavailable",
+      );
     }
   }
 
@@ -217,10 +229,7 @@ export const buildDiagnosticsPanelModel = (
           label: runtimeEntry.kind,
           value: runtimeEntry.ok ? (runtimeEntry.version ?? "detected") : "missing",
         }));
-  const cliToolsHealthy =
-    runtimeCheck === null
-      ? null
-      : runtimeCheck.gitOk && runtimeCheck.runtimes.every((entry) => entry.ok);
+  const cliToolsHealthy = runtimeCheck === null ? null : !hasRuntimeCheckFailure(runtimeCheck);
 
   const cliToolsSection: DiagnosticsSectionModel = {
     key: "cli-tools",

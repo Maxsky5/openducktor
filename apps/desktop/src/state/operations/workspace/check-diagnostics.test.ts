@@ -104,6 +104,40 @@ describe("check-diagnostics helpers", () => {
     );
   });
 
+  test("treats GitHub CLI and auth failures as CLI toast-level issues", () => {
+    const issues = buildDiagnosticsToastIssues({
+      activeRepo: "/repo",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      runtimeCheck: {
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        ghOk: false,
+        ghVersion: null,
+        ghAuthOk: false,
+        ghAuthLogin: null,
+        ghAuthError: "gh auth missing",
+        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
+        errors: ["gh auth missing"],
+      },
+      runtimeCheckError: null,
+      runtimeCheckFailureKind: null,
+      beadsCheck: null,
+      beadsCheckError: null,
+      beadsCheckFailureKind: null,
+      runtimeHealthByRuntime: {},
+    });
+
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "diagnostics:cli-tools",
+          severity: "error",
+          description: "gh auth missing",
+        }),
+      ]),
+    );
+  });
+
   test("computes retry plan per diagnostics family", () => {
     expect(
       buildDiagnosticsRetryPlan({

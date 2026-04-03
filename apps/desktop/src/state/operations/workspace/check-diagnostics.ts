@@ -44,6 +44,20 @@ export const buildBeadsCheckErrorState = (beadsCheckError: string): BeadsCheck =
   beadsError: beadsCheckError,
 });
 
+export const hasRuntimeCheckFailure = (runtimeCheck: RuntimeCheck | null): boolean => {
+  return (
+    runtimeCheck !== null &&
+    (!runtimeCheck.gitOk ||
+      !runtimeCheck.ghOk ||
+      !runtimeCheck.ghAuthOk ||
+      runtimeCheck.runtimes.some((entry) => !entry.ok))
+  );
+};
+
+export const hasBeadsCheckFailure = (beadsCheck: BeadsCheck | null): boolean => {
+  return beadsCheck?.beadsOk === false;
+};
+
 export const buildRuntimeHealthErrorMap = (
   runtimeDefinitions: RuntimeDescriptor[],
   runtimeHealthError: string,
@@ -148,9 +162,10 @@ export const buildDiagnosticsToastIssues = ({
 
   const issues: DiagnosticsToastIssue[] = [];
 
-  const runtimeCheckDetail = runtimeCheckError ?? runtimeCheck?.errors[0] ?? null;
+  const runtimeCheckDetail =
+    runtimeCheckError ?? runtimeCheck?.errors[0] ?? runtimeCheck?.ghAuthError ?? null;
   const runtimeCheckIssueSeverity =
-    runtimeCheckFailureKind ?? (runtimeCheck?.gitOk === false ? "error" : null);
+    runtimeCheckFailureKind ?? (hasRuntimeCheckFailure(runtimeCheck) ? "error" : null);
 
   if (runtimeCheckDetail && runtimeCheckIssueSeverity !== null) {
     issues.push(
@@ -165,7 +180,7 @@ export const buildDiagnosticsToastIssues = ({
 
   const beadsCheckDetail = beadsCheckError ?? beadsCheck?.beadsError ?? null;
   const beadsCheckIssueSeverity =
-    beadsCheckFailureKind ?? (beadsCheck?.beadsOk === false ? "error" : null);
+    beadsCheckFailureKind ?? (hasBeadsCheckFailure(beadsCheck) ? "error" : null);
 
   if (beadsCheckDetail && beadsCheckIssueSeverity !== null) {
     issues.push(

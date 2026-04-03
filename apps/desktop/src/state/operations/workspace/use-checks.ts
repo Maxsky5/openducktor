@@ -163,11 +163,21 @@ export function useChecks({
         refreshBeadsCheckForRepo(activeRepo, true),
         refreshRepoRuntimeHealthForRepo(activeRepo, true),
       ]);
-      const runtime = runtimeResult.status === "fulfilled" ? runtimeResult.value : null;
-      const beads = beadsResult.status === "fulfilled" ? beadsResult.value : null;
+
+      if (runtimeResult.status === "rejected") {
+        throw runtimeResult.reason;
+      }
+
+      if (beadsResult.status === "rejected") {
+        throw beadsResult.reason;
+      }
+
       if (runtimeHealthResult.status === "rejected") {
         throw runtimeHealthResult.reason;
       }
+
+      const runtime = runtimeResult.value;
+      const beads = beadsResult.value;
 
       if (runtime && beads && runtime.gitOk && beads.beadsOk) {
         return;

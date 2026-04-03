@@ -566,8 +566,9 @@ describe("use-checks", () => {
         await value.refreshRuntimeCheck();
       });
       await harness.run(async (value) => {
-        await value.refreshChecks();
+        await expect(value.refreshChecks()).rejects.toThrow("runtime down");
       });
+      await harness.waitFor(() => toastError.mock.calls.length === 1, 1_000);
 
       expect(runtimeCheck).toHaveBeenCalledTimes(2);
       expect(runtimeCheck.mock.calls[0]).toEqual([false]);
@@ -639,7 +640,7 @@ describe("use-checks", () => {
       beadsDeferred.reject(new Error("beads down"));
       runtimeHealthDeferred.resolve(makeRepoHealth());
       await harness.run(async () => {
-        await refreshPromise;
+        await expect(refreshPromise).rejects.toThrow("runtime down");
       });
       await harness.waitFor((value) => value.isLoadingChecks === false);
 
@@ -722,7 +723,7 @@ describe("use-checks", () => {
       });
       await harness.waitFor((value) => value.isLoadingChecks === true);
       await harness.run(async () => {
-        await refreshPromise;
+        await expect(refreshPromise).rejects.toThrow("runtime down");
       });
       await harness.waitFor((value) => value.isLoadingChecks === false);
 
