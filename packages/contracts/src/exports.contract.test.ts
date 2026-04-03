@@ -147,6 +147,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "devServerScriptStateSchema",
   "devServerScriptStatusSchema",
   "DEFAULT_BRANCH_PREFIX",
+  "failureKindSchema",
   "gitCommitAllRequestSchema",
   "gitCommitAllResultSchema",
   "gitConflictAbortRequestSchema",

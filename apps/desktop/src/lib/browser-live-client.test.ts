@@ -53,6 +53,7 @@ class FakeEventSource {
 }
 
 const originalEventSource = globalThis.EventSource;
+const originalFetch = globalThis.fetch;
 
 const loadBrowserLiveClient = () => import("./browser-live-client");
 
@@ -65,6 +66,7 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.EventSource = originalEventSource;
+  globalThis.fetch = originalFetch;
 });
 
 describe("readBrowserLiveErrorMessage", () => {
@@ -97,6 +99,45 @@ describe("readBrowserLiveErrorMessage", () => {
 
     await expect(readBrowserLiveErrorMessage(response)).resolves.toBe(
       "Browser backend request failed with status 502.",
+    );
+  });
+
+  test("preserves structured timeout metadata through browser live runtimeEnsure", async () => {
+    const { createBrowserLiveHostClient } = await loadBrowserLiveClient();
+    const fetchMock = mock(async () => {
+      return new Response(
+        JSON.stringify({
+          error: "OpenCode runtime is still starting",
+          failureKind: "timeout",
+        }),
+        {
+          status: 504,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    const client = createBrowserLiveHostClient();
+
+    try {
+      await client.runtimeEnsure("/repo", "opencode");
+      throw new Error("Expected runtimeEnsure to reject");
+    } catch (error) {
+      expect(error instanceof Error).toBe(true);
+      if (!(error instanceof Error)) {
+        throw new Error("Expected runtimeEnsure to reject with an Error");
+      }
+      expect(error.message).toBe("OpenCode runtime is still starting");
+      expect(Reflect.get(error, "failureKind")).toBe("timeout");
+    }
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:14327/invoke/runtime_ensure",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      }),
     );
   });
 });

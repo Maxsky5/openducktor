@@ -5,6 +5,7 @@ import {
   buildContinuationTargetSchema,
   type DevServerGroupState,
   devServerGroupStateSchema,
+  type FailureKind,
   type PullRequest,
   pullRequestSchema,
   type RunSummary,
@@ -37,7 +38,7 @@ export type BuildRespondInput =
   | { action: "deny" }
   | { action: "message"; message: string };
 
-type RuntimeEnsureFailureKind = "timeout" | "error";
+type RuntimeEnsureFailureKind = FailureKind;
 
 type RuntimeEnsureErrorInit = {
   failureKind: RuntimeEnsureFailureKind;

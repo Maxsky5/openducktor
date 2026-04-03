@@ -1,9 +1,11 @@
+import type { FailureKind } from "@openducktor/contracts";
+
 type ResponseMetadata = {
   status?: unknown;
   statusText?: unknown;
 };
 
-export type OpenCodeRequestFailureKind = "timeout" | "error";
+export type OpenCodeRequestFailureKind = FailureKind;
 
 type OpenCodeRequestErrorInit = {
   failureKind: OpenCodeRequestFailureKind;
