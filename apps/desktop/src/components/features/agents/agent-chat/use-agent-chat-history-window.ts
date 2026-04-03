@@ -7,6 +7,7 @@ import {
   CHAT_TURN_WINDOW_BATCH,
   getAgentChatInitialTurnStart,
 } from "./agent-chat-thread-windowing";
+import { CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
 
 type UseAgentChatHistoryWindowInput = {
   rows: AgentChatWindowRow[];
@@ -44,6 +45,7 @@ export function useAgentChatHistoryWindow({
   const [turnStart, setTurnStart] = useState(() => getLatestTurnStart());
   const turnStartRef = useRef(turnStart);
   const fillFrameRef = useRef<number | null>(null);
+  const continuationFrameRef = useRef<number | null>(null);
   const pendingLatestResetRef = useRef(isSessionViewLoading && rows.length === 0);
   const pendingScrollRestoreRef = useRef<{
     beforeScrollHeight: number;
@@ -126,6 +128,39 @@ export function useAgentChatHistoryWindow({
     });
   }, [messagesContainerRef, revealOlderTurns, userScrolledRef]);
 
+  const scheduleContinuation = useCallback(() => {
+    if (continuationFrameRef.current !== null) {
+      return;
+    }
+
+    continuationFrameRef.current = globalThis.requestAnimationFrame(() => {
+      continuationFrameRef.current = null;
+
+      const container = messagesContainerRef.current;
+      if (!container) {
+        return;
+      }
+
+      if (!userScrolledRef.current) {
+        return;
+      }
+
+      if (pendingScrollRestoreRef.current !== null) {
+        return;
+      }
+
+      if (turnStartRef.current <= 0) {
+        return;
+      }
+
+      if (container.scrollTop >= CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX) {
+        return;
+      }
+
+      revealOlderTurns();
+    });
+  }, [messagesContainerRef, revealOlderTurns, userScrolledRef]);
+
   // Intentionally runs after every commit so pending scroll restoration and
   // deferred-session latest-turn rebasing happen on the very next DOM update.
   useLayoutEffect(() => {
@@ -141,6 +176,14 @@ export function useAgentChatHistoryWindow({
     const pendingRestore = pendingScrollRestoreRef.current;
     const container = messagesContainerRef.current;
     if (!pendingRestore) {
+      if (
+        container &&
+        userScrolledRef.current &&
+        turnStartRef.current > 0 &&
+        container.scrollTop < CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX
+      ) {
+        scheduleContinuation();
+      }
       return;
     }
 
@@ -152,6 +195,14 @@ export function useAgentChatHistoryWindow({
     const delta = container.scrollHeight - pendingRestore.beforeScrollHeight;
     if (delta) {
       container.scrollTop = pendingRestore.beforeScrollTop + delta;
+    }
+
+    if (
+      userScrolledRef.current &&
+      turnStartRef.current > 0 &&
+      container.scrollTop < CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX
+    ) {
+      scheduleContinuation();
     }
   });
 
@@ -186,7 +237,7 @@ export function useAgentChatHistoryWindow({
         return;
       }
 
-      if (container.scrollTop > 1) {
+      if (container.scrollTop >= CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX) {
         return;
       }
 
@@ -213,6 +264,9 @@ export function useAgentChatHistoryWindow({
     return () => {
       if (fillFrameRef.current !== null) {
         globalThis.cancelAnimationFrame(fillFrameRef.current);
+      }
+      if (continuationFrameRef.current !== null) {
+        globalThis.cancelAnimationFrame(continuationFrameRef.current);
       }
     };
   }, []);
