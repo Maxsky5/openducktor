@@ -36,6 +36,92 @@ export type BuildRespondInput =
   | { action: "approve" }
   | { action: "deny" }
   | { action: "message"; message: string };
+
+type RuntimeEnsureFailureKind = "timeout" | "error";
+
+type RuntimeEnsureErrorInit = {
+  failureKind: RuntimeEnsureFailureKind;
+};
+
+type NormalizedRuntimeEnsureFailure = RuntimeEnsureErrorInit & {
+  message: string;
+  cause?: unknown;
+};
+
+class RuntimeEnsureError extends Error {
+  readonly failureKind: RuntimeEnsureFailureKind;
+
+  constructor(message: string, failure: RuntimeEnsureErrorInit, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "RuntimeEnsureError";
+    this.failureKind = failure.failureKind;
+  }
+}
+
+const readUnknownProp = (value: unknown, key: string): unknown => {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  return (value as Record<string, unknown>)[key];
+};
+
+const readStringProp = (value: unknown, key: string): string | undefined => {
+  const candidate = readUnknownProp(value, key);
+  return typeof candidate === "string" && candidate.trim().length > 0 ? candidate : undefined;
+};
+
+const readFailureKind = (value: unknown): RuntimeEnsureFailureKind | undefined => {
+  const candidate = readUnknownProp(value, "failureKind");
+  return candidate === "timeout" || candidate === "error" ? candidate : undefined;
+};
+
+const buildRuntimeEnsureFailureSources = (error: unknown): unknown[] => {
+  return [error, readUnknownProp(error, "cause")];
+};
+
+const extractRuntimeEnsureFailure = (error: unknown): NormalizedRuntimeEnsureFailure | null => {
+  if (error instanceof RuntimeEnsureError) {
+    return {
+      message: error.message,
+      failureKind: error.failureKind,
+      ...(error.cause !== undefined ? { cause: error.cause } : {}),
+    };
+  }
+
+  const sources = buildRuntimeEnsureFailureSources(error);
+  const failureSource = sources.find((source) => readFailureKind(source) !== undefined);
+  const failureKind = failureSource ? readFailureKind(failureSource) : undefined;
+  if (!failureKind) {
+    return null;
+  }
+
+  const message =
+    readStringProp(failureSource, "message") ??
+    readStringProp(failureSource, "error") ??
+    (error instanceof Error && error.message.trim().length > 0 ? error.message : undefined) ??
+    "Failed to ensure runtime.";
+
+  return {
+    message,
+    failureKind,
+    ...(error !== undefined ? { cause: error } : {}),
+  };
+};
+
+const toRuntimeEnsureError = (error: unknown): RuntimeEnsureError | null => {
+  const failure = extractRuntimeEnsureFailure(error);
+  if (!failure) {
+    return null;
+  }
+
+  return new RuntimeEnsureError(
+    failure.message,
+    { failureKind: failure.failureKind },
+    failure.cause !== undefined ? { cause: failure.cause } : undefined,
+  );
+};
+
 const systemCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<SystemCheck> => {
   const payload = await invokeFn("system_check", { repoPath });
   return systemCheckSchema.parse(payload);
@@ -94,11 +180,15 @@ const runtimeEnsure = async (
   repoPath: string,
   runtimeKind: RuntimeKind,
 ): Promise<RuntimeInstanceSummary> => {
-  const payload = await invokeFn("runtime_ensure", {
-    repoPath,
-    runtimeKind,
-  });
-  return runtimeInstanceSummarySchema.parse(payload);
+  try {
+    const payload = await invokeFn("runtime_ensure", {
+      repoPath,
+      runtimeKind,
+    });
+    return runtimeInstanceSummarySchema.parse(payload);
+  } catch (error) {
+    throw toRuntimeEnsureError(error) ?? error;
+  }
 };
 
 const buildStart = async (

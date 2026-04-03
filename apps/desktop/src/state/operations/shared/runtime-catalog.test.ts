@@ -9,6 +9,12 @@ import { createRuntimeCatalogOperations } from "./runtime-catalog";
 
 type CatalogDependencies = Parameters<typeof createRuntimeCatalogOperations>[0];
 type RuntimeSummary = Awaited<ReturnType<CatalogDependencies["ensureRuntime"]>>;
+const withFailureKind = <T extends Error>(
+  error: T,
+  failureKind: "timeout" | "error",
+): T & {
+  failureKind: "timeout" | "error";
+} => Object.assign(error, { failureKind });
 
 const runtimeFixture: RuntimeSummary = {
   kind: "opencode",
@@ -231,7 +237,9 @@ describe("opencode-catalog", () => {
     expect(result.mcpOk).toBe(false);
     expect(result.availableToolIds).toEqual([]);
     expect(result.runtimeError).toContain("runtime unavailable");
+    expect(result.runtimeFailureKind).toBe("error");
     expect(result.mcpError).toContain("MCP cannot be verified");
+    expect(result.mcpFailureKind).toBe("error");
     expect(result.mcpServerName).toBe("openducktor");
     expect(result.errors).toEqual([
       "runtime unavailable",
@@ -306,7 +314,47 @@ describe("opencode-catalog", () => {
     expect(result.mcpOk).toBe(false);
     expect(result.runtime).toEqual(runtimeFixture);
     expect(result.mcpError).toBe("Failed to query runtime MCP status: status unavailable");
+    expect(result.runtimeFailureKind).toBeNull();
+    expect(result.mcpFailureKind).toBe("error");
     expect(result.errors).toEqual(["Failed to query runtime MCP status: status unavailable"]);
+  });
+
+  test("classifies timeout-shaped runtime and MCP failures distinctly", async () => {
+    const runtimeTimeoutOperations = createRuntimeCatalogOperations(
+      createDeps({
+        ensureRuntime: async () => {
+          throw withFailureKind(
+            new Error("OpenCode startup probe failed reason=timeout after 15000ms"),
+            "timeout",
+          );
+        },
+      }),
+    );
+    const runtimeTimeoutResult = await runtimeTimeoutOperations.checkRepoRuntimeHealth(
+      "/tmp/repo",
+      "opencode",
+    );
+
+    expect(runtimeTimeoutResult.runtimeFailureKind).toBe("timeout");
+    expect(runtimeTimeoutResult.mcpFailureKind).toBe("timeout");
+
+    const mcpTimeoutOperations = createRuntimeCatalogOperations(
+      createDeps({
+        getMcpStatus: async () => {
+          throw withFailureKind(
+            new Error("OpenCode startup probe failed reason=timeout after 15000ms"),
+            "timeout",
+          );
+        },
+      }),
+    );
+    const mcpTimeoutResult = await mcpTimeoutOperations.checkRepoRuntimeHealth(
+      "/tmp/repo",
+      "opencode",
+    );
+
+    expect(mcpTimeoutResult.runtimeFailureKind).toBeNull();
+    expect(mcpTimeoutResult.mcpFailureKind).toBe("timeout");
   });
 
   test("treats MCP status as optional when the runtime does not support it", async () => {

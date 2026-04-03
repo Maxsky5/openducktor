@@ -15,6 +15,8 @@ describe("DiagnosticsPanelSections", () => {
       runtimeDefinitionsError: null,
       runtimeCheck: null,
       beadsCheck: null,
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {},
       isLoadingChecks: false,
     });
@@ -57,10 +59,13 @@ describe("DiagnosticsPanelSections", () => {
         beadsPath: "/Users/dev/.openducktor/beads/fairnest/.beads",
         beadsError: null,
       },
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: {
           runtimeOk: true,
           runtimeError: null,
+          runtimeFailureKind: null,
           runtime: {
             kind: "opencode",
             runtimeId: "runtime-1",
@@ -77,6 +82,7 @@ describe("DiagnosticsPanelSections", () => {
           },
           mcpOk: true,
           mcpError: null,
+          mcpFailureKind: null,
           mcpServerName: "openducktor",
           mcpServerStatus: "connected",
           mcpServerError: null,
@@ -131,13 +137,17 @@ describe("DiagnosticsPanelSections", () => {
         beadsPath: null,
         beadsError: "beads init failed",
       },
+      runtimeCheckFailureKind: "error",
+      beadsCheckFailureKind: "error",
       runtimeHealthByRuntime: {
         opencode: {
           runtimeOk: false,
           runtimeError: "runtime failed",
+          runtimeFailureKind: "error",
           runtime: null,
           mcpOk: false,
           mcpError: "mcp unavailable",
+          mcpFailureKind: "error",
           mcpServerName: "openducktor",
           mcpServerStatus: null,
           mcpServerError: "server unavailable",

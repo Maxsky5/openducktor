@@ -50,9 +50,11 @@ const makeRepoHealth = (
 ): RepoRuntimeHealthCheck => ({
   runtimeOk: true,
   runtimeError: null,
+  runtimeFailureKind: null,
   runtime: null,
   mcpOk: true,
   mcpError: null,
+  mcpFailureKind: null,
   mcpServerName: "openducktor",
   mcpServerStatus: "connected",
   mcpServerError: null,
@@ -72,8 +74,13 @@ const MOCK_RUNTIME_DESCRIPTOR: RuntimeDescriptor = {
   },
 };
 
-const toastError = mock((_message: string, _options?: { description?: string }) => {});
-const toastSuccess = mock((_message: string, _options?: { description?: string }) => {});
+const toastMessage = mock(
+  (_message: string, _options?: { description?: string; id?: string; duration?: number }) => {},
+);
+const toastError = mock(
+  (_message: string, _options?: { description?: string; id?: string; duration?: number }) => {},
+);
+const toastDismiss = mock((_toastId?: string | number) => {});
 let repoHealthHandler = async (
   _repoPath: string,
   _runtimeKind: RuntimeKind,
@@ -154,9 +161,17 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
 
 type HookHarness = ReturnType<typeof createHookHarness>;
 
+const captureDeferredRejection = <T,>(promise: Promise<T>): Promise<T> => {
+  void promise.catch(() => {});
+  return promise;
+};
+
+const REFRESH_CHECKS_WAIT_TIMEOUT_MS = 1_000;
+
 const waitForInitialChecksToSettle = async (
   harness: HookHarness,
   runtimeKinds: RuntimeKind[] = ["opencode"],
+  timeoutMs = 1_000,
 ) => {
   await harness.mount();
   await harness.waitFor((value) => {
@@ -168,24 +183,31 @@ const waitForInitialChecksToSettle = async (
       ) &&
       value.isLoadingChecks === false
     );
-  });
+  }, timeoutMs);
 };
 
 beforeAll(async () => {
   mock.module("sonner", () => ({
-    toast: {
-      error: (message: string, options?: { description?: string }) => toastError(message, options),
-      success: (message: string, options?: { description?: string }) =>
-        toastSuccess(message, options),
-    },
+    toast: Object.assign(
+      (message: string, options?: { description?: string; id?: string; duration?: number }) =>
+        toastMessage(message, options),
+      {
+        error: (
+          message: string,
+          options?: { description?: string; id?: string; duration?: number },
+        ) => toastError(message, options),
+        dismiss: (toastId?: string | number) => toastDismiss(toastId),
+      },
+    ),
   }));
   ({ useChecks } = await import("./use-checks"));
 });
 
 beforeEach(async () => {
   Object.assign(host, originalHostMethods);
+  toastMessage.mockClear();
   toastError.mockClear();
-  toastSuccess.mockClear();
+  toastDismiss.mockClear();
   checkRepoRuntimeHealthMock.mockClear();
   repoHealthHandler = async () => makeRepoHealth();
 });
@@ -329,17 +351,19 @@ describe("use-checks", () => {
     }
   });
 
-  test("refreshChecks reports unhealthy diagnostics details", async () => {
+  test("deduplicates runtime health error toasts across manual refreshes", async () => {
     const runtimeCheck = mock(
-      async (_force?: boolean): Promise<RuntimeCheck> =>
-        makeRuntimeCheck({ gitOk: false, errors: ["git unavailable"] }),
+      async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
     );
-    const beadsCheck = mock(
-      async (): Promise<BeadsCheck> =>
-        makeBeadsCheck({ beadsOk: false, beadsError: "missing .beads" }),
-    );
+    const beadsCheck = mock(async (): Promise<BeadsCheck> => makeBeadsCheck());
     repoHealthHandler = async () =>
-      makeRepoHealth({ mcpOk: false, mcpError: "mcp offline", errors: ["mcp offline"] });
+      makeRepoHealth({
+        mcpOk: false,
+        mcpError: "mcp offline",
+        mcpFailureKind: "error",
+        mcpServerError: "mcp offline",
+        errors: ["mcp offline"],
+      });
 
     const original = {
       runtimeCheck: host.runtimeCheck,
@@ -354,15 +378,95 @@ describe("use-checks", () => {
     });
 
     try {
-      await harness.mount();
+      await waitForInitialChecksToSettle(harness, ["opencode"], 1_000);
+      await harness.waitFor(() => toastError.mock.calls.length === 1, 1_000);
+
+      expect(toastError).toHaveBeenCalledWith(
+        "OpenCode OpenDucktor MCP unavailable",
+        expect.objectContaining({
+          id: "diagnostics:mcp:opencode",
+          description: "mcp offline",
+        }),
+      );
+
+      toastError.mockClear();
       await harness.run(async (value) => {
         await value.refreshChecks();
       });
 
-      expect(toastError).toHaveBeenCalledWith("Diagnostics check failed", {
-        description: "git unavailable | beads: missing .beads | mcp offline",
-      });
+      expect(toastError).not.toHaveBeenCalled();
       expect(harness.getLatest().isLoadingChecks).toBe(false);
+    } finally {
+      await harness.unmount();
+      host.runtimeCheck = original.runtimeCheck;
+      host.beadsCheck = original.beadsCheck;
+    }
+  });
+
+  test("shows cli and beads toasts for unhealthy successful payloads", async () => {
+    let runtimeCallCount = 0;
+    let beadsCallCount = 0;
+    const runtimeCheck = mock(async (): Promise<RuntimeCheck> => {
+      runtimeCallCount += 1;
+      return runtimeCallCount === 1
+        ? makeRuntimeCheck()
+        : makeRuntimeCheck({
+            gitOk: false,
+            gitVersion: null,
+            ghOk: false,
+            ghVersion: null,
+            ghAuthOk: false,
+            ghAuthLogin: null,
+            ghAuthError: "git missing",
+            runtimes: [{ kind: "opencode", ok: false, version: null }],
+            errors: ["git missing"],
+          });
+    });
+    const beadsCheck = mock(async (): Promise<BeadsCheck> => {
+      beadsCallCount += 1;
+      return beadsCallCount === 1
+        ? makeBeadsCheck()
+        : makeBeadsCheck({
+            beadsOk: false,
+            beadsPath: null,
+            beadsError: "beads offline",
+          });
+    });
+
+    const original = {
+      runtimeCheck: host.runtimeCheck,
+      beadsCheck: host.beadsCheck,
+    };
+    host.runtimeCheck = runtimeCheck;
+    host.beadsCheck = beadsCheck;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+
+    try {
+      await waitForInitialChecksToSettle(harness, ["opencode"], 1_000);
+      toastError.mockClear();
+
+      await harness.run(async (value) => {
+        await value.refreshChecks();
+      });
+
+      expect(toastError).toHaveBeenCalledWith(
+        "CLI tools unavailable",
+        expect.objectContaining({
+          id: "diagnostics:cli-tools",
+          description: "git missing",
+        }),
+      );
+      expect(toastError).toHaveBeenCalledWith(
+        "Beads store unavailable",
+        expect.objectContaining({
+          id: "diagnostics:beads-store",
+          description: "beads offline",
+        }),
+      );
     } finally {
       await harness.unmount();
       host.runtimeCheck = original.runtimeCheck;
@@ -411,9 +515,12 @@ describe("use-checks", () => {
       checkRepoRuntimeHealthMock.mockClear();
 
       await harness.run((value) => {
-        refreshPromise = value.refreshChecks();
+        refreshPromise = captureDeferredRejection(value.refreshChecks());
       });
-      await harness.waitFor((value) => value.isLoadingChecks === true);
+      await harness.waitFor(
+        (value) => value.isLoadingChecks === true,
+        REFRESH_CHECKS_WAIT_TIMEOUT_MS,
+      );
 
       expect(runtimeCheck).toHaveBeenCalledTimes(1);
       expect(runtimeCheck.mock.calls[0]).toEqual([true]);
@@ -427,7 +534,10 @@ describe("use-checks", () => {
       await harness.run(async () => {
         await refreshPromise;
       });
-      await harness.waitFor((value) => value.isLoadingChecks === false);
+      await harness.waitFor(
+        (value) => value.isLoadingChecks === false,
+        REFRESH_CHECKS_WAIT_TIMEOUT_MS,
+      );
     } finally {
       await harness.unmount();
       host.runtimeCheck = original.runtimeCheck;
@@ -469,15 +579,20 @@ describe("use-checks", () => {
         await value.refreshRuntimeCheck();
       });
       await harness.run(async (value) => {
-        await value.refreshChecks();
+        await expect(value.refreshChecks()).rejects.toThrow("runtime down");
       });
+      await harness.waitFor(() => toastError.mock.calls.length === 1, 1_000);
 
       expect(runtimeCheck).toHaveBeenCalledTimes(2);
       expect(runtimeCheck.mock.calls[0]).toEqual([false]);
       expect(runtimeCheck.mock.calls[1]).toEqual([true]);
-      expect(toastError).toHaveBeenCalledWith("Diagnostics check unavailable", {
-        description: "runtime: runtime down",
-      });
+      expect(toastError).toHaveBeenCalledWith(
+        "CLI tools unavailable",
+        expect.objectContaining({
+          id: "diagnostics:cli-tools",
+          description: "runtime down",
+        }),
+      );
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
       await harness.unmount();
@@ -527,9 +642,12 @@ describe("use-checks", () => {
       checkRepoRuntimeHealthMock.mockClear();
 
       await harness.run((value) => {
-        refreshPromise = value.refreshChecks();
+        refreshPromise = captureDeferredRejection(value.refreshChecks());
       });
-      await harness.waitFor((value) => value.isLoadingChecks === true);
+      await harness.waitFor(
+        (value) => value.isLoadingChecks === true,
+        REFRESH_CHECKS_WAIT_TIMEOUT_MS,
+      );
 
       runtimeDeferred.reject(new Error("runtime down"));
       await Promise.resolve();
@@ -538,13 +656,21 @@ describe("use-checks", () => {
       beadsDeferred.reject(new Error("beads down"));
       runtimeHealthDeferred.resolve(makeRepoHealth());
       await harness.run(async () => {
-        await refreshPromise;
+        await expect(refreshPromise).rejects.toThrow("runtime down");
       });
-      await harness.waitFor((value) => value.isLoadingChecks === false);
+      await harness.waitFor(
+        (value) => value.isLoadingChecks === false,
+        REFRESH_CHECKS_WAIT_TIMEOUT_MS,
+      );
 
-      expect(toastError).toHaveBeenCalledWith("Diagnostics check unavailable", {
-        description: "runtime: runtime down | beads: beads down",
-      });
+      expect(toastError).toHaveBeenCalledWith(
+        "CLI tools unavailable",
+        expect.objectContaining({ id: "diagnostics:cli-tools", description: "runtime down" }),
+      );
+      expect(toastError).toHaveBeenCalledWith(
+        "Beads store unavailable",
+        expect.objectContaining({ id: "diagnostics:beads-store", description: "beads down" }),
+      );
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
       await harness.unmount();
@@ -576,10 +702,15 @@ describe("use-checks", () => {
     };
     const originalSetTimeout = globalThis.setTimeout;
     const originalClearTimeout = globalThis.clearTimeout;
-    const setTimeoutMock = mock((handler: TimerHandler, _delay?: number) => {
+    const setTimeoutMock = mock((handler: TimerHandler, delay?: number) => {
       if (typeof handler !== "function") {
         throw new Error("Expected timeout callback function");
       }
+
+      if (delay === 2_000) {
+        return originalSetTimeout(() => {}, 60_000);
+      }
+
       return originalSetTimeout(() => {
         handler();
       }, 0);
@@ -607,17 +738,31 @@ describe("use-checks", () => {
       checkRepoRuntimeHealthMock.mockClear();
 
       await harness.run((value) => {
-        refreshPromise = value.refreshChecks();
+        refreshPromise = captureDeferredRejection(value.refreshChecks());
       });
-      await harness.waitFor((value) => value.isLoadingChecks === true);
+      await harness.waitFor(
+        (value) => value.isLoadingChecks === true,
+        REFRESH_CHECKS_WAIT_TIMEOUT_MS,
+      );
       await harness.run(async () => {
-        await refreshPromise;
+        await expect(refreshPromise).rejects.toThrow("runtime down");
       });
-      await harness.waitFor((value) => value.isLoadingChecks === false);
+      await harness.waitFor(
+        (value) => value.isLoadingChecks === false,
+        REFRESH_CHECKS_WAIT_TIMEOUT_MS,
+      );
 
-      expect(toastError).toHaveBeenCalledWith("Diagnostics check unavailable", {
-        description: "runtime: runtime down | beads: Timed out after 5000ms",
-      });
+      expect(toastError).toHaveBeenCalledWith(
+        "CLI tools unavailable",
+        expect.objectContaining({
+          id: "diagnostics:cli-tools",
+          description: "runtime down",
+        }),
+      );
+      expect(toastMessage).toHaveBeenCalledWith(
+        "Beads store not yet available",
+        expect.objectContaining({ id: "diagnostics:beads-store" }),
+      );
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
       await harness.unmount();
@@ -625,6 +770,73 @@ describe("use-checks", () => {
       host.beadsCheck = original.beadsCheck;
       globalThis.setTimeout = originalSetTimeout;
       globalThis.clearTimeout = originalClearTimeout;
+      beadsDeferred.reject(new Error("cleanup"));
+    }
+  });
+
+  test("projects runtime and beads query timeouts into concrete states instead of leaving checks pending", async () => {
+    const runtimeDeferred = createDeferred<RuntimeCheck>();
+    const beadsDeferred = createDeferred<BeadsCheck>();
+    const original = {
+      runtimeCheck: host.runtimeCheck,
+      beadsCheck: host.beadsCheck,
+    };
+    const originalSetTimeout = globalThis.setTimeout;
+    const originalClearTimeout = globalThis.clearTimeout;
+
+    host.runtimeCheck = mock(async () => runtimeDeferred.promise);
+    host.beadsCheck = mock(async () => beadsDeferred.promise);
+    repoHealthHandler = async () => makeRepoHealth();
+
+    globalThis.setTimeout = ((handler: TimerHandler, delay?: number) => {
+      if (typeof handler !== "function") {
+        throw new Error("Expected timeout callback function");
+      }
+
+      if (delay === 2_000) {
+        return originalSetTimeout(() => {}, 60_000);
+      }
+
+      return originalSetTimeout(() => {
+        handler();
+      }, 0);
+    }) as unknown as typeof globalThis.setTimeout;
+    globalThis.clearTimeout = ((timeoutId: ReturnType<typeof globalThis.setTimeout>) => {
+      originalClearTimeout(timeoutId);
+    }) as typeof globalThis.clearTimeout;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (value) =>
+          value.runtimeCheck?.errors[0] === "Timed out after 15000ms" &&
+          value.activeBeadsCheck?.beadsError === "Timed out after 15000ms" &&
+          value.runtimeCheckFailureKind === "timeout" &&
+          value.beadsCheckFailureKind === "timeout" &&
+          value.isLoadingChecks === false,
+        1000,
+      );
+
+      expect(toastMessage).toHaveBeenCalledWith(
+        "CLI tools not yet available",
+        expect.objectContaining({ id: "diagnostics:cli-tools" }),
+      );
+      expect(toastMessage).toHaveBeenCalledWith(
+        "Beads store not yet available",
+        expect.objectContaining({ id: "diagnostics:beads-store" }),
+      );
+    } finally {
+      await harness.unmount();
+      host.runtimeCheck = original.runtimeCheck;
+      host.beadsCheck = original.beadsCheck;
+      globalThis.setTimeout = originalSetTimeout;
+      globalThis.clearTimeout = originalClearTimeout;
+      runtimeDeferred.reject(new Error("cleanup"));
       beadsDeferred.reject(new Error("cleanup"));
     }
   });
@@ -747,6 +959,95 @@ describe("use-checks", () => {
       );
     } finally {
       await harness.unmount();
+    }
+  });
+
+  test("retries timeout-classified runtime health without duplicating toasts", async () => {
+    const originalSetTimeout = globalThis.setTimeout;
+    const originalClearTimeout = globalThis.clearTimeout;
+    let scheduledRetryCount = 0;
+    globalThis.setTimeout = ((handler: TimerHandler, delay?: number) => {
+      if (typeof handler !== "function") {
+        throw new Error("Expected retry timer handler to be a function");
+      }
+
+      if (delay === 2_000) {
+        scheduledRetryCount += 1;
+        return originalSetTimeout(() => {}, 60_000);
+      }
+
+      return originalSetTimeout(() => {
+        handler();
+      }, delay);
+    }) as unknown as typeof globalThis.setTimeout;
+    globalThis.clearTimeout = ((timerId: ReturnType<typeof globalThis.setTimeout>) => {
+      return originalClearTimeout(timerId);
+    }) as typeof globalThis.clearTimeout;
+
+    let callCount = 0;
+    repoHealthHandler = async () => {
+      callCount += 1;
+
+      if (callCount < 3) {
+        return makeRepoHealth({
+          runtimeOk: false,
+          runtimeError: "Timed out waiting for OpenCode runtime startup readiness",
+          runtimeFailureKind: "timeout",
+          mcpOk: false,
+          mcpError: "Runtime is unavailable, so MCP cannot be verified.",
+          mcpFailureKind: "timeout",
+          errors: [
+            "Timed out waiting for OpenCode runtime startup readiness",
+            "Runtime is unavailable, so MCP cannot be verified.",
+          ],
+        });
+      }
+
+      return makeRepoHealth();
+    };
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (value) =>
+          value.activeRepoRuntimeHealthByRuntime.opencode?.runtimeFailureKind === "timeout" &&
+          value.isLoadingChecks === false,
+        5000,
+      );
+
+      expect(toastMessage).toHaveBeenCalledWith(
+        "OpenCode runtime not yet available",
+        expect.objectContaining({
+          id: "diagnostics:runtime:opencode",
+        }),
+      );
+      expect(scheduledRetryCount).toBeGreaterThan(0);
+
+      await harness.run(async () => {
+        await harness.getLatest().refreshRepoRuntimeHealthForRepo("/repo-a", true);
+      });
+      await harness.waitFor(() => checkRepoRuntimeHealthMock.mock.calls.length === 2, 1000);
+      expect(toastMessage).toHaveBeenCalledTimes(1);
+
+      await harness.run(async () => {
+        await harness.getLatest().refreshRepoRuntimeHealthForRepo("/repo-a", true);
+      });
+      await harness.waitFor(
+        (value) => value.activeRepoRuntimeHealthByRuntime.opencode?.runtimeOk === true,
+        1000,
+      );
+
+      expect(toastMessage).toHaveBeenCalledTimes(1);
+      expect(toastDismiss).toHaveBeenCalledWith("diagnostics:runtime:opencode");
+    } finally {
+      await harness.unmount();
+      globalThis.setTimeout = originalSetTimeout;
+      globalThis.clearTimeout = originalClearTimeout;
     }
   });
 });

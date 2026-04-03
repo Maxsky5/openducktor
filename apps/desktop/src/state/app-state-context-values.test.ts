@@ -90,6 +90,8 @@ describe("app-state-context-values", () => {
     const checksValue: ChecksStateContextValue = {
       runtimeCheck: null,
       beadsCheck: null,
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {},
       isLoadingChecks: false,
       refreshChecks: async () => {},

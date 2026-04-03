@@ -58,16 +58,10 @@ export function useAppLifecycle({
 
   useEffect(() => {
     Promise.allSettled([refreshWorkspaces(), refreshRuntimeCheck(false)]).then(
-      ([workspaceResult, runtimeResult]) => {
+      ([workspaceResult]) => {
         if (workspaceResult.status === "rejected") {
           toast.error("Workspace load failed", {
             description: errorMessage(workspaceResult.reason),
-          });
-        }
-
-        if (runtimeResult.status === "rejected") {
-          toast.error("Runtime checks unavailable", {
-            description: errorMessage(runtimeResult.reason),
           });
         }
       },
@@ -190,7 +184,7 @@ export function useAppLifecycle({
     });
 
     Promise.allSettled([taskLoadPromise, runtimeCheckPromise])
-      .then(([tasksResult, runtimeResult]) => {
+      .then(([tasksResult]) => {
         if (isStaleRepoLoad()) {
           return;
         }
@@ -198,12 +192,6 @@ export function useAppLifecycle({
         if (tasksResult.status === "rejected") {
           toast.error("Repository tasks unavailable", {
             description: summarizeTaskLoadError(tasksResult.reason),
-          });
-        }
-
-        if (runtimeResult.status === "rejected") {
-          toast.error("Runtime checks unavailable", {
-            description: errorMessage(runtimeResult.reason),
           });
         }
       })

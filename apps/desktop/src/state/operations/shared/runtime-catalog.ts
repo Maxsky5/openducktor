@@ -15,7 +15,7 @@ import { errorMessage } from "@/lib/errors";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import { appQueryClient } from "@/lib/query-client";
 import { ensureRuntimeListFromQuery } from "@/state/queries/runtime";
-import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
+import type { RepoRuntimeFailureKind, RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { host } from "./host";
 
 type RuntimeMcpServerStatus = {
@@ -83,7 +83,10 @@ type McpProbeResult =
 type NormalizedMcpStatus = {
   mcpServerStatus: string | null;
   mcpServerError: string | null;
+  mcpFailureKind: RepoRuntimeFailureKind;
 };
+
+type NonNullRepoRuntimeFailureKind = Exclude<RepoRuntimeFailureKind, null>;
 
 const ACTIVE_RUN_STATES = new Set<RunSummary["state"]>([
   "starting",
@@ -104,17 +107,36 @@ const shouldReconnectMcp = (status: string | null): boolean => {
   return status !== null && status !== "connected";
 };
 
+const readFailureKind = (error: unknown): NonNullRepoRuntimeFailureKind | null => {
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+
+  const candidate = (error as { failureKind?: unknown }).failureKind;
+  return candidate === "timeout" || candidate === "error" ? candidate : null;
+};
+
+const toErrorFailure = (
+  error: unknown,
+): { message: string; failureKind: NonNullRepoRuntimeFailureKind } => ({
+  message: errorMessage(error),
+  failureKind: readFailureKind(error) ?? "error",
+});
+
 const toRuntimeUnavailableHealthCheck = (
   runtimeError: string,
+  runtimeFailureKind: NonNullRepoRuntimeFailureKind,
   checkedAt: string,
 ): RepoRuntimeHealthCheck => {
   const unavailableMessage = "Runtime is unavailable, so MCP cannot be verified.";
   return {
     runtimeOk: false,
     runtimeError,
+    runtimeFailureKind,
     runtime: null,
     mcpOk: false,
     mcpError: unavailableMessage,
+    mcpFailureKind: runtimeFailureKind,
     mcpServerName: ODT_MCP_SERVER_NAME,
     mcpServerStatus: null,
     mcpServerError: unavailableMessage,
@@ -127,14 +149,17 @@ const toRuntimeUnavailableHealthCheck = (
 const toMcpStatusFailedHealthCheck = (
   runtime: RuntimeInstanceSummary,
   mcpError: string,
+  mcpFailureKind: NonNullRepoRuntimeFailureKind,
   checkedAt: string,
 ): RepoRuntimeHealthCheck => {
   return {
     runtimeOk: true,
     runtimeError: null,
+    runtimeFailureKind: null,
     runtime,
     mcpOk: false,
     mcpError,
+    mcpFailureKind,
     mcpServerName: ODT_MCP_SERVER_NAME,
     mcpServerStatus: null,
     mcpServerError: mcpError,
@@ -151,9 +176,11 @@ const toRepoRuntimeHealthCheckWithoutMcpStatus = (
   return {
     runtimeOk: true,
     runtimeError: null,
+    runtimeFailureKind: null,
     runtime,
     mcpOk: true,
     mcpError: null,
+    mcpFailureKind: null,
     mcpServerName: ODT_MCP_SERVER_NAME,
     mcpServerStatus: null,
     mcpServerError: null,
@@ -180,9 +207,11 @@ const toRepoRuntimeHealthCheck = ({
   return {
     runtimeOk: true,
     runtimeError: null,
+    runtimeFailureKind: null,
     runtime,
     mcpOk,
     mcpError,
+    mcpFailureKind: mcpOk ? null : "error",
     mcpServerName: ODT_MCP_SERVER_NAME,
     mcpServerStatus,
     mcpServerError: mcpServerError ?? null,
@@ -194,20 +223,22 @@ const toRepoRuntimeHealthCheck = ({
 
 const resolveMcpStatusError = (
   statusByServer: Record<string, RuntimeMcpServerStatus>,
-): { status: string | null; error: string | null } => {
+): { status: string | null; error: string | null; failureKind: RepoRuntimeFailureKind } => {
   const serverStatus = statusByServer[ODT_MCP_SERVER_NAME];
   if (!serverStatus) {
     return {
       status: null,
       error: `MCP server '${ODT_MCP_SERVER_NAME}' is not configured for this runtime.`,
+      failureKind: "error",
     };
   }
   if (serverStatus.status === "connected") {
-    return { status: serverStatus.status, error: null };
+    return { status: serverStatus.status, error: null, failureKind: null };
   }
   return {
     status: serverStatus.status,
     error: serverStatus.error ?? `MCP server '${ODT_MCP_SERVER_NAME}' is ${serverStatus.status}.`,
+    failureKind: "error",
   };
 };
 
@@ -242,10 +273,14 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
         runtimeInput: toRuntimeInput(runtime, runtimeKind),
       };
     } catch (error) {
-      const runtimeError = errorMessage(error);
+      const runtimeError = toErrorFailure(error);
       return {
         ok: false,
-        result: toRuntimeUnavailableHealthCheck(runtimeError, checkedAt),
+        result: toRuntimeUnavailableHealthCheck(
+          runtimeError.message,
+          runtimeError.failureKind,
+          checkedAt,
+        ),
       };
     }
   };
@@ -265,13 +300,15 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
         statusByServer,
       };
     } catch (error) {
-      const rawMessage = errorMessage(error);
+      const mcpStatusError = toErrorFailure(error);
+      const rawMessage = mcpStatusError.message;
       if (!deps.shouldRestartRuntimeForMcpStatusError(runtimeKind, rawMessage)) {
         return {
           ok: false,
           result: toMcpStatusFailedHealthCheck(
             runtimeProbe.runtime,
             `Failed to query runtime MCP status: ${rawMessage}`,
+            mcpStatusError.failureKind,
             checkedAt,
           ),
         };
@@ -286,6 +323,7 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
             result: toMcpStatusFailedHealthCheck(
               runtimeProbe.runtime,
               `Failed to query runtime MCP status: ${rawMessage}. Automatic runtime restart was skipped because an active run is using this runtime.`,
+              mcpStatusError.failureKind,
               checkedAt,
             ),
           };
@@ -301,11 +339,13 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
           statusByServer,
         };
       } catch (retryError) {
+        const retriedMcpStatusError = toErrorFailure(retryError);
         return {
           ok: false,
           result: toMcpStatusFailedHealthCheck(
             restartedRuntime ?? runtimeProbe.runtime,
-            `Failed to query runtime MCP status: ${errorMessage(retryError)}`,
+            `Failed to query runtime MCP status: ${retriedMcpStatusError.message}`,
+            retriedMcpStatusError.failureKind,
             checkedAt,
           ),
         };
@@ -317,7 +357,11 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
     runtimeInput: ListCatalogInput,
     statusByServer: Record<string, RuntimeMcpServerStatus>,
   ): Promise<NormalizedMcpStatus> => {
-    let { status: mcpServerStatus, error: mcpServerError } = resolveMcpStatusError(statusByServer);
+    let {
+      status: mcpServerStatus,
+      error: mcpServerError,
+      failureKind: mcpFailureKind,
+    } = resolveMcpStatusError(statusByServer);
 
     if (shouldReconnectMcp(mcpServerStatus)) {
       try {
@@ -329,17 +373,20 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
         const refreshedStatus = resolveMcpStatusError(refreshedStatusByServer);
         mcpServerStatus = refreshedStatus.status;
         mcpServerError = refreshedStatus.error;
+        mcpFailureKind = refreshedStatus.failureKind;
       } catch (error) {
         const reconnectError = errorMessage(error);
         mcpServerError = mcpServerError
           ? `${mcpServerError} (reconnect failed: ${reconnectError})`
           : `Failed to reconnect MCP server '${ODT_MCP_SERVER_NAME}': ${reconnectError}`;
+        mcpFailureKind = "error";
       }
     }
 
     return {
       mcpServerStatus,
       mcpServerError,
+      mcpFailureKind,
     };
   };
 

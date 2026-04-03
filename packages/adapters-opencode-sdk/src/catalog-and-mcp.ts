@@ -293,30 +293,34 @@ export const getMcpStatus = async (
     workingDirectory: string;
   },
 ): Promise<Record<string, McpServerStatus>> => {
-  const client = createClient({
-    runtimeEndpoint: input.runtimeEndpoint,
-    workingDirectory: input.workingDirectory,
-  });
-  const response = await client.mcp.status({
-    directory: input.workingDirectory,
-  });
-  const payload = unwrapData(response, "get mcp status");
-  const statusPayload = asUnknownRecord(payload);
-  if (!statusPayload) {
-    throw new Error("Invalid MCP status payload: expected an object keyed by server name.");
-  }
-
-  const statusByServer: Record<string, McpServerStatus> = {};
-  for (const [name, rawStatus] of Object.entries(statusPayload)) {
-    const status = readStringProp(rawStatus, ["status"]);
-    if (!status || status.trim().length === 0) {
-      continue;
+  try {
+    const client = createClient({
+      runtimeEndpoint: input.runtimeEndpoint,
+      workingDirectory: input.workingDirectory,
+    });
+    const response = await client.mcp.status({
+      directory: input.workingDirectory,
+    });
+    const payload = unwrapData(response, "get mcp status");
+    const statusPayload = asUnknownRecord(payload);
+    if (!statusPayload) {
+      throw new Error("Invalid MCP status payload: expected an object keyed by server name.");
     }
-    const error = readStringProp(rawStatus, ["error"]);
-    statusByServer[name] = error && error.trim().length > 0 ? { status, error } : { status };
-  }
 
-  return statusByServer;
+    const statusByServer: Record<string, McpServerStatus> = {};
+    for (const [name, rawStatus] of Object.entries(statusPayload)) {
+      const status = readStringProp(rawStatus, ["status"]);
+      if (!status || status.trim().length === 0) {
+        continue;
+      }
+      const error = readStringProp(rawStatus, ["error"]);
+      statusByServer[name] = error && error.trim().length > 0 ? { status, error } : { status };
+    }
+
+    return statusByServer;
+  } catch (error) {
+    throw toOpenCodeRequestError("get mcp status", error);
+  }
 };
 
 export const connectMcpServer = async (
