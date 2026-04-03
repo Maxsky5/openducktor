@@ -1255,10 +1255,63 @@ describe("TauriHostClient", () => {
       await client.runtimeEnsure("/repo", "opencode");
       throw new Error("Expected runtimeEnsure to reject");
     } catch (error) {
-      expect((error as { message?: unknown }).message).toBe(
-        "OpenCode startup probe failed reason=timeout after 15000ms",
-      );
-      expect((error as { failureKind?: unknown }).failureKind).toBe("timeout");
+      expect(error instanceof Error).toBe(true);
+      if (!(error instanceof Error)) {
+        throw new Error("Expected runtimeEnsure to reject with an Error");
+      }
+      expect(error.message).toBe("OpenCode startup probe failed reason=timeout after 15000ms");
+      expect(Reflect.get(error, "failureKind")).toBe("timeout");
+    }
+  });
+
+  test("runtimeEnsure prefers structured cause metadata over generic wrapper errors", async () => {
+    const { client } = createClient((command) => {
+      if (command === "runtime_ensure") {
+        const error = new Error("invoke failed");
+        Reflect.set(error, "cause", {
+          message: "OpenCode runtime is still starting",
+          failureKind: "timeout",
+        });
+        throw error;
+      }
+
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    try {
+      await client.runtimeEnsure("/repo", "opencode");
+      throw new Error("Expected runtimeEnsure to reject");
+    } catch (error) {
+      expect(error instanceof Error).toBe(true);
+      if (!(error instanceof Error)) {
+        throw new Error("Expected runtimeEnsure to reject with an Error");
+      }
+      expect(error.message).toBe("OpenCode runtime is still starting");
+      expect(Reflect.get(error, "failureKind")).toBe("timeout");
+    }
+  });
+
+  test("runtimeEnsure preserves failure metadata attached directly to Error instances", async () => {
+    const { client } = createClient((command) => {
+      if (command === "runtime_ensure") {
+        const error = new Error("OpenCode runtime startup failed");
+        Reflect.set(error, "failureKind", "error");
+        throw error;
+      }
+
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    try {
+      await client.runtimeEnsure("/repo", "opencode");
+      throw new Error("Expected runtimeEnsure to reject");
+    } catch (error) {
+      expect(error instanceof Error).toBe(true);
+      if (!(error instanceof Error)) {
+        throw new Error("Expected runtimeEnsure to reject with an Error");
+      }
+      expect(error.message).toBe("OpenCode runtime startup failed");
+      expect(Reflect.get(error, "failureKind")).toBe("error");
     }
   });
 

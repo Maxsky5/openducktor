@@ -39,13 +39,22 @@ export type BuildRespondInput =
 
 type RuntimeEnsureFailureKind = "timeout" | "error";
 
+type RuntimeEnsureErrorInit = {
+  failureKind: RuntimeEnsureFailureKind;
+};
+
+type NormalizedRuntimeEnsureFailure = RuntimeEnsureErrorInit & {
+  message: string;
+  cause?: unknown;
+};
+
 class RuntimeEnsureError extends Error {
   readonly failureKind: RuntimeEnsureFailureKind;
 
-  constructor(message: string, failureKind: RuntimeEnsureFailureKind, options?: ErrorOptions) {
+  constructor(message: string, failure: RuntimeEnsureErrorInit, options?: ErrorOptions) {
     super(message, options);
     this.name = "RuntimeEnsureError";
-    this.failureKind = failureKind;
+    this.failureKind = failure.failureKind;
   }
 }
 
@@ -62,27 +71,54 @@ const readStringProp = (value: unknown, key: string): string | undefined => {
   return typeof candidate === "string" && candidate.trim().length > 0 ? candidate : undefined;
 };
 
-const readRuntimeEnsureFailureKind = (value: unknown): RuntimeEnsureFailureKind | undefined => {
-  return value === "timeout" || value === "error" ? value : undefined;
+const readFailureKind = (value: unknown): RuntimeEnsureFailureKind | undefined => {
+  const candidate = readUnknownProp(value, "failureKind");
+  return candidate === "timeout" || candidate === "error" ? candidate : undefined;
 };
 
-const toRuntimeEnsureError = (error: unknown): RuntimeEnsureError | null => {
-  const payload = error instanceof Error ? error.cause : error;
-  const failureKind = readRuntimeEnsureFailureKind(readUnknownProp(payload, "failureKind"));
+const buildRuntimeEnsureFailureSources = (error: unknown): unknown[] => {
+  return [error, readUnknownProp(error, "cause")];
+};
+
+const extractRuntimeEnsureFailure = (error: unknown): NormalizedRuntimeEnsureFailure | null => {
+  if (error instanceof RuntimeEnsureError) {
+    return {
+      message: error.message,
+      failureKind: error.failureKind,
+      ...(error.cause !== undefined ? { cause: error.cause } : {}),
+    };
+  }
+
+  const sources = buildRuntimeEnsureFailureSources(error);
+  const failureSource = sources.find((source) => readFailureKind(source) !== undefined);
+  const failureKind = failureSource ? readFailureKind(failureSource) : undefined;
   if (!failureKind) {
     return null;
   }
 
   const message =
+    readStringProp(failureSource, "message") ??
+    readStringProp(failureSource, "error") ??
     (error instanceof Error && error.message.trim().length > 0 ? error.message : undefined) ??
-    readStringProp(payload, "message") ??
-    readStringProp(payload, "error") ??
     "Failed to ensure runtime.";
 
-  return new RuntimeEnsureError(
+  return {
     message,
     failureKind,
-    error instanceof Error ? { cause: error } : undefined,
+    ...(error !== undefined ? { cause: error } : {}),
+  };
+};
+
+const toRuntimeEnsureError = (error: unknown): RuntimeEnsureError | null => {
+  const failure = extractRuntimeEnsureFailure(error);
+  if (!failure) {
+    return null;
+  }
+
+  return new RuntimeEnsureError(
+    failure.message,
+    { failureKind: failure.failureKind },
+    failure.cause !== undefined ? { cause: failure.cause } : undefined,
   );
 };
 
