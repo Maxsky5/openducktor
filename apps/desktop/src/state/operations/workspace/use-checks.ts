@@ -5,8 +5,7 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
+import { useCallback, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import type {
   RepoRuntimeFailureKind,
@@ -31,6 +30,10 @@ import {
   buildRuntimeHealthErrorMap,
   type DiagnosticsToastIssue,
 } from "./check-diagnostics";
+import {
+  useDiagnosticsRetryScheduler,
+  useDiagnosticsToasts,
+} from "./use-check-diagnostics-effects";
 
 type UseChecksArgs = {
   activeRepo: string | null;
@@ -63,8 +66,6 @@ type UseChecksResult = {
   clearActiveRepoRuntimeHealth: () => void;
 };
 
-const RUNTIME_HEALTH_TIMEOUT_RETRY_DELAY_MS = 2_000;
-
 export function useChecks({
   activeRepo,
   runtimeDefinitions,
@@ -72,8 +73,6 @@ export function useChecks({
 }: UseChecksArgs): UseChecksResult {
   const queryClient = useQueryClient();
   const [isManualLoadingChecks, setIsManualLoadingChecks] = useState(false);
-  const issueSignaturesRef = useRef(new Map<string, string>());
-  const diagnosticsRetryTimeoutRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const runtimeCheckQuery = useQuery(runtimeCheckQueryOptions());
   const beadsCheckQuery = useQuery({
     ...beadsCheckQueryOptions(activeRepo ?? "__disabled__"),
@@ -312,118 +311,38 @@ export function useChecks({
     ],
   );
 
-  useEffect(() => {
-    const nextIssueIds = new Set(diagnosticsToastIssues.map((issue) => issue.id));
-
-    for (const issueId of [...issueSignaturesRef.current.keys()]) {
-      if (nextIssueIds.has(issueId)) {
-        continue;
-      }
-
-      toast.dismiss(issueId);
-      issueSignaturesRef.current.delete(issueId);
-    }
-
-    for (const issue of diagnosticsToastIssues) {
-      const signature = `${issue.severity}:${issue.title}:${issue.description}`;
-      if (issueSignaturesRef.current.get(issue.id) === signature) {
-        continue;
-      }
-
-      if (issue.severity === "timeout") {
-        toast(issue.title, {
-          id: issue.id,
-          description: issue.description,
-          duration: Number.POSITIVE_INFINITY,
-        });
-      } else {
-        toast.error(issue.title, {
-          id: issue.id,
-          description: issue.description,
-          duration: Number.POSITIVE_INFINITY,
-        });
-      }
-
-      issueSignaturesRef.current.set(issue.id, signature);
-    }
-  }, [diagnosticsToastIssues]);
-
-  useEffect(() => {
-    if (diagnosticsRetryTimeoutRef.current !== null) {
-      globalThis.clearTimeout(diagnosticsRetryTimeoutRef.current);
-      diagnosticsRetryTimeoutRef.current = null;
-    }
-
-    const retryPlan = buildDiagnosticsRetryPlan({
+  const diagnosticsRetryPlan = useMemo(
+    () =>
+      buildDiagnosticsRetryPlan({
+        activeRepo,
+        runtimeDefinitions,
+        runtimeCheckFailureKind,
+        runtimeCheckFetching: runtimeCheckQuery.isFetching,
+        beadsCheckFailureKind,
+        beadsCheckFetching: beadsCheckQuery.isFetching,
+        runtimeHealthByRuntime: activeRepoRuntimeHealthByRuntime,
+        runtimeHealthFetching: runtimeHealthQuery.isFetching,
+      }),
+    [
       activeRepo,
-      runtimeDefinitions,
-      runtimeCheckFailureKind,
-      runtimeCheckFetching: runtimeCheckQuery.isFetching,
+      activeRepoRuntimeHealthByRuntime,
       beadsCheckFailureKind,
-      beadsCheckFetching: beadsCheckQuery.isFetching,
-      runtimeHealthByRuntime: activeRepoRuntimeHealthByRuntime,
-      runtimeHealthFetching: runtimeHealthQuery.isFetching,
-    });
+      beadsCheckQuery.isFetching,
+      runtimeCheckFailureKind,
+      runtimeCheckQuery.isFetching,
+      runtimeDefinitions,
+      runtimeHealthQuery.isFetching,
+    ],
+  );
 
-    if (
-      !retryPlan.retryRuntimeCheck &&
-      !retryPlan.retryBeadsCheck &&
-      !retryPlan.retryRuntimeHealth
-    ) {
-      return;
-    }
-
-    diagnosticsRetryTimeoutRef.current = globalThis.setTimeout(() => {
-      diagnosticsRetryTimeoutRef.current = null;
-      const retries: Promise<unknown>[] = [];
-
-      if (retryPlan.retryRuntimeCheck) {
-        retries.push(refreshRuntimeCheck(true));
-      }
-
-      if (retryPlan.retryBeadsCheck && activeRepo !== null) {
-        retries.push(refreshBeadsCheckForRepo(activeRepo, true));
-      }
-
-      if (retryPlan.retryRuntimeHealth && activeRepo !== null) {
-        retries.push(refreshRepoRuntimeHealthForRepo(activeRepo, true));
-      }
-
-      void Promise.allSettled(retries);
-    }, RUNTIME_HEALTH_TIMEOUT_RETRY_DELAY_MS);
-
-    return () => {
-      if (diagnosticsRetryTimeoutRef.current !== null) {
-        globalThis.clearTimeout(diagnosticsRetryTimeoutRef.current);
-        diagnosticsRetryTimeoutRef.current = null;
-      }
-    };
-  }, [
+  useDiagnosticsToasts(diagnosticsToastIssues);
+  useDiagnosticsRetryScheduler({
     activeRepo,
-    activeRepoRuntimeHealthByRuntime,
-    beadsCheckFailureKind,
-    beadsCheckQuery.isFetching,
+    retryPlan: diagnosticsRetryPlan,
+    refreshRuntimeCheck,
     refreshBeadsCheckForRepo,
     refreshRepoRuntimeHealthForRepo,
-    refreshRuntimeCheck,
-    runtimeCheckFailureKind,
-    runtimeCheckQuery.isFetching,
-    runtimeDefinitions,
-    runtimeHealthQuery.isFetching,
-  ]);
-
-  useEffect(() => {
-    return () => {
-      if (diagnosticsRetryTimeoutRef.current !== null) {
-        globalThis.clearTimeout(diagnosticsRetryTimeoutRef.current);
-      }
-
-      for (const issueId of issueSignaturesRef.current.keys()) {
-        toast.dismiss(issueId);
-      }
-      issueSignaturesRef.current.clear();
-    };
-  }, []);
+  });
 
   const isLoadingChecks =
     isManualLoadingChecks ||
