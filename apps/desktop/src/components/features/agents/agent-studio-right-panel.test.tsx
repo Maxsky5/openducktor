@@ -3,6 +3,7 @@ import type { DevServerScriptState } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentStudioDevServerLogBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
 import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import {
@@ -18,12 +19,34 @@ const emptyDoc = {
   loaded: true,
 };
 
+const emptyDiffScopeState: DiffScopeState = {
+  branch: "feature/task-12",
+  fileDiffs: [],
+  fileStatuses: [],
+  uncommittedFileCount: 0,
+  commitsAheadBehind: null,
+  upstreamAheadBehind: null,
+  upstreamStatus: "tracking",
+  error: null,
+  hashVersion: 1,
+  statusHash: "0123456789abcdef",
+  diffHash: "fedcba9876543210",
+};
+
 const diffModel: AgentStudioGitPanelModel = {
   contextMode: "worktree",
   branch: "feature/task-12",
   worktreePath: "/tmp/worktree/task-12",
   targetBranch: "origin/main",
   diffScope: "target",
+  scopeStatesByScope: {
+    target: emptyDiffScopeState,
+    uncommitted: emptyDiffScopeState,
+  },
+  loadedScopesByScope: {
+    target: true,
+    uncommitted: true,
+  },
   commitsAheadBehind: null,
   upstreamAheadBehind: null,
   upstreamStatus: "tracking",
@@ -36,8 +59,6 @@ const diffModel: AgentStudioGitPanelModel = {
   isLoading: false,
   error: null,
   refresh: () => {},
-  selectedFile: null,
-  setSelectedFile: () => {},
   setDiffScope: () => {},
   isCommitting: false,
   isPushing: false,

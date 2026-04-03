@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { canonicalTargetBranch } from "@/lib/target-branch";
 import type { UseAgentStudioDiffDataInput } from "./agent-studio-diff-data-model";
 import type { DiffDataState } from "./contracts";
@@ -39,18 +39,6 @@ export function useAgentStudioDiffData({
     }`;
   }, [branchIdentityKey, repoPath, targetBranch, worktreePath, worktreeResolutionRunId]);
 
-  const [selectedFileState, setSelectedFileState] = useState<string | null>(null);
-  const previousRequestContextKeyRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const previousRequestContextKey = previousRequestContextKeyRef.current;
-    previousRequestContextKeyRef.current = requestContextKey;
-
-    if (previousRequestContextKey !== null && previousRequestContextKey !== requestContextKey) {
-      setSelectedFileState(null);
-    }
-  }, [requestContextKey]);
-
   const {
     activeScopeState,
     diffScope,
@@ -66,8 +54,6 @@ export function useAgentStudioDiffData({
     enablePolling,
     shouldBlockDiffLoading,
   });
-
-  const selectedFile = selectedFileState;
 
   const refresh = useCallback((): void => {
     if (worktreeResolutionError != null) {
@@ -87,10 +73,6 @@ export function useAgentStudioDiffData({
     worktreeResolutionError,
   ]);
 
-  const setSelectedFile = useCallback((path: string | null): void => {
-    setSelectedFileState(path);
-  }, []);
-
   const displayError = worktreeResolutionError ?? activeScopeState.error;
   const isLoading = state.isLoading || isWorktreeResolutionResolving;
 
@@ -100,6 +82,8 @@ export function useAgentStudioDiffData({
       worktreePath,
       targetBranch,
       diffScope,
+      scopeStatesByScope: state.byScope,
+      loadedScopesByScope: state.loadedByScope,
       commitsAheadBehind: activeScopeState.commitsAheadBehind,
       upstreamAheadBehind: activeScopeState.upstreamAheadBehind,
       upstreamStatus: activeScopeState.upstreamStatus,
@@ -113,8 +97,6 @@ export function useAgentStudioDiffData({
       isLoading,
       error: displayError,
       refresh,
-      selectedFile,
-      setSelectedFile,
       setDiffScope,
     }),
     [
@@ -123,9 +105,9 @@ export function useAgentStudioDiffData({
       diffScope,
       isLoading,
       refresh,
-      selectedFile,
       setDiffScope,
-      setSelectedFile,
+      state.byScope,
+      state.loadedByScope,
       statusSnapshotKey,
       targetBranch,
       worktreePath,

@@ -1,7 +1,11 @@
 import { useEffect, useRef } from "react";
+import {
+  forEachSessionMessage,
+  forEachSessionMessageFrom,
+} from "@/state/operations/agent-orchestrator/support/messages";
 import { isReadOnlyShellCommand, isSafeReadToolName } from "@/state/operations/permission-policy";
 
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatMessageMeta, AgentSessionState } from "@/types/agent-orchestrator";
 import { findFirstChangedMessageIndex } from "./agent-session-message-diff";
 
 type UseAgentStudioBuildWorktreeRefreshArgs = {
@@ -40,10 +44,7 @@ const EXPLICIT_NON_WORKTREE_TOOL_NAMES = new Set([
 
 const SHELL_TOOL_NAMES = new Set(["bash", "shell", "exec", "command"]);
 
-type ToolMessageMeta = Extract<
-  NonNullable<AgentSessionState["messages"][number]["meta"]>,
-  { kind: "tool" }
->;
+type ToolMessageMeta = Extract<NonNullable<AgentChatMessageMeta>, { kind: "tool" }>;
 
 const isReadOnlyNonWorktreeTool = (toolName: string): boolean =>
   EXPLICIT_NON_WORKTREE_TOOL_NAMES.has(toolName) || isSafeReadToolName(toolName);
@@ -65,17 +66,18 @@ const canToolAffectWorktree = (meta: ToolMessageMeta): boolean => {
   return true;
 };
 
-const seedProcessedToolMessageKeys = (session: AgentSessionState): Set<string> =>
-  new Set(
-    session.messages.flatMap((message) => {
-      const meta = message.meta;
-      if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
-        return [];
-      }
+const seedProcessedToolMessageKeys = (session: AgentSessionState): Set<string> => {
+  const keys = new Set<string>();
+  forEachSessionMessage(session, (message) => {
+    const meta = message.meta;
+    if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
+      return;
+    }
 
-      return [`${session.sessionId}:${message.id}`];
-    }),
-  );
+    keys.add(`${session.sessionId}:${message.id}`);
+  });
+  return keys;
+};
 
 export function useAgentStudioBuildWorktreeRefresh({
   viewRole,
@@ -114,7 +116,7 @@ export function useAgentStudioBuildWorktreeRefresh({
 
     const firstChangedMessageIndex = findFirstChangedMessageIndex(
       previousMessagesRef.current,
-      activeSession.messages,
+      activeSession,
     );
     if (firstChangedMessageIndex < 0) {
       previousMessagesRef.current = activeSession.messages;
@@ -122,27 +124,22 @@ export function useAgentStudioBuildWorktreeRefresh({
     }
 
     let shouldRefresh = false;
-    for (let index = firstChangedMessageIndex; index < activeSession.messages.length; index += 1) {
-      const message = activeSession.messages[index];
-      if (!message) {
-        continue;
-      }
-
+    forEachSessionMessageFrom(activeSession, firstChangedMessageIndex, (message) => {
       const meta = message.meta;
       if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
-        continue;
+        return;
       }
 
       const messageKey = `${activeSession.sessionId}:${message.id}`;
       if (processedToolMessageKeysRef.current.has(messageKey)) {
-        continue;
+        return;
       }
 
       processedToolMessageKeysRef.current.add(messageKey);
       if (canToolAffectWorktree(meta)) {
         shouldRefresh = true;
       }
-    }
+    });
 
     previousMessagesRef.current = activeSession.messages;
 

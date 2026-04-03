@@ -1,5 +1,5 @@
 import type { AgentRole } from "@openducktor/core";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export { normalizeWorkingDirectory } from "@/lib/working-directory";
 
@@ -46,40 +46,4 @@ export const throwIfRepoStale = (isStaleRepoOperation: () => boolean, message: s
   if (isStaleRepoOperation()) {
     throw new Error(message);
   }
-};
-
-export const isDuplicateAssistantMessage = (
-  messages: AgentChatMessage[],
-  incomingContent: string,
-  incomingTimestamp: string,
-): boolean => {
-  const normalizedIncoming = incomingContent.trim();
-  if (normalizedIncoming.length === 0) {
-    return false;
-  }
-
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const entry = messages[index];
-    if (!entry || entry.role !== "assistant") {
-      continue;
-    }
-
-    const normalizedExisting = entry.content.trim();
-    if (normalizedExisting !== normalizedIncoming) {
-      return false;
-    }
-
-    if (entry.timestamp === incomingTimestamp) {
-      return true;
-    }
-
-    const existingEpoch = Date.parse(entry.timestamp);
-    const incomingEpoch = Date.parse(incomingTimestamp);
-    if (Number.isNaN(existingEpoch) || Number.isNaN(incomingEpoch)) {
-      return false;
-    }
-    return Math.abs(incomingEpoch - existingEpoch) <= 2_000;
-  }
-
-  return false;
 };

@@ -1,8 +1,8 @@
 import type { AgentEnginePort } from "@openducktor/core";
-import { type PropsWithChildren, type ReactElement, useMemo } from "react";
-import { buildAgentStateValue } from "../app-state-context-values";
+import type { PropsWithChildren, ReactElement } from "react";
 import {
-  AgentStateContext,
+  AgentOperationsContext,
+  AgentSessionsContext,
   useActiveRepoContext,
   useTaskControlContext,
   useTaskDataContext,
@@ -20,24 +20,7 @@ export function AgentStudioStateProvider({
   const { activeRepo } = useActiveRepoContext();
   const { tasks, runs } = useTaskDataContext();
   const { refreshTaskData } = useTaskControlContext();
-  const {
-    sessions,
-    bootstrapTaskSessions,
-    hydrateRequestedTaskSessionHistory,
-    reconcileLiveTaskSessions,
-    loadAgentSessions,
-    readSessionModelCatalog,
-    readSessionFileSearch,
-    readSessionSlashCommands,
-    readSessionTodos,
-    removeAgentSessions,
-    startAgentSession,
-    sendAgentMessage,
-    stopAgentSession,
-    updateAgentSessionModel,
-    replyAgentPermission,
-    answerAgentQuestion,
-  } = useAgentOrchestratorOperations({
+  const { sessionStore, operations } = useAgentOrchestratorOperations({
     activeRepo,
     tasks,
     runs,
@@ -45,47 +28,9 @@ export function AgentStudioStateProvider({
     agentEngine,
   });
 
-  const agentStateValue = useMemo(
-    () =>
-      buildAgentStateValue({
-        sessions,
-        bootstrapTaskSessions,
-        hydrateRequestedTaskSessionHistory,
-        reconcileLiveTaskSessions,
-        loadAgentSessions,
-        readSessionModelCatalog,
-        readSessionFileSearch,
-        readSessionSlashCommands,
-        readSessionTodos,
-        removeAgentSessions,
-        startAgentSession,
-        sendAgentMessage,
-        stopAgentSession,
-        updateAgentSessionModel,
-        replyAgentPermission,
-        answerAgentQuestion,
-      }),
-    [
-      answerAgentQuestion,
-      bootstrapTaskSessions,
-      hydrateRequestedTaskSessionHistory,
-      loadAgentSessions,
-      removeAgentSessions,
-      readSessionModelCatalog,
-      readSessionFileSearch,
-      readSessionSlashCommands,
-      readSessionTodos,
-      reconcileLiveTaskSessions,
-      replyAgentPermission,
-      sendAgentMessage,
-      sessions,
-      startAgentSession,
-      stopAgentSession,
-      updateAgentSessionModel,
-    ],
-  );
-
   return (
-    <AgentStateContext.Provider value={agentStateValue}>{children}</AgentStateContext.Provider>
+    <AgentOperationsContext.Provider value={operations}>
+      <AgentSessionsContext.Provider value={sessionStore}>{children}</AgentSessionsContext.Provider>
+    </AgentOperationsContext.Provider>
   );
 }

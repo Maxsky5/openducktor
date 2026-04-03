@@ -1,7 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { startTransition, useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   AGENT_STUDIO_QUERY_KEYS,
   type AgentStudioQueryUpdate as QueryUpdate,
@@ -38,8 +38,8 @@ export function useAgentStudioTaskTabs(args: {
   selectedTask: TaskCard | null;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
-  latestSessionByTaskId: Map<string, AgentSessionState>;
-  activeSessionByTaskId?: Map<string, AgentSessionState>;
+  latestSessionByTaskId: Map<string, AgentSessionSummary>;
+  activeSessionByTaskId?: Map<string, AgentSessionSummary>;
   updateQuery: (updates: QueryUpdate) => void;
   clearComposerInput: () => void;
   onContextSwitchIntent?: () => void;
@@ -72,15 +72,6 @@ export function useAgentStudioTaskTabs(args: {
   const [tabsStorageHydratedRepo, setTabsStorageHydratedRepo] = useState<string | null>(null);
   const taskIdForTabs = selectedTask?.status === "closed" ? "" : taskId;
 
-  const deferQueryUpdate = useCallback(
-    (updates: QueryUpdate): void => {
-      startTransition(() => {
-        updateQuery(updates);
-      });
-    },
-    [updateQuery],
-  );
-
   const selectableTaskIds = useMemo(
     () => new Set(tasks.filter((task) => task.status !== "closed").map((task) => task.id)),
     [tasks],
@@ -92,14 +83,14 @@ export function useAgentStudioTaskTabs(args: {
 
   const navigateToTaskIntent = useCallback(
     (nextTaskId: string) => {
-      deferQueryUpdate(toTaskIntentQueryUpdate(nextTaskId));
+      updateQuery(toTaskIntentQueryUpdate(nextTaskId));
     },
-    [deferQueryUpdate],
+    [updateQuery],
   );
 
   const clearTaskSelection = useCallback((): void => {
-    deferQueryUpdate(toClearTaskQueryUpdate());
-  }, [deferQueryUpdate]);
+    updateQuery(toClearTaskQueryUpdate());
+  }, [updateQuery]);
 
   const { tabTaskIds, activeTaskTabId, handleSelectTab } = useTaskTabSelection({
     activeRepo,

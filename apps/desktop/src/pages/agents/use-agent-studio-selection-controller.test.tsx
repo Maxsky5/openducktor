@@ -1,18 +1,27 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import {
-  buildSessionsByTaskIdWithCache,
-  useAgentStudioSelectionController,
-} from "./use-agent-studio-selection-controller";
 
 enableReactActEnvironment();
 
-type HookArgs = Parameters<typeof useAgentStudioSelectionController>[0];
+type UseAgentStudioSelectionControllerHook =
+  typeof import("./use-agent-studio-selection-controller")["useAgentStudioSelectionController"];
+type BuildSessionsByTaskIdWithCacheFn =
+  typeof import("./use-agent-studio-selection-controller")["buildSessionsByTaskIdWithCache"];
+
+let useAgentStudioSelectionController: UseAgentStudioSelectionControllerHook;
+let buildSessionsByTaskIdWithCache: BuildSessionsByTaskIdWithCacheFn;
+
+const sessionByIdRef: { current: Record<string, AgentSessionState> } = {
+  current: {},
+};
+
+type HookArgs = Parameters<UseAgentStudioSelectionControllerHook>[0];
 const emptyCatalog = {
   providers: [],
   models: [],
@@ -35,8 +44,26 @@ const createSession = (
     ...overrides,
   });
 
-const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useAgentStudioSelectionController, initialProps);
+const syncSessionLookup = (sessions: HookArgs["sessions"]): void => {
+  sessionByIdRef.current = Object.fromEntries(
+    sessions
+      .filter((session): session is AgentSessionState => "messages" in session)
+      .map((session) => [session.sessionId, session]),
+  );
+};
+
+const createHookHarness = (initialProps: HookArgs) => {
+  syncSessionLookup(initialProps.sessions);
+  const harness = createSharedHookHarness(useAgentStudioSelectionController, initialProps);
+
+  return {
+    ...harness,
+    update: async (nextProps: HookArgs) => {
+      syncSessionLookup(nextProps.sessions);
+      await harness.update(nextProps);
+    },
+  };
+};
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeRepo: null,
@@ -59,6 +86,21 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 describe("useAgentStudioSelectionController", () => {
+  beforeAll(async () => {
+    mock.module("@/state", () => ({
+      useAgentSession: (sessionId: string | null) =>
+        sessionId ? (sessionByIdRef.current[sessionId] ?? null) : null,
+    }));
+
+    ({ buildSessionsByTaskIdWithCache, useAgentStudioSelectionController } = await import(
+      "./use-agent-studio-selection-controller"
+    ));
+  });
+
+  afterAll(() => {
+    mock.restore();
+  });
+
   test("reuses cached task ordering metadata for unchanged task signatures", () => {
     const firstTaskOneOld = createSession("task-1", "session-old", {
       startedAt: "2026-02-22T10:00:00.000Z",

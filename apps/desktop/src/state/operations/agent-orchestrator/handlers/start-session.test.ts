@@ -3,6 +3,10 @@ import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
 import { clearAppQueryClient } from "@/lib/query-client";
+import {
+  sessionMessageAt,
+  sessionMessagesToArray,
+} from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
 import { createDeferred, createTaskCardFixture, withTimeout } from "../test-utils";
@@ -1689,7 +1693,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(sessionId).toBe("forked-pr-session");
       expect(sessionsById["forked-pr-session"]?.scenario).toBe("build_pull_request_generation");
       expect(sessionsById["forked-pr-session"]?.workingDirectory).toBe("/tmp/repo/worktree");
-      expect(sessionsById["forked-pr-session"]?.messages).toEqual([
+      expect(
+        sessionsById["forked-pr-session"]
+          ? sessionMessagesToArray(sessionsById["forked-pr-session"])
+          : undefined,
+      ).toEqual([
         {
           id: "history:session-forked:forked-pr-session",
           role: "system",
@@ -1857,7 +1865,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
           targetSessionId: "source-build",
         },
       ]);
-      expect(sessionsById["forked-from-hydrated-source"]?.messages).toEqual([
+      expect(
+        sessionsById["forked-from-hydrated-source"]
+          ? sessionMessagesToArray(sessionsById["forked-from-hydrated-source"])
+          : undefined,
+      ).toEqual([
         {
           id: "history:session-forked:forked-from-hydrated-source",
           role: "system",
@@ -3128,7 +3140,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(kickoffCalls).toBe(1);
       expect(refreshCalls).toBe(1);
       expect(Object.keys(sessionsState)).toContain("session-created");
-      expect(sessionsState["session-created"]?.messages[0]).toEqual({
+      expect(
+        sessionsState["session-created"]
+          ? sessionMessageAt(sessionsState["session-created"], 0)
+          : undefined,
+      ).toEqual({
         id: "history:session-start:session-created",
         role: "system",
         content: "Session started (build - build_implementation_start)",

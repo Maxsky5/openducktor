@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AgentStudioDevServerPanelModel } from "@/components/features/agents/agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "@/components/features/agents/agent-studio-git-panel";
+import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -62,12 +63,34 @@ const documentsModel = {
   activeDocument: null,
 };
 
+const emptyDiffScopeState: DiffScopeState = {
+  branch: "feature/task-12",
+  fileDiffs: [],
+  fileStatuses: [],
+  uncommittedFileCount: 0,
+  commitsAheadBehind: null,
+  upstreamAheadBehind: null,
+  upstreamStatus: "tracking",
+  error: null,
+  hashVersion: 1,
+  statusHash: "0123456789abcdef",
+  diffHash: "fedcba9876543210",
+};
+
 const diffModel: AgentStudioGitPanelModel = {
   contextMode: "worktree",
   branch: "feature/task-12",
   worktreePath: "/tmp/worktree/task-12",
   targetBranch: "origin/main",
   diffScope: "target",
+  scopeStatesByScope: {
+    target: emptyDiffScopeState,
+    uncommitted: emptyDiffScopeState,
+  },
+  loadedScopesByScope: {
+    target: true,
+    uncommitted: true,
+  },
   commitsAheadBehind: null,
   upstreamAheadBehind: null,
   upstreamStatus: "tracking",
@@ -80,8 +103,6 @@ const diffModel: AgentStudioGitPanelModel = {
   isLoading: false,
   error: null,
   refresh: () => {},
-  selectedFile: null,
-  setSelectedFile: () => {},
   setDiffScope: () => {},
   isCommitting: false,
   isPushing: false,

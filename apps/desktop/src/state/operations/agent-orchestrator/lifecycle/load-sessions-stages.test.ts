@@ -6,6 +6,8 @@ import type {
   TaskCard,
 } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
+import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { liveAgentSessionLookupKey, runtimeWorkingDirectoryKey } from "./live-agent-session-cache";
 import {
@@ -486,8 +488,8 @@ describe("load-sessions-stages", () => {
     });
 
     expect(systemPrompt).toBe("");
-    expect(prelude).toHaveLength(1);
-    expect(prelude[0]).toMatchObject({
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: prelude })).toBe(1);
+    expect(sessionMessageAt({ sessionId: "session-1", messages: prelude }, 0)).toMatchObject({
       id: "history:session-start:session-1",
       content: "Session started (planner - planner_initial)",
     });
@@ -511,8 +513,8 @@ describe("load-sessions-stages", () => {
     });
 
     expect(systemPrompt.length).toBeGreaterThan(0);
-    expect(prelude).toHaveLength(2);
-    expect(prelude[1]).toMatchObject({
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: prelude })).toBe(2);
+    expect(sessionMessageAt({ sessionId: "session-1", messages: prelude }, 1)).toMatchObject({
       id: "history:system-prompt:session-1",
       content: `System prompt:\n\n${systemPrompt}`,
     });

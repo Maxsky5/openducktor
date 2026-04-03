@@ -22,6 +22,7 @@ import {
   useSessionStartModalRunner,
 } from "@/features/session-start";
 import { resolveBuildContinuationScenario } from "@/lib/build-scenarios";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
@@ -287,7 +288,7 @@ export function useKanbanSessionStartFlow({
   }, [isSubmittingHumanReviewFeedback]);
 
   const openAgentStudioSession = useCallback(
-    (taskId: string, session: AgentSessionState): void => {
+    (taskId: string, session: AgentSessionSummary): void => {
       const params = new URLSearchParams({
         task: taskId,
         session: session.sessionId,

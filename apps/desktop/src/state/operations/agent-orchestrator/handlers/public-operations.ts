@@ -17,6 +17,7 @@ import type {
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { StartAgentSessionInput } from "./start-session";
 
 type SessionActions = {
@@ -34,7 +35,6 @@ type SessionActions = {
 };
 
 type CreatePublicOperationsArgs = {
-  sessionsById: Record<string, AgentSessionState>;
   bootstrapTaskSessions: (taskId: string, persistedRecords?: AgentSessionRecord[]) => Promise<void>;
   hydrateRequestedTaskSessionHistory: (input: {
     taskId: string;
@@ -73,58 +73,7 @@ type CreatePublicOperationsArgs = {
   sessionActions: SessionActions;
 };
 
-type OrchestratorPublicOperations = {
-  sessions: AgentSessionState[];
-  bootstrapTaskSessions: (taskId: string, persistedRecords?: AgentSessionRecord[]) => Promise<void>;
-  hydrateRequestedTaskSessionHistory: (input: {
-    taskId: string;
-    sessionId: string;
-    persistedRecords?: AgentSessionRecord[];
-  }) => Promise<void>;
-  reconcileLiveTaskSessions: (input: {
-    taskId: string;
-    persistedRecords?: AgentSessionRecord[];
-    preloadedRuns?: RunSummary[];
-    preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-    preloadedRuntimeConnectionsByKey?: Map<string, AgentRuntimeConnection>;
-    preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
-    allowRuntimeEnsure?: boolean;
-  }) => Promise<void>;
-  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
-  readSessionModelCatalog: (
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-  ) => Promise<AgentModelCatalog>;
-  readSessionTodos: (
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-    externalSessionId: string,
-  ) => Promise<AgentSessionTodoItem[]>;
-  readSessionSlashCommands: (
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-  ) => Promise<AgentSlashCommandCatalog>;
-  readSessionFileSearch: (
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-    query: string,
-  ) => Promise<AgentFileSearchResult[]>;
-  removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
-  startAgentSession: (input: StartAgentSessionInput) => Promise<string>;
-  sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
-  stopAgentSession: (sessionId: string) => Promise<void>;
-  updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
-  replyAgentPermission: (
-    sessionId: string,
-    requestId: string,
-    reply: "once" | "always" | "reject",
-    message?: string,
-  ) => Promise<void>;
-  answerAgentQuestion: (sessionId: string, requestId: string, answers: string[][]) => Promise<void>;
-};
-
-const sortByStartedAtDesc = (a: AgentSessionState, b: AgentSessionState): number =>
-  a.startedAt > b.startedAt ? -1 : a.startedAt < b.startedAt ? 1 : 0;
+type OrchestratorPublicOperations = AgentOperationsContextValue;
 
 const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Promise<T> => {
   try {
@@ -138,7 +87,6 @@ const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Pr
 };
 
 export const createOrchestratorPublicOperations = ({
-  sessionsById,
   bootstrapTaskSessions,
   hydrateRequestedTaskSessionHistory,
   reconcileLiveTaskSessions,
@@ -150,7 +98,6 @@ export const createOrchestratorPublicOperations = ({
   removeAgentSessions,
   sessionActions,
 }: CreatePublicOperationsArgs): OrchestratorPublicOperations => ({
-  sessions: Object.values(sessionsById).sort(sortByStartedAtDesc),
   bootstrapTaskSessions: (taskId, persistedRecords) =>
     withErrorToast("Failed to load agent sessions", () =>
       bootstrapTaskSessions(taskId, persistedRecords),

@@ -103,7 +103,7 @@ type AgentsPageShellModelState = {
   onRetryChatSettingsLoad: () => void;
   hasSelectedTask: boolean;
   isRightPanelVisible: boolean;
-  rightPanelModel: RightPanelState["rightPanelModel"] | null;
+  rightPanelContent: ReactElement | null;
   sessionStartModal: ReactElement | null;
   mergedPullRequestModal: ReactElement | null;
   humanReviewFeedbackModal: ReactElement;
@@ -144,13 +144,24 @@ let tasksState: TasksStateContextValue = {
   unlinkingPullRequestTaskId: null,
   pendingMergedPullRequest: null,
 };
-let agentState = {
-  sessions: [session],
-  loadAgentSessions: mock(async () => undefined),
+let agentSessions = [session];
+let agentOperations = {
+  bootstrapTaskSessions: mock(async () => undefined),
+  hydrateRequestedTaskSessionHistory: mock(async () => undefined),
+  readSessionFileSearch: mock(async () => []),
+  readSessionModelCatalog: mock(async () => ({
+    providers: [],
+    models: [],
+    variants: [],
+    profiles: [],
+    defaultModelsByProvider: {},
+  })),
+  readSessionSlashCommands: mock(async () => ({ commands: [] })),
+  readSessionTodos: mock(async () => []),
   startAgentSession: mock(async () => "session-1"),
   sendAgentMessage: mock(async () => undefined),
   stopAgentSession: mock(async () => undefined),
-  updateAgentSessionModel: mock(async () => undefined),
+  updateAgentSessionModel: mock(() => undefined),
   replyAgentPermission: mock(async () => undefined),
   answerAgentQuestion: mock(async () => undefined),
 };
@@ -261,7 +272,25 @@ const registerModuleMocks = (): void => {
     useWorkspaceState: () => workspaceState,
     useChecksState: () => checksState,
     useTasksState: () => tasksState,
-    useAgentState: () => agentState,
+    useAgentOperations: () => agentOperations,
+    useAgentSessions: () => agentSessions,
+    useAgentSessionSummaries: () =>
+      agentSessions.map((entry) => ({
+        sessionId: entry.sessionId,
+        taskId: entry.taskId,
+        role: entry.role,
+        scenario: entry.scenario,
+        status: entry.status,
+        startedAt: entry.startedAt,
+        workingDirectory: entry.workingDirectory,
+        pendingPermissions: entry.pendingPermissions,
+        pendingQuestions: entry.pendingQuestions,
+        selectedModel: entry.selectedModel,
+        runtimeKind: entry.runtimeKind,
+      })),
+    useAgentSession: (sessionId: string | null) =>
+      sessionId ? (agentSessions.find((entry) => entry.sessionId === sessionId) ?? null) : null,
+    useAgentState: () => ({ sessions: agentSessions, ...agentOperations }),
     useSpecState: () => {
       throw new Error("useSpecState is not used in this test");
     },
@@ -365,13 +394,24 @@ beforeEach(async () => {
     unlinkingPullRequestTaskId: null,
     pendingMergedPullRequest: null,
   };
-  agentState = {
-    sessions: [session],
-    loadAgentSessions: mock(async () => undefined),
+  agentSessions = [session];
+  agentOperations = {
+    bootstrapTaskSessions: mock(async () => undefined),
+    hydrateRequestedTaskSessionHistory: mock(async () => undefined),
+    readSessionFileSearch: mock(async () => []),
+    readSessionModelCatalog: mock(async () => ({
+      providers: [],
+      models: [],
+      variants: [],
+      profiles: [],
+      defaultModelsByProvider: {},
+    })),
+    readSessionSlashCommands: mock(async () => ({ commands: [] })),
+    readSessionTodos: mock(async () => []),
     startAgentSession: mock(async () => "session-1"),
     sendAgentMessage: mock(async () => undefined),
     stopAgentSession: mock(async () => undefined),
-    updateAgentSessionModel: mock(async () => undefined),
+    updateAgentSessionModel: mock(() => undefined),
     replyAgentPermission: mock(async () => undefined),
     answerAgentQuestion: mock(async () => undefined),
   };
@@ -516,7 +556,7 @@ describe("useAgentsPageShellModel", () => {
       expect(state.onRetryChatSettingsLoad).toBe(retryChatSettingsLoad);
       expect(state.hasSelectedTask).toBe(true);
       expect(state.isRightPanelVisible).toBe(true);
-      expect(state.rightPanelModel as unknown).toBe(rightPanelModel);
+      expect(state.rightPanelContent).not.toBeNull();
       expect(
         (state.sessionStartModal as ReactElement<{ model: unknown }> | null)?.props.model,
       ).toBe(orchestrationState.sessionStartModal);

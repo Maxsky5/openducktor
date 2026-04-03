@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -95,7 +96,7 @@ type UseAgentStudioDocumentsHook =
 let useAgentStudioDocuments: UseAgentStudioDocumentsHook;
 
 type HookArgs = Parameters<UseAgentStudioDocumentsHook>[0];
-type AgentMessage = ReturnType<typeof createAgentSessionFixture>["messages"][number];
+type AgentMessage = AgentChatMessage;
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioDocuments, initialProps);

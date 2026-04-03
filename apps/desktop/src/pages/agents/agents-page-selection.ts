@@ -8,7 +8,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { compareAgentSessionRecency } from "@/lib/agent-session-options";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_ORDER, firstScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
 
 export {
@@ -60,7 +60,7 @@ export const resolveAgentStudioTaskId = ({
   selectedSessionById,
 }: {
   taskIdParam: string;
-  selectedSessionById: AgentSessionState | null;
+  selectedSessionById: AgentSessionSummary | null;
 }): string => {
   return taskIdParam || selectedSessionById?.taskId || "";
 };
@@ -112,27 +112,27 @@ export const resolveAgentStudioSessionSelection = ({
   fallbackRole,
   scenarioFromQuery,
 }: {
-  sessionsForTask: AgentSessionState[];
+  sessionsForTask: AgentSessionSummary[];
   sessionParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   selectedTask: TaskCard | null;
   fallbackRole: AgentRole;
   scenarioFromQuery?: AgentScenario | null;
-}): { activeSession: AgentSessionState | null; role: AgentRole; scenario: AgentScenario } => {
+}): { activeSession: AgentSessionSummary | null; role: AgentRole; scenario: AgentScenario } => {
   const runningSession =
     [...sessionsForTask]
       .filter((session) => session.status === "running" || session.status === "starting")
       .sort(compareAgentSessionRecency)[0] ?? null;
 
-  const latestSessionByRole = (role: AgentRole): AgentSessionState | null => {
+  const latestSessionByRole = (role: AgentRole): AgentSessionSummary | null => {
     const roleSessions = sessionsForTask
       .filter((session) => session.role === role)
       .sort(compareAgentSessionRecency);
     return roleSessions[0] ?? null;
   };
 
-  const toSelection = (role: AgentRole, session: AgentSessionState | null) => {
+  const toSelection = (role: AgentRole, session: AgentSessionSummary | null) => {
     const roleScenarios = SCENARIOS_BY_ROLE[role];
     const explicitScenarioForRole =
       hasExplicitRoleParam && scenarioFromQuery && roleScenarios.includes(scenarioFromQuery)
@@ -176,7 +176,7 @@ export const resolveAgentStudioSessionSelection = ({
   const defaultRole = resolveAgentStudioDefaultRoleForTask(selectedTask);
   const mostRecentSession = [...sessionsForTask].sort(compareAgentSessionRecency)[0] ?? null;
 
-  const withRoleFallback = (session: AgentSessionState | null) =>
+  const withRoleFallback = (session: AgentSessionSummary | null) =>
     toSelection(session?.role ?? defaultRole ?? fallbackRole, session);
 
   switch (selectedTask.status) {
@@ -209,12 +209,12 @@ export const resolveAgentStudioBuilderSessionsForTask = ({
   sessionsForTask,
 }: {
   taskId: string;
-  viewActiveSession: AgentSessionState | null;
-  activeSession: AgentSessionState | null;
-  selectedSessionById: AgentSessionState | null;
-  viewSessionsForTask: AgentSessionState[];
-  sessionsForTask: AgentSessionState[];
-}): AgentSessionState[] => {
+  viewActiveSession: AgentSessionSummary | null;
+  activeSession: AgentSessionSummary | null;
+  selectedSessionById: AgentSessionSummary | null;
+  viewSessionsForTask: AgentSessionSummary[];
+  sessionsForTask: AgentSessionSummary[];
+}): AgentSessionSummary[] => {
   if (!taskId) {
     return [];
   }
@@ -227,7 +227,7 @@ export const resolveAgentStudioBuilderSessionsForTask = ({
     ...viewSessionsForTask,
     ...sessionsForTask,
   ];
-  const sessions: AgentSessionState[] = [];
+  const sessions: AgentSessionSummary[] = [];
 
   for (const session of candidates) {
     if (!session || session.role !== "build" || session.taskId !== taskId) {
@@ -252,12 +252,12 @@ export const resolveAgentStudioBuilderSessionForTask = ({
   sessionsForTask,
 }: {
   taskId: string;
-  viewActiveSession: AgentSessionState | null;
-  activeSession: AgentSessionState | null;
-  selectedSessionById: AgentSessionState | null;
-  viewSessionsForTask: AgentSessionState[];
-  sessionsForTask: AgentSessionState[];
-}): AgentSessionState | null => {
+  viewActiveSession: AgentSessionSummary | null;
+  activeSession: AgentSessionSummary | null;
+  selectedSessionById: AgentSessionSummary | null;
+  viewSessionsForTask: AgentSessionSummary[];
+  sessionsForTask: AgentSessionSummary[];
+}): AgentSessionSummary | null => {
   return (
     resolveAgentStudioBuilderSessionsForTask({
       taskId,

@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { isRoleAvailableForTask } from "@/lib/task-agent-workflows";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   AGENT_STUDIO_QUERY_KEYS,
@@ -33,7 +34,7 @@ export const canStartSessionForRole = (task: TaskCard | null, role: AgentRole): 
 
 export const resolveReusableSessionForStart = (params: {
   activeSession: AgentSessionState | null;
-  sessionsForTask: AgentSessionState[];
+  sessionsForTask: AgentSessionSummary[];
   role: AgentRole;
 }): ReusableSessionDecision | null => {
   if (params.activeSession) {

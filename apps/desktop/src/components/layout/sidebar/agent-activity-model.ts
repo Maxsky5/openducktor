@@ -1,3 +1,4 @@
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export type AgentActivitySessionItem = {
@@ -39,7 +40,7 @@ export const summarizeAgentActivity = ({
   sessions,
   taskTitleById,
 }: {
-  sessions: AgentSessionState[];
+  sessions: AgentSessionSummary[];
   taskTitleById?: ReadonlyMap<string, string>;
 }): AgentActivitySummary => {
   const activeSessions: AgentActivitySessionItem[] = [];

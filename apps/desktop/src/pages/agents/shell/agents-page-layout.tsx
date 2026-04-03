@@ -1,10 +1,13 @@
 import { type ComponentProps, memo, type ReactElement, type ReactNode } from "react";
 import { AgentChat } from "@/components/features/agents/agent-chat/agent-chat";
 import { AgentStudioHeader } from "@/components/features/agents/agent-studio-header";
-import { AgentStudioRightPanel } from "@/components/features/agents/agent-studio-right-panel";
 import { AgentStudioTaskTabs } from "@/components/features/agents/agent-studio-task-tabs";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { AgentsPageShell } from "./agents-page-shell";
+
+const PANEL_CONTAINMENT_STYLE = {
+  contain: "layout paint",
+} as const;
 
 type AgentsPageWorkspaceProps = {
   hasSelectedTask: boolean;
@@ -30,13 +33,17 @@ function AgentsPageWorkspace({
   return (
     <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
       <ResizablePanel defaultSize={63} minSize={35}>
-        {chatContent}
+        <div className="h-full min-h-0 overflow-hidden" style={PANEL_CONTAINMENT_STYLE}>
+          {chatContent}
+        </div>
       </ResizablePanel>
       {isRightPanelVisible ? (
         <>
           <ResizableHandle withHandle />
           <ResizablePanel defaultSize={37} minSize={30}>
-            {rightPanelContent}
+            <div className="h-full min-h-0 overflow-hidden" style={PANEL_CONTAINMENT_STYLE}>
+              {rightPanelContent}
+            </div>
           </ResizablePanel>
         </>
       ) : null}
@@ -91,7 +98,7 @@ type AgentsPageLayoutProps = {
   chatHeaderModel: ComponentProps<typeof AgentStudioHeader>["model"];
   chatModel: ComponentProps<typeof AgentChat>["model"];
   isRightPanelVisible: boolean;
-  rightPanelModel: ComponentProps<typeof AgentStudioRightPanel>["model"] | null;
+  rightPanelContent: ReactNode;
   mergedPullRequestModal: ReactNode;
   humanReviewFeedbackModal: ReactNode;
   sessionStartModal: ReactNode;
@@ -112,7 +119,7 @@ export function AgentsPageLayout({
   chatHeaderModel,
   chatModel,
   isRightPanelVisible,
-  rightPanelModel,
+  rightPanelContent,
   mergedPullRequestModal,
   humanReviewFeedbackModal,
   sessionStartModal,
@@ -140,9 +147,7 @@ export function AgentsPageLayout({
             <MemoizedAgentChatPane chatHeaderModel={chatHeaderModel} chatModel={chatModel} />
           }
           isRightPanelVisible={isRightPanelVisible}
-          rightPanelContent={
-            rightPanelModel ? <AgentStudioRightPanel model={rightPanelModel} /> : null
-          }
+          rightPanelContent={rightPanelContent}
         />
       }
       modalContent={

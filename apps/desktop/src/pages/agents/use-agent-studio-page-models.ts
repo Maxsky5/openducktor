@@ -6,6 +6,7 @@ import type { AgentChatComposerDraft } from "@/components/features/agents/agent-
 import { useAgentChatLayout } from "@/components/features/agents/agent-chat/use-agent-chat-layout";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import { ROLE_OPTIONS } from "./agents-page-constants";
@@ -34,7 +35,7 @@ type AgentStudioCoreContext = {
   taskId: string;
   role: AgentRole;
   selectedTask: TaskCard | null;
-  sessionsForTask: AgentSessionState[];
+  sessionsForTask: AgentSessionSummary[];
   contextSessionsLength: number;
   activeSession: AgentSessionState | null;
   isTaskHydrating: boolean;
@@ -155,7 +156,6 @@ export function useAgentStudioPageModels({
     contextSwitchVersion: core.contextSwitchVersion,
   });
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
-
   const { messagesContainerRef, composerFormRef, composerEditorRef, resizeComposerEditor } =
     useAgentChatLayout({
       activeSessionId: threadSession?.sessionId ?? null,
@@ -163,6 +163,19 @@ export function useAgentStudioPageModels({
     });
 
   const scrollToBottomOnSendRef = useRef<(() => void) | null>(null);
+  const workflowSessionsForTask = core.sessionsForTask;
+  const workflowActiveSessionId = core.activeSession?.sessionId ?? null;
+  const workflowActiveSessionRole = core.activeSession?.role ?? null;
+  const workflowActiveSession = useMemo(
+    () =>
+      workflowActiveSessionId && workflowActiveSessionRole
+        ? {
+            sessionId: workflowActiveSessionId,
+            role: workflowActiveSessionRole,
+          }
+        : null,
+    [workflowActiveSessionId, workflowActiveSessionRole],
+  );
 
   const agentStudioTaskTabsModel = useMemo(
     () =>
@@ -189,19 +202,19 @@ export function useAgentStudioPageModels({
     () =>
       buildWorkflowModelContext({
         selectedTask: core.selectedTask,
-        sessionsForTask: core.sessionsForTask,
-        activeSession: core.activeSession,
+        sessionsForTask: workflowSessionsForTask,
+        activeSession: workflowActiveSession,
         role: core.role,
         isSessionWorking: sessionActions.isSessionWorking,
         roleLabelByRole,
       }),
     [
-      core.activeSession,
       core.role,
       core.selectedTask,
-      core.sessionsForTask,
       roleLabelByRole,
       sessionActions.isSessionWorking,
+      workflowActiveSession,
+      workflowSessionsForTask,
     ],
   );
   const {
@@ -266,6 +279,30 @@ export function useAgentStudioPageModels({
   const activeTodoPanelCollapsed = activeSessionId
     ? (todoPanelCollapsedBySession[activeSessionId] ?? true)
     : true;
+  const composerSessionId = core.activeSession?.sessionId ?? null;
+  const composerSelectedModel = core.activeSession?.selectedModel ?? null;
+  const composerIsLoadingModelCatalog = core.activeSession?.isLoadingModelCatalog ?? false;
+  const composerPendingPermissions = core.activeSession?.pendingPermissions ?? [];
+  const composerPendingQuestions = core.activeSession?.pendingQuestions ?? [];
+  const composerSession = useMemo(
+    () =>
+      composerSessionId
+        ? {
+            sessionId: composerSessionId,
+            selectedModel: composerSelectedModel,
+            isLoadingModelCatalog: composerIsLoadingModelCatalog,
+            pendingPermissions: composerPendingPermissions,
+            pendingQuestions: composerPendingQuestions,
+          }
+        : null,
+    [
+      composerIsLoadingModelCatalog,
+      composerPendingPermissions,
+      composerPendingQuestions,
+      composerSelectedModel,
+      composerSessionId,
+    ],
+  );
 
   const handleToggleTodoPanel = useCallback((): void => {
     if (!activeSessionId) {
@@ -311,7 +348,7 @@ export function useAgentStudioPageModels({
 
   const agentChatComposerModel = useAgentStudioComposerModel({
     taskId: core.taskId,
-    activeSession: core.activeSession,
+    activeSession: composerSession,
     isSessionWorking: sessionActions.isSessionWorking,
     isWaitingInput: sessionActions.isWaitingInput,
     busySendBlockedReason: sessionActions.busySendBlockedReason,

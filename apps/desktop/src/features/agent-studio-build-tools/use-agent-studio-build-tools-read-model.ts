@@ -4,20 +4,22 @@ import {
   resolveAgentStudioGitPanelBranch,
 } from "@/pages/agents/right-panel/agents-page-git-panel";
 import { useAgentStudioDevServerPanel } from "@/pages/agents/right-panel/use-agent-studio-dev-server-panel";
-import { useAgentStudioBuildWorktreeRefresh } from "@/pages/agents/use-agent-studio-build-worktree-refresh";
 import type {
   AgentStudioOrchestrationSelectionContext,
   useAgentStudioOrchestrationController,
 } from "@/pages/agents/use-agent-studio-orchestration-controller";
 import type { useWorkspaceState } from "@/state";
 import { useAgentStudioDiffData } from "../agent-studio-git";
-import { useAgentStudioBuildToolsBootstrap } from "./use-agent-studio-build-tools-bootstrap";
+import {
+  type BuildToolsSessionDescriptor,
+  useAgentStudioBuildToolsBootstrap,
+} from "./use-agent-studio-build-tools-bootstrap";
 
 type UseAgentStudioBuildToolsReadModelArgs = {
   activeRepo: string | null;
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
   viewRole: AgentStudioOrchestrationSelectionContext["viewRole"];
-  viewActiveSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
+  session: BuildToolsSessionDescriptor;
   viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
   panelKind: "documents" | "build_tools" | null;
   isPanelOpen: boolean;
@@ -30,7 +32,7 @@ export function useAgentStudioBuildToolsReadModel({
   activeRepo,
   activeBranch,
   viewRole,
-  viewActiveSession,
+  session,
   viewSelectedTask,
   panelKind,
   isPanelOpen,
@@ -38,8 +40,9 @@ export function useAgentStudioBuildToolsReadModel({
   repoSettings,
   runCompletionRecoverySignal,
 }: UseAgentStudioBuildToolsReadModelArgs) {
+  const sessionRole = session.role;
   const gitPanelContextMode: "repository" | "worktree" =
-    viewActiveSession?.role === "build" ? "worktree" : "repository";
+    sessionRole === "build" ? "worktree" : "repository";
   const repositoryBranchIdentityKey =
     gitPanelContextMode === "repository"
       ? buildAgentStudioGitPanelBranchIdentityKey(activeBranch)
@@ -51,7 +54,7 @@ export function useAgentStudioBuildToolsReadModel({
   const buildToolsBootstrap = useAgentStudioBuildToolsBootstrap({
     activeRepo,
     viewRole,
-    viewActiveSession,
+    session,
     viewSelectedTask,
     panelKind,
     isPanelOpen,
@@ -68,13 +71,6 @@ export function useAgentStudioBuildToolsReadModel({
     enablePolling: buildToolsBootstrap.shouldEnableEventPolling,
   });
 
-  useAgentStudioBuildWorktreeRefresh({
-    viewRole,
-    activeSession: viewActiveSession,
-    isSessionHistoryHydrating: isViewSessionHistoryHydrating,
-    refreshWorktree: diffData.refresh,
-  });
-
   const devServerModel = useAgentStudioDevServerPanel({
     repoPath: buildToolsBootstrap.repoPath,
     taskId: buildToolsBootstrap.isEnabled ? (viewSelectedTask?.id ?? null) : null,
@@ -84,6 +80,7 @@ export function useAgentStudioBuildToolsReadModel({
 
   return {
     diffData,
+    refreshWorktree: diffData.refresh,
     devServerModel,
     gitPanelContextMode,
     resolvedGitPanelBranch: resolveAgentStudioGitPanelBranch({

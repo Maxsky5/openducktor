@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { NEW_BUILDER_SESSION_TARGET } from "@/features/human-review-feedback/human-review-feedback-state";
 import type { HumanReviewFeedbackState } from "@/features/human-review-feedback/human-review-feedback-types";
 import { buildReusableSessionOptions } from "@/features/session-start";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 
 type ConfirmHumanReviewFeedbackFlowInput = {
@@ -14,7 +14,7 @@ type ConfirmHumanReviewFeedbackFlowInput = {
     sessionId: string;
   }) => Promise<void>;
   openSessionStartModal: (intent: KanbanSessionStartIntent) => void;
-  openAgentStudioSession: (taskId: string, session: AgentSessionState) => void;
+  openAgentStudioSession: (taskId: string, session: AgentSessionSummary) => void;
   sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
   onDismiss: () => void;
 };

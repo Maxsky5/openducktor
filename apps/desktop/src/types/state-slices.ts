@@ -232,3 +232,5 @@ export type AgentStateContextValue = {
   ) => Promise<void>;
   answerAgentQuestion: (sessionId: string, requestId: string, answers: string[][]) => Promise<void>;
 };
+
+export type AgentOperationsContextValue = Omit<AgentStateContextValue, "sessions">;

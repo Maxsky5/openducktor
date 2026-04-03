@@ -3,6 +3,7 @@ import type {
   AgentSessionContextUsage,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
+import { appendSessionMessage, findLastSessionMessage, updateLastSessionMessage } from "./messages";
 import { mergeModelSelection } from "./models";
 
 const resolveModelDescriptor = (
@@ -102,39 +103,34 @@ export const finalizeDraftAssistantMessage = (
     };
   }
 
-  const lastMessage = session.messages[session.messages.length - 1];
+  const lastMessage = findLastSessionMessage(session);
   const alreadyAppended =
     lastMessage?.role === "assistant" &&
     (lastMessage.id === session.draftAssistantMessageId || lastMessage.content.trim() === draft);
   if (alreadyAppended) {
-    const nextMessages = [...session.messages];
-    const lastIndex = nextMessages.length - 1;
-    const existing = nextMessages[lastIndex];
-    if (existing && (!existing.meta || existing.meta.kind !== "assistant")) {
-      nextMessages[lastIndex] = {
-        ...existing,
-        meta: toAssistantMessageMeta(session, durationMs, totalTokens, model),
-      };
-    }
     return {
       ...session,
       ...clearedDraftFields,
-      messages: nextMessages,
+      messages: updateLastSessionMessage(session, (existing) =>
+        !existing.meta || existing.meta.kind !== "assistant"
+          ? {
+              ...existing,
+              meta: toAssistantMessageMeta(session, durationMs, totalTokens, model),
+            }
+          : existing,
+      ),
     };
   }
 
   return {
     ...session,
     ...clearedDraftFields,
-    messages: [
-      ...session.messages,
-      {
-        id: session.draftAssistantMessageId ?? crypto.randomUUID(),
-        role: "assistant",
-        content: draft,
-        timestamp,
-        meta: toAssistantMessageMeta(session, durationMs, totalTokens, model),
-      },
-    ],
+    messages: appendSessionMessage(session, {
+      id: session.draftAssistantMessageId ?? crypto.randomUUID(),
+      role: "assistant",
+      content: draft,
+      timestamp,
+      meta: toAssistantMessageMeta(session, durationMs, totalTokens, model),
+    }),
   };
 };

@@ -178,7 +178,6 @@ describe("agents-page-view-model", () => {
     expect(model.workflowSteps).toHaveLength(2);
     expect(typeof model.onOpenTaskDetails).toBe("function");
     expect(model.sessionSelector.disabled).toBe(true);
-    expect(model.stats).toEqual({ sessions: 2, messages: 1, permissions: 1, questions: 1 });
 
     model.sessionSelector.onValueChange("session-next");
     expect(onSessionSelectionChange).toHaveBeenCalledWith("session-next");

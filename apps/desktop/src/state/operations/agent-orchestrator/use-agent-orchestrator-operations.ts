@@ -1,30 +1,13 @@
-import type {
-  AgentSessionRecord,
-  RunSummary,
-  RuntimeInstanceSummary,
-  RuntimeKind,
-  TaskCard,
-} from "@openducktor/contracts";
-import type {
-  AgentEnginePort,
-  AgentFileSearchResult,
-  AgentModelCatalog,
-  AgentModelSelection,
-  AgentRuntimeConnection,
-  AgentSessionTodoItem,
-  AgentSlashCommandCatalog,
-  AgentUserMessagePart,
-} from "@openducktor/core";
+import type { AgentSessionRecord, RunSummary, RuntimeKind, TaskCard } from "@openducktor/contracts";
+import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { appQueryClient } from "@/lib/query-client";
+import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
-import type {
-  AgentChatMessage,
-  AgentSessionLoadOptions,
-  AgentSessionState,
-} from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentOperationsContextValue, AgentStateContextValue } from "@/types/state-slices";
 import { upsertAgentSessionRecordInQuery } from "../../queries/agent-sessions";
 import { upsertAgentSessionInRepoTaskData } from "../../queries/tasks";
 import { host } from "../shared/host";
@@ -41,11 +24,11 @@ import {
   toPersistedSessionRecord,
 } from ".";
 import { createOrchestratorPublicOperations } from "./handlers/public-operations";
-import type { StartAgentSessionInput } from "./handlers/start-session";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { LiveAgentSessionStore } from "./lifecycle/live-agent-session-store";
 import { createRepoSessionHydrationService } from "./lifecycle/repo-session-hydration-service";
 import { createSessionHydrationOperations } from "./lifecycle/session-hydration-operations";
+import { clearSessionMessageCache, findLastUserSessionMessage } from "./support/messages";
 
 type UseAgentOrchestratorOperationsArgs = {
   activeRepo: string | null;
@@ -55,60 +38,9 @@ type UseAgentOrchestratorOperationsArgs = {
   agentEngine: AgentEnginePort;
 };
 
-type UseAgentOrchestratorOperationsResult = {
-  sessions: AgentSessionState[];
-  bootstrapTaskSessions: (taskId: string, persistedRecords?: AgentSessionRecord[]) => Promise<void>;
-  hydrateRequestedTaskSessionHistory: (input: {
-    taskId: string;
-    sessionId: string;
-    persistedRecords?: AgentSessionRecord[];
-  }) => Promise<void>;
-  reconcileLiveTaskSessions: (input: {
-    taskId: string;
-    persistedRecords?: AgentSessionRecord[];
-    preloadedRuns?: RunSummary[];
-    preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-    preloadedRuntimeConnectionsByKey?: Map<
-      string,
-      import("@openducktor/core").AgentRuntimeConnection
-    >;
-    preloadedLiveAgentSessionsByKey?: Map<
-      string,
-      import("@openducktor/core").LiveAgentSessionSnapshot[]
-    >;
-    allowRuntimeEnsure?: boolean;
-  }) => Promise<void>;
-  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
-  readSessionModelCatalog: (
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-  ) => Promise<AgentModelCatalog>;
-  readSessionTodos: (
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-    externalSessionId: string,
-  ) => Promise<AgentSessionTodoItem[]>;
-  readSessionSlashCommands: (
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-  ) => Promise<AgentSlashCommandCatalog>;
-  readSessionFileSearch: (
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-    query: string,
-  ) => Promise<AgentFileSearchResult[]>;
-  removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
-  startAgentSession: (input: StartAgentSessionInput) => Promise<string>;
-  sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
-  stopAgentSession: (sessionId: string) => Promise<void>;
-  updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
-  replyAgentPermission: (
-    sessionId: string,
-    requestId: string,
-    reply: "once" | "always" | "reject",
-    message?: string,
-  ) => Promise<void>;
-  answerAgentQuestion: (sessionId: string, requestId: string, answers: string[][]) => Promise<void>;
+type UseAgentOrchestratorOperationsResult = AgentStateContextValue & {
+  sessionStore: AgentSessionsStore;
+  operations: AgentOperationsContextValue;
 };
 
 export function useAgentOrchestratorOperations({
@@ -118,7 +50,7 @@ export function useAgentOrchestratorOperations({
   refreshTaskData,
   agentEngine,
 }: UseAgentOrchestratorOperationsArgs): UseAgentOrchestratorOperationsResult {
-  const { sessionsById, refBridges, commitSessions } = useOrchestratorSessionState({
+  const { sessionStore, refBridges, commitSessions } = useOrchestratorSessionState({
     activeRepo,
     tasks,
     runs,
@@ -194,7 +126,7 @@ export function useAgentOrchestratorOperations({
     (
       sessionId: string,
       timestamp: string,
-      messages: AgentChatMessage[] = [],
+      messages: AgentSessionState["messages"] = [],
     ): number | undefined => {
       const parsedTimestamp = Date.parse(timestamp);
       const endedAt = Number.isNaN(parsedTimestamp) ? Date.now() : parsedTimestamp;
@@ -204,7 +136,7 @@ export function useAgentOrchestratorOperations({
         return Math.max(0, endedAt - startedAt);
       }
 
-      const latestUserMessage = [...messages].reverse().find((entry) => entry.role === "user");
+      const latestUserMessage = findLastUserSessionMessage({ sessionId, messages });
       if (latestUserMessage) {
         const userTimestamp = Date.parse(latestUserMessage.timestamp);
         if (!Number.isNaN(userTimestamp) && endedAt >= userTimestamp) {
@@ -281,6 +213,7 @@ export function useAgentOrchestratorOperations({
       }
 
       for (const sessionId of sessionIds) {
+        clearSessionMessageCache(sessionId);
         const unsubscribe = unsubscribersRef.current.get(sessionId);
         unsubscribe?.();
         unsubscribersRef.current.delete(sessionId);
@@ -548,24 +481,11 @@ export function useAgentOrchestratorOperations({
     ],
   );
 
-  return useMemo<UseAgentOrchestratorOperationsResult>(
-    () =>
-      createOrchestratorPublicOperations({
-        sessionsById,
-        bootstrapTaskSessions: sessionHydration.bootstrapTaskSessions,
-        hydrateRequestedTaskSessionHistory: sessionHydration.hydrateRequestedTaskSession,
-        reconcileLiveTaskSessions: sessionHydration.reconcileLiveTaskSessions,
-        loadAgentSessions,
-        readSessionModelCatalog,
-        readSessionTodos,
-        readSessionSlashCommands,
-        readSessionFileSearch,
-        removeAgentSessions,
-        sessionActions,
-      }),
-    [
-      sessionsById,
-      sessionHydration,
+  return useMemo<UseAgentOrchestratorOperationsResult>(() => {
+    const operations = createOrchestratorPublicOperations({
+      bootstrapTaskSessions: sessionHydration.bootstrapTaskSessions,
+      hydrateRequestedTaskSessionHistory: sessionHydration.hydrateRequestedTaskSession,
+      reconcileLiveTaskSessions: sessionHydration.reconcileLiveTaskSessions,
       loadAgentSessions,
       readSessionModelCatalog,
       readSessionTodos,
@@ -573,6 +493,25 @@ export function useAgentOrchestratorOperations({
       readSessionFileSearch,
       removeAgentSessions,
       sessionActions,
-    ],
-  );
+    });
+
+    return {
+      get sessions() {
+        return sessionStore.getSessionsSnapshot();
+      },
+      ...operations,
+      sessionStore,
+      operations,
+    };
+  }, [
+    sessionStore,
+    sessionHydration,
+    loadAgentSessions,
+    readSessionModelCatalog,
+    readSessionTodos,
+    readSessionSlashCommands,
+    readSessionFileSearch,
+    removeAgentSessions,
+    sessionActions,
+  ]);
 }

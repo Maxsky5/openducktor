@@ -4,7 +4,6 @@ import { memo, type ReactElement, useMemo } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { PRELOAD_DIFF_LIMIT } from "./constants";
 import { DiffPreloadQueue } from "./diff-preload-queue";
 import { FileDiffEntryWithMemo } from "./file-diff-entry";
 
@@ -15,6 +14,7 @@ type FileDiffListProps = {
   setDiffStyle: (style: PierreDiffStyle) => void;
   expandedFiles: ReadonlySet<string>;
   onToggleFile: (filePath: string) => void;
+  preloadLimit: number;
   canResetFiles: boolean;
   isResetDisabled: boolean;
   resetDisabledReason: string | null;
@@ -42,7 +42,7 @@ function DiffStyleToggleButton({
           type="button"
           aria-pressed={isActive}
           className={cn(
-            "p-1 transition-colors",
+            "p-1",
             isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
           )}
           onClick={onClick}
@@ -65,6 +65,7 @@ export const FileDiffList = memo(function FileDiffList({
   setDiffStyle,
   expandedFiles,
   onToggleFile,
+  preloadLimit,
   canResetFiles,
   isResetDisabled,
   resetDisabledReason,
@@ -115,11 +116,7 @@ export const FileDiffList = memo(function FileDiffList({
         </div>
       </div>
 
-      <DiffPreloadQueue
-        fileDiffs={fileDiffs}
-        expandedFiles={expandedFiles}
-        limit={PRELOAD_DIFF_LIMIT}
-      />
+      <DiffPreloadQueue fileDiffs={fileDiffs} expandedFiles={expandedFiles} limit={preloadLimit} />
 
       {fileDiffs.map((diff) => (
         <FileDiffEntryWithMemo

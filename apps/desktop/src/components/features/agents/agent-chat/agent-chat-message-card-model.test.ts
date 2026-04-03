@@ -662,7 +662,7 @@ describe("agent-chat-message-card-model", () => {
       ).toBeNull();
     });
 
-    test("computes duration from input-ready timestamp and completion timestamp", () => {
+    test("uses runtime part timing only", () => {
       expect(
         getToolDuration(
           createToolMeta({
@@ -674,7 +674,7 @@ describe("agent-chat-message-card-model", () => {
           }),
           "2026-02-22T10:00:00.000Z",
         ),
-      ).toBe(130);
+      ).toBe(50);
 
       expect(
         getToolDuration(
@@ -684,7 +684,7 @@ describe("agent-chat-message-card-model", () => {
           }),
           "1970-01-01T00:00:00.040Z",
         ),
-      ).toBe(30);
+      ).toBeNull();
 
       expect(
         getToolDuration(
@@ -699,7 +699,7 @@ describe("agent-chat-message-card-model", () => {
       ).toBe(30);
     });
 
-    test("falls back to observed and started/ended timestamps", () => {
+    test("returns null when only locally observed timing is available", () => {
       expect(
         getToolDuration(
           createToolMeta({
@@ -710,7 +710,7 @@ describe("agent-chat-message-card-model", () => {
           }),
           "2026-02-22T10:00:00.000Z",
         ),
-      ).toBe(200);
+      ).toBeNull();
 
       expect(
         getToolDuration(
@@ -720,7 +720,7 @@ describe("agent-chat-message-card-model", () => {
           }),
           "1970-01-01T00:00:00.080Z",
         ),
-      ).toBe(60);
+      ).toBeNull();
 
       expect(
         getToolDuration(

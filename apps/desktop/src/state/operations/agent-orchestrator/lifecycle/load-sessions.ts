@@ -5,6 +5,7 @@ import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { TaskDocuments } from "../runtime/runtime";
 import { createRepoStaleGuard } from "../support/core";
+import { getSessionMessageCount } from "../support/messages";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import {
   createHydrationPromptAssemblerStage,
@@ -169,7 +170,7 @@ export const createLoadAgentSessions = ({
       if (intent.historyPolicy === "live_if_empty") {
         for (const sessionId of reattachedSessionIds) {
           const currentSession = sessionsRef.current[sessionId];
-          if (!currentSession || currentSession.messages.length > 0) {
+          if (!currentSession || getSessionMessageCount(currentSession) > 0) {
             continue;
           }
           effectiveHistoryHydrationSessionIds.add(sessionId);

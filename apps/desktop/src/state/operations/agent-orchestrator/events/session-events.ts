@@ -19,7 +19,7 @@ import {
 } from "./session-lifecycle";
 import { handleAssistantDelta, handleAssistantPart } from "./session-parts";
 
-const SESSION_EVENT_BATCH_WINDOW_MS = process.env.NODE_ENV === "test" ? 0 : 200;
+const SESSION_EVENT_BATCH_WINDOW_MS = process.env.NODE_ENV === "test" ? 0 : 500;
 
 const hasSessionStateChanges = (current: object, next: object): boolean => {
   for (const key of Object.keys(next) as Array<keyof typeof next>) {

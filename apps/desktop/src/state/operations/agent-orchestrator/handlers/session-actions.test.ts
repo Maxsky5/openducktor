@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import {
+  findSessionMessageForTest,
+  lastSessionMessageForTest,
+  sessionMessageAt,
+  sessionMessagesToArray,
+  someSessionMessageForTest,
+} from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { attachAgentSessionListener } from "../events/session-events";
 import { createDeferred, createTaskCardFixture } from "../test-utils";
@@ -31,6 +38,17 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   isLoadingModelCatalog: false,
   ...overrides,
 });
+
+const getSession = (
+  sessionsRef: { current: Record<string, AgentSessionState> },
+  sessionId = "session-1",
+): AgentSessionState => {
+  const session = sessionsRef.current[sessionId];
+  if (!session) {
+    throw new Error(`Expected session ${sessionId}`);
+  }
+  return session;
+};
 
 describe("agent-orchestrator/handlers/session-actions", () => {
   test("returns action handlers", () => {
@@ -425,7 +443,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     try {
       await actions.stopAgentSession("session-1");
 
-      const lastMessage = sessionsRef.current["session-1"]?.messages.at(-1);
+      const lastMessage = lastSessionMessageForTest(getSession(sessionsRef));
       expect(lastMessage?.content).toBe("Session stopped at your request.");
       expect(lastMessage?.meta).toEqual({
         kind: "session_notice",
@@ -433,7 +451,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         reason: "user_stopped",
         title: "Stopped",
       });
-      const toolMessage = sessionsRef.current["session-1"]?.messages.find(
+      const toolMessage = findSessionMessageForTest(
+        getSession(sessionsRef),
         (message) => message.id === "tool-running",
       );
       expect(toolMessage?.meta?.kind).toBe("tool");
@@ -1049,7 +1068,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       await actions.answerAgentQuestion("session-1", "question-1", [["yes"]]);
       expect(replyCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
-      const message = sessionsRef.current["session-1"]?.messages[0];
+      const message = sessionMessageAt(getSession(sessionsRef), 0);
       if (!message || message.meta?.kind !== "tool") {
         throw new Error("Expected tool message metadata");
       }
@@ -1239,7 +1258,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       await actions.sendAgentMessage("session-1", [{ kind: "text", text: " hello " }]);
       expect(sendCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.status).toBe("running");
-      expect(sessionsRef.current["session-1"]?.messages).toHaveLength(0);
+      expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
@@ -1247,7 +1266,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }
   });
 
-  test("hydrates requested history before sending to an unhydrated reused session", async () => {
+  test("does not hydrate requested history before sending to an attached session", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
     const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
@@ -1301,22 +1320,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {
         callOrder.push("hydrate");
-        const currentSession = sessionsRef.current["session-1"];
-        if (!currentSession) {
-          throw new Error("Expected session to hydrate");
-        }
-        sessionsRef.current["session-1"] = {
-          ...currentSession,
-          historyHydrationState: "hydrated",
-          messages: [
-            {
-              id: "m-user",
-              role: "user",
-              content: "Earlier request",
-              timestamp: "2026-02-22T08:00:00.000Z",
-            },
-          ],
-        };
       },
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -1326,11 +1329,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     try {
       await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
 
-      expect(callOrder).toEqual(["hydrate", "send"]);
-      expect(sessionsRef.current["session-1"]?.messages.map((message) => message.content)).toEqual([
-        "Earlier request",
-      ]);
-      expect(sessionsRef.current["session-1"]?.historyHydrationState).toBe("hydrated");
+      expect(callOrder).toEqual(["send"]);
+      expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
+      expect(sessionsRef.current["session-1"]?.historyHydrationState).toBe("not_requested");
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
@@ -1338,7 +1339,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }
   });
 
-  test("does not send a free-form message if hydration reveals pending input", async () => {
+  test("does not send a free-form message if ensure-ready reveals pending input", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
     const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
@@ -1346,7 +1347,23 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     let sendCalls = 0;
 
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [];
+    adapter.listLiveAgentSessionSnapshots = async () => [
+      {
+        externalSessionId: "external-1",
+        status: { type: "idle" },
+        title: "Session 1",
+        model: null,
+        workingDirectory: "/tmp/repo/worktree",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        pendingPermissions: [],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [{ header: "Confirm", question: "Confirm", options: [] }],
+          },
+        ],
+      },
+    ];
     adapter.sendUserMessage = async () => {
       sendCalls += 1;
     };
@@ -1390,29 +1407,16 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {
-        const currentSession = sessionsRef.current["session-1"];
-        if (!currentSession) {
-          throw new Error("Expected session to hydrate");
-        }
-        sessionsRef.current["session-1"] = {
-          ...currentSession,
-          historyHydrationState: "hydrated",
-          pendingQuestions: [
-            {
-              requestId: "question-1",
-              questions: [{ header: "Confirm", question: "Confirm", options: [] }],
-            },
-          ],
-        };
-      },
+      loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       persistSessionRecord: async () => {},
     });
 
     try {
-      await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
+      await expect(
+        actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]),
+      ).rejects.toThrow("Session is waiting for pending runtime input.");
 
       expect(sendCalls).toBe(0);
       expect(sessionsRef.current["session-1"]?.status).toBe("idle");
@@ -1487,7 +1491,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     try {
       await actions.sendAgentMessage("session-1", [{ kind: "text", text: " hello " }]);
       expect(sendCalls).toBe(0);
-      expect(sessionsRef.current["session-1"]?.messages).toHaveLength(0);
+      expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(1);
     } finally {
       adapter.hasSession = originalHasSession;
@@ -1704,7 +1708,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
       expect(sessionsRef.current["session-1"]?.status).toBe("error");
       expect(
-        sessionsRef.current["session-1"]?.messages.some((message) =>
+        someSessionMessageForTest(getSession(sessionsRef), (message) =>
           message.content.includes("Failed to send message:"),
         ),
       ).toBe(true);
@@ -1893,7 +1897,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("Still working");
       expect(sessionsRef.current["session-1"]?.draftReasoningText).toBe("Thinking");
       expect(
-        sessionsRef.current["session-1"]?.messages.some((message) =>
+        someSessionMessageForTest(getSession(sessionsRef), (message) =>
           message.content.includes("Failed to send message:"),
         ),
       ).toBe(true);

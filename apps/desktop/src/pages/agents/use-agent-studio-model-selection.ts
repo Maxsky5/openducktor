@@ -18,6 +18,7 @@ import {
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { findFirstChangedSessionMessageIndex } from "@/state/operations/agent-orchestrator/support/messages";
 import {
   sessionFileSearchQueryOptions,
   sessionSlashCommandsQueryOptions,
@@ -37,7 +38,9 @@ import {
 } from "./agents-page-selection";
 import {
   type AgentStudioContextUsage,
+  type AgentStudioContextUsageEntry,
   extractLatestContextUsage,
+  extractLatestContextUsageEntry,
   resolveDraftSelection,
   resolveSessionSelection,
   toModelDescriptorByKey,
@@ -102,7 +105,11 @@ const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
 });
 
 const toRuntimeQueryInput = (
-  session: AgentSessionState | null,
+  session: {
+    runtimeKind: RuntimeKind | null;
+    runtimeEndpoint: string;
+    workingDirectory: string;
+  } | null,
 ): {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
@@ -153,6 +160,9 @@ export function useAgentStudioModelSelection({
   const previousRepoForDefaultsRef = useRef<string | null>(activeRepo);
   const previousRepoSettingsRef = useRef<RepoSettingsInput | null>(repoSettings);
   const activeSessionContextUsageCacheRef = useRef<{
+    sessionId: string;
+    messages: AgentSessionState["messages"];
+    sourceIndex: number;
     key: string;
     value: NonNullable<AgentStudioContextUsage>;
   } | null>(null);
@@ -163,27 +173,52 @@ export function useAgentStudioModelSelection({
   const [draftSelectionTouchedByRole, setDraftSelectionTouchedByRole] = useState<
     Record<AgentRole, boolean>
   >(emptyDraftSelectionTouchedByRole);
+  const activeSessionId = activeSession?.sessionId ?? null;
+  const activeSessionStatus = activeSession?.status ?? null;
+  const activeSessionSelectedModel = activeSession?.selectedModel ?? null;
+  const activeSessionModelCatalog = activeSession?.modelCatalog ?? null;
+  const activeSessionRuntimeKind = activeSession?.runtimeKind ?? null;
+  const activeSessionRuntimeEndpoint = activeSession?.runtimeEndpoint?.trim() ?? "";
+  const activeSessionWorkingDirectory = activeSession?.workingDirectory?.trim() ?? "";
+  const activeSessionIsLoadingModelCatalog = activeSession?.isLoadingModelCatalog === true;
+  const activeSessionLiveContextUsage = activeSession?.contextUsage ?? null;
+  const activeSessionMessages = activeSession?.messages ?? null;
+  const hasActiveSession = activeSessionId !== null;
   const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
     return toRoleDefaultSelection(repoSettings?.agentDefaults[role]);
   }, [repoSettings?.agentDefaults, role]);
   const composerRuntimeKind = useMemo<RuntimeKind>(() => {
     return (
-      activeSession?.selectedModel?.runtimeKind ??
+      activeSessionSelectedModel?.runtimeKind ??
       draftSelectionByRole[role]?.runtimeKind ??
       roleDefaultSelection?.runtimeKind ??
       repoSettings?.defaultRuntimeKind ??
       DEFAULT_RUNTIME_KIND
     );
   }, [
-    activeSession?.selectedModel?.runtimeKind,
+    activeSessionSelectedModel?.runtimeKind,
     draftSelectionByRole,
     repoSettings?.defaultRuntimeKind,
     role,
     roleDefaultSelection?.runtimeKind,
   ]);
   const activeSessionRuntimeQueryInput = useMemo(
-    () => toRuntimeQueryInput(activeSession),
-    [activeSession],
+    () =>
+      toRuntimeQueryInput(
+        hasActiveSession
+          ? {
+              runtimeKind: activeSessionRuntimeKind,
+              runtimeEndpoint: activeSessionRuntimeEndpoint,
+              workingDirectory: activeSessionWorkingDirectory,
+            }
+          : null,
+      ),
+    [
+      activeSessionRuntimeEndpoint,
+      activeSessionRuntimeKind,
+      activeSessionWorkingDirectory,
+      hasActiveSession,
+    ],
   );
   const slashCommandRuntimeKind =
     activeSessionRuntimeQueryInput?.runtimeKind ?? composerRuntimeKind;
@@ -256,8 +291,8 @@ export function useAgentStudioModelSelection({
         }),
     enabled:
       supportsSlashCommands &&
-      activeSession != null &&
-      activeSession.status !== "starting" &&
+      hasActiveSession &&
+      activeSessionStatus !== "starting" &&
       activeSessionRuntimeQueryInput !== null &&
       readSessionSlashCommands !== undefined,
   });
@@ -275,7 +310,7 @@ export function useAgentStudioModelSelection({
     : false;
 
   useEffect(() => {
-    if (activeSession) {
+    if (hasActiveSession) {
       return;
     }
     if (!composerCatalog) {
@@ -314,22 +349,28 @@ export function useAgentStudioModelSelection({
         [role]: normalized,
       };
     });
-  }, [activeSession, composerCatalog, isDraftSelectionTouched, role, roleDefaultSelection]);
+  }, [composerCatalog, hasActiveSession, isDraftSelectionTouched, role, roleDefaultSelection]);
 
   useEffect(() => {
-    if (!activeSession) {
+    if (!activeSessionId) {
       return;
     }
     const preferredSelection = resolveSessionSelection({
-      catalog: activeSession.modelCatalog,
-      selectedModel: activeSession.selectedModel,
+      catalog: activeSessionModelCatalog,
+      selectedModel: activeSessionSelectedModel,
       roleDefaultSelection,
     });
-    if (!preferredSelection || isSameSelection(activeSession.selectedModel, preferredSelection)) {
+    if (!preferredSelection || isSameSelection(activeSessionSelectedModel, preferredSelection)) {
       return;
     }
-    updateAgentSessionModel(activeSession.sessionId, preferredSelection);
-  }, [activeSession, roleDefaultSelection, updateAgentSessionModel]);
+    updateAgentSessionModel(activeSessionId, preferredSelection);
+  }, [
+    activeSessionId,
+    activeSessionModelCatalog,
+    activeSessionSelectedModel,
+    roleDefaultSelection,
+    updateAgentSessionModel,
+  ]);
 
   const draftSelection = hasDraftSelectionForActiveRepo ? draftSelectionByRole[role] : null;
   const roleDefaultSelectionForComposer = useMemo<AgentModelSelection | null>(() => {
@@ -341,7 +382,7 @@ export function useAgentStudioModelSelection({
     }
     return coerceVisibleSelectionToCatalog(composerCatalog, roleDefaultSelection);
   }, [activeSession, composerCatalog, isAwaitingRepoSettingsForActiveRepo, roleDefaultSelection]);
-  const selectionCatalog = activeSession?.modelCatalog ?? composerCatalog;
+  const selectionCatalog = activeSessionModelCatalog ?? composerCatalog;
   const slashCommandCatalog = activeSession
     ? (activeSessionSlashCommandsQuery.data ?? null)
     : (repoSlashCommandsQuery.data ?? null);
@@ -365,7 +406,7 @@ export function useAgentStudioModelSelection({
       if (!supportsFileSearch) {
         return [];
       }
-      if (activeSession) {
+      if (hasActiveSession) {
         if (activeSessionRuntimeQueryInput == null || readSessionFileSearch == null) {
           throw new Error(
             "Active session file search is unavailable until the session runtime connection is ready.",
@@ -394,7 +435,7 @@ export function useAgentStudioModelSelection({
     },
     [
       activeRepo,
-      activeSession,
+      hasActiveSession,
       activeSessionRuntimeQueryInput,
       composerRuntimeKind,
       loadFileSearchForRepo,
@@ -403,8 +444,8 @@ export function useAgentStudioModelSelection({
       supportsFileSearch,
     ],
   );
-  const isSelectionCatalogLoading = activeSession
-    ? activeSession.isLoadingModelCatalog && !activeSession.modelCatalog && !composerCatalog
+  const isSelectionCatalogLoading = hasActiveSession
+    ? activeSessionIsLoadingModelCatalog && !activeSessionModelCatalog && !composerCatalog
     : isLoadingComposerCatalog;
   const fallbackCatalogSelection = useMemo(
     () => pickDefaultVisibleSelectionForCatalog(selectionCatalog),
@@ -412,13 +453,13 @@ export function useAgentStudioModelSelection({
   );
   const selectedModelSelection = useMemo(
     () =>
-      activeSession?.selectedModel ??
+      activeSessionSelectedModel ??
       draftSelection ??
       roleDefaultSelectionForComposer ??
       fallbackCatalogSelection ??
       null,
     [
-      activeSession?.selectedModel,
+      activeSessionSelectedModel,
       draftSelection,
       fallbackCatalogSelection,
       roleDefaultSelectionForComposer,
@@ -427,8 +468,8 @@ export function useAgentStudioModelSelection({
 
   const applySelection = useCallback(
     (selection: AgentModelSelection | null): void => {
-      if (activeSession) {
-        updateAgentSessionModel(activeSession.sessionId, selection);
+      if (activeSessionId) {
+        updateAgentSessionModel(activeSessionId, selection);
         return;
       }
       setDraftSelectionByRole((current) => ({
@@ -440,7 +481,7 @@ export function useAgentStudioModelSelection({
         [role]: true,
       }));
     },
-    [activeSession, role, updateAgentSessionModel],
+    [activeSessionId, role, updateAgentSessionModel],
   );
 
   const selectionForNewSession = useMemo(
@@ -544,51 +585,142 @@ export function useAgentStudioModelSelection({
     return map;
   }, [selectionCatalog]);
 
-  const activeSessionMessages = activeSession?.messages ?? null;
-  const activeSessionLiveContextUsage = activeSession?.contextUsage ?? null;
-  const activeSessionMessagesForContextUsage =
+  const activeSessionForContextUsage =
     activeSessionLiveContextUsage && activeSessionLiveContextUsage.totalTokens > 0
       ? null
-      : activeSessionMessages;
-  const activeSessionModelCatalog = activeSession?.modelCatalog;
+      : activeSession;
+  const activeSessionIdForContextUsage = activeSessionForContextUsage?.sessionId ?? null;
+  const activeSessionMessagesForContextUsage =
+    activeSessionForContextUsage?.sessionId === activeSessionId ? activeSessionMessages : null;
+  const activeSessionMessageOwnerForContextUsage = useMemo(
+    () =>
+      activeSessionIdForContextUsage && activeSessionMessagesForContextUsage
+        ? {
+            sessionId: activeSessionIdForContextUsage,
+            messages: activeSessionMessagesForContextUsage,
+          }
+        : null,
+    [activeSessionIdForContextUsage, activeSessionMessagesForContextUsage],
+  );
   const activeSessionModelDescriptorByKey = useMemo(() => {
     return toModelDescriptorByKey(activeSessionModelCatalog ?? null);
   }, [activeSessionModelCatalog]);
 
   const activeSessionContextUsage = useMemo<AgentStudioContextUsage>(() => {
-    const nextUsage = extractLatestContextUsage({
-      messages: activeSessionMessagesForContextUsage,
-      ...(activeSessionLiveContextUsage !== null
-        ? { liveContextUsage: activeSessionLiveContextUsage }
-        : {}),
-      modelDescriptorByKey: activeSessionModelDescriptorByKey,
-      ...(typeof selectedModelEntry?.contextWindow === "number"
-        ? { fallbackContextWindow: selectedModelEntry.contextWindow }
-        : {}),
-    });
+    const fallbackContextWindow =
+      typeof selectedModelEntry?.contextWindow === "number"
+        ? selectedModelEntry.contextWindow
+        : null;
+    const commitCachedUsage = (
+      usage: NonNullable<AgentStudioContextUsage>,
+      sourceIndex: number,
+      messages: AgentSessionState["messages"],
+    ): NonNullable<AgentStudioContextUsage> => {
+      const nextKey = [usage.totalTokens, usage.contextWindow, usage.outputLimit ?? ""].join(":");
+      const cached = activeSessionContextUsageCacheRef.current;
+      if (cached?.key === nextKey) {
+        activeSessionContextUsageCacheRef.current = {
+          sessionId: activeSessionIdForContextUsage ?? cached.sessionId,
+          messages,
+          sourceIndex,
+          key: cached.key,
+          value: cached.value,
+        };
+        return cached.value;
+      }
 
-    if (nextUsage === null) {
+      activeSessionContextUsageCacheRef.current = {
+        sessionId: activeSessionIdForContextUsage ?? "",
+        messages,
+        sourceIndex,
+        key: nextKey,
+        value: usage,
+      };
+      return usage;
+    };
+
+    if (activeSessionLiveContextUsage !== null) {
+      const nextUsage = extractLatestContextUsage({
+        session: activeSessionMessageOwnerForContextUsage,
+        liveContextUsage: activeSessionLiveContextUsage,
+        modelDescriptorByKey: activeSessionModelDescriptorByKey,
+        ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),
+      });
+      if (nextUsage === null) {
+        activeSessionContextUsageCacheRef.current = null;
+        return null;
+      }
+
+      return commitCachedUsage(
+        nextUsage,
+        Number.MAX_SAFE_INTEGER,
+        activeSessionMessages ?? activeSessionMessageOwnerForContextUsage?.messages ?? [],
+      );
+    }
+
+    let nextUsageEntry: AgentStudioContextUsageEntry = null;
+    if (activeSessionMessageOwnerForContextUsage) {
+      const cached = activeSessionContextUsageCacheRef.current;
+      if (
+        cached &&
+        activeSessionIdForContextUsage !== null &&
+        cached.sessionId === activeSessionIdForContextUsage
+      ) {
+        const firstChangedMessageIndex = findFirstChangedSessionMessageIndex(
+          cached.messages,
+          activeSessionMessageOwnerForContextUsage,
+        );
+        if (firstChangedMessageIndex < 0) {
+          return cached.value;
+        }
+
+        nextUsageEntry = extractLatestContextUsageEntry({
+          session: activeSessionMessageOwnerForContextUsage,
+          modelDescriptorByKey: activeSessionModelDescriptorByKey,
+          ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),
+          startIndex: firstChangedMessageIndex,
+        });
+
+        if (!nextUsageEntry && cached.sourceIndex < firstChangedMessageIndex) {
+          activeSessionContextUsageCacheRef.current = {
+            ...cached,
+            messages: activeSessionMessageOwnerForContextUsage.messages,
+          };
+          return cached.value;
+        }
+
+        if (!nextUsageEntry && firstChangedMessageIndex > 0) {
+          nextUsageEntry = extractLatestContextUsageEntry({
+            session: activeSessionMessageOwnerForContextUsage,
+            modelDescriptorByKey: activeSessionModelDescriptorByKey,
+            ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),
+            endIndex: firstChangedMessageIndex - 1,
+          });
+        }
+      } else {
+        nextUsageEntry = extractLatestContextUsageEntry({
+          session: activeSessionMessageOwnerForContextUsage,
+          modelDescriptorByKey: activeSessionModelDescriptorByKey,
+          ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),
+        });
+      }
+    }
+
+    if (nextUsageEntry === null) {
       activeSessionContextUsageCacheRef.current = null;
       return null;
     }
 
-    const nextKey = [
-      nextUsage.totalTokens,
-      nextUsage.contextWindow,
-      nextUsage.outputLimit ?? "",
-    ].join(":");
-    if (activeSessionContextUsageCacheRef.current?.key === nextKey) {
-      return activeSessionContextUsageCacheRef.current.value;
-    }
-
-    activeSessionContextUsageCacheRef.current = {
-      key: nextKey,
-      value: nextUsage,
-    };
-    return nextUsage;
+    return commitCachedUsage(
+      nextUsageEntry.usage,
+      nextUsageEntry.sourceIndex,
+      activeSessionMessageOwnerForContextUsage?.messages ?? [],
+    );
   }, [
     activeSessionLiveContextUsage,
-    activeSessionMessagesForContextUsage,
+    activeSessionIdForContextUsage,
+    activeSessionMessages,
+    activeSessionMessageOwnerForContextUsage,
     activeSessionModelDescriptorByKey,
     selectedModelEntry?.contextWindow,
   ]);

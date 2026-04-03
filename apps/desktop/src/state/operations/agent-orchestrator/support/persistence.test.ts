@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
+import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   fromPersistedSessionRecord,
@@ -458,7 +459,7 @@ describe("agent-orchestrator/support/persistence", () => {
       },
     );
 
-    const assistant = messages[0];
+    const assistant = sessionMessageAt({ sessionId: "session-1", messages }, 0);
     if (!assistant || assistant.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }

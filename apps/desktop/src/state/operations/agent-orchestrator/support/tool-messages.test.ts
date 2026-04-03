@@ -7,6 +7,11 @@ import {
   resolveToolMessageId,
 } from "./tool-messages";
 
+const createSession = (messages: AgentChatMessage[]) => ({
+  sessionId: "session-1",
+  messages,
+});
+
 describe("agent-orchestrator/support/tool-messages", () => {
   test("resolves tool message ids by callId and running fallback", () => {
     const messages: AgentChatMessage[] = [
@@ -26,7 +31,7 @@ describe("agent-orchestrator/support/tool-messages", () => {
     ];
 
     const byCallId = resolveToolMessageId(
-      messages,
+      createSession(messages),
       {
         messageId: "m2",
         callId: "call-1",

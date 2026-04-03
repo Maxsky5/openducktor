@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import { createAgentSessionFixture, createTaskCardFixture } from "./shared-test-fixtures";
 
 describe("shared test fixtures", () => {
@@ -24,14 +25,16 @@ describe("shared test fixtures", () => {
       permission: "read",
       patterns: [".env"],
     });
-    first.messages.push({
-      id: "message-1",
-      role: "assistant",
-      content: "hello",
-      timestamp: "2026-03-23T10:00:00.000Z",
-    });
+    first.messages = [
+      {
+        id: "message-1",
+        role: "assistant",
+        content: "hello",
+        timestamp: "2026-03-23T10:00:00.000Z",
+      },
+    ];
 
     expect(second.pendingPermissions).toEqual([]);
-    expect(second.messages).toEqual([]);
+    expect(getSessionMessageCount(second)).toBe(0);
   });
 });

@@ -6,7 +6,7 @@ import type {
   GitWorktreeStatus,
   GitWorktreeStatusSummary,
 } from "@openducktor/contracts";
-import type { DiffScope } from "@/features/agent-studio-git";
+import type { DiffScope, DiffScopeState } from "./contracts";
 
 export type UseAgentStudioDiffDataInput = {
   repoPath: string | null;
@@ -24,19 +24,7 @@ export type DiffBatchState = {
   isLoading: boolean;
 };
 
-export type ScopeSnapshot = {
-  branch: string | null;
-  fileDiffs: FileDiff[];
-  fileStatuses: FileStatus[];
-  uncommittedFileCount: number;
-  commitsAheadBehind: CommitsAheadBehind | null;
-  upstreamAheadBehind: CommitsAheadBehind | null;
-  upstreamStatus: "tracking" | "untracked" | "error";
-  error: string | null;
-  hashVersion: number | null;
-  statusHash: string | null;
-  diffHash: string | null;
-};
+export type ScopeSnapshot = DiffScopeState;
 
 export type LoadDataMode = "full" | "summary";
 

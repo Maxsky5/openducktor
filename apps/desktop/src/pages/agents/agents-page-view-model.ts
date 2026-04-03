@@ -16,7 +16,7 @@ import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
-import type { SessionCreateOption } from "./agents-page-session-tabs";
+import type { AgentSessionWorkflowSummary, SessionCreateOption } from "./agents-page-session-tabs";
 
 export const buildRoleLabelByRole = (roleOptions: AgentRoleOption[]): Record<AgentRole, string> => {
   return roleOptions.reduce(
@@ -47,11 +47,11 @@ export const buildAgentStudioTaskTabsModel = (args: {
 export const buildAgentStudioHeaderModel = (args: {
   selectedTask: TaskCard | null;
   onOpenTaskDetails: (() => void) | null;
-  activeSession: AgentSessionState | null;
+  activeSession: Pick<AgentSessionState, "status"> | null;
   roleOptions: AgentRoleOption[];
   workflowStateByRole: Record<AgentRole, AgentWorkflowStepState>;
   selectedRole: AgentRole | null;
-  workflowSessionByRole: Record<AgentRole, AgentSessionState | null>;
+  workflowSessionByRole: Record<AgentRole, AgentSessionWorkflowSummary | null>;
   onWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
   onSessionSelectionChange: (value: string) => void;
   sessionSelectorValue: string;
@@ -90,12 +90,6 @@ export const buildAgentStudioHeaderModel = (args: {
   onCreateSession: args.onCreateSession,
   createSessionDisabled: args.createSessionDisabled,
   isCreatingSession: args.isStarting,
-  stats: {
-    sessions: args.contextSessionsLength,
-    messages: args.activeSession?.messages.length ?? 0,
-    permissions: args.activeSession?.pendingPermissions.length ?? 0,
-    questions: args.activeSession?.pendingQuestions.length ?? 0,
-  },
   agentStudioReady: args.agentStudioReady,
 });
 

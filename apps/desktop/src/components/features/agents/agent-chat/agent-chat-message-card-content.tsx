@@ -10,11 +10,13 @@ import {
   type ReactElement,
   type ReactNode,
   Suspense,
+  useDeferredValue,
   useEffect,
   useRef,
   useState,
 } from "react";
 import type { MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
+import { isTauriRuntime } from "@/lib/runtime";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
@@ -228,14 +230,16 @@ const REASONING_MARKDOWN_CLASS_NAME = cn(
 );
 
 const ReasoningMessage = ({ content, streaming }: ReasoningMessageProps): ReactElement => {
-  const pacedContent = usePacedStreamingText(content || "Thinking...", streaming);
+  const shouldPaceStreamingText = streaming && !isTauriRuntime();
+  const pacedContent = usePacedStreamingText(content || "Thinking...", shouldPaceStreamingText);
+  const renderedContent = useDeferredValue(pacedContent);
   return (
     <div className="px-1 py-0.5 text-muted-foreground">
       <div className="space-y-0.5 text-[13px] leading-relaxed">
         <span className="block text-[11px] font-medium text-muted-foreground">Thinking:</span>
         <div className="min-w-0">
           <DeferredMarkdownRenderer
-            markdown={pacedContent}
+            markdown={streaming ? renderedContent : pacedContent}
             variant="compact"
             className={REASONING_MARKDOWN_CLASS_NAME}
           />
@@ -255,11 +259,17 @@ const AssistantMessage = ({
   assistantAccentColor,
 }: AssistantMessageProps): ReactElement => {
   const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
-  const pacedContent = usePacedStreamingText(message.content, assistantMeta?.isFinal !== true);
+  const streaming = assistantMeta?.isFinal !== true;
+  const shouldPaceStreamingText = streaming && !isTauriRuntime();
+  const pacedContent = usePacedStreamingText(message.content, shouldPaceStreamingText);
+  const renderedContent = useDeferredValue(pacedContent);
   const footer = getAssistantFooterData(message);
   return (
     <div className="space-y-2">
-      <DeferredMarkdownRenderer markdown={pacedContent} variant="document" />
+      <DeferredMarkdownRenderer
+        markdown={streaming ? renderedContent : pacedContent}
+        variant="document"
+      />
       {footer.infoParts.length > 0 ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span

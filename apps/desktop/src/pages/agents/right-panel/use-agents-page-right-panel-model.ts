@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { useAgentStudioBuildToolsReadModel } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-read-model";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState, useWorkspaceState } from "@/state";
@@ -9,11 +10,11 @@ import type {
 } from "../use-agent-studio-orchestration-controller";
 import { buildAgentStudioRightPanelModel } from "./use-agent-studio-right-panel";
 
-type UseAgentsPageRightPanelModelArgs = {
+export type UseAgentsPageRightPanelModelArgs = {
   activeRepo: string | null;
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
   viewRole: AgentStudioOrchestrationSelectionContext["viewRole"];
-  viewActiveSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
+  session: BuildToolsSessionDescriptor;
   viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
   panelKind: Parameters<typeof buildAgentStudioRightPanelModel>[0]["panelKind"];
   isPanelOpen: boolean;
@@ -31,7 +32,7 @@ export function useAgentsPageRightPanelModel({
   activeRepo,
   activeBranch,
   viewRole,
-  viewActiveSession,
+  session,
   viewSelectedTask,
   panelKind,
   isPanelOpen,
@@ -44,12 +45,15 @@ export function useAgentsPageRightPanelModel({
   onDetectPullRequest,
   onResolveGitConflict,
 }: UseAgentsPageRightPanelModelArgs) {
+  const sessionRole = session.role;
+  const sessionStatus = session.status;
+
   const { diffData, devServerModel, gitPanelContextMode, resolvedGitPanelBranch } =
     useAgentStudioBuildToolsReadModel({
       activeRepo,
       activeBranch,
       viewRole,
-      viewActiveSession,
+      session,
       viewSelectedTask,
       panelKind,
       isPanelOpen,
@@ -59,8 +63,7 @@ export function useAgentsPageRightPanelModel({
     });
 
   const isActiveBuilderWorking =
-    viewActiveSession?.role === "build" &&
-    (viewActiveSession.status === "running" || viewActiveSession.status === "starting");
+    sessionRole === "build" && (sessionStatus === "running" || sessionStatus === "starting");
   const gitActions = useAgentStudioGitActions({
     repoPath: activeRepo,
     workingDir: diffData.worktreePath,
@@ -109,13 +112,20 @@ export function useAgentsPageRightPanelModel({
     ],
   );
 
+  const rightPanelModel = useMemo(
+    () =>
+      buildAgentStudioRightPanelModel({
+        panelKind,
+        documentsModel,
+        diffModel,
+        devServerModel,
+      }),
+    [panelKind, documentsModel, diffModel, devServerModel],
+  );
+
   return {
     isRightPanelVisible: Boolean(panelKind && isPanelOpen),
-    rightPanelModel: buildAgentStudioRightPanelModel({
-      panelKind,
-      documentsModel,
-      diffModel,
-      devServerModel,
-    }),
+    rightPanelModel,
+    refreshWorktree: diffData.refresh,
   };
 }

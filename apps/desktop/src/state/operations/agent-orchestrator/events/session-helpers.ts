@@ -9,7 +9,7 @@ import type {
   SessionPart,
 } from "./session-event-types";
 
-const DRAFT_FLUSH_DELAY_MS = 32;
+const DRAFT_FLUSH_DELAY_MS = 100;
 export const clearDraftBuffers = (
   context: Pick<SessionLifecycleEventContext, "drafts" | "store">,
 ): void => {
@@ -137,7 +137,7 @@ export const settleDraftToIdle = (
     shouldClear = shouldClearTurnFromCurrentState(current);
     return {
       ...finalized,
-      messages: settleDanglingTodoToolMessages(finalized.messages, timestamp),
+      messages: settleDanglingTodoToolMessages(finalized, timestamp),
       ...(current.status === "error" ? { status: "error" } : { status: "idle" }),
     };
   });
@@ -160,7 +160,7 @@ export const createPrePartTodoSettlement = (
     if (!shouldSettleTodoToolRows) {
       return current;
     }
-    const settledMessages = settleDanglingTodoToolMessages(current.messages, timestamp);
+    const settledMessages = settleDanglingTodoToolMessages(current, timestamp);
     if (settledMessages === current.messages) {
       return current;
     }

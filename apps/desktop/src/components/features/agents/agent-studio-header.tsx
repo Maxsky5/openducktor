@@ -67,12 +67,6 @@ export type AgentStudioHeaderModel = {
   onCreateSession: (option: AgentSessionCreateOption) => void;
   createSessionDisabled: boolean;
   isCreatingSession: boolean;
-  stats: {
-    sessions: number;
-    messages: number;
-    permissions: number;
-    questions: number;
-  };
   agentStudioReady: boolean;
 };
 

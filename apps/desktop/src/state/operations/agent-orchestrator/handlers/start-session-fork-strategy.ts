@@ -2,6 +2,7 @@ import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
+import { createSessionMessagesState, getSessionMessagesSlice } from "../support/messages";
 import { historyToChatMessages } from "../support/persistence";
 import { buildSessionHeaderMessages } from "../support/session-prompt";
 import type {
@@ -134,20 +135,29 @@ export const executeForkStart = async ({
   }
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
-  const initialMessages: AgentSessionState["messages"] = [
-    ...buildSessionHeaderMessages({
-      sessionId: summary.sessionId,
-      role: ctx.role,
-      scenario: resolved.resolvedScenario,
-      systemPrompt: resolved.systemPrompt,
-      startedAt: summary.startedAt,
-      eventLabel: "forked",
-    }),
-    ...historyToChatMessages(forkHistory, {
-      role: ctx.role,
-      selectedModel,
-    }),
-  ];
+  const initialMessages: AgentSessionState["messages"] = createSessionMessagesState(
+    summary.sessionId,
+    [
+      ...getSessionMessagesSlice(
+        {
+          sessionId: summary.sessionId,
+          messages: buildSessionHeaderMessages({
+            sessionId: summary.sessionId,
+            role: ctx.role,
+            scenario: resolved.resolvedScenario,
+            systemPrompt: resolved.systemPrompt,
+            startedAt: summary.startedAt,
+            eventLabel: "forked",
+          }),
+        },
+        0,
+      ),
+      ...historyToChatMessages(forkHistory, {
+        role: ctx.role,
+        selectedModel,
+      }),
+    ],
+  );
 
   const forkedRuntime: RuntimeInfo = {
     runtimeKind,

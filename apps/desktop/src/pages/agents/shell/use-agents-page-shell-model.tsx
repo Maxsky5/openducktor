@@ -1,7 +1,17 @@
 import type { AgentRole, AgentScenario } from "@openducktor/core";
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type MutableRefObject,
+  memo,
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import { SessionStartModal } from "@/components/features/agents";
+import { MemoizedAgentStudioRightPanel } from "@/components/features/agents/agent-studio-right-panel";
 import type {
   ActiveTaskSessionContextByTaskId,
   KanbanTaskSession,
@@ -11,15 +21,27 @@ import {
   TaskDetailsSheetController,
   type TaskDetailsSheetControllerHandle,
 } from "@/components/features/task-details/task-details-sheet-controller";
+import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
-import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
+import {
+  useAgentOperations,
+  useAgentSessionSummaries,
+  useChecksState,
+  useTasksState,
+  useWorkspaceState,
+} from "@/state";
+import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   useChecksOperationsContext,
   useDelegationEventsContext,
   useRuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import type { AgentStudioQueryUpdate } from "../agent-studio-navigation";
-import { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
+import { useAgentStudioBuildWorktreeRefresh } from "../use-agent-studio-build-worktree-refresh";
+import {
+  type AgentStudioOrchestrationSelectionContext,
+  useAgentStudioOrchestrationController,
+} from "../use-agent-studio-orchestration-controller";
 import { useAgentStudioQuerySessionSync } from "../use-agent-studio-query-session-sync";
 import { useAgentStudioQuerySync } from "../use-agent-studio-query-sync";
 import { useAgentStudioRebaseConflictResolution } from "../use-agent-studio-rebase-conflict-resolution";
@@ -28,7 +50,10 @@ import {
   useAgentStudioReadiness,
   useRunCompletionRecoverySignal,
 } from "../use-agents-page-readiness";
-import { useAgentsPageRightPanelModel } from "../use-agents-page-right-panel-model";
+import {
+  type UseAgentsPageRightPanelModelArgs,
+  useAgentsPageRightPanelModel,
+} from "../use-agents-page-right-panel-model";
 
 type AgentsPageShellModel = {
   activeRepo: string | null;
@@ -50,12 +75,61 @@ type AgentsPageShellModel = {
   >["agentStudioHeaderModel"];
   chatModel: ReturnType<typeof useAgentStudioOrchestrationController>["agentChatModel"];
   isRightPanelVisible: boolean;
-  rightPanelModel: ReturnType<typeof useAgentsPageRightPanelModel>["rightPanelModel"];
+  rightPanelContent: ReactElement | null;
   mergedPullRequestModal: ReactElement | null;
   humanReviewFeedbackModal: ReactElement;
   sessionStartModal: ReactElement | null;
   taskDetailsSheet: ReactElement;
 };
+
+const AgentsPageRightPanelRuntime = memo(function AgentsPageRightPanelRuntime({
+  refreshWorktreeRef,
+  ...args
+}: UseAgentsPageRightPanelModelArgs & {
+  refreshWorktreeRef: MutableRefObject<(() => void) | null>;
+}): ReactElement | null {
+  const { rightPanelModel, refreshWorktree } = useAgentsPageRightPanelModel(args);
+
+  useEffect(() => {
+    refreshWorktreeRef.current = refreshWorktree;
+    return () => {
+      if (refreshWorktreeRef.current === refreshWorktree) {
+        refreshWorktreeRef.current = null;
+      }
+    };
+  }, [refreshWorktree, refreshWorktreeRef]);
+
+  return rightPanelModel ? <MemoizedAgentStudioRightPanel model={rightPanelModel} /> : null;
+});
+
+function AgentsPageBuildWorktreeRefreshRuntime({
+  panelKind,
+  isPanelOpen,
+  viewRole,
+  activeSession,
+  isSessionHistoryHydrating,
+  refreshWorktreeRef,
+}: {
+  panelKind: "documents" | "build_tools" | null;
+  isPanelOpen: boolean;
+  viewRole: UseAgentsPageRightPanelModelArgs["viewRole"];
+  activeSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
+  isSessionHistoryHydrating: boolean;
+  refreshWorktreeRef: MutableRefObject<(() => void) | null>;
+}): null {
+  const refreshWorktree = useCallback(() => {
+    refreshWorktreeRef.current?.();
+  }, [refreshWorktreeRef]);
+
+  useAgentStudioBuildWorktreeRefresh({
+    viewRole: panelKind === "build_tools" && isPanelOpen ? viewRole : null,
+    activeSession,
+    isSessionHistoryHydrating,
+    refreshWorktree,
+  });
+
+  return null;
+}
 
 const EMPTY_TASK_SESSIONS_BY_TASK_ID = new Map<string, KanbanTaskSession[]>();
 const EMPTY_ACTIVE_TASK_SESSION_CONTEXT_BY_TASK_ID: ActiveTaskSessionContextByTaskId = new Map();
@@ -88,7 +162,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     unlinkingPullRequestTaskId,
   } = useTasksState();
   const {
-    sessions,
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
     readSessionFileSearch,
@@ -101,12 +174,14 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     updateAgentSessionModel,
     replyAgentPermission,
     answerAgentQuestion,
-  } = useAgentState();
+  } = useAgentOperations();
+  const sessions = useAgentSessionSummaries();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const navigationType = useNavigationType();
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
+  const rightPanelRefreshWorktreeRef = useRef<(() => void) | null>(null);
   const { runCompletionSignal } = useDelegationEventsContext();
 
   const {
@@ -278,14 +353,20 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   });
 
   const { startSessionRequest } = orchestration;
+  const activeSessionSummary = selection.activeSession
+    ? toAgentSessionSummary(selection.activeSession)
+    : null;
+  const viewActiveSessionSummary = selection.viewActiveSession
+    ? toAgentSessionSummary(selection.viewActiveSession)
+    : null;
 
   const { handleResolveRebaseConflict } = useAgentStudioRebaseConflictResolution({
     activeRepo,
     selection: {
       viewTaskId: selection.viewTaskId,
       viewSelectedTask: selection.viewSelectedTask,
-      viewActiveSession: selection.viewActiveSession,
-      activeSession: selection.activeSession,
+      viewActiveSession: viewActiveSessionSummary,
+      activeSession: activeSessionSummary,
       selectedSessionById: selection.selectedSessionById,
       viewSessionsForTask: selection.viewSessionsForTask,
       sessionsForTask: selection.sessionsForTask,
@@ -295,23 +376,60 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     startSessionRequest,
   });
 
-  const { isRightPanelVisible, rightPanelModel } = useAgentsPageRightPanelModel({
-    activeRepo,
-    activeBranch,
-    viewRole: selection.viewRole,
-    viewActiveSession: selection.viewActiveSession,
-    viewSelectedTask: selection.viewSelectedTask,
-    panelKind: orchestration.rightPanel.panelKind,
-    isPanelOpen: orchestration.rightPanel.isPanelOpen,
-    isViewSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
-    documentsModel: orchestration.agentStudioWorkspaceSidebarModel,
-    repoSettings: orchestration.repoSettings,
-    runCompletionRecoverySignal,
-    runs,
-    detectingPullRequestTaskId,
-    onDetectPullRequest: handleDetectPullRequest,
-    onResolveGitConflict: handleResolveRebaseConflict,
-  });
+  const isRightPanelVisible = Boolean(
+    orchestration.rightPanel.panelKind && orchestration.rightPanel.isPanelOpen,
+  );
+  const rightPanelSessionRole = selection.viewActiveSession?.role ?? null;
+  const rightPanelSessionStatus = selection.viewActiveSession?.status ?? null;
+  const rightPanelSessionWorkingDirectory = selection.viewActiveSession?.workingDirectory ?? null;
+  const rightPanelSessionRunId = selection.viewActiveSession?.runId ?? null;
+  const rightPanelHasActiveSession = selection.viewActiveSession != null;
+  const rightPanelSession = useMemo<BuildToolsSessionDescriptor>(
+    () => ({
+      role: rightPanelSessionRole,
+      status: rightPanelSessionStatus,
+      workingDirectory: rightPanelSessionWorkingDirectory,
+      runId: rightPanelSessionRunId,
+      hasActiveSession: rightPanelHasActiveSession,
+    }),
+    [
+      rightPanelHasActiveSession,
+      rightPanelSessionRole,
+      rightPanelSessionRunId,
+      rightPanelSessionStatus,
+      rightPanelSessionWorkingDirectory,
+    ],
+  );
+  const rightPanelContent = orchestration.rightPanel.panelKind ? (
+    <>
+      <AgentsPageBuildWorktreeRefreshRuntime
+        panelKind={orchestration.rightPanel.panelKind}
+        isPanelOpen={orchestration.rightPanel.isPanelOpen}
+        viewRole={selection.viewRole}
+        activeSession={selection.viewActiveSession}
+        isSessionHistoryHydrating={selection.isViewSessionHistoryHydrating}
+        refreshWorktreeRef={rightPanelRefreshWorktreeRef}
+      />
+      <AgentsPageRightPanelRuntime
+        activeRepo={activeRepo}
+        activeBranch={activeBranch}
+        viewRole={selection.viewRole}
+        session={rightPanelSession}
+        viewSelectedTask={selection.viewSelectedTask}
+        panelKind={orchestration.rightPanel.panelKind}
+        isPanelOpen={orchestration.rightPanel.isPanelOpen}
+        isViewSessionHistoryHydrating={selection.isViewSessionHistoryHydrating}
+        documentsModel={orchestration.agentStudioWorkspaceSidebarModel}
+        repoSettings={orchestration.repoSettings}
+        runCompletionRecoverySignal={runCompletionRecoverySignal}
+        runs={runs}
+        detectingPullRequestTaskId={detectingPullRequestTaskId}
+        onDetectPullRequest={handleDetectPullRequest}
+        onResolveGitConflict={handleResolveRebaseConflict}
+        refreshWorktreeRef={rightPanelRefreshWorktreeRef}
+      />
+    </>
+  ) : null;
 
   const sessionStartModal = orchestration.sessionStartModal ? (
     <SessionStartModal model={orchestration.sessionStartModal} />
@@ -361,7 +479,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     chatHeaderModel: orchestration.agentStudioHeaderModel,
     chatModel: orchestration.agentChatModel,
     isRightPanelVisible,
-    rightPanelModel,
+    rightPanelContent,
     mergedPullRequestModal,
     humanReviewFeedbackModal,
     sessionStartModal,

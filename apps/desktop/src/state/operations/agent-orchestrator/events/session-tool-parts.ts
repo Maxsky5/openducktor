@@ -2,7 +2,7 @@ import { isOdtWorkflowMutationToolName } from "@openducktor/core";
 import type { AgentChatMessageMeta, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent, isTodoToolName } from "../agent-tool-messages";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
-import { findMessageById, upsertMessage } from "../support/messages";
+import { findSessionMessageById, upsertSessionMessage } from "../support/messages";
 import {
   mergeTodoListPreservingOrder,
   parseTodosFromToolInput,
@@ -150,7 +150,7 @@ const composeToolPartSessionUpdate = ({
   const prepared = prepareCurrent(current);
   const fallbackMessageId = `tool:${streamMessageKey}`;
   const messageId = resolveToolMessageId(
-    prepared.messages,
+    prepared,
     {
       messageId: part.messageId,
       callId: part.callId,
@@ -159,7 +159,7 @@ const composeToolPartSessionUpdate = ({
     },
     fallbackMessageId,
   );
-  const existing = findMessageById(prepared.messages, messageId);
+  const existing = findSessionMessageById(prepared, messageId);
   const previousStatus = existing?.meta?.kind === "tool" ? existing.meta.status : undefined;
   const existingToolMeta = existing?.meta?.kind === "tool" ? existing.meta : null;
   const refreshDecision = resolveToolRefreshDecision(part, status, previousStatus);
@@ -178,7 +178,7 @@ const composeToolPartSessionUpdate = ({
       ...(todoUpdateFromTool
         ? { todos: mergeTodoListPreservingOrder(prepared.todos, todoUpdateFromTool) }
         : {}),
-      messages: upsertMessage(prepared.messages, {
+      messages: upsertSessionMessage(prepared, {
         id: messageId,
         role: "tool",
         content: formatToolContent({

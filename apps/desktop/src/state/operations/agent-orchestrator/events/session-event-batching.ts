@@ -30,11 +30,6 @@ const rebuildKeyIndex = (entries: QueuedSessionEventEntry[]): Map<string, number
   return nextIndex;
 };
 
-const eventTimestampMs = (event: SessionEvent): number => {
-  const parsed = Date.parse(event.timestamp);
-  return Number.isNaN(parsed) ? Date.now() : parsed;
-};
-
 const SESSION_EVENT_BATCH_RULES: SessionEventBatchRules = {
   session_started: {
     immediate: false,
@@ -47,7 +42,7 @@ const SESSION_EVENT_BATCH_RULES: SessionEventBatchRules = {
       ...next,
       delta: `${previous.delta}${next.delta}`,
     }),
-    minEmitIntervalMs: 120,
+    minEmitIntervalMs: 500,
   },
   assistant_part: {
     immediate: false,
@@ -55,10 +50,10 @@ const SESSION_EVENT_BATCH_RULES: SessionEventBatchRules = {
       `assistant_part:${event.part.kind}:${event.part.messageId}:${event.part.partId}`,
     minEmitIntervalMs: (event) => {
       if (event.part.kind === "text" || event.part.kind === "reasoning") {
-        return event.part.completed ? 0 : 160;
+        return event.part.completed ? 0 : 500;
       }
       if (event.part.kind === "tool") {
-        return event.part.status === "completed" || event.part.status === "error" ? 0 : 160;
+        return event.part.status === "completed" || event.part.status === "error" ? 0 : 400;
       }
       return 0;
     },
@@ -77,7 +72,7 @@ const SESSION_EVENT_BATCH_RULES: SessionEventBatchRules = {
 
       return false;
     },
-    minEmitIntervalMs: 320,
+    minEmitIntervalMs: 500,
   },
   user_message: {
     immediate: true,
@@ -108,12 +103,12 @@ const SESSION_EVENT_BATCH_RULES: SessionEventBatchRules = {
   tool_call: {
     immediate: false,
     dedupeKey: (event) => `tool_call:${event.call.tool}:${JSON.stringify(event.call.args)}`,
-    minEmitIntervalMs: 160,
+    minEmitIntervalMs: 400,
   },
   tool_result: {
     immediate: false,
     dedupeKey: (event) => `tool_result:${event.tool}:${event.success}:${event.message}`,
-    minEmitIntervalMs: 160,
+    minEmitIntervalMs: 400,
   },
 };
 
@@ -183,8 +178,15 @@ export type SessionEventBatcher = {
   prepareQueuedSessionEvents: (events: SessionEvent[]) => PreparedQueuedSessionEvents;
 };
 
-export const createSessionEventBatcher = (): SessionEventBatcher => {
+type CreateSessionEventBatcherOptions = {
+  nowMs?: () => number;
+};
+
+export const createSessionEventBatcher = (
+  options: CreateSessionEventBatcherOptions = {},
+): SessionEventBatcher => {
   const lastEmittedAtByKey = new Map<string, number>();
+  const nowMs = options.nowMs ?? (() => Date.now());
 
   return {
     prepareQueuedSessionEvents: (events) => {
@@ -192,9 +194,10 @@ export const createSessionEventBatcher = (): SessionEventBatcher => {
       const readyEvents: SessionEvent[] = [];
       const deferredEvents: SessionEvent[] = [];
       let nextDelayMs: number | null = null;
+      const emittedAtMs = nowMs();
+
       for (const entry of mergedEntries) {
         const rule = SESSION_EVENT_BATCH_RULES[entry.event.type];
-        const now = eventTimestampMs(entry.event);
         const minEmitIntervalMs =
           typeof rule.minEmitIntervalMs === "function"
             ? rule.minEmitIntervalMs(entry.event as never)
@@ -203,21 +206,21 @@ export const createSessionEventBatcher = (): SessionEventBatcher => {
         if (!entry.key || !minEmitIntervalMs) {
           readyEvents.push(entry.event);
           if (entry.key) {
-            lastEmittedAtByKey.set(entry.key, now);
+            lastEmittedAtByKey.set(entry.key, emittedAtMs);
           }
           continue;
         }
 
         const lastEmittedAt = lastEmittedAtByKey.get(entry.key);
         if (lastEmittedAt === undefined) {
-          lastEmittedAtByKey.set(entry.key, now);
+          lastEmittedAtByKey.set(entry.key, emittedAtMs);
           readyEvents.push(entry.event);
           continue;
         }
 
-        const elapsedMs = now - lastEmittedAt;
+        const elapsedMs = emittedAtMs - lastEmittedAt;
         if (elapsedMs >= minEmitIntervalMs) {
-          lastEmittedAtByKey.set(entry.key, now);
+          lastEmittedAtByKey.set(entry.key, emittedAtMs);
           readyEvents.push(entry.event);
           continue;
         }

@@ -1,4 +1,4 @@
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 
 export type HumanReviewFeedbackTargetOption = {
   value: string;
@@ -24,11 +24,11 @@ export type HumanReviewFeedbackState = {
   taskId: string;
   scenario: "build_after_qa_rejected" | "build_after_human_request_changes";
   message: string;
-  builderSessions: AgentSessionState[];
+  builderSessions: AgentSessionSummary[];
   selectedTarget: string;
 };
 
 export type PendingHumanReviewHydration = {
   taskId: string;
-  baselineSessions: AgentSessionState[];
+  baselineSessions: AgentSessionSummary[];
 };

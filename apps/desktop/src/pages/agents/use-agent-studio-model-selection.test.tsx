@@ -4,6 +4,7 @@ import type { AgentFileSearchResult, AgentModelCatalog } from "@openducktor/core
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { getSessionMessagesSlice } from "@/state/operations/agent-orchestrator/support/messages";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -936,7 +937,7 @@ describe("useAgentStudioModelSelection", () => {
           activeSession: {
             ...activeSession,
             messages: [
-              ...activeSession.messages,
+              ...getSessionMessagesSlice(activeSession, 0),
               {
                 id: "tool-1",
                 role: "tool",
@@ -952,6 +953,53 @@ describe("useAgentStudioModelSelection", () => {
               },
             ],
             contextUsage,
+          },
+        }),
+      );
+
+      expect(harness.getLatest().activeSessionContextUsage).toBe(previousUsage);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps fallback context usage stable when unrelated tail messages change", async () => {
+    const activeSession = createActiveSession({
+      contextUsage: null,
+      messages: [
+        createAssistantMessage({
+          totalTokens: 21,
+          contextWindow: 48_000,
+        }),
+      ],
+    });
+    const harness = createHookHarness(createBaseProps({ activeSession }));
+
+    try {
+      await harness.mount();
+      const previousUsage = harness.getLatest().activeSessionContextUsage;
+
+      await harness.update(
+        createBaseProps({
+          activeSession: {
+            ...activeSession,
+            messages: [
+              ...getSessionMessagesSlice(activeSession, 0),
+              {
+                id: "tool-tail-1",
+                role: "tool",
+                content: "read",
+                timestamp: "2026-02-20T10:01:00.000Z",
+                meta: {
+                  kind: "tool",
+                  partId: "part-tool-tail-1",
+                  callId: "call-tool-tail-1",
+                  tool: "read",
+                  status: "completed",
+                },
+              },
+            ],
+            contextUsage: null,
           },
         }),
       );

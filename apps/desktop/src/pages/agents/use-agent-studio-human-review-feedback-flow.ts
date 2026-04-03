@@ -20,6 +20,7 @@ import {
   startSessionWorkflow,
 } from "@/features/session-start";
 import { compareAgentSessionRecency } from "@/lib/agent-session-options";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
@@ -29,7 +30,7 @@ import {
   shouldTriggerContextSwitchIntent,
 } from "./use-agent-studio-session-action-helpers";
 
-const findBuilderSessions = (sessions: AgentSessionState[]): AgentSessionState[] => {
+const findBuilderSessions = (sessions: AgentSessionSummary[]): AgentSessionSummary[] => {
   return sessions.filter((session) => session.role === "build").sort(compareAgentSessionRecency);
 };
 
@@ -38,7 +39,7 @@ type UseAgentStudioHumanReviewFeedbackFlowArgs = {
   taskId: string;
   role: AgentRole;
   activeSession: AgentSessionState | null;
-  sessionsForTask: AgentSessionState[];
+  sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];

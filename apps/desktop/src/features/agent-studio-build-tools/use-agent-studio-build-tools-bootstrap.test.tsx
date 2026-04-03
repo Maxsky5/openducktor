@@ -4,7 +4,10 @@ import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
-import { useAgentStudioBuildToolsBootstrap } from "./use-agent-studio-build-tools-bootstrap";
+import {
+  type BuildToolsSessionDescriptor,
+  useAgentStudioBuildToolsBootstrap,
+} from "./use-agent-studio-build-tools-bootstrap";
 
 enableReactActEnvironment();
 
@@ -13,10 +16,20 @@ type HookArgs = Parameters<typeof useAgentStudioBuildToolsBootstrap>[0];
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioBuildToolsBootstrap, initialProps);
 
+const toBuildToolsSession = (
+  session: ReturnType<typeof createAgentSessionFixture> | null,
+): BuildToolsSessionDescriptor => ({
+  role: session?.role ?? null,
+  status: session?.status ?? null,
+  workingDirectory: session?.workingDirectory ?? null,
+  runId: session?.runId ?? null,
+  hasActiveSession: session != null,
+});
+
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeRepo: "/repo",
   viewRole: "build",
-  viewActiveSession: null,
+  session: toBuildToolsSession(null),
   viewSelectedTask: null,
   panelKind: "build_tools",
   isPanelOpen: true,
@@ -28,11 +41,13 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
   test("blocks build-tools bootstrap while the selected build session history is hydrating", async () => {
     const harness = createHookHarness(
       createBaseArgs({
-        viewActiveSession: createAgentSessionFixture({
-          role: "build",
-          workingDirectory: "/repo/worktree",
-          runId: "run-1",
-        }),
+        session: toBuildToolsSession(
+          createAgentSessionFixture({
+            role: "build",
+            workingDirectory: "/repo/worktree",
+            runId: "run-1",
+          }),
+        ),
         isViewSessionHistoryHydrating: true,
       }),
     );
@@ -57,11 +72,13 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
     const harness = createHookHarness(
       createBaseArgs({
         viewSelectedTask: { id: "task-1" } as HookArgs["viewSelectedTask"],
-        viewActiveSession: createAgentSessionFixture({
-          role: "build",
-          workingDirectory: "/repo/worktree",
-          runId: "run-1",
-        }),
+        session: toBuildToolsSession(
+          createAgentSessionFixture({
+            role: "build",
+            workingDirectory: "/repo/worktree",
+            runId: "run-1",
+          }),
+        ),
       }),
     );
 

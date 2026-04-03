@@ -8,8 +8,8 @@ import {
   toAssistantMessageMeta,
   toSessionContextUsage,
 } from "../support/assistant-meta";
-import { isDuplicateAssistantMessage, READ_ONLY_ROLES } from "../support/core";
-import { upsertMessage } from "../support/messages";
+import { READ_ONLY_ROLES } from "../support/core";
+import { appendSessionMessage, upsertSessionMessage } from "../support/messages";
 import { mergeTodoListPreservingOrder } from "../support/todos";
 import {
   isStopAbortSessionErrorMessage,
@@ -40,44 +40,6 @@ const toPendingPermission = (event: PermissionRequiredEvent) => ({
   patterns: event.patterns,
   ...(event.metadata ? { metadata: event.metadata } : {}),
 });
-
-const findExistingAssistantMessageIndex = (
-  messages: SessionLifecycleEventContext["store"]["sessionsRef"]["current"][string]["messages"],
-  event: Extract<SessionEvent, { type: "assistant_message" }>,
-): number => {
-  const byIdIndex = messages.findIndex((entry) => entry.id === event.messageId);
-  if (byIdIndex >= 0) {
-    return byIdIndex;
-  }
-
-  const normalizedIncoming = event.message.trim();
-  if (normalizedIncoming.length === 0) {
-    return -1;
-  }
-
-  const incomingEpoch = Date.parse(event.timestamp);
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const entry = messages[index];
-    if (!entry || entry.role !== "assistant") {
-      continue;
-    }
-    if (entry.content.trim() !== normalizedIncoming) {
-      continue;
-    }
-    if (entry.timestamp === event.timestamp) {
-      return index;
-    }
-    const existingEpoch = Date.parse(entry.timestamp);
-    if (Number.isNaN(existingEpoch) || Number.isNaN(incomingEpoch)) {
-      continue;
-    }
-    if (Math.abs(incomingEpoch - existingEpoch) <= 2_000) {
-      return index;
-    }
-  }
-
-  return -1;
-};
 
 const toUserMessageMeta = (event: Extract<SessionEvent, { type: "user_message" }>) => {
   const model = event.model;
@@ -121,15 +83,12 @@ const autoRejectMutatingPermission = (
           ...current.pendingPermissions.filter((entry) => entry.requestId !== event.requestId),
           pendingPermission,
         ],
-        messages: [
-          ...current.messages,
-          {
-            id: crypto.randomUUID(),
-            role: "system",
-            content: `Automatic permission rejection failed: ${errorMessage(error)}. Manual response required.`,
-            timestamp: event.timestamp,
-          },
-        ],
+        messages: appendSessionMessage(current, {
+          id: crypto.randomUUID(),
+          role: "system",
+          content: `Automatic permission rejection failed: ${errorMessage(error)}. Manual response required.`,
+          timestamp: event.timestamp,
+        }),
       }),
       { persist: true },
     );
@@ -161,15 +120,12 @@ const autoRejectMutatingPermission = (
           pendingPermissions: current.pendingPermissions.filter(
             (entry) => entry.requestId !== event.requestId,
           ),
-          messages: [
-            ...current.messages,
-            {
-              id: crypto.randomUUID(),
-              role: "system",
-              content: `Auto-rejected mutating permission (${event.permission}) for ${role} session.`,
-              timestamp: event.timestamp,
-            },
-          ],
+          messages: appendSessionMessage(current, {
+            id: crypto.randomUUID(),
+            role: "system",
+            content: `Auto-rejected mutating permission (${event.permission}) for ${role} session.`,
+            timestamp: event.timestamp,
+          }),
         }),
         { persist: true },
       );
@@ -186,15 +142,12 @@ export const handleSessionStarted = (
   context.store.updateSession(context.store.sessionId, (current) => ({
     ...current,
     status: "running",
-    messages: [
-      ...current.messages,
-      {
-        id: crypto.randomUUID(),
-        role: "system",
-        content: event.message,
-        timestamp: event.timestamp,
-      },
-    ],
+    messages: appendSessionMessage(current, {
+      id: crypto.randomUUID(),
+      role: "system",
+      content: event.message,
+      timestamp: event.timestamp,
+    }),
   }));
 };
 
@@ -205,11 +158,7 @@ export const handleAssistantMessage = (
   flushDraftBuffers(context);
   clearDraftBuffers(context);
   context.store.updateSession(context.store.sessionId, (current) => {
-    const settledMessages = settleDanglingTodoToolMessages(current.messages, event.timestamp);
-    const existingMessageIndex = findExistingAssistantMessageIndex(settledMessages, event);
-    const messageAlreadyPresent =
-      existingMessageIndex >= 0 ||
-      isDuplicateAssistantMessage(settledMessages, event.message, event.timestamp);
+    const settledMessages = settleDanglingTodoToolMessages(current, event.timestamp);
     const durationMs = context.turn.resolveTurnDurationMs(
       context.store.sessionId,
       event.timestamp,
@@ -229,13 +178,13 @@ export const handleAssistantMessage = (
       draftReasoningText: "",
       draftReasoningMessageId: null,
       contextUsage: toSessionContextUsage(current, event.totalTokens, event.model),
-      messages: messageAlreadyPresent
-        ? existingMessageIndex >= 0
-          ? settledMessages.map((entry, index) =>
-              index === existingMessageIndex ? { ...entry, ...nextAssistantMessage } : entry,
-            )
-          : settledMessages
-        : [...settledMessages, nextAssistantMessage],
+      messages: upsertSessionMessage(
+        {
+          sessionId: current.sessionId,
+          messages: settledMessages,
+        },
+        nextAssistantMessage,
+      ),
     };
   });
   context.turn.clearTurnDuration(context.store.sessionId);
@@ -249,15 +198,14 @@ export const handleUserMessage = (
   context.store.updateSession(
     context.store.sessionId,
     (current) => {
-      const userMessageMeta = toUserMessageMeta(event);
       return {
         ...current,
-        messages: upsertMessage(current.messages, {
+        messages: upsertSessionMessage(current, {
           id: event.messageId,
           role: "user",
           content: event.message,
           timestamp: event.timestamp,
-          meta: userMessageMeta,
+          meta: toUserMessageMeta(event),
         }),
       };
     },
@@ -301,7 +249,7 @@ export const handleSessionStatus = (
           : {
               ...current,
               status: "running",
-              messages: upsertMessage(current.messages, {
+              messages: upsertSessionMessage(current, {
                 id: `retry:${status.attempt}`,
                 role: "system",
                 content: `Retry ${status.attempt}: ${retryMessage}`,
@@ -374,7 +322,7 @@ export const handleSessionTodosUpdated = (
     (current) => ({
       ...current,
       todos: mergeTodoListPreservingOrder(current.todos, event.todos),
-      messages: settleDanglingTodoToolMessages(current.messages, event.timestamp),
+      messages: settleDanglingTodoToolMessages(current, event.timestamp),
     }),
     { persist: false },
   );
@@ -435,7 +383,10 @@ const buildSessionErrorNoticeMessage = (timestamp: string, message: string) =>
   });
 
 const settleTerminalMessages = (
-  messages: SessionLifecycleEventContext["store"]["sessionsRef"]["current"][string]["messages"],
+  session: Pick<
+    SessionLifecycleEventContext["store"]["sessionsRef"]["current"][string],
+    "sessionId" | "messages"
+  >,
   timestamp: string,
   options?: {
     outcome?: "completed" | "error";
@@ -443,7 +394,7 @@ const settleTerminalMessages = (
     appendUserStoppedNotice?: boolean;
   },
 ) => {
-  const settledMessages = settleDanglingTodoToolMessages(messages, timestamp, {
+  const settledMessages = settleDanglingTodoToolMessages(session, timestamp, {
     ...(options?.outcome ? { outcome: options.outcome } : {}),
     ...(options?.errorMessage ? { errorMessage: options.errorMessage } : {}),
   });
@@ -452,7 +403,10 @@ const settleTerminalMessages = (
     return settledMessages;
   }
 
-  return [...settledMessages, buildUserStoppedNoticeMessage(timestamp)];
+  return appendSessionMessage(
+    { sessionId: session.sessionId, messages: settledMessages },
+    buildUserStoppedNoticeMessage(timestamp),
+  );
 };
 
 export const handleSessionError = (
@@ -483,18 +437,21 @@ export const handleSessionError = (
         pendingPermissions: [],
         pendingQuestions: [],
         messages: appendUserStoppedNotice
-          ? settleTerminalMessages(finalized.messages, event.timestamp, {
+          ? settleTerminalMessages(finalized, event.timestamp, {
               outcome: "error",
               errorMessage: sessionErrorMessage,
               appendUserStoppedNotice: true,
             })
-          : [
-              ...settleTerminalMessages(finalized.messages, event.timestamp, {
-                outcome: "error",
-                errorMessage: sessionErrorMessage,
-              }),
+          : appendSessionMessage(
+              {
+                sessionId: finalized.sessionId,
+                messages: settleTerminalMessages(finalized, event.timestamp, {
+                  outcome: "error",
+                  errorMessage: sessionErrorMessage,
+                }),
+              },
               buildSessionErrorNoticeMessage(event.timestamp, sessionErrorMessage),
-            ],
+            ),
       };
     },
     { persist: true },
@@ -536,7 +493,7 @@ export const handleSessionFinished = (
       const appendUserStoppedNotice = Boolean(current.stopRequestedAt);
       return {
         ...finalized,
-        messages: settleTerminalMessages(finalized.messages, event.timestamp, {
+        messages: settleTerminalMessages(finalized, event.timestamp, {
           ...(appendUserStoppedNotice
             ? {
                 outcome: "error" as const,

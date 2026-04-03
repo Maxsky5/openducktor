@@ -22,6 +22,10 @@ export const buildDiffPreloadEntries = (
     return [];
   }
 
+  if (expandedFiles.size > 0) {
+    return [];
+  }
+
   const next: DiffPreloadEntry[] = [];
   for (const fileDiff of fileDiffs) {
     if (next.length >= limit) {

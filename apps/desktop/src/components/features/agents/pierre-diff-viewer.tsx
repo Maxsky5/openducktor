@@ -6,6 +6,7 @@ import { Undo2 } from "lucide-react";
 import { type CSSProperties, memo, type ReactElement, useEffect, useId, useMemo } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { selectRenderableDiff } from "./renderable-patch";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -44,6 +45,8 @@ const HUNK_RESET_ANNOTATION_CLASS_NAME = "pointer-events-none relative h-0";
 const HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME = "contents";
 const HUNK_RESET_BUTTON_CLASS_NAME =
   "pointer-events-auto absolute right-3 top-1 h-7 gap-1.5 px-2.5 text-[11px] shadow-sm";
+const MAX_RENDERABLE_DIFF_CACHE_ENTRIES = 64;
+const DIFF_SCROLL_CONTAINER_CLASS_NAME = "max-h-[min(70vh,48rem)] overflow-auto";
 const HUNK_RESET_FLOATING_CSS = `
 [data-line-annotation],
 [data-gutter-buffer='annotation'] {
@@ -132,15 +135,40 @@ const tryGetSingularPatch = (patch: string) => {
   }
 };
 
+type RenderableFileDiff = {
+  fileDiff: FileDiffMetadata | null;
+  normalizedPatch: string | null;
+  fallbackPatch: string;
+};
+
+const renderableFileDiffCache = new Map<string, RenderableFileDiff>();
+
 export const getRenderableFileDiff = (patch: string, filePath: string) => {
+  const cacheKey = `${filePath}\u0000${patch}`;
+  const cached = renderableFileDiffCache.get(cacheKey);
+  if (cached) {
+    renderableFileDiffCache.delete(cacheKey);
+    renderableFileDiffCache.set(cacheKey, cached);
+    return cached;
+  }
+
   const normalizedPatch = selectRenderableDiff(patch, filePath);
   const fileDiff = normalizedPatch ? tryGetSingularPatch(normalizedPatch) : null;
-
-  return {
+  const result = {
     fileDiff,
     normalizedPatch,
     fallbackPatch: normalizedPatch ?? patch,
-  };
+  } satisfies RenderableFileDiff;
+
+  renderableFileDiffCache.set(cacheKey, result);
+  if (renderableFileDiffCache.size > MAX_RENDERABLE_DIFF_CACHE_ENTRIES) {
+    const oldestKey = renderableFileDiffCache.keys().next().value;
+    if (typeof oldestKey === "string") {
+      renderableFileDiffCache.delete(oldestKey);
+    }
+  }
+
+  return result;
 };
 
 export const PierreDiffPreloader = memo(function PierreDiffPreloader({
@@ -222,35 +250,37 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
     content = <pre className={RAW_DIFF_FALLBACK_CLASS_NAME}>{fallbackPatch}</pre>;
   } else {
     content = (
-      <PierreReactFileDiff
-        fileDiff={fileDiff}
-        options={options}
-        lineAnnotations={lineAnnotations}
-        renderAnnotation={(annotation) => (
-          <div className={HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME}>
-            <div className={HUNK_RESET_ANNOTATION_CLASS_NAME}>
-              <Button
-                className={HUNK_RESET_BUTTON_CLASS_NAME}
-                variant="outline"
-                size="sm"
-                aria-label="Reset hunk"
-                title={`Reset hunk in ${filePath}`}
-                data-testid="agent-studio-git-reset-hunk-button"
-                disabled={isHunkResetDisabled}
-                onClick={() => onResetHunk?.(annotation.metadata.hunkIndex)}
-              >
-                <Undo2 className="size-3.5" />
-                <span>Reset hunk</span>
-              </Button>
+      <div className={DIFF_SCROLL_CONTAINER_CLASS_NAME}>
+        <PierreReactFileDiff
+          fileDiff={fileDiff}
+          options={options}
+          lineAnnotations={lineAnnotations}
+          renderAnnotation={(annotation) => (
+            <div className={HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME}>
+              <div className={HUNK_RESET_ANNOTATION_CLASS_NAME}>
+                <Button
+                  className={HUNK_RESET_BUTTON_CLASS_NAME}
+                  variant="outline"
+                  size="sm"
+                  aria-label="Reset hunk"
+                  title={`Reset hunk in ${filePath}`}
+                  data-testid="agent-studio-git-reset-hunk-button"
+                  disabled={isHunkResetDisabled}
+                  onClick={() => onResetHunk?.(annotation.metadata.hunkIndex)}
+                >
+                  <Undo2 className="size-3.5" />
+                  <span>Reset hunk</span>
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
-      />
+          )}
+        />
+      </div>
     );
   }
 
   return (
-    <div className={className} style={DIFF_WRAPPER_STYLE}>
+    <div className={cn("min-w-0", className)} style={DIFF_WRAPPER_STYLE}>
       {content}
     </div>
   );

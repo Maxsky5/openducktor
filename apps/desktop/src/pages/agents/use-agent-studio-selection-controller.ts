@@ -7,6 +7,8 @@ import type {
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { useMemo, useRef } from "react";
+import { useAgentSession } from "@/state";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
@@ -24,7 +26,7 @@ type UseAgentStudioSelectionControllerArgs = {
   agentStudioReadinessState: AgentStudioReadinessState;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
-  sessions: AgentSessionState[];
+  sessions: AgentSessionSummary[];
   taskIdParam: string;
   sessionParam: string | null;
   hasExplicitRoleParam: boolean;
@@ -49,10 +51,10 @@ type UseAgentStudioSelectionControllerArgs = {
 };
 
 export type AgentStudioSelectionControllerResult = {
-  selectedSessionById: AgentSessionState | null;
+  selectedSessionById: AgentSessionSummary | null;
   taskId: string;
   selectedTask: TaskCard | null;
-  sessionsForTask: AgentSessionState[];
+  sessionsForTask: AgentSessionSummary[];
   activeSession: AgentSessionState | null;
   isLoadingTasks: boolean;
   activeTaskTabId: string;
@@ -63,7 +65,7 @@ export type AgentStudioSelectionControllerResult = {
   handleCloseTab: (taskIdToClose: string) => void;
   viewTaskId: string;
   viewSelectedTask: TaskCard | null;
-  viewSessionsForTask: AgentSessionState[];
+  viewSessionsForTask: AgentSessionSummary[];
   viewActiveSession: AgentSessionState | null;
   viewRole: AgentRole;
   viewScenario: AgentScenario;
@@ -77,7 +79,10 @@ export type AgentStudioSelectionControllerResult = {
 
 const ACTIVE_SESSION_STATUS = new Set<AgentSessionState["status"]>(["starting", "running"]);
 
-const compareSessionsByRecency = (left: AgentSessionState, right: AgentSessionState): number => {
+const compareSessionsByRecency = (
+  left: AgentSessionSummary,
+  right: AgentSessionSummary,
+): number => {
   if (left.startedAt !== right.startedAt) {
     return left.startedAt > right.startedAt ? -1 : 1;
   }
@@ -94,17 +99,17 @@ type SessionsByTaskSortCacheEntry = {
 
 type SessionsByTaskSortCache = Map<string, SessionsByTaskSortCacheEntry>;
 
-const toTaskInputSignature = (taskSessions: AgentSessionState[]): string =>
+const toTaskInputSignature = (taskSessions: AgentSessionSummary[]): string =>
   taskSessions
     .map((session) => `${session.sessionId}:${session.startedAt}`)
     .sort()
     .join("|");
 
 export const buildSessionsByTaskIdWithCache = (
-  sessions: AgentSessionState[],
+  sessions: AgentSessionSummary[],
   previousCache: SessionsByTaskSortCache,
-): { sessionsByTaskId: Map<string, AgentSessionState[]>; nextCache: SessionsByTaskSortCache } => {
-  const grouped = new Map<string, AgentSessionState[]>();
+): { sessionsByTaskId: Map<string, AgentSessionSummary[]>; nextCache: SessionsByTaskSortCache } => {
+  const grouped = new Map<string, AgentSessionSummary[]>();
   for (const session of sessions) {
     const current = grouped.get(session.taskId);
     if (current) {
@@ -120,11 +125,11 @@ export const buildSessionsByTaskIdWithCache = (
     const previous = previousCache.get(taskId);
     const sessionsById = new Map(taskSessions.map((session) => [session.sessionId, session]));
 
-    let sortedSessions: AgentSessionState[];
+    let sortedSessions: AgentSessionSummary[];
     if (previous && previous.inputSignature === inputSignature) {
       sortedSessions = previous.sortedSessionIds
         .map((sessionId) => sessionsById.get(sessionId))
-        .filter((session): session is AgentSessionState => session !== undefined);
+        .filter((session): session is AgentSessionSummary => session !== undefined);
 
       if (sortedSessions.length !== taskSessions.length) {
         sortedSessions = [...taskSessions].sort(compareSessionsByRecency);
@@ -180,7 +185,7 @@ export function useAgentStudioSelectionController({
     return new Map(tasks.map((task) => [task.id, task]));
   }, [tasks]);
 
-  const sessionsById = useMemo(() => {
+  const sessionSummariesById = useMemo(() => {
     return new Map(sessions.map((session) => [session.sessionId, session]));
   }, [sessions]);
 
@@ -194,8 +199,9 @@ export function useAgentStudioSelectionController({
   }, [sessions]);
 
   const selectedSessionById = useMemo(
-    () => (effectiveSessionParam ? (sessionsById.get(effectiveSessionParam) ?? null) : null),
-    [effectiveSessionParam, sessionsById],
+    () =>
+      effectiveSessionParam ? (sessionSummariesById.get(effectiveSessionParam) ?? null) : null,
+    [effectiveSessionParam, sessionSummariesById],
   );
 
   const taskId = resolveAgentStudioTaskId({
@@ -215,7 +221,7 @@ export function useAgentStudioSelectionController({
     return sessionsByTaskId.get(taskId) ?? [];
   }, [sessionsByTaskId, taskId]);
 
-  const activeSession = useMemo(() => {
+  const activeSessionSummary = useMemo(() => {
     return resolveAgentStudioSessionSelection({
       sessionsForTask,
       sessionParam: effectiveSessionParam,
@@ -233,6 +239,7 @@ export function useAgentStudioSelectionController({
     selectedTask,
     sessionsForTask,
   ]);
+  const activeSession = useAgentSession(activeSessionSummary?.sessionId ?? null);
   const hydratedActiveSession = useAgentStudioActiveSessionRuntimeData({
     session: activeSession,
     agentStudioReadinessState,
@@ -241,7 +248,7 @@ export function useAgentStudioSelectionController({
   });
 
   const latestSessionByTaskId = useMemo(() => {
-    const latestByTask = new Map<string, AgentSessionState>();
+    const latestByTask = new Map<string, AgentSessionSummary>();
     for (const [taskKey, taskSessions] of sessionsByTaskId) {
       const latestSession = taskSessions[0];
       if (latestSession) {
@@ -252,7 +259,7 @@ export function useAgentStudioSelectionController({
   }, [sessionsByTaskId]);
 
   const activeSessionByTaskId = useMemo(() => {
-    const activeByTask = new Map<string, AgentSessionState>();
+    const activeByTask = new Map<string, AgentSessionSummary>();
     for (const [taskKey, taskSessions] of sessionsByTaskId) {
       const activeSession = taskSessions.find((session) =>
         ACTIVE_SESSION_STATUS.has(session.status),
@@ -332,7 +339,7 @@ export function useAgentStudioSelectionController({
     viewSessionParam,
     viewSessionsForTask,
   ]);
-  const viewActiveSession = viewSelection.activeSession;
+  const viewActiveSession = useAgentSession(viewSelection.activeSession?.sessionId ?? null);
   const hydratedViewActiveSession = useAgentStudioActiveSessionRuntimeData({
     session: viewActiveSession,
     agentStudioReadinessState,

@@ -20,6 +20,7 @@ import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feed
 import type { SessionStartRequestReason } from "@/features/session-start";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
@@ -38,6 +39,19 @@ import { useAgentStudioSessionStartFlow } from "./use-agent-studio-session-start
 
 export type { NewSessionStartDecision, NewSessionStartRequest } from "@/features/session-start";
 
+export type AgentSessionActionState = Pick<
+  AgentSessionState,
+  | "sessionId"
+  | "role"
+  | "status"
+  | "selectedModel"
+  | "isLoadingModelCatalog"
+  | "pendingPermissions"
+  | "pendingQuestions"
+  | "modelCatalog"
+  | "runtimeKind"
+>;
+
 type UseAgentStudioSessionActionsArgs = {
   activeRepo: string | null;
   taskId: string;
@@ -46,7 +60,7 @@ type UseAgentStudioSessionActionsArgs = {
   activeSession: AgentSessionState | null;
   selectedModelSelection: AgentModelSelection | null;
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
-  sessionsForTask: AgentSessionState[];
+  sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
   agentStudioReady: boolean;
   isActiveTaskHydrated: boolean;
@@ -129,6 +143,15 @@ export function useAgentStudioSessionActions({
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
 
   const activeSessionId = activeSession?.sessionId ?? null;
+  const activeSessionRole = activeSession?.role ?? role;
+  const activeSessionStatus = activeSession?.status ?? "stopped";
+  const activeSessionSelectedModel = activeSession?.selectedModel ?? null;
+  const activeSessionIsLoadingModelCatalog = activeSession?.isLoadingModelCatalog === true;
+  const activeSessionPendingPermissions = activeSession?.pendingPermissions ?? [];
+  const activeSessionPendingQuestions = activeSession?.pendingQuestions ?? [];
+  const activeSessionRuntimeKind = activeSession?.runtimeKind ?? null;
+  const activeSessionRuntimeDescriptor = activeSession?.modelCatalog?.runtime ?? null;
+  const hasActiveSession = activeSession != null;
   const activeComposerContextKey = buildAgentStudioAsyncActivityContextKey({
     activeRepo,
     taskId,
@@ -137,26 +160,29 @@ export function useAgentStudioSessionActions({
   });
   const isSending = (sendingActivityCountByContext[activeComposerContextKey] ?? 0) > 0;
   const isSessionWorking =
-    Boolean(activeSession) &&
-    ((activeSession?.status ?? "stopped") === "running" ||
-      (activeSession?.status ?? "stopped") === "starting" ||
-      isSending);
-  const isWaitingInput = Boolean(activeSession && isAgentSessionWaitingInput(activeSession));
+    hasActiveSession &&
+    (activeSessionStatus === "running" || activeSessionStatus === "starting" || isSending);
+  const isWaitingInput =
+    hasActiveSession &&
+    isAgentSessionWaitingInput({
+      pendingPermissions: activeSessionPendingPermissions,
+      pendingQuestions: activeSessionPendingQuestions,
+    });
   const selectedRuntimeKind =
-    selectedModelSelection?.runtimeKind ?? activeSession?.selectedModel?.runtimeKind ?? null;
+    selectedModelSelection?.runtimeKind ?? activeSessionSelectedModel?.runtimeKind ?? null;
   const activeRuntimeDescriptor =
     (selectedRuntimeKind
       ? runtimeDefinitions.find((runtime) => runtime.kind === selectedRuntimeKind)
       : null) ??
-    activeSession?.modelCatalog?.runtime ??
-    runtimeDefinitions.find((runtime) => runtime.kind === activeSession?.runtimeKind) ??
+    activeSessionRuntimeDescriptor ??
+    runtimeDefinitions.find((runtime) => runtime.kind === activeSessionRuntimeKind) ??
     null;
   const supportsQueuedUserMessages =
     activeRuntimeDescriptor?.capabilities.supportsQueuedUserMessages !== false;
   const canQueueBusyFollowups =
-    activeSession?.status === "running" && !isWaitingInput && supportsQueuedUserMessages;
+    activeSessionStatus === "running" && !isWaitingInput && supportsQueuedUserMessages;
   const busySendBlockedReason =
-    activeSession && isSessionWorking && !isWaitingInput && !supportsQueuedUserMessages
+    hasActiveSession && isSessionWorking && !isWaitingInput && !supportsQueuedUserMessages
       ? `${activeRuntimeDescriptor?.label ?? "Current runtime"} does not support queued messages while the session is working.`
       : null;
 
@@ -204,7 +230,7 @@ export function useAgentStudioSessionActions({
       if (!canStartSessionForRole(selectedTask, role)) {
         return false;
       }
-      if (activeSession?.isLoadingModelCatalog && !activeSession.selectedModel) {
+      if (activeSessionIsLoadingModelCatalog && !activeSessionSelectedModel) {
         return false;
       }
 
@@ -233,7 +259,7 @@ export function useAgentStudioSessionActions({
       const sendContextKeys = new Set<string>();
 
       try {
-        let targetSessionId = activeSession?.sessionId;
+        let targetSessionId: string | null | undefined = activeSessionId;
         if (!targetSessionId) {
           targetSessionId = await startSession("composer_send");
         }
@@ -286,7 +312,9 @@ export function useAgentStudioSessionActions({
     [
       activeRepo,
       activeComposerContextKey,
-      activeSession,
+      activeSessionId,
+      activeSessionIsLoadingModelCatalog,
+      activeSessionSelectedModel,
       agentStudioReady,
       canQueueBusyFollowups,
       isSending,
@@ -304,17 +332,16 @@ export function useAgentStudioSessionActions({
 
   const onSubmitQuestionAnswers = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
-      if (!activeSession || !agentStudioReady) {
+      if (!activeSessionId || !agentStudioReady) {
         return;
       }
 
-      const sessionId = activeSession.sessionId;
       setIsSubmittingQuestionByRequestId((current) => ({
         ...current,
         [requestId]: true,
       }));
       try {
-        await answerAgentQuestion(sessionId, requestId, answers);
+        await answerAgentQuestion(activeSessionId, requestId, answers);
       } finally {
         setIsSubmittingQuestionByRequestId((current) => {
           if (!current[requestId]) {
@@ -326,7 +353,7 @@ export function useAgentStudioSessionActions({
         });
       }
     },
-    [activeSession, agentStudioReady, answerAgentQuestion],
+    [activeSessionId, agentStudioReady, answerAgentQuestion],
   );
 
   useEffect(() => {
@@ -339,9 +366,7 @@ export function useAgentStudioSessionActions({
   }, [activeSessionId]);
 
   useEffect(() => {
-    const activeRequestIds = new Set(
-      (activeSession?.pendingQuestions ?? []).map((entry) => entry.requestId),
-    );
+    const activeRequestIds = new Set(activeSessionPendingQuestions.map((entry) => entry.requestId));
     setIsSubmittingQuestionByRequestId((current) => {
       let changed = false;
       const next: Record<string, boolean> = {};
@@ -354,7 +379,7 @@ export function useAgentStudioSessionActions({
       }
       return changed ? next : current;
     });
-  }, [activeSession?.pendingQuestions]);
+  }, [activeSessionPendingQuestions]);
 
   const handleWorkflowStepSelect = useCallback(
     (nextRole: AgentRole, sessionId: string | null): void => {
@@ -362,8 +387,8 @@ export function useAgentStudioSessionActions({
         return;
       }
 
-      const currentSessionId = activeSession?.sessionId ?? null;
-      const currentRole = activeSession?.role ?? role;
+      const currentSessionId = activeSessionId;
+      const currentRole = activeSessionRole;
 
       if (!sessionId) {
         if (
@@ -409,7 +434,15 @@ export function useAgentStudioSessionActions({
         scenario: session.scenario,
       });
     },
-    [activeSession, onContextSwitchIntent, role, scenario, sessionsForTask, taskId, updateQuery],
+    [
+      activeSessionId,
+      activeSessionRole,
+      onContextSwitchIntent,
+      scenario,
+      sessionsForTask,
+      taskId,
+      updateQuery,
+    ],
   );
 
   const handleSessionSelectionChange = useCallback(
@@ -425,8 +458,8 @@ export function useAgentStudioSessionActions({
 
       if (
         shouldTriggerContextSwitchIntent({
-          currentSessionId: activeSession?.sessionId ?? null,
-          currentRole: activeSession?.role ?? role,
+          currentSessionId: activeSessionId,
+          currentRole: activeSessionRole,
           nextSessionId: selectedSession.sessionId,
           nextRole: selectedSession.role,
         })
@@ -441,7 +474,14 @@ export function useAgentStudioSessionActions({
         scenario: selectedSession.scenario,
       });
     },
-    [activeSession, onContextSwitchIntent, role, sessionsForTask, taskId, updateQuery],
+    [
+      activeSessionId,
+      activeSessionRole,
+      onContextSwitchIntent,
+      sessionsForTask,
+      taskId,
+      updateQuery,
+    ],
   );
 
   const selectedRoleAvailable = selectedTask ? canStartSessionForRole(selectedTask, role) : false;
@@ -449,7 +489,7 @@ export function useAgentStudioSessionActions({
     agentStudioReady &&
     Boolean(taskId) &&
     isActiveTaskHydrated &&
-    !activeSession &&
+    !hasActiveSession &&
     selectedRoleAvailable &&
     isAgentKickoffScenario(scenario);
   const kickoffLabel =
@@ -458,7 +498,7 @@ export function useAgentStudioSessionActions({
       : role === "planner"
         ? "Start Planner"
         : `Start ${SCENARIO_LABELS[scenario]}`;
-  const canStopSession = Boolean(activeSession && isSessionWorking);
+  const canStopSession = hasActiveSession && isSessionWorking;
 
   return {
     isStarting,

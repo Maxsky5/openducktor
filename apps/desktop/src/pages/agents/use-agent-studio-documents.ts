@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import { normalizeOdtWorkflowToolName } from "@openducktor/core";
 import { useEffect, useRef } from "react";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
+import { forEachSessionMessageFrom } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { findFirstChangedMessageIndex } from "./agent-session-message-diff";
 import { extractCompletionTimestamp, parseTimestamp } from "./agents-page-selection";
@@ -119,10 +120,16 @@ export function useAgentStudioDocuments({
       return;
     }
 
+    if (activeSession.role === "build") {
+      previousSessionIdRef.current = activeSession.sessionId;
+      previousMessagesRef.current = activeSession.messages;
+      return;
+    }
+
     const firstChangedMessageIndex =
       previousSessionIdRef.current !== activeSession.sessionId
         ? 0
-        : findFirstChangedMessageIndex(previousMessagesRef.current, activeSession.messages);
+        : findFirstChangedMessageIndex(previousMessagesRef.current, activeSession);
 
     if (firstChangedMessageIndex < 0) {
       previousSessionIdRef.current = activeSession.sessionId;
@@ -130,19 +137,15 @@ export function useAgentStudioDocuments({
       return;
     }
 
-    for (let index = firstChangedMessageIndex; index < activeSession.messages.length; index += 1) {
-      const message = activeSession.messages[index];
-      if (!message) {
-        continue;
-      }
+    forEachSessionMessageFrom(activeSession, firstChangedMessageIndex, (message) => {
       const eventKey = `${activeSession.sessionId}:${message.id}`;
       if (processedDocumentToolEventsRef.current.has(eventKey)) {
-        continue;
+        return;
       }
 
       const meta = message.meta;
       if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
-        continue;
+        return;
       }
       const normalizedTool = normalizeOdtWorkflowToolName(meta.tool);
       const target = resolveWorkflowDocumentTarget(normalizedTool, {
@@ -151,7 +154,7 @@ export function useAgentStudioDocuments({
         qaDoc,
       });
       if (!target) {
-        continue;
+        return;
       }
 
       const completionInfo =
@@ -184,7 +187,7 @@ export function useAgentStudioDocuments({
       if (reloadDocument(target.section)) {
         processedDocumentToolEventsRef.current.add(eventKey);
       }
-    }
+    });
 
     previousSessionIdRef.current = activeSession.sessionId;
     previousMessagesRef.current = activeSession.messages;

@@ -6,8 +6,8 @@ import {
   formatAgentSessionOptionDescription,
   formatAgentSessionOptionLabel,
 } from "@/lib/agent-session-options";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { SCENARIO_LABELS } from "./session-start-prompts";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
 
@@ -15,7 +15,7 @@ export const buildReusableSessionOptions = ({
   sessions,
   role,
 }: {
-  sessions: AgentSessionState[];
+  sessions: AgentSessionSummary[];
   role: AgentRole;
 }): SessionStartExistingSessionOption[] => {
   const roleSessions = sessions.filter((session) => session.role === role);

@@ -1,5 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
+  sessionMessageAt,
+  sessionMessagesToArray,
+} from "@/test-utils/session-message-test-helpers";
+import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -102,8 +106,8 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
           sessionId: "build-session-1",
           role: "build",
           messages: [
-            ...createCompletedToolSession("apply_patch", "tool-1").messages,
-            ...createCompletedToolSession("bash", "tool-2").messages,
+            ...sessionMessagesToArray(createCompletedToolSession("apply_patch", "tool-1")),
+            ...sessionMessagesToArray(createCompletedToolSession("bash", "tool-2")),
           ],
         }),
       });
@@ -230,8 +234,10 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
   });
 
   test("refreshes when a same-id tool row transitions to completed", async () => {
-    const baseCompletedMessage = createCompletedToolSession("apply_patch", "tool-transition")
-      .messages[0];
+    const baseCompletedMessage = sessionMessageAt(
+      createCompletedToolSession("apply_patch", "tool-transition"),
+      0,
+    );
     if (!baseCompletedMessage?.meta || baseCompletedMessage.meta.kind !== "tool") {
       throw new Error("Expected completed tool message fixture");
     }

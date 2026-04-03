@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
+import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createLoadSessionModelCatalog, createLoadSessionTodos } from "./session-loaders";
 
@@ -141,7 +142,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
 
     const session = harness.getState()["session-1"];
     expect(session?.isLoadingModelCatalog).toBe(false);
-    expect(session?.messages).toEqual([]);
+    expect(session ? getSessionMessageCount(session) : null).toBe(0);
   });
 
   test("dedupes in-flight model catalog loads for the same runtime connection", async () => {
@@ -193,7 +194,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     const session = harness.getState()["session-1"];
     expect(listAvailableModelsCalled).toBe(false);
     expect(session?.isLoadingModelCatalog).toBe(false);
-    expect(session?.messages).toEqual([]);
+    expect(session ? getSessionMessageCount(session) : null).toBe(0);
   });
 
   test("loads todos and merges while preserving existing order", async () => {

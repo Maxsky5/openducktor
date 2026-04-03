@@ -22,8 +22,24 @@ const omitDialogDomProps = ({
 type AgentStudioGitPanelComponent =
   typeof import("./agent-studio-git-panel")["AgentStudioGitPanel"];
 type AgentStudioGitPanelModel = import("./agent-studio-git-panel").AgentStudioGitPanelModel;
+type DiffScopeState = import("@/features/agent-studio-git/contracts").DiffScopeState;
 
 let AgentStudioGitPanel: AgentStudioGitPanelComponent;
+
+const toScopeState = (overrides: Partial<DiffScopeState> = {}): DiffScopeState => ({
+  branch: "feature/task-11",
+  fileDiffs: [],
+  fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
+  uncommittedFileCount: 1,
+  commitsAheadBehind: { ahead: 2, behind: 1 },
+  upstreamAheadBehind: { ahead: 1, behind: 0 },
+  upstreamStatus: "tracking",
+  error: null,
+  hashVersion: 1,
+  statusHash: "0123456789abcdef",
+  diffHash: "fedcba9876543210",
+  ...overrides,
+});
 
 const baseModel = (overrides: Partial<AgentStudioGitPanelModel> = {}): AgentStudioGitPanelModel => {
   const model: AgentStudioGitPanelModel = {
@@ -32,6 +48,14 @@ const baseModel = (overrides: Partial<AgentStudioGitPanelModel> = {}): AgentStud
     worktreePath: "/tmp/worktree",
     targetBranch: "origin/main",
     diffScope: "target",
+    scopeStatesByScope: {
+      target: toScopeState(),
+      uncommitted: toScopeState(),
+    },
+    loadedScopesByScope: {
+      target: true,
+      uncommitted: true,
+    },
     commitsAheadBehind: { ahead: 2, behind: 1 },
     upstreamAheadBehind: { ahead: 1, behind: 0 },
     upstreamStatus: "tracking",
@@ -44,8 +68,6 @@ const baseModel = (overrides: Partial<AgentStudioGitPanelModel> = {}): AgentStud
     isLoading: false,
     error: null,
     refresh: () => {},
-    selectedFile: null,
-    setSelectedFile: () => {},
     setDiffScope: () => {},
     isCommitting: false,
     isPushing: false,
@@ -60,8 +82,47 @@ const baseModel = (overrides: Partial<AgentStudioGitPanelModel> = {}): AgentStud
     ...overrides,
   };
 
+  if (overrides.scopeStatesByScope === undefined) {
+    const derivedScopeState = toScopeState({
+      branch: model.branch,
+      fileDiffs: model.fileDiffs,
+      fileStatuses: model.fileStatuses,
+      uncommittedFileCount: model.uncommittedFileCount,
+      commitsAheadBehind: model.commitsAheadBehind,
+      upstreamAheadBehind: model.upstreamAheadBehind,
+      upstreamStatus: model.upstreamStatus,
+      error: model.error,
+      hashVersion: model.hashVersion,
+      statusHash: model.statusHash,
+      diffHash: model.diffHash,
+    });
+    model.scopeStatesByScope = {
+      target: derivedScopeState,
+      uncommitted: derivedScopeState,
+    };
+  }
+
+  if (overrides.loadedScopesByScope === undefined) {
+    model.loadedScopesByScope = {
+      target: true,
+      uncommitted: true,
+    };
+  }
+
   if (overrides.uncommittedFileCount === undefined) {
     model.uncommittedFileCount = model.fileStatuses.length;
+    if (overrides.scopeStatesByScope === undefined) {
+      model.scopeStatesByScope = {
+        target: {
+          ...model.scopeStatesByScope.target,
+          uncommittedFileCount: model.uncommittedFileCount,
+        },
+        uncommitted: {
+          ...model.scopeStatesByScope.uncommitted,
+          uncommittedFileCount: model.uncommittedFileCount,
+        },
+      };
+    }
   }
 
   return model;
@@ -240,6 +301,8 @@ describe("AgentStudioGitPanel", () => {
     }));
     mock.module("@pierre/diffs/react", () => ({
       FileDiff: () => createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
+      Virtualizer: ({ children }: { children: React.ReactNode }) =>
+        createElement("div", { "data-testid": "mock-pierre-virtualizer" }, children),
       useWorkerPool: () => null,
     }));
     ({ AgentStudioGitPanel } = await import("./agent-studio-git-panel"));
@@ -641,13 +704,6 @@ describe("AgentStudioGitPanel", () => {
     expect(Boolean(submitButton.props.disabled)).toBe(true);
 
     await act(async () => {
-      fireEvent.mouseDown(findDiffScopeTabs(root, "target").element, { button: 0 });
-      await flush();
-    });
-    expect(setDiffScope).toHaveBeenCalledTimes(2);
-    expect(setDiffScope).toHaveBeenLastCalledWith("target");
-
-    await act(async () => {
       messageInput.props.onChange({ currentTarget: { value: "   " } });
       await flush();
     });
@@ -675,13 +731,20 @@ describe("AgentStudioGitPanel", () => {
     ).toBe(true);
 
     await act(async () => {
+      fireEvent.mouseDown(findDiffScopeTabs(root, "target").element, { button: 0 });
+      await flush();
+    });
+    expect(setDiffScope).toHaveBeenCalledTimes(2);
+    expect(setDiffScope).toHaveBeenLastCalledWith("target");
+    expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(0);
+
+    await act(async () => {
       ensureRenderer(renderer).unmount();
       await flush();
     });
   });
 
-  test("notifies selected-file changes when a diff entry is expanded or collapsed", async () => {
-    const setSelectedFile = mock((_path: string | null) => {});
+  test("expands and collapses a diff entry without mutating selected-file state", async () => {
     let renderer: RenderResult | null = null;
 
     await act(async () => {
@@ -697,7 +760,6 @@ describe("AgentStudioGitPanel", () => {
                 diff: "@@ -1 +1 @@\n-old\n+new\n",
               },
             ],
-            setSelectedFile,
           }),
         }),
       );
@@ -711,13 +773,13 @@ describe("AgentStudioGitPanel", () => {
       diffButton.props.onClick();
       await flush();
     });
-    expect(setSelectedFile).toHaveBeenNthCalledWith(1, "src/a.ts");
+    expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(1);
 
     await act(async () => {
       diffButton.props.onClick();
       await flush();
     });
-    expect(setSelectedFile).toHaveBeenNthCalledWith(2, null);
+    expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(0);
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
@@ -726,7 +788,6 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("handles rapid consecutive file toggles without stale expansion state", async () => {
-    const setSelectedFile = mock((_path: string | null) => {});
     let renderer: RenderResult | null = null;
 
     await act(async () => {
@@ -742,7 +803,6 @@ describe("AgentStudioGitPanel", () => {
                 diff: "@@ -1 +1 @@\n-old\n+new\n",
               },
             ],
-            setSelectedFile,
           }),
         }),
       );
@@ -758,8 +818,6 @@ describe("AgentStudioGitPanel", () => {
       await flush();
     });
 
-    expect(setSelectedFile).toHaveBeenNthCalledWith(1, "src/a.ts");
-    expect(setSelectedFile).toHaveBeenNthCalledWith(2, null);
     expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(0);
 
     await act(async () => {

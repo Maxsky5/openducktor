@@ -1,6 +1,14 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import { type PropsWithChildren, type ReactElement, useCallback, useMemo } from "react";
+import {
+  type PropsWithChildren,
+  type ReactElement,
+  useCallback,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type {
+  AgentOperationsContextValue,
   AgentStateContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
@@ -9,12 +17,16 @@ import type {
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
 import { createAgentRuntimeRegistry } from "./agent-runtime-registry";
+import type { AgentSessionSummary } from "./agent-sessions-store";
 import {
-  AgentStateContext,
+  AgentOperationsContext,
+  AgentSessionsContext,
   ChecksStateContext,
   DelegationStateContext,
   SpecStateContext,
   TasksStateContext,
+  useAgentOperationsContext,
+  useAgentSessionsContext,
   useRequiredContext,
   WorkspaceStateContext,
 } from "./app-state-contexts";
@@ -86,5 +98,49 @@ export const useDelegationState = (): DelegationStateContextValue =>
 export const useSpecState = (): SpecStateContextValue =>
   useRequiredContext(SpecStateContext, "useSpecState");
 
-export const useAgentState = (): AgentStateContextValue =>
-  useRequiredContext(AgentStateContext, "useAgentState");
+export const useAgentOperations = (): AgentOperationsContextValue => useAgentOperationsContext();
+
+export const useAgentSessions = (): AgentStateContextValue["sessions"] => {
+  const sessionStore = useAgentSessionsContext();
+  return useSyncExternalStore(
+    sessionStore.subscribe,
+    sessionStore.getSessionsSnapshot,
+    sessionStore.getSessionsSnapshot,
+  );
+};
+
+export const useAgentSessionSummaries = (): AgentSessionSummary[] => {
+  const sessionStore = useAgentSessionsContext();
+  return useSyncExternalStore(
+    sessionStore.subscribe,
+    sessionStore.getSessionSummariesSnapshot,
+    sessionStore.getSessionSummariesSnapshot,
+  );
+};
+
+export const useAgentSession = (sessionId: string | null): AgentSessionState | null => {
+  const sessionStore = useAgentSessionsContext();
+  return useSyncExternalStore(
+    sessionStore.subscribe,
+    () => sessionStore.getSessionSnapshot(sessionId),
+    () => sessionStore.getSessionSnapshot(sessionId),
+  );
+};
+
+export const useAgentState = (): AgentStateContextValue => {
+  const sessionStore = useRequiredContext(AgentSessionsContext, "useAgentState");
+  const operations = useRequiredContext(AgentOperationsContext, "useAgentState");
+  const sessions = useSyncExternalStore(
+    sessionStore.subscribe,
+    sessionStore.getSessionsSnapshot,
+    sessionStore.getSessionsSnapshot,
+  );
+
+  return useMemo(
+    () => ({
+      sessions,
+      ...operations,
+    }),
+    [operations, sessions],
+  );
+};

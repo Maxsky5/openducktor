@@ -1,7 +1,15 @@
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
-export const compareAgentSessionRecency = (a: AgentSessionState, b: AgentSessionState): number => {
+export type AgentSessionOptionSummary = Pick<
+  AgentSessionState,
+  "sessionId" | "role" | "scenario" | "startedAt" | "status"
+>;
+
+export const compareAgentSessionRecency = (
+  a: AgentSessionOptionSummary,
+  b: AgentSessionOptionSummary,
+): number => {
   if (a.startedAt !== b.startedAt) {
     return a.startedAt > b.startedAt ? -1 : 1;
   }
@@ -12,7 +20,7 @@ export const compareAgentSessionRecency = (a: AgentSessionState, b: AgentSession
 };
 
 export const buildRoleSessionSequenceById = (
-  sessions: AgentSessionState[],
+  sessions: AgentSessionOptionSummary[],
 ): Map<string, number> => {
   return new Map(
     [...sessions]
@@ -30,7 +38,7 @@ export const buildRoleSessionSequenceById = (
 };
 
 export const formatAgentSessionOptionLabel = (params: {
-  session: AgentSessionState;
+  session: AgentSessionOptionSummary;
   sessionNumber: number;
   scenarioLabels: Record<AgentScenario, string>;
   roleLabelByRole: Record<AgentRole, string>;
@@ -41,7 +49,7 @@ export const formatAgentSessionOptionLabel = (params: {
   return `${baseLabel} #${params.sessionNumber}`;
 };
 
-export const formatAgentSessionOptionDescription = (session: AgentSessionState): string => {
+export const formatAgentSessionOptionDescription = (session: AgentSessionOptionSummary): string => {
   const startedAt = new Date(session.startedAt);
   const startedAtLabel = Number.isNaN(startedAt.getTime())
     ? session.startedAt

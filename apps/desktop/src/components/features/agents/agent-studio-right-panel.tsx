@@ -1,5 +1,6 @@
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import type { ReactElement } from "react";
+import { memo } from "react";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
@@ -108,3 +109,5 @@ export function AgentStudioRightPanel({
     <AgentStudioBuildToolsPanel diffModel={model.diffModel} devServerModel={model.devServerModel} />
   );
 }
+
+export const MemoizedAgentStudioRightPanel = memo(AgentStudioRightPanel);

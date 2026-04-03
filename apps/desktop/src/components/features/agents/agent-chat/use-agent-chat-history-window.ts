@@ -2,14 +2,15 @@ import type { RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   type AgentChatWindowRow,
+  type AgentChatWindowTurn,
   buildAgentChatWindowTurns,
   CHAT_TURN_WINDOW_BATCH,
   getAgentChatInitialTurnStart,
 } from "./agent-chat-thread-windowing";
-import { CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
 
 type UseAgentChatHistoryWindowInput = {
   rows: AgentChatWindowRow[];
+  turns?: AgentChatWindowTurn[];
   isSessionViewLoading: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   userScrolledRef: RefObject<boolean>;
@@ -20,17 +21,22 @@ type UseAgentChatHistoryWindowResult = {
   turnStart: number;
   windowStart: number;
   windowedRows: AgentChatWindowRow[];
+  windowedTurns: AgentChatWindowTurn[];
   resetToLatestTurns: () => void;
   revealAllHistory: () => void;
 };
 
 export function useAgentChatHistoryWindow({
   rows,
+  turns: providedTurns,
   isSessionViewLoading,
   messagesContainerRef,
   userScrolledRef,
 }: UseAgentChatHistoryWindowInput): UseAgentChatHistoryWindowResult {
-  const turns = useMemo(() => buildAgentChatWindowTurns(rows), [rows]);
+  const turns = useMemo(
+    () => providedTurns ?? buildAgentChatWindowTurns(rows),
+    [providedTurns, rows],
+  );
   const getLatestTurnStart = useCallback(
     () => getAgentChatInitialTurnStart(turns.length),
     [turns.length],
@@ -38,7 +44,6 @@ export function useAgentChatHistoryWindow({
   const [turnStart, setTurnStart] = useState(() => getLatestTurnStart());
   const turnStartRef = useRef(turnStart);
   const fillFrameRef = useRef<number | null>(null);
-  const continuationFrameRef = useRef<number | null>(null);
   const pendingLatestResetRef = useRef(isSessionViewLoading && rows.length === 0);
   const pendingScrollRestoreRef = useRef<{
     beforeScrollHeight: number;
@@ -121,39 +126,6 @@ export function useAgentChatHistoryWindow({
     });
   }, [messagesContainerRef, revealOlderTurns, userScrolledRef]);
 
-  const scheduleContinuation = useCallback(() => {
-    if (continuationFrameRef.current !== null) {
-      return;
-    }
-
-    continuationFrameRef.current = globalThis.requestAnimationFrame(() => {
-      continuationFrameRef.current = null;
-
-      const container = messagesContainerRef.current;
-      if (!container) {
-        return;
-      }
-
-      if (!userScrolledRef.current) {
-        return;
-      }
-
-      if (pendingScrollRestoreRef.current !== null) {
-        return;
-      }
-
-      if (turnStartRef.current <= 0) {
-        return;
-      }
-
-      if (container.scrollTop >= CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX) {
-        return;
-      }
-
-      revealOlderTurns();
-    });
-  }, [messagesContainerRef, revealOlderTurns, userScrolledRef]);
-
   // Intentionally runs after every commit so pending scroll restoration and
   // deferred-session latest-turn rebasing happen on the very next DOM update.
   useLayoutEffect(() => {
@@ -169,14 +141,6 @@ export function useAgentChatHistoryWindow({
     const pendingRestore = pendingScrollRestoreRef.current;
     const container = messagesContainerRef.current;
     if (!pendingRestore) {
-      if (
-        container &&
-        userScrolledRef.current &&
-        turnStartRef.current > 0 &&
-        container.scrollTop < CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX
-      ) {
-        scheduleContinuation();
-      }
       return;
     }
 
@@ -188,14 +152,6 @@ export function useAgentChatHistoryWindow({
     const delta = container.scrollHeight - pendingRestore.beforeScrollHeight;
     if (delta) {
       container.scrollTop = pendingRestore.beforeScrollTop + delta;
-    }
-
-    if (
-      userScrolledRef.current &&
-      turnStartRef.current > 0 &&
-      container.scrollTop < CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX
-    ) {
-      scheduleContinuation();
     }
   });
 
@@ -230,7 +186,7 @@ export function useAgentChatHistoryWindow({
         return;
       }
 
-      if (container.scrollTop >= CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX) {
+      if (container.scrollTop > 1) {
         return;
       }
 
@@ -258,20 +214,28 @@ export function useAgentChatHistoryWindow({
       if (fillFrameRef.current !== null) {
         globalThis.cancelAnimationFrame(fillFrameRef.current);
       }
-      if (continuationFrameRef.current !== null) {
-        globalThis.cancelAnimationFrame(continuationFrameRef.current);
-      }
     };
   }, []);
 
   const windowStart = turns[effectiveTurnStart]?.start ?? 0;
   const windowedRows = useMemo(() => rows.slice(windowStart), [rows, windowStart]);
+  const windowedTurns = useMemo(
+    () =>
+      turns.slice(effectiveTurnStart).map((turn) => ({
+        key: turn.key,
+        start: turn.start - windowStart,
+        end: turn.end - windowStart,
+        rows: turn.rows,
+      })),
+    [effectiveTurnStart, turns, windowStart],
+  );
 
   return {
     latestTurnStart,
     turnStart: effectiveTurnStart,
     windowStart,
     windowedRows,
+    windowedTurns,
     resetToLatestTurns: () => {
       if (isSessionViewLoading && rows.length === 0) {
         pendingLatestResetRef.current = true;

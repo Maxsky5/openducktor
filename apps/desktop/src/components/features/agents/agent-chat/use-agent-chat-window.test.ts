@@ -351,7 +351,7 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("scrolling near the top backfills older turns and preserves scroll position", async () => {
+  test("scrolling near the top does not backfill until the actual top is reached", async () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness(
       {
@@ -374,13 +374,15 @@ describe("useAgentChatWindow", () => {
     });
     await flushAnimationFrames();
 
-    expect(harness.getLatestResult().windowStart).toBe(0);
-    expect(container.scrollTop).toBe(320);
+    expect(harness.getLatestResult().windowStart).toBe(
+      buildAgentChatWindowTurns(rows)[2]?.start ?? 0,
+    );
+    expect(container.scrollTop).toBe(160);
 
     await harness.unmount();
   });
 
-  test("fast upward scrolling keeps backfilling until the viewport leaves the top threshold", async () => {
+  test("reaching the top backfills a single older batch and preserves scroll position", async () => {
     const rows = createTurnRows(20);
     const harness = await mountHarness(
       {
@@ -407,8 +409,49 @@ describe("useAgentChatWindow", () => {
     });
     await flushAnimationFrames();
 
-    expect(harness.getLatestResult().windowStart).toBe(0);
-    expect(container.scrollTop).toBeGreaterThanOrEqual(200);
+    expect(harness.getLatestResult().windowStart).toBe(
+      buildAgentChatWindowTurns(rows)[2]?.start ?? 0,
+    );
+    expect(container.scrollTop).toBeGreaterThan(0);
+
+    await harness.unmount();
+  });
+
+  test("programmatic scroll restoration does not keep backfilling older history", async () => {
+    const rows = createTurnRows(20);
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      {
+        attachDom: true,
+        containerClientHeight: 100,
+        rowHeightPx: 10,
+      },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    container.scrollTop = 0;
+    await act(async () => {
+      await dispatchWheelUp(container);
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    const windowStartAfterFirstReveal = harness.getLatestResult().windowStart;
+
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    expect(harness.getLatestResult().windowStart).toBe(windowStartAfterFirstReveal);
 
     await harness.unmount();
   });
@@ -436,7 +479,44 @@ describe("useAgentChatWindow", () => {
 
     expect(harness.getLatestResult().windowStart).toBe(0);
     expect(container.scrollTop).toBe(0);
+    expect(harness.getLatestResult().isNearTop).toBe(true);
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
     expect(container.style.overflowAnchor).toBe("none");
+
+    await harness.unmount();
+  });
+
+  test("recomputes top and bottom edge visibility after scrolling away from the top", async () => {
+    const rows = createTurnRows(12);
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+
+    expect(harness.getLatestResult().isNearTop).toBe(true);
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
+
+    container.scrollTop = 160;
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+
+    expect(harness.getLatestResult().isNearTop).toBe(false);
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
 
     await harness.unmount();
   });
@@ -567,6 +647,55 @@ describe("useAgentChatWindow", () => {
 
     expect(container.scrollTop).toBe(getMaxScrollTop(container));
     expect(harness.getLatestResult().isNearBottom).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("keeps the current transcript window when a new turn is appended while pinned", async () => {
+    const initialRows = createTurnRows(12);
+    const nextRows = createTurnRows(13);
+    const harness = await mountHarness(
+      {
+        rows: initialRows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+        isSessionWorking: true,
+      },
+      { attachDom: true },
+    );
+    const initialWindowStart = harness.getLatestResult().windowStart;
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    container.scrollTop = container.scrollHeight;
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    await act(async () => {
+      harness.getLatestResult().scrollToBottomOnSend();
+      await flush();
+    });
+
+    await harness.update({
+      rows: nextRows,
+      activeSessionId: "session-1",
+      isSessionViewLoading: false,
+      isSessionWorking: true,
+    });
+    await act(async () => {
+      triggerResizeObservers();
+      await flush();
+    });
+    await flushAnimationFrames();
+
+    expect(harness.getLatestResult().windowStart).toBe(initialWindowStart);
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
 
     await harness.unmount();
   });

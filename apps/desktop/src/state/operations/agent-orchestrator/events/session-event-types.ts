@@ -1,6 +1,6 @@
 import type { AgentEnginePort } from "@openducktor/core";
 import type { MutableRefObject } from "react";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export type DraftChannel = "text" | "reasoning";
 export type DraftSource = "delta" | "part";
@@ -15,7 +15,7 @@ export type UpdateSession = (
 export type ResolveTurnDuration = (
   sessionId: string,
   timestamp: string,
-  messages?: AgentChatMessage[],
+  messages?: AgentSessionState["messages"],
 ) => number | undefined;
 
 export type SessionEventAdapter = Pick<AgentEnginePort, "subscribeEvents" | "replyPermission">;

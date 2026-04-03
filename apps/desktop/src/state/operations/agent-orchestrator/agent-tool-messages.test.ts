@@ -1,5 +1,15 @@
 import { describe, expect, test } from "bun:test";
+import {
+  sessionMessageAt,
+  sessionMessagesToArray,
+} from "@/test-utils/session-message-test-helpers";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "./agent-tool-messages";
+
+const createSession = (messages: AgentSessionState["messages"]) => ({
+  sessionId: "session-1",
+  messages,
+});
 
 const baseTodoToolMessage = (overrides = {}) => ({
   id: "tool:1",
@@ -27,15 +37,21 @@ describe("settleDanglingTodoToolMessages", () => {
         timestamp: "2026-02-19T00:00:01.000Z",
       },
     ];
-    const next = settleDanglingTodoToolMessages(messages, "2026-02-19T00:00:02.000Z");
-    expect(next).toBe(messages);
+    const next = settleDanglingTodoToolMessages(
+      createSession(messages),
+      "2026-02-19T00:00:02.000Z",
+    );
+    expect(sessionMessagesToArray(createSession(next))).toEqual(messages);
   });
 
   test("marks dangling todowrite rows as completed and sets endedAt", () => {
     const messages = [baseTodoToolMessage()];
-    const next = settleDanglingTodoToolMessages(messages, "2026-02-19T00:00:02.500Z");
+    const next = settleDanglingTodoToolMessages(
+      createSession(messages),
+      "2026-02-19T00:00:02.500Z",
+    );
     expect(next).not.toBe(messages);
-    const toolMessage = next[0];
+    const toolMessage = sessionMessageAt(createSession(next), 0);
     expect(toolMessage?.meta?.kind).toBe("tool");
     if (toolMessage?.meta?.kind !== "tool") {
       throw new Error("Expected tool metadata");
@@ -47,11 +63,15 @@ describe("settleDanglingTodoToolMessages", () => {
 
   test("can settle dangling todo rows as error", () => {
     const messages = [baseTodoToolMessage()];
-    const next = settleDanglingTodoToolMessages(messages, "2026-02-19T00:00:03.000Z", {
-      outcome: "error",
-      errorMessage: "Session failed",
-    });
-    const toolMessage = next[0];
+    const next = settleDanglingTodoToolMessages(
+      createSession(messages),
+      "2026-02-19T00:00:03.000Z",
+      {
+        outcome: "error",
+        errorMessage: "Session failed",
+      },
+    );
+    const toolMessage = sessionMessageAt(createSession(next), 0);
     expect(toolMessage?.meta?.kind).toBe("tool");
     if (toolMessage?.meta?.kind !== "tool") {
       throw new Error("Expected tool metadata");
@@ -77,7 +97,10 @@ describe("settleDanglingTodoToolMessages", () => {
         },
       },
     ];
-    const next = settleDanglingTodoToolMessages(messages, "2026-02-19T00:00:04.000Z");
-    expect(next).toBe(messages);
+    const next = settleDanglingTodoToolMessages(
+      createSession(messages),
+      "2026-02-19T00:00:04.000Z",
+    );
+    expect(sessionMessagesToArray(createSession(next))).toEqual(messages);
   });
 });

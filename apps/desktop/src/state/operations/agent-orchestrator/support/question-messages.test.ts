@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { annotateQuestionToolMessage } from "./question-messages";
+
+const createSession = (messages: AgentSessionState["messages"]) => ({
+  sessionId: "session-1",
+  messages,
+});
 
 describe("agent-orchestrator-question-messages", () => {
   test("annotates latest compatible question tool message", () => {
@@ -38,7 +44,7 @@ describe("agent-orchestrator-question-messages", () => {
     ];
 
     const next = annotateQuestionToolMessage(
-      messages,
+      createSession(messages),
       "question-1",
       [
         {
@@ -53,7 +59,7 @@ describe("agent-orchestrator-question-messages", () => {
       [["yes"]],
     );
 
-    const latest = next[1];
+    const latest = sessionMessageAt(createSession(next), 1);
     if (!latest || latest.meta?.kind !== "tool") {
       throw new Error("Expected tool meta on latest message");
     }
@@ -82,7 +88,7 @@ describe("agent-orchestrator-question-messages", () => {
     ];
 
     const next = annotateQuestionToolMessage(
-      messages,
+      createSession(messages),
       "question-1",
       [
         {
@@ -97,7 +103,7 @@ describe("agent-orchestrator-question-messages", () => {
       [["yes"]],
     );
 
-    const first = next[0];
+    const first = sessionMessageAt(createSession(next), 0);
     if (!first || first.meta?.kind !== "tool") {
       throw new Error("Expected tool meta on first message");
     }
@@ -124,7 +130,7 @@ describe("agent-orchestrator-question-messages", () => {
     ];
 
     const next = annotateQuestionToolMessage(
-      messages,
+      createSession(messages),
       "question-1",
       [
         {
@@ -139,7 +145,7 @@ describe("agent-orchestrator-question-messages", () => {
       [["yes"]],
     );
 
-    const first = next[0];
+    const first = sessionMessageAt(createSession(next), 0);
     if (!first || first.meta?.kind !== "tool") {
       throw new Error("Expected tool meta on first message");
     }
