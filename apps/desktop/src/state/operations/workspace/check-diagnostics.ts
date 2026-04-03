@@ -6,17 +6,66 @@ import type {
   RepoRuntimeHealthMap,
 } from "@/types/diagnostics";
 
+type NonNullRepoRuntimeFailureKind = Exclude<RepoRuntimeFailureKind, null>;
+type AvailabilityVerb = "is" | "are";
+
 export type DiagnosticsToastIssue = {
   id: string;
   title: string;
   description: string;
-  severity: Exclude<RepoRuntimeFailureKind, null>;
+  severity: NonNullRepoRuntimeFailureKind;
 };
 
 export type DiagnosticsRetryPlan = {
   retryRuntimeCheck: boolean;
   retryBeadsCheck: boolean;
   retryRuntimeHealth: boolean;
+};
+
+type DiagnosticsIssueMeta = {
+  id: string;
+  label: string;
+  availabilityVerb: AvailabilityVerb;
+};
+
+type DiagnosticsIssueCandidate = DiagnosticsIssueMeta & {
+  detail: string | null;
+  failureKind: NonNullRepoRuntimeFailureKind;
+};
+
+type BuildDiagnosticsToastIssuesArgs = {
+  activeRepo: string | null;
+  runtimeDefinitions: RuntimeDescriptor[];
+  runtimeCheck: RuntimeCheck | null;
+  runtimeCheckError: string | null;
+  runtimeCheckFailureKind: RepoRuntimeFailureKind;
+  beadsCheck: BeadsCheck | null;
+  beadsCheckError: string | null;
+  beadsCheckFailureKind: RepoRuntimeFailureKind;
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
+};
+
+type BuildDiagnosticsRetryPlanArgs = {
+  activeRepo: string | null;
+  runtimeDefinitions: RuntimeDescriptor[];
+  runtimeCheckFailureKind: RepoRuntimeFailureKind;
+  runtimeCheckFetching: boolean;
+  beadsCheckFailureKind: RepoRuntimeFailureKind;
+  beadsCheckFetching: boolean;
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
+  runtimeHealthFetching: boolean;
+};
+
+const CLI_TOOLS_ISSUE_META: DiagnosticsIssueMeta = {
+  id: "diagnostics:cli-tools",
+  label: "CLI tools",
+  availabilityVerb: "are",
+};
+
+const BEADS_STORE_ISSUE_META: DiagnosticsIssueMeta = {
+  id: "diagnostics:beads-store",
+  label: "Beads store",
+  availabilityVerb: "is",
 };
 
 export const buildRuntimeCheckErrorState = (
@@ -63,30 +112,28 @@ export const buildRuntimeHealthErrorMap = (
   runtimeHealthError: string,
   checkedAt: string,
 ): RepoRuntimeHealthMap => {
-  return Object.fromEntries(
-    runtimeDefinitions.map((definition) => [
-      definition.kind,
-      {
-        runtimeOk: false,
-        runtimeError: runtimeHealthError,
-        runtimeFailureKind: "error",
-        runtime: null,
-        mcpOk: false,
-        mcpError: runtimeHealthError,
-        mcpFailureKind: "error",
-        mcpServerName: ODT_MCP_SERVER_NAME,
-        mcpServerStatus: null,
-        mcpServerError: runtimeHealthError,
-        availableToolIds: [],
-        checkedAt,
-        errors: [runtimeHealthError],
-      } satisfies RepoRuntimeHealthCheck,
-    ]),
-  ) as RepoRuntimeHealthMap;
+  return runtimeDefinitions.reduce<RepoRuntimeHealthMap>((runtimeHealthMap, definition) => {
+    runtimeHealthMap[definition.kind] = {
+      runtimeOk: false,
+      runtimeError: runtimeHealthError,
+      runtimeFailureKind: "error",
+      runtime: null,
+      mcpOk: false,
+      mcpError: runtimeHealthError,
+      mcpFailureKind: "error",
+      mcpServerName: ODT_MCP_SERVER_NAME,
+      mcpServerStatus: null,
+      mcpServerError: runtimeHealthError,
+      availableToolIds: [],
+      checkedAt,
+      errors: [runtimeHealthError],
+    } satisfies RepoRuntimeHealthCheck;
+    return runtimeHealthMap;
+  }, {});
 };
 
 type TimeoutMessageOptions = {
-  availabilityVerb?: "is" | "are";
+  availabilityVerb?: AvailabilityVerb;
 };
 
 export const buildTimeoutToastDescription = (
@@ -112,18 +159,14 @@ const buildDiagnosticsToastIssue = ({
   label,
   detail,
   failureKind,
-}: {
-  id: string;
-  label: string;
-  detail: string | null;
-  failureKind: Exclude<RepoRuntimeFailureKind, null>;
-}): DiagnosticsToastIssue => {
+  availabilityVerb,
+}: DiagnosticsIssueCandidate): DiagnosticsToastIssue => {
   return failureKind === "timeout"
     ? {
         id,
         title: `${label} not yet available`,
         description: buildTimeoutToastDescription(label, detail, {
-          availabilityVerb: label === "CLI tools" ? "are" : "is",
+          availabilityVerb,
         }),
         severity: failureKind,
       }
@@ -133,6 +176,92 @@ const buildDiagnosticsToastIssue = ({
         description: buildErrorToastDescription(label, detail),
         severity: failureKind,
       };
+};
+
+const buildDiagnosticsIssueCandidate = (
+  meta: DiagnosticsIssueMeta,
+  detail: string | null,
+  failureKind: RepoRuntimeFailureKind,
+): DiagnosticsIssueCandidate | null => {
+  if (detail === null || failureKind === null) {
+    return null;
+  }
+
+  return {
+    ...meta,
+    detail,
+    failureKind,
+  };
+};
+
+const getRuntimeCheckIssueCandidate = (
+  runtimeCheck: RuntimeCheck | null,
+  runtimeCheckError: string | null,
+  runtimeCheckFailureKind: RepoRuntimeFailureKind,
+): DiagnosticsIssueCandidate | null => {
+  const detail = runtimeCheckError ?? runtimeCheck?.errors[0] ?? runtimeCheck?.ghAuthError ?? null;
+  const failureKind =
+    runtimeCheckFailureKind ?? (hasRuntimeCheckFailure(runtimeCheck) ? "error" : null);
+  return buildDiagnosticsIssueCandidate(CLI_TOOLS_ISSUE_META, detail, failureKind);
+};
+
+const getBeadsCheckIssueCandidate = (
+  beadsCheck: BeadsCheck | null,
+  beadsCheckError: string | null,
+  beadsCheckFailureKind: RepoRuntimeFailureKind,
+): DiagnosticsIssueCandidate | null => {
+  const detail = beadsCheckError ?? beadsCheck?.beadsError ?? null;
+  const failureKind = beadsCheckFailureKind ?? (hasBeadsCheckFailure(beadsCheck) ? "error" : null);
+  return buildDiagnosticsIssueCandidate(BEADS_STORE_ISSUE_META, detail, failureKind);
+};
+
+const getRuntimeHealthIssueCandidates = (
+  runtimeDefinitions: RuntimeDescriptor[],
+  runtimeHealthByRuntime: RepoRuntimeHealthMap,
+): DiagnosticsIssueCandidate[] => {
+  const issueCandidates: DiagnosticsIssueCandidate[] = [];
+
+  for (const definition of runtimeDefinitions) {
+    const runtimeHealth = runtimeHealthByRuntime[definition.kind];
+    if (!runtimeHealth) {
+      continue;
+    }
+
+    const runtimeIssue = buildDiagnosticsIssueCandidate(
+      {
+        id: `diagnostics:runtime:${definition.kind}`,
+        label: `${definition.label} runtime`,
+        availabilityVerb: "is",
+      },
+      runtimeHealth.runtimeError,
+      runtimeHealth.runtimeOk ? null : runtimeHealth.runtimeFailureKind,
+    );
+
+    if (runtimeIssue !== null) {
+      issueCandidates.push(runtimeIssue);
+      continue;
+    }
+
+    if (!definition.capabilities.supportsMcpStatus) {
+      continue;
+    }
+
+    const mcpIssue = buildDiagnosticsIssueCandidate(
+      {
+        id: `diagnostics:mcp:${definition.kind}`,
+        label: `${definition.label} OpenDucktor MCP`,
+        availabilityVerb: "is",
+      },
+      runtimeHealth.mcpServerError ?? runtimeHealth.mcpError,
+      runtimeHealth.mcpOk ? null : runtimeHealth.mcpFailureKind,
+    );
+
+    if (mcpIssue !== null) {
+      issueCandidates.push(mcpIssue);
+    }
+  }
+
+  return issueCandidates;
 };
 
 export const buildDiagnosticsToastIssues = ({
@@ -145,89 +274,18 @@ export const buildDiagnosticsToastIssues = ({
   beadsCheckError,
   beadsCheckFailureKind,
   runtimeHealthByRuntime,
-}: {
-  activeRepo: string | null;
-  runtimeDefinitions: RuntimeDescriptor[];
-  runtimeCheck: RuntimeCheck | null;
-  runtimeCheckError: string | null;
-  runtimeCheckFailureKind: RepoRuntimeFailureKind;
-  beadsCheck: BeadsCheck | null;
-  beadsCheckError: string | null;
-  beadsCheckFailureKind: RepoRuntimeFailureKind;
-  runtimeHealthByRuntime: RepoRuntimeHealthMap;
-}): DiagnosticsToastIssue[] => {
+}: BuildDiagnosticsToastIssuesArgs): DiagnosticsToastIssue[] => {
   if (activeRepo === null) {
     return [];
   }
 
-  const issues: DiagnosticsToastIssue[] = [];
-
-  const runtimeCheckDetail =
-    runtimeCheckError ?? runtimeCheck?.errors[0] ?? runtimeCheck?.ghAuthError ?? null;
-  const runtimeCheckIssueSeverity =
-    runtimeCheckFailureKind ?? (hasRuntimeCheckFailure(runtimeCheck) ? "error" : null);
-
-  if (runtimeCheckDetail && runtimeCheckIssueSeverity !== null) {
-    issues.push(
-      buildDiagnosticsToastIssue({
-        id: "diagnostics:cli-tools",
-        label: "CLI tools",
-        detail: runtimeCheckDetail,
-        failureKind: runtimeCheckIssueSeverity,
-      }),
-    );
-  }
-
-  const beadsCheckDetail = beadsCheckError ?? beadsCheck?.beadsError ?? null;
-  const beadsCheckIssueSeverity =
-    beadsCheckFailureKind ?? (hasBeadsCheckFailure(beadsCheck) ? "error" : null);
-
-  if (beadsCheckDetail && beadsCheckIssueSeverity !== null) {
-    issues.push(
-      buildDiagnosticsToastIssue({
-        id: "diagnostics:beads-store",
-        label: "Beads store",
-        detail: beadsCheckDetail,
-        failureKind: beadsCheckIssueSeverity,
-      }),
-    );
-  }
-
-  for (const definition of runtimeDefinitions) {
-    const runtimeHealth = runtimeHealthByRuntime[definition.kind];
-    if (!runtimeHealth) {
-      continue;
-    }
-
-    if (runtimeHealth.runtimeOk === false && runtimeHealth.runtimeFailureKind !== null) {
-      issues.push(
-        buildDiagnosticsToastIssue({
-          id: `diagnostics:runtime:${definition.kind}`,
-          label: `${definition.label} runtime`,
-          detail: runtimeHealth.runtimeError,
-          failureKind: runtimeHealth.runtimeFailureKind,
-        }),
-      );
-      continue;
-    }
-
-    if (
-      definition.capabilities.supportsMcpStatus &&
-      runtimeHealth.mcpOk === false &&
-      runtimeHealth.mcpFailureKind !== null
-    ) {
-      issues.push(
-        buildDiagnosticsToastIssue({
-          id: `diagnostics:mcp:${definition.kind}`,
-          label: `${definition.label} OpenDucktor MCP`,
-          detail: runtimeHealth.mcpServerError ?? runtimeHealth.mcpError,
-          failureKind: runtimeHealth.mcpFailureKind,
-        }),
-      );
-    }
-  }
-
-  return issues;
+  return [
+    getRuntimeCheckIssueCandidate(runtimeCheck, runtimeCheckError, runtimeCheckFailureKind),
+    getBeadsCheckIssueCandidate(beadsCheck, beadsCheckError, beadsCheckFailureKind),
+    ...getRuntimeHealthIssueCandidates(runtimeDefinitions, runtimeHealthByRuntime),
+  ]
+    .filter((issueCandidate) => issueCandidate !== null)
+    .map((issueCandidate) => buildDiagnosticsToastIssue(issueCandidate));
 };
 
 export const hasRuntimeHealthTimeoutIssue = (
@@ -256,24 +314,19 @@ export const buildDiagnosticsRetryPlan = ({
   beadsCheckFetching,
   runtimeHealthByRuntime,
   runtimeHealthFetching,
-}: {
-  activeRepo: string | null;
-  runtimeDefinitions: RuntimeDescriptor[];
-  runtimeCheckFailureKind: RepoRuntimeFailureKind;
-  runtimeCheckFetching: boolean;
-  beadsCheckFailureKind: RepoRuntimeFailureKind;
-  beadsCheckFetching: boolean;
-  runtimeHealthByRuntime: RepoRuntimeHealthMap;
-  runtimeHealthFetching: boolean;
-}): DiagnosticsRetryPlan => {
+}: BuildDiagnosticsRetryPlanArgs): DiagnosticsRetryPlan => {
+  const retryRuntimeCheck = runtimeCheckFailureKind === "timeout" && !runtimeCheckFetching;
+  const retryBeadsCheck =
+    activeRepo !== null && beadsCheckFailureKind === "timeout" && !beadsCheckFetching;
+  const retryRuntimeHealth =
+    activeRepo !== null &&
+    runtimeDefinitions.length > 0 &&
+    hasRuntimeHealthTimeoutIssue(runtimeDefinitions, runtimeHealthByRuntime) &&
+    !runtimeHealthFetching;
+
   return {
-    retryRuntimeCheck: runtimeCheckFailureKind === "timeout" && !runtimeCheckFetching,
-    retryBeadsCheck:
-      activeRepo !== null && beadsCheckFailureKind === "timeout" && !beadsCheckFetching,
-    retryRuntimeHealth:
-      activeRepo !== null &&
-      runtimeDefinitions.length > 0 &&
-      hasRuntimeHealthTimeoutIssue(runtimeDefinitions, runtimeHealthByRuntime) &&
-      !runtimeHealthFetching,
+    retryRuntimeCheck,
+    retryBeadsCheck,
+    retryRuntimeHealth,
   };
 };
