@@ -1,8 +1,14 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import {
-  getCaretOffsetWithinElement,
-  setCaretOffsetWithinElement,
-} from "@/components/features/agents/agent-chat/agent-chat-composer-selection";
+import { afterEach, beforeAll, describe, expect, test } from "bun:test";
+
+type SelectionModule = typeof import("./agent-chat-composer-selection");
+
+let selectionModule: SelectionModule;
+
+beforeAll(async () => {
+  selectionModule = (await import(
+    new URL("./agent-chat-composer-selection.ts", import.meta.url).href
+  )) as SelectionModule;
+});
 
 const createSelectionHost = (): HTMLElement => {
   const root = document.createElement("div");
@@ -24,7 +30,7 @@ describe("agent-chat-composer-selection", () => {
     const element = createSelectionHost();
     element.textContent = "hello\n";
 
-    setCaretOffsetWithinElement(element, 6);
+    selectionModule.setCaretOffsetWithinElement(element, 6);
 
     const selection = globalThis.getSelection?.();
     expect(selection?.rangeCount).toBe(1);
@@ -39,6 +45,6 @@ describe("agent-chat-composer-selection", () => {
     expect((textNode.textContent ?? "").length).toBeGreaterThan(6);
     expect(range?.endContainer).toBe(textNode);
     expect(range?.endOffset).toBe((textNode.textContent ?? "").length);
-    expect(getCaretOffsetWithinElement(element)).toBe(6);
+    expect(selectionModule.getCaretOffsetWithinElement(element)).toBe(6);
   });
 });

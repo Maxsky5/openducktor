@@ -76,7 +76,6 @@ beforeAll(async () => {
   }));
 
   ({ AgentChatComposerEditor } = await import("./agent-chat-composer-editor"));
-  mock.restore();
 });
 
 afterAll(() => {
