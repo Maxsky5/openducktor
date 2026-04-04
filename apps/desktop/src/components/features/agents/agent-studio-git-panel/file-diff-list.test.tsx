@@ -30,6 +30,13 @@ beforeAll(async () => {
   }));
 
   ({ FileDiffList } = await import("./file-diff-list"));
+
+  await restoreMockedModules([
+    [
+      "@/components/features/agents/pierre-diff-viewer",
+      () => import("@/components/features/agents/pierre-diff-viewer"),
+    ],
+  ]);
 });
 
 afterEach(() => {
@@ -44,15 +51,6 @@ afterAll(() => {
   } else {
     reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironmentValue;
   }
-});
-
-afterAll(async () => {
-  await restoreMockedModules([
-    [
-      "@/components/features/agents/pierre-diff-viewer",
-      () => import("@/components/features/agents/pierre-diff-viewer"),
-    ],
-  ]);
 });
 
 function FileDiffListHarness(): ReactElement {
@@ -101,7 +99,7 @@ describe("FileDiffList", () => {
     expect(screen.getByTestId("pierre-diff-preloader").textContent).toBe("src/example.ts");
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /example\.ts/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Toggle diff for src/example.ts" }));
 
     expect(screen.getByTestId("pierre-diff-viewer").textContent).toBe("src/example.ts");
     expect(screen.queryByTestId("pierre-diff-preloader")).toBeNull();

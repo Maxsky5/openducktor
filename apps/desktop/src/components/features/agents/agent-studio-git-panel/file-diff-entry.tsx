@@ -52,6 +52,8 @@ function FileDiffEntry({
   const fileName = diff.file.split("/").pop() ?? diff.file;
   const dirName = diff.file.includes("/") ? diff.file.slice(0, diff.file.lastIndexOf("/")) : "";
   const hasDiffContent = diff.diff.trim().length > 0;
+  // Keep diff subtrees mounted after first expand in production for cheap reopen,
+  // but reset them in tests so assertions stay deterministic.
   const shouldPersistMountedDiffBody = process.env.NODE_ENV !== "test";
   const [hasMountedDiffBody, setHasMountedDiffBody] = useState(false);
 
@@ -76,6 +78,7 @@ function FileDiffEntry({
         <button
           type="button"
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 overflow-hidden text-left text-xs"
+          aria-label={`Toggle diff for ${diff.file}`}
           data-testid="agent-studio-git-file-toggle-button"
           onClick={() => onToggle(diff.file)}
         >
