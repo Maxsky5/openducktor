@@ -1,0 +1,111 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+
+import {
+  readCefVersion,
+  readTauriCefRevision,
+  resolveCargoToolsRoot,
+  resolveCefPath,
+} from "./cef-paths";
+
+const ENV_KEYS = [
+  "CEF_PATH",
+  "OPENDUCKTOR_CEF_PATH",
+  "OPENDUCKTOR_CARGO_TOOLS_ROOT",
+  "OPENDUCKTOR_CONFIG_DIR",
+] as const;
+
+function withTempTauriRoot(lockContents: string): string {
+  const root = mkdtempSync(join(tmpdir(), "odt-cef-paths-"));
+  writeFileSync(join(root, "Cargo.lock"), lockContents);
+  return root;
+}
+
+function restoreEnv(): void {
+  for (const key of ENV_KEYS) {
+    delete process.env[key];
+  }
+}
+
+afterEach(() => {
+  restoreEnv();
+});
+
+describe("cef-paths", () => {
+  test("reads the cef crate version from Cargo.lock", () => {
+    const tauriRoot = withTempTauriRoot(
+      '[package]\nname = "root"\n\n[[package]]\nname = "serde"\nversion = "1.0.0"\n\n[[package]]\nname = "cef"\nversion = "135.0.0"\n\n[[package]]\nname = "tauri"\nversion = "2.10.3"\nsource = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#1234567890abcdef1234567890abcdef12345678"\n',
+    );
+
+    try {
+      expect(readCefVersion(tauriRoot)).toBe("135.0.0");
+    } finally {
+      rmSync(tauriRoot, { force: true, recursive: true });
+    }
+  });
+
+  test("uses the shared config root for default cache paths", () => {
+    process.env.OPENDUCKTOR_CONFIG_DIR = "~/.openducktor-dev";
+    const tauriRoot = withTempTauriRoot(
+      '[[package]]\nname = "cef"\nversion = "136.2.1"\n\n[[package]]\nname = "tauri"\nversion = "2.10.3"\nsource = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#1234567890abcdef1234567890abcdef12345678"\n',
+    );
+
+    try {
+      expect(resolveCargoToolsRoot(tauriRoot)).toBe(
+        resolve(
+          process.env.HOME ?? "",
+          ".openducktor-dev",
+          "cache",
+          "cargo-tools",
+          "tauri-feat-cef",
+          "1234567890ab",
+        ),
+      );
+      expect(resolveCefPath(tauriRoot)).toBe(
+        resolve(process.env.HOME ?? "", ".openducktor-dev", "cache", "cef", "136.2.1"),
+      );
+    } finally {
+      rmSync(tauriRoot, { force: true, recursive: true });
+    }
+  });
+
+  test("prefers explicit OpenDucktor overrides", () => {
+    process.env.CEF_PATH = "/tmp/upstream-cef";
+    process.env.OPENDUCKTOR_CEF_PATH = "~/custom-cef";
+    process.env.OPENDUCKTOR_CARGO_TOOLS_ROOT = "~/custom-tools";
+    const tauriRoot = withTempTauriRoot(
+      '[[package]]\nname = "cef"\nversion = "137.0.0"\n\n[[package]]\nname = "tauri"\nversion = "2.10.3"\nsource = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#abcdefabcdefabcdefabcdefabcdefabcdefabcd"\n',
+    );
+
+    try {
+      expect(resolveCargoToolsRoot(tauriRoot)).toBe(
+        resolve(process.env.HOME ?? "", "custom-tools"),
+      );
+      expect(resolveCefPath(tauriRoot)).toBe(resolve(process.env.HOME ?? "", "custom-cef"));
+    } finally {
+      rmSync(tauriRoot, { force: true, recursive: true });
+    }
+  });
+
+  test("reads the pinned tauri revision from Cargo.lock", () => {
+    const tauriRoot = withTempTauriRoot(
+      '[[package]]\nname = "cef"\nversion = "137.0.0"\n\n[[package]]\nname = "tauri"\nversion = "2.10.3"\nsource = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#abcdefabcdefabcdefabcdefabcdefabcdefabcd"\n',
+    );
+
+    try {
+      expect(readTauriCefRevision(tauriRoot)).toBe("abcdefabcdefabcdefabcdefabcdefabcdefabcd");
+    } finally {
+      rmSync(tauriRoot, { force: true, recursive: true });
+    }
+  });
+
+  test("rejects empty overrides", () => {
+    process.env.OPENDUCKTOR_CARGO_TOOLS_ROOT = "   ";
+
+    expect(() => resolveCargoToolsRoot(process.cwd())).toThrow(
+      "OPENDUCKTOR_CARGO_TOOLS_ROOT is set but empty. Provide a valid directory path.",
+    );
+  });
+});

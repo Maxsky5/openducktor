@@ -81,11 +81,24 @@ bun run tauri:setup:cef
 
 That command:
 
-- installs repo-local CEF tools into `.cargo-tools/`
-- exports CEF into the repo-local cache at `.cache/cef/`
+- installs the CEF toolchain into a shared OpenDucktor cache directory
+- exports CEF into a shared OpenDucktor cache directory that is versioned by the resolved `cef` crate version
 - clears the macOS quarantine attribute from the downloaded CEF bundle
 
-The CEF setup uses repo-local tool binaries and a repo-local CEF cache so contributors do not need machine-specific paths in their package scripts. The day-to-day `dev` and `build` commands are thin wrappers around the repo-local `cargo-tauri` binary.
+By default, worktrees share the same contributor-local cache under `~/.openducktor/cache/`, so you do not need to rerun the full CEF bootstrap for every git worktree.
+
+- CEF tools default to `~/.openducktor/cache/cargo-tools/tauri-feat-cef/<tauri-revision>/`
+- Exported CEF bundles default to `~/.openducktor/cache/cef/<cef-version>/`
+
+The setup script installs `cargo-tauri` from the exact Tauri git revision locked in `apps/desktop/src-tauri/Cargo.lock`, so the CEF CLI matches the app runtime instead of following the moving `feat/cef` branch head.
+
+You can override those locations with environment variables:
+
+- `OPENDUCKTOR_CARGO_TOOLS_ROOT` sets the install root for the shared `cargo-tauri` and `export-cef-dir` binaries
+- `OPENDUCKTOR_CEF_PATH` sets the exported CEF bundle directory used by OpenDucktor's setup, dev, and build wrappers
+- `CEF_PATH` is still honored for upstream compatibility when `OPENDUCKTOR_CEF_PATH` is unset
+
+The day-to-day `dev` and `build` commands are thin wrappers around the shared `cargo-tauri` binary.
 
 Then run:
 
@@ -93,7 +106,15 @@ Then run:
 bun run tauri:dev:cef
 ```
 
-If you need a different CEF location temporarily, you can still override `CEF_PATH` when invoking the setup or run script directly.
+If you need a different location temporarily, set `OPENDUCKTOR_CARGO_TOOLS_ROOT` and/or `OPENDUCKTOR_CEF_PATH` for that shell before invoking the scripts.
+
+On macOS, `tauri:dev:cef` uses `src-tauri/tauri.cef-dev.conf.json` so it runs as a separate app identity from your packaged `tauri:build:cef` app.
+
+- app bundle name: `OpenDucktor CEF Dev.app`
+- bundle identifier: `dev.openducktor.desktop.cefdev`
+- main window title: `OpenDucktor CEF Dev`
+
+That separation keeps the CEF dev app from sharing the same CEF profile directory as the packaged app. It does not change frontend UI copy such as the sidebar title.
 
 ### Build A macOS CEF Bundle
 

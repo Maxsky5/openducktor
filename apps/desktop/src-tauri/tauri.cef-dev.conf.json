@@ -1,0 +1,15 @@
+{
+  "productName": "OpenDucktor CEF Dev",
+  "identifier": "dev.openducktor.desktop.cefdev",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "OpenDucktor CEF Dev",
+        "width": 1500,
+        "height": 980,
+        "resizable": true
+      }
+    ]
+  }
+}
