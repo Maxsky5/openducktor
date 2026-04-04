@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { createElement, type ReactElement } from "react";
+import { createElement, type ReactElement, type ReactNode } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import * as appStateContexts from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
@@ -351,6 +351,18 @@ const registerModuleMocks = (): void => {
       createElement("mock-agent-studio-right-panel", props),
   }));
 
+  mock.module("@/contexts/DiffWorkerProvider", () => ({
+    DiffWorkerProvider: ({ children }: { children: ReactNode }) => children,
+  }));
+
+  mock.module("@pierre/diffs/react", () => ({
+    FileDiff: () => createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
+    Virtualizer: ({ children }: { children: ReactNode }) =>
+      createElement("div", { "data-testid": "mock-pierre-virtualizer" }, children),
+    useWorkerPool: () => null,
+    WorkerPoolContextProvider: ({ children }: { children: ReactNode }) => children,
+  }));
+
   mock.module("@/features/human-review-feedback/human-review-feedback-modal", () => ({
     HumanReviewFeedbackModal: (props: Record<string, unknown>): ReactElement =>
       createElement("mock-human-review-feedback-modal", props),
@@ -496,6 +508,8 @@ afterAll(async () => {
   await restoreMockedModules([
     ["react-router-dom", () => import("react-router-dom")],
     ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+    ["@/contexts/DiffWorkerProvider", () => import("@/contexts/DiffWorkerProvider")],
+    ["@pierre/diffs/react", () => import("@pierre/diffs/react")],
     ["@/state/app-state-contexts", () => import("@/state/app-state-contexts")],
     ["../use-agent-studio-query-sync", () => import("../use-agent-studio-query-sync")],
     [
