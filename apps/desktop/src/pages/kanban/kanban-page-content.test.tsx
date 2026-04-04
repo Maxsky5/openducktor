@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import type { ReactElement } from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
 
 const model: KanbanPageContentModel = {
@@ -41,8 +42,13 @@ describe("KanbanPageContent", () => {
     ({ KanbanPageContent } = await import("./kanban-page-content"));
   });
 
-  afterAll(() => {
-    mock.restore();
+  afterAll(async () => {
+    await restoreMockedModules([
+      [
+        "@/components/features/kanban/kanban-column",
+        () => import("@/components/features/kanban/kanban-column"),
+      ],
+    ]);
   });
 
   test("keeps the horizontal scroll region stretched across the remaining page height", () => {

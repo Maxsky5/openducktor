@@ -3,6 +3,7 @@ import { render } from "@testing-library/react";
 import { createElement, type ReactElement, type ReactNode } from "react";
 import type { Components } from "react-markdown";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 enableReactActEnvironment();
 
@@ -44,12 +45,12 @@ beforeAll(async () => {
   ({ default: PremiumMarkdownRenderer } = await import("./markdown-renderer-premium"));
 });
 
-beforeEach(() => {
-  markdownRenderMock.mockClear();
+afterAll(async () => {
+  await restoreMockedModules([["react-markdown", () => import("react-markdown")]]);
 });
 
-afterAll(() => {
-  mock.restore();
+beforeEach(() => {
+  markdownRenderMock.mockClear();
 });
 
 describe("PremiumMarkdownRenderer memoization", () => {

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "b
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 enableReactActEnvironment();
 
@@ -27,6 +28,10 @@ describe("TaskDetailsMarkdownContent", () => {
     ({ TaskDetailsMarkdownContent } = await import("./task-details-markdown-content"));
   });
 
+  afterAll(async () => {
+    await restoreMockedModules([["sonner", () => import("sonner")]]);
+  });
+
   beforeEach(() => {
     toastSuccessMock.mockClear();
     toastErrorMock.mockClear();
@@ -39,10 +44,6 @@ describe("TaskDetailsMarkdownContent", () => {
         writeText: writeClipboardMock,
       },
     });
-  });
-
-  afterAll(() => {
-    mock.restore();
   });
 
   test("renders floating copy button when copyable markdown is provided", () => {

@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { useRef } from "react";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { useWorkspaceSelectionOperations } from "./use-workspace-selection-operations";
@@ -30,10 +30,6 @@ let workspaceHost = createWorkspaceHostClient();
 
 beforeEach(() => {
   workspaceHost = createWorkspaceHostClient();
-});
-
-afterAll(() => {
-  mock.restore();
 });
 
 type SelectionHarnessArgs = {

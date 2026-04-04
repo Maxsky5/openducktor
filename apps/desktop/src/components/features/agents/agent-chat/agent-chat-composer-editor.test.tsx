@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import type { AgentFileSearchResult } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useRef, useState } from "react";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { type AgentChatComposerDraft, createComposerAttachment } from "./agent-chat-composer-draft";
 import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fixtures";
 
@@ -14,6 +15,10 @@ const renderMockEditableTextContent = (text: string): string => {
   return text.endsWith("\n") ? `${text}\u200B` : text;
 };
 
+const readMockEditableTextContent = (element: HTMLElement): string => {
+  return (element.textContent ?? "").replace(/\u200B/g, "");
+};
+
 const setCaretOffsetWithinElementMock = mock((element: HTMLElement, logicalOffset: number) => {
   const selection =
     element.ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
@@ -23,15 +28,24 @@ const setCaretOffsetWithinElementMock = mock((element: HTMLElement, logicalOffse
 
   let textNode = element.firstChild;
   if (!(textNode instanceof Text)) {
-    textNode = element.ownerDocument.createTextNode(
-      renderMockEditableTextContent((element.textContent ?? "").replace(/\u200B/g, "")),
-    );
+    textNode = element.ownerDocument.createTextNode("");
     element.replaceChildren(textNode);
   }
 
+  textNode.textContent = renderMockEditableTextContent(readMockEditableTextContent(element));
   const textContent = textNode.textContent ?? "";
-  const boundedOffset =
-    textContent === "\u200B" ? 1 : Math.max(0, Math.min(logicalOffset, textContent.length));
+  const logicalText = readMockEditableTextContent(element);
+  const boundedLogicalOffset = Math.max(0, Math.min(logicalOffset, logicalText.length));
+  let boundedOffset = boundedLogicalOffset;
+  if (textContent === "\u200B") {
+    boundedOffset = 1;
+  } else if (
+    textContent.endsWith("\u200B") &&
+    logicalText.endsWith("\n") &&
+    boundedLogicalOffset === logicalText.length
+  ) {
+    boundedOffset = textContent.length;
+  }
   const range = element.ownerDocument.createRange();
   range.setStart(textNode, boundedOffset);
   range.collapse(true);
@@ -46,8 +60,7 @@ const getCaretOffsetWithinElementMock = mock(
 beforeAll(async () => {
   mock.module("./agent-chat-composer-selection", () => ({
     EMPTY_TEXT_SEGMENT_SENTINEL: "\u200B",
-    readEditableTextContent: (element: HTMLElement): string =>
-      (element.textContent ?? "").replace(/\u200B/g, ""),
+    readEditableTextContent: readMockEditableTextContent,
     renderEditableTextContent: renderMockEditableTextContent,
     getCaretOffsetWithinElement: getCaretOffsetWithinElementMock,
     insertTextAtCaretWithinElement: (
@@ -66,8 +79,10 @@ beforeAll(async () => {
   ({ AgentChatComposerEditor } = await import("./agent-chat-composer-editor"));
 });
 
-afterAll(() => {
-  mock.restore();
+afterAll(async () => {
+  await restoreMockedModules([
+    ["./agent-chat-composer-selection", () => import("./agent-chat-composer-selection")],
+  ]);
 });
 
 const resetSelectionMocks = (): void => {

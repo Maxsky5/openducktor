@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -138,8 +139,13 @@ beforeAll(async () => {
   ({ useAgentStudioDocuments } = await import("./use-agent-studio-documents"));
 });
 
-afterAll(() => {
-  mock.restore();
+afterAll(async () => {
+  await restoreMockedModules([
+    [
+      "@/components/features/task-details/use-task-documents",
+      () => import("@/components/features/task-details/use-task-documents"),
+    ],
+  ]);
 });
 
 beforeEach(() => {

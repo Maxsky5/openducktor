@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { executeSessionStart, prepareSessionStartInput } from "./session-start-execution";
 
 const BUILD_SELECTION = {
@@ -10,10 +10,6 @@ const BUILD_SELECTION = {
 };
 
 describe("session-start-execution", () => {
-  afterEach(() => {
-    mock.restore();
-  });
-
   test("prepareSessionStartInput keeps reuse starts free of selection-only fields", async () => {
     const result = await prepareSessionStartInput({
       taskId: "TASK-1",

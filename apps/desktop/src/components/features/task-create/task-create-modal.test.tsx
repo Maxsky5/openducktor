@@ -3,6 +3,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import { render } from "@testing-library/react";
 import { act, createElement, type ReactNode } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 enableReactActEnvironment();
 
@@ -85,8 +86,15 @@ describe("TaskCreateModal", () => {
     ({ TaskCreateModal } = await import("./task-create-modal"));
   });
 
-  afterAll(() => {
-    mock.restore();
+  afterAll(async () => {
+    await restoreMockedModules([
+      ["@/components/features/task-create", () => import("@/components/features/task-create")],
+      [
+        "@/components/features/task-composer/task-document-editor",
+        () => import("@/components/features/task-composer/task-document-editor"),
+      ],
+      ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
+    ]);
   });
 
   test("renders the edit modal shell for the document editor flow", async () => {

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 (
   globalThis as typeof globalThis & {
@@ -26,8 +27,11 @@ describe("TaskPullRequestLink", () => {
     }));
   });
 
-  afterAll(() => {
-    mock.restore();
+  afterAll(async () => {
+    await restoreMockedModules([
+      ["@/lib/open-external-url", () => import("@/lib/open-external-url")],
+      ["sonner", () => import("sonner")],
+    ]);
   });
 
   beforeEach(() => {

@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { SettingsSnapshot, WorkspaceRecord } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
@@ -176,10 +176,6 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<
 
 beforeEach(async () => {
   workspaceHost = createWorkspaceHostClient();
-});
-
-afterAll(() => {
-  mock.restore();
 });
 
 type HookArgs = Parameters<typeof useWorkspaceOperations>[0];

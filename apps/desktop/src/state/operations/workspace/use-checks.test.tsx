@@ -7,6 +7,7 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
+import * as actualSonner from "sonner";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
@@ -214,7 +215,7 @@ beforeEach(async () => {
 
 afterAll(() => {
   Object.assign(host, originalHostMethods);
-  mock.restore();
+  mock.module("sonner", () => actualSonner);
 });
 
 describe("use-checks", () => {
@@ -797,9 +798,15 @@ describe("use-checks", () => {
         return originalSetTimeout(() => {}, 60_000);
       }
 
+      if (delay === 15_000) {
+        return originalSetTimeout(() => {
+          handler();
+        }, 0);
+      }
+
       return originalSetTimeout(() => {
         handler();
-      }, 0);
+      }, delay);
     }) as unknown as typeof globalThis.setTimeout;
     globalThis.clearTimeout = ((timeoutId: ReturnType<typeof globalThis.setTimeout>) => {
       originalClearTimeout(timeoutId);
@@ -819,7 +826,7 @@ describe("use-checks", () => {
           value.runtimeCheckFailureKind === "timeout" &&
           value.beadsCheckFailureKind === "timeout" &&
           value.isLoadingChecks === false,
-        1000,
+        400,
       );
 
       expect(toastMessage).toHaveBeenCalledWith(

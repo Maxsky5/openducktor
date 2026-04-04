@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { fireEvent, type RenderResult, render } from "@testing-library/react";
 import { act, createElement } from "react";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 const omitDialogDomProps = ({
   onOpenChange: _onOpenChange,
@@ -244,8 +245,13 @@ describe("AgentStudioGitPanel", () => {
     ({ AgentStudioGitPanel } = await import("./agent-studio-git-panel"));
   });
 
-  afterAll(() => {
-    mock.restore();
+  afterAll(async () => {
+    await restoreMockedModules([
+      ["@/components/ui/tooltip", () => import("@/components/ui/tooltip")],
+      ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
+      ["@/components/layout/theme-provider", () => import("@/components/layout/theme-provider")],
+      ["@pierre/diffs/react", () => import("@pierre/diffs/react")],
+    ]);
   });
 
   test("renders branch context labels and git action controls", async () => {

@@ -7,6 +7,7 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { TaskDetailsSheetControllerHandle } from "./task-details-sheet-controller";
 
 enableReactActEnvironment();
@@ -37,8 +38,8 @@ describe("TaskDetailsSheetController", () => {
     }));
   });
 
-  afterAll(() => {
-    mock.restore();
+  afterAll(async () => {
+    await restoreMockedModules([["./task-details-sheet", () => import("./task-details-sheet")]]);
   });
 
   beforeEach(() => {

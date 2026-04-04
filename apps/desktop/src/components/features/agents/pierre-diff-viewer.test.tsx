@@ -1,9 +1,14 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterAll, describe, expect, mock, test } from "bun:test";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 mock.module("@pierre/diffs/react", () => ({
   FileDiff: () => null,
   useWorkerPool: () => null,
 }));
+
+afterAll(async () => {
+  await restoreMockedModules([["@pierre/diffs/react", () => import("@pierre/diffs/react")]]);
+});
 
 const pierreViewerModule = await import("./pierre-diff-viewer");
 

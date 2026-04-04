@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { createQueryClient } from "@/lib/query-client";
 import { host } from "@/state/operations/host";
 import {
@@ -13,10 +13,6 @@ const createDocumentPayload = (markdown = "", updatedAt: string | null = null) =
 });
 
 describe("documents query helpers", () => {
-  afterEach(() => {
-    mock.restore();
-  });
-
   test("fetchFreshTaskDocumentFromQuery performs an authoritative read and updates the cache", async () => {
     const queryClient = createQueryClient();
     const taskDocumentGet = mock(async () =>

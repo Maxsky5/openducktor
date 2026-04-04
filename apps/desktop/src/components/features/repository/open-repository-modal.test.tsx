@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 enableReactActEnvironment();
 
@@ -86,8 +87,13 @@ describe("OpenRepositoryModal", () => {
     ({ OpenRepositoryModal } = await import("./open-repository-modal"));
   });
 
-  afterEach(() => {
-    mock.restore();
+  afterAll(async () => {
+    await restoreMockedModules([
+      ["@/lib/repo-directory", () => import("@/lib/repo-directory")],
+      ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+      ["@/components/ui/button", () => import("@/components/ui/button")],
+      ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
+    ]);
   });
 
   test("renders string host errors from repository add failures", async () => {

@@ -12,6 +12,7 @@ import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -562,11 +563,28 @@ describe("KanbanPage session start modal flow", () => {
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
     host.tasksList = originalTasksList;
     host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
-    mock.restore();
   });
 
-  afterAll(() => {
+  afterAll(async () => {
     console.error = originalConsoleError;
+    await restoreMockedModules([
+      ["sonner", () => import("sonner")],
+      [
+        "@/components/features/kanban/kanban-column",
+        () => import("@/components/features/kanban/kanban-column"),
+      ],
+      ["./kanban-session-start-modal", () => import("./kanban-session-start-modal")],
+      [
+        "@/components/features/pull-requests/merged-pull-request-confirm-dialog",
+        () => import("@/components/features/pull-requests/merged-pull-request-confirm-dialog"),
+      ],
+      ["./task-reset-implementation-modal", () => import("./task-reset-implementation-modal")],
+      [
+        "@/features/human-review-feedback/human-review-feedback-modal",
+        () => import("@/features/human-review-feedback/human-review-feedback-modal"),
+      ],
+      ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+    ]);
   });
 
   test("delegate action opens modal and foreground confirm navigates to Agent Studio", async () => {
