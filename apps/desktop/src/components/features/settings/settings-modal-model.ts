@@ -1,11 +1,14 @@
 import {
   type AgentPromptTemplateId,
+  type RepoConfig,
   type RepoPromptOverrides,
+  type RuntimeDescriptor,
+  type RuntimeKind,
   validatePromptTemplatePlaceholders,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ComboboxOption } from "@/components/ui/combobox";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
+import { DEFAULT_RUNTIME_KIND, resolveRuntimeKindSelection } from "@/lib/agent-runtime";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 
@@ -34,7 +37,7 @@ export const ROLE_DEFAULTS: ReadonlyArray<{
   { role: "qa", label: AGENT_ROLE_LABELS.qa },
 ];
 
-export const ensureAgentDefault = (
+export const ensureDraftAgentDefault = (
   value:
     | {
         runtimeKind?: string;
@@ -59,7 +62,7 @@ export const updateRoleDefault = (
   field: keyof RepoAgentDefaultInput,
   value: string,
 ): RepoAgentDefaultsInput => {
-  const next = ensureAgentDefault(agentDefaults[role]);
+  const next = ensureDraftAgentDefault(agentDefaults[role]);
   return {
     ...agentDefaults,
     [role]: {
@@ -87,6 +90,8 @@ export const selectedModelKeyForRole = (
   }
   return `${value.providerId}/${value.modelId}`;
 };
+
+export const ensureAgentDefault = ensureDraftAgentDefault;
 
 export const findCatalogModel = (
   catalog: AgentModelCatalog | null,
@@ -120,6 +125,46 @@ export const getMissingRequiredRoleLabels = (agentDefaults: RepoAgentDefaultsInp
       (value.profileId?.trim().length ?? 0) > 0
     );
   }).map(({ label }) => label);
+};
+
+export const resolveRepoAgentDefaultRuntimeKind = ({
+  selectedRepoConfig,
+  runtimeDefinitions,
+  role,
+}: {
+  selectedRepoConfig: RepoConfig;
+  runtimeDefinitions: RuntimeDescriptor[];
+  role: RepoDefaultRole;
+}): RuntimeKind => {
+  const requestedRuntimeKind =
+    selectedRepoConfig.agentDefaults[role]?.runtimeKind ?? selectedRepoConfig.defaultRuntimeKind;
+
+  return resolveRuntimeKindSelection({
+    runtimeDefinitions,
+    requestedRuntimeKind,
+    fallbackRuntimeKind: DEFAULT_RUNTIME_KIND,
+  });
+};
+
+export const getNeededCatalogRuntimeKinds = (
+  selectedRepoConfig: RepoConfig | null,
+  runtimeDefinitions: RuntimeDescriptor[],
+): RuntimeKind[] => {
+  if (!selectedRepoConfig || runtimeDefinitions.length === 0) {
+    return [];
+  }
+
+  const runtimeKinds = new Set<RuntimeKind>();
+  for (const { role } of ROLE_DEFAULTS) {
+    const resolvedRuntimeKind = resolveRepoAgentDefaultRuntimeKind({
+      selectedRepoConfig,
+      runtimeDefinitions,
+      role,
+    });
+    runtimeKinds.add(resolvedRuntimeKind);
+  }
+
+  return [...runtimeKinds];
 };
 
 const normalizeTemplateForComparison = (value: string | undefined): string =>

@@ -6,7 +6,6 @@ import {
   type RunSummary,
   type TaskCard,
 } from "@openducktor/contracts";
-import { act } from "react";
 import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
@@ -229,19 +228,14 @@ const createHookHarness = (args: {
 
   const waitFor = async (
     predicate: (state: ReturnType<typeof useAgentOrchestratorOperations>) => boolean,
-    timeoutMs = 1000,
   ) => {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      const state = latest;
-      if (state && predicate(state)) {
-        return state;
-      }
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      });
+    await sharedHarness.waitFor(() => latest !== null && predicate(latest));
+
+    if (!latest) {
+      throw new Error("Hook state unavailable");
     }
-    throw new Error("Timed out waiting for hook state");
+
+    return latest;
   };
 
   const getLatest = () => {
@@ -2266,9 +2260,8 @@ describe("use-agent-orchestrator-operations", () => {
 
       try {
         await harness.mount();
-        const resolved = await harness.waitFor(
-          (state) => state.sessions.some((session) => session.sessionId === "session-1"),
-          2_000,
+        const resolved = await harness.waitFor((state) =>
+          state.sessions.some((session) => session.sessionId === "session-1"),
         );
         expect(repoConfigCalls).toBe(0);
         expect(

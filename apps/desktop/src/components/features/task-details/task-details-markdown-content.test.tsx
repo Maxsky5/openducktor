@@ -165,12 +165,9 @@ describe("TaskDetailsMarkdownContent", () => {
         expect(button.querySelector(".lucide-check")).not.toBeNull();
       });
 
-      await waitFor(
-        () => {
-          expect(button.querySelector(".lucide-copy")).not.toBeNull();
-        },
-        { timeout: 200 },
-      );
+      await waitFor(() => {
+        expect(button.querySelector(".lucide-copy")).not.toBeNull();
+      });
     } finally {
       rendered.unmount();
     }

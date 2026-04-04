@@ -15,7 +15,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
-    "test": "bun test --pass-with-no-tests",
+    "test": "bun test --pass-with-no-tests --timeout 1000",
     "lint": "biome check src scripts"
   },
   "dependencies": {

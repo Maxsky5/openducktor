@@ -1,16 +1,23 @@
 import { describe, expect, test } from "bun:test";
-import type { RepoPromptOverrides } from "@openducktor/contracts";
+import {
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RepoConfig,
+  type RepoPromptOverrides,
+  type RuntimeDescriptor,
+} from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import {
   buildPromptOverrideValidationErrors,
   canResetPromptOverrideToBuiltin,
   clearRoleDefault,
-  ensureAgentDefault,
+  ensureDraftAgentDefault,
   findCatalogModel,
   getMissingRequiredRoleLabels,
+  getNeededCatalogRuntimeKinds,
   removePromptOverride,
   resetPromptOverrideToBuiltin,
   resolvePromptOverrideFallbackTemplate,
+  resolveRepoAgentDefaultRuntimeKind,
   selectedModelKeyForRole,
   togglePromptOverrideEnabled,
   toRoleVariantOptions,
@@ -42,9 +49,38 @@ const emptyDefaults = {
   qa: null,
 };
 
+const OPENCODE_DESCRIPTOR = {
+  ...OPENCODE_RUNTIME_DESCRIPTOR,
+} satisfies RuntimeDescriptor;
+
+const CODEX_DESCRIPTOR = {
+  ...OPENCODE_RUNTIME_DESCRIPTOR,
+  kind: "codex",
+  label: "Codex",
+  description: "Codex runtime",
+} satisfies RuntimeDescriptor;
+
+const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
+  defaultRuntimeKind: "opencode",
+  worktreeBasePath: undefined,
+  branchPrefix: "odt",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
+  git: {
+    providers: {},
+  },
+  trustedHooks: false,
+  trustedHooksFingerprint: undefined,
+  hooks: { preStart: [], postComplete: [] },
+  devServers: [],
+  worktreeFileCopies: [],
+  promptOverrides: {},
+  agentDefaults: {},
+  ...overrides,
+});
+
 describe("settings-modal-model", () => {
   test("normalizes null defaults to empty values", () => {
-    expect(ensureAgentDefault(null)).toEqual({
+    expect(ensureDraftAgentDefault(null)).toEqual({
       runtimeKind: "opencode",
       providerId: "",
       modelId: "",
@@ -97,6 +133,86 @@ describe("settings-modal-model", () => {
     };
 
     expect(getMissingRequiredRoleLabels(defaults)).toEqual(["Planner", "Builder", "QA"]);
+  });
+
+  test("derives one catalog target when all roles inherit the same runtime", () => {
+    expect(
+      getNeededCatalogRuntimeKinds(createRepoConfig(), [OPENCODE_DESCRIPTOR, CODEX_DESCRIPTOR]),
+    ).toEqual(["opencode"]);
+  });
+
+  test("resolves inherited role runtime kinds from the repo default runtime", () => {
+    expect(
+      resolveRepoAgentDefaultRuntimeKind({
+        selectedRepoConfig: createRepoConfig({
+          defaultRuntimeKind: "codex",
+          agentDefaults: {
+            spec: undefined,
+            planner: undefined,
+            build: undefined,
+            qa: undefined,
+          },
+        }),
+        runtimeDefinitions: [OPENCODE_DESCRIPTOR, CODEX_DESCRIPTOR],
+        role: "spec",
+      }),
+    ).toBe("codex");
+  });
+
+  test("derives unique catalog targets from mixed role overrides", () => {
+    expect(
+      getNeededCatalogRuntimeKinds(
+        createRepoConfig({
+          defaultRuntimeKind: "opencode",
+          agentDefaults: {
+            spec: {
+              runtimeKind: "codex",
+              providerId: "openai",
+              modelId: "gpt-5",
+              variant: "default",
+              profileId: "spec-agent",
+            },
+            planner: {
+              runtimeKind: "codex",
+              providerId: "openai",
+              modelId: "gpt-5",
+              variant: "default",
+              profileId: "planner-agent",
+            },
+            build: undefined,
+            qa: undefined,
+          },
+        }),
+        [OPENCODE_DESCRIPTOR, CODEX_DESCRIPTOR],
+      ),
+    ).toEqual(["codex", "opencode"]);
+  });
+
+  test("returns an empty target list when no runtime definitions are available", () => {
+    expect(getNeededCatalogRuntimeKinds(createRepoConfig(), [])).toEqual([]);
+  });
+
+  test("resolves missing stored runtime kinds through existing runtime resolution", () => {
+    expect(
+      getNeededCatalogRuntimeKinds(
+        createRepoConfig({
+          defaultRuntimeKind: "missing-runtime",
+          agentDefaults: {
+            spec: {
+              runtimeKind: "also-missing",
+              providerId: "openai",
+              modelId: "gpt-5",
+              variant: "default",
+              profileId: "spec-agent",
+            },
+            planner: undefined,
+            build: undefined,
+            qa: undefined,
+          },
+        }),
+        [CODEX_DESCRIPTOR],
+      ),
+    ).toEqual(["codex"]);
   });
 
   test("resets prompt override only when it exists and preserves enabled flag", () => {

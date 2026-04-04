@@ -6,7 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback } from "react";
-import { ensureAgentDefault } from "@/components/features/settings";
+import { ensureDraftAgentDefault } from "@/components/features/settings";
 
 type UseSettingsModalDraftActionsArgs = {
   selectedRepoPath: string | null;
@@ -163,16 +163,24 @@ export const useSettingsModalDraftActions = ({
       field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
       value: string,
     ): void => {
-      updateSelectedRepoConfig((repoConfig) => ({
-        ...repoConfig,
-        agentDefaults: {
-          ...repoConfig.agentDefaults,
-          [role]: {
-            ...ensureAgentDefault(repoConfig.agentDefaults[role]),
-            [field]: value,
+      updateSelectedRepoConfig((repoConfig) => {
+        const currentRoleDefault = repoConfig.agentDefaults[role];
+        const nextRoleDefault = {
+          ...ensureDraftAgentDefault(currentRoleDefault),
+          runtimeKind: currentRoleDefault?.runtimeKind ?? repoConfig.defaultRuntimeKind,
+        };
+
+        return {
+          ...repoConfig,
+          agentDefaults: {
+            ...repoConfig.agentDefaults,
+            [role]: {
+              ...nextRoleDefault,
+              [field]: value,
+            },
           },
-        },
-      }));
+        };
+      });
     },
     [updateSelectedRepoConfig],
   );

@@ -171,23 +171,17 @@ const mountApprovalHarness = async (Harness: () => ReactElement | null) => {
   return harness;
 };
 
-const waitForTaskApprovalModalLoaded = async (timeoutMs = 1000): Promise<void> => {
-  await waitFor(
-    () => {
-      expect(latestHarnessValue?.taskApprovalModal).toBeTruthy();
-      expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(false);
-    },
-    { timeout: timeoutMs },
-  );
+const waitForTaskApprovalModalLoaded = async (): Promise<void> => {
+  await waitFor(() => {
+    expect(latestHarnessValue?.taskApprovalModal).toBeTruthy();
+    expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(false);
+  });
 };
 
-const waitForTaskApprovalModalClosed = async (timeoutMs = 1000): Promise<void> => {
-  await waitFor(
-    () => {
-      expect(latestHarnessValue?.taskApprovalModal).toBeNull();
-    },
-    { timeout: timeoutMs },
-  );
+const waitForTaskApprovalModalClosed = async (): Promise<void> => {
+  await waitFor(() => {
+    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+  });
 };
 
 const createTaskApprovalContextFixture = (
