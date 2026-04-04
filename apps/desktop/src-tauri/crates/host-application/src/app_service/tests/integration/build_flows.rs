@@ -1102,6 +1102,193 @@ fn build_start_rejects_existing_worktree_directory() -> Result<()> {
 }
 
 #[test]
+fn build_start_uses_targeted_task_reads_instead_of_listing_all_tasks() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("build-targeted-task-read");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _opencode_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        fake_opencode.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("worktrees");
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+
+    {
+        let mut state = task_state.lock().expect("task lock poisoned");
+        state.list_error = Some("build start should not enumerate the full task list".to_string());
+    }
+
+    let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
+    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
+    assert!(matches!(run.state, RunState::Running));
+
+    {
+        let state = task_state.lock().expect("task lock poisoned");
+        assert_eq!(
+            state.get_task_calls,
+            vec!["task-1".to_string(), "task-1".to_string()]
+        );
+    }
+
+    {
+        let mut state = task_state.lock().expect("task lock poisoned");
+        state.list_error = None;
+    }
+
+    assert!(service.build_stop(run.run_id.as_str(), emitter.clone())?);
+    assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn build_start_reports_missing_task_from_targeted_lookup() -> Result<()> {
+    let root = unique_temp_path("build-missing-task");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("worktrees");
+    let (service, _task_state, _git_state) = build_service_with_store(
+        Vec::new(),
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+
+    let error = service
+        .build_start(
+            repo_path.as_str(),
+            "task-1",
+            "opencode",
+            make_emitter(Arc::new(Mutex::new(Vec::new()))),
+        )
+        .expect_err("missing task should fail targeted lookup");
+    assert_eq!(error.to_string(), "Task not found: task-1");
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn build_start_preserves_transition_validation_with_targeted_lookup() -> Result<()> {
+    let root = unique_temp_path("build-invalid-transition");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("worktrees");
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "feature", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+
+    let error = service
+        .build_start(
+            repo_path.as_str(),
+            "task-1",
+            "opencode",
+            make_emitter(Arc::new(Mutex::new(Vec::new()))),
+        )
+        .expect_err("feature should still require ready_for_dev before build start");
+    assert!(error
+        .to_string()
+        .contains("Transition not allowed for task-1 (feature): open -> in_progress"));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
 fn build_start_reports_opencode_startup_failure() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("build-startup-failure");
