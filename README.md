@@ -49,7 +49,7 @@ OpenDucktor is built around a workflow where tasks live in Beads and agent work 
 
 OpenDucktor currently targets local macOS development.
 
-- Bun `1.3.5`
+- Bun `1.3.11`
 - Rust stable toolchain
 - Xcode Command Line Tools
 - `git`

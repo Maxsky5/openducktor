@@ -7,8 +7,8 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
-import * as actualSonner from "sonner";
 import { QueryProvider } from "@/lib/query-provider";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
@@ -213,9 +213,9 @@ beforeEach(async () => {
   repoHealthHandler = async () => makeRepoHealth();
 });
 
-afterAll(() => {
+afterAll(async () => {
   Object.assign(host, originalHostMethods);
-  mock.module("sonner", () => actualSonner);
+  await restoreMockedModules([["sonner", () => import("sonner")]]);
 });
 
 describe("use-checks", () => {

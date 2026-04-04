@@ -1,9 +1,10 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import type { DevServerScriptState } from "@openducktor/contracts";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentStudioDevServerLogBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 
@@ -20,9 +21,23 @@ beforeAll(async () => {
     DiffWorkerProvider: ({ children }: { children: ReactNode }) => children,
   }));
 
+  mock.module("@pierre/diffs/react", () => ({
+    FileDiff: () => createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
+    Virtualizer: ({ children }: { children: ReactNode }) =>
+      createElement("div", { "data-testid": "mock-pierre-virtualizer" }, children),
+    useWorkerPool: () => null,
+  }));
+
   ({ AgentStudioRightPanel, AgentStudioRightPanelToggleButton } = await import(
     "./agent-studio-right-panel"
   ));
+});
+
+afterAll(async () => {
+  await restoreMockedModules([
+    ["@/contexts/DiffWorkerProvider", () => import("@/contexts/DiffWorkerProvider")],
+    ["@pierre/diffs/react", () => import("@pierre/diffs/react")],
+  ]);
 });
 
 const emptyDoc = {
