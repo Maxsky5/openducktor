@@ -66,7 +66,6 @@ impl HeadlessEventBus {
 
         (receiver, replay)
     }
-
 }
 
 pub(super) fn build_sse_response(
@@ -75,11 +74,9 @@ pub(super) fn build_sse_response(
     stream_name: &'static str,
 ) -> impl IntoResponse {
     let (receiver, replay) = bus.subscribe_with_replay(last_event_id);
-    let replay_stream = tokio_stream::iter(
-        replay.into_iter().map(|event| to_sse_event(&event)),
-    );
-    let live_stream = BroadcastStream::new(receiver)
-        .map(move |message| live_event_to_sse(message, stream_name));
+    let replay_stream = tokio_stream::iter(replay.into_iter().map(|event| to_sse_event(&event)));
+    let live_stream =
+        BroadcastStream::new(receiver).map(move |message| live_event_to_sse(message, stream_name));
     let stream: Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>> =
         Box::pin(replay_stream.chain(live_stream));
 
@@ -225,7 +222,10 @@ mod tests {
 
         bus.emit("third".to_string());
 
-        let live = receiver.recv().await.expect("subscribed receiver should get new events");
+        let live = receiver
+            .recv()
+            .await
+            .expect("subscribed receiver should get new events");
         assert_eq!(live.id, 3);
         assert_eq!(live.payload, "third");
     }

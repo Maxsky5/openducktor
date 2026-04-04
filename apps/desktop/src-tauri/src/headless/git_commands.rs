@@ -1,8 +1,8 @@
 use super::command_registry::CommandRegistry;
 use super::command_support::{
     deserialize_args, handle_repo_path_operation_blocking, invalidate_repo_worktree_cache,
-    request_error, run_headless_blocking, serialize_value, CommandResult,
-    HeadlessCommandError, HeadlessState,
+    request_error, run_headless_blocking, serialize_value, CommandResult, HeadlessCommandError,
+    HeadlessState,
 };
 use crate::commands::git::{
     build_worktree_status_summary_with_snapshot, build_worktree_status_with_snapshot,
@@ -140,9 +140,7 @@ fn resolve_authorized_working_dir(
     resolve_working_dir(repo_path, working_dir).map_err(request_error)
 }
 
-fn require_git_commit_message(
-    message: &str,
-) -> Result<String, HeadlessCommandError> {
+fn require_git_commit_message(message: &str) -> Result<String, HeadlessCommandError> {
     let trimmed = message.trim();
     if trimmed.is_empty() {
         return Err(HeadlessCommandError::bad_request("message is required"));
@@ -150,12 +148,12 @@ fn require_git_commit_message(
     Ok(trimmed.to_string())
 }
 
-fn require_git_rebase_target_branch(
-    target_branch: &str,
-) -> Result<String, HeadlessCommandError> {
+fn require_git_rebase_target_branch(target_branch: &str) -> Result<String, HeadlessCommandError> {
     let trimmed = target_branch.trim();
     if trimmed.is_empty() {
-        return Err(HeadlessCommandError::bad_request("targetBranch is required"));
+        return Err(HeadlessCommandError::bad_request(
+            "targetBranch is required",
+        ));
     }
     Ok(trimmed.to_string())
 }
@@ -181,9 +179,12 @@ fn build_worktree_snapshot_metadata(
 pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), String> {
     registry.register("git_get_branches", |state, args| {
         Box::pin(async move {
-            handle_repo_path_operation_blocking(state, args, "git_get_branches", |service, repo_path| {
-                service.git_get_branches(&repo_path)
-            })
+            handle_repo_path_operation_blocking(
+                state,
+                args,
+                "git_get_branches",
+                |service, repo_path| service.git_get_branches(&repo_path),
+            )
             .await
         })
     })?;
@@ -504,10 +505,7 @@ async fn handle_git_commit_all(state: &HeadlessState, args: Value) -> CommandRes
     )
 }
 
-async fn handle_git_reset_worktree_selection(
-    state: &HeadlessState,
-    args: Value,
-) -> CommandResult {
+async fn handle_git_reset_worktree_selection(state: &HeadlessState, args: Value) -> CommandResult {
     let request: GitResetWorktreeSelectionArgs = deserialize_args(args)?;
     let target_branch = require_target_branch(&request.target_branch)
         .map_err(request_error)?
@@ -630,8 +628,8 @@ mod tests {
 
     #[test]
     fn require_git_rebase_target_branch_rejects_blank_values() {
-        let error = require_git_rebase_target_branch("   ")
-            .expect_err("blank target branch should fail");
+        let error =
+            require_git_rebase_target_branch("   ").expect_err("blank target branch should fail");
 
         assert_eq!(error.status, StatusCode::BAD_REQUEST);
         assert_eq!(error.message, "targetBranch is required");

@@ -84,9 +84,12 @@ struct WorkspaceResolveLocalAttachmentPathArgs {
 pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), String> {
     registry.register("system_check", |state, args| {
         Box::pin(async move {
-            handle_repo_path_operation_blocking(state, args, "system_check", |service, repo_path| {
-                service.system_check(&repo_path)
-            })
+            handle_repo_path_operation_blocking(
+                state,
+                args,
+                "system_check",
+                |service, repo_path| service.system_check(&repo_path),
+            )
             .await
         })
     })?;
@@ -121,15 +124,18 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     registry.register("workspace_update_repo_hooks", |state, args| {
         Box::pin(async move { handle_workspace_update_repo_hooks(state, args) })
     })?;
-    registry.register("workspace_prepare_trusted_hooks_challenge", |state, args| {
-        Box::pin(async move {
-            handle_repo_path_operation(args, |repo_path| {
-                state
-                    .service
-                    .workspace_prepare_trusted_hooks_challenge(&repo_path)
+    registry.register(
+        "workspace_prepare_trusted_hooks_challenge",
+        |state, args| {
+            Box::pin(async move {
+                handle_repo_path_operation(args, |repo_path| {
+                    state
+                        .service
+                        .workspace_prepare_trusted_hooks_challenge(&repo_path)
+                })
             })
-        })
-    })?;
+        },
+    )?;
     registry.register("workspace_get_repo_config", |state, args| {
         Box::pin(async move {
             handle_repo_path_operation(args, |repo_path| {
@@ -359,10 +365,7 @@ async fn handle_workspace_save_settings_snapshot(
     serialize_value(updated)
 }
 
-async fn handle_workspace_set_trusted_hooks(
-    state: &HeadlessState,
-    args: Value,
-) -> CommandResult {
+async fn handle_workspace_set_trusted_hooks(state: &HeadlessState, args: Value) -> CommandResult {
     let WorkspaceSetTrustedHooksArgs {
         repo_path,
         trusted,

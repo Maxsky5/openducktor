@@ -65,11 +65,7 @@ impl IntoResponse for HeadlessCommandError {
             }),
         };
 
-        (
-            self.status,
-            Json(payload),
-        )
-            .into_response()
+        (self.status, Json(payload)).into_response()
     }
 }
 
@@ -107,12 +103,16 @@ impl HookTrustConfirmationPort for HeadlessHookTrustConfirmationPort {
     }
 }
 
-pub(super) fn deserialize_args<T: DeserializeOwned>(args: Value) -> Result<T, HeadlessCommandError> {
+pub(super) fn deserialize_args<T: DeserializeOwned>(
+    args: Value,
+) -> Result<T, HeadlessCommandError> {
     serde_json::from_value(args)
         .map_err(|error| HeadlessCommandError::bad_request(format!("Invalid arguments: {error}")))
 }
 
-pub(super) fn serialize_value<T: serde::Serialize>(value: T) -> Result<Value, HeadlessCommandError> {
+pub(super) fn serialize_value<T: serde::Serialize>(
+    value: T,
+) -> Result<Value, HeadlessCommandError> {
     serde_json::to_value(value).map_err(|error| {
         HeadlessCommandError::internal(format!("Failed to serialize response: {error}"))
     })
@@ -233,9 +233,7 @@ where
     )
 }
 
-pub(super) fn invalidate_repo_worktree_cache(
-    repo_path: &str,
-) -> Result<(), HeadlessCommandError> {
+pub(super) fn invalidate_repo_worktree_cache(repo_path: &str) -> Result<(), HeadlessCommandError> {
     invalidate_worktree_resolution_cache_for_repo(repo_path)
         .map_err(|error| HeadlessCommandError::internal(error.to_string()))
 }

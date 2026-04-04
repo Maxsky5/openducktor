@@ -79,7 +79,13 @@ fn sanitize_attachment_lookup_token(path_or_name: &str) -> Result<String, String
 fn format_attachment_lookup_display_name(token: &str) -> String {
     let sanitized = token
         .chars()
-        .map(|character| if character.is_control() { '_' } else { character })
+        .map(|character| {
+            if character.is_control() {
+                '_'
+            } else {
+                character
+            }
+        })
         .collect::<String>();
     if sanitized.len() <= MAX_ATTACHMENT_LOOKUP_DISPLAY_LEN {
         return sanitized;
@@ -104,18 +110,17 @@ fn read_staged_attachment_original_name(path: &Path) -> Option<String> {
     Some(rest[1..].to_string())
 }
 
-pub(crate) fn stage_local_attachment_to_temp(name: &str, base64_data: &str) -> Result<PathBuf, String> {
+pub(crate) fn stage_local_attachment_to_temp(
+    name: &str,
+    base64_data: &str,
+) -> Result<PathBuf, String> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(base64_data)
         .map_err(|error| format!("Failed to decode attachment payload: {error}"))?;
     let attachment_dir = local_attachment_stage_dir();
     std::fs::create_dir_all(&attachment_dir)
         .map_err(|error| format!("Failed to prepare attachment staging directory: {error}"))?;
-    let file_name = format!(
-        "{}-{}",
-        Uuid::new_v4(),
-        sanitize_attachment_filename(name)
-    );
+    let file_name = format!("{}-{}", Uuid::new_v4(), sanitize_attachment_filename(name));
     let path = attachment_dir.join(file_name);
     std::fs::write(&path, bytes)
         .map_err(|error| format!("Failed to stage local attachment: {error}"))?;
@@ -143,15 +148,20 @@ pub(crate) fn resolve_staged_local_attachment_path(path_or_name: &str) -> Result
     let entries = match std::fs::read_dir(&attachment_dir) {
         Ok(entries) => entries,
         Err(error) if error.kind() == ErrorKind::NotFound => {
-            return Err(format!("No staged local attachment matches '{display_name}'."))
+            return Err(format!(
+                "No staged local attachment matches '{display_name}'."
+            ))
         }
         Err(error) => {
-            return Err(format!("Failed to read attachment staging directory: {error}"))
+            return Err(format!(
+                "Failed to read attachment staging directory: {error}"
+            ))
         }
     };
     let mut matches = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(|error| format!("Failed to read staged attachment entry: {error}"))?;
+        let entry =
+            entry.map_err(|error| format!("Failed to read staged attachment entry: {error}"))?;
         let path = entry.path();
         let Some(name) = read_staged_attachment_original_name(&path) else {
             continue;
@@ -162,7 +172,9 @@ pub(crate) fn resolve_staged_local_attachment_path(path_or_name: &str) -> Result
     }
 
     match matches.len() {
-        0 => Err(format!("No staged local attachment matches '{display_name}'.")),
+        0 => Err(format!(
+            "No staged local attachment matches '{display_name}'."
+        )),
         1 => Ok(matches.remove(0)),
         _ => {
             let mut ranked_matches = matches
@@ -583,13 +595,10 @@ mod tests {
         stage_local_attachment_to_temp, workspace_detect_github_repository,
         workspace_prepare_trusted_hooks_challenge, workspace_save_repo_settings,
         workspace_save_settings_snapshot, workspace_set_trusted_hooks,
-        workspace_update_repo_config,
-        workspace_update_global_git_config, HookSet,
-    };
-    use crate::commands::git::{
-        authorized_worktree_cache, cache_key, read_worktree_state_token,
+        workspace_update_global_git_config, workspace_update_repo_config, HookSet,
     };
     use crate::commands::git::resolve_working_dir;
+    use crate::commands::git::{authorized_worktree_cache, cache_key, read_worktree_state_token};
     use crate::{AppState, RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload};
     use host_application::{AppService, PreparedHookTrustChallenge};
     use host_domain::{TaskStore, WorkspaceRecord, TASK_METADATA_NAMESPACE};
@@ -648,11 +657,8 @@ mod tests {
                 .expect("system clock should be after unix epoch")
                 .as_nanos()
         );
-        let path = stage_local_attachment_to_temp(
-            &unique_name,
-            "cHJldmlldy1ieXRlcw==",
-        )
-        .expect("attachment should stage");
+        let path = stage_local_attachment_to_temp(&unique_name, "cHJldmlldy1ieXRlcw==")
+            .expect("attachment should stage");
 
         let resolved = resolve_staged_local_attachment_path(&unique_name)
             .expect("filename token should resolve to staged path");
@@ -717,12 +723,15 @@ mod tests {
     }
 
     fn seed_authorized_worktree_cache_with_subset(repo: &Path, allowed_worktrees: &[&Path]) {
-        let canonical_repo = fs::canonicalize(repo).expect("repo should canonicalize for cache seed");
+        let canonical_repo =
+            fs::canonicalize(repo).expect("repo should canonicalize for cache seed");
         let worktree_state_token = read_worktree_state_token(canonical_repo.as_path())
             .expect("worktree state token should be readable for cache seed");
         let seeded_worktrees = allowed_worktrees
             .iter()
-            .map(|path| fs::canonicalize(path).expect("worktree should canonicalize for cache seed"))
+            .map(|path| {
+                fs::canonicalize(path).expect("worktree should canonicalize for cache seed")
+            })
             .collect::<HashSet<_>>();
         let mut cache = authorized_worktree_cache()
             .lock()
@@ -1280,7 +1289,8 @@ mod tests {
 
     #[test]
     fn workspace_update_repo_config_invalidates_authorized_worktree_cache() -> Result<(), String> {
-        let fixture = setup_workspace_command_fixture("update-repo-config-cache", HookSet::default());
+        let fixture =
+            setup_workspace_command_fixture("update-repo-config-cache", HookSet::default());
         let repo_path = PathBuf::from(&fixture.repo_path);
         clear_authorized_worktree_cache_for_repo(repo_path.as_path());
         let worktree_one = fixture.root.join("repo-wt-config-one");
@@ -1313,15 +1323,22 @@ mod tests {
         seed_authorized_worktree_cache_with_subset(repo_path.as_path(), &[worktree_one.as_path()]);
 
         let worktree_two_str = worktree_two.to_string_lossy().to_string();
-        let stale_error = resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
-            .expect_err("seeded cache should reject worktree omitted from subset");
+        let stale_error =
+            resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+                .expect_err("seeded cache should reject worktree omitted from subset");
         assert!(stale_error.contains("not within authorized repository or linked worktrees"));
 
         run_workspace_update_repo_config(
             &fixture,
             RepoConfigPayload {
                 default_runtime_kind: None,
-                worktree_base_path: Some(fixture.root.join("updated-base").to_string_lossy().to_string()),
+                worktree_base_path: Some(
+                    fixture
+                        .root
+                        .join("updated-base")
+                        .to_string_lossy()
+                        .to_string(),
+                ),
                 branch_prefix: None,
                 default_target_branch: None,
                 git: None,
@@ -1332,8 +1349,9 @@ mod tests {
             },
         )?;
 
-        let resolved = resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
-            .expect("worktree cache should refresh after repo config update invalidation");
+        let resolved =
+            resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+                .expect("worktree cache should refresh after repo config update invalidation");
         let expected = fs::canonicalize(&worktree_two)
             .expect("worktree should canonicalize")
             .to_string_lossy()
@@ -1346,7 +1364,8 @@ mod tests {
 
     #[test]
     fn workspace_save_repo_settings_invalidates_authorized_worktree_cache() -> Result<(), String> {
-        let fixture = setup_workspace_command_fixture("save-repo-settings-cache", HookSet::default());
+        let fixture =
+            setup_workspace_command_fixture("save-repo-settings-cache", HookSet::default());
         let repo_path = PathBuf::from(&fixture.repo_path);
         clear_authorized_worktree_cache_for_repo(repo_path.as_path());
         let worktree_one = fixture.root.join("repo-wt-settings-one");
@@ -1379,15 +1398,22 @@ mod tests {
         seed_authorized_worktree_cache_with_subset(repo_path.as_path(), &[worktree_one.as_path()]);
 
         let worktree_two_str = worktree_two.to_string_lossy().to_string();
-        let stale_error = resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
-            .expect_err("seeded cache should reject worktree omitted from subset");
+        let stale_error =
+            resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+                .expect_err("seeded cache should reject worktree omitted from subset");
         assert!(stale_error.contains("not within authorized repository or linked worktrees"));
 
         run_workspace_save_repo_settings(
             &fixture,
             RepoSettingsPayload {
                 default_runtime_kind: None,
-                worktree_base_path: Some(fixture.root.join("updated-settings-base").to_string_lossy().to_string()),
+                worktree_base_path: Some(
+                    fixture
+                        .root
+                        .join("updated-settings-base")
+                        .to_string_lossy()
+                        .to_string(),
+                ),
                 branch_prefix: None,
                 default_target_branch: None,
                 git: None,
@@ -1400,8 +1426,9 @@ mod tests {
             },
         )?;
 
-        let resolved = resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
-            .expect("worktree cache should refresh after repo settings save invalidation");
+        let resolved =
+            resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+                .expect("worktree cache should refresh after repo settings save invalidation");
         let expected = fs::canonicalize(&worktree_two)
             .expect("worktree should canonicalize")
             .to_string_lossy()
@@ -1413,8 +1440,10 @@ mod tests {
     }
 
     #[test]
-    fn workspace_save_settings_snapshot_invalidates_authorized_worktree_cache() -> Result<(), String> {
-        let fixture = setup_workspace_command_fixture("save-settings-snapshot-cache", HookSet::default());
+    fn workspace_save_settings_snapshot_invalidates_authorized_worktree_cache() -> Result<(), String>
+    {
+        let fixture =
+            setup_workspace_command_fixture("save-settings-snapshot-cache", HookSet::default());
         let repo_path = PathBuf::from(&fixture.repo_path);
         clear_authorized_worktree_cache_for_repo(repo_path.as_path());
         let worktree_one = fixture.root.join("repo-wt-snapshot-one");
@@ -1447,8 +1476,9 @@ mod tests {
         seed_authorized_worktree_cache_with_subset(repo_path.as_path(), &[worktree_one.as_path()]);
 
         let worktree_two_str = worktree_two.to_string_lossy().to_string();
-        let stale_error = resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
-            .expect_err("seeded cache should reject worktree omitted from subset");
+        let stale_error =
+            resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+                .expect_err("seeded cache should reject worktree omitted from subset");
         assert!(stale_error.contains("not within authorized repository or linked worktrees"));
 
         let (theme, git, chat, kanban, autopilot, repos, global_prompt_overrides) = fixture
@@ -1468,8 +1498,9 @@ mod tests {
             },
         )?;
 
-        let resolved = resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
-            .expect("worktree cache should refresh after snapshot save invalidation");
+        let resolved =
+            resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+                .expect("worktree cache should refresh after snapshot save invalidation");
         let expected = fs::canonicalize(&worktree_two)
             .expect("worktree should canonicalize")
             .to_string_lossy()

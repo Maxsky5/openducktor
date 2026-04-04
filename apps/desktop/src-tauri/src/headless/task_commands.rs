@@ -116,38 +116,60 @@ struct HumanRequestChangesArgs {
 }
 
 pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), String> {
-    registry.register("tasks_list", |state, args| Box::pin(handle_tasks_list(state, args)))?;
-    registry.register("task_create", |state, args| Box::pin(handle_task_create(state, args)))?;
-    registry.register("task_update", |state, args| Box::pin(handle_task_update(state, args)))?;
-    registry.register("task_delete", |state, args| Box::pin(handle_task_delete(state, args)))?;
+    registry.register("tasks_list", |state, args| {
+        Box::pin(handle_tasks_list(state, args))
+    })?;
+    registry.register("task_create", |state, args| {
+        Box::pin(handle_task_create(state, args))
+    })?;
+    registry.register("task_update", |state, args| {
+        Box::pin(handle_task_update(state, args))
+    })?;
+    registry.register("task_delete", |state, args| {
+        Box::pin(handle_task_delete(state, args))
+    })?;
     registry.register("task_reset_implementation", |state, args| {
         Box::pin(handle_task_reset_implementation(state, args))
     })?;
     registry.register("task_transition", |state, args| {
         Box::pin(handle_task_transition(state, args))
     })?;
-    registry.register("task_defer", |state, args| Box::pin(handle_task_defer(state, args)))?;
+    registry.register("task_defer", |state, args| {
+        Box::pin(handle_task_defer(state, args))
+    })?;
     registry.register("task_resume_deferred", |state, args| {
         Box::pin(handle_task_resume_deferred(state, args))
     })?;
-    registry.register("spec_get", |state, args| Box::pin(handle_spec_get(state, args)))?;
+    registry.register("spec_get", |state, args| {
+        Box::pin(handle_spec_get(state, args))
+    })?;
     registry.register("task_metadata_get", |state, args| {
         Box::pin(handle_task_metadata_get(state, args))
     })?;
-    registry.register("set_spec", |state, args| Box::pin(handle_set_spec(state, args)))?;
+    registry.register("set_spec", |state, args| {
+        Box::pin(handle_set_spec(state, args))
+    })?;
     registry.register("spec_save_document", |state, args| {
         Box::pin(handle_spec_save_document(state, args))
     })?;
-    registry.register("plan_get", |state, args| Box::pin(handle_plan_get(state, args)))?;
-    registry.register("set_plan", |state, args| Box::pin(handle_set_plan(state, args)))?;
+    registry.register("plan_get", |state, args| {
+        Box::pin(handle_plan_get(state, args))
+    })?;
+    registry.register("set_plan", |state, args| {
+        Box::pin(handle_set_plan(state, args))
+    })?;
     registry.register("plan_save_document", |state, args| {
         Box::pin(handle_plan_save_document(state, args))
     })?;
     registry.register("qa_get_report", |state, args| {
         Box::pin(handle_qa_get_report(state, args))
     })?;
-    registry.register("qa_approved", |state, args| Box::pin(handle_qa_approved(state, args)))?;
-    registry.register("qa_rejected", |state, args| Box::pin(handle_qa_rejected(state, args)))?;
+    registry.register("qa_approved", |state, args| {
+        Box::pin(handle_qa_approved(state, args))
+    })?;
+    registry.register("qa_rejected", |state, args| {
+        Box::pin(handle_qa_rejected(state, args))
+    })?;
     registry.register("build_blocked", |state, args| {
         Box::pin(async move { handle_build_blocked(state, args) })
     })?;
@@ -278,16 +300,24 @@ async fn handle_task_transition(state: &HeadlessState, args: Value) -> CommandRe
 }
 
 async fn handle_task_defer(state: &HeadlessState, args: Value) -> CommandResult {
-    handle_repo_task_reason_operation_blocking(state, args, "task_defer", |service, repo_path, task_id, reason| {
-        service.task_defer(&repo_path, &task_id, reason.as_deref())
-    })
+    handle_repo_task_reason_operation_blocking(
+        state,
+        args,
+        "task_defer",
+        |service, repo_path, task_id, reason| {
+            service.task_defer(&repo_path, &task_id, reason.as_deref())
+        },
+    )
     .await
 }
 
 async fn handle_task_resume_deferred(state: &HeadlessState, args: Value) -> CommandResult {
-    handle_repo_task_operation_blocking(state, args, "task_resume_deferred", |service, repo_path, task_id| {
-        service.task_resume_deferred(&repo_path, &task_id)
-    })
+    handle_repo_task_operation_blocking(
+        state,
+        args,
+        "task_resume_deferred",
+        |service, repo_path, task_id| service.task_resume_deferred(&repo_path, &task_id),
+    )
     .await
 }
 
@@ -299,9 +329,12 @@ async fn handle_spec_get(state: &HeadlessState, args: Value) -> CommandResult {
 }
 
 async fn handle_task_metadata_get(state: &HeadlessState, args: Value) -> CommandResult {
-    handle_repo_task_operation_blocking(state, args, "task_metadata_get", |service, repo_path, task_id| {
-        service.task_metadata_get(&repo_path, &task_id)
-    })
+    handle_repo_task_operation_blocking(
+        state,
+        args,
+        "task_metadata_get",
+        |service, repo_path, task_id| service.task_metadata_get(&repo_path, &task_id),
+    )
     .await
 }
 
@@ -375,9 +408,12 @@ async fn handle_plan_save_document(state: &HeadlessState, args: Value) -> Comman
 }
 
 async fn handle_qa_get_report(state: &HeadlessState, args: Value) -> CommandResult {
-    handle_repo_task_operation_blocking(state, args, "qa_get_report", |service, repo_path, task_id| {
-        service.qa_get_report(&repo_path, &task_id)
-    })
+    handle_repo_task_operation_blocking(
+        state,
+        args,
+        "qa_get_report",
+        |service, repo_path, task_id| service.qa_get_report(&repo_path, &task_id),
+    )
     .await
 }
 
@@ -477,10 +513,11 @@ async fn handle_task_direct_merge_complete(state: &HeadlessState, args: Value) -
     let service = state.service.clone();
     let repo_path_for_worker = repo_path.clone();
     let task_id_for_worker = task_id.clone();
-    let result = super::command_support::run_headless_blocking("task_direct_merge_complete", move || {
-        service.task_direct_merge_complete(&repo_path_for_worker, &task_id_for_worker)
-    })
-    .await?;
+    let result =
+        super::command_support::run_headless_blocking("task_direct_merge_complete", move || {
+            service.task_direct_merge_complete(&repo_path_for_worker, &task_id_for_worker)
+        })
+        .await?;
     super::command_support::invalidate_repo_worktree_cache(&repo_path)?;
     serialize_value(result)
 }
@@ -515,10 +552,7 @@ fn handle_task_pull_request_detect(state: &HeadlessState, args: Value) -> Comman
     })
 }
 
-async fn handle_task_pull_request_link_merged(
-    state: &HeadlessState,
-    args: Value,
-) -> CommandResult {
+async fn handle_task_pull_request_link_merged(state: &HeadlessState, args: Value) -> CommandResult {
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct TaskPullRequestLinkMergedArgs {
@@ -535,14 +569,15 @@ async fn handle_task_pull_request_link_merged(
     let service = state.service.clone();
     let repo_path_for_worker = repo_path.clone();
     let task_id_for_worker = task_id.clone();
-    let result = super::command_support::run_headless_blocking("task_pull_request_link_merged", move || {
-        service.task_pull_request_link_merged(
-            &repo_path_for_worker,
-            &task_id_for_worker,
-            pull_request,
-        )
-    })
-    .await?;
+    let result =
+        super::command_support::run_headless_blocking("task_pull_request_link_merged", move || {
+            service.task_pull_request_link_merged(
+                &repo_path_for_worker,
+                &task_id_for_worker,
+                pull_request,
+            )
+        })
+        .await?;
     super::command_support::invalidate_repo_worktree_cache(&repo_path)?;
     serialize_value(result)
 }
