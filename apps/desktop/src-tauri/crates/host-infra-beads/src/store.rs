@@ -98,6 +98,10 @@ impl TaskStore for BeadsTaskStore {
         self.list_tasks_impl(repo_path)
     }
 
+    fn get_task(&self, repo_path: &Path, task_id: &str) -> Result<TaskCard> {
+        self.get_task_impl(repo_path, task_id)
+    }
+
     fn list_tasks_for_kanban(
         &self,
         repo_path: &Path,

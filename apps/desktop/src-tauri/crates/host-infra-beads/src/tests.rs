@@ -387,14 +387,14 @@ fn verify_repo_initialized_reads_json_errors_from_nonzero_exit() -> Result<()> {
 }
 
 #[test]
-fn show_task_uses_id_flag_when_loading_issue() -> Result<()> {
+fn get_task_uses_id_flag_when_loading_issue() -> Result<()> {
     let repo = RepoFixture::new("show-with-id-flag");
     let issue = issue_value("task-1", "open", "task", None, json!([]), None);
     let runner =
         MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(json!([issue]).to_string()))]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
-    let task = store.show_task(repo.path(), "task-1")?;
+    let task = store.get_task(repo.path(), "task-1")?;
     assert_eq!(task.id, "task-1");
 
     let calls = runner.take_calls();
@@ -438,7 +438,7 @@ fn strict_issue_type_and_status_parsers_return_actionable_errors() {
 }
 
 #[test]
-fn show_task_rejects_invalid_issue_type_with_task_context() {
+fn get_task_rejects_invalid_issue_type_with_task_context() {
     let repo = RepoFixture::new("show-invalid-issue-type");
     let issue = issue_value("task-bad-type", "open", "decision", None, json!([]), None);
     let runner =
@@ -446,12 +446,24 @@ fn show_task_rejects_invalid_issue_type_with_task_context() {
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
 
     let error = store
-        .show_task(repo.path(), "task-bad-type")
+        .get_task(repo.path(), "task-bad-type")
         .expect_err("invalid issue type should fail");
     let message = error.to_string();
     assert!(message.contains("task-bad-type"));
     assert!(message.contains("issue type"));
     assert!(message.contains("decision"));
+}
+
+#[test]
+fn get_task_reports_missing_tasks_with_task_context() {
+    let repo = RepoFixture::new("show-missing-task");
+    let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(json!([]).to_string()))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let error = store
+        .get_task(repo.path(), "task-missing")
+        .expect_err("missing task should fail");
+    assert_eq!(error.to_string(), "Task not found: task-missing");
 }
 
 #[test]
