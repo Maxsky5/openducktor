@@ -1,7 +1,9 @@
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import type { ReactElement } from "react";
+import { memo } from "react";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import {
   AgentStudioDevServerPanel,
   type AgentStudioDevServerPanelModel,
@@ -47,25 +49,29 @@ function AgentStudioBuildToolsPanel({
 }): ReactElement {
   if (!devServerModel.isExpanded) {
     return (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <AgentStudioGitPanel model={diffModel} />
+      <DiffWorkerProvider>
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <AgentStudioGitPanel model={diffModel} />
+          </div>
+          <AgentStudioDevServerPanel model={devServerModel} />
         </div>
-        <AgentStudioDevServerPanel model={devServerModel} />
-      </div>
+      </DiffWorkerProvider>
     );
   }
 
   return (
-    <ResizablePanelGroup direction="vertical">
-      <ResizablePanel defaultSize={60} minSize={30}>
-        <AgentStudioGitPanel model={diffModel} />
-      </ResizablePanel>
-      <ResizableHandle withHandle />
-      <ResizablePanel defaultSize={40} minSize={20}>
-        <AgentStudioDevServerPanel model={devServerModel} />
-      </ResizablePanel>
-    </ResizablePanelGroup>
+    <DiffWorkerProvider>
+      <ResizablePanelGroup direction="vertical">
+        <ResizablePanel defaultSize={60} minSize={30}>
+          <AgentStudioGitPanel model={diffModel} />
+        </ResizablePanel>
+        <ResizableHandle withHandle />
+        <ResizablePanel defaultSize={40} minSize={20}>
+          <AgentStudioDevServerPanel model={devServerModel} />
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </DiffWorkerProvider>
   );
 }
 
@@ -108,3 +114,5 @@ export function AgentStudioRightPanel({
     <AgentStudioBuildToolsPanel diffModel={model.diffModel} devServerModel={model.devServerModel} />
   );
 }
+
+export const MemoizedAgentStudioRightPanel = memo(AgentStudioRightPanel);

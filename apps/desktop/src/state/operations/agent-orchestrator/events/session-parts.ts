@@ -1,7 +1,7 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
 import { sanitizeStreamingText } from "../support/core";
-import { upsertMessage } from "../support/messages";
+import { findSessionMessageById, upsertSessionMessage } from "../support/messages";
 import type {
   DraftChannel,
   SessionEvent,
@@ -107,14 +107,15 @@ const clearDraftChannelBuffer = (
   }
 };
 
-const toReasoningMessageId = (messageId: string): string => `thinking:${messageId}`;
+const toReasoningMessageId = (messageId: string, partId: string): string =>
+  `thinking:${messageId}:${partId}`;
 
 const resolvePartModelSelection = (
   context: SessionPartEventContext,
   current: AgentSessionState,
   messageId: string,
 ): AgentSessionState["selectedModel"] | null => {
-  const existingMessage = current.messages.find((entry) => entry.id === messageId);
+  const existingMessage = findSessionMessageById(current, messageId);
   if (existingMessage?.meta?.kind === "assistant") {
     if (!existingMessage.meta.providerId || !existingMessage.meta.modelId) {
       return null;
@@ -156,7 +157,7 @@ const upsertLiveAssistantMessage = ({
     };
   }
 
-  const existingMessage = current.messages.find((entry) => entry.id === messageId);
+  const existingMessage = findSessionMessageById(current, messageId);
   const assistantMeta =
     existingMessage?.meta?.kind === "assistant"
       ? existingMessage.meta
@@ -169,7 +170,7 @@ const upsertLiveAssistantMessage = ({
     ...current,
     draftAssistantText: "",
     draftAssistantMessageId: null,
-    messages: upsertMessage(current.messages, {
+    messages: upsertSessionMessage(current, {
       id: messageId,
       role: "assistant",
       content: nextContent,
@@ -193,7 +194,7 @@ export const handleAssistantDelta = (
     context.store.updateSession(
       context.store.sessionId,
       (current) => {
-        const existingMessage = current.messages.find((entry) => entry.id === messageId);
+        const existingMessage = findSessionMessageById(current, messageId);
         const baseContent = existingMessage?.role === "assistant" ? existingMessage.content : "";
         return upsertLiveAssistantMessage({
           current: {
@@ -301,8 +302,8 @@ const handleReasoningPart = (
     context.store.sessionId,
     (current) => {
       const prepared = prepareCurrent(current);
-      const messageId = toReasoningMessageId(part.messageId);
-      const existingMessage = prepared.messages.find((entry) => entry.id === messageId);
+      const messageId = toReasoningMessageId(part.messageId, part.partId);
+      const existingMessage = findSessionMessageById(prepared, messageId);
       const nextContent =
         part.text.trim().length > 0 ? part.text : (existingMessage?.content ?? "");
       if (nextContent.trim().length === 0) {
@@ -319,7 +320,7 @@ const handleReasoningPart = (
         status: "running",
         draftReasoningText: "",
         draftReasoningMessageId: null,
-        messages: upsertMessage(prepared.messages, {
+        messages: upsertSessionMessage(prepared, {
           id: messageId,
           role: "thinking",
           content: nextContent,
@@ -350,7 +351,7 @@ const handleSubtaskPart = (
       return {
         ...prepared,
         status: "running",
-        messages: upsertMessage(prepared.messages, {
+        messages: upsertSessionMessage(prepared, {
           id: `subtask:${streamMessageKey}`,
           role: "system",
           content: `Subtask (${part.agent}): ${part.description}`,

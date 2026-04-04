@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   createRepoStaleGuard,
-  isDuplicateAssistantMessage,
   READ_ONLY_ROLES,
   runningStates,
   shouldReattachListenerForAttachedSession,
@@ -17,22 +15,6 @@ describe("agent-orchestrator/support/core", () => {
     expect(runningStates.has("running")).toBe(true);
     expect(runningStates.has("closed")).toBe(false);
     expect(toBaseUrl(4444)).toBe("http://127.0.0.1:4444");
-  });
-
-  test("detects duplicate assistant messages with timestamp tolerance", () => {
-    const messages: AgentChatMessage[] = [
-      {
-        id: "assistant-1",
-        role: "assistant",
-        content: "Done",
-        timestamp: "2026-02-22T08:00:00.000Z",
-      },
-    ];
-
-    expect(isDuplicateAssistantMessage(messages, "Done", "2026-02-22T08:00:01.500Z")).toBe(true);
-    expect(isDuplicateAssistantMessage(messages, "Different", "2026-02-22T08:00:01.500Z")).toBe(
-      false,
-    );
   });
 
   test("reattaches listener only for non-error attached sessions", () => {

@@ -1,4 +1,5 @@
-import type { AgentChatMessage } from "../../../types/agent-orchestrator";
+import type { AgentSessionMessages } from "../../../types/agent-orchestrator";
+import { type SessionMessageOwner, updateSessionMessagesByRole } from "./support/messages";
 
 type ToolStatus = "pending" | "running" | "completed" | "error";
 type ToolCompletionOutcome = "completed" | "error";
@@ -37,20 +38,19 @@ export const formatToolContent = (part: {
 };
 
 export const settleDanglingTodoToolMessages = (
-  messages: AgentChatMessage[],
+  session: SessionMessageOwner,
   timestamp: string,
   options?: {
     outcome?: ToolCompletionOutcome;
     errorMessage?: string;
   },
-): AgentChatMessage[] => {
+): AgentSessionMessages => {
   const outcome = options?.outcome ?? "completed";
   const parsedEndedAt = Date.parse(timestamp);
   const endedAtMs = Number.isNaN(parsedEndedAt) ? undefined : parsedEndedAt;
-  let didChange = false;
 
-  const next = messages.map((message) => {
-    if (message.role !== "tool" || message.meta?.kind !== "tool") {
+  return updateSessionMessagesByRole(session, "tool", (message) => {
+    if (message.meta?.kind !== "tool") {
       return message;
     }
 
@@ -59,7 +59,6 @@ export const settleDanglingTodoToolMessages = (
       return message;
     }
 
-    didChange = true;
     const errorText =
       outcome === "error"
         ? options?.errorMessage?.trim() || meta.error || "Tool failed"
@@ -89,6 +88,4 @@ export const settleDanglingTodoToolMessages = (
       meta: updatedMeta,
     };
   });
-
-  return didChange ? next : messages;
 };

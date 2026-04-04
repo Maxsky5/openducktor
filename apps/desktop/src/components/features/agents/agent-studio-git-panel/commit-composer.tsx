@@ -1,5 +1,5 @@
 import { Send } from "lucide-react";
-import { type ReactElement, useState } from "react";
+import { memo, type ReactElement, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,7 +16,7 @@ type CommitComposerProps = {
   commitAll: ((message: string) => Promise<boolean>) | null;
 };
 
-export function CommitComposer({
+export const CommitComposer = memo(function CommitComposer({
   hasUncommittedFiles,
   uncommittedFileCount,
   isCommitting,
@@ -102,4 +102,4 @@ export function CommitComposer({
       ) : null}
     </div>
   );
-}
+});

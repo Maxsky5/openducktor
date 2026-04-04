@@ -436,7 +436,44 @@ describe("useAgentChatWindow", () => {
 
     expect(harness.getLatestResult().windowStart).toBe(0);
     expect(container.scrollTop).toBe(0);
+    expect(harness.getLatestResult().isNearTop).toBe(true);
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
     expect(container.style.overflowAnchor).toBe("none");
+
+    await harness.unmount();
+  });
+
+  test("recomputes top and bottom edge visibility after scrolling away from the top", async () => {
+    const rows = createTurnRows(12);
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+
+    expect(harness.getLatestResult().isNearTop).toBe(true);
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
+
+    container.scrollTop = 160;
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+
+    expect(harness.getLatestResult().isNearTop).toBe(false);
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
 
     await harness.unmount();
   });
@@ -571,6 +608,55 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("keeps the current transcript window when a new turn is appended while pinned", async () => {
+    const initialRows = createTurnRows(12);
+    const nextRows = createTurnRows(13);
+    const harness = await mountHarness(
+      {
+        rows: initialRows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+        isSessionWorking: true,
+      },
+      { attachDom: true },
+    );
+    const initialWindowStart = harness.getLatestResult().windowStart;
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    container.scrollTop = container.scrollHeight;
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    await act(async () => {
+      harness.getLatestResult().scrollToBottomOnSend();
+      await flush();
+    });
+
+    await harness.update({
+      rows: nextRows,
+      activeSessionId: "session-1",
+      isSessionViewLoading: false,
+      isSessionWorking: true,
+    });
+    await act(async () => {
+      triggerResizeObservers();
+      await flush();
+    });
+    await flushAnimationFrames();
+
+    expect(harness.getLatestResult().windowStart).toBe(initialWindowStart);
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await harness.unmount();
+  });
+
   test("scrollToBottomOnSend clears user scroll state and jumps to bottom", async () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness(
@@ -604,6 +690,49 @@ describe("useAgentChatWindow", () => {
     expect(harness.getLatestResult().windowStart).toBe(
       buildAgentChatWindowTurns(rows)[2]?.start ?? 0,
     );
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await harness.unmount();
+  });
+
+  test("scrollToBottomOnSend keeps full history expanded when already at the bottom", async () => {
+    const rows = createTurnRows(12);
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+        isSessionWorking: true,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+    await flushAnimationFrames();
+
+    container.scrollTop = getMaxScrollTop(container);
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    expect(harness.getLatestResult().windowStart).toBe(0);
+
+    await act(async () => {
+      harness.getLatestResult().scrollToBottomOnSend();
+      await flush();
+    });
+    await flushAnimationFrames();
+
+    expect(harness.getLatestResult().windowStart).toBe(0);
     expect(container.scrollTop).toBe(getMaxScrollTop(container));
 
     await harness.unmount();

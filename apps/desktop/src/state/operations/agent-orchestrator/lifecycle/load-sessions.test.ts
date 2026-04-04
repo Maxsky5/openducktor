@@ -3,12 +3,29 @@ import type { AgentSessionRecord, RuntimeInstanceSummary } from "@openducktor/co
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
+import {
+  findSessionMessageForTest,
+  sessionMessageAt,
+  sessionMessagesToArray,
+  someSessionMessageForTest,
+} from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createDeferred, createTaskCardFixture } from "../test-utils";
 import { LiveAgentSessionStore } from "./live-agent-session-store";
 import { createLoadAgentSessions } from "./load-sessions";
 
 const taskFixture = createTaskCardFixture({ title: "Task" });
+
+const getSession = (
+  state: Record<string, AgentSessionState>,
+  sessionId: string,
+): AgentSessionState => {
+  const session = state[sessionId];
+  if (!session) {
+    throw new Error(`Expected session ${sessionId}`);
+  }
+  return session;
+};
 
 const persistedSessionRecord = (
   input: {
@@ -313,7 +330,9 @@ describe("agent-orchestrator-load-sessions", () => {
       hostModule.host.agentSessionsList = originalList;
     }
 
-    expect(state["session-1"]?.messages).toEqual(existingSession.messages);
+    expect(state["session-1"] ? sessionMessagesToArray(state["session-1"]) : undefined).toEqual(
+      sessionMessagesToArray(existingSession),
+    );
     expect(state["session-1"]?.pendingPermissions).toEqual([]);
     expect(state["session-1"]?.pendingQuestions).toEqual([]);
   });
@@ -938,7 +957,11 @@ describe("agent-orchestrator-load-sessions", () => {
       ],
     });
     expect(hydratedSession?.pendingQuestions).toHaveLength(1);
-    expect(hydratedSession?.messages.map((message) => message.content)).toEqual([
+    expect(
+      hydratedSession
+        ? sessionMessagesToArray(hydratedSession).map((message) => message.content)
+        : [],
+    ).toEqual([
       "Session started (planner - planner_initial)",
       expect.stringContaining("System prompt:"),
       "Requested history",
@@ -947,7 +970,9 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(resumeCalls).toBe(0);
     expect(attachedListeners).toBe(0);
 
-    const hydratedMessageIds = hydratedSession?.messages.map((message) => message.id) ?? [];
+    const hydratedMessageIds = hydratedSession
+      ? sessionMessagesToArray(hydratedSession).map((message) => message.id)
+      : [];
 
     await loadAgentSessions("task-1", {
       mode: "reconcile_live",
@@ -960,7 +985,9 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(resumeCalls).toBe(1);
     expect(attachedListeners).toBe(1);
     expect(liveSnapshotLoads).toBe(2);
-    expect(state["session-1"]?.messages.map((message) => message.id)).toEqual(hydratedMessageIds);
+    expect(
+      sessionMessagesToArray(getSession(state, "session-1")).map((message) => message.id),
+    ).toEqual(hydratedMessageIds);
     expect(state["session-1"]).toMatchObject({
       status: "running",
       runtimeEndpoint: "http://127.0.0.1:4444",
@@ -1115,7 +1142,9 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(resumeCalls).toBe(1);
     expect(historyLoads).toBe(1);
     expect(state["session-1"]?.historyHydrationState).toBe("hydrated");
-    expect(state["session-1"]?.messages.map((message) => message.content)).toEqual([
+    expect(
+      sessionMessagesToArray(getSession(state, "session-1")).map((message) => message.content),
+    ).toEqual([
       "Session started (planner - planner_initial)",
       expect.stringContaining("System prompt:"),
       "Hydrated from reconcile",
@@ -1721,7 +1750,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadPromise;
 
-    const mergedMessages = sessionsRef.current["session-live"]?.messages ?? [];
+    const mergedMessages = sessionMessagesToArray(getSession(sessionsRef.current, "session-live"));
     expect(mergedMessages.some((message) => message.id === "live-user-1")).toBe(true);
     expect(mergedMessages.find((message) => message.id === "assistant-1")?.content).toBe(
       "Live replacement",
@@ -1806,7 +1835,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(Object.keys(state)).toContain("session-1");
     expect(historyLoads).toBe(0);
     expect(runLoads).toBe(0);
-    expect(state["session-1"]?.messages).toEqual([]);
+    expect(state["session-1"] ? sessionMessagesToArray(state["session-1"]) : undefined).toEqual([]);
     expect(state["session-1"]?.runtimeEndpoint).toBe("");
   });
 
@@ -2251,8 +2280,10 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(historyLoads).toBe(1);
-    expect(state["session-1"]?.messages.length).toBeGreaterThan(0);
-    expect(state["session-1"]?.messages[0]?.id).toBe("history:session-start:session-1");
+    expect(sessionMessagesToArray(getSession(state, "session-1")).length).toBeGreaterThan(0);
+    expect(sessionMessageAt(getSession(state, "session-1"), 0)?.id).toBe(
+      "history:session-start:session-1",
+    );
   });
 
   test("hydrates runtime pending permissions and questions for a requested live session", async () => {
@@ -2567,7 +2598,9 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(String(observedRuntimeEndpoint)).toBe("http://127.0.0.1:4444");
     expect(state["session-qa-1"]?.runId).toBe("run-1");
     expect(state["session-qa-1"]?.runtimeId).toBeNull();
-    expect(state["session-qa-1"]?.messages[0]?.id).toBe("history:session-start:session-qa-1");
+    expect(sessionMessageAt(getSession(state, "session-qa-1"), 0)?.id).toBe(
+      "history:session-start:session-qa-1",
+    );
   });
 
   test("does not ensure a workspace runtime for qa sessions when repo root paths only differ by trailing slash", async () => {
@@ -2672,7 +2705,9 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(ensuredRuntimeKinds).toEqual([]);
-    expect(state["session-qa-root"]?.messages).toEqual([]);
+    expect(
+      state["session-qa-root"] ? sessionMessagesToArray(state["session-qa-root"]) : undefined,
+    ).toEqual([]);
   });
 
   test("invalidates runtime list cache after ensuring a workspace runtime during hydration", async () => {
@@ -2883,7 +2918,7 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(ensuredRuntimeKinds).toEqual([]);
-    expect(state["session-1"]?.messages).toEqual([]);
+    expect(state["session-1"] ? sessionMessagesToArray(state["session-1"]) : undefined).toEqual([]);
   });
 
   test("fails fast instead of ensuring a workspace runtime for qa sessions on worktree directories", async () => {
@@ -2983,7 +3018,11 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(ensuredRuntimeKinds).toEqual([]);
-    expect(state["session-qa-worktree"]?.messages).toEqual([]);
+    expect(
+      state["session-qa-worktree"]
+        ? sessionMessagesToArray(state["session-qa-worktree"])
+        : undefined,
+    ).toEqual([]);
   });
 
   test("resumes live persisted sessions without eagerly hydrating transcript history", async () => {
@@ -3131,7 +3170,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(attachedListeners).toBe(1);
     expect(state["session-1"]?.status).toBe("running");
     expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4444");
-    expect(state["session-1"]?.messages).toEqual([]);
+    expect(state["session-1"] ? sessionMessagesToArray(state["session-1"]) : undefined).toEqual([]);
   });
 
   test("does not attach projected live sessions when the repo changes while reconcile is in flight", async () => {
@@ -3923,7 +3962,7 @@ describe("agent-orchestrator-load-sessions", () => {
       hostModule.host.qaGetReport = originalQaGetReport;
     }
 
-    expect(state["session-1"]?.messages).toEqual([]);
+    expect(state["session-1"] ? sessionMessagesToArray(state["session-1"]) : undefined).toEqual([]);
     expect(specCalls).toBe(0);
     expect(planCalls).toBe(0);
     expect(qaCalls).toBe(0);
@@ -4041,7 +4080,10 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(historyCalls).toBe(1);
     expect(state["session-1"]?.historyHydrationState).toBe("hydrated");
     expect(
-      state["session-1"]?.messages.some((message) => message.content === "Previous request"),
+      someSessionMessageForTest(
+        getSession(state, "session-1"),
+        (message) => message.content === "Previous request",
+      ),
     ).toBe(true);
   });
 
@@ -4192,9 +4234,13 @@ describe("agent-orchestrator-load-sessions", () => {
       modelId: "gpt-5",
     });
     expect(
-      state["session-1"]?.messages.some((message) => message.content === "Hydrated message"),
+      someSessionMessageForTest(
+        getSession(state, "session-1"),
+        (message) => message.content === "Hydrated message",
+      ),
     ).toBe(true);
-    const hydratedUser = state["session-1"]?.messages.find(
+    const hydratedUser = findSessionMessageForTest(
+      getSession(state, "session-1"),
       (message) => message.id === "hydrated-user-1",
     );
     if (!hydratedUser || hydratedUser.meta?.kind !== "user") {

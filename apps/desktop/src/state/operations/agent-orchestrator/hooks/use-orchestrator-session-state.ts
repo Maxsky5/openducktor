@@ -1,14 +1,18 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import type { MutableRefObject } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  type AgentSessionsById,
+  type AgentSessionsStore,
+  createAgentSessionsStore,
+} from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { DraftChannelValueMap, DraftSource } from "../events/session-event-types";
 
-type SessionStateById = Record<string, AgentSessionState>;
-type SessionStateUpdater = SessionStateById | ((current: SessionStateById) => SessionStateById);
+type SessionStateUpdater = AgentSessionsById | ((current: AgentSessionsById) => AgentSessionsById);
 
 type OrchestratorMutableState = {
-  sessionsById: SessionStateById;
+  sessionsById: AgentSessionsById;
   tasks: TaskCard[];
   runs: RunSummary[];
   activeRepo: string | null;
@@ -50,7 +54,8 @@ type UseOrchestratorSessionStateArgs = {
 };
 
 type UseOrchestratorSessionStateResult = {
-  sessionsById: SessionStateById;
+  sessionsById: AgentSessionsById;
+  sessionStore: AgentSessionsStore;
   refBridges: OrchestratorRefBridges;
   commitSessions: (updater: SessionStateUpdater) => void;
 };
@@ -81,7 +86,7 @@ export const useOrchestratorSessionState = ({
   tasks,
   runs,
 }: UseOrchestratorSessionStateArgs): UseOrchestratorSessionStateResult => {
-  const [sessionsById, setSessionsById] = useState<SessionStateById>({});
+  const sessionStore = useMemo(() => createAgentSessionsStore(), []);
   const mutableStateRef = useRef<OrchestratorMutableState>({
     sessionsById: {},
     tasks,
@@ -121,12 +126,16 @@ export const useOrchestratorSessionState = ({
     [],
   );
 
-  const commitSessions = useCallback((updater: SessionStateUpdater): void => {
-    const current = mutableStateRef.current.sessionsById;
-    const next = typeof updater === "function" ? updater(current) : updater;
-    mutableStateRef.current.sessionsById = next;
-    setSessionsById(next);
-  }, []);
+  const commitSessions = useCallback(
+    (updater: SessionStateUpdater): void => {
+      const current = mutableStateRef.current.sessionsById;
+      const next = typeof updater === "function" ? updater(current) : updater;
+      mutableStateRef.current.sessionsById = next;
+
+      sessionStore.setSessionsById(next);
+    },
+    [sessionStore],
+  );
 
   useEffect(() => {
     mutableStateRef.current.activeRepo = activeRepo;
@@ -169,9 +178,15 @@ export const useOrchestratorSessionState = ({
     };
   }, []);
 
-  return {
-    sessionsById,
-    refBridges,
-    commitSessions,
-  };
+  return useMemo(
+    () => ({
+      get sessionsById() {
+        return sessionStore.getSessionsByIdSnapshot();
+      },
+      sessionStore,
+      refBridges,
+      commitSessions,
+    }),
+    [commitSessions, refBridges, sessionStore],
+  );
 };

@@ -22,8 +22,8 @@ import {
   useSessionStartModalRunner,
 } from "@/features/session-start";
 import { resolveBuildContinuationScenario } from "@/lib/build-scenarios";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import { confirmHumanReviewFeedbackFlow } from "./kanban-human-review-feedback";
 import type {
@@ -38,7 +38,7 @@ type UseKanbanSessionStartFlowArgs = {
   activeRepo: string | null;
   repoSettings: RepoSettingsInput | null;
   tasks: TaskCard[];
-  sessions: AgentSessionState[];
+  sessions: AgentSessionSummary[];
   navigate: NavigateFunction;
   loadRepoSettings: () => Promise<RepoSettingsInput>;
   bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
@@ -68,18 +68,18 @@ type UseKanbanSessionStartFlowResult = {
 };
 
 const findLatestSessionByRoleForTask = (
-  sessions: AgentSessionState[],
+  sessions: AgentSessionSummary[],
   taskId: string,
   role: AgentRole,
-): AgentSessionState | null => {
+): AgentSessionSummary | null => {
   return findSessionsByRoleForTask(sessions, taskId, role)[0] ?? null;
 };
 
 const findPreferredSessionByRoleForTask = (
-  sessions: AgentSessionState[],
+  sessions: AgentSessionSummary[],
   taskId: string,
   role: AgentRole,
-): AgentSessionState | null => {
+): AgentSessionSummary | null => {
   const matchingSessions = findSessionsByRoleForTask(sessions, taskId, role);
   if (matchingSessions.length === 0) {
     return null;
@@ -107,10 +107,10 @@ const findPreferredSessionByRoleForTask = (
 };
 
 const findSessionsByRoleForTask = (
-  sessions: AgentSessionState[],
+  sessions: AgentSessionSummary[],
   taskId: string,
   role: AgentRole,
-): AgentSessionState[] => {
+): AgentSessionSummary[] => {
   return sessions
     .filter((session) => session.taskId === taskId && session.role === role)
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
@@ -287,7 +287,7 @@ export function useKanbanSessionStartFlow({
   }, [isSubmittingHumanReviewFeedback]);
 
   const openAgentStudioSession = useCallback(
-    (taskId: string, session: AgentSessionState): void => {
+    (taskId: string, session: AgentSessionSummary): void => {
       const params = new URLSearchParams({
         task: taskId,
         session: session.sessionId,

@@ -2,7 +2,9 @@ import type { TaskCard } from "@openducktor/contracts";
 import { normalizeOdtWorkflowToolName } from "@openducktor/core";
 import { useEffect, useRef } from "react";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
+import { forEachSessionMessageFrom } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { findFirstChangedMessageIndex } from "./agent-session-message-diff";
 import { extractCompletionTimestamp, parseTimestamp } from "./agents-page-selection";
 
 type UseAgentStudioDocumentsArgs = {
@@ -72,6 +74,8 @@ export function useAgentStudioDocuments({
   const documentContextKey = `${taskId}:${activeSession?.sessionId ?? ""}`;
   const processedDocumentToolEventsRef = useRef(new Set<string>());
   const refreshedTaskVersionsRef = useRef(new Set<string>());
+  const previousSessionIdRef = useRef<string | null>(null);
+  const previousMessagesRef = useRef<AgentSessionState["messages"] | null>(null);
   const taskDocumentVersionKey =
     taskId && selectedTask
       ? [
@@ -92,6 +96,8 @@ export function useAgentStudioDocuments({
   useEffect(() => {
     processedDocumentToolEventsRef.current.clear();
     refreshedTaskVersionsRef.current.clear();
+    previousSessionIdRef.current = null;
+    previousMessagesRef.current = null;
   }, [documentContextKey]);
 
   useEffect(() => {
@@ -110,23 +116,36 @@ export function useAgentStudioDocuments({
   }, [reloadDocument, taskDocumentVersionKey, taskId]);
 
   useEffect(() => {
-    if (!activeSession || !taskId) {
+    if (!activeSession || !taskId || !activeRepo) {
       return;
     }
 
-    for (let index = 0; index < activeSession.messages.length; index += 1) {
-      const message = activeSession.messages[index];
-      if (!message) {
-        continue;
-      }
+    if (activeSession.role === "build") {
+      previousSessionIdRef.current = activeSession.sessionId;
+      previousMessagesRef.current = activeSession.messages;
+      return;
+    }
+
+    const firstChangedMessageIndex =
+      previousSessionIdRef.current !== activeSession.sessionId
+        ? 0
+        : findFirstChangedMessageIndex(previousMessagesRef.current, activeSession);
+
+    if (firstChangedMessageIndex < 0) {
+      previousSessionIdRef.current = activeSession.sessionId;
+      previousMessagesRef.current = activeSession.messages;
+      return;
+    }
+
+    forEachSessionMessageFrom(activeSession, firstChangedMessageIndex, (message) => {
       const eventKey = `${activeSession.sessionId}:${message.id}`;
       if (processedDocumentToolEventsRef.current.has(eventKey)) {
-        continue;
+        return;
       }
 
       const meta = message.meta;
       if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
-        continue;
+        return;
       }
       const normalizedTool = normalizeOdtWorkflowToolName(meta.tool);
       const target = resolveWorkflowDocumentTarget(normalizedTool, {
@@ -135,10 +154,7 @@ export function useAgentStudioDocuments({
         qaDoc,
       });
       if (!target) {
-        continue;
-      }
-      if (!activeRepo) {
-        continue;
+        return;
       }
 
       const completionInfo =
@@ -171,7 +187,10 @@ export function useAgentStudioDocuments({
       if (reloadDocument(target.section)) {
         processedDocumentToolEventsRef.current.add(eventKey);
       }
-    }
+    });
+
+    previousSessionIdRef.current = activeSession.sessionId;
+    previousMessagesRef.current = activeSession.messages;
   }, [
     activeRepo,
     activeSession,

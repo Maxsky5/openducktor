@@ -1,5 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
+import {
+  lastSessionMessageForTest,
+  sessionMessageAt,
+  sessionMessagesToArray,
+} from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { createSessionEventBatcher } from "./session-event-batching";
+import type { SessionEvent } from "./session-event-types";
 import { attachAgentSessionListener, type SessionEventAdapter } from "./session-events";
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
@@ -30,8 +37,295 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   ...overrides,
 });
 
+const getSession = (
+  sessionsRef: { current: Record<string, AgentSessionState> },
+  sessionId = "session-1",
+): AgentSessionState => {
+  const session = sessionsRef.current[sessionId];
+  if (!session) {
+    throw new Error(`Expected session ${sessionId}`);
+  }
+  return session;
+};
+
+const getSessionMessages = (
+  sessionsRef: { current: Record<string, AgentSessionState> },
+  sessionId = "session-1",
+) => sessionMessagesToArray(getSession(sessionsRef, sessionId));
+
+const getLastSessionMessage = (
+  sessionsRef: { current: Record<string, AgentSessionState> },
+  sessionId = "session-1",
+) => lastSessionMessageForTest(getSession(sessionsRef, sessionId));
+
 describe("agent-orchestrator-session-events", () => {
+  test("centralizes assistant batch coalescing rules in one reducer", () => {
+    const batcher = createSessionEventBatcher();
+    const prepared = batcher.prepareQueuedSessionEvents([
+      {
+        type: "assistant_delta",
+        sessionId: "session-1",
+        channel: "text",
+        messageId: "assistant-1",
+        delta: "Hello",
+        timestamp: "2026-02-22T08:00:01.000Z",
+      },
+      {
+        type: "session_status",
+        sessionId: "session-1",
+        status: { type: "busy" },
+        timestamp: "2026-02-22T08:00:01.500Z",
+      },
+      {
+        type: "assistant_delta",
+        sessionId: "session-1",
+        channel: "text",
+        messageId: "assistant-1",
+        delta: " world",
+        timestamp: "2026-02-22T08:00:02.000Z",
+      },
+      {
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:03.000Z",
+        part: {
+          kind: "reasoning",
+          messageId: "assistant-1",
+          partId: "reasoning-1",
+          text: "Draft reasoning",
+          completed: false,
+        },
+      },
+      {
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:04.000Z",
+        part: {
+          kind: "reasoning",
+          messageId: "assistant-1",
+          partId: "reasoning-1",
+          text: "Draft reasoning refined",
+          completed: false,
+        },
+      },
+      {
+        type: "assistant_message",
+        sessionId: "session-1",
+        messageId: "assistant-1",
+        timestamp: "2026-02-22T08:00:05.000Z",
+        message: "Final answer",
+      },
+    ] satisfies SessionEvent[]);
+
+    expect(prepared.readyEvents).toEqual([
+      {
+        type: "session_status",
+        sessionId: "session-1",
+        status: { type: "busy" },
+        timestamp: "2026-02-22T08:00:01.500Z",
+      },
+      {
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:04.000Z",
+        part: {
+          kind: "reasoning",
+          messageId: "assistant-1",
+          partId: "reasoning-1",
+          text: "Draft reasoning refined",
+          completed: false,
+        },
+      },
+      {
+        type: "assistant_message",
+        sessionId: "session-1",
+        messageId: "assistant-1",
+        timestamp: "2026-02-22T08:00:05.000Z",
+        message: "Final answer",
+      },
+    ]);
+  });
+
+  test("keeps per-type replacement behavior configurable inside the central reducer", () => {
+    const batcher = createSessionEventBatcher();
+    const prepared = batcher.prepareQueuedSessionEvents([
+      {
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        part: {
+          kind: "tool",
+          messageId: "assistant-1",
+          partId: "tool-1",
+          callId: "call-1",
+          tool: "bash",
+          status: "running",
+          input: { command: "pwd" },
+        },
+      },
+      {
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:02.000Z",
+        part: {
+          kind: "tool",
+          messageId: "assistant-1",
+          partId: "tool-1",
+          callId: "call-1",
+          tool: "bash",
+          status: "completed",
+          input: { command: "pwd" },
+          output: "/tmp/repo",
+        },
+      },
+      {
+        type: "session_todos_updated",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:03.000Z",
+        todos: [{ id: "todo-1", content: "Do it", status: "pending", priority: "high" }],
+      },
+      {
+        type: "session_todos_updated",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:04.000Z",
+        todos: [{ id: "todo-1", content: "Do it", status: "completed", priority: "high" }],
+      },
+    ] satisfies SessionEvent[]);
+
+    expect(prepared.readyEvents).toEqual([
+      {
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:02.000Z",
+        part: {
+          kind: "tool",
+          messageId: "assistant-1",
+          partId: "tool-1",
+          callId: "call-1",
+          tool: "bash",
+          status: "completed",
+          input: { command: "pwd" },
+          output: "/tmp/repo",
+        },
+      },
+      {
+        type: "session_todos_updated",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:04.000Z",
+        todos: [{ id: "todo-1", content: "Do it", status: "completed", priority: "high" }],
+      },
+    ]);
+  });
+
+  test("defers repeated final assistant message snapshots within the emit gate", () => {
+    let now = 1_000;
+    const batcher = createSessionEventBatcher({
+      nowMs: () => now,
+    });
+    const first = batcher.prepareQueuedSessionEvents([
+      {
+        type: "assistant_message",
+        sessionId: "session-1",
+        messageId: "assistant-1",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        message: "Final answer 1",
+      },
+    ] satisfies SessionEvent[]);
+
+    now += 100;
+    const second = batcher.prepareQueuedSessionEvents([
+      {
+        type: "assistant_message",
+        sessionId: "session-1",
+        messageId: "assistant-1",
+        timestamp: "2026-02-22T08:00:01.100Z",
+        message: "Final answer 2",
+      },
+    ] satisfies SessionEvent[]);
+
+    expect(first.readyEvents).toHaveLength(1);
+    expect(second.readyEvents).toHaveLength(0);
+    expect(second.deferredEvents).toHaveLength(1);
+  });
+
+  test("gates assistant streaming by real elapsed time, not event timestamps", () => {
+    let now = 10_000;
+    const batcher = createSessionEventBatcher({
+      nowMs: () => now,
+    });
+
+    const first = batcher.prepareQueuedSessionEvents([
+      {
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        part: {
+          kind: "text",
+          messageId: "assistant-1",
+          partId: "text-1",
+          text: "Hello",
+          completed: false,
+        },
+      },
+    ] satisfies SessionEvent[]);
+
+    now += 100;
+    const second = batcher.prepareQueuedSessionEvents([
+      {
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:20.000Z",
+        part: {
+          kind: "text",
+          messageId: "assistant-1",
+          partId: "text-1",
+          text: "Hello again",
+          completed: false,
+        },
+      },
+    ] satisfies SessionEvent[]);
+
+    expect(first.readyEvents).toHaveLength(1);
+    expect(second.readyEvents).toHaveLength(0);
+    expect(second.deferredEvents).toHaveLength(1);
+    expect(second.nextDelayMs).toBe(400);
+  });
+
+  test("dedupes identical tool events in the central reducer", () => {
+    const batcher = createSessionEventBatcher();
+    const prepared = batcher.prepareQueuedSessionEvents([
+      {
+        type: "tool_call",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        call: {
+          tool: "odt_set_spec",
+          args: {
+            taskId: "task-1",
+            markdown: "# Spec",
+          },
+        },
+      },
+      {
+        type: "tool_call",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:02.000Z",
+        call: {
+          tool: "odt_set_spec",
+          args: {
+            taskId: "task-1",
+            markdown: "# Spec",
+          },
+        },
+      },
+    ] satisfies SessionEvent[]);
+
+    expect(prepared.readyEvents).toHaveLength(1);
+    expect(prepared.readyEvents[0]?.type).toBe("tool_call");
+  });
+
   test("records inputReadyAtMs when tool input first becomes meaningful", () => {
+    const originalDateNow = Date.now;
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_sessionId, handler) => {
@@ -63,107 +357,114 @@ describe("agent-orchestrator-session-events", () => {
       };
     };
 
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
-      sessionId: "session-1",
-      sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession,
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-    });
+    try {
+      attachAgentSessionListener({
+        adapter,
+        repoPath: "/tmp/repo",
+        sessionId: "session-1",
+        sessionsRef,
+        draftRawBySessionRef: { current: {} },
+        draftSourceBySessionRef: { current: {} },
+        draftMessageIdBySessionRef: { current: {} },
+        draftFlushTimeoutBySessionRef: { current: {} },
+        turnStartedAtBySessionRef: { current: {} },
+        updateSession,
+        resolveTurnDurationMs: () => undefined,
+        clearTurnDuration: () => {},
+        refreshTaskData: async () => {},
+      });
 
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
+      const handleEvent = handlers[0];
+      if (!handleEvent) {
+        throw new Error("Expected session event handler to be registered");
+      }
 
-    handleEvent({
-      type: "assistant_part",
-      sessionId: "session-1",
-      timestamp: "2026-02-22T08:00:05.000Z",
-      part: {
-        kind: "tool",
-        messageId: "tool-msg-1",
-        partId: "part-1",
-        callId: "call-1",
-        tool: "odt_set_spec",
-        status: "pending",
-        input: {},
-        output: "",
-        error: "",
-      },
-    });
-
-    const queuedMessage = sessionsRef.current["session-1"]?.messages.find(
-      (message) => message.meta?.kind === "tool" && message.meta.callId === "call-1",
-    );
-    if (!queuedMessage || queuedMessage.meta?.kind !== "tool") {
-      throw new Error("Expected queued tool message");
-    }
-    expect(queuedMessage.meta.inputReadyAtMs).toBeUndefined();
-
-    handleEvent({
-      type: "assistant_part",
-      sessionId: "session-1",
-      timestamp: "2026-02-22T08:00:10.000Z",
-      part: {
-        kind: "tool",
-        messageId: "tool-msg-1",
-        partId: "part-1",
-        callId: "call-1",
-        tool: "odt_set_spec",
-        status: "pending",
-        input: {
-          taskId: "fairnest-123",
-          markdown: "# Plan",
+      Date.now = () => Date.parse("2026-02-22T08:00:05.000Z");
+      handleEvent({
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:05.000Z",
+        part: {
+          kind: "tool",
+          messageId: "tool-msg-1",
+          partId: "part-1",
+          callId: "call-1",
+          tool: "odt_set_spec",
+          status: "pending",
+          input: {},
+          output: "",
+          error: "",
         },
-        output: "",
-        error: "",
-      },
-    });
+      });
 
-    const inputReadyMessage = sessionsRef.current["session-1"]?.messages.find(
-      (message) => message.meta?.kind === "tool" && message.meta.callId === "call-1",
-    );
-    if (!inputReadyMessage || inputReadyMessage.meta?.kind !== "tool") {
-      throw new Error("Expected input-ready tool message");
-    }
-    expect(inputReadyMessage.meta.inputReadyAtMs).toBe(Date.parse("2026-02-22T08:00:10.000Z"));
+      const queuedMessage = getSessionMessages(sessionsRef).find(
+        (message) => message.meta?.kind === "tool" && message.meta.callId === "call-1",
+      );
+      if (!queuedMessage || queuedMessage.meta?.kind !== "tool") {
+        throw new Error("Expected queued tool message");
+      }
+      expect(queuedMessage.meta.inputReadyAtMs).toBeUndefined();
 
-    handleEvent({
-      type: "assistant_part",
-      sessionId: "session-1",
-      timestamp: "2026-02-22T08:00:20.000Z",
-      part: {
-        kind: "tool",
-        messageId: "tool-msg-1",
-        partId: "part-1",
-        callId: "call-1",
-        tool: "odt_set_spec",
-        status: "completed",
-        input: {
-          taskId: "fairnest-123",
-          markdown: "# Plan",
+      Date.now = () => Date.parse("2026-02-22T08:00:10.000Z");
+      handleEvent({
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:10.000Z",
+        part: {
+          kind: "tool",
+          messageId: "tool-msg-1",
+          partId: "part-1",
+          callId: "call-1",
+          tool: "odt_set_spec",
+          status: "pending",
+          input: {
+            taskId: "fairnest-123",
+            markdown: "# Plan",
+          },
+          output: "",
+          error: "",
         },
-        output: "ok",
-        error: "",
-      },
-    });
+      });
 
-    const completedMessage = sessionsRef.current["session-1"]?.messages.find(
-      (message) => message.meta?.kind === "tool" && message.meta.callId === "call-1",
-    );
-    if (!completedMessage || completedMessage.meta?.kind !== "tool") {
-      throw new Error("Expected completed tool message");
+      const inputReadyMessage = getSessionMessages(sessionsRef).find(
+        (message) => message.meta?.kind === "tool" && message.meta.callId === "call-1",
+      );
+      if (!inputReadyMessage || inputReadyMessage.meta?.kind !== "tool") {
+        throw new Error("Expected input-ready tool message");
+      }
+      expect(inputReadyMessage.meta.inputReadyAtMs).toBe(Date.parse("2026-02-22T08:00:10.000Z"));
+
+      Date.now = () => Date.parse("2026-02-22T08:00:20.000Z");
+      handleEvent({
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:20.000Z",
+        part: {
+          kind: "tool",
+          messageId: "tool-msg-1",
+          partId: "part-1",
+          callId: "call-1",
+          tool: "odt_set_spec",
+          status: "completed",
+          input: {
+            taskId: "fairnest-123",
+            markdown: "# Plan",
+          },
+          output: "ok",
+          error: "",
+        },
+      });
+
+      const completedMessage = getSessionMessages(sessionsRef).find(
+        (message) => message.meta?.kind === "tool" && message.meta.callId === "call-1",
+      );
+      if (!completedMessage || completedMessage.meta?.kind !== "tool") {
+        throw new Error("Expected completed tool message");
+      }
+      expect(completedMessage.meta.inputReadyAtMs).toBe(Date.parse("2026-02-22T08:00:10.000Z"));
+    } finally {
+      Date.now = originalDateNow;
     }
-    expect(completedMessage.meta.inputReadyAtMs).toBe(Date.parse("2026-02-22T08:00:10.000Z"));
   });
 
   test("runs completion side effects once for duplicate completed tool events", async () => {
@@ -282,7 +583,7 @@ describe("agent-orchestrator-session-events", () => {
     }
   });
 
-  test("writes canonical user_message events into the transcript", () => {
+  test("writes canonical user_message events into the transcript", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_sessionId, handler) => {
@@ -351,7 +652,10 @@ describe("agent-orchestrator-session-events", () => {
       },
     });
 
-    const userMessages = sessionsRef.current["session-1"]?.messages.filter(
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const userMessages = getSessionMessages(sessionsRef).filter(
       (message) => message.role === "user",
     );
     expect(userMessages).toHaveLength(1);
@@ -445,7 +749,7 @@ describe("agent-orchestrator-session-events", () => {
       state: "read",
     });
 
-    const userMessages = sessionsRef.current["session-1"]?.messages.filter(
+    const userMessages = getSessionMessages(sessionsRef).filter(
       (message) => message.role === "user",
     );
     expect(userMessages).toHaveLength(1);
@@ -460,6 +764,414 @@ describe("agent-orchestrator-session-events", () => {
       },
     ]);
     expect(userMessages[0].meta.state).toBe("read");
+  });
+
+  test("flushes queued non-immediate events in a single session commit", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ status: "starting" }),
+      },
+    };
+    let updateSessionCalls = 0;
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      updateSessionCalls += 1;
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    const unsubscribe = attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      eventBatchWindowMs: 25,
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "session_started",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:00.000Z",
+      message: "Started",
+    });
+    handleEvent({
+      type: "session_todos_updated",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:01.000Z",
+      todos: [
+        {
+          id: "todo-1",
+          content: "Investigate live performance",
+          status: "in_progress",
+          priority: "high",
+        },
+      ],
+    });
+
+    expect(updateSessionCalls).toBe(0);
+
+    unsubscribe();
+
+    expect(updateSessionCalls).toBe(1);
+    expect(sessionsRef.current["session-1"]?.status).toBe("running");
+    expect(getSessionMessages(sessionsRef)).toHaveLength(1);
+    expect(sessionsRef.current["session-1"]?.todos).toEqual([
+      {
+        id: "todo-1",
+        content: "Investigate live performance",
+        status: "in_progress",
+        priority: "high",
+      },
+    ]);
+  });
+
+  test("flushes queued work before applying an immediate event", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ status: "starting" }),
+      },
+    };
+    let updateSessionCalls = 0;
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      updateSessionCalls += 1;
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      eventBatchWindowMs: 25,
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "session_started",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:00.000Z",
+      message: "Started",
+    });
+    expect(updateSessionCalls).toBe(0);
+
+    handleEvent({
+      type: "user_message",
+      sessionId: "session-1",
+      messageId: "user-message-1",
+      timestamp: "2026-02-22T08:00:01.000Z",
+      message: "Continue",
+      parts: [{ kind: "text", text: "Continue" }],
+      state: "read",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+    });
+
+    expect(updateSessionCalls).toBe(2);
+    expect(getSessionMessages(sessionsRef).map((message) => message.role)).toEqual([
+      "system",
+      "user",
+    ]);
+  });
+
+  test("collapses assistant stream chunks across a queued flush", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ status: "running", role: "build" }),
+      },
+    };
+    let updateSessionCalls = 0;
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      updateSessionCalls += 1;
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      eventBatchWindowMs: 25,
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_delta",
+      sessionId: "session-1",
+      channel: "text",
+      messageId: "assistant-1",
+      delta: "Hello",
+      timestamp: "2026-02-22T08:00:01.000Z",
+    });
+    handleEvent({
+      type: "assistant_delta",
+      sessionId: "session-1",
+      channel: "text",
+      messageId: "assistant-1",
+      delta: " world",
+      timestamp: "2026-02-22T08:00:02.000Z",
+    });
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:03.000Z",
+      part: {
+        kind: "reasoning",
+        messageId: "assistant-1",
+        partId: "reasoning-1",
+        text: "Draft reasoning",
+        completed: false,
+      },
+    });
+    handleEvent({
+      type: "session_status",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:04.500Z",
+      status: "running",
+      message: "Still running",
+    });
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:04.000Z",
+      part: {
+        kind: "reasoning",
+        messageId: "assistant-1",
+        partId: "reasoning-1",
+        text: "Draft reasoning refined",
+        completed: false,
+      },
+    });
+    handleEvent({
+      type: "user_message",
+      sessionId: "session-1",
+      messageId: "user-1",
+      timestamp: "2026-02-22T08:00:05.000Z",
+      message: "Continue",
+      parts: [{ kind: "text", text: "Continue" }],
+      state: "read",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+    });
+
+    expect(updateSessionCalls).toBe(2);
+    const assistantMessage = getSessionMessages(sessionsRef).find(
+      (message) => message.id === "assistant-1",
+    );
+    expect(assistantMessage?.content).toBe("Hello world");
+  });
+
+  test("prefers final assistant message over earlier streamed text in the same batch", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ status: "running", role: "build" }),
+      },
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      eventBatchWindowMs: 25,
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_delta",
+      sessionId: "session-1",
+      channel: "text",
+      messageId: "assistant-1",
+      delta: "Draft",
+      timestamp: "2026-02-22T08:00:01.000Z",
+    });
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.000Z",
+      part: {
+        kind: "text",
+        messageId: "assistant-1",
+        partId: "text-1",
+        text: "Draft refined",
+        completed: false,
+      },
+    });
+    handleEvent({
+      type: "assistant_message",
+      sessionId: "session-1",
+      messageId: "assistant-1",
+      timestamp: "2026-02-22T08:00:03.000Z",
+      message: "Final answer",
+      totalTokens: 321,
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+    });
+    handleEvent({
+      type: "user_message",
+      sessionId: "session-1",
+      messageId: "user-1",
+      timestamp: "2026-02-22T08:00:04.000Z",
+      message: "Continue",
+      parts: [{ kind: "text", text: "Continue" }],
+      state: "read",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+    });
+
+    const assistantMessage = getSessionMessages(sessionsRef).find(
+      (message) => message.id === "assistant-1",
+    );
+    expect(assistantMessage?.content).toBe("Final answer");
   });
 
   test("auto-rejects mutating permissions for read-only roles", async () => {
@@ -531,7 +1243,7 @@ describe("agent-orchestrator-session-events", () => {
     expect(replyPermission).toHaveBeenCalledTimes(1);
     expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
     expect(
-      sessionsRef.current["session-1"]?.messages.some((message) =>
+      getSessionMessages(sessionsRef).some((message) =>
         message.content.includes("Auto-rejected mutating permission"),
       ),
     ).toBe(true);
@@ -609,7 +1321,7 @@ describe("agent-orchestrator-session-events", () => {
     expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(1);
     expect(sessionsRef.current["session-1"]?.pendingPermissions[0]?.requestId).toBe("perm-fail");
     expect(
-      sessionsRef.current["session-1"]?.messages.some((message) =>
+      getSessionMessages(sessionsRef).some((message) =>
         message.content.includes("Automatic permission rejection failed"),
       ),
     ).toBe(true);
@@ -695,7 +1407,7 @@ describe("agent-orchestrator-session-events", () => {
       "perm-template-fail",
     );
     expect(
-      sessionsRef.current["session-1"]?.messages.some((message) =>
+      getSessionMessages(sessionsRef).some((message) =>
         message.content.includes("Automatic permission rejection failed"),
       ),
     ).toBe(true);
@@ -785,7 +1497,7 @@ describe("agent-orchestrator-session-events", () => {
     expect(sessionsRef.current["session-1"]?.status).toBe("error");
     expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
     expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
-    const lastMessage = sessionsRef.current["session-1"]?.messages.at(-1);
+    const lastMessage = getLastSessionMessage(sessionsRef);
     expect(lastMessage?.content).toBe("Aborted");
     expect(lastMessage?.meta).toEqual({
       kind: "session_notice",
@@ -855,7 +1567,7 @@ describe("agent-orchestrator-session-events", () => {
       timestamp: "2026-02-22T08:00:10.000Z",
     });
 
-    const lastMessage = sessionsRef.current["session-1"]?.messages.at(-1);
+    const lastMessage = getLastSessionMessage(sessionsRef);
     expect(lastMessage?.content).toBe(
       "Our servers are currently overloaded. Please try again later.",
     );
@@ -950,7 +1662,7 @@ describe("agent-orchestrator-session-events", () => {
       timestamp: "2026-02-22T08:00:10.000Z",
     });
 
-    const lastMessage = sessionsRef.current["session-1"]?.messages.at(-1);
+    const lastMessage = getLastSessionMessage(sessionsRef);
     expect(lastMessage?.content).toBe("Session stopped at your request.");
     expect(lastMessage?.meta).toEqual({
       kind: "session_notice",
@@ -958,7 +1670,7 @@ describe("agent-orchestrator-session-events", () => {
       reason: "user_stopped",
       title: "Stopped",
     });
-    const toolMessage = sessionsRef.current["session-1"]?.messages.find(
+    const toolMessage = getSessionMessages(sessionsRef).find(
       (message) => message.id === "tool-running",
     );
     expect(toolMessage?.meta?.kind).toBe("tool");
@@ -970,9 +1682,7 @@ describe("agent-orchestrator-session-events", () => {
     expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
     expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
     expect(
-      sessionsRef.current["session-1"]?.messages.some((message) =>
-        message.content.includes("Session error:"),
-      ),
+      getSessionMessages(sessionsRef).some((message) => message.content.includes("Session error:")),
     ).toBe(false);
   });
 
@@ -1156,7 +1866,7 @@ describe("agent-orchestrator-session-events", () => {
       message: "Session stopped",
     });
 
-    const lastMessage = sessionsRef.current["session-1"]?.messages.at(-1);
+    const lastMessage = getLastSessionMessage(sessionsRef);
     expect(lastMessage?.content).toBe("Session stopped at your request.");
     expect(lastMessage?.meta).toEqual({
       kind: "session_notice",
@@ -1164,7 +1874,7 @@ describe("agent-orchestrator-session-events", () => {
       reason: "user_stopped",
       title: "Stopped",
     });
-    const toolMessage = sessionsRef.current["session-1"]?.messages.find(
+    const toolMessage = getSessionMessages(sessionsRef).find(
       (message) => message.id === "tool-running",
     );
     expect(toolMessage?.meta?.kind).toBe("tool");
@@ -1242,11 +1952,11 @@ describe("agent-orchestrator-session-events", () => {
 
     expect(sessionsRef.current["session-1"]?.status).toBe("error");
     expect(
-      sessionsRef.current["session-1"]?.messages.some((message) =>
+      getSessionMessages(sessionsRef).some((message) =>
         message.content.includes("Session stopped at your request."),
       ),
     ).toBe(false);
-    const lastMessage = sessionsRef.current["session-1"]?.messages.at(-1);
+    const lastMessage = getLastSessionMessage(sessionsRef);
     expect(lastMessage?.content).toBe("Permission denied");
     expect(lastMessage?.meta).toEqual({
       kind: "session_notice",
@@ -1340,12 +2050,12 @@ describe("agent-orchestrator-session-events", () => {
     expect(sessionsRef.current["session-1"]?.status).toBe("idle");
     expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("");
     expect(
-      sessionsRef.current["session-1"]?.messages.some(
+      getSessionMessages(sessionsRef).some(
         (message) => message.role === "assistant" && message.content.includes("Partial answer"),
       ),
     ).toBe(true);
     expect(
-      sessionsRef.current["session-1"]?.messages.some(
+      getSessionMessages(sessionsRef).some(
         (message) => message.role === "system" && message.content.includes("Retrying"),
       ),
     ).toBe(true);
@@ -1417,7 +2127,7 @@ describe("agent-orchestrator-session-events", () => {
     });
 
     expect(sessionsRef.current["session-1"]?.status).toBe("running");
-    expect(sessionsRef.current["session-1"]?.messages.length).toBeGreaterThan(0);
+    expect(getSessionMessages(sessionsRef).length).toBeGreaterThan(0);
 
     handleEvent({
       type: "assistant_part",
@@ -1538,17 +2248,17 @@ describe("agent-orchestrator-session-events", () => {
     expect(clearCalls).toBeGreaterThan(0);
     expect(sessionsRef.current["session-1"]?.status).toBe("idle");
     expect(
-      sessionsRef.current["session-1"]?.messages.some(
+      getSessionMessages(sessionsRef).some(
         (message) => message.role === "thinking" && message.content.includes("Reasoning"),
       ),
     ).toBe(true);
     expect(
-      sessionsRef.current["session-1"]?.messages.some(
+      getSessionMessages(sessionsRef).some(
         (message) => message.role === "tool" && message.meta?.kind === "tool",
       ),
     ).toBe(true);
     expect(
-      sessionsRef.current["session-1"]?.messages.some(
+      getSessionMessages(sessionsRef).some(
         (message) =>
           message.role === "tool" &&
           message.meta?.kind === "tool" &&
@@ -1557,7 +2267,7 @@ describe("agent-orchestrator-session-events", () => {
       ),
     ).toBe(true);
     expect(
-      sessionsRef.current["session-1"]?.messages.some(
+      getSessionMessages(sessionsRef).some(
         (message) =>
           message.role === "tool" &&
           message.meta?.kind === "tool" &&
@@ -1566,17 +2276,17 @@ describe("agent-orchestrator-session-events", () => {
       ),
     ).toBe(true);
     expect(
-      sessionsRef.current["session-1"]?.messages.some((message) =>
+      getSessionMessages(sessionsRef).some((message) =>
         message.content.includes("Subtask (build): Done subtask"),
       ),
     ).toBe(true);
     expect(
-      sessionsRef.current["session-1"]?.messages.some(
+      getSessionMessages(sessionsRef).some(
         (message) =>
           message.role === "assistant" && message.content.includes("Final assistant output"),
       ),
     ).toBe(true);
-    const finalAssistantMessage = sessionsRef.current["session-1"]?.messages.find(
+    const finalAssistantMessage = getSessionMessages(sessionsRef).find(
       (message) =>
         message.role === "assistant" && message.content.includes("Final assistant output"),
     );
@@ -1586,7 +2296,7 @@ describe("agent-orchestrator-session-events", () => {
     expect(finalAssistantMessage.meta.profileId).toBe("Hephaestus");
     expect(finalAssistantMessage.meta.modelId).toBe("claude-3-7-sonnet");
     expect(
-      sessionsRef.current["session-1"]?.messages.some(
+      getSessionMessages(sessionsRef).some(
         (message) => message.role === "assistant" && message.content.includes("Idle follow-up"),
       ),
     ).toBe(true);
@@ -1679,7 +2389,7 @@ describe("agent-orchestrator-session-events", () => {
       },
     });
 
-    const assistantMessages = sessionsRef.current["session-1"]?.messages.filter(
+    const assistantMessages = getSessionMessages(sessionsRef).filter(
       (message) => message.role === "assistant",
     );
     expect(assistantMessages).toHaveLength(1);
@@ -1764,9 +2474,10 @@ describe("agent-orchestrator-session-events", () => {
       message: "Stable output",
     });
 
-    expect(sessionsRef.current["session-1"]?.messages).toHaveLength(2);
-    expect(sessionsRef.current["session-1"]?.messages[0]?.id).toBe("assistant-final");
-    expect(sessionsRef.current["session-1"]?.messages[1]?.id).toBe("assistant-newer-miss");
+    expect(getSessionMessages(sessionsRef)).toHaveLength(3);
+    expect(sessionMessageAt(getSession(sessionsRef), 0)?.id).toBe("assistant-older-match");
+    expect(sessionMessageAt(getSession(sessionsRef), 1)?.id).toBe("assistant-newer-miss");
+    expect(sessionMessageAt(getSession(sessionsRef), 2)?.id).toBe("assistant-final");
   });
 
   test("updates live session context usage from step-finish part tokens", () => {
@@ -2076,7 +2787,7 @@ describe("agent-orchestrator-session-events", () => {
 
     expect(sessionsRef.current["session-1"]?.draftReasoningText).toBe("");
     expect(
-      sessionsRef.current["session-1"]?.messages.some(
+      getSessionMessages(sessionsRef).some(
         (message) => message.role === "assistant" && message.content.includes("Reason silently"),
       ),
     ).toBe(false);
@@ -2153,10 +2864,11 @@ describe("agent-orchestrator-session-events", () => {
     });
 
     expect(
-      sessionsRef.current["session-1"]?.messages.some(
+      getSessionMessages(sessionsRef).some(
         (message) => message.id === "assistant-buffered-1" && message.content === "Buffered answer",
       ),
     ).toBe(true);
+    expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("");
   });
 
   test("upserts the finalized assistant message instead of appending a duplicate", () => {
@@ -2241,7 +2953,7 @@ describe("agent-orchestrator-session-events", () => {
       },
     });
 
-    const assistantMessages = sessionsRef.current["session-1"]?.messages.filter(
+    const assistantMessages = getSessionMessages(sessionsRef).filter(
       (entry) => entry.role === "assistant",
     );
     expect(assistantMessages).toHaveLength(1);

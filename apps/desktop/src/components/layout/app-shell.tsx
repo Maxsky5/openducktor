@@ -22,7 +22,7 @@ import { summarizeAgentActivity } from "@/components/layout/sidebar/agent-activi
 import { ThemeToggle } from "@/components/layout/sidebar/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useAgentState, useTasksState, useWorkspaceState } from "@/state";
+import { useAgentSessionSummaries, useTasksState, useWorkspaceState } from "@/state";
 
 const SettingsModal = lazy(async () => {
   const module = await import("@/components/features/settings/settings-modal");
@@ -32,7 +32,7 @@ const SettingsModal = lazy(async () => {
 export function AppShell(): ReactElement {
   const { activeRepo, workspaces } = useWorkspaceState();
   const { tasks } = useTasksState();
-  const { sessions } = useAgentState();
+  const sessions = useAgentSessionSummaries();
   const [isRepositoryModalOpen, setRepositoryModalOpen] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const isRepositoryModalBlocking = !activeRepo && workspaces.length === 0;

@@ -31,7 +31,6 @@ type UseAgentStudioFreshSessionCreationArgs = {
   taskId: string;
   role: AgentRole;
   activeSession: AgentSessionState | null;
-  sessionsForTask?: AgentSessionState[];
   selectedTask: TaskCard | null;
   agentStudioReady: boolean;
   isActiveTaskHydrated: boolean;

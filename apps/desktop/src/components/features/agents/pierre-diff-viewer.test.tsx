@@ -3,6 +3,7 @@ import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 mock.module("@pierre/diffs/react", () => ({
   FileDiff: () => null,
+  Virtualizer: ({ children }: { children: React.ReactNode }) => children,
   useWorkerPool: () => null,
 }));
 

@@ -80,16 +80,19 @@ describe("agent-chat-thread windowing helpers", () => {
         key: "session-1:assistant-0:duration",
         start: 0,
         end: 1,
+        rows: rows.slice(0, 2),
       },
       {
         key: "session-1:user-1",
         start: 2,
         end: 4,
+        rows: rows.slice(2, 5),
       },
       {
         key: "session-1:user-2",
         start: 5,
         end: 7,
+        rows: rows.slice(5, 8),
       },
     ]);
   });

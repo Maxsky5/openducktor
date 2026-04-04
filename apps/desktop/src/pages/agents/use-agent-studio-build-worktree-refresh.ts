@@ -1,7 +1,12 @@
 import { useEffect, useRef } from "react";
+import {
+  forEachSessionMessage,
+  forEachSessionMessageFrom,
+} from "@/state/operations/agent-orchestrator/support/messages";
 import { isReadOnlyShellCommand, isSafeReadToolName } from "@/state/operations/permission-policy";
 
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatMessageMeta, AgentSessionState } from "@/types/agent-orchestrator";
+import { findFirstChangedMessageIndex } from "./agent-session-message-diff";
 
 type UseAgentStudioBuildWorktreeRefreshArgs = {
   viewRole: string | null;
@@ -39,10 +44,7 @@ const EXPLICIT_NON_WORKTREE_TOOL_NAMES = new Set([
 
 const SHELL_TOOL_NAMES = new Set(["bash", "shell", "exec", "command"]);
 
-type ToolMessageMeta = Extract<
-  NonNullable<AgentSessionState["messages"][number]["meta"]>,
-  { kind: "tool" }
->;
+type ToolMessageMeta = Extract<NonNullable<AgentChatMessageMeta>, { kind: "tool" }>;
 
 const isReadOnlyNonWorktreeTool = (toolName: string): boolean =>
   EXPLICIT_NON_WORKTREE_TOOL_NAMES.has(toolName) || isSafeReadToolName(toolName);
@@ -64,6 +66,34 @@ const canToolAffectWorktree = (meta: ToolMessageMeta): boolean => {
   return true;
 };
 
+const seedProcessedToolMessageKeys = (session: AgentSessionState): Set<string> => {
+  const keys = new Set<string>();
+  forEachSessionMessage(session, (message) => {
+    const meta = message.meta;
+    if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
+      return;
+    }
+
+    keys.add(`${session.sessionId}:${message.id}`);
+  });
+  return keys;
+};
+
+const collectCompletedWorktreeAffectingToolKeys = (session: AgentSessionState): Set<string> => {
+  const keys = new Set<string>();
+  forEachSessionMessage(session, (message) => {
+    const meta = message.meta;
+    if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
+      return;
+    }
+
+    if (canToolAffectWorktree(meta)) {
+      keys.add(`${session.sessionId}:${message.id}`);
+    }
+  });
+  return keys;
+};
+
 export function useAgentStudioBuildWorktreeRefresh({
   viewRole,
   activeSession,
@@ -72,7 +102,9 @@ export function useAgentStudioBuildWorktreeRefresh({
 }: UseAgentStudioBuildWorktreeRefreshArgs): void {
   const processedToolMessageKeysRef = useRef(new Set<string>());
   const previousSessionIdRef = useRef<string | null>(null);
+  const previousMessagesRef = useRef<AgentSessionState["messages"] | null>(null);
   const wasSessionHistoryHydratingRef = useRef(false);
+  const completedToolKeysBeforeHydrationRef = useRef<Set<string> | null>(null);
 
   useEffect(() => {
     if (viewRole !== "build" || activeSession?.role !== "build") {
@@ -80,57 +112,60 @@ export function useAgentStudioBuildWorktreeRefresh({
     }
 
     if (isSessionHistoryHydrating) {
+      if (!wasSessionHistoryHydratingRef.current) {
+        completedToolKeysBeforeHydrationRef.current =
+          collectCompletedWorktreeAffectingToolKeys(activeSession);
+      }
       wasSessionHistoryHydratingRef.current = true;
       return;
     }
 
     if (previousSessionIdRef.current !== activeSession.sessionId) {
       previousSessionIdRef.current = activeSession.sessionId;
-      processedToolMessageKeysRef.current = new Set(
-        activeSession.messages.flatMap((message) => {
-          const meta = message.meta;
-          if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
-            return [];
-          }
-
-          return [`${activeSession.sessionId}:${message.id}`];
-        }),
-      );
+      previousMessagesRef.current = activeSession.messages;
+      processedToolMessageKeysRef.current = seedProcessedToolMessageKeys(activeSession);
       return;
     }
 
     if (wasSessionHistoryHydratingRef.current) {
       wasSessionHistoryHydratingRef.current = false;
-      processedToolMessageKeysRef.current = new Set(
-        activeSession.messages.flatMap((message) => {
-          const meta = message.meta;
-          if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
-            return [];
-          }
+      previousMessagesRef.current = activeSession.messages;
+      const completedToolKeysBeforeHydration = completedToolKeysBeforeHydrationRef.current;
+      processedToolMessageKeysRef.current = completedToolKeysBeforeHydration
+        ? new Set(completedToolKeysBeforeHydration)
+        : seedProcessedToolMessageKeys(activeSession);
+      completedToolKeysBeforeHydrationRef.current = null;
+      return;
+    }
 
-          return [`${activeSession.sessionId}:${message.id}`];
-        }),
-      );
+    const firstChangedMessageIndex = findFirstChangedMessageIndex(
+      previousMessagesRef.current,
+      activeSession,
+    );
+    if (firstChangedMessageIndex < 0) {
+      previousMessagesRef.current = activeSession.messages;
       return;
     }
 
     let shouldRefresh = false;
-    for (const message of activeSession.messages) {
+    forEachSessionMessageFrom(activeSession, firstChangedMessageIndex, (message) => {
       const meta = message.meta;
       if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
-        continue;
+        return;
       }
 
       const messageKey = `${activeSession.sessionId}:${message.id}`;
       if (processedToolMessageKeysRef.current.has(messageKey)) {
-        continue;
+        return;
       }
 
       processedToolMessageKeysRef.current.add(messageKey);
       if (canToolAffectWorktree(meta)) {
         shouldRefresh = true;
       }
-    }
+    });
+
+    previousMessagesRef.current = activeSession.messages;
 
     if (shouldRefresh) {
       refreshWorktree();

@@ -9,10 +9,6 @@ import {
 
 export type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 
-type ReusableSessionDecision = {
-  session: AgentSessionState;
-};
-
 type AgentStudioSessionSelectionQueryParams = {
   taskId: string;
   sessionId: string | undefined;
@@ -29,20 +25,6 @@ type AgentStudioAsyncActivityContextKeyParams = {
 
 export const canStartSessionForRole = (task: TaskCard | null, role: AgentRole): boolean => {
   return !task || isRoleAvailableForTask(task, role);
-};
-
-export const resolveReusableSessionForStart = (params: {
-  activeSession: AgentSessionState | null;
-  sessionsForTask: AgentSessionState[];
-  role: AgentRole;
-}): ReusableSessionDecision | null => {
-  if (params.activeSession) {
-    return {
-      session: params.activeSession,
-    };
-  }
-
-  return null;
 };
 
 const buildSessionSelectionQueryUpdate = (params: {

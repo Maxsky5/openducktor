@@ -1,5 +1,9 @@
 export {
   AppStateProvider,
+  useAgentOperations,
+  useAgentSession,
+  useAgentSessionSummaries,
+  useAgentSessions,
   useAgentState,
   useChecksState,
   useSpecState,

@@ -1,6 +1,11 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
-import type { AgentChatMessage, AgentSessionContextUsage } from "@/types/agent-orchestrator";
+import {
+  getSessionMessageAt,
+  getSessionMessageCount,
+  type SessionMessageOwner,
+} from "@/state/operations/agent-orchestrator/support/messages";
+import type { AgentSessionContextUsage } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   coerceVisibleSelectionToCatalog,
@@ -11,6 +16,11 @@ export type AgentStudioContextUsage = {
   totalTokens: number;
   contextWindow: number;
   outputLimit?: number;
+} | null;
+
+export type AgentStudioContextUsageEntry = {
+  usage: NonNullable<AgentStudioContextUsage>;
+  sourceIndex: number;
 } | null;
 
 type CatalogModelDescriptor = AgentModelCatalog["models"][number];
@@ -112,12 +122,12 @@ export const toModelDescriptorByKey = (
 };
 
 export const extractLatestContextUsage = ({
-  messages,
+  session,
   liveContextUsage,
   modelDescriptorByKey,
   fallbackContextWindow,
 }: {
-  messages: AgentChatMessage[] | null | undefined;
+  session: SessionMessageOwner | null | undefined;
   liveContextUsage?: AgentSessionContextUsage | null;
   modelDescriptorByKey: ReadonlyMap<string, CatalogModelDescriptor>;
   fallbackContextWindow?: number;
@@ -141,13 +151,45 @@ export const extractLatestContextUsage = ({
     return null;
   }
 
-  if (!messages) {
+  if (!session) {
     return null;
   }
 
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (!message || message.role !== "assistant" || message.meta?.kind !== "assistant") {
+  return (
+    extractLatestContextUsageEntry({
+      session,
+      modelDescriptorByKey,
+      ...(typeof fallbackContextWindow === "number" ? { fallbackContextWindow } : {}),
+    })?.usage ?? null
+  );
+};
+
+export const extractLatestContextUsageEntry = ({
+  session,
+  modelDescriptorByKey,
+  fallbackContextWindow,
+  startIndex = 0,
+  endIndex,
+}: {
+  session: SessionMessageOwner | null | undefined;
+  modelDescriptorByKey: ReadonlyMap<string, CatalogModelDescriptor>;
+  fallbackContextWindow?: number;
+  startIndex?: number;
+  endIndex?: number;
+}): AgentStudioContextUsageEntry => {
+  if (!session) {
+    return null;
+  }
+
+  const lastIndex = getSessionMessageCount(session) - 1;
+  const scanEndIndex = Math.min(typeof endIndex === "number" ? endIndex : lastIndex, lastIndex);
+  if (scanEndIndex < startIndex) {
+    return null;
+  }
+
+  for (let index = scanEndIndex; index >= startIndex; index -= 1) {
+    const message = getSessionMessageAt(session, index);
+    if (!message || message.meta?.kind !== "assistant") {
       continue;
     }
 
@@ -170,9 +212,12 @@ export const extractLatestContextUsage = ({
     const outputLimit = message.meta.outputLimit ?? modelDescriptor?.outputLimit;
 
     return {
-      totalTokens,
-      contextWindow,
-      ...(typeof outputLimit === "number" ? { outputLimit } : {}),
+      usage: {
+        totalTokens,
+        contextWindow,
+        ...(typeof outputLimit === "number" ? { outputLimit } : {}),
+      },
+      sourceIndex: index,
     };
   }
 

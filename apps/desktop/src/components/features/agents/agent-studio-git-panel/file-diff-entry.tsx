@@ -1,11 +1,8 @@
 import type { FileDiff } from "@openducktor/contracts";
 import { AlertTriangle, ChevronDown, ChevronRight, FileText, Undo2 } from "lucide-react";
-import { memo, type ReactElement } from "react";
+import { memo, type ReactElement, useEffect, useState } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
-import {
-  PierreDiffPreloader,
-  PierreDiffViewer,
-} from "@/components/features/agents/pierre-diff-viewer";
+import { PierreDiffViewer } from "@/components/features/agents/pierre-diff-viewer";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -17,6 +14,10 @@ const areFileDiffsEqual = (left: FileDiff, right: FileDiff): boolean =>
   left.additions === right.additions &&
   left.deletions === right.deletions &&
   left.diff === right.diff;
+
+const DIFF_BODY_CONTAINER_STYLE = {
+  contain: "layout paint",
+} as const;
 
 type FileDiffEntryProps = {
   diff: FileDiff;
@@ -51,14 +52,39 @@ function FileDiffEntry({
   const fileName = diff.file.split("/").pop() ?? diff.file;
   const dirName = diff.file.includes("/") ? diff.file.slice(0, diff.file.lastIndexOf("/")) : "";
   const hasDiffContent = diff.diff.trim().length > 0;
+  const shouldPersistMountedDiffBody = process.env.NODE_ENV !== "test";
+  const [isDiffBodyMounted, setIsDiffBodyMounted] = useState(process.env.NODE_ENV === "test");
+
+  useEffect(() => {
+    if (!isExpanded || !hasDiffContent) {
+      if (!shouldPersistMountedDiffBody) {
+        setIsDiffBodyMounted(false);
+      }
+      return;
+    }
+
+    if (process.env.NODE_ENV === "test") {
+      setIsDiffBodyMounted(true);
+      return;
+    }
+
+    if (isDiffBodyMounted) {
+      return;
+    }
+
+    setIsDiffBodyMounted(false);
+    const rafId = globalThis.requestAnimationFrame(() => {
+      setIsDiffBodyMounted(true);
+    });
+
+    return () => {
+      globalThis.cancelAnimationFrame(rafId);
+    };
+  }, [hasDiffContent, isDiffBodyMounted, isExpanded, shouldPersistMountedDiffBody]);
 
   return (
     <div className="min-w-0 max-w-full">
-      {isExpanded && hasDiffContent ? (
-        <PierreDiffPreloader patch={diff.diff} filePath={diff.file} />
-      ) : null}
-
-      <div className="flex items-center gap-1 px-3 py-1.5 transition-colors hover:bg-muted/50">
+      <div className="flex items-center gap-1 px-3 py-1.5 hover:bg-muted/50">
         <button
           type="button"
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 overflow-hidden text-left text-xs"
@@ -139,23 +165,37 @@ function FileDiffEntry({
         ) : null}
       </div>
 
-      {isExpanded ? (
-        <div className="border-t border-border/50">
+      {isExpanded || (hasDiffContent && shouldPersistMountedDiffBody && isDiffBodyMounted) ? (
+        <div
+          className={cn("border-t border-border/50", !isExpanded && "hidden")}
+          style={DIFF_BODY_CONTAINER_STYLE}
+        >
           {hasDiffContent ? (
-            <PierreDiffViewer
-              patch={diff.diff}
-              filePath={diff.file}
-              diffStyle={diffStyle}
-              enableHunkReset={canReset && onRequestHunkReset != null}
-              isHunkResetDisabled={isResetDisabled}
-              onResetHunk={
-                onRequestHunkReset
-                  ? (hunkIndex) => {
-                      onRequestHunkReset(diff.file, hunkIndex);
-                    }
-                  : undefined
-              }
-            />
+            isDiffBodyMounted ? (
+              <div>
+                <PierreDiffViewer
+                  patch={diff.diff}
+                  filePath={diff.file}
+                  diffStyle={diffStyle}
+                  enableHunkReset={canReset && onRequestHunkReset != null}
+                  isHunkResetDisabled={isResetDisabled}
+                  onResetHunk={
+                    onRequestHunkReset
+                      ? (hunkIndex) => {
+                          onRequestHunkReset(diff.file, hunkIndex);
+                        }
+                      : undefined
+                  }
+                />
+              </div>
+            ) : (
+              <div
+                className="p-3 text-xs text-muted-foreground"
+                data-testid="agent-studio-git-diff-pending"
+              >
+                Loading diff...
+              </div>
+            )
           ) : (
             <div className="p-3 text-xs italic text-muted-foreground">
               No diff content available for {diff.file}

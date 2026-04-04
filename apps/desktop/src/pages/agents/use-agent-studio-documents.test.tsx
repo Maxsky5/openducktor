@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -95,7 +96,7 @@ type UseAgentStudioDocumentsHook =
 let useAgentStudioDocuments: UseAgentStudioDocumentsHook;
 
 type HookArgs = Parameters<UseAgentStudioDocumentsHook>[0];
-type AgentMessage = ReturnType<typeof createAgentSessionFixture>["messages"][number];
+type AgentMessage = AgentChatMessage;
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioDocuments, initialProps);
@@ -491,6 +492,61 @@ describe("useAgentStudioDocuments", () => {
       });
 
       expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(2);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("processes same-id tool rows when they transition to completed", async () => {
+    const pendingToolMessage = {
+      ...createCompletedToolMessage({
+        id: "message-transition",
+        tool: "odt_set_plan",
+        input: { markdown: "# Saved plan" },
+        output: "done",
+      }),
+      meta: {
+        kind: "tool" as const,
+        partId: "part-message-transition",
+        callId: "call-message-transition",
+        tool: "odt_set_plan",
+        status: "running" as const,
+        input: { markdown: "# Saved plan" },
+      },
+    };
+    const completedToolMessage = createCompletedToolMessage({
+      id: "message-transition",
+      tool: "odt_set_plan",
+      input: { markdown: "# Saved plan" },
+      output: "done",
+    });
+    const baseArgs = {
+      ...createBaseArgs(),
+      selectedTask: null,
+      activeSession: createAgentSessionFixture({
+        runtimeKind: "opencode",
+        sessionId: "session-transition",
+        messages: [pendingToolMessage],
+      }),
+    };
+    const harness = createHookHarness(baseArgs);
+
+    try {
+      await harness.mount();
+      expect(reloadDocumentMock).not.toHaveBeenCalled();
+
+      await harness.update({
+        ...baseArgs,
+        activeSession: createAgentSessionFixture({
+          runtimeKind: "opencode",
+          sessionId: "session-transition",
+          messages: [completedToolMessage],
+        }),
+      });
+
+      expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
+      expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+      expect(reloadDocumentMock).toHaveBeenCalledWith("plan");
     } finally {
       await harness.unmount();
     }

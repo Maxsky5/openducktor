@@ -1,6 +1,6 @@
-import type { SupportedLanguages } from "@pierre/diffs";
+import { preloadHighlighter, type SupportedLanguages } from "@pierre/diffs";
 import { WorkerPoolContextProvider } from "@pierre/diffs/react";
-import type { ReactElement, ReactNode } from "react";
+import { type ReactElement, type ReactNode, useEffect, useMemo } from "react";
 import { workerFactory } from "@/lib/diff/workerFactory";
 
 // ─── Pre-warm config ───────────────────────────────────────────────────────────
@@ -14,6 +14,7 @@ const PRELOAD_LANGS: SupportedLanguages[] = [
   "json",
   "markdown",
 ];
+const PRELOAD_THEMES = ["pierre-light", "pierre-dark"] as const;
 
 // ─── Provider (wraps the agent studio layout) ──────────────────────────────
 
@@ -24,11 +25,27 @@ const PRELOAD_LANGS: SupportedLanguages[] = [
  * automatically use the worker pool for off-main-thread syntax highlighting.
  */
 export function DiffWorkerProvider({ children }: { children: ReactNode }): ReactElement {
+  const poolSize = useMemo(() => {
+    if (typeof navigator === "undefined") {
+      return 2;
+    }
+
+    const concurrency = navigator.hardwareConcurrency || 2;
+    return Math.min(Math.max(1, concurrency - 1), 3);
+  }, []);
+
+  useEffect(() => {
+    void preloadHighlighter({
+      themes: [...PRELOAD_THEMES],
+      langs: PRELOAD_LANGS,
+    });
+  }, []);
+
   return (
     <WorkerPoolContextProvider
       poolOptions={{
         workerFactory,
-        poolSize: 2,
+        poolSize,
         totalASTLRUCacheSize: 56,
       }}
       highlighterOptions={{

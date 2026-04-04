@@ -1,11 +1,12 @@
 import type { MutableRefObject, RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
+import type { AgentChatWindowRow, AgentChatWindowTurn } from "./agent-chat-thread-windowing";
 import { useAgentChatHistoryWindow } from "./use-agent-chat-history-window";
 import { useAgentChatScrollController } from "./use-agent-chat-scroll-controller";
 
 type UseAgentChatWindowInput = {
   rows: AgentChatWindowRow[];
+  turns?: AgentChatWindowTurn[];
   activeSessionId: string | null;
   isSessionViewLoading: boolean;
   isSessionWorking?: boolean;
@@ -16,6 +17,7 @@ type UseAgentChatWindowInput = {
 
 type UseAgentChatWindowResult = {
   windowedRows: AgentChatWindowRow[];
+  windowedTurns: AgentChatWindowTurn[];
   windowStart: number;
   isNearBottom: boolean;
   isNearTop: boolean;
@@ -26,6 +28,7 @@ type UseAgentChatWindowResult = {
 
 export function useAgentChatWindow({
   rows,
+  turns,
   activeSessionId,
   isSessionViewLoading,
   isSessionWorking = false,
@@ -44,6 +47,7 @@ export function useAgentChatWindow({
     userScrolledRef,
     userScrollIntentVersionRef,
     forceScrollToBottom,
+    refreshScrollState,
   } = useAgentChatScrollController({
     messagesContainerRef,
     messagesContentRef,
@@ -54,6 +58,7 @@ export function useAgentChatWindow({
     turnStart,
     windowStart,
     windowedRows,
+    windowedTurns,
     resetToLatestTurns,
     revealAllHistory,
   } = useAgentChatHistoryWindow({
@@ -61,8 +66,10 @@ export function useAgentChatWindow({
     isSessionViewLoading,
     messagesContainerRef,
     userScrolledRef,
+    ...(turns ? { turns } : {}),
   });
   const pendingBottomResetRef = useRef(false);
+  const visibleWindowKey = `${windowStart}:${windowedRows.length}`;
 
   const resetLatestTurnsAndPinBottom = useCallback(() => {
     if (turnStart === latestTurnStart) {
@@ -153,10 +160,16 @@ export function useAgentChatWindow({
 
     pendingBottomResetRef.current = false;
     forceScrollToBottom();
-  });
+  }, [forceScrollToBottom]);
+
+  useLayoutEffect(() => {
+    void visibleWindowKey;
+    refreshScrollState();
+  }, [refreshScrollState, visibleWindowKey]);
 
   return {
     windowedRows,
+    windowedTurns,
     windowStart,
     isNearBottom,
     isNearTop: isNearTop && turnStart === 0,
@@ -171,6 +184,7 @@ export function useAgentChatWindow({
 
       revealAllHistory();
       if (!container) {
+        refreshScrollState();
         return;
       }
 
@@ -178,9 +192,15 @@ export function useAgentChatWindow({
         top: 0,
         behavior: "auto",
       });
+      refreshScrollState();
     },
     scrollToBottomOnSend: () => {
-      resetLatestTurnsAndPinBottom();
+      if (userScrolledRef.current) {
+        resetLatestTurnsAndPinBottom();
+        return;
+      }
+
+      forceScrollToBottom();
     },
   };
 }

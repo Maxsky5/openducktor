@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
+import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { finalizeDraftAssistantMessage, toAssistantMessageMeta } from "./assistant-meta";
 
@@ -92,8 +94,9 @@ describe("agent-orchestrator/support/assistant-meta", () => {
     );
 
     expect(finalized.draftAssistantText).toBe("");
-    expect(finalized.messages).toHaveLength(1);
-    expect(finalized.messages[0]?.role).toBe("assistant");
-    expect(finalized.messages[0]?.content).toBe("Draft answer");
+    expect(getSessionMessageCount(finalized)).toBe(1);
+    expect(sessionMessageAt(finalized, 0)?.role).toBe("assistant");
+    expect(sessionMessageAt(finalized, 0)?.content).toBe("Draft answer");
+    expect(sessionMessageAt(finalized, 0)?.timestamp).toBe("2026-02-22T08:00:01.000Z");
   });
 });

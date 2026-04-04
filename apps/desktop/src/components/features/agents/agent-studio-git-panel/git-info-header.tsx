@@ -8,7 +8,7 @@ import {
   RefreshCw,
   Target,
 } from "lucide-react";
-import type { ReactElement } from "react";
+import { memo, type ReactElement } from "react";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -383,7 +383,7 @@ function GitDiffScopeTabs({ diffScope, onScopeChange }: GitDiffScopeTabsProps): 
               key={option.scope}
               value={option.scope}
               className={cn(
-                "inline-flex h-7 flex-1 cursor-pointer justify-center rounded-sm px-3 text-xs transition-colors",
+                "inline-flex h-7 flex-1 cursor-pointer justify-center rounded-sm px-3 text-xs",
                 "border-none bg-transparent data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm",
                 "text-muted-foreground hover:bg-background/80 hover:text-foreground data-[state=active]:border-transparent",
               )}
@@ -427,7 +427,7 @@ function GitInfoHeaderErrors({
   );
 }
 
-export function GitInfoHeader({
+export const GitInfoHeader = memo(function GitInfoHeader({
   contextMode = "worktree",
   pullRequest,
   branch,
@@ -590,4 +590,4 @@ export function GitInfoHeader({
       <GitInfoHeaderErrors pushError={pushError ?? null} rebaseError={rebaseError ?? null} />
     </div>
   );
-}
+});

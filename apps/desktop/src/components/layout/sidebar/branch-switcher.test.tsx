@@ -3,6 +3,10 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import {
+  type AppStateProviderModule,
+  createAppStateProviderModuleMock,
+} from "@/test-utils/app-state-provider-mock";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 let branchSyncDegraded = false;
@@ -36,10 +40,21 @@ const createDeferred = <T,>() => {
 
 describe("BranchSwitcher", () => {
   beforeEach(() => {
-    mock.module("@/state/app-state-provider", () => ({
-      AppStateProvider: ({ children }: { children: ReactElement }) => children,
+    const stateModule = createAppStateProviderModuleMock({
       useAgentState: () => {
         throw new Error("useAgentState is not used in this test");
+      },
+      useAgentOperations: () => {
+        throw new Error("useAgentOperations is not used in this test");
+      },
+      useAgentSessions: () => {
+        throw new Error("useAgentSessions is not used in this test");
+      },
+      useAgentSessionSummaries: () => {
+        throw new Error("useAgentSessionSummaries is not used in this test");
+      },
+      useAgentSession: () => {
+        throw new Error("useAgentSession is not used in this test");
       },
       useChecksState: () => {
         throw new Error("useChecksState is not used in this test");
@@ -50,8 +65,13 @@ describe("BranchSwitcher", () => {
       useTasksState: () => {
         throw new Error("useTasksState is not used in this test");
       },
-      useWorkspaceState: () => ({
+      useWorkspaceState: (() => ({
         activeRepo: "/repo",
+        workspaces: [],
+        activeWorkspace: null,
+        addWorkspace: async () => {},
+        selectWorkspace: async () => {},
+        refreshBranches: async () => {},
         branches: [
           {
             name: "main",
@@ -68,8 +88,28 @@ describe("BranchSwitcher", () => {
         isSwitchingBranch,
         branchSyncDegraded,
         switchBranch,
-      }),
-    }));
+        loadRepoSettings: async () => {
+          throw new Error("loadRepoSettings is not used in this test");
+        },
+        saveRepoSettings: async () => {
+          throw new Error("saveRepoSettings is not used in this test");
+        },
+        loadSettingsSnapshot: async () => {
+          throw new Error("loadSettingsSnapshot is not used in this test");
+        },
+        detectGithubRepository: async () => {
+          throw new Error("detectGithubRepository is not used in this test");
+        },
+        saveGlobalGitConfig: async () => {
+          throw new Error("saveGlobalGitConfig is not used in this test");
+        },
+        saveSettingsSnapshot: async () => {
+          throw new Error("saveSettingsSnapshot is not used in this test");
+        },
+      })) as AppStateProviderModule["useWorkspaceState"],
+    });
+
+    mock.module("@/state/app-state-provider", () => stateModule);
 
     mock.module("@/components/features/repository/branch-selector", () => ({
       BranchSelector: ({

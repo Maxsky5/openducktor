@@ -1,5 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
+  sessionMessageAt,
+  sessionMessagesToArray,
+} from "@/test-utils/session-message-test-helpers";
+import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -102,8 +106,8 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
           sessionId: "build-session-1",
           role: "build",
           messages: [
-            ...createCompletedToolSession("apply_patch", "tool-1").messages,
-            ...createCompletedToolSession("bash", "tool-2").messages,
+            ...sessionMessagesToArray(createCompletedToolSession("apply_patch", "tool-1")),
+            ...sessionMessagesToArray(createCompletedToolSession("bash", "tool-2")),
           ],
         }),
       });
@@ -224,6 +228,51 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
         }),
       });
       expect(refreshWorktreeMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("refreshes when a same-id tool row transitions to completed", async () => {
+    const baseCompletedMessage = sessionMessageAt(
+      createCompletedToolSession("apply_patch", "tool-transition"),
+      0,
+    );
+    if (!baseCompletedMessage?.meta || baseCompletedMessage.meta.kind !== "tool") {
+      throw new Error("Expected completed tool message fixture");
+    }
+
+    const pendingToolMessage = {
+      ...baseCompletedMessage,
+      meta: {
+        ...baseCompletedMessage.meta,
+        status: "running" as const,
+      },
+    };
+    const baseArgs = {
+      ...createBaseArgs(),
+      activeSession: createAgentSessionFixture({
+        sessionId: "build-session-1",
+        role: "build",
+        messages: [pendingToolMessage],
+      }),
+    };
+    const harness = createHookHarness(baseArgs);
+
+    try {
+      await harness.mount();
+      expect(refreshWorktreeMock).not.toHaveBeenCalled();
+
+      await harness.update({
+        ...baseArgs,
+        activeSession: createAgentSessionFixture({
+          sessionId: "build-session-1",
+          role: "build",
+          messages: [baseCompletedMessage],
+        }),
+      });
+
+      expect(refreshWorktreeMock).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }

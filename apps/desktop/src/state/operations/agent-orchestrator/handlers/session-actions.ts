@@ -20,7 +20,7 @@ import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-o
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import { now } from "../support/core";
-import { requiresHydratedAgentSessionHistory } from "../support/history-hydration";
+import { appendSessionMessage } from "../support/messages";
 import { toPersistedSessionRecord } from "../support/persistence";
 import { annotateQuestionToolMessage } from "../support/question-messages";
 import { createStartAgentSession } from "./start-session";
@@ -108,7 +108,7 @@ const applyQuestionAnswerToSession = (
   return {
     pendingQuestions,
     messages: annotateQuestionToolMessage(
-      session.messages,
+      session,
       requestId,
       answeredQuestionsWithAnswers,
       answers,
@@ -181,21 +181,12 @@ export const createAgentSessionActions = ({
     await ensureSessionReady(sessionId);
 
     const readySession = sessionsRef.current[sessionId];
-    if (readySession && requiresHydratedAgentSessionHistory(readySession)) {
-      await loadAgentSessions(readySession.taskId, {
-        mode: "requested_history",
-        targetSessionId: sessionId,
-        historyPolicy: "requested_only",
-      });
-    }
-
-    const hydratedSession = sessionsRef.current[sessionId];
-    if (!hydratedSession || isAgentSessionWaitingInput(hydratedSession)) {
+    if (!readySession || isAgentSessionWaitingInput(readySession)) {
       return;
     }
 
-    const selectedModel = hydratedSession.selectedModel ?? undefined;
-    const isBusyQueuedSend = hydratedSession.status === "running";
+    const selectedModel = readySession.selectedModel ?? undefined;
+    const isBusyQueuedSend = readySession.status === "running";
     if (!isBusyQueuedSend) {
       turnStartedAtBySessionRef.current[sessionId] = Date.now();
       if (turnModelBySessionRef) {
@@ -236,15 +227,19 @@ export const createAgentSessionActions = ({
                 draftReasoningText: "",
                 draftReasoningMessageId: null,
               }),
-          messages: [
-            ...current.messages,
-            {
-              id: crypto.randomUUID(),
-              role: "system",
-              content: `Failed to send message: ${errorMessage(error)}`,
-              timestamp: now(),
-            },
-          ],
+        }),
+        { persist: false },
+      );
+      updateSession(
+        sessionId,
+        (current) => ({
+          ...current,
+          messages: appendSessionMessage(current, {
+            id: crypto.randomUUID(),
+            role: "system",
+            content: `Failed to send message: ${errorMessage(error)}`,
+            timestamp: now(),
+          }),
         }),
         { persist: false },
       );

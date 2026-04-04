@@ -1,5 +1,6 @@
 import type { AgentRole } from "@openducktor/core";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export type KanbanSessionPresentationState = "active" | "waiting_input";
@@ -23,11 +24,11 @@ export type KanbanTaskSession = Pick<
 };
 
 const isKanbanSessionWaitingInput = (
-  session: Pick<AgentSessionState, "pendingPermissions" | "pendingQuestions">,
+  session: Pick<AgentSessionSummary, "pendingPermissions" | "pendingQuestions">,
 ): boolean => isAgentSessionWaitingInput(session);
 
 export const toKanbanSessionPresentationState = (
-  session: Pick<AgentSessionState, "pendingPermissions" | "pendingQuestions">,
+  session: Pick<AgentSessionSummary, "pendingPermissions" | "pendingQuestions">,
 ): KanbanSessionPresentationState =>
   isKanbanSessionWaitingInput(session) ? "waiting_input" : "active";
 

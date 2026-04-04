@@ -1,6 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
 import { toast } from "sonner";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createOrchestratorPublicOperations } from "./public-operations";
 
 const BUILD_SELECTION = {
@@ -10,35 +9,6 @@ const BUILD_SELECTION = {
   variant: "default",
   profileId: "build",
 };
-
-const createSessionState = (
-  sessionId: string,
-  startedAt: string,
-  taskId = "task-1",
-): AgentSessionState => ({
-  sessionId,
-  externalSessionId: `external-${sessionId}`,
-  taskId,
-  role: "build",
-  scenario: "build_implementation_start",
-  status: "idle",
-  startedAt,
-  runtimeId: "runtime-1",
-  runId: "run-1",
-  runtimeEndpoint: "http://127.0.0.1:4444",
-  workingDirectory: "/tmp/repo",
-  messages: [],
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
-  pendingPermissions: [],
-  pendingQuestions: [],
-  todos: [],
-  modelCatalog: null,
-  selectedModel: null,
-  isLoadingModelCatalog: false,
-});
 
 type SessionActions = Parameters<typeof createOrchestratorPublicOperations>[0]["sessionActions"];
 
@@ -55,40 +25,12 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
 };
 
 describe("agent-orchestrator-public-operations", () => {
-  test("sorts sessions by startedAt in descending order", () => {
-    const operations = createOrchestratorPublicOperations({
-      sessionsById: {
-        older: createSessionState("older", "2026-03-01T10:00:00.000Z"),
-        newer: createSessionState("newer", "2026-03-01T11:00:00.000Z"),
-      },
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
-      reconcileLiveTaskSessions: async () => {},
-      loadAgentSessions: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      removeAgentSessions: () => {},
-      sessionActions: createSessionActions(),
-    });
-
-    expect(operations.sessions.map((entry) => entry.sessionId)).toEqual(["newer", "older"]);
-  });
-
   test("shows toast and rethrows load errors", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "");
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      sessionsById: {},
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
       reconcileLiveTaskSessions: async () => {},
@@ -125,7 +67,6 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      sessionsById: {},
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
       reconcileLiveTaskSessions: async () => {},
@@ -171,7 +112,6 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      sessionsById: {},
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
       reconcileLiveTaskSessions: async () => {},
@@ -212,7 +152,6 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      sessionsById: {},
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
       reconcileLiveTaskSessions: async () => {},
@@ -248,7 +187,6 @@ describe("agent-orchestrator-public-operations", () => {
   test("forwards explicit session removals without toast wrapping", () => {
     const removeAgentSessions = mock(() => {});
     const operations = createOrchestratorPublicOperations({
-      sessionsById: {},
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
       reconcileLiveTaskSessions: async () => {},

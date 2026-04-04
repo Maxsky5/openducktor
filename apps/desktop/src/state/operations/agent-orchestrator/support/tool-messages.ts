@@ -1,5 +1,9 @@
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { isRunningToolStatus } from "../agent-tool-messages";
+import {
+  findLastToolSessionMessage,
+  findSessionMessageById,
+  type SessionMessageOwner,
+} from "./messages";
 
 export const normalizeToolInput = (
   input: Record<string, unknown> | undefined,
@@ -35,7 +39,7 @@ export const normalizeToolText = (value: unknown): string | undefined => {
 };
 
 export const resolveToolMessageId = (
-  messages: AgentChatMessage[],
+  session: SessionMessageOwner,
   part: {
     messageId: string;
     callId: string;
@@ -44,22 +48,21 @@ export const resolveToolMessageId = (
   },
   fallbackId: string,
 ): string => {
-  const existingByFallback = messages.find((entry) => entry.id === fallbackId);
+  const existingByFallback = findSessionMessageById(session, fallbackId);
   if (existingByFallback) {
     return fallbackId;
   }
 
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const entry = messages[index];
-    if (!entry || entry.role !== "tool" || entry.meta?.kind !== "tool") {
-      continue;
-    }
-    const meta = entry.meta;
-    if (meta.tool !== part.tool || !part.callId) {
-      continue;
-    }
-    if (meta.callId === part.callId) {
-      return entry.id;
+  if (part.callId) {
+    const byCallId = findLastToolSessionMessage(
+      session,
+      (entry) =>
+        entry.meta?.kind === "tool" &&
+        entry.meta.tool === part.tool &&
+        entry.meta.callId === part.callId,
+    );
+    if (byCallId) {
+      return byCallId.id;
     }
   }
 
@@ -67,25 +70,26 @@ export const resolveToolMessageId = (
     return fallbackId;
   }
 
-  let fallbackCandidateId: string | null = null;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const entry = messages[index];
-    if (!entry || entry.role !== "tool" || entry.meta?.kind !== "tool") {
-      continue;
-    }
-    const meta = entry.meta;
-    if (meta.tool !== part.tool) {
-      continue;
-    }
-    if (!isRunningToolStatus(meta.status)) {
-      continue;
-    }
-    if (entry.id.startsWith(`tool:${part.messageId}:`)) {
-      return entry.id;
-    }
-    fallbackCandidateId = fallbackCandidateId ?? entry.id;
+  const byMessageScopedFallback = findLastToolSessionMessage(
+    session,
+    (entry) =>
+      entry.meta?.kind === "tool" &&
+      entry.meta.tool === part.tool &&
+      isRunningToolStatus(entry.meta.status) &&
+      entry.id.startsWith(`tool:${part.messageId}:`),
+  );
+  if (byMessageScopedFallback) {
+    return byMessageScopedFallback.id;
   }
-  return fallbackCandidateId ?? fallbackId;
+
+  const byRunningTool = findLastToolSessionMessage(
+    session,
+    (entry) =>
+      entry.meta?.kind === "tool" &&
+      entry.meta.tool === part.tool &&
+      isRunningToolStatus(entry.meta.status),
+  );
+  return byRunningTool?.id ?? fallbackId;
 };
 
 export const normalizeSessionErrorMessage = (value: string): string => {

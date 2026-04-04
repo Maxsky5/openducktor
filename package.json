@@ -2,14 +2,20 @@
   "name": "openducktor",
   "private": true,
   "version": "0.0.1",
-  "packageManager": "bun@1.3.5",
-  "workspaces": ["apps/*", "packages/*"],
+  "packageManager": "bun@1.3.11",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "bun run --filter @openducktor/desktop dev",
     "browser:dev": "bun run scripts/browser-dev.ts",
     "tauri": "cd apps/desktop && bun run tauri",
     "tauri:dev": "cd apps/desktop && bun run tauri:dev",
     "tauri:build": "cd apps/desktop && bun run tauri:build",
+    "tauri:setup:cef": "cd apps/desktop && bun run tauri:setup:cef",
+    "tauri:dev:cef": "cd apps/desktop && bun run tauri:dev:cef",
+    "tauri:build:cef": "cd apps/desktop && bun run tauri:build:cef",
     "check:rust": "cd apps/desktop/src-tauri && cargo check",
     "test:rust": "cd apps/desktop/src-tauri && cargo test",
     "build": "bun run --workspaces build",

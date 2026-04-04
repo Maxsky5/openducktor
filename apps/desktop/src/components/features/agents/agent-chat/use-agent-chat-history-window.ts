@@ -2,6 +2,7 @@ import type { RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   type AgentChatWindowRow,
+  type AgentChatWindowTurn,
   buildAgentChatWindowTurns,
   CHAT_TURN_WINDOW_BATCH,
   getAgentChatInitialTurnStart,
@@ -10,6 +11,7 @@ import { CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
 
 type UseAgentChatHistoryWindowInput = {
   rows: AgentChatWindowRow[];
+  turns?: AgentChatWindowTurn[];
   isSessionViewLoading: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   userScrolledRef: RefObject<boolean>;
@@ -20,17 +22,22 @@ type UseAgentChatHistoryWindowResult = {
   turnStart: number;
   windowStart: number;
   windowedRows: AgentChatWindowRow[];
+  windowedTurns: AgentChatWindowTurn[];
   resetToLatestTurns: () => void;
   revealAllHistory: () => void;
 };
 
 export function useAgentChatHistoryWindow({
   rows,
+  turns: providedTurns,
   isSessionViewLoading,
   messagesContainerRef,
   userScrolledRef,
 }: UseAgentChatHistoryWindowInput): UseAgentChatHistoryWindowResult {
-  const turns = useMemo(() => buildAgentChatWindowTurns(rows), [rows]);
+  const turns = useMemo(
+    () => providedTurns ?? buildAgentChatWindowTurns(rows),
+    [providedTurns, rows],
+  );
   const getLatestTurnStart = useCallback(
     () => getAgentChatInitialTurnStart(turns.length),
     [turns.length],
@@ -266,12 +273,23 @@ export function useAgentChatHistoryWindow({
 
   const windowStart = turns[effectiveTurnStart]?.start ?? 0;
   const windowedRows = useMemo(() => rows.slice(windowStart), [rows, windowStart]);
+  const windowedTurns = useMemo(
+    () =>
+      turns.slice(effectiveTurnStart).map((turn) => ({
+        key: turn.key,
+        start: turn.start - windowStart,
+        end: turn.end - windowStart,
+        rows: turn.rows,
+      })),
+    [effectiveTurnStart, turns, windowStart],
+  );
 
   return {
     latestTurnStart,
     turnStart: effectiveTurnStart,
     windowStart,
     windowedRows,
+    windowedTurns,
     resetToLatestTurns: () => {
       if (isSessionViewLoading && rows.length === 0) {
         pendingLatestResetRef.current = true;

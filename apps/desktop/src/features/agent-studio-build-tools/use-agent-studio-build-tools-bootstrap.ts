@@ -1,10 +1,26 @@
 import { useMemo } from "react";
 import type { AgentStudioOrchestrationSelectionContext } from "@/pages/agents/use-agent-studio-orchestration-controller";
 
+export type BuildToolsSessionDescriptor = {
+  role: AgentStudioOrchestrationSelectionContext["viewActiveSession"] extends infer T
+    ? T extends { role: infer TRole | null }
+      ? TRole | null
+      : null
+    : null;
+  status: AgentStudioOrchestrationSelectionContext["viewActiveSession"] extends infer T
+    ? T extends { status: infer TStatus | null }
+      ? TStatus | null
+      : null
+    : null;
+  workingDirectory: string | null;
+  runId: string | null;
+  hasActiveSession: boolean;
+};
+
 type UseAgentStudioBuildToolsBootstrapArgs = {
   activeRepo: string | null;
   viewRole: AgentStudioOrchestrationSelectionContext["viewRole"];
-  viewActiveSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
+  session: BuildToolsSessionDescriptor;
   viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
   panelKind: "documents" | "build_tools" | null;
   isPanelOpen: boolean;
@@ -23,12 +39,17 @@ type BuildToolsBootstrapContext = {
 export function useAgentStudioBuildToolsBootstrap({
   activeRepo,
   viewRole,
-  viewActiveSession,
+  session,
   viewSelectedTask,
   panelKind,
   isPanelOpen,
   isViewSessionHistoryHydrating,
 }: UseAgentStudioBuildToolsBootstrapArgs): BuildToolsBootstrapContext {
+  const sessionRole = session.role;
+  const sessionWorkingDirectory = session.workingDirectory;
+  const sessionRunId = session.runId;
+  const hasActiveSession = session.hasActiveSession;
+
   return useMemo(() => {
     const isVisibleBuildToolsPanel =
       viewRole === "build" && panelKind === "build_tools" && isPanelOpen;
@@ -43,26 +64,26 @@ export function useAgentStudioBuildToolsBootstrap({
       };
     }
 
-    const isBuildSessionContextStable =
-      viewActiveSession?.role !== "build" || !isViewSessionHistoryHydrating;
+    const isBuildSessionContextStable = sessionRole !== "build" || !isViewSessionHistoryHydrating;
 
     return {
       isEnabled: Boolean(activeRepo) && isBuildSessionContextStable,
       repoPath: isBuildSessionContextStable ? activeRepo : null,
-      sessionWorkingDirectory: isBuildSessionContextStable
-        ? (viewActiveSession?.workingDirectory ?? null)
-        : null,
-      sessionRunId: isBuildSessionContextStable ? (viewActiveSession?.runId ?? null) : null,
+      sessionWorkingDirectory: isBuildSessionContextStable ? sessionWorkingDirectory : null,
+      sessionRunId: isBuildSessionContextStable ? sessionRunId : null,
       shouldEnableEventPolling:
-        Boolean(activeRepo) && isBuildSessionContextStable && Boolean(viewActiveSession),
+        Boolean(activeRepo) && isBuildSessionContextStable && hasActiveSession,
       hasSelectedTask: Boolean(viewSelectedTask),
     };
   }, [
     activeRepo,
+    hasActiveSession,
     isPanelOpen,
     isViewSessionHistoryHydrating,
     panelKind,
-    viewActiveSession,
+    sessionRole,
+    sessionRunId,
+    sessionWorkingDirectory,
     viewRole,
     viewSelectedTask,
   ]);

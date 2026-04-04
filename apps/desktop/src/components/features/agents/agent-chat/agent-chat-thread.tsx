@@ -9,8 +9,13 @@ import {
   useRef,
 } from "react";
 import { Button } from "@/components/ui/button";
-import { isTauriRuntime } from "@/lib/runtime";
 import { cn } from "@/lib/utils";
+import {
+  findLastUserSessionMessage,
+  getSessionMessageAt,
+  getSessionMessagesSlice,
+  someSessionMessage,
+} from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { resolveAgentAccentColor } from "../agent-accent-color";
 import type { AgentChatThreadModel } from "./agent-chat.types";
@@ -18,9 +23,9 @@ import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import { getAgentChatThreadState } from "./agent-chat-thread-state";
 import {
   type AgentChatWindowRow,
-  buildAgentChatWindowRows,
-  buildAgentChatWindowTurns,
-  getAgentChatWindowRowsKey,
+  type AgentChatWindowTurn,
+  buildAgentChatWindowRowsState,
+  findFirstChangedChatMessageIndex,
 } from "./agent-chat-thread-windowing";
 import { AgentSessionPermissionCard } from "./agent-session-permission-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
@@ -100,29 +105,63 @@ type AgentChatBottomStackProps = {
 };
 
 const EMPTY_ROWS: AgentChatWindowRow[] = [];
+type RowsCacheEntry = {
+  sessionId: string;
+  showThinkingMessages: boolean;
+  messages: AgentSessionState["messages"];
+  rows: AgentChatWindowRow[];
+  rowStartByMessageIndex: number[];
+  rebuildStartByMessageIndex: number[];
+  latestRebuildStartMessageIndex: number;
+  turns: AgentChatWindowTurn[];
+};
 const TURN_CONTENT_VISIBILITY_STYLE = {
   contentVisibility: "auto",
   containIntrinsicSize: "auto 500px",
 } as const;
 
-const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
-  row,
-  sessionAgentColors,
-  sessionRole,
-  sessionWorkingDirectory,
-  resolveRowRef,
-}: AgentChatThreadMotionRowProps): ReactElement {
-  return (
-    <div ref={resolveRowRef(row.key)} data-row-key={row.key} className="agent-chat-row-motion">
-      <AgentChatThreadRow
-        row={row}
-        sessionRole={sessionRole}
-        sessionAgentColors={sessionAgentColors}
-        sessionWorkingDirectory={sessionWorkingDirectory}
-      />
-    </div>
-  );
-});
+const areChatRowsEquivalent = (left: AgentChatWindowRow, right: AgentChatWindowRow): boolean => {
+  if (left === right) {
+    return true;
+  }
+  if (left.kind !== right.kind || left.key !== right.key) {
+    return false;
+  }
+  if (left.kind === "turn_duration" && right.kind === "turn_duration") {
+    return left.durationMs === right.durationMs;
+  }
+  return left.kind === "message" && right.kind === "message" && left.message === right.message;
+};
+
+const AgentChatThreadMotionRow = memo(
+  function AgentChatThreadMotionRow({
+    row,
+    sessionAgentColors,
+    sessionRole,
+    sessionWorkingDirectory,
+    resolveRowRef,
+  }: AgentChatThreadMotionRowProps): ReactElement {
+    return (
+      <div ref={resolveRowRef(row.key)} data-row-key={row.key} className="agent-chat-row-motion">
+        <AgentChatThreadRow
+          row={row}
+          sessionRole={sessionRole}
+          sessionAgentColors={sessionAgentColors}
+          sessionWorkingDirectory={sessionWorkingDirectory}
+        />
+      </div>
+    );
+  },
+  (previousProps, nextProps) => {
+    return (
+      previousProps.sessionRole === nextProps.sessionRole &&
+      previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
+      previousProps.sessionAgentColors === nextProps.sessionAgentColors &&
+      previousProps.resolveRowRef === nextProps.resolveRowRef &&
+      areChatRowsEquivalent(previousProps.row, nextProps.row)
+    );
+  },
+);
 
 const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn,
@@ -382,44 +421,138 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     blockedReason,
     isTranscriptRenderDeferred,
   });
-  const messageTokenByRef = useRef<WeakMap<AgentChatMessage, number>>(new WeakMap());
-  const nextMessageTokenRef = useRef(1);
-  const rowsCacheRef = useRef<{ key: string; rows: AgentChatWindowRow[] } | null>(null);
-  const resolveMessageIdentityToken = useCallback((message: AgentChatMessage): number => {
-    const cachedToken = messageTokenByRef.current.get(message);
-    if (typeof cachedToken === "number") {
-      return cachedToken;
-    }
+  const rowsCacheRef = useRef<RowsCacheEntry | null>(null);
 
-    const nextToken = nextMessageTokenRef.current;
-    nextMessageTokenRef.current += 1;
-    messageTokenByRef.current.set(message, nextToken);
-    return nextToken;
-  }, []);
-
-  const rows = useMemo(() => {
+  const transcriptState = useMemo(() => {
     if (!session || hideTranscriptWhileHydrating) {
-      return EMPTY_ROWS;
+      rowsCacheRef.current = null;
+      return {
+        rows: EMPTY_ROWS,
+        turns: [] as AgentChatWindowTurn[],
+      };
     }
 
-    const rowsKey = getAgentChatWindowRowsKey(
-      session,
-      showThinkingMessages,
-      resolveMessageIdentityToken,
-    );
     const cachedRows = rowsCacheRef.current;
-    if (cachedRows?.key === rowsKey) {
-      return cachedRows.rows;
+    if (
+      cachedRows &&
+      cachedRows.sessionId === session.sessionId &&
+      cachedRows.showThinkingMessages === showThinkingMessages
+    ) {
+      const firstChangedMessageIndex = findFirstChangedChatMessageIndex(
+        cachedRows.messages,
+        session,
+      );
+      if (firstChangedMessageIndex < 0) {
+        return {
+          rows: cachedRows.rows,
+          turns: cachedRows.turns,
+        };
+      }
+
+      const rebuildStartMessageIndex = (() => {
+        const cachedRebuildStart = cachedRows.rebuildStartByMessageIndex[firstChangedMessageIndex];
+        if (typeof cachedRebuildStart === "number") {
+          return cachedRebuildStart;
+        }
+
+        const changedMessage = getSessionMessageAt(session, firstChangedMessageIndex);
+        if (changedMessage?.role === "user") {
+          return firstChangedMessageIndex;
+        }
+
+        return cachedRows.latestRebuildStartMessageIndex;
+      })();
+      if (rebuildStartMessageIndex > 0) {
+        const prefixRowEnd =
+          cachedRows.rowStartByMessageIndex[rebuildStartMessageIndex] ?? cachedRows.rows.length;
+        const nextRows = cachedRows.rows.slice(0, prefixRowEnd);
+        const nextRowStartByMessageIndex = cachedRows.rowStartByMessageIndex.slice(
+          0,
+          rebuildStartMessageIndex,
+        );
+        const incrementalRowsState = buildAgentChatWindowRowsState(
+          {
+            ...session,
+            messages: getSessionMessagesSlice(session, rebuildStartMessageIndex),
+          },
+          { showThinkingMessages },
+        );
+
+        for (
+          let index = 0;
+          index < incrementalRowsState.rowStartByMessageIndex.length;
+          index += 1
+        ) {
+          const rowStart = incrementalRowsState.rowStartByMessageIndex[index];
+          if (typeof rowStart !== "number") {
+            continue;
+          }
+          nextRowStartByMessageIndex[rebuildStartMessageIndex + index] = prefixRowEnd + rowStart;
+        }
+
+        const nextTurns = cachedRows.turns.slice();
+        while (nextTurns.length > 0) {
+          const lastTurn = nextTurns[nextTurns.length - 1];
+          if (!lastTurn || lastTurn.start < prefixRowEnd) {
+            break;
+          }
+          nextTurns.pop();
+        }
+        nextTurns.push(
+          ...incrementalRowsState.turns.map((turn) => ({
+            key: turn.key,
+            start: prefixRowEnd + turn.start,
+            end: prefixRowEnd + turn.end,
+            rows: turn.rows,
+          })),
+        );
+        nextRows.push(...incrementalRowsState.rows);
+        rowsCacheRef.current = {
+          sessionId: session.sessionId,
+          showThinkingMessages,
+          messages: session.messages,
+          rows: nextRows,
+          rowStartByMessageIndex: nextRowStartByMessageIndex,
+          rebuildStartByMessageIndex: [
+            ...cachedRows.rebuildStartByMessageIndex.slice(0, rebuildStartMessageIndex),
+            ...incrementalRowsState.rebuildStartByMessageIndex.map(
+              (index) => rebuildStartMessageIndex + index,
+            ),
+          ],
+          latestRebuildStartMessageIndex:
+            rebuildStartMessageIndex + incrementalRowsState.latestRebuildStartMessageIndex,
+          turns: nextTurns,
+        };
+        return {
+          rows: nextRows,
+          turns: nextTurns,
+        };
+      }
     }
 
-    const nextRows = buildAgentChatWindowRows(session, { showThinkingMessages });
-    rowsCacheRef.current = { key: rowsKey, rows: nextRows };
-    return nextRows;
-  }, [hideTranscriptWhileHydrating, resolveMessageIdentityToken, session, showThinkingMessages]);
+    const nextRowsState = buildAgentChatWindowRowsState(session, { showThinkingMessages });
+    rowsCacheRef.current = {
+      sessionId: session.sessionId,
+      showThinkingMessages,
+      messages: session.messages,
+      rows: nextRowsState.rows,
+      rowStartByMessageIndex: nextRowsState.rowStartByMessageIndex,
+      rebuildStartByMessageIndex: nextRowsState.rebuildStartByMessageIndex,
+      latestRebuildStartMessageIndex: nextRowsState.latestRebuildStartMessageIndex,
+      turns: nextRowsState.turns,
+    };
+    return {
+      rows: nextRowsState.rows,
+      turns: nextRowsState.turns,
+    };
+  }, [hideTranscriptWhileHydrating, session, showThinkingMessages]);
+  const rows = transcriptState.rows;
+  const transcriptTurns = transcriptState.turns;
 
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
   const {
     windowedRows,
+    windowedTurns,
     windowStart,
     isNearBottom,
     isNearTop,
@@ -428,6 +561,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     scrollToBottomOnSend,
   } = useAgentChatWindow({
     rows,
+    turns: transcriptTurns,
     activeSessionId,
     isSessionViewLoading: isTranscriptLoading,
     isSessionWorking,
@@ -456,16 +590,15 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   }, [sessionAgentColors, sessionSelectedModel?.profileId]);
   const sessionWorkingDirectory = session?.workingDirectory ?? null;
   const rowKeys = useMemo(() => windowedRows.map((row) => row.key), [windowedRows]);
-  const turns = useMemo(() => buildAgentChatWindowTurns(windowedRows), [windowedRows]);
   const hasAttachmentMessages = useMemo(() => {
-    return session?.messages.some(messageHasAttachmentDisplayParts) ?? false;
+    return session ? someSessionMessage(session, messageHasAttachmentDisplayParts) : false;
   }, [session]);
   // Attachment-bearing sessions are kept fully materialized because staged turn reveal and
   // containment can under-measure transcript height during hydration and break bottom pinning.
   const stagedTurns = useAgentChatTurnStaging({
     activeSessionId,
     windowStart,
-    turns,
+    turns: windowedTurns,
     disabled: hasAttachmentMessages,
   });
   const rowRefByKeyRef = useRef<Map<string, (element: HTMLDivElement | null) => void>>(new Map());
@@ -502,23 +635,17 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       return null;
     }
 
-    for (let index = session.messages.length - 1; index >= 0; index -= 1) {
-      const message = session.messages[index];
-      if (message?.role === "user") {
-        return `${session.sessionId}:${message.id}`;
-      }
-    }
-
-    return null;
+    const latestUserMessage = findLastUserSessionMessage(session);
+    return latestUserMessage ? `${session.sessionId}:${latestUserMessage.id}` : null;
   }, [isSessionWorking, session]);
   const renderedTurns = useMemo(() => {
     return stagedTurns.map((turn) => ({
       key: turn.key,
-      rows: windowedRows.slice(turn.start, turn.end + 1),
+      rows: turn.rows,
       isActive: turn.key === activeTurnKey,
     }));
-  }, [activeTurnKey, stagedTurns, windowedRows]);
-  const allowTurnContainment = !isTauriRuntime() && !hasAttachmentMessages;
+  }, [activeTurnKey, stagedTurns]);
+  const allowTurnContainment = !hasAttachmentMessages;
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">

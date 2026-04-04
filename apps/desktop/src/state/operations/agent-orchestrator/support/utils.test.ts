@@ -3,7 +3,6 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   coerceSessionSelectionToCatalog,
-  isDuplicateAssistantMessage,
   mergeTodoListPreservingOrder,
   parseTodosFromToolInput,
   parseTodosFromToolOutput,
@@ -11,6 +10,11 @@ import {
   resolveToolMessageId,
   shouldReattachListenerForAttachedSession,
 } from "./utils";
+
+const createSession = (messages: AgentChatMessage[]) => ({
+  sessionId: "session-1",
+  messages,
+});
 
 const catalogFixture: AgentModelCatalog = {
   models: [
@@ -150,7 +154,7 @@ describe("agent-orchestrator-utils", () => {
     ];
 
     const byCallId = resolveToolMessageId(
-      messages,
+      createSession(messages),
       {
         messageId: "m2",
         callId: "call-1",
@@ -160,7 +164,7 @@ describe("agent-orchestrator-utils", () => {
       "tool:m2:new",
     );
     const byMessageFallback = resolveToolMessageId(
-      messages,
+      createSession(messages),
       {
         messageId: "m1",
         callId: "",
@@ -172,22 +176,6 @@ describe("agent-orchestrator-utils", () => {
 
     expect(byCallId).toBe("tool:m1:old");
     expect(byMessageFallback).toBe("tool:m1:old");
-  });
-
-  test("detects duplicate assistant message within timestamp tolerance", () => {
-    const messages: AgentChatMessage[] = [
-      {
-        id: "assistant-1",
-        role: "assistant",
-        content: "Done",
-        timestamp: "2026-02-22T08:00:00.000Z",
-      },
-    ];
-
-    expect(isDuplicateAssistantMessage(messages, "Done", "2026-02-22T08:00:01.500Z")).toBe(true);
-    expect(isDuplicateAssistantMessage(messages, "Different", "2026-02-22T08:00:01.500Z")).toBe(
-      false,
-    );
   });
 
   test("reattaches listener only for non-error attached sessions", () => {

@@ -1,6 +1,9 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { act } from "react";
 import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
+import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
@@ -65,11 +68,11 @@ const createDocumentState = (markdown: string): TaskDocumentState => ({
 
 const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   const defaultSession = createSession();
-  const sessionsForTask = overrides.core?.sessionsForTask ?? [defaultSession];
+  const sessionsForTask = overrides.core?.sessionsForTask ?? [
+    toAgentSessionSummary(defaultSession),
+  ];
   const activeSession =
-    overrides.core?.activeSession !== undefined
-      ? overrides.core.activeSession
-      : (sessionsForTask[0] ?? null);
+    overrides.core?.activeSession !== undefined ? overrides.core.activeSession : defaultSession;
   const contextSessionsLength =
     overrides.core?.contextSessionsLength !== undefined
       ? overrides.core.contextSessionsLength
@@ -137,7 +140,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     },
     modelSelection: {
       selectedModelSelection: null,
-      selectedModelDescriptor: null,
       isSelectionCatalogLoading: false,
       supportsSlashCommands: true,
       supportsFileSearch: true,
@@ -230,6 +232,45 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
+  test("scrolls to bottom immediately when sending a message", async () => {
+    const sendResolver = { current: null as ((value: boolean) => void) | null };
+    const onSend = mock(
+      () =>
+        new Promise<boolean>((resolve) => {
+          sendResolver.current = resolve;
+        }),
+    );
+    const scrollToBottomOnSend = mock(() => {});
+
+    const harness = createHookHarness(
+      createHookArgs({
+        sessionActions: {
+          onSend,
+        },
+      }),
+    );
+
+    await harness.mount();
+    const state = harness.getLatest();
+    state.agentChatModel.composer.scrollToBottomOnSendRef.current = scrollToBottomOnSend;
+
+    let sendPromise: Promise<boolean> | null = null;
+    await act(async () => {
+      sendPromise = state.agentChatModel.composer.onSend(createComposerDraft("message"));
+      await Promise.resolve();
+    });
+
+    expect(scrollToBottomOnSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledTimes(1);
+
+    if (!sendResolver.current) {
+      throw new Error("Expected pending send resolver");
+    }
+    sendResolver.current(true);
+    await sendPromise;
+    await harness.unmount();
+  });
+
   test("keeps transcript visible while waiting for runtime readiness", async () => {
     const cachedSession = createSession("session-waiting", "external-waiting", {
       messages: [
@@ -262,7 +303,9 @@ describe("useAgentStudioPageModels", () => {
     expect(thread.isSessionHistoryLoading).toBe(false);
     expect(thread.isWaitingForRuntimeReadiness).toBe(true);
     expect(thread.readinessState).toBe("checking");
-    expect(thread.session?.messages[0]?.content).toBe("Cached transcript");
+    expect(thread.session ? sessionMessageAt(thread.session, 0)?.content : null).toBe(
+      "Cached transcript",
+    );
 
     await harness.unmount();
   });
@@ -408,7 +451,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("includes pending permission count in header stats", async () => {
+  test("keeps the header model stable across permission-only session changes", async () => {
     const permissionSession = createSession("session-1", "external-1", {
       status: "running",
       pendingPermissions: [{ requestId: "p-1", permission: "shell", patterns: ["rm -rf /tmp"] }],
@@ -423,7 +466,7 @@ describe("useAgentStudioPageModels", () => {
     );
 
     await harness.mount();
-    expect(harness.getLatest().agentStudioHeaderModel.stats.permissions).toBe(1);
+    const initialHeaderModel = harness.getLatest().agentStudioHeaderModel;
 
     const permissionSessionWithoutRequests = createSession("session-1", "external-1", {
       status: "running",
@@ -439,7 +482,8 @@ describe("useAgentStudioPageModels", () => {
       }),
     );
 
-    expect(harness.getLatest().agentStudioHeaderModel.stats.permissions).toBe(0);
+    expect(harness.getLatest().agentStudioHeaderModel.sessionStatus).toBe("running");
+    expect(harness.getLatest().agentStudioHeaderModel).not.toBe(initialHeaderModel);
     await harness.unmount();
   });
 

@@ -34,10 +34,22 @@ describe("OpenRepositoryModal", () => {
       pickRepositoryDirectory: pickRepositoryDirectoryMock,
     }));
 
-    mock.module("@/state/app-state-provider", () => ({
+    const stateModule = {
       AppStateProvider: ({ children }: { children: ReactNode }) => children,
       useAgentState: () => {
         throw new Error("useAgentState is not used in this test");
+      },
+      useAgentOperations: () => {
+        throw new Error("useAgentOperations is not used in this test");
+      },
+      useAgentSessions: () => {
+        throw new Error("useAgentSessions is not used in this test");
+      },
+      useAgentSessionSummaries: () => {
+        throw new Error("useAgentSessionSummaries is not used in this test");
+      },
+      useAgentSession: () => {
+        throw new Error("useAgentSession is not used in this test");
       },
       useChecksState: () => {
         throw new Error("useChecksState is not used in this test");
@@ -55,7 +67,9 @@ describe("OpenRepositoryModal", () => {
         selectWorkspace: selectWorkspaceMock,
         isSwitchingWorkspace: false,
       }),
-    }));
+    };
+
+    mock.module("@/state/app-state-provider", () => stateModule);
 
     mock.module("@/components/ui/button", () => ({
       Button: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>

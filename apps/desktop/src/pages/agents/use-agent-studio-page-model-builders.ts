@@ -8,6 +8,7 @@ import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { SCENARIO_LABELS } from "./agents-page-constants";
 import {
+  type AgentSessionWorkflowSummary,
   buildLatestSessionByRoleMap,
   buildRoleEnabledMapForTask,
   buildRoleSessionSummaryMap,
@@ -30,8 +31,8 @@ export type AgentStudioSessionContextUsage = {
 
 type BuildWorkflowModelContextArgs = {
   selectedTask: TaskCard | null;
-  sessionsForTask: AgentSessionState[];
-  activeSession: AgentSessionState | null;
+  sessionsForTask: AgentSessionWorkflowSummary[];
+  activeSession: Pick<AgentSessionState, "sessionId" | "role"> | null;
   role: AgentRole;
   isSessionWorking: boolean;
   roleLabelByRole: Record<AgentRole, string>;
@@ -43,7 +44,7 @@ const isTaskAwaitingHumanFeedback = (task: TaskCard | null): boolean => {
 
 export type WorkflowModelContext = {
   latestSessionByRole: ReturnType<typeof buildLatestSessionByRoleMap>;
-  workflowSessionByRole: Record<AgentRole, AgentSessionState | null>;
+  workflowSessionByRole: Record<AgentRole, AgentSessionWorkflowSummary | null>;
   workflowStateByRole: ReturnType<typeof buildWorkflowStateByRole>;
   sessionSelectorGroups: ComboboxGroup[];
   sessionSelectorValue: string;

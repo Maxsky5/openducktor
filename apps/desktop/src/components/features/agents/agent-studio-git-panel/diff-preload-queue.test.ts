@@ -19,13 +19,13 @@ describe("buildDiffPreloadEntries", () => {
         buildDiff("src/c.ts", "@@ -1 +1 @@\n-old\n+new"),
         buildDiff("src/d.ts", "@@ -2 +2 @@\n-d\n+dd"),
       ],
-      new Set(["src/c.ts"]),
+      new Set(),
       2,
     );
 
     expect(entries).toEqual([
       { file: "src/a.ts", diff: "@@ -1 +1 @@\n-a\n+b" },
-      { file: "src/d.ts", diff: "@@ -2 +2 @@\n-d\n+dd" },
+      { file: "src/c.ts", diff: "@@ -1 +1 @@\n-old\n+new" },
     ]);
   });
 
@@ -34,6 +34,19 @@ describe("buildDiffPreloadEntries", () => {
       [buildDiff("src/a.ts", "@@ -1 +1 @@\n-a\n+b")],
       new Set(),
       0,
+    );
+
+    expect(entries).toEqual([]);
+  });
+
+  test("pauses preloading while a diff is expanded", () => {
+    const entries = buildDiffPreloadEntries(
+      [
+        buildDiff("src/a.ts", "@@ -1 +1 @@\n-a\n+b"),
+        buildDiff("src/b.ts", "@@ -1 +1 @@\n-old\n+new"),
+      ],
+      new Set(["src/a.ts"]),
+      2,
     );
 
     expect(entries).toEqual([]);

@@ -1,14 +1,44 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import type { DevServerScriptState } from "@openducktor/contracts";
-import { createElement } from "react";
+import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentStudioDevServerLogBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
-import {
-  AgentStudioRightPanel,
-  AgentStudioRightPanelToggleButton,
-} from "./agent-studio-right-panel";
+
+type AgentStudioRightPanelComponent =
+  typeof import("./agent-studio-right-panel")["AgentStudioRightPanel"];
+type AgentStudioRightPanelToggleButtonComponent =
+  typeof import("./agent-studio-right-panel")["AgentStudioRightPanelToggleButton"];
+
+let AgentStudioRightPanel: AgentStudioRightPanelComponent;
+let AgentStudioRightPanelToggleButton: AgentStudioRightPanelToggleButtonComponent;
+
+beforeAll(async () => {
+  mock.module("@/contexts/DiffWorkerProvider", () => ({
+    DiffWorkerProvider: ({ children }: { children: ReactNode }) => children,
+  }));
+
+  mock.module("@pierre/diffs/react", () => ({
+    FileDiff: () => createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
+    Virtualizer: ({ children }: { children: ReactNode }) =>
+      createElement("div", { "data-testid": "mock-pierre-virtualizer" }, children),
+    useWorkerPool: () => null,
+  }));
+
+  ({ AgentStudioRightPanel, AgentStudioRightPanelToggleButton } = await import(
+    "./agent-studio-right-panel"
+  ));
+});
+
+afterAll(async () => {
+  await restoreMockedModules([
+    ["@/contexts/DiffWorkerProvider", () => import("@/contexts/DiffWorkerProvider")],
+    ["@pierre/diffs/react", () => import("@pierre/diffs/react")],
+  ]);
+});
 
 const emptyDoc = {
   markdown: "",
@@ -18,12 +48,34 @@ const emptyDoc = {
   loaded: true,
 };
 
+const emptyDiffScopeState: DiffScopeState = {
+  branch: "feature/task-12",
+  fileDiffs: [],
+  fileStatuses: [],
+  uncommittedFileCount: 0,
+  commitsAheadBehind: null,
+  upstreamAheadBehind: null,
+  upstreamStatus: "tracking",
+  error: null,
+  hashVersion: 1,
+  statusHash: "0123456789abcdef",
+  diffHash: "fedcba9876543210",
+};
+
 const diffModel: AgentStudioGitPanelModel = {
   contextMode: "worktree",
   branch: "feature/task-12",
   worktreePath: "/tmp/worktree/task-12",
   targetBranch: "origin/main",
   diffScope: "target",
+  scopeStatesByScope: {
+    target: { ...emptyDiffScopeState },
+    uncommitted: { ...emptyDiffScopeState },
+  },
+  loadedScopesByScope: {
+    target: true,
+    uncommitted: true,
+  },
   commitsAheadBehind: null,
   upstreamAheadBehind: null,
   upstreamStatus: "tracking",
@@ -36,8 +88,6 @@ const diffModel: AgentStudioGitPanelModel = {
   isLoading: false,
   error: null,
   refresh: () => {},
-  selectedFile: null,
-  setSelectedFile: () => {},
   setDiffScope: () => {},
   isCommitting: false,
   isPushing: false,

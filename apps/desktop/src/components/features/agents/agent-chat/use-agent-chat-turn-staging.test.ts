@@ -15,6 +15,7 @@ const buildTurns = (count: number): AgentChatWindowTurn[] =>
     key: `turn-${index}`,
     start: index * 2,
     end: index * 2 + 1,
+    rows: [],
   }));
 
 const flush = async (): Promise<void> => {

@@ -120,7 +120,6 @@ export function AgentStudioTaskTabs({
                       data-active={tab.isActive ? "true" : "false"}
                       className={cn(
                         "group relative z-1 inline-flex h-10 shrink-0 items-center gap-1 rounded-t-[10px] pl-2 pr-1",
-                        "transition-colors",
                         tab.isActive
                           ? "z-10 border-input border-b-transparent bg-card text-foreground hover:bg-card after:absolute after:right-0 after:bottom-0 after:left-0 after:h-px after:bg-card"
                           : "border-input border-b-input bg-secondary text-foreground hover:bg-muted",
@@ -148,7 +147,7 @@ export function AgentStudioTaskTabs({
                       <button
                         type="button"
                         className={cn(
-                          "mr-1 cursor-pointer rounded-md p-1 text-muted-foreground transition hover:bg-secondary hover:text-foreground",
+                          "mr-1 cursor-pointer rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-foreground",
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                           "opacity-60 group-hover:opacity-100 data-[active=true]:opacity-100",
                         )}

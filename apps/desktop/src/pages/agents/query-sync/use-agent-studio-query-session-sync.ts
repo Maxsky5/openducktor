@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useEffect } from "react";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { AGENT_STUDIO_QUERY_KEYS, type AgentStudioQueryUpdate } from "./agent-studio-navigation";
 
@@ -10,7 +11,7 @@ type UseAgentStudioQuerySessionSyncArgs = {
   tasks: TaskCard[];
   taskIdParam: string;
   sessionParam: string | null;
-  selectedSessionById: AgentSessionState | null;
+  selectedSessionById: AgentSessionSummary | null;
   taskId: string;
   activeSession: AgentSessionState | null;
   roleFromQuery: AgentRole;

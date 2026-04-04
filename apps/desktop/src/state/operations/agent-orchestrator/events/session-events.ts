@@ -1,3 +1,4 @@
+import { createSessionEventBatcher, isImmediateSessionEvent } from "./session-event-batching";
 import type {
   AttachAgentSessionListenerParams,
   SessionEvent,
@@ -18,7 +19,17 @@ import {
 } from "./session-lifecycle";
 import { handleAssistantDelta, handleAssistantPart } from "./session-parts";
 
-const SESSION_EVENT_BATCH_WINDOW_MS = process.env.NODE_ENV === "test" ? 0 : 200;
+const SESSION_EVENT_BATCH_WINDOW_MS = process.env.NODE_ENV === "test" ? 0 : 500;
+
+const hasSessionStateChanges = (current: object, next: object): boolean => {
+  for (const key of Object.keys(next) as Array<keyof typeof next>) {
+    if (next[key] !== current[key]) {
+      return true;
+    }
+  }
+
+  return false;
+};
 
 const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionEvent): void => {
   switch (event.type) {
@@ -64,31 +75,12 @@ const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionE
   }
 };
 
-const isImmediateSessionEvent = (event: SessionEvent): boolean => {
-  switch (event.type) {
-    case "assistant_message":
-    case "user_message":
-    case "permission_required":
-    case "question_required":
-    case "session_error":
-    case "session_idle":
-    case "session_finished":
-      return true;
-    case "session_started":
-    case "assistant_delta":
-    case "assistant_part":
-    case "session_status":
-    case "session_todos_updated":
-    case "tool_call":
-    case "tool_result":
-      return false;
-  }
-};
-
 export const attachAgentSessionListener = (
   context: AttachAgentSessionListenerParams,
 ): (() => void) => {
   const handlerContext = createSessionEventHandlerContext(context);
+  const batchWindowMs = context.eventBatchWindowMs ?? SESSION_EVENT_BATCH_WINDOW_MS;
+  const batcher = createSessionEventBatcher();
   let queuedEvents: SessionEvent[] = [];
   let batchTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -102,15 +94,84 @@ export const attachAgentSessionListener = (
       return;
     }
 
-    const eventsToHandle = queuedEvents;
-    queuedEvents = [];
-    for (const queuedEvent of eventsToHandle) {
-      handleSessionEvent(handlerContext, queuedEvent);
+    const { readyEvents, deferredEvents, nextDelayMs } =
+      batcher.prepareQueuedSessionEvents(queuedEvents);
+    queuedEvents = deferredEvents;
+
+    if (readyEvents.length === 0) {
+      if (queuedEvents.length > 0) {
+        scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
+      }
+      return;
+    }
+
+    const batchedSessionsRef = {
+      current: context.sessionsRef.current,
+    };
+    let shouldPersistBufferedSession = false;
+    let hasBufferedSessionUpdate = false;
+    const batchedHandlerContext = createSessionEventHandlerContext({
+      ...context,
+      sessionsRef: batchedSessionsRef,
+      updateSession: (sessionId, updater, options) => {
+        if (sessionId !== context.sessionId) {
+          context.updateSession(sessionId, updater, options);
+          return;
+        }
+
+        const current = batchedSessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+
+        const next = updater(current);
+        if (next === current || !hasSessionStateChanges(current, next)) {
+          return;
+        }
+
+        hasBufferedSessionUpdate = true;
+        if (options?.persist === true) {
+          shouldPersistBufferedSession = true;
+        }
+        batchedSessionsRef.current = {
+          ...batchedSessionsRef.current,
+          [sessionId]: next,
+        };
+      },
+    });
+
+    for (const queuedEvent of readyEvents) {
+      handleSessionEvent(batchedHandlerContext, queuedEvent);
+    }
+
+    if (!hasBufferedSessionUpdate) {
+      if (queuedEvents.length > 0) {
+        scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
+      }
+      return;
+    }
+
+    const nextSession = batchedSessionsRef.current[context.sessionId];
+    if (!nextSession) {
+      if (queuedEvents.length > 0) {
+        scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
+      }
+      return;
+    }
+
+    context.updateSession(
+      context.sessionId,
+      () => nextSession,
+      shouldPersistBufferedSession ? { persist: true } : undefined,
+    );
+
+    if (queuedEvents.length > 0) {
+      scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
     }
   };
 
-  const scheduleQueuedFlush = (): void => {
-    if (SESSION_EVENT_BATCH_WINDOW_MS <= 0) {
+  const scheduleQueuedFlush = (delayMs = batchWindowMs): void => {
+    if (delayMs <= 0) {
       flushQueuedEvents();
       return;
     }
@@ -120,7 +181,7 @@ export const attachAgentSessionListener = (
     batchTimeoutId = setTimeout(() => {
       batchTimeoutId = null;
       flushQueuedEvents();
-    }, SESSION_EVENT_BATCH_WINDOW_MS);
+    }, delayMs);
   };
 
   const unsubscribe = context.adapter.subscribeEvents(context.sessionId, (event) => {

@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  BUN_VERSION: 1.3.5
+  BUN_VERSION: 1.3.11
 
 jobs:
   knip-dependency-check:

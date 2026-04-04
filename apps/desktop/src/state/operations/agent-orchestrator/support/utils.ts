@@ -1,8 +1,5 @@
-export {
-  isDuplicateAssistantMessage,
-  shouldReattachListenerForAttachedSession,
-} from "./core";
-export { upsertMessage } from "./messages";
+export { shouldReattachListenerForAttachedSession } from "./core";
+export { upsertSessionMessage as upsertMessage } from "./messages";
 export {
   coerceSessionSelectionToCatalog,
   pickDefaultSessionSelectionForCatalog,

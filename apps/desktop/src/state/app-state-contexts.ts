@@ -15,20 +15,22 @@ import type {
 import { type Context, createContext, type Dispatch, type SetStateAction, useContext } from "react";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type {
-  AgentStateContextValue,
+  AgentOperationsContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
   SpecStateContextValue,
   TasksStateContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
+import type { AgentSessionsStore } from "./agent-sessions-store";
 
 export const WorkspaceStateContext = createContext<WorkspaceStateContextValue | null>(null);
 export const ChecksStateContext = createContext<ChecksStateContextValue | null>(null);
 export const TasksStateContext = createContext<TasksStateContextValue | null>(null);
 export const DelegationStateContext = createContext<DelegationStateContextValue | null>(null);
 export const SpecStateContext = createContext<SpecStateContextValue | null>(null);
-export const AgentStateContext = createContext<AgentStateContextValue | null>(null);
+export const AgentSessionsContext = createContext<AgentSessionsStore | null>(null);
+export const AgentOperationsContext = createContext<AgentOperationsContextValue | null>(null);
 
 export type ActiveRepoContextValue = {
   activeRepo: string | null;
@@ -142,3 +144,9 @@ export const useWorkspaceOperationsContext = (): WorkspaceOperationsContextValue
 
 export const useDelegationEventsContext = (): DelegationEventsContextValue =>
   useRequiredContext(DelegationEventsContext, "useDelegationEventsContext");
+
+export const useAgentSessionsContext = (): AgentSessionsStore =>
+  useRequiredContext(AgentSessionsContext, "useAgentSessions");
+
+export const useAgentOperationsContext = (): AgentOperationsContextValue =>
+  useRequiredContext(AgentOperationsContext, "useAgentOperations");

@@ -365,54 +365,6 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
-  test("selected file updates local selection without reloading the active scope", async () => {
-    const harness = createHookHarness(createBaseArgs());
-
-    try {
-      await harness.mount();
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
-
-      await harness.run((state) => {
-        state.setDiffScope("target");
-      });
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
-
-      await harness.run((state) => {
-        state.setSelectedFile("src/main.ts");
-      });
-      await harness.waitFor((state) => state.selectedFile === "src/main.ts");
-      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("clears selected file when repository context changes", async () => {
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      repoPath: "/repo-a",
-    });
-
-    try {
-      await harness.mount();
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
-
-      await harness.run((state) => {
-        state.setSelectedFile("src/main.ts");
-      });
-      await harness.waitFor((state) => state.selectedFile === "src/main.ts");
-
-      await harness.update({
-        ...createBaseArgs(),
-        repoPath: "/repo-b",
-      });
-
-      await harness.waitFor((state) => state.selectedFile === null);
-    } finally {
-      await harness.unmount();
-    }
-  });
-
   test("resets diff scope to uncommitted when repository context changes", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -443,41 +395,6 @@ describe("useAgentStudioDiffData", () => {
         "uncommitted",
         undefined,
       );
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("clears selected file when the resolved run context changes", async () => {
-    runsListMock.mockImplementation(async () => [
-      { runId: "run-1", worktreePath: "/repo/.worktrees/run-1" },
-    ]);
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      sessionRunId: "run-1",
-    });
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) => state.worktreePath === "/repo/.worktrees/run-1");
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
-
-      await harness.run((state) => {
-        state.setSelectedFile("src/main.ts");
-      });
-      await harness.waitFor((state) => state.selectedFile === "src/main.ts");
-
-      runsListMock.mockImplementation(async () => [
-        { runId: "run-2", worktreePath: "/repo/.worktrees/run-2" },
-      ]);
-      await harness.update({
-        ...createBaseArgs(),
-        sessionRunId: "run-2",
-      });
-
-      await harness.waitFor((state) => state.selectedFile === null);
-      await harness.waitFor((state) => state.worktreePath === "/repo/.worktrees/run-2");
     } finally {
       await harness.unmount();
     }

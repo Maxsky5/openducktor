@@ -2,14 +2,7 @@ import { spawn } from "node:child_process";
 
 const child = spawn(
   process.execPath,
-  [
-    "run",
-    "tauri",
-    "build",
-    "--config",
-    "src-tauri/bundle.sidecars.json",
-    ...process.argv.slice(2),
-  ],
+  ["run", "tauri", "build", "--config", "src-tauri/bundle.sidecars.json", ...process.argv.slice(2)],
   {
     cwd: process.cwd(),
     env: {

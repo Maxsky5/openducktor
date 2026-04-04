@@ -3,7 +3,7 @@ import { useCallback } from "react";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { useGitConflictResolution } from "@/features/git-conflict-resolution";
 import type { SessionStartExistingSessionOption } from "@/features/session-start";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import type { AgentStudioQueryUpdate } from "./agent-studio-navigation";
 import {
@@ -14,11 +14,11 @@ import {
 type AgentStudioRebaseConflictResolutionSelectionContext = {
   viewTaskId: string;
   viewSelectedTask: TaskCard | null;
-  viewActiveSession: AgentSessionState | null;
-  activeSession: AgentSessionState | null;
-  selectedSessionById: AgentSessionState | null;
-  viewSessionsForTask: AgentSessionState[];
-  sessionsForTask: AgentSessionState[];
+  viewActiveSession: AgentSessionSummary | null;
+  activeSession: AgentSessionSummary | null;
+  selectedSessionById: AgentSessionSummary | null;
+  viewSessionsForTask: AgentSessionSummary[];
+  sessionsForTask: AgentSessionSummary[];
 };
 
 type UseAgentStudioRebaseConflictResolutionArgs = {

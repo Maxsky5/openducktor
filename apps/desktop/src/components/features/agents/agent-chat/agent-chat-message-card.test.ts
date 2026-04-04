@@ -10,7 +10,7 @@ const renderToHtml = async (element: ReturnType<typeof createElement>): Promise<
 };
 
 describe("AgentChatMessageCard tool duration", () => {
-  test("uses completedAt - inputReadyAt for workflow duration display", () => {
+  test("uses runtime part timing for workflow duration display", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: {
@@ -39,8 +39,8 @@ describe("AgentChatMessageCard tool duration", () => {
       }),
     );
 
-    expect(html).toContain("30s");
-    expect(html).not.toContain("1.5s");
+    expect(html).toContain("1.5s");
+    expect(html).not.toContain("30s");
   });
 
   test("falls back to part timing when observed timing is absent", () => {

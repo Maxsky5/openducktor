@@ -22,7 +22,7 @@ import type {
 type UseAgentStudioHeaderModelArgs = {
   selectedTask: TaskCard | null;
   onOpenTaskDetails: (() => void) | null;
-  activeSession: AgentSessionState | null;
+  activeSession: Pick<AgentSessionState, "status"> | null;
   sessionsForTaskLength: number;
   contextSessionsLength: number;
   agentStudioReady: boolean;
@@ -46,12 +46,14 @@ export const useAgentStudioHeaderModel = ({
   onCreateSession,
   workflow,
 }: UseAgentStudioHeaderModelArgs): ReturnType<typeof buildAgentStudioHeaderModel> => {
+  const activeSessionStatus = activeSession?.status ?? null;
+
   return useMemo(
     () =>
       buildAgentStudioHeaderModel({
         selectedTask,
         onOpenTaskDetails,
-        activeSession,
+        activeSession: activeSessionStatus ? { status: activeSessionStatus } : null,
         roleOptions: ROLE_OPTIONS,
         workflowStateByRole: workflow.workflowStateByRole,
         selectedRole: workflow.selectedInteractionRole,
@@ -69,7 +71,7 @@ export const useAgentStudioHeaderModel = ({
         contextSessionsLength,
       }),
     [
-      activeSession,
+      activeSessionStatus,
       agentStudioReady,
       contextSessionsLength,
       isStarting,
@@ -237,7 +239,14 @@ export const useAgentStudioThreadModel = ({
 
 type UseAgentStudioComposerModelArgs = {
   taskId: string;
-  activeSession: AgentSessionState | null;
+  activeSession: Pick<
+    AgentSessionState,
+    | "sessionId"
+    | "selectedModel"
+    | "isLoadingModelCatalog"
+    | "pendingPermissions"
+    | "pendingQuestions"
+  > | null;
   isSessionWorking: boolean;
   isWaitingInput: boolean;
   busySendBlockedReason: string | null;
@@ -324,10 +333,8 @@ export const useAgentStudioComposerModel = ({
 
   const handleSend = useCallback<AgentChatModel["composer"]["onSend"]>(
     async (draft) => {
+      scrollToBottomOnSendRef.current?.();
       const didSend = await onSend(draft);
-      if (didSend) {
-        scrollToBottomOnSendRef.current?.();
-      }
       return didSend;
     },
     [onSend, scrollToBottomOnSendRef],

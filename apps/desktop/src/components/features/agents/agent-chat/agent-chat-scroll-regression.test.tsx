@@ -262,12 +262,14 @@ describe("agent chat scroll regression", () => {
     await act(async () => {
       fireEvent.scroll(container);
     });
+    await flushAnimationFrames();
     expect(screen.getByTestId("is-near-bottom").textContent).toBe("false");
 
     container.scrollTop = 700;
     await act(async () => {
       fireEvent.scroll(container);
     });
+    await flushAnimationFrames();
     expect(screen.getByTestId("is-near-bottom").textContent).toBe("true");
 
     await act(async () => {
@@ -345,12 +347,14 @@ describe("agent chat scroll regression", () => {
     await act(async () => {
       fireEvent.scroll(container);
     });
+    await flushAnimationFrames();
     expect(screen.getByTestId("is-near-bottom").textContent).toBe("false");
 
     container.scrollTop = 700;
     await act(async () => {
       fireEvent.scroll(container);
     });
+    await flushAnimationFrames();
     expect(screen.getByTestId("is-near-bottom").textContent).toBe("true");
 
     await act(async () => {

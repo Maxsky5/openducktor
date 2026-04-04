@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useTaskDeleteImpact } from "@/components/features/task-details/use-task-delete-impact";
 import { errorMessage } from "@/lib/errors";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { KanbanPageModels } from "./kanban-page-model-types";
 
@@ -13,14 +14,14 @@ type ResetImplementationOptions = {
 
 type UseTaskResetFlowArgs = {
   tasks: TaskCard[];
-  sessions: AgentSessionState[];
+  sessions: AgentSessionSummary[];
   loadAgentSessions: (taskId: string) => Promise<void>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
   resetTaskImplementation: (taskId: string) => Promise<void>;
   closeTaskDetails: () => void;
 };
 
-const isActiveImplementationSession = (session: AgentSessionState): boolean =>
+const isActiveImplementationSession = (session: AgentSessionSummary): boolean =>
   (session.role === "build" || session.role === "qa") &&
   (session.status === "starting" || session.status === "running");
 

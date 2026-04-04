@@ -18,6 +18,7 @@ import {
   toSessionStartPostAction,
   useSessionStartModalRunner,
 } from "@/features/session-start";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
@@ -43,7 +44,7 @@ type UseAgentStudioSessionStartFlowArgs = {
   role: AgentRole;
   scenario: AgentScenario;
   activeSession: AgentSessionState | null;
-  sessionsForTask: AgentSessionState[];
+  sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
   agentStudioReady: boolean;
   isActiveTaskHydrated: boolean;
@@ -323,7 +324,6 @@ export function useAgentStudioSessionStartFlow({
     taskId,
     role,
     activeSession,
-    sessionsForTask,
     selectedTask,
     agentStudioReady,
     isActiveTaskHydrated,

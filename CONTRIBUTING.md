@@ -23,7 +23,7 @@ Please keep these constraints in mind when proposing or implementing changes:
 
 Required local tooling:
 
-- Bun `1.3.5`
+- Bun `1.3.11`
 - Rust stable
 - Xcode Command Line Tools
 - `git`

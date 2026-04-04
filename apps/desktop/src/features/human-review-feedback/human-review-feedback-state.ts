@@ -4,7 +4,7 @@ import {
   type BuildRequestChangesScenario,
   resolveBuildRequestChangesScenario,
 } from "@/lib/build-scenarios";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type {
   HumanReviewFeedbackModalModel,
   HumanReviewFeedbackState,
@@ -43,7 +43,7 @@ const buildHumanReviewMessage = (
 export const createHumanReviewFeedbackState = (
   tasks: TaskCard[],
   taskId: string,
-  builderSessions: AgentSessionState[],
+  builderSessions: AgentSessionSummary[],
 ): HumanReviewFeedbackState => {
   const task = tasks.find((entry) => entry.id === taskId);
   const scenario = resolveRequestChangesScenario(task);

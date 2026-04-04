@@ -18,6 +18,13 @@ import type {
 } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
 import { DEFAULT_AGENT_SESSION_HISTORY_HYDRATION_STATE } from "../support/history-hydration";
+import {
+  appendSessionMessage,
+  createSessionMessagesState,
+  findSessionMessageById,
+  forEachSessionMessage,
+  getSessionMessagesSlice,
+} from "../support/messages";
 import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
 import {
   defaultScenarioForRole,
@@ -179,14 +186,15 @@ const mergePersistedSessionRecord = (
 };
 
 export const mergeHydratedMessages = (
+  sessionId: string,
   hydratedMessages: AgentSessionState["messages"],
   currentMessages: AgentSessionState["messages"],
 ): AgentSessionState["messages"] => {
-  const currentMessageById = new Map(currentMessages.map((message) => [message.id, message]));
+  const currentOwner = { sessionId, messages: currentMessages };
   const mergeSameMessageId = (
-    hydratedMessage: AgentSessionState["messages"][number],
-    currentMessage: AgentSessionState["messages"][number] | undefined,
-  ): AgentSessionState["messages"][number] => {
+    hydratedMessage: import("@/types/agent-orchestrator").AgentChatMessage,
+    currentMessage: import("@/types/agent-orchestrator").AgentChatMessage | undefined,
+  ) => {
     if (!currentMessage) {
       return hydratedMessage;
     }
@@ -214,17 +222,24 @@ export const mergeHydratedMessages = (
 
     return currentMessage;
   };
-  const mergedMessages = hydratedMessages.map((message) =>
-    mergeSameMessageId(message, currentMessageById.get(message.id)),
-  );
-  const hydratedMessageIds = new Set(hydratedMessages.map((message) => message.id));
+  const hydratedOwner = { sessionId, messages: hydratedMessages };
+  const hydratedMessageIds = new Set<string>();
+  let mergedMessages = createSessionMessagesState(sessionId);
 
-  for (const message of currentMessages) {
+  forEachSessionMessage(hydratedOwner, (message) => {
+    hydratedMessageIds.add(message.id);
+    mergedMessages = appendSessionMessage(
+      { sessionId, messages: mergedMessages },
+      mergeSameMessageId(message, findSessionMessageById(currentOwner, message.id)),
+    );
+  });
+
+  forEachSessionMessage(currentOwner, (message) => {
     if (hydratedMessageIds.has(message.id)) {
-      continue;
+      return;
     }
-    mergedMessages.push(message);
-  }
+    mergedMessages = appendSessionMessage({ sessionId, messages: mergedMessages }, message);
+  });
 
   return mergedMessages;
 };
@@ -815,13 +830,13 @@ export const hydrateSessionRecordsStage = async ({
       record.sessionId,
       (current) => {
         const selectedModel = normalizePersistedSelection(record.selectedModel);
-        const hydratedMessages = [
-          ...preludeMessages,
+        const hydratedMessages = createSessionMessagesState(record.sessionId, [
+          ...getSessionMessagesSlice({ sessionId: record.sessionId, messages: preludeMessages }, 0),
           ...historyToChatMessages(history, {
             role: record.role,
             selectedModel,
           }),
-        ];
+        ]);
         return {
           ...current,
           runtimeKind,
@@ -835,7 +850,7 @@ export const hydrateSessionRecordsStage = async ({
           pendingPermissions: livePendingPermissions,
           pendingQuestions: livePendingQuestions,
           contextUsage: historyToSessionContextUsage(history, selectedModel),
-          messages: mergeHydratedMessages(hydratedMessages, current.messages),
+          messages: mergeHydratedMessages(current.sessionId, hydratedMessages, current.messages),
         };
       },
       { persist: false },

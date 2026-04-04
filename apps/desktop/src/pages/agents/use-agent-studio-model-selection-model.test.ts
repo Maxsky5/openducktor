@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentModelCatalog } from "@openducktor/core";
+import { createSessionMessageOwner } from "@/test-utils/session-message-test-helpers";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   extractLatestContextUsage,
@@ -217,7 +218,7 @@ describe("use-agent-studio-model-selection-model", () => {
 
     expect(
       extractLatestContextUsage({
-        messages,
+        session: createSessionMessageOwner(messages),
         modelDescriptorByKey: lookup,
       }),
     ).toEqual({
@@ -238,7 +239,7 @@ describe("use-agent-studio-model-selection-model", () => {
 
     expect(
       extractLatestContextUsage({
-        messages,
+        session: createSessionMessageOwner(messages),
         liveContextUsage: {
           totalTokens: 44,
           contextWindow: 150_000,
@@ -258,7 +259,7 @@ describe("use-agent-studio-model-selection-model", () => {
 
     expect(
       extractLatestContextUsage({
-        messages: null,
+        session: null,
         liveContextUsage: {
           totalTokens: 44,
           providerId: "openai",
@@ -287,7 +288,7 @@ describe("use-agent-studio-model-selection-model", () => {
 
     expect(
       extractLatestContextUsage({
-        messages,
+        session: createSessionMessageOwner(messages),
         modelDescriptorByKey: lookup,
       }),
     ).toEqual({
@@ -306,7 +307,7 @@ describe("use-agent-studio-model-selection-model", () => {
 
     expect(
       extractLatestContextUsage({
-        messages,
+        session: createSessionMessageOwner(messages),
         modelDescriptorByKey: lookup,
       }),
     ).toBeNull();
@@ -322,7 +323,7 @@ describe("use-agent-studio-model-selection-model", () => {
 
     expect(
       extractLatestContextUsage({
-        messages,
+        session: createSessionMessageOwner(messages),
         modelDescriptorByKey: lookup,
         fallbackContextWindow: 50_000,
       }),

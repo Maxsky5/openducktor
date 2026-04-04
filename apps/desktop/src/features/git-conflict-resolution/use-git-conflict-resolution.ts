@@ -6,8 +6,8 @@ import {
   buildReusableSessionOptions,
 } from "@/features/session-start";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { getGitConflictCopy } from "./conflict-copy";
 import { BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO } from "./constants";
 
@@ -25,7 +25,7 @@ export type StartGitConflictResolutionSessionInput = {
 type GitConflictTaskContext = {
   taskId: string;
   task: TaskCard | null;
-  builderSessions: AgentSessionState[];
+  builderSessions: AgentSessionSummary[];
   currentViewSessionId: string | null;
   onOpenSession: (sessionId: string) => void;
 };
@@ -47,8 +47,8 @@ type UseGitConflictResolutionResult = {
 
 const filterConflictBuilderSessions = (
   conflict: GitConflict,
-  builderSessions: AgentSessionState[],
-): AgentSessionState[] => {
+  builderSessions: AgentSessionSummary[],
+): AgentSessionSummary[] => {
   const conflictWorkingDirectory = normalizeWorkingDirectory(conflict.workingDir);
 
   return builderSessions.filter(
@@ -60,9 +60,9 @@ const pickDefaultBuilderSession = ({
   builderSessions,
   currentViewSessionId,
 }: {
-  builderSessions: AgentSessionState[];
+  builderSessions: AgentSessionSummary[];
   currentViewSessionId: string | null;
-}): AgentSessionState | null => {
+}): AgentSessionSummary | null => {
   return (
     builderSessions.find((session) => session.sessionId === currentViewSessionId) ??
     builderSessions[0] ??

@@ -90,6 +90,14 @@ export type AgentChatMessage = {
   meta?: AgentChatMessageMeta;
 };
 
+export type SessionMessagesState = {
+  readonly sessionId: string;
+  readonly count: number;
+  readonly version: number;
+};
+
+export type AgentSessionMessages = AgentChatMessage[] | SessionMessagesState;
+
 export type AgentPermissionRequest = {
   requestId: string;
   permission: string;
@@ -138,7 +146,7 @@ export type AgentSessionState = {
   runtimeEndpoint: string;
   workingDirectory: string;
   historyHydrationState?: AgentSessionHistoryHydrationState;
-  messages: AgentChatMessage[];
+  messages: AgentSessionMessages;
   draftAssistantText: string;
   draftAssistantMessageId: string | null;
   draftReasoningText: string;

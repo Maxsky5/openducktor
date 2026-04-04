@@ -7,11 +7,27 @@ import type {
 
 export type DiffScope = "target" | "uncommitted";
 
+export type DiffScopeState = {
+  branch: string | null;
+  fileDiffs: FileDiff[];
+  fileStatuses: FileStatus[];
+  uncommittedFileCount: number;
+  commitsAheadBehind: CommitsAheadBehind | null;
+  upstreamAheadBehind: CommitsAheadBehind | null;
+  upstreamStatus: "tracking" | "untracked" | "error";
+  error: string | null;
+  hashVersion: number | null;
+  statusHash: string | null;
+  diffHash: string | null;
+};
+
 export type DiffDataState = {
   branch: string | null;
   worktreePath: string | null;
   targetBranch: string;
   diffScope: DiffScope;
+  scopeStatesByScope: Record<DiffScope, DiffScopeState>;
+  loadedScopesByScope: Record<DiffScope, boolean>;
   commitsAheadBehind: CommitsAheadBehind | null;
   upstreamAheadBehind: CommitsAheadBehind | null;
   upstreamStatus: "tracking" | "untracked" | "error";
@@ -25,8 +41,6 @@ export type DiffDataState = {
   isLoading: boolean;
   error: string | null;
   refresh: () => void;
-  selectedFile: string | null;
-  setSelectedFile: (path: string | null) => void;
   setDiffScope: (scope: DiffScope) => void;
 };
 

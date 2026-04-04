@@ -25,9 +25,8 @@ import { isQaRejectedTask } from "@/lib/task-qa";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import {
-  AgentStateContext,
   useActiveRepoContext,
-  useRequiredContext,
+  useAgentOperationsContext,
   useRuntimeDefinitionsContext,
   useTaskDataContext,
 } from "../app-state-contexts";
@@ -347,7 +346,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
   const { activeRepo } = useActiveRepoContext();
   const { tasks } = useTaskDataContext();
   const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
-  const agentState = useRequiredContext(AgentStateContext, "AutopilotProvider");
+  const { startAgentSession, sendAgentMessage } = useAgentOperationsContext();
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
   const previousRepoRef = useRef<string | null>(null);
   const previousTasksByIdRef = useRef<Map<string, TaskCard>>(new Map());
@@ -393,8 +392,8 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
               loadRepoRuntimeCatalog,
               resolveBuildContinuationTarget: loadBuildContinuationTarget,
               startSessionWorkflow,
-              startAgentSession: agentState.startAgentSession,
-              sendAgentMessage: agentState.sendAgentMessage,
+              startAgentSession,
+              sendAgentMessage,
             });
 
             if (outcome.kind === "started") {
@@ -414,9 +413,10 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     })();
   }, [
     activeRepo,
-    agentState,
     loadRepoRuntimeCatalog,
     queryClient,
+    sendAgentMessage,
+    startAgentSession,
     settingsSnapshotQuery.data?.autopilot,
     tasks,
   ]);

@@ -8,6 +8,7 @@ import {
 import type { AgentStudioTaskTab } from "@/components/features/agents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import {
+  type AgentSessionOptionSummary,
   buildRoleSessionSequenceById,
   compareAgentSessionRecency,
   formatAgentSessionOptionDescription,
@@ -15,7 +16,7 @@ import {
 } from "@/lib/agent-session-options";
 import { buildRoleWorkflowMapForTask as resolveRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import { isQaRejectedTask } from "@/lib/task-qa";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type {
   AgentWorkflowStepAvailability,
   AgentWorkflowStepLiveSession,
@@ -41,6 +42,9 @@ export type SessionCreateOption = {
   disabled: boolean;
 };
 
+export type AgentSessionWorkflowSummary = AgentSessionOptionSummary &
+  Pick<AgentSessionSummary, "taskId" | "pendingPermissions" | "pendingQuestions">;
+
 const ALL_AGENT_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
 
 const DEFAULT_PERSISTED_TABS_STATE: PersistedTaskTabsState = {
@@ -49,12 +53,12 @@ const DEFAULT_PERSISTED_TABS_STATE: PersistedTaskTabsState = {
 };
 
 type RoleSessionSummary = {
-  latestSession: AgentSessionState | null;
-  workflowSession: AgentSessionState | null;
+  latestSession: AgentSessionWorkflowSummary | null;
+  workflowSession: AgentSessionWorkflowSummary | null;
   liveSession: AgentWorkflowStepLiveSession;
 };
 
-const toLiveSessionState = (session: AgentSessionState): AgentWorkflowStepLiveSession => {
+const toLiveSessionState = (session: AgentSessionWorkflowSummary): AgentWorkflowStepLiveSession => {
   if (session.pendingPermissions.length > 0 || session.pendingQuestions.length > 0) {
     return "waiting_input";
   }
@@ -121,10 +125,10 @@ const normalizeTaskTabs = (entries: unknown): string[] => {
 };
 
 export const buildLatestSessionByTaskMap = (
-  sessions: AgentSessionState[],
-): Map<string, AgentSessionState> => {
+  sessions: AgentSessionWorkflowSummary[],
+): Map<string, AgentSessionWorkflowSummary> => {
   const sortedSessions = [...sessions].sort(compareAgentSessionRecency);
-  const next = new Map<string, AgentSessionState>();
+  const next = new Map<string, AgentSessionWorkflowSummary>();
   for (const entry of sortedSessions) {
     if (!next.has(entry.taskId)) {
       next.set(entry.taskId, entry);
@@ -298,9 +302,9 @@ export const buildWorkflowStateByRole = (params: {
 };
 
 export const buildLatestSessionByRoleMap = (
-  sessionsForTask: AgentSessionState[],
-): Record<AgentRole, AgentSessionState | null> => {
-  const map: Record<AgentRole, AgentSessionState | null> = {
+  sessionsForTask: AgentSessionWorkflowSummary[],
+): Record<AgentRole, AgentSessionWorkflowSummary | null> => {
+  const map: Record<AgentRole, AgentSessionWorkflowSummary | null> = {
     spec: null,
     planner: null,
     build: null,
@@ -317,7 +321,7 @@ export const buildLatestSessionByRoleMap = (
 };
 
 export const buildRoleSessionSummaryMap = (
-  sessionsForTask: AgentSessionState[],
+  sessionsForTask: AgentSessionWorkflowSummary[],
 ): Record<AgentRole, RoleSessionSummary> => {
   const sortedSessions = [...sessionsForTask].sort(compareAgentSessionRecency);
   const map: Record<AgentRole, RoleSessionSummary> = {
@@ -359,7 +363,7 @@ export const buildRoleSessionSummaryMap = (
 };
 
 export const buildSessionSelectorGroups = (params: {
-  sessionsForTask: AgentSessionState[];
+  sessionsForTask: AgentSessionWorkflowSummary[];
   scenarioLabels: Record<AgentScenario, string>;
   roleLabelByRole: Record<AgentRole, string>;
 }): ComboboxGroup[] => {
@@ -497,7 +501,7 @@ export const getAvailableTabTasks = (tasks: TaskCard[], tabTaskIds: string[]): T
 };
 
 export const getTabStatusFromSession = (
-  session: AgentSessionState | null | undefined,
+  session: AgentSessionWorkflowSummary | null | undefined,
 ): AgentStudioTaskTab["status"] => {
   if (!session) {
     return "idle";
@@ -514,7 +518,7 @@ export const getTabStatusFromSession = (
 export const buildTaskTabs = (params: {
   tabTaskIds: string[];
   tasks: TaskCard[];
-  latestSessionByTaskId: Map<string, AgentSessionState>;
+  latestSessionByTaskId: Map<string, AgentSessionWorkflowSummary>;
   activeTaskId: string;
 }): AgentStudioTaskTab[] => {
   return params.tabTaskIds.map((tabTaskId) => {

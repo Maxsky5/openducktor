@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { createElement, type ReactElement } from "react";
+import { createElement, type ReactElement, type ReactNode } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import * as appStateContexts from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
@@ -14,13 +14,15 @@ import {
 enableReactActEnvironment();
 
 const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
-const session = createAgentSessionFixture({
-  sessionId: "session-1",
-  taskId: "task-1",
-  role: "planner",
-  scenario: "planner_initial",
-  runtimeKind: "opencode",
-});
+const createSession = () =>
+  createAgentSessionFixture({
+    sessionId: "session-1",
+    taskId: "task-1",
+    role: "planner",
+    scenario: "planner_initial",
+    runtimeKind: "opencode",
+  });
+type SessionFixture = ReturnType<typeof createSession>;
 
 const retryNavigationPersistence = mock(() => {});
 const updateQuery = mock((_updates?: unknown) => {});
@@ -45,19 +47,19 @@ type SelectionState = {
   viewRole: "planner";
   viewScenario: "planner_initial";
   viewSelectedTask: typeof task | null;
-  viewSessionsForTask: (typeof session)[];
-  viewActiveSession: typeof session | null;
+  viewSessionsForTask: SessionFixture[];
+  viewActiveSession: SessionFixture | null;
   activeTaskTabId: string;
   taskTabs: [];
   availableTabTasks: (typeof task)[];
-  selectedSessionById: Record<string, typeof session>;
+  selectedSessionById: Record<string, SessionFixture>;
   taskId: string;
-  activeSession: typeof session | null;
+  activeSession: SessionFixture | null;
   isActiveTaskHydrated: boolean;
   isActiveTaskHydrationFailed: boolean;
   isViewSessionHistoryHydrationFailed: boolean;
   isViewSessionHistoryHydrating: boolean;
-  sessionsForTask: (typeof session)[];
+  sessionsForTask: SessionFixture[];
   handleCreateTab: (taskId: string) => void;
   handleCloseTab: (taskId: string) => void;
   handleSelectTab: typeof handleSelectTab;
@@ -103,7 +105,7 @@ type AgentsPageShellModelState = {
   onRetryChatSettingsLoad: () => void;
   hasSelectedTask: boolean;
   isRightPanelVisible: boolean;
-  rightPanelModel: RightPanelState["rightPanelModel"] | null;
+  rightPanelContent: ReactElement | null;
   sessionStartModal: ReactElement | null;
   mergedPullRequestModal: ReactElement | null;
   humanReviewFeedbackModal: ReactElement;
@@ -144,13 +146,24 @@ let tasksState: TasksStateContextValue = {
   unlinkingPullRequestTaskId: null,
   pendingMergedPullRequest: null,
 };
-let agentState = {
-  sessions: [session],
-  loadAgentSessions: mock(async () => undefined),
+let agentSessions = [createSession()];
+let agentOperations = {
+  bootstrapTaskSessions: mock(async () => undefined),
+  hydrateRequestedTaskSessionHistory: mock(async () => undefined),
+  readSessionFileSearch: mock(async () => []),
+  readSessionModelCatalog: mock(async () => ({
+    providers: [],
+    models: [],
+    variants: [],
+    profiles: [],
+    defaultModelsByProvider: {},
+  })),
+  readSessionSlashCommands: mock(async () => ({ commands: [] })),
+  readSessionTodos: mock(async () => []),
   startAgentSession: mock(async () => "session-1"),
   sendAgentMessage: mock(async () => undefined),
   stopAgentSession: mock(async () => undefined),
-  updateAgentSessionModel: mock(async () => undefined),
+  updateAgentSessionModel: mock(() => undefined),
   replyAgentPermission: mock(async () => undefined),
   answerAgentQuestion: mock(async () => undefined),
 };
@@ -165,24 +178,25 @@ let querySyncState: QuerySyncState = {
   retryNavigationPersistence,
   updateQuery,
 };
+const initialSelectionSession = createSession();
 let selectionState: SelectionState = {
   viewTaskId: "task-1",
   viewRole: "planner" as const,
   viewScenario: "planner_initial" as const,
   viewSelectedTask: task,
-  viewSessionsForTask: [session],
-  viewActiveSession: session,
+  viewSessionsForTask: [initialSelectionSession],
+  viewActiveSession: initialSelectionSession,
   activeTaskTabId: "task-1",
   taskTabs: [],
   availableTabTasks: [task],
-  selectedSessionById: { "session-1": session },
+  selectedSessionById: { "session-1": initialSelectionSession },
   taskId: "task-1",
-  activeSession: session,
+  activeSession: initialSelectionSession,
   isActiveTaskHydrated: true,
   isActiveTaskHydrationFailed: false,
   isViewSessionHistoryHydrationFailed: false,
   isViewSessionHistoryHydrating: false,
-  sessionsForTask: [session],
+  sessionsForTask: [initialSelectionSession],
   handleCreateTab: mock((_taskId: string) => {}),
   handleCloseTab: mock((_taskId: string) => {}),
   handleSelectTab,
@@ -251,21 +265,41 @@ let rightPanelState: RightPanelState = {
 let useAgentsPageShellModel: () => AgentsPageShellModelState;
 
 const registerModuleMocks = (): void => {
+  const stateModule = {
+    AppStateProvider: ({ children }: { children: ReactElement }) => children,
+    useWorkspaceState: () => workspaceState,
+    useChecksState: () => checksState,
+    useTasksState: () => tasksState,
+    useAgentOperations: () => agentOperations,
+    useAgentSessions: () => agentSessions,
+    useAgentSessionSummaries: () =>
+      agentSessions.map((entry) => ({
+        sessionId: entry.sessionId,
+        taskId: entry.taskId,
+        role: entry.role,
+        scenario: entry.scenario,
+        status: entry.status,
+        startedAt: entry.startedAt,
+        workingDirectory: entry.workingDirectory,
+        pendingPermissions: entry.pendingPermissions,
+        pendingQuestions: entry.pendingQuestions,
+        selectedModel: entry.selectedModel,
+        runtimeKind: entry.runtimeKind,
+      })),
+    useAgentSession: (sessionId: string | null) =>
+      sessionId ? (agentSessions.find((entry) => entry.sessionId === sessionId) ?? null) : null,
+    useAgentState: () => ({ sessions: agentSessions, ...agentOperations }),
+    useSpecState: () => {
+      throw new Error("useSpecState is not used in this test");
+    },
+  };
+
   mock.module("react-router-dom", () => ({
     useNavigationType: () => "PUSH",
     useSearchParams: () => [new URLSearchParams(), mock(() => {})],
   }));
 
-  mock.module("@/state/app-state-provider", () => ({
-    AppStateProvider: ({ children }: { children: ReactElement }) => children,
-    useWorkspaceState: () => workspaceState,
-    useChecksState: () => checksState,
-    useTasksState: () => tasksState,
-    useAgentState: () => agentState,
-    useSpecState: () => {
-      throw new Error("useSpecState is not used in this test");
-    },
-  }));
+  mock.module("@/state/app-state-provider", () => stateModule);
 
   mock.module("@/state/app-state-contexts", () => ({
     ...appStateContexts,
@@ -310,6 +344,23 @@ const registerModuleMocks = (): void => {
   mock.module("@/components/features/agents", () => ({
     SessionStartModal: (props: Record<string, unknown>): ReactElement =>
       createElement("mock-session-start-modal", props),
+  }));
+
+  mock.module("@/components/features/agents/agent-studio-right-panel", () => ({
+    MemoizedAgentStudioRightPanel: (props: Record<string, unknown>): ReactElement =>
+      createElement("mock-agent-studio-right-panel", props),
+  }));
+
+  mock.module("@/contexts/DiffWorkerProvider", () => ({
+    DiffWorkerProvider: ({ children }: { children: ReactNode }) => children,
+  }));
+
+  mock.module("@pierre/diffs/react", () => ({
+    FileDiff: () => createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
+    Virtualizer: ({ children }: { children: ReactNode }) =>
+      createElement("div", { "data-testid": "mock-pierre-virtualizer" }, children),
+    useWorkerPool: () => null,
+    WorkerPoolContextProvider: ({ children }: { children: ReactNode }) => children,
   }));
 
   mock.module("@/features/human-review-feedback/human-review-feedback-modal", () => ({
@@ -365,13 +416,25 @@ beforeEach(async () => {
     unlinkingPullRequestTaskId: null,
     pendingMergedPullRequest: null,
   };
-  agentState = {
-    sessions: [session],
-    loadAgentSessions: mock(async () => undefined),
+  const session = createSession();
+  agentSessions = [session];
+  agentOperations = {
+    bootstrapTaskSessions: mock(async () => undefined),
+    hydrateRequestedTaskSessionHistory: mock(async () => undefined),
+    readSessionFileSearch: mock(async () => []),
+    readSessionModelCatalog: mock(async () => ({
+      providers: [],
+      models: [],
+      variants: [],
+      profiles: [],
+      defaultModelsByProvider: {},
+    })),
+    readSessionSlashCommands: mock(async () => ({ commands: [] })),
+    readSessionTodos: mock(async () => []),
     startAgentSession: mock(async () => "session-1"),
     sendAgentMessage: mock(async () => undefined),
     stopAgentSession: mock(async () => undefined),
-    updateAgentSessionModel: mock(async () => undefined),
+    updateAgentSessionModel: mock(() => undefined),
     replyAgentPermission: mock(async () => undefined),
     answerAgentQuestion: mock(async () => undefined),
   };
@@ -445,6 +508,8 @@ afterAll(async () => {
   await restoreMockedModules([
     ["react-router-dom", () => import("react-router-dom")],
     ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+    ["@/contexts/DiffWorkerProvider", () => import("@/contexts/DiffWorkerProvider")],
+    ["@pierre/diffs/react", () => import("@pierre/diffs/react")],
     ["@/state/app-state-contexts", () => import("@/state/app-state-contexts")],
     ["../use-agent-studio-query-sync", () => import("../use-agent-studio-query-sync")],
     [
@@ -516,7 +581,7 @@ describe("useAgentsPageShellModel", () => {
       expect(state.onRetryChatSettingsLoad).toBe(retryChatSettingsLoad);
       expect(state.hasSelectedTask).toBe(true);
       expect(state.isRightPanelVisible).toBe(true);
-      expect(state.rightPanelModel as unknown).toBe(rightPanelModel);
+      expect(state.rightPanelContent).not.toBeNull();
       expect(
         (state.sessionStartModal as ReactElement<{ model: unknown }> | null)?.props.model,
       ).toBe(orchestrationState.sessionStartModal);
