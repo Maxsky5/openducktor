@@ -392,7 +392,7 @@ describe("useAppLifecycle", () => {
       expect(refreshTasksWithOptions).not.toHaveBeenCalled();
 
       intervalController.tick();
-      await harness.waitFor(() => refreshTasksWithOptions.mock.calls.length === 1, 1000);
+      await harness.waitFor(() => refreshTasksWithOptions.mock.calls.length === 1);
 
       const visibleCallCount = refreshTasksWithOptions.mock.calls.length;
       expect(visibleCallCount).toBeGreaterThan(0);
@@ -417,7 +417,6 @@ describe("useAppLifecycle", () => {
       intervalController.tick();
       await harness.waitFor(
         () => refreshTasksWithOptions.mock.calls.length === visibleCallCount + 1,
-        1000,
       );
 
       expect(refreshTasksWithOptions.mock.calls.length).toBeGreaterThan(visibleCallCount);
@@ -463,7 +462,7 @@ describe("useAppLifecycle", () => {
       await harness.mount();
 
       intervalController.tick();
-      await harness.waitFor(() => refreshTasksForRepoA.mock.calls.length === 1, 1000);
+      await harness.waitFor(() => refreshTasksForRepoA.mock.calls.length === 1);
 
       const repoACallCount = refreshTasksForRepoA.mock.calls.length;
       expect(repoACallCount).toBeGreaterThan(0);
@@ -478,7 +477,7 @@ describe("useAppLifecycle", () => {
       });
 
       intervalController.tick();
-      await harness.waitFor(() => refreshTasksForRepoB.mock.calls.length === 1, 1000);
+      await harness.waitFor(() => refreshTasksForRepoB.mock.calls.length === 1);
 
       expect(refreshTasksForRepoA).toHaveBeenCalledTimes(repoACallCount);
       expect(refreshTasksForRepoB.mock.calls.length).toBeGreaterThan(0);

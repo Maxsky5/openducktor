@@ -10,7 +10,7 @@
   "scripts": {
     "build": "bunx tsc -p tsconfig.json",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
-    "test": "bun test --pass-with-no-tests",
+    "test": "bun test --pass-with-no-tests --timeout 1000",
     "lint": "biome check src"
   },
   "dependencies": {

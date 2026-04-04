@@ -13,7 +13,10 @@
   "bin": {
     "openducktor-mcp": "./dist/index.js"
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "publishConfig": {
     "access": "public"
   },
@@ -21,7 +24,7 @@
     "start": "bun run src/index.ts",
     "build": "bun build --target=bun --outfile dist/index.js --banner '#!/usr/bin/env bun' src/index.ts && chmod +x dist/index.js && bunx tsc -p tsconfig.json --emitDeclarationOnly",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
-    "test": "bun test",
+    "test": "bun test --timeout 1000",
     "lint": "biome check src",
     "publish:dry-run": "bun publish --dry-run"
   },

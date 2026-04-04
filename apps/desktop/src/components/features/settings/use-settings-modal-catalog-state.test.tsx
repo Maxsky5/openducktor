@@ -138,7 +138,7 @@ describe("useSettingsModalCatalogState", () => {
       loadRepoRuntimeCatalog,
     );
     await harness.mount();
-    await harness.waitFor((state) => state.getCatalogForRuntime("opencode") !== null, 300);
+    await harness.waitFor((state) => state.getCatalogForRuntime("opencode") !== null);
 
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("/repo", "opencode");
@@ -167,7 +167,7 @@ describe("useSettingsModalCatalogState", () => {
       loadRepoRuntimeCatalog,
     );
     await harness.mount();
-    await harness.waitFor((state) => state.getCatalogForRuntime("opencode") !== null, 300);
+    await harness.waitFor((state) => state.getCatalogForRuntime("opencode") !== null);
 
     loadRepoRuntimeCatalog.mockClear();
 
@@ -176,7 +176,7 @@ describe("useSettingsModalCatalogState", () => {
       selectedRepoPath: "/repo",
       runtimeKinds: ["opencode", "codex"],
     });
-    await harness.waitFor((state) => state.getCatalogForRuntime("codex") !== null, 300);
+    await harness.waitFor((state) => state.getCatalogForRuntime("codex") !== null);
 
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("/repo", "codex");
@@ -209,17 +209,13 @@ describe("useSettingsModalCatalogState", () => {
       (state) =>
         state.getCatalogForRuntime("opencode") !== null &&
         state.isCatalogLoadingForRuntime("codex"),
-      300,
     );
 
     expect(loadingHarness.getLatest().isLoadingCatalog).toBe(true);
     expect(loadingHarness.getLatest().isCatalogLoadingForRuntime("opencode")).toBe(false);
 
     codexDeferred.resolve(CODEX_CATALOG);
-    await loadingHarness.waitFor(
-      (state) => state.isCatalogLoadingForRuntime("codex") === false,
-      300,
-    );
+    await loadingHarness.waitFor((state) => state.isCatalogLoadingForRuntime("codex") === false);
 
     expect(loadingHarness.getLatest().getCatalogForRuntime("codex")).toEqual(CODEX_CATALOG);
 
@@ -245,7 +241,6 @@ describe("useSettingsModalCatalogState", () => {
     await errorHarness.mount();
     await errorHarness.waitFor(
       (state) => state.getCatalogErrorForRuntime("codex") === "codex failed",
-      300,
     );
 
     expect(errorHarness.getLatest().getCatalogForRuntime("opencode")).toEqual(OPENCODE_CATALOG);

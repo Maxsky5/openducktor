@@ -260,7 +260,7 @@ describe("useSettingsModalController", () => {
     expect(harness.getLatest().getCatalogForRuntime("opencode")).toBeNull();
 
     await harness.update({ isOpen: true, shouldLoad: true });
-    await harness.waitFor((state) => state.getCatalogForRuntime("opencode") !== null, 300);
+    await harness.waitFor((state) => state.getCatalogForRuntime("opencode") !== null);
 
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("/repo", "opencode");
@@ -278,14 +278,14 @@ describe("useSettingsModalController", () => {
     const harness = createHookHarness(true, true, { loadRepoRuntimeCatalog });
     await harness.mount();
     await harness.waitFor((state) => state.snapshotDraft !== null);
-    await harness.waitFor((state) => state.getCatalogForRuntime("opencode") !== null, 300);
+    await harness.waitFor((state) => state.getCatalogForRuntime("opencode") !== null);
 
     loadRepoRuntimeCatalog.mockClear();
 
     await harness.run((state) => {
       state.setSelectedRepoPath("/repo-two");
     });
-    await harness.waitFor((state) => state.getCatalogForRuntime("codex") !== null, 300);
+    await harness.waitFor((state) => state.getCatalogForRuntime("codex") !== null);
 
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("/repo-two", "codex");

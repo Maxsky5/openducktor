@@ -267,16 +267,13 @@ const renderPage = async (options?: { waitForKanbanReady?: boolean }): Promise<R
   );
 
   if (options?.waitForKanbanReady !== false) {
-    await waitFor(
-      () => {
-        const totalTaskCount = latestKanbanColumnPropsList.reduce((count, props) => {
-          const column = props.column as { tasks: unknown[] };
-          return count + column.tasks.length;
-        }, 0);
-        expect(totalTaskCount).toBeGreaterThan(0);
-      },
-      { timeout: 1000 },
-    );
+    await waitFor(() => {
+      const totalTaskCount = latestKanbanColumnPropsList.reduce((count, props) => {
+        const column = props.column as { tasks: unknown[] };
+        return count + column.tasks.length;
+      }, 0);
+      expect(totalTaskCount).toBeGreaterThan(0);
+    });
   }
 
   return renderer;
@@ -285,24 +282,17 @@ const renderPage = async (options?: { waitForKanbanReady?: boolean }): Promise<R
 const waitForMockCall = async (
   fn: { mock: { calls: unknown[][] } },
   minCalls = 1,
-  timeoutMs = 1000,
 ): Promise<void> => {
-  await waitFor(
-    () => {
-      expect(fn.mock.calls.length).toBeGreaterThanOrEqual(minCalls);
-    },
-    { timeout: timeoutMs },
-  );
+  await waitFor(() => {
+    expect(fn.mock.calls.length).toBeGreaterThanOrEqual(minCalls);
+  });
 };
 
 const waitForSessionStartModalReady = async (): Promise<void> => {
-  await waitFor(
-    () => {
-      expect(latestSessionStartModalModel).toBeTruthy();
-      expect(latestSessionStartModalModel?.isSelectionCatalogLoading).not.toBe(true);
-    },
-    { timeout: 1000 },
-  );
+  await waitFor(() => {
+    expect(latestSessionStartModalModel).toBeTruthy();
+    expect(latestSessionStartModalModel?.isSelectionCatalogLoading).not.toBe(true);
+  });
 };
 
 const confirmSessionStartModal = async (input?: {

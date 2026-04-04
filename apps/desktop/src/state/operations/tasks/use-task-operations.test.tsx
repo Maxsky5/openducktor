@@ -718,7 +718,7 @@ describe("use-task-operations", () => {
       await harness.run((value) => {
         manualRefreshPromise = value.refreshTasks();
       });
-      await harness.waitFor((value) => value.isLoadingTasks, 1000);
+      await harness.waitFor((value) => value.isLoadingTasks);
 
       expect(repoPullRequestSync).toHaveBeenCalledTimes(1);
 
@@ -730,7 +730,7 @@ describe("use-task-operations", () => {
         repoPullRequestSyncDeferred.resolve({ ok: true });
         await Promise.all([scheduledRefreshPromise, manualRefreshPromise]);
       });
-      await harness.waitFor((value) => !value.isLoadingTasks, 1000);
+      await harness.waitFor((value) => !value.isLoadingTasks);
 
       expect(tasksList).toHaveBeenCalledTimes(1);
       expect(runsList).toHaveBeenCalledTimes(1);
@@ -786,7 +786,7 @@ describe("use-task-operations", () => {
       await harness.run((value) => {
         manualRefreshPromise = value.refreshTasks();
       });
-      await harness.waitFor((value) => value.isLoadingTasks, 1000);
+      await harness.waitFor((value) => value.isLoadingTasks);
 
       if (!scheduledRefreshPromise || !manualRefreshPromise) {
         throw new Error("Expected both refresh promises to be created");
@@ -796,7 +796,7 @@ describe("use-task-operations", () => {
         repoPullRequestSyncDeferred.reject(new Error("gh auth expired"));
         await Promise.all([scheduledRefreshPromise, manualRefreshPromise]);
       });
-      await harness.waitFor((value) => !value.isLoadingTasks, 1000);
+      await harness.waitFor((value) => !value.isLoadingTasks);
 
       expect(toastError).toHaveBeenCalledTimes(1);
       expect(toastError).toHaveBeenCalledWith("Failed to refresh tasks", {
@@ -863,13 +863,13 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((value) => value.tasks[0]?.id === "A", 1000);
+      await harness.waitFor((value) => value.tasks[0]?.id === "A");
 
       let repoAManualRefresh: Promise<void> | null = null;
       await harness.run((value) => {
         repoAManualRefresh = value.refreshTasks();
       });
-      await harness.waitFor((value) => value.isLoadingTasks, 1000);
+      await harness.waitFor((value) => value.isLoadingTasks);
 
       await harness.updateArgs({
         activeRepo: "/repo-b",
@@ -879,14 +879,14 @@ describe("use-task-operations", () => {
           beadsError: null,
         }),
       });
-      await harness.waitFor((value) => value.tasks[0]?.id === "B", 1000);
-      await harness.waitFor((value) => !value.isLoadingTasks, 1000);
+      await harness.waitFor((value) => value.tasks[0]?.id === "B");
+      await harness.waitFor((value) => !value.isLoadingTasks);
 
       let repoBManualRefresh: Promise<void> | null = null;
       await harness.run((value) => {
         repoBManualRefresh = value.refreshTasks();
       });
-      await harness.waitFor((value) => value.isLoadingTasks, 1000);
+      await harness.waitFor((value) => value.isLoadingTasks);
 
       if (!repoAManualRefresh || !repoBManualRefresh) {
         throw new Error("Expected both manual refresh promises to be created");
@@ -903,7 +903,7 @@ describe("use-task-operations", () => {
         repoBRefreshDeferred.resolve({ ok: true });
         await repoBManualRefresh;
       });
-      await harness.waitFor((value) => !value.isLoadingTasks, 1000);
+      await harness.waitFor((value) => !value.isLoadingTasks);
     } finally {
       repoARefreshDeferred.resolve({ ok: true });
       repoBRefreshDeferred.resolve({ ok: true });
@@ -1094,7 +1094,6 @@ describe("use-task-operations", () => {
           !value.isFetchingKanban &&
           value.operations.tasks[0]?.status === "human_review" &&
           value.kanbanTasks[0]?.status === "human_review",
-        1000,
       );
       tasksList.mockClear();
       runsList.mockClear();
@@ -1109,7 +1108,6 @@ describe("use-task-operations", () => {
           !value.isFetchingKanban &&
           value.operations.tasks[0]?.status === "closed" &&
           value.kanbanTasks[0]?.status === "closed",
-        1000,
       );
 
       expect(repoPullRequestSync).toHaveBeenCalledWith("/repo");
@@ -1180,7 +1178,7 @@ describe("use-task-operations", () => {
       ).toBe("ready_for_dev");
 
       await harness.mount();
-      await harness.waitFor(() => latest?.tasks[0]?.status === "ready_for_dev", 1000);
+      await harness.waitFor(() => latest?.tasks[0]?.status === "ready_for_dev");
 
       tasksList.mockClear();
       runsList.mockClear();
@@ -1199,7 +1197,6 @@ describe("use-task-operations", () => {
           latest?.tasks[0]?.status === "in_progress" &&
           queryClient.getQueryData<TaskCard[]>(taskQueryKeys.kanbanData("/repo", 1))?.[0]
             ?.status === "in_progress",
-        1000,
       );
 
       expect(

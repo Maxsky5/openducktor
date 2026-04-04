@@ -77,7 +77,7 @@ export const createHookHarness = <Props, State>(
 
   const waitForState = async (
     predicate: (state: State) => boolean,
-    timeoutMs = 200,
+    timeoutMs = 1000,
   ): Promise<void> => {
     if (!rendered) {
       throw new Error("Hook state unavailable");
