@@ -790,7 +790,9 @@ impl AppService {
             }),
         )?;
 
-        if let Err(stop_error) = self.runtime_stop(runtime.runtime_id.as_str()) {
+        if let Err(stop_error) =
+            self.stop_registered_runtime_preserving_repo_health(runtime.runtime_id.as_str())
+        {
             let stop_message =
                 format!("Failed to stop runtime before MCP recovery: {stop_error:#}");
             return self.store_repo_runtime_health(

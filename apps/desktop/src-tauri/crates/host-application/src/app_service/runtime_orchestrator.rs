@@ -1268,6 +1268,75 @@ mod tests {
     }
 
     #[test]
+    fn stop_registered_runtime_preserving_repo_health_keeps_restart_snapshot() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let runtime = host_domain::RuntimeInstanceSummary {
+            kind: AgentRuntimeKind::Opencode,
+            runtime_id: "runtime-preserve-health".to_string(),
+            repo_path: "/tmp/repo-health-preserve".to_string(),
+            task_id: None,
+            role: host_domain::RuntimeRole::Workspace,
+            working_directory: "/tmp/repo-health-preserve".to_string(),
+            runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                endpoint: "http://127.0.0.1:9998".to_string(),
+            },
+            started_at: "2026-04-04T16:00:00Z".to_string(),
+            descriptor: AgentRuntimeKind::Opencode.descriptor(),
+        };
+        insert_workspace_runtime(&service, runtime.clone())?;
+        service
+            .repo_runtime_health_snapshots
+            .lock()
+            .expect("repo runtime health snapshots lock poisoned")
+            .insert(
+                AppService::runtime_ensure_flight_key(
+                    AgentRuntimeKind::Opencode,
+                    "/tmp/repo-health-preserve",
+                ),
+                host_domain::RepoRuntimeHealthCheck {
+                    runtime_ok: true,
+                    runtime_error: None,
+                    runtime_failure_kind: None,
+                    runtime: Some(runtime.clone()),
+                    mcp_ok: false,
+                    mcp_error: Some("Restarting runtime".to_string()),
+                    mcp_failure_kind: Some(RepoRuntimeStartupFailureKind::Error),
+                    mcp_server_name: "openducktor".to_string(),
+                    mcp_server_status: None,
+                    mcp_server_error: Some("Restarting runtime".to_string()),
+                    available_tool_ids: Vec::new(),
+                    checked_at: "2026-04-04T16:00:01Z".to_string(),
+                    errors: vec!["Restarting runtime".to_string()],
+                    progress: Some(host_domain::RepoRuntimeHealthProgress {
+                        stage: RepoRuntimeHealthStage::RestartingRuntime,
+                        observation: Some(RepoRuntimeHealthObservation::RestartedForMcp),
+                        started_at: Some("2026-04-04T16:00:00Z".to_string()),
+                        updated_at: "2026-04-04T16:00:01Z".to_string(),
+                        elapsed_ms: None,
+                        attempts: None,
+                        detail: Some("Restarting runtime".to_string()),
+                        failure_kind: Some(RepoRuntimeStartupFailureKind::Error),
+                        failure_reason: None,
+                        failure_origin: Some(
+                            host_domain::RepoRuntimeHealthFailureOrigin::RuntimeRestart,
+                        ),
+                        host: None,
+                    }),
+                },
+            );
+
+        service.stop_registered_runtime_preserving_repo_health(runtime.runtime_id.as_str())?;
+
+        let health = service.repo_runtime_health_status("opencode", "/tmp/repo-health-preserve")?;
+        assert_eq!(
+            health.progress.as_ref().map(|value| value.stage),
+            Some(RepoRuntimeHealthStage::RestartingRuntime)
+        );
+        assert!(health.runtime.is_some());
+        Ok(())
+    }
+
+    #[test]
     fn repo_runtime_health_skips_restart_when_active_run_uses_runtime() -> Result<()> {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
         let (port, server_handle) = spawn_runtime_http_server(vec![runtime_http_response(

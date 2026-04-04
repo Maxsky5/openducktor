@@ -116,9 +116,10 @@ impl AppService {
         Ok(None)
     }
 
-    pub(in crate::app_service::runtime_orchestrator) fn stop_registered_runtime(
+    fn stop_registered_runtime_internal(
         &self,
         runtime_id: &str,
+        clear_repo_runtime_health: bool,
     ) -> Result<bool> {
         let mut runtimes = self
             .agent_runtimes
@@ -128,9 +129,25 @@ impl AppService {
             .remove(runtime_id)
             .ok_or_else(|| anyhow!("Runtime not found: {runtime_id}"))?;
         self.clear_runtime_startup_status_for_runtime(&runtime.summary)?;
-        self.clear_repo_runtime_health_status_for_runtime(&runtime.summary)?;
+        if clear_repo_runtime_health {
+            self.clear_repo_runtime_health_status_for_runtime(&runtime.summary)?;
+        }
         Self::cleanup_runtime_process(&mut runtime)?;
         Ok(true)
+    }
+
+    pub(in crate::app_service::runtime_orchestrator) fn stop_registered_runtime(
+        &self,
+        runtime_id: &str,
+    ) -> Result<bool> {
+        self.stop_registered_runtime_internal(runtime_id, true)
+    }
+
+    pub(in crate::app_service::runtime_orchestrator) fn stop_registered_runtime_preserving_repo_health(
+        &self,
+        runtime_id: &str,
+    ) -> Result<bool> {
+        self.stop_registered_runtime_internal(runtime_id, false)
     }
 
     pub fn shutdown(&self) -> Result<()> {
