@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -84,10 +84,6 @@ describe("OpenRepositoryModal", () => {
     }));
 
     ({ OpenRepositoryModal } = await import("./open-repository-modal"));
-  });
-
-  afterEach(() => {
-    mock.restore();
   });
 
   test("renders string host errors from repository add failures", async () => {

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { beforeAll, describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { render } from "@testing-library/react";
 import { act, createElement, type ReactNode } from "react";
@@ -83,10 +83,6 @@ describe("TaskCreateModal", () => {
         createElement("h2", null, children),
     }));
     ({ TaskCreateModal } = await import("./task-create-modal"));
-  });
-
-  afterAll(() => {
-    mock.restore();
   });
 
   test("renders the edit modal shell for the document editor flow", async () => {

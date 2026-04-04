@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   createDeferred,
   createHookHarness as createSharedHookHarness,
@@ -62,10 +62,6 @@ beforeAll(async () => {
     },
   }));
   ({ useAgentStudioGitActions } = await import("./use-agent-studio-git-actions"));
-});
-
-afterAll(() => {
-  mock.restore();
 });
 
 beforeEach(() => {

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { render, waitFor } from "@testing-library/react";
 import { createElement, type ReactElement } from "react";
 
@@ -87,10 +87,6 @@ beforeEach(() => {
   yamlLanguageShouldFail = false;
   syntaxHighlighterRenderMock.mockClear();
   darkThemeModuleLoadMock.mockClear();
-});
-
-afterAll(() => {
-  mock.restore();
 });
 
 describe("MarkdownSyntaxBlock", () => {

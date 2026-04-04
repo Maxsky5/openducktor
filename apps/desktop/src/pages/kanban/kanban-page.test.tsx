@@ -562,7 +562,6 @@ describe("KanbanPage session start modal flow", () => {
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
     host.tasksList = originalTasksList;
     host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
-    mock.restore();
   });
 
   afterAll(() => {

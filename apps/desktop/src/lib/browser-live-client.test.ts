@@ -64,7 +64,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  mock.restore();
   globalThis.EventSource = originalEventSource;
   globalThis.fetch = originalFetch;
 });

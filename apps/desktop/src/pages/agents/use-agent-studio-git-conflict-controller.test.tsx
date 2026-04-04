@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { GitConflict } from "@/features/agent-studio-git";
 import {
   createDeferred,
@@ -57,10 +57,6 @@ beforeAll(async () => {
   ({ useAgentStudioGitConflictController } = await import(
     "./use-agent-studio-git-conflict-controller"
   ));
-});
-
-afterAll(() => {
-  mock.restore();
 });
 
 beforeEach(() => {

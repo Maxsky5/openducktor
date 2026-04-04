@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { createElement, type ReactElement } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import * as appStateContexts from "@/state/app-state-contexts";
@@ -438,10 +438,6 @@ beforeEach(async () => {
     isRightPanelVisible: true,
     rightPanelModel,
   };
-});
-
-afterEach(() => {
-  mock.restore();
 });
 
 const createHookHarness = () =>

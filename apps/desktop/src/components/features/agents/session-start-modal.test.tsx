@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { beforeAll, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import type { SessionStartModalModel } from "./session-start-modal";
@@ -91,10 +91,6 @@ describe("SessionStartModal", () => {
         createElement("h2", omitDialogDomProps(props), children),
     }));
     ({ SessionStartModal } = await import("./session-start-modal"));
-  });
-
-  afterAll(() => {
-    mock.restore();
   });
 
   test("submits through the form action", () => {

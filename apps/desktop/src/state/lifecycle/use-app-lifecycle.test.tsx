@@ -178,7 +178,6 @@ beforeEach(() => {
 
 afterEach(() => {
   visibilityStateController.restore();
-  mock.restore();
 });
 
 describe("useAppLifecycle", () => {

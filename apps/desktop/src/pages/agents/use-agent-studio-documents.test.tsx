@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -136,10 +136,6 @@ const createCompletedToolMessage = ({
 
 beforeAll(async () => {
   ({ useAgentStudioDocuments } = await import("./use-agent-studio-documents"));
-});
-
-afterAll(() => {
-  mock.restore();
 });
 
 beforeEach(() => {

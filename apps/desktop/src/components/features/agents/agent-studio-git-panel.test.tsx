@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { beforeAll, describe, expect, mock, test } from "bun:test";
 import { fireEvent, type RenderResult, render } from "@testing-library/react";
 import { act, createElement } from "react";
 
@@ -242,10 +242,6 @@ describe("AgentStudioGitPanel", () => {
       useWorkerPool: () => null,
     }));
     ({ AgentStudioGitPanel } = await import("./agent-studio-git-panel"));
-  });
-
-  afterAll(() => {
-    mock.restore();
   });
 
   test("renders branch context labels and git action controls", async () => {

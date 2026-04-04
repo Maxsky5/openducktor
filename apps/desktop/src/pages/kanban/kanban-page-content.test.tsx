@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { beforeAll, describe, expect, mock, test } from "bun:test";
 import type { ReactElement } from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -39,10 +39,6 @@ describe("KanbanPageContent", () => {
     }));
 
     ({ KanbanPageContent } = await import("./kanban-page-content"));
-  });
-
-  afterAll(() => {
-    mock.restore();
   });
 
   test("keeps the horizontal scroll region stretched across the remaining page height", () => {

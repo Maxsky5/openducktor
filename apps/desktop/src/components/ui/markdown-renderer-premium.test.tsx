@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { render } from "@testing-library/react";
 import { createElement, type ReactElement, type ReactNode } from "react";
 import type { Components } from "react-markdown";
@@ -46,10 +46,6 @@ beforeAll(async () => {
 
 beforeEach(() => {
   markdownRenderMock.mockClear();
-});
-
-afterAll(() => {
-  mock.restore();
 });
 
 describe("PremiumMarkdownRenderer memoization", () => {

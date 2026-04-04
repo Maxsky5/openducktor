@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
 import { startSessionWorkflow } from "./session-start-workflow";
 
@@ -11,10 +11,6 @@ const BUILD_SELECTION = {
 };
 
 describe("session-start-workflow", () => {
-  afterEach(() => {
-    mock.restore();
-  });
-
   test("aborts before session creation when the before-start action fails", async () => {
     const startAgentSession = mock(async () => "session-new");
     const humanRequestChangesTask = mock(async () => {

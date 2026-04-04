@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -39,10 +39,6 @@ describe("TaskDetailsMarkdownContent", () => {
         writeText: writeClipboardMock,
       },
     });
-  });
-
-  afterAll(() => {
-    mock.restore();
   });
 
   test("renders floating copy button when copyable markdown is provided", () => {

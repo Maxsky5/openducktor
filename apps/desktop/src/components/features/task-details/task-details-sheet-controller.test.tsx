@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { render } from "@testing-library/react";
 import { act, createElement, createRef, type ReactElement } from "react";
@@ -35,10 +35,6 @@ describe("TaskDetailsSheetController", () => {
         return null;
       },
     }));
-  });
-
-  afterAll(() => {
-    mock.restore();
   });
 
   beforeEach(() => {

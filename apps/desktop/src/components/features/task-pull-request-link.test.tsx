@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 
@@ -24,10 +24,6 @@ describe("TaskPullRequestLink", () => {
         dismiss: () => {},
       },
     }));
-  });
-
-  afterAll(() => {
-    mock.restore();
   });
 
   beforeEach(() => {

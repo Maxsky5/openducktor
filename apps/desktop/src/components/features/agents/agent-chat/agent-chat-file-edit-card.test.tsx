@@ -57,8 +57,6 @@ afterAll(() => {
   } else {
     reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironmentValue;
   }
-
-  mock.restore();
 });
 
 describe("AgentChatFileEditCard", () => {

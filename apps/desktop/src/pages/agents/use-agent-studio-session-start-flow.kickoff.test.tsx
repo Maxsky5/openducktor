@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -131,10 +131,6 @@ beforeAll(async () => {
     },
   }));
   ({ useAgentStudioSessionStartFlow } = await import("./use-agent-studio-session-start-flow"));
-});
-
-afterAll(() => {
-  mock.restore();
 });
 
 beforeEach(() => {

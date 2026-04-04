@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import { AgentChatComposerSlashMenu } from "./agent-chat-composer-slash-menu";
 
@@ -18,10 +18,6 @@ const COMMANDS = [
     hints: [],
   },
 ];
-
-afterEach(() => {
-  mock.restore();
-});
 
 describe("AgentChatComposerSlashMenu", () => {
   test("renders command rows with pointer cursor affordance", () => {

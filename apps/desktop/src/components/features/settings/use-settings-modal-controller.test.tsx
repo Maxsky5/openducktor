@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { createDefaultAutopilotSettings, type SettingsSnapshot } from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
@@ -124,10 +124,6 @@ describe("useSettingsModalController", () => {
   beforeEach(async () => {
     registerModuleMocks();
     ({ useSettingsModalController } = await import("./use-settings-modal-controller"));
-  });
-
-  afterEach(() => {
-    mock.restore();
   });
 
   test("does not refresh diagnostics when the modal opens", async () => {

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { host } from "@/state/operations/host";
 import {
@@ -75,10 +75,6 @@ beforeAll(async () => {
   ({ useAgentStudioFreshSessionCreation } = await import(
     "./use-agent-studio-fresh-session-creation"
   ));
-});
-
-afterAll(() => {
-  mock.restore();
 });
 
 const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
