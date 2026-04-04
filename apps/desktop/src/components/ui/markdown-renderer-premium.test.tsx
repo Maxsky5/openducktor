@@ -1,8 +1,9 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { render } from "@testing-library/react";
 import { createElement, type ReactElement, type ReactNode } from "react";
 import type { Components } from "react-markdown";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 enableReactActEnvironment();
 
@@ -42,6 +43,10 @@ const getLatestComponentsProp = (): Components => {
 
 beforeAll(async () => {
   ({ default: PremiumMarkdownRenderer } = await import("./markdown-renderer-premium"));
+});
+
+afterAll(async () => {
+  await restoreMockedModules([["react-markdown", () => import("react-markdown")]]);
 });
 
 beforeEach(() => {

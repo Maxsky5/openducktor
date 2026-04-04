@@ -1,7 +1,8 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import type { AgentFileSearchResult } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useRef, useState } from "react";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { type AgentChatComposerDraft, createComposerAttachment } from "./agent-chat-composer-draft";
 import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fixtures";
 
@@ -76,6 +77,12 @@ beforeAll(async () => {
   }));
 
   ({ AgentChatComposerEditor } = await import("./agent-chat-composer-editor"));
+});
+
+afterAll(async () => {
+  await restoreMockedModules([
+    ["./agent-chat-composer-selection", () => import("./agent-chat-composer-selection")],
+  ]);
 });
 
 const resetSelectionMocks = (): void => {

@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createDefaultAutopilotSettings, type SettingsSnapshot } from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { SettingsModalController } from "./use-settings-modal-controller";
 
 enableReactActEnvironment();
@@ -124,6 +125,14 @@ describe("useSettingsModalController", () => {
   beforeEach(async () => {
     registerModuleMocks();
     ({ useSettingsModalController } = await import("./use-settings-modal-controller"));
+  });
+
+  afterAll(async () => {
+    await restoreMockedModules([
+      ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+      ["./use-settings-modal-branches-state", () => import("./use-settings-modal-branches-state")],
+      ["./use-settings-modal-catalog-state", () => import("./use-settings-modal-catalog-state")],
+    ]);
   });
 
   test("does not refresh diagnostics when the modal opens", async () => {

@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerGroupState, DevServerScriptState } from "@openducktor/contracts";
 import { act, render, waitFor } from "@testing-library/react";
 import { getDevServerLogEntryAt } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import { QueryProvider } from "@/lib/query-provider";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
 if (typeof document === "undefined") {
@@ -100,6 +101,10 @@ beforeEach(() => {
   devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
     buildState();
   devServerEventListener = null;
+});
+
+afterAll(async () => {
+  await restoreMockedModules([["@/lib/host-client", () => import("@/lib/host-client")]]);
 });
 
 describe("useAgentStudioDevServerPanel", () => {

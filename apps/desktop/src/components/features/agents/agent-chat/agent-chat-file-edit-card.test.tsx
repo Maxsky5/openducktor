@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { FileEditData } from "./agent-chat-message-card-model";
 
 let AgentChatFileEditCard: typeof import("./agent-chat-file-edit-card").AgentChatFileEditCard;
@@ -57,6 +58,15 @@ afterAll(() => {
   } else {
     reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironmentValue;
   }
+});
+
+afterAll(async () => {
+  await restoreMockedModules([
+    [
+      "@/components/features/agents/pierre-diff-viewer",
+      () => import("@/components/features/agents/pierre-diff-viewer"),
+    ],
+  ]);
 });
 
 describe("AgentChatFileEditCard", () => {

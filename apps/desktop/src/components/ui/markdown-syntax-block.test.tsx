@@ -1,6 +1,7 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { render, waitFor } from "@testing-library/react";
 import { createElement, type ReactElement } from "react";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 const reactActEnvironment = globalThis as {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -80,6 +81,33 @@ const findSyntaxNodes = (container: HTMLElement): HTMLElement[] =>
 
 beforeAll(async () => {
   ({ default: MarkdownSyntaxBlock } = await import("./markdown-syntax-block"));
+});
+
+afterAll(async () => {
+  await restoreMockedModules([
+    ["@/components/layout/theme-provider", () => import("@/components/layout/theme-provider")],
+    ["react-syntax-highlighter", () => import("react-syntax-highlighter")],
+    [
+      "react-syntax-highlighter/dist/esm/languages/prism/javascript",
+      () => import("react-syntax-highlighter/dist/esm/languages/prism/javascript"),
+    ],
+    [
+      "react-syntax-highlighter/dist/esm/languages/prism/json",
+      () => import("react-syntax-highlighter/dist/esm/languages/prism/json"),
+    ],
+    [
+      "react-syntax-highlighter/dist/esm/styles/prism/one-light",
+      () => import("react-syntax-highlighter/dist/esm/styles/prism/one-light"),
+    ],
+    [
+      "react-syntax-highlighter/dist/esm/styles/prism/one-dark",
+      () => import("react-syntax-highlighter/dist/esm/styles/prism/one-dark"),
+    ],
+    [
+      "react-syntax-highlighter/dist/esm/languages/prism/yaml",
+      () => import("react-syntax-highlighter/dist/esm/languages/prism/yaml"),
+    ],
+  ]);
 });
 
 beforeEach(() => {

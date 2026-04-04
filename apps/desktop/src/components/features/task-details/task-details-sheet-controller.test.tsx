@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { render } from "@testing-library/react";
 import { act, createElement, createRef, type ReactElement } from "react";
@@ -7,6 +7,7 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { TaskDetailsSheetControllerHandle } from "./task-details-sheet-controller";
 
 enableReactActEnvironment();
@@ -35,6 +36,10 @@ describe("TaskDetailsSheetController", () => {
         return null;
       },
     }));
+  });
+
+  afterAll(async () => {
+    await restoreMockedModules([["./task-details-sheet", () => import("./task-details-sheet")]]);
   });
 
   beforeEach(() => {

@@ -1,5 +1,6 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { GitConflict } from "@/features/agent-studio-git";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
   createDeferred,
   createHookHarness,
@@ -57,6 +58,13 @@ beforeAll(async () => {
   ({ useAgentStudioGitConflictController } = await import(
     "./use-agent-studio-git-conflict-controller"
   ));
+});
+
+afterAll(async () => {
+  await restoreMockedModules([
+    ["@/state/operations/shared/host", () => import("@/state/operations/shared/host")],
+    ["sonner", () => import("sonner")],
+  ]);
 });
 
 beforeEach(() => {

@@ -1,6 +1,7 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { SessionStartModalModel } from "./session-start-modal";
 
 const omitDialogDomProps = ({
@@ -91,6 +92,17 @@ describe("SessionStartModal", () => {
         createElement("h2", omitDialogDomProps(props), children),
     }));
     ({ SessionStartModal } = await import("./session-start-modal"));
+  });
+
+  afterAll(async () => {
+    await restoreMockedModules([
+      [
+        "@/components/features/agents/agent-runtime-combobox",
+        () => import("@/components/features/agents/agent-runtime-combobox"),
+      ],
+      ["@/components/ui/combobox", () => import("@/components/ui/combobox")],
+      ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
+    ]);
   });
 
   test("submits through the form action", () => {

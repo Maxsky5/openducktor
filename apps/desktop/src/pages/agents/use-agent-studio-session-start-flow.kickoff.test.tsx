@@ -1,8 +1,9 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import { createTaskCardFixture, enableReactActEnvironment } from "./agent-studio-test-utils";
 
@@ -131,6 +132,10 @@ beforeAll(async () => {
     },
   }));
   ({ useAgentStudioSessionStartFlow } = await import("./use-agent-studio-session-start-flow"));
+});
+
+afterAll(async () => {
+  await restoreMockedModules([["sonner", () => import("sonner")]]);
 });
 
 beforeEach(() => {

@@ -1,6 +1,7 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { host } from "@/state/operations/host";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -75,6 +76,10 @@ beforeAll(async () => {
   ({ useAgentStudioFreshSessionCreation } = await import(
     "./use-agent-studio-fresh-session-creation"
   ));
+});
+
+afterAll(async () => {
+  await restoreMockedModules([["sonner", () => import("sonner")]]);
 });
 
 const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;

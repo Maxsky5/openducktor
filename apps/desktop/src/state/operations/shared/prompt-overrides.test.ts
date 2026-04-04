@@ -1,6 +1,7 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
 import { clearAppQueryClient } from "@/lib/query-client";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 const createRepoConfig = (): RepoConfig => ({
   defaultRuntimeKind: "opencode",
@@ -58,6 +59,10 @@ mock.module("../host", () => ({
     workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
   },
 }));
+
+afterAll(async () => {
+  await restoreMockedModules([["../host", () => import("../host")]]);
+});
 
 let loadEffectivePromptOverrides: typeof import("./prompt-overrides")["loadEffectivePromptOverrides"];
 

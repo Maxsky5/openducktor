@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
 import { clearAppQueryClient } from "@/lib/query-client";
@@ -6,6 +6,7 @@ import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 enableReactActEnvironment();
 if (typeof document === "undefined") {
@@ -186,6 +187,13 @@ const dispatchDiffRefresh = (): void => {
 
 beforeAll(async () => {
   ({ useAgentStudioDiffData } = await import("./use-agent-studio-diff-data"));
+});
+
+afterAll(async () => {
+  await restoreMockedModules([
+    ["@/state/operations/host", () => import("@/state/operations/host")],
+    ["@/lib/host-client", () => import("@/lib/host-client")],
+  ]);
 });
 
 beforeEach(async () => {
