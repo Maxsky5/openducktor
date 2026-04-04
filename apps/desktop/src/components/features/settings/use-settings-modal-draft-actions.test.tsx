@@ -168,4 +168,37 @@ describe("useSettingsModalDraftActions", () => {
 
     await harness.unmount();
   });
+
+  test("preserves the inherited repo default runtime when editing role fields", async () => {
+    const initialSnapshot = createInitialSnapshot();
+    const selectedRepo = initialSnapshot.repos["/repo-a"];
+    if (!selectedRepo) {
+      throw new Error("Expected /repo-a snapshot fixture");
+    }
+
+    initialSnapshot.repos["/repo-a"] = {
+      ...selectedRepo,
+      defaultRuntimeKind: "codex",
+    };
+
+    const harness = createHookHarness({
+      selectedRepoPath: "/repo-a",
+      initialSnapshot,
+    });
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.updateSelectedRepoAgentDefault("planner", "profileId", "planner-agent");
+    });
+
+    expect(harness.getLatest().snapshotDraft?.repos["/repo-a"]?.agentDefaults.planner).toEqual({
+      runtimeKind: "codex",
+      providerId: "",
+      modelId: "",
+      variant: "",
+      profileId: "planner-agent",
+    });
+
+    await harness.unmount();
+  });
 });

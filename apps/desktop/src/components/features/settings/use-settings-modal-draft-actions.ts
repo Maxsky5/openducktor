@@ -163,16 +163,24 @@ export const useSettingsModalDraftActions = ({
       field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
       value: string,
     ): void => {
-      updateSelectedRepoConfig((repoConfig) => ({
-        ...repoConfig,
-        agentDefaults: {
-          ...repoConfig.agentDefaults,
-          [role]: {
-            ...ensureDraftAgentDefault(repoConfig.agentDefaults[role]),
-            [field]: value,
+      updateSelectedRepoConfig((repoConfig) => {
+        const currentRoleDefault = repoConfig.agentDefaults[role];
+        const nextRoleDefault = {
+          ...ensureDraftAgentDefault(currentRoleDefault),
+          runtimeKind: currentRoleDefault?.runtimeKind ?? repoConfig.defaultRuntimeKind,
+        };
+
+        return {
+          ...repoConfig,
+          agentDefaults: {
+            ...repoConfig.agentDefaults,
+            [role]: {
+              ...nextRoleDefault,
+              [field]: value,
+            },
           },
-        },
-      }));
+        };
+      });
     },
     [updateSelectedRepoConfig],
   );
