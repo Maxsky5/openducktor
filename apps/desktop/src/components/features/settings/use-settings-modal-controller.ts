@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import {
   buildDevServerDraftValidationMap,
   countDevServerDraftValidationErrors,
+  getNeededCatalogRuntimeKinds,
 } from "@/components/features/settings";
 import { errorMessage } from "@/lib/errors";
 import { pickRepositoryDirectory } from "@/lib/repo-directory";
@@ -173,6 +174,11 @@ export const useSettingsModalController = ({
     selectedRepoPath,
   });
 
+  const catalogRuntimeKinds = useMemo(
+    () => getNeededCatalogRuntimeKinds(selectedRepoConfig, runtimeDefinitions),
+    [selectedRepoConfig, runtimeDefinitions],
+  );
+
   const {
     getCatalogForRuntime,
     getCatalogErrorForRuntime,
@@ -181,7 +187,7 @@ export const useSettingsModalController = ({
   } = useSettingsModalCatalogState({
     enabled: shouldLoadCatalog,
     selectedRepoPath,
-    runtimeDefinitions,
+    runtimeKinds: catalogRuntimeKinds,
   });
 
   const {

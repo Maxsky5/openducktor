@@ -3,6 +3,7 @@ export {
   canResetPromptOverrideToBuiltin,
   ensureAgentDefault,
   findCatalogModel,
+  getNeededCatalogRuntimeKinds,
   ROLE_DEFAULTS,
   resetPromptOverrideToBuiltin,
   resolvePromptOverrideFallbackTemplate,

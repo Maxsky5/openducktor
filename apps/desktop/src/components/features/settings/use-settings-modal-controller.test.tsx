@@ -1,5 +1,9 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { createDefaultAutopilotSettings, type SettingsSnapshot } from "@openducktor/contracts";
+import {
+  createDefaultAutopilotSettings,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -134,6 +138,20 @@ describe("useSettingsModalController", () => {
     mock.module("./use-settings-modal-catalog-state", () => ({
       useSettingsModalCatalogState: useSettingsModalCatalogStateMock,
     }));
+
+    mock.module("@/state/app-state-contexts", () => ({
+      useRuntimeDefinitionsContext: () => ({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        isLoadingRuntimeDefinitions: false,
+        runtimeDefinitionsError: null,
+        refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+        loadRepoRuntimeCatalog: async () => {
+          throw new Error("catalog loading is mocked in this test");
+        },
+        loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+        loadRepoRuntimeFileSearch: async () => [],
+      }),
+    }));
   };
 
   beforeEach(async () => {
@@ -144,6 +162,7 @@ describe("useSettingsModalController", () => {
   afterAll(async () => {
     await restoreMockedModules([
       ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+      ["@/state/app-state-contexts", () => import("@/state/app-state-contexts")],
       ["./use-settings-modal-branches-state", () => import("./use-settings-modal-branches-state")],
       ["./use-settings-modal-catalog-state", () => import("./use-settings-modal-catalog-state")],
     ]);
@@ -185,11 +204,15 @@ describe("useSettingsModalController", () => {
 
     expect(useSettingsModalCatalogStateMock).toHaveBeenCalled();
     const catalogCalls = useSettingsModalCatalogStateMock.mock.calls as unknown as Array<
-      [{ enabled: boolean; selectedRepoPath: string | null }]
+      [{ enabled: boolean; selectedRepoPath: string | null; runtimeKinds: string[] }]
     >;
-    const disabledCall = catalogCalls.find((call) => call[0].enabled === false);
+    const disabledCall = [...catalogCalls]
+      .reverse()
+      .find((call) => call[0].enabled === false && call[0].selectedRepoPath === "/repo");
     expect(disabledCall?.[0]).toMatchObject({
       enabled: false,
+      selectedRepoPath: "/repo",
+      runtimeKinds: ["opencode"],
     });
 
     await harness.update({ isOpen: true, shouldLoad: true });
@@ -198,6 +221,7 @@ describe("useSettingsModalController", () => {
     expect(enabledCall?.[0]).toMatchObject({
       enabled: true,
       selectedRepoPath: "/repo",
+      runtimeKinds: ["opencode"],
     });
 
     await harness.unmount();

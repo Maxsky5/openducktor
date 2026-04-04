@@ -1,11 +1,14 @@
 import {
   type AgentPromptTemplateId,
+  type RepoConfig,
   type RepoPromptOverrides,
+  type RuntimeDescriptor,
+  type RuntimeKind,
   validatePromptTemplatePlaceholders,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ComboboxOption } from "@/components/ui/combobox";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
+import { DEFAULT_RUNTIME_KIND, resolveRuntimeKindSelection } from "@/lib/agent-runtime";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 
@@ -120,6 +123,29 @@ export const getMissingRequiredRoleLabels = (agentDefaults: RepoAgentDefaultsInp
       (value.profileId?.trim().length ?? 0) > 0
     );
   }).map(({ label }) => label);
+};
+
+export const getNeededCatalogRuntimeKinds = (
+  selectedRepoConfig: RepoConfig | null,
+  runtimeDefinitions: RuntimeDescriptor[],
+): RuntimeKind[] => {
+  if (!selectedRepoConfig || runtimeDefinitions.length === 0) {
+    return [];
+  }
+
+  const runtimeKinds = new Set<RuntimeKind>();
+  for (const { role } of ROLE_DEFAULTS) {
+    const requestedRuntimeKind =
+      selectedRepoConfig.agentDefaults[role]?.runtimeKind ?? selectedRepoConfig.defaultRuntimeKind;
+    const resolvedRuntimeKind = resolveRuntimeKindSelection({
+      runtimeDefinitions,
+      requestedRuntimeKind,
+      fallbackRuntimeKind: DEFAULT_RUNTIME_KIND,
+    });
+    runtimeKinds.add(resolvedRuntimeKind);
+  }
+
+  return [...runtimeKinds];
 };
 
 const normalizeTemplateForComparison = (value: string | undefined): string =>
