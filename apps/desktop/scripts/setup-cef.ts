@@ -1,35 +1,23 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 
+import {
+  readCefVersion,
+  readTauriCefRevision,
+  resolveCargoToolsRoot,
+  resolveCefPath,
+} from "./cef-paths";
+
 const desktopRoot = process.cwd();
-const repoRoot = resolve(desktopRoot, "../..");
 const tauriRoot = resolve(desktopRoot, "src-tauri");
-const toolRoot = resolve(repoRoot, ".cargo-tools");
+const toolRoot = resolveCargoToolsRoot(tauriRoot);
 const toolBinRoot = resolve(toolRoot, "bin");
-const cefPath = process.env.CEF_PATH ?? resolve(repoRoot, ".cache", "cef");
+const cefPath = resolveCefPath(tauriRoot);
+const tauriRevision = readTauriCefRevision(tauriRoot);
 const binaryExtension = process.platform === "win32" ? ".exe" : "";
 const exportCefDirPath = resolve(toolBinRoot, `export-cef-dir${binaryExtension}`);
-
-function cefVersion(): string {
-  const lockFilePath = resolve(tauriRoot, "Cargo.lock");
-  const lockFile = readFileSync(lockFilePath, "utf8");
-  const packageBlocks = lockFile.split(/\[\[package\]\]\r?\n/);
-  for (const packageBlock of packageBlocks) {
-    const nameMatch = packageBlock.match(/^name = "([^"]+)"/m);
-    if (nameMatch?.[1] !== "cef") {
-      continue;
-    }
-
-    const versionMatch = packageBlock.match(/^version = "([^"]+)"/m);
-    if (versionMatch?.[1]) {
-      return versionMatch[1];
-    }
-  }
-
-  throw new Error(`Could not resolve the cef crate version from ${lockFilePath}`);
-}
 
 function cargoHomeBinPath(): string {
   return resolve(process.env.CARGO_HOME ?? join(homedir(), ".cargo"), "bin");
@@ -93,8 +81,8 @@ await (async () => {
     "tauri-cli",
     "--git",
     "https://github.com/tauri-apps/tauri",
-    "--branch",
-    "feat/cef",
+    "--rev",
+    tauriRevision,
     "--force",
   ]);
 
@@ -108,7 +96,7 @@ await (async () => {
     toolRoot,
     "export-cef-dir",
     "--version",
-    cefVersion(),
+    readCefVersion(tauriRoot),
     "--force",
   ]);
 

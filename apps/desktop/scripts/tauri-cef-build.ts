@@ -2,14 +2,16 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { resolveCargoToolsRoot, resolveCefPath } from "./cef-paths";
+
 const desktopRoot = process.cwd();
-const repoRoot = resolve(desktopRoot, "../..");
+const tauriRoot = resolve(desktopRoot, "src-tauri");
 const cargoTauriPath = resolve(
-  repoRoot,
-  ".cargo-tools",
+  resolveCargoToolsRoot(tauriRoot),
   "bin",
   process.platform === "win32" ? "cargo-tauri.exe" : "cargo-tauri",
 );
+const cefPath = resolveCefPath(tauriRoot);
 
 if (!existsSync(cargoTauriPath)) {
   console.error("Missing cargo-tauri. Run `bun run tauri:setup:cef` first.");
@@ -32,7 +34,7 @@ const child = spawn(
     cwd: desktopRoot,
     env: {
       ...process.env,
-      CEF_PATH: process.env.CEF_PATH ?? resolve(repoRoot, ".cache", "cef"),
+      CEF_PATH: cefPath,
       OPENDUCKTOR_PREPARE_SIDECARS: "1",
     },
     stdio: "inherit",
