@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
@@ -113,7 +114,7 @@ describe("useAgentStudioSelectionController", () => {
     });
 
     const first = buildSessionsByTaskIdWithCache(
-      [firstTaskOneOld, firstTaskOneNew, firstTaskTwo],
+      [firstTaskOneOld, firstTaskOneNew, firstTaskTwo].map(toAgentSessionSummary),
       new Map(),
     );
 
@@ -135,7 +136,7 @@ describe("useAgentStudioSelectionController", () => {
     });
 
     const second = buildSessionsByTaskIdWithCache(
-      [secondTaskOneOld, secondTaskOneNew, secondTaskTwoNew],
+      [secondTaskOneOld, secondTaskOneNew, secondTaskTwoNew].map(toAgentSessionSummary),
       first.nextCache,
     );
 
@@ -156,8 +157,14 @@ describe("useAgentStudioSelectionController", () => {
       startedAt: "2026-02-22T11:00:00.000Z",
     });
 
-    const first = buildSessionsByTaskIdWithCache([sessionOld, sessionNew], new Map());
-    const second = buildSessionsByTaskIdWithCache([sessionNew, sessionOld], first.nextCache);
+    const first = buildSessionsByTaskIdWithCache(
+      [sessionOld, sessionNew].map(toAgentSessionSummary),
+      new Map(),
+    );
+    const second = buildSessionsByTaskIdWithCache(
+      [sessionNew, sessionOld].map(toAgentSessionSummary),
+      first.nextCache,
+    );
 
     expect(second.nextCache.get("task-1")?.inputSignature).toBe(
       first.nextCache.get("task-1")?.inputSignature,
