@@ -6,7 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback } from "react";
-import { ensureAgentDefault } from "@/components/features/settings";
+import { ensureDraftAgentDefault } from "@/components/features/settings";
 
 type UseSettingsModalDraftActionsArgs = {
   selectedRepoPath: string | null;
@@ -168,7 +168,7 @@ export const useSettingsModalDraftActions = ({
         agentDefaults: {
           ...repoConfig.agentDefaults,
           [role]: {
-            ...ensureAgentDefault(repoConfig.agentDefaults[role]),
+            ...ensureDraftAgentDefault(repoConfig.agentDefaults[role]),
             [field]: value,
           },
         },

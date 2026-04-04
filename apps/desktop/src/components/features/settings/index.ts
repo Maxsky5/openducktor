@@ -2,6 +2,7 @@ export {
   buildPromptOverrideValidationErrors,
   canResetPromptOverrideToBuiltin,
   ensureAgentDefault,
+  ensureDraftAgentDefault,
   findCatalogModel,
   getNeededCatalogRuntimeKinds,
   ROLE_DEFAULTS,

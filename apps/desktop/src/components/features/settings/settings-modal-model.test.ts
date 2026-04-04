@@ -10,7 +10,7 @@ import {
   buildPromptOverrideValidationErrors,
   canResetPromptOverrideToBuiltin,
   clearRoleDefault,
-  ensureAgentDefault,
+  ensureDraftAgentDefault,
   findCatalogModel,
   getMissingRequiredRoleLabels,
   getNeededCatalogRuntimeKinds,
@@ -80,7 +80,7 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
 
 describe("settings-modal-model", () => {
   test("normalizes null defaults to empty values", () => {
-    expect(ensureAgentDefault(null)).toEqual({
+    expect(ensureDraftAgentDefault(null)).toEqual({
       runtimeKind: "opencode",
       providerId: "",
       modelId: "",

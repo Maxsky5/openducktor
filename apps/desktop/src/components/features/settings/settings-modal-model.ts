@@ -37,7 +37,7 @@ export const ROLE_DEFAULTS: ReadonlyArray<{
   { role: "qa", label: AGENT_ROLE_LABELS.qa },
 ];
 
-export const ensureAgentDefault = (
+export const ensureDraftAgentDefault = (
   value:
     | {
         runtimeKind?: string;
@@ -62,7 +62,7 @@ export const updateRoleDefault = (
   field: keyof RepoAgentDefaultInput,
   value: string,
 ): RepoAgentDefaultsInput => {
-  const next = ensureAgentDefault(agentDefaults[role]);
+  const next = ensureDraftAgentDefault(agentDefaults[role]);
   return {
     ...agentDefaults,
     [role]: {
@@ -90,6 +90,8 @@ export const selectedModelKeyForRole = (
   }
   return `${value.providerId}/${value.modelId}`;
 };
+
+export const ensureAgentDefault = ensureDraftAgentDefault;
 
 export const findCatalogModel = (
   catalog: AgentModelCatalog | null,

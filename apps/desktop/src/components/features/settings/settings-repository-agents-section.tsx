@@ -8,7 +8,7 @@ import {
   toPrimaryAgentOptions,
 } from "@/components/features/agents";
 import {
-  ensureAgentDefault,
+  ensureDraftAgentDefault,
   findCatalogModel,
   ROLE_DEFAULTS,
   resolveRepoAgentDefaultRuntimeKind,
@@ -43,6 +43,59 @@ type RepositoryAgentsSectionProps = {
     value: string,
   ) => void;
   onClearSelectedRepoAgentDefault: (role: "spec" | "planner" | "build" | "qa") => void;
+};
+
+type RepositoryAgentRoleViewModel = {
+  runtimeKind: RuntimeKind;
+  value: ReturnType<typeof ensureDraftAgentDefault>;
+  runtimeDescriptor: RuntimeDescriptor | null;
+  catalog: AgentModelCatalog | null;
+  catalogError: string | null;
+  isCatalogLoading: boolean;
+  agentOptions: ReturnType<typeof toPrimaryAgentOptions>;
+  modelOptions: ReturnType<typeof toModelOptions>;
+  modelGroups: ComboboxGroup[];
+  roleVariantOptions: ReturnType<typeof toRoleVariantOptions>;
+  modelKey: string;
+};
+
+const buildRepositoryAgentRoleViewModel = ({
+  selectedRepoConfig,
+  runtimeDefinitions,
+  role,
+  getCatalogForRuntime,
+  getCatalogErrorForRuntime,
+  isCatalogLoadingForRuntime,
+}: {
+  selectedRepoConfig: RepoConfig;
+  runtimeDefinitions: RuntimeDescriptor[];
+  role: "spec" | "planner" | "build" | "qa";
+  getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
+  getCatalogErrorForRuntime: (runtimeKind: RuntimeKind) => string | null;
+  isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
+}): RepositoryAgentRoleViewModel => {
+  const value = ensureDraftAgentDefault(selectedRepoConfig.agentDefaults[role] ?? null);
+  const runtimeKind = resolveRepoAgentDefaultRuntimeKind({
+    selectedRepoConfig,
+    runtimeDefinitions,
+    role,
+  });
+  const runtimeDescriptor = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
+  const catalog = getCatalogForRuntime(runtimeKind);
+
+  return {
+    runtimeKind,
+    value,
+    runtimeDescriptor,
+    catalog,
+    catalogError: getCatalogErrorForRuntime(runtimeKind),
+    isCatalogLoading: isCatalogLoadingForRuntime(runtimeKind),
+    agentOptions: toPrimaryAgentOptions(catalog),
+    modelOptions: toModelOptions(catalog),
+    modelGroups: toModelGroupsByProvider(catalog) as ComboboxGroup[],
+    roleVariantOptions: toRoleVariantOptions(catalog, selectedRepoConfig.agentDefaults, role),
+    modelKey: selectedModelKeyForRole(selectedRepoConfig.agentDefaults, role),
+  };
 };
 
 export function RepositoryAgentsSection({
@@ -145,25 +198,27 @@ export function RepositoryAgentsSection({
       <div className="grid gap-3">
         {ROLE_DEFAULTS.map(({ role, label }) => {
           const roleRuntimeOptions = runtimeOptions;
-          const value = ensureAgentDefault(selectedRepoConfig.agentDefaults[role] ?? null);
-          const runtimeKind = resolveRepoAgentDefaultRuntimeKind({
+          const roleViewModel = buildRepositoryAgentRoleViewModel({
             selectedRepoConfig,
             runtimeDefinitions,
             role,
+            getCatalogForRuntime,
+            getCatalogErrorForRuntime,
+            isCatalogLoadingForRuntime,
           });
-          const runtimeDescriptor = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
-          const catalog = getCatalogForRuntime(runtimeKind);
-          const catalogError = getCatalogErrorForRuntime(runtimeKind);
-          const isRoleCatalogLoading = isCatalogLoadingForRuntime(runtimeKind);
-          const agentOptions = toPrimaryAgentOptions(catalog);
-          const modelOptions = toModelOptions(catalog);
-          const modelGroups = toModelGroupsByProvider(catalog) as ComboboxGroup[];
-          const roleVariantOptions = toRoleVariantOptions(
+          const {
+            value,
+            runtimeKind,
+            runtimeDescriptor,
             catalog,
-            selectedRepoConfig.agentDefaults,
-            role,
-          );
-          const modelKey = selectedModelKeyForRole(selectedRepoConfig.agentDefaults, role);
+            catalogError,
+            isCatalogLoading: isRoleCatalogLoading,
+            agentOptions,
+            modelOptions,
+            modelGroups,
+            roleVariantOptions,
+            modelKey,
+          } = roleViewModel;
 
           return (
             <div key={role} className="grid gap-2 rounded-md border border-border bg-card p-3">
@@ -246,7 +301,7 @@ export function RepositoryAgentsSection({
                         agentDefaults: {
                           ...repoConfig.agentDefaults,
                           [role]: {
-                            ...ensureAgentDefault(repoConfig.agentDefaults[role] ?? null),
+                            ...ensureDraftAgentDefault(repoConfig.agentDefaults[role] ?? null),
                             runtimeKind,
                             providerId: model.providerId,
                             modelId: model.modelId,

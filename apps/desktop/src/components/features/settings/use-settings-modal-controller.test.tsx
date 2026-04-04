@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   createDefaultAutopilotSettings,
   OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeDescriptor,
   type SettingsSnapshot,
 } from "@openducktor/contracts";
 import {
@@ -12,6 +13,13 @@ import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { SettingsModalController } from "./use-settings-modal-controller";
 
 enableReactActEnvironment();
+
+const CODEX_RUNTIME_DESCRIPTOR = {
+  ...OPENCODE_RUNTIME_DESCRIPTOR,
+  kind: "codex",
+  label: "Codex",
+  description: "Codex runtime",
+} satisfies RuntimeDescriptor;
 
 const createSettingsSnapshot = (): SettingsSnapshot => ({
   theme: "light",
@@ -42,6 +50,22 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
       promptOverrides: {},
       agentDefaults: {},
     },
+    "/repo-two": {
+      defaultRuntimeKind: "codex",
+      worktreeBasePath: undefined,
+      branchPrefix: "odt",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {
+        providers: {},
+      },
+      trustedHooks: false,
+      trustedHooksFingerprint: undefined,
+      hooks: { preStart: [], postComplete: [] },
+      devServers: [],
+      worktreeFileCopies: [],
+      promptOverrides: {},
+      agentDefaults: {},
+    },
   },
   globalPromptOverrides: {},
 });
@@ -51,6 +75,25 @@ const loadSettingsSnapshot = mock(async (): Promise<SettingsSnapshot> => createS
 let refreshChecks = mock(async () => {});
 let saveGlobalGitConfig = mock(async () => {});
 let saveSettingsSnapshot = mock(async () => {});
+let workspaceRecords = [
+  {
+    path: "/repo",
+    isActive: true,
+    hasConfig: true,
+    configuredWorktreeBasePath: null,
+    defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+    effectiveWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+  },
+  {
+    path: "/repo-two",
+    isActive: false,
+    hasConfig: true,
+    configuredWorktreeBasePath: null,
+    defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo-two",
+    effectiveWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo-two",
+  },
+];
+let runtimeDefinitions = [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR];
 const useSettingsModalCatalogStateMock = mock(() => ({
   getCatalogForRuntime: () => null,
   getCatalogErrorForRuntime: () => null,
@@ -97,16 +140,7 @@ describe("useSettingsModalController", () => {
       },
       useWorkspaceState: () => ({
         activeRepo: "/repo",
-        workspaces: [
-          {
-            path: "/repo",
-            isActive: true,
-            hasConfig: true,
-            configuredWorktreeBasePath: null,
-            defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-            effectiveWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-          },
-        ],
+        workspaces: workspaceRecords,
         loadSettingsSnapshot,
         detectGithubRepository: async () => null,
         saveGlobalGitConfig,
@@ -141,10 +175,10 @@ describe("useSettingsModalController", () => {
 
     mock.module("@/state/app-state-contexts", () => ({
       useRuntimeDefinitionsContext: () => ({
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        runtimeDefinitions,
         isLoadingRuntimeDefinitions: false,
         runtimeDefinitionsError: null,
-        refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+        refreshRuntimeDefinitions: async () => runtimeDefinitions,
         loadRepoRuntimeCatalog: async () => {
           throw new Error("catalog loading is mocked in this test");
         },
@@ -155,6 +189,25 @@ describe("useSettingsModalController", () => {
   };
 
   beforeEach(async () => {
+    workspaceRecords = [
+      {
+        path: "/repo",
+        isActive: true,
+        hasConfig: true,
+        configuredWorktreeBasePath: null,
+        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+        effectiveWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+      },
+      {
+        path: "/repo-two",
+        isActive: false,
+        hasConfig: true,
+        configuredWorktreeBasePath: null,
+        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo-two",
+        effectiveWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo-two",
+      },
+    ];
+    runtimeDefinitions = [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR];
     registerModuleMocks();
     ({ useSettingsModalController } = await import("./use-settings-modal-controller"));
   });
@@ -222,6 +275,33 @@ describe("useSettingsModalController", () => {
       enabled: true,
       selectedRepoPath: "/repo",
       runtimeKinds: ["opencode"],
+    });
+
+    await harness.unmount();
+  });
+
+  test("recalculates catalog runtime kinds when the selected repo changes", async () => {
+    useSettingsModalCatalogStateMock.mockClear();
+
+    const harness = createHookHarness(true, true);
+    await harness.mount();
+    await harness.waitFor((state) => state.snapshotDraft !== null);
+
+    await harness.run((state) => {
+      state.setSelectedRepoPath("/repo-two");
+    });
+
+    const catalogCalls = useSettingsModalCatalogStateMock.mock.calls as unknown as Array<
+      [{ enabled: boolean; selectedRepoPath: string | null; runtimeKinds: string[] }]
+    >;
+    const repoTwoCall = [...catalogCalls]
+      .reverse()
+      .find((call) => call[0].enabled === true && call[0].selectedRepoPath === "/repo-two");
+
+    expect(repoTwoCall?.[0]).toMatchObject({
+      enabled: true,
+      selectedRepoPath: "/repo-two",
+      runtimeKinds: ["codex"],
     });
 
     await harness.unmount();
