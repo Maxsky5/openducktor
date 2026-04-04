@@ -798,9 +798,15 @@ describe("use-checks", () => {
         return originalSetTimeout(() => {}, 60_000);
       }
 
+      if (delay === 15_000) {
+        return originalSetTimeout(() => {
+          handler();
+        }, 0);
+      }
+
       return originalSetTimeout(() => {
         handler();
-      }, 0);
+      }, delay);
     }) as unknown as typeof globalThis.setTimeout;
     globalThis.clearTimeout = ((timeoutId: ReturnType<typeof globalThis.setTimeout>) => {
       originalClearTimeout(timeoutId);
@@ -820,7 +826,7 @@ describe("use-checks", () => {
           value.runtimeCheckFailureKind === "timeout" &&
           value.beadsCheckFailureKind === "timeout" &&
           value.isLoadingChecks === false,
-        1000,
+        400,
       );
 
       expect(toastMessage).toHaveBeenCalledWith(
