@@ -1,16 +1,24 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   createDefaultAutopilotSettings,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeDescriptor,
+  type RuntimeKind,
   type SettingsSnapshot,
 } from "@openducktor/contracts";
+import type { AgentModelCatalog } from "@openducktor/core";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createQueryClient } from "@/lib/query-client";
+import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import {
-  createHookHarness as createSharedHookHarness,
-  enableReactActEnvironment,
-} from "@/pages/agents/agent-studio-test-utils";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+  ChecksStateContext,
+  RuntimeDefinitionsContext,
+  WorkspaceStateContext,
+} from "@/state/app-state-contexts";
+import { repoBranchesQueryOptions } from "@/state/queries/git";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { SettingsModalController } from "./use-settings-modal-controller";
+import { useSettingsModalController } from "./use-settings-modal-controller";
 
 enableReactActEnvironment();
 
@@ -94,20 +102,86 @@ let workspaceRecords = [
   },
 ];
 let runtimeDefinitions = [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR];
-const useSettingsModalCatalogStateMock = mock(() => ({
-  getCatalogForRuntime: () => null,
-  getCatalogErrorForRuntime: () => null,
-  isCatalogLoadingForRuntime: () => false,
-  isLoadingCatalog: false,
-}));
 
-let useSettingsModalController: (input: {
-  open: boolean;
-  shouldLoadCatalog: boolean;
-}) => SettingsModalController;
+const EMPTY_BRANCHES: [] = [];
 
-const createHookHarness = (open: boolean, shouldLoadCatalog = false) =>
-  createSharedHookHarness(
+const createHookHarness = (
+  open: boolean,
+  shouldLoadCatalog = false,
+  options?: {
+    loadRepoRuntimeCatalog?: (
+      repoPath: string,
+      runtimeKind: RuntimeKind,
+    ) => Promise<AgentModelCatalog>;
+  },
+) => {
+  const queryClient = createQueryClient();
+  queryClient.setQueryData(repoBranchesQueryOptions("/repo").queryKey, EMPTY_BRANCHES);
+  queryClient.setQueryData(repoBranchesQueryOptions("/repo-two").queryKey, EMPTY_BRANCHES);
+
+  const workspaceState = {
+    isSwitchingWorkspace: false,
+    isLoadingBranches: false,
+    isSwitchingBranch: false,
+    branchSyncDegraded: false,
+    workspaces: workspaceRecords,
+    activeRepo: "/repo",
+    activeWorkspace: workspaceRecords[0] ?? null,
+    branches: EMPTY_BRANCHES,
+    activeBranch: null,
+    addWorkspace: async () => {},
+    selectWorkspace: async () => {},
+    refreshBranches: async () => {},
+    switchBranch: async () => {},
+    loadRepoSettings: async () => {
+      throw new Error("loadRepoSettings is not used in this test");
+    },
+    saveRepoSettings: async () => {
+      throw new Error("saveRepoSettings is not used in this test");
+    },
+    loadSettingsSnapshot,
+    detectGithubRepository: async () => null,
+    saveGlobalGitConfig,
+    saveSettingsSnapshot,
+  } satisfies React.ComponentProps<typeof WorkspaceStateContext.Provider>["value"];
+
+  const checksState = {
+    runtimeCheck: null,
+    beadsCheck: null,
+    runtimeCheckFailureKind: null,
+    beadsCheckFailureKind: null,
+    runtimeHealthByRuntime: {},
+    isLoadingChecks: false,
+    refreshChecks,
+  } satisfies React.ComponentProps<typeof ChecksStateContext.Provider>["value"];
+
+  const runtimeDefinitionsContext = {
+    runtimeDefinitions,
+    isLoadingRuntimeDefinitions: false,
+    runtimeDefinitionsError: null,
+    refreshRuntimeDefinitions: async () => runtimeDefinitions,
+    loadRepoRuntimeCatalog:
+      options?.loadRepoRuntimeCatalog ??
+      (async () => {
+        throw new Error("catalog loading is not configured for this test");
+      }),
+    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+    loadRepoRuntimeFileSearch: async () => [],
+  } satisfies React.ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
+
+  const wrapper = ({ children }: React.PropsWithChildren): React.ReactElement => (
+    <WorkspaceStateContext.Provider value={workspaceState}>
+      <ChecksStateContext.Provider value={checksState}>
+        <QueryClientProvider client={queryClient}>
+          <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsContext}>
+            {children}
+          </RuntimeDefinitionsContext.Provider>
+        </QueryClientProvider>
+      </ChecksStateContext.Provider>
+    </WorkspaceStateContext.Provider>
+  );
+
+  return createSharedHookHarness(
     ({ isOpen, shouldLoad }: { isOpen: boolean; shouldLoad: boolean }) =>
       useSettingsModalController({
         open: isOpen,
@@ -117,77 +191,11 @@ const createHookHarness = (open: boolean, shouldLoadCatalog = false) =>
       isOpen: open,
       shouldLoad: shouldLoadCatalog,
     },
+    { wrapper },
   );
+};
 
 describe("useSettingsModalController", () => {
-  const registerModuleMocks = (): void => {
-    const stateModule = {
-      AppStateProvider: ({ children }: { children: unknown }) => children,
-      useAgentState: () => {
-        throw new Error("useAgentState is not used in this test");
-      },
-      useAgentOperations: () => {
-        throw new Error("useAgentOperations is not used in this test");
-      },
-      useAgentSessions: () => {
-        throw new Error("useAgentSessions is not used in this test");
-      },
-      useAgentSessionSummaries: () => {
-        throw new Error("useAgentSessionSummaries is not used in this test");
-      },
-      useAgentSession: () => {
-        throw new Error("useAgentSession is not used in this test");
-      },
-      useWorkspaceState: () => ({
-        activeRepo: "/repo",
-        workspaces: workspaceRecords,
-        loadSettingsSnapshot,
-        detectGithubRepository: async () => null,
-        saveGlobalGitConfig,
-        saveSettingsSnapshot,
-      }),
-      useChecksState: () => ({
-        runtimeCheck: null,
-        refreshChecks,
-      }),
-      useSpecState: () => {
-        throw new Error("useSpecState is not used in this test");
-      },
-      useTasksState: () => {
-        throw new Error("useTasksState is not used in this test");
-      },
-    };
-
-    mock.module("@/state/app-state-provider", () => stateModule);
-
-    mock.module("./use-settings-modal-branches-state", () => ({
-      useSettingsModalBranchesState: () => ({
-        selectedRepoBranches: [],
-        isLoadingSelectedRepoBranches: false,
-        selectedRepoBranchesError: null,
-        retrySelectedRepoBranchesLoad: () => {},
-      }),
-    }));
-
-    mock.module("./use-settings-modal-catalog-state", () => ({
-      useSettingsModalCatalogState: useSettingsModalCatalogStateMock,
-    }));
-
-    mock.module("@/state/app-state-contexts", () => ({
-      useRuntimeDefinitionsContext: () => ({
-        runtimeDefinitions,
-        isLoadingRuntimeDefinitions: false,
-        runtimeDefinitionsError: null,
-        refreshRuntimeDefinitions: async () => runtimeDefinitions,
-        loadRepoRuntimeCatalog: async () => {
-          throw new Error("catalog loading is mocked in this test");
-        },
-        loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-        loadRepoRuntimeFileSearch: async () => [],
-      }),
-    }));
-  };
-
   beforeEach(async () => {
     workspaceRecords = [
       {
@@ -208,17 +216,7 @@ describe("useSettingsModalController", () => {
       },
     ];
     runtimeDefinitions = [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR];
-    registerModuleMocks();
-    ({ useSettingsModalController } = await import("./use-settings-modal-controller"));
-  });
-
-  afterAll(async () => {
-    await restoreMockedModules([
-      ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
-      ["@/state/app-state-contexts", () => import("@/state/app-state-contexts")],
-      ["./use-settings-modal-branches-state", () => import("./use-settings-modal-branches-state")],
-      ["./use-settings-modal-catalog-state", () => import("./use-settings-modal-catalog-state")],
-    ]);
+    loadSettingsSnapshot.mockClear();
   });
 
   test("does not refresh diagnostics when the modal opens", async () => {
@@ -249,60 +247,49 @@ describe("useSettingsModalController", () => {
   });
 
   test("does not enable catalog loading unless the agents section requests it", async () => {
-    useSettingsModalCatalogStateMock.mockClear();
+    const loadRepoRuntimeCatalog = mock(async () => ({
+      models: [],
+      defaultModelsByProvider: {},
+      profiles: [],
+    }));
 
-    const harness = createHookHarness(true, false);
+    const harness = createHookHarness(true, false, { loadRepoRuntimeCatalog });
     await harness.mount();
     await harness.waitFor((state) => state.snapshotDraft !== null);
 
-    expect(useSettingsModalCatalogStateMock).toHaveBeenCalled();
-    const catalogCalls = useSettingsModalCatalogStateMock.mock.calls as unknown as Array<
-      [{ enabled: boolean; selectedRepoPath: string | null; runtimeKinds: string[] }]
-    >;
-    const disabledCall = [...catalogCalls]
-      .reverse()
-      .find((call) => call[0].enabled === false && call[0].selectedRepoPath === "/repo");
-    expect(disabledCall?.[0]).toMatchObject({
-      enabled: false,
-      selectedRepoPath: "/repo",
-      runtimeKinds: ["opencode"],
-    });
+    expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(0);
+    expect(harness.getLatest().getCatalogForRuntime("opencode")).toBeNull();
 
     await harness.update({ isOpen: true, shouldLoad: true });
+    await harness.waitFor((state) => state.getCatalogForRuntime("opencode") !== null, 300);
 
-    const enabledCall = [...catalogCalls].reverse().find((call) => call[0].enabled === true);
-    expect(enabledCall?.[0]).toMatchObject({
-      enabled: true,
-      selectedRepoPath: "/repo",
-      runtimeKinds: ["opencode"],
-    });
+    expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
+    expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("/repo", "opencode");
 
     await harness.unmount();
   });
 
   test("recalculates catalog runtime kinds when the selected repo changes", async () => {
-    useSettingsModalCatalogStateMock.mockClear();
+    const loadRepoRuntimeCatalog = mock(async () => ({
+      models: [],
+      defaultModelsByProvider: {},
+      profiles: [],
+    }));
 
-    const harness = createHookHarness(true, true);
+    const harness = createHookHarness(true, true, { loadRepoRuntimeCatalog });
     await harness.mount();
     await harness.waitFor((state) => state.snapshotDraft !== null);
+    await harness.waitFor((state) => state.getCatalogForRuntime("opencode") !== null, 300);
+
+    loadRepoRuntimeCatalog.mockClear();
 
     await harness.run((state) => {
       state.setSelectedRepoPath("/repo-two");
     });
+    await harness.waitFor((state) => state.getCatalogForRuntime("codex") !== null, 300);
 
-    const catalogCalls = useSettingsModalCatalogStateMock.mock.calls as unknown as Array<
-      [{ enabled: boolean; selectedRepoPath: string | null; runtimeKinds: string[] }]
-    >;
-    const repoTwoCall = [...catalogCalls]
-      .reverse()
-      .find((call) => call[0].enabled === true && call[0].selectedRepoPath === "/repo-two");
-
-    expect(repoTwoCall?.[0]).toMatchObject({
-      enabled: true,
-      selectedRepoPath: "/repo-two",
-      runtimeKinds: ["codex"],
-    });
+    expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
+    expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("/repo-two", "codex");
 
     await harness.unmount();
   });

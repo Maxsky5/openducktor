@@ -20,8 +20,12 @@ import {
 } from "@/components/features/settings";
 import { errorMessage } from "@/lib/errors";
 import { pickRepositoryDirectory } from "@/lib/repo-directory";
-import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { useChecksState, useWorkspaceState } from "@/state/app-state-provider";
+import {
+  ChecksStateContext,
+  useRequiredContext,
+  useRuntimeDefinitionsContext,
+  WorkspaceStateContext,
+} from "@/state/app-state-contexts";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
 import {
@@ -129,6 +133,8 @@ export const useSettingsModalController = ({
   open,
   shouldLoadCatalog,
 }: UseSettingsModalControllerArgs): SettingsModalController => {
+  const workspaceState = useRequiredContext(WorkspaceStateContext, "useSettingsModalController");
+  const checksState = useRequiredContext(ChecksStateContext, "useSettingsModalController");
   const {
     activeRepo,
     workspaces,
@@ -136,8 +142,8 @@ export const useSettingsModalController = ({
     detectGithubRepository,
     saveGlobalGitConfig,
     saveSettingsSnapshot,
-  } = useWorkspaceState();
-  const { runtimeCheck } = useChecksState();
+  } = workspaceState;
+  const { runtimeCheck } = checksState;
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
 
