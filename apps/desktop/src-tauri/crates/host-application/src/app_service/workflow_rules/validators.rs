@@ -43,6 +43,14 @@ pub(crate) fn validate_transition(
     Ok(())
 }
 
+pub(crate) fn validate_transition_without_related_tasks(
+    task: &TaskCard,
+    from: &TaskStatus,
+    to: &TaskStatus,
+) -> Result<()> {
+    validate_transition(task, std::slice::from_ref(task), from, to)
+}
+
 fn find_task<'a>(tasks: &'a [TaskCard], task_id: &str) -> Result<&'a TaskCard> {
     tasks
         .iter()
