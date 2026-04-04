@@ -3,7 +3,7 @@ use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentSessionDocument, BuildContinuationTarget, BuildContinuationTargetSource, RunState,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -41,20 +41,26 @@ impl AppService {
 
         let repo_path = self.resolve_task_repo_path(repo_path)?;
         let repo_dir = Path::new(&repo_path);
-        let tasks = self.task_store.list_tasks(repo_dir)?;
-        let available_task_ids = tasks
+        let sessions_by_available_task = self
+            .task_store
+            .list_tasks(repo_dir)?
             .into_iter()
-            .map(|task| task.id)
-            .collect::<HashSet<_>>();
+            .map(|task| (task.id, task.agent_sessions))
+            .collect::<HashMap<_, _>>();
+
+        for task_id in task_ids {
+            if !sessions_by_available_task.contains_key(task_id) {
+                return Err(anyhow!("Task not found: {task_id}"));
+            }
+        }
 
         let mut sessions_by_task = HashMap::new();
         for task_id in task_ids {
-            if !available_task_ids.contains(task_id) {
-                return Err(anyhow!("Task not found: {task_id}"));
-            }
-
-            let metadata = self.task_store.get_task_metadata(repo_dir, task_id)?;
-            sessions_by_task.insert(task_id.clone(), metadata.agent_sessions);
+            let sessions = sessions_by_available_task
+                .get(task_id)
+                .cloned()
+                .ok_or_else(|| anyhow!("Task not found: {task_id}"))?;
+            sessions_by_task.insert(task_id.clone(), sessions);
         }
 
         Ok(sessions_by_task)
