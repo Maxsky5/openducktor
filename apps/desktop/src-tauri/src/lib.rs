@@ -45,7 +45,7 @@ mod macos_cef_quit_delegate {
     use objc2::{
         DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send,
         rc::Retained,
-        runtime::{NSObject, NSObjectProtocol, ProtocolObject},
+        runtime::{AnyObject, NSObject, NSObjectProtocol, ProtocolObject, Sel},
         sel,
     };
     use objc2_app_kit::{NSApp, NSApplication, NSApplicationDelegate, NSApplicationTerminateReply};
@@ -72,6 +72,22 @@ mod macos_cef_quit_delegate {
         unsafe impl NSObjectProtocol for QuitDelegate {}
 
         #[allow(non_snake_case)]
+        impl QuitDelegate {
+            #[unsafe(method(forwardingTargetForSelector:))]
+            unsafe fn forwardingTargetForSelector(&self, selector: Sel) -> *mut AnyObject {
+                if selector == sel!(applicationShouldTerminate:)
+                    || selector == sel!(application:openURLs:)
+                {
+                    std::ptr::null_mut()
+                } else {
+                    Retained::as_ptr(&self.ivars().original_delegate)
+                        .cast::<AnyObject>()
+                        .cast_mut()
+                }
+            }
+        }
+
+        #[allow(non_snake_case)]
         unsafe impl NSApplicationDelegate for QuitDelegate {
             #[unsafe(method(application:openURLs:))]
             unsafe fn application_openURLs(
@@ -79,7 +95,13 @@ mod macos_cef_quit_delegate {
                 application: &NSApplication,
                 urls: &NSArray<objc2_foundation::NSURL>,
             ) {
-                self.ivars().original_delegate.application_openURLs(application, urls);
+                if self
+                    .ivars()
+                    .original_delegate
+                    .respondsToSelector(sel!(application:openURLs:))
+                {
+                    self.ivars().original_delegate.application_openURLs(application, urls);
+                }
             }
 
             #[unsafe(method(applicationShouldTerminate:))]
@@ -125,6 +147,8 @@ mod macos_cef_quit_delegate {
 
     fn request_orderly_quit(app_handle: &AppHandle<TauriRuntime>) {
         for window in app_handle.webview_windows().into_values() {
+            // `destroy()` proved more reliable than `close()` for the macOS CEF
+            // quit path because it completes teardown before the runtime exits.
             let _ = window.destroy();
         }
     }
@@ -154,8 +178,9 @@ mod macos_cef_quit_delegate {
 
         #[test]
         fn keeps_intercepting_until_windows_are_gone() {
+            assert!(should_intercept_quit(3));
             assert!(should_intercept_quit(1));
-            assert!(should_intercept_quit(1));
+            assert!(!should_intercept_quit(0));
         }
 
         #[test]
