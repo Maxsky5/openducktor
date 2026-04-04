@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { act } from "react";
 import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
@@ -139,7 +140,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     },
     modelSelection: {
       selectedModelSelection: null,
-      selectedModelDescriptor: null,
       isSelectionCatalogLoading: false,
       supportsSlashCommands: true,
       supportsFileSearch: true,
@@ -229,6 +229,45 @@ describe("useAgentStudioPageModels", () => {
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onStopSession).toHaveBeenCalledTimes(1);
 
+    await harness.unmount();
+  });
+
+  test("scrolls to bottom immediately when sending a message", async () => {
+    const sendResolver = { current: null as ((value: boolean) => void) | null };
+    const onSend = mock(
+      () =>
+        new Promise<boolean>((resolve) => {
+          sendResolver.current = resolve;
+        }),
+    );
+    const scrollToBottomOnSend = mock(() => {});
+
+    const harness = createHookHarness(
+      createHookArgs({
+        sessionActions: {
+          onSend,
+        },
+      }),
+    );
+
+    await harness.mount();
+    const state = harness.getLatest();
+    state.agentChatModel.composer.scrollToBottomOnSendRef.current = scrollToBottomOnSend;
+
+    let sendPromise: Promise<boolean> | null = null;
+    await act(async () => {
+      sendPromise = state.agentChatModel.composer.onSend(createComposerDraft("message"));
+      await Promise.resolve();
+    });
+
+    expect(scrollToBottomOnSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledTimes(1);
+
+    if (!sendResolver.current) {
+      throw new Error("Expected pending send resolver");
+    }
+    sendResolver.current(true);
+    await sendPromise;
     await harness.unmount();
   });
 

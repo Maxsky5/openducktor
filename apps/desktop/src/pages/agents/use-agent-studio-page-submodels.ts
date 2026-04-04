@@ -333,10 +333,8 @@ export const useAgentStudioComposerModel = ({
 
   const handleSend = useCallback<AgentChatModel["composer"]["onSend"]>(
     async (draft) => {
+      scrollToBottomOnSendRef.current?.();
       const didSend = await onSend(draft);
-      if (didSend) {
-        scrollToBottomOnSendRef.current?.();
-      }
       return didSend;
     },
     [onSend, scrollToBottomOnSendRef],

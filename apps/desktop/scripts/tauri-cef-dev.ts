@@ -18,7 +18,7 @@ if (!existsSync(cargoTauriPath)) {
 
 const child = spawn(
   cargoTauriPath,
-  ["dev", "--no-default-features", "--features", "cef", "--", ...process.argv.slice(2)],
+  ["dev", "--features", "cef", "--", "--no-default-features", ...process.argv.slice(2)],
   {
     cwd: desktopRoot,
     env: {
