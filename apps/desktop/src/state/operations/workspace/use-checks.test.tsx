@@ -167,12 +167,12 @@ const captureDeferredRejection = <T,>(promise: Promise<T>): Promise<T> => {
   return promise;
 };
 
-const REFRESH_CHECKS_WAIT_TIMEOUT_MS = 1_000;
+const REFRESH_CHECKS_WAIT_TIMEOUT_MS = 400;
 
 const waitForInitialChecksToSettle = async (
   harness: HookHarness,
   runtimeKinds: RuntimeKind[] = ["opencode"],
-  timeoutMs = 1_000,
+  timeoutMs = 400,
 ) => {
   await harness.mount();
   await harness.waitFor((value) => {
@@ -379,8 +379,8 @@ describe("use-checks", () => {
     });
 
     try {
-      await waitForInitialChecksToSettle(harness, ["opencode"], 1_000);
-      await harness.waitFor(() => toastError.mock.calls.length === 1, 1_000);
+      await waitForInitialChecksToSettle(harness, ["opencode"], 400);
+      await harness.waitFor(() => toastError.mock.calls.length === 1, 400);
 
       expect(toastError).toHaveBeenCalledWith(
         "OpenCode OpenDucktor MCP unavailable",
@@ -447,7 +447,7 @@ describe("use-checks", () => {
     });
 
     try {
-      await waitForInitialChecksToSettle(harness, ["opencode"], 1_000);
+      await waitForInitialChecksToSettle(harness, ["opencode"], 400);
       toastError.mockClear();
 
       await harness.run(async (value) => {
@@ -582,7 +582,7 @@ describe("use-checks", () => {
       await harness.run(async (value) => {
         await expect(value.refreshChecks()).rejects.toThrow("runtime down");
       });
-      await harness.waitFor(() => toastError.mock.calls.length === 1, 1_000);
+      await harness.waitFor(() => toastError.mock.calls.length === 1, 400);
 
       expect(runtimeCheck).toHaveBeenCalledTimes(2);
       expect(runtimeCheck.mock.calls[0]).toEqual([false]);
@@ -709,7 +709,7 @@ describe("use-checks", () => {
       }
 
       if (delay === 2_000) {
-        return originalSetTimeout(() => {}, 60_000);
+        return 0 as unknown as ReturnType<typeof globalThis.setTimeout>;
       }
 
       return originalSetTimeout(() => {
@@ -795,7 +795,7 @@ describe("use-checks", () => {
       }
 
       if (delay === 2_000) {
-        return originalSetTimeout(() => {}, 60_000);
+        return 0 as unknown as ReturnType<typeof globalThis.setTimeout>;
       }
 
       if (delay === 15_000) {
@@ -980,7 +980,7 @@ describe("use-checks", () => {
 
       if (delay === 2_000) {
         scheduledRetryCount += 1;
-        return originalSetTimeout(() => {}, 60_000);
+        return 0 as unknown as ReturnType<typeof globalThis.setTimeout>;
       }
 
       return originalSetTimeout(() => {
@@ -1024,7 +1024,7 @@ describe("use-checks", () => {
         (value) =>
           value.activeRepoRuntimeHealthByRuntime.opencode?.runtimeFailureKind === "timeout" &&
           value.isLoadingChecks === false,
-        5000,
+        400,
       );
 
       expect(toastMessage).toHaveBeenCalledWith(
@@ -1038,7 +1038,7 @@ describe("use-checks", () => {
       await harness.run(async () => {
         await harness.getLatest().refreshRepoRuntimeHealthForRepo("/repo-a", true);
       });
-      await harness.waitFor(() => checkRepoRuntimeHealthMock.mock.calls.length === 2, 1000);
+      await harness.waitFor(() => checkRepoRuntimeHealthMock.mock.calls.length === 2, 400);
       expect(toastMessage).toHaveBeenCalledTimes(1);
 
       await harness.run(async () => {
@@ -1046,7 +1046,7 @@ describe("use-checks", () => {
       });
       await harness.waitFor(
         (value) => value.activeRepoRuntimeHealthByRuntime.opencode?.runtimeOk === true,
-        1000,
+        400,
       );
 
       expect(toastMessage).toHaveBeenCalledTimes(1);

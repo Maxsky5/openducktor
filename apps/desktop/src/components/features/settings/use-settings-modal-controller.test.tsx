@@ -17,7 +17,6 @@ import {
 } from "@/state/app-state-contexts";
 import { repoBranchesQueryOptions } from "@/state/queries/git";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import type { SettingsModalController } from "./use-settings-modal-controller";
 import { useSettingsModalController } from "./use-settings-modal-controller";
 
 enableReactActEnvironment();
