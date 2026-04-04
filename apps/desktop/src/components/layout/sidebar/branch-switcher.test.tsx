@@ -36,10 +36,19 @@ const createDeferred = <T,>() => {
 
 describe("BranchSwitcher", () => {
   beforeEach(() => {
-    mock.module("@/state/app-state-provider", () => ({
+    const stateModule = {
       AppStateProvider: ({ children }: { children: ReactElement }) => children,
       useAgentState: () => {
         throw new Error("useAgentState is not used in this test");
+      },
+      useAgentOperations: () => {
+        throw new Error("useAgentOperations is not used in this test");
+      },
+      useAgentSessionSummaries: () => {
+        throw new Error("useAgentSessionSummaries is not used in this test");
+      },
+      useAgentSession: () => {
+        throw new Error("useAgentSession is not used in this test");
       },
       useChecksState: () => {
         throw new Error("useChecksState is not used in this test");
@@ -69,7 +78,10 @@ describe("BranchSwitcher", () => {
         branchSyncDegraded,
         switchBranch,
       }),
-    }));
+    };
+
+    mock.module("@/state/app-state-provider", () => stateModule);
+    mock.module("@/state", () => stateModule);
 
     mock.module("@/components/features/repository/branch-selector", () => ({
       BranchSelector: ({
@@ -100,6 +112,7 @@ describe("BranchSwitcher", () => {
   afterAll(async () => {
     await restoreMockedModules([
       ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+      ["@/state", () => import("@/state")],
       [
         "@/components/features/repository/branch-selector",
         () => import("@/components/features/repository/branch-selector"),

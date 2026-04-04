@@ -74,10 +74,19 @@ const createHookHarness = (open: boolean, shouldLoadCatalog = false) =>
 
 describe("useSettingsModalController", () => {
   const registerModuleMocks = (): void => {
-    mock.module("@/state/app-state-provider", () => ({
+    const stateModule = {
       AppStateProvider: ({ children }: { children: unknown }) => children,
       useAgentState: () => {
         throw new Error("useAgentState is not used in this test");
+      },
+      useAgentOperations: () => {
+        throw new Error("useAgentOperations is not used in this test");
+      },
+      useAgentSessionSummaries: () => {
+        throw new Error("useAgentSessionSummaries is not used in this test");
+      },
+      useAgentSession: () => {
+        throw new Error("useAgentSession is not used in this test");
       },
       useWorkspaceState: () => ({
         activeRepo: "/repo",
@@ -106,7 +115,10 @@ describe("useSettingsModalController", () => {
       useTasksState: () => {
         throw new Error("useTasksState is not used in this test");
       },
-    }));
+    };
+
+    mock.module("@/state/app-state-provider", () => stateModule);
+    mock.module("@/state", () => stateModule);
 
     mock.module("./use-settings-modal-branches-state", () => ({
       useSettingsModalBranchesState: () => ({
@@ -130,6 +142,7 @@ describe("useSettingsModalController", () => {
   afterAll(async () => {
     await restoreMockedModules([
       ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+      ["@/state", () => import("@/state")],
       ["./use-settings-modal-branches-state", () => import("./use-settings-modal-branches-state")],
       ["./use-settings-modal-catalog-state", () => import("./use-settings-modal-catalog-state")],
     ]);
