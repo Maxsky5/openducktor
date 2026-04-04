@@ -2329,6 +2329,7 @@ fn wait_for_local_server_with_process_returns_early_when_child_exits() {
         test_startup_policy(Duration::from_secs(2)),
         &cancel_epoch,
         0,
+        |_| {},
     )
     .expect_err("should report early process exit");
     assert!(error.to_string().contains("startup failed"));
@@ -2355,6 +2356,7 @@ fn wait_for_local_server_with_process_times_out_when_child_stays_alive() {
         test_startup_policy(Duration::from_millis(250)),
         &cancel_epoch,
         0,
+        |_| {},
     )
     .expect_err("should time out when child remains alive and port stays closed");
     terminate_child_process(&mut child);
@@ -2388,6 +2390,7 @@ fn wait_for_local_server_with_process_honors_total_timeout_budget_when_connect_t
         },
         &cancel_epoch,
         0,
+        |_| {},
     )
     .expect_err("total timeout budget should cap each connect attempt");
     let elapsed = started_at.elapsed();
@@ -2421,6 +2424,7 @@ fn wait_for_local_server_with_process_honors_cancellation_epoch() {
         test_startup_policy(Duration::from_secs(2)),
         &cancel_epoch,
         snapshot,
+        |_| {},
     )
     .expect_err("should stop waiting when cancellation epoch changes");
     terminate_child_process(&mut child);

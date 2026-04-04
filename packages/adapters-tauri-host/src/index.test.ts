@@ -1161,6 +1161,107 @@ describe("TauriHostClient", () => {
           descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         };
       }
+      if (command === "runtime_startup_status") {
+        return {
+          runtimeKind: "opencode",
+          repoPath: "/repo",
+          stage: "waiting_for_runtime",
+          runtime: null,
+          startedAt: "2026-02-17T12:00:00Z",
+          updatedAt: "2026-02-17T12:00:05Z",
+          elapsedMs: 5000,
+          attempts: 4,
+          failureKind: null,
+          failureReason: null,
+          detail: null,
+        };
+      }
+      if (command === "repo_runtime_health") {
+        return {
+          runtimeOk: true,
+          runtimeError: null,
+          runtimeFailureKind: null,
+          runtime: {
+            kind: "opencode",
+            runtimeId: "runtime-main",
+            repoPath: "/repo",
+            taskId: null,
+            role: "workspace",
+            workingDirectory: "/repo",
+            runtimeRoute: {
+              type: "local_http",
+              endpoint: "http://127.0.0.1:4444",
+            },
+            startedAt: "2026-02-17T12:00:00Z",
+            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+          },
+          mcpOk: true,
+          mcpError: null,
+          mcpFailureKind: null,
+          mcpServerName: "openducktor",
+          mcpServerStatus: "connected",
+          mcpServerError: null,
+          availableToolIds: ["odt_read_task"],
+          checkedAt: "2026-02-17T12:00:05Z",
+          errors: [],
+          progress: {
+            stage: "ready",
+            observation: "observed_existing_runtime",
+            startedAt: "2026-02-17T12:00:00Z",
+            updatedAt: "2026-02-17T12:00:05Z",
+            elapsedMs: 5000,
+            attempts: 4,
+            detail: null,
+            failureKind: null,
+            failureReason: null,
+            failureOrigin: null,
+            host: null,
+          },
+        };
+      }
+      if (command === "repo_runtime_health_status") {
+        return {
+          runtimeOk: true,
+          runtimeError: null,
+          runtimeFailureKind: null,
+          runtime: {
+            kind: "opencode",
+            runtimeId: "runtime-main",
+            repoPath: "/repo",
+            taskId: null,
+            role: "workspace",
+            workingDirectory: "/repo",
+            runtimeRoute: {
+              type: "local_http",
+              endpoint: "http://127.0.0.1:4444",
+            },
+            startedAt: "2026-02-17T12:00:00Z",
+            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+          },
+          mcpOk: false,
+          mcpError: null,
+          mcpFailureKind: null,
+          mcpServerName: "openducktor",
+          mcpServerStatus: null,
+          mcpServerError: null,
+          availableToolIds: [],
+          checkedAt: "2026-02-17T12:00:05Z",
+          errors: [],
+          progress: {
+            stage: "checking_mcp_status",
+            observation: "observed_existing_runtime",
+            startedAt: "2026-02-17T12:00:00Z",
+            updatedAt: "2026-02-17T12:00:05Z",
+            elapsedMs: 5000,
+            attempts: 4,
+            detail: "Checking OpenDucktor MCP",
+            failureKind: null,
+            failureReason: null,
+            failureOrigin: null,
+            host: null,
+          },
+        };
+      }
       if (command === "runtime_stop") {
         return { ok: true };
       }
@@ -1171,6 +1272,9 @@ describe("TauriHostClient", () => {
     const qaTarget = await client.buildContinuationTargetGet("/repo", "task-1");
     const runtimes = await client.runtimeList("/repo", "opencode");
     const ensured = await client.runtimeEnsure("/repo", "opencode");
+    const startupStatus = await client.runtimeStartupStatus("/repo", "opencode");
+    const repoRuntimeHealth = await client.repoRuntimeHealth("/repo", "opencode");
+    const repoRuntimeHealthStatus = await client.repoRuntimeHealthStatus("/repo", "opencode");
     const stopped = await client.runtimeStop("runtime-1");
 
     expect(definitions[0]?.kind).toBe("opencode");
@@ -1180,12 +1284,18 @@ describe("TauriHostClient", () => {
     });
     expect(runtimes).toHaveLength(1);
     expect(ensured.runtimeId).toBe("runtime-main");
+    expect(startupStatus.stage).toBe("waiting_for_runtime");
+    expect(repoRuntimeHealth.mcpOk).toBe(true);
+    expect(repoRuntimeHealthStatus.progress?.stage).toBe("checking_mcp_status");
     expect(stopped.ok).toBe(true);
     expect(calls.map((entry) => entry.command)).toEqual([
       "runtime_definitions_list",
       "build_continuation_target_get",
       "runtime_list",
       "runtime_ensure",
+      "runtime_startup_status",
+      "repo_runtime_health",
+      "repo_runtime_health_status",
       "runtime_stop",
     ]);
     expect(calls[2]?.args).toEqual({

@@ -292,6 +292,113 @@ pub struct RuntimeInstanceSummary {
     pub descriptor: RuntimeDescriptor,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RepoRuntimeStartupStage {
+    Idle,
+    StartupRequested,
+    WaitingForRuntime,
+    RuntimeReady,
+    StartupFailed,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RepoRuntimeStartupFailureKind {
+    Timeout,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoRuntimeStartupStatus {
+    pub runtime_kind: AgentRuntimeKind,
+    pub repo_path: String,
+    pub stage: RepoRuntimeStartupStage,
+    pub runtime: Option<RuntimeInstanceSummary>,
+    pub started_at: Option<String>,
+    pub updated_at: String,
+    pub elapsed_ms: Option<u64>,
+    pub attempts: Option<u32>,
+    pub failure_kind: Option<RepoRuntimeStartupFailureKind>,
+    pub failure_reason: Option<String>,
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RepoRuntimeHealthStage {
+    Idle,
+    StartupRequested,
+    WaitingForRuntime,
+    RuntimeReady,
+    CheckingMcpStatus,
+    ReconnectingMcp,
+    RestartingRuntime,
+    RestartSkippedActiveRun,
+    Ready,
+    StartupFailed,
+    FrontendObservationTimeout,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RepoRuntimeHealthObservation {
+    ObservedExistingRuntime,
+    ObservingExistingStartup,
+    StartedByDiagnostics,
+    RestartedForMcp,
+    RestartSkippedActiveRun,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RepoRuntimeHealthFailureOrigin {
+    RuntimeStartup,
+    McpStatus,
+    McpConnect,
+    RuntimeStop,
+    RuntimeRestart,
+    FrontendObservation,
+    StartupStatus,
+    HealthStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoRuntimeHealthProgress {
+    pub stage: RepoRuntimeHealthStage,
+    pub observation: Option<RepoRuntimeHealthObservation>,
+    pub started_at: Option<String>,
+    pub updated_at: String,
+    pub elapsed_ms: Option<u64>,
+    pub attempts: Option<u32>,
+    pub detail: Option<String>,
+    pub failure_kind: Option<RepoRuntimeStartupFailureKind>,
+    pub failure_reason: Option<String>,
+    pub failure_origin: Option<RepoRuntimeHealthFailureOrigin>,
+    pub host: Option<RepoRuntimeStartupStatus>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoRuntimeHealthCheck {
+    pub runtime_ok: bool,
+    pub runtime_error: Option<String>,
+    pub runtime_failure_kind: Option<RepoRuntimeStartupFailureKind>,
+    pub runtime: Option<RuntimeInstanceSummary>,
+    pub mcp_ok: bool,
+    pub mcp_error: Option<String>,
+    pub mcp_failure_kind: Option<RepoRuntimeStartupFailureKind>,
+    pub mcp_server_name: String,
+    pub mcp_server_status: Option<String>,
+    pub mcp_server_error: Option<String>,
+    pub available_tool_ids: Vec<String>,
+    pub checked_at: String,
+    pub errors: Vec<String>,
+    pub progress: Option<RepoRuntimeHealthProgress>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DevServerScriptStatus {

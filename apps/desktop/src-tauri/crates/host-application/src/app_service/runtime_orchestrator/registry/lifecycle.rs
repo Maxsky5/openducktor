@@ -1,9 +1,9 @@
 use super::super::super::{
-    AgentRuntimeProcess, AppService, RuntimeCleanupTarget, terminate_child_process,
+    terminate_child_process, AgentRuntimeProcess, AppService, RuntimeCleanupTarget,
 };
 use super::super::{RuntimePostStartPolicy, RuntimeStartInput, SpawnedRuntimeServer};
-use anyhow::{Result, anyhow};
-use host_domain::{RuntimeInstanceSummary, now_rfc3339};
+use anyhow::{anyhow, Result};
+use host_domain::{now_rfc3339, RuntimeInstanceSummary};
 use std::collections::HashMap;
 use std::process::Child;
 use std::sync::MutexGuard;
@@ -41,7 +41,7 @@ impl AppService {
 
         let mut runtimes = self
             .lock_runtime_registry_for_attach(&mut spawned_server.child, cleanup_target.as_ref())?;
-        if let Some(existing) = Self::apply_post_start_policy(
+        if let Some(existing) = self.apply_post_start_policy(
             &mut runtimes,
             post_start_policy,
             startup_scope,
@@ -82,6 +82,7 @@ impl AppService {
     }
 
     fn apply_post_start_policy(
+        &self,
         runtimes: &mut HashMap<String, AgentRuntimeProcess>,
         post_start_policy: Option<RuntimePostStartPolicy<'_>>,
         startup_scope: &str,
@@ -92,7 +93,7 @@ impl AppService {
             return Ok(None);
         };
 
-        if let Err(error) = Self::prune_stale_runtimes(runtimes) {
+        if let Err(error) = self.prune_stale_runtimes(runtimes) {
             let prune_error = error.context(post_start_policy.prune_error_context);
             if let Err(cleanup_error) = Self::cleanup_started_runtime(child, cleanup_target) {
                 return Err(Self::append_cleanup_error(prune_error, cleanup_error));
@@ -115,9 +116,10 @@ impl AppService {
         Ok(None)
     }
 
-    pub(in crate::app_service::runtime_orchestrator) fn stop_registered_runtime(
+    fn stop_registered_runtime_internal(
         &self,
         runtime_id: &str,
+        clear_repo_runtime_health: bool,
     ) -> Result<bool> {
         let mut runtimes = self
             .agent_runtimes
@@ -126,8 +128,26 @@ impl AppService {
         let mut runtime = runtimes
             .remove(runtime_id)
             .ok_or_else(|| anyhow!("Runtime not found: {runtime_id}"))?;
+        self.clear_runtime_startup_status_for_runtime(&runtime.summary)?;
+        if clear_repo_runtime_health {
+            self.clear_repo_runtime_health_status_for_runtime(&runtime.summary)?;
+        }
         Self::cleanup_runtime_process(&mut runtime)?;
         Ok(true)
+    }
+
+    pub(in crate::app_service::runtime_orchestrator) fn stop_registered_runtime(
+        &self,
+        runtime_id: &str,
+    ) -> Result<bool> {
+        self.stop_registered_runtime_internal(runtime_id, true)
+    }
+
+    pub(in crate::app_service::runtime_orchestrator) fn stop_registered_runtime_preserving_repo_health(
+        &self,
+        runtime_id: &str,
+    ) -> Result<bool> {
+        self.stop_registered_runtime_internal(runtime_id, false)
     }
 
     pub fn shutdown(&self) -> Result<()> {
@@ -157,6 +177,22 @@ impl AppService {
         match self.agent_runtimes.lock() {
             Ok(mut runtimes) => {
                 for (_, mut runtime) in runtimes.drain() {
+                    if let Err(error) =
+                        self.clear_runtime_startup_status_for_runtime(&runtime.summary)
+                    {
+                        cleanup_errors.push(format!(
+                            "Failed clearing startup status for runtime {}: {}",
+                            runtime.summary.runtime_id, error
+                        ));
+                    }
+                    if let Err(error) =
+                        self.clear_repo_runtime_health_status_for_runtime(&runtime.summary)
+                    {
+                        cleanup_errors.push(format!(
+                            "Failed clearing repo runtime health status for runtime {}: {}",
+                            runtime.summary.runtime_id, error
+                        ));
+                    }
                     if let Err(error) = Self::cleanup_runtime_process(&mut runtime) {
                         cleanup_errors.push(format!(
                             "Failed shutting down runtime {}: {}",
@@ -176,6 +212,7 @@ impl AppService {
     }
 
     pub(in crate::app_service::runtime_orchestrator) fn prune_stale_runtimes(
+        &self,
         runtimes: &mut HashMap<String, AgentRuntimeProcess>,
     ) -> Result<()> {
         let stale_runtime_ids = runtimes
@@ -193,6 +230,19 @@ impl AppService {
 
         for runtime_id in stale_runtime_ids {
             if let Some(mut runtime) = runtimes.remove(&runtime_id) {
+                if let Err(error) = self.clear_runtime_startup_status_for_runtime(&runtime.summary)
+                {
+                    cleanup_errors.push(format!(
+                        "Failed clearing startup status for stale runtime {runtime_id}: {error}"
+                    ));
+                }
+                if let Err(error) =
+                    self.clear_repo_runtime_health_status_for_runtime(&runtime.summary)
+                {
+                    cleanup_errors.push(format!(
+                        "Failed clearing repo runtime health status for stale runtime {runtime_id}: {error}"
+                    ));
+                }
                 if let Err(error) = Self::cleanup_runtime_process(&mut runtime) {
                     cleanup_errors.push(format!(
                         "Failed pruning stale runtime {runtime_id}: {error}"

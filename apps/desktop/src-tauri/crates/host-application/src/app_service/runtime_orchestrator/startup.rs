@@ -42,6 +42,16 @@ impl AppService {
         &self,
         input: &RuntimeStartInput<'_>,
     ) -> Result<SpawnedRuntimeServer> {
+        self.mark_runtime_startup_requested(
+            input.runtime_kind,
+            input.repo_key.as_str(),
+            &super::RuntimeStartupProgress {
+                started_at_instant: input.startup_started_at_instant,
+                started_at: input.startup_started_at.clone(),
+                attempts: Some(0),
+                elapsed_ms: None,
+            },
+        )?;
         let port = pick_free_port()?;
         let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
         let startup_policy = input.startup_policy;
@@ -85,6 +95,18 @@ impl AppService {
             startup_policy,
             &startup_cancel_epoch,
             startup_cancel_snapshot,
+            |progress| {
+                let _ = self.mark_runtime_startup_waiting(
+                    input.runtime_kind,
+                    input.repo_key.as_str(),
+                    &super::RuntimeStartupProgress {
+                        started_at_instant: input.startup_started_at_instant,
+                        started_at: input.startup_started_at.clone(),
+                        attempts: Some(progress.report.attempts()),
+                        elapsed_ms: None,
+                    },
+                );
+            },
         ) {
             Ok(report) => report,
             Err(error) => {
@@ -134,6 +156,9 @@ impl AppService {
             port,
             child,
             opencode_process_guard,
+            startup_started_at_instant: input.startup_started_at_instant,
+            startup_started_at: input.startup_started_at.clone(),
+            startup_report,
         })
     }
 }

@@ -8,6 +8,11 @@ import type {
 import { runtimeLabelFor } from "@/lib/agent-runtime";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import {
+  describeRepoRuntimeProgress,
+  formatRepoRuntimeElapsed,
+  formatRepoRuntimeObservation,
+} from "@/lib/repo-runtime-health";
+import {
   buildTimeoutToastDescription,
   hasBeadsCheckFailure,
   hasRuntimeCheckFailure,
@@ -113,6 +118,78 @@ const buildFailureMessages = ({
   return detail ? [detail] : [];
 };
 
+const buildProgressRows = (
+  runtimeHealth: RepoRuntimeHealthMap[string] | undefined,
+): DiagnosticKeyValueRowModel[] => {
+  const progress = runtimeHealth?.progress;
+  if (!progress) {
+    return [];
+  }
+
+  const rows: DiagnosticKeyValueRowModel[] = [
+    {
+      label: "Stage",
+      value: progress.stage.replaceAll("_", " "),
+      valueClassName: "text-muted-foreground",
+    },
+  ];
+  const observation = formatRepoRuntimeObservation(progress.observation);
+  if (observation) {
+    rows.push({
+      label: "Observation",
+      value: observation,
+      valueClassName: "text-muted-foreground",
+    });
+  }
+  const elapsed = formatRepoRuntimeElapsed(progress.elapsedMs);
+  if (elapsed) {
+    rows.push({
+      label: "Elapsed",
+      value: elapsed,
+      mono: true,
+      valueClassName: "text-muted-foreground",
+    });
+  }
+  if (progress.attempts !== null) {
+    rows.push({
+      label: "Attempts",
+      value: String(progress.attempts),
+      mono: true,
+      valueClassName: "text-muted-foreground",
+    });
+  }
+  return rows;
+};
+
+const getRuntimeBadge = (
+  runtimeHealth: RepoRuntimeHealthMap[string] | undefined,
+): DiagnosticsSectionModel["badge"] | null => {
+  switch (runtimeHealth?.progress?.stage) {
+    case "startup_requested":
+    case "waiting_for_runtime":
+      return { label: "Starting", variant: "warning" };
+    case "restarting_runtime":
+      return { label: "Restarting", variant: "warning" };
+    default:
+      return null;
+  }
+};
+
+const getMcpBadge = (
+  runtimeHealth: RepoRuntimeHealthMap[string] | undefined,
+): DiagnosticsSectionModel["badge"] | null => {
+  switch (runtimeHealth?.progress?.stage) {
+    case "checking_mcp_status":
+      return { label: "Checking", variant: "secondary" };
+    case "reconnecting_mcp":
+      return { label: "Reconnecting", variant: "warning" };
+    case "restarting_runtime":
+      return { label: "Waiting on runtime", variant: "warning" };
+    default:
+      return null;
+  }
+};
+
 export const buildDiagnosticsPanelModel = (
   input: BuildDiagnosticsPanelModelInput,
 ): DiagnosticsPanelModel => {
@@ -156,16 +233,18 @@ export const buildDiagnosticsPanelModel = (
     for (const { definition, runtimeHealth } of runtimeEntries) {
       if (runtimeHealth?.runtimeOk === false) {
         criticalReasons.push(
-          runtimeHealth.runtimeFailureKind === "timeout"
-            ? `${definition.label} runtime is still starting`
-            : `${definition.label} runtime unavailable`,
+          describeRepoRuntimeProgress(definition.label, runtimeHealth ?? null) ??
+            (runtimeHealth.runtimeFailureKind === "timeout"
+              ? `${definition.label} runtime is still starting`
+              : `${definition.label} runtime unavailable`),
         );
       }
       if (definition.capabilities.supportsMcpStatus && runtimeHealth?.mcpOk === false) {
         criticalReasons.push(
-          runtimeHealth.mcpFailureKind === "timeout"
-            ? `${definition.label} OpenDucktor MCP is still starting`
-            : `${definition.label} OpenDucktor MCP unavailable`,
+          describeRepoRuntimeProgress(definition.label, runtimeHealth ?? null) ??
+            (runtimeHealth.mcpFailureKind === "timeout"
+              ? `${definition.label} OpenDucktor MCP is still starting`
+              : `${definition.label} OpenDucktor MCP unavailable`),
         );
       }
     }
@@ -260,19 +339,25 @@ export const buildDiagnosticsPanelModel = (
   };
 
   const runtimeSections = runtimeEntries.flatMap(({ definition, runtimeHealth }) => {
+    const progressDescription = describeRepoRuntimeProgress(
+      definition.label,
+      runtimeHealth ?? null,
+    );
     const runtimeSection: DiagnosticsSectionModel = {
       key: `runtime:${definition.kind}`,
       title: `${definition.label} Runtime`,
-      badge: getFailureBadge(
-        runtimeHealth?.runtimeOk ?? null,
-        runtimeHealth?.runtimeFailureKind ?? null,
-        {
-          healthy: "Running",
-          timeout: "Starting",
-          error: "Unavailable",
-          checking: "Checking",
-        },
-      ),
+      badge:
+        getRuntimeBadge(runtimeHealth) ??
+        getFailureBadge(
+          runtimeHealth?.runtimeOk ?? null,
+          runtimeHealth?.runtimeFailureKind ?? null,
+          {
+            healthy: "Running",
+            timeout: "Starting",
+            error: "Unavailable",
+            checking: "Checking",
+          },
+        ),
       rows: runtimeHealth?.runtime
         ? [
             {
@@ -293,13 +378,17 @@ export const buildDiagnosticsPanelModel = (
               breakAll: true,
               valueClassName: "text-muted-foreground",
             },
+            ...buildProgressRows(runtimeHealth),
           ]
-        : [],
-      errors: buildFailureMessages({
-        label: `${definition.label} runtime`,
-        detail: runtimeHealth?.runtimeError ?? null,
-        failureKind: runtimeHealth?.runtimeFailureKind ?? null,
-      }),
+        : buildProgressRows(runtimeHealth),
+      errors:
+        runtimeHealth?.runtimeOk === false && progressDescription != null
+          ? [progressDescription]
+          : buildFailureMessages({
+              label: `${definition.label} runtime`,
+              detail: runtimeHealth?.runtimeError ?? null,
+              failureKind: runtimeHealth?.runtimeFailureKind ?? null,
+            }),
       ...(activeRepo
         ? runtimeHealth == null
           ? { emptyMessage: "Runtime health is loading..." }
@@ -314,12 +403,14 @@ export const buildDiagnosticsPanelModel = (
     const mcpSection: DiagnosticsSectionModel = {
       key: `mcp:${definition.kind}`,
       title: `${definition.label} MCP`,
-      badge: getFailureBadge(runtimeHealth?.mcpOk ?? null, runtimeHealth?.mcpFailureKind ?? null, {
-        healthy: "Connected",
-        timeout: "Retrying",
-        error: "Unavailable",
-        checking: "Checking",
-      }),
+      badge:
+        getMcpBadge(runtimeHealth) ??
+        getFailureBadge(runtimeHealth?.mcpOk ?? null, runtimeHealth?.mcpFailureKind ?? null, {
+          healthy: "Connected",
+          timeout: "Retrying",
+          error: "Unavailable",
+          checking: "Checking",
+        }),
       rows: activeRepo
         ? [
             {
@@ -340,13 +431,17 @@ export const buildDiagnosticsPanelModel = (
               mono: true,
               valueClassName: "text-muted-foreground",
             },
+            ...buildProgressRows(runtimeHealth),
           ]
         : [],
-      errors: buildFailureMessages({
-        label: `${definition.label} OpenDucktor MCP`,
-        detail: runtimeHealth?.mcpServerError ?? runtimeHealth?.mcpError ?? null,
-        failureKind: runtimeHealth?.mcpFailureKind ?? null,
-      }),
+      errors:
+        progressDescription != null && !runtimeHealth?.mcpOk
+          ? [progressDescription]
+          : buildFailureMessages({
+              label: `${definition.label} OpenDucktor MCP`,
+              detail: runtimeHealth?.mcpServerError ?? runtimeHealth?.mcpError ?? null,
+              failureKind: runtimeHealth?.mcpFailureKind ?? null,
+            }),
       ...(activeRepo
         ? runtimeHealth == null
           ? { emptyMessage: "MCP health is loading..." }

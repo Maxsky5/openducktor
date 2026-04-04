@@ -1,14 +1,18 @@
 mod registry;
+mod repo_health;
 mod startup;
 
 use super::AppService;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use host_domain::{
-    AgentRuntimeKind, RunState, RunSummary, RuntimeDescriptor, RuntimeInstanceSummary, RuntimeRole,
+    now_rfc3339, AgentRuntimeKind, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage,
+    RepoRuntimeStartupStatus, RunState, RunSummary, RuntimeDescriptor, RuntimeInstanceSummary,
+    RuntimeRole,
 };
 use std::collections::{HashMap, HashSet};
 use std::process::Child;
 use std::sync::Arc;
+use std::time::Instant;
 
 #[derive(Clone, Copy)]
 pub(super) struct RuntimeExistingLookup<'a> {
@@ -27,6 +31,8 @@ pub(super) struct RuntimeStartInput<'a> {
     startup_scope: &'a str,
     repo_path: &'a str,
     repo_key: String,
+    startup_started_at_instant: Instant,
+    startup_started_at: String,
     task_id: &'a str,
     role: RuntimeRole,
     startup_policy: super::OpencodeStartupReadinessPolicy,
@@ -37,11 +43,28 @@ pub(super) struct RuntimeStartInput<'a> {
     post_start_policy: Option<RuntimePostStartPolicy<'a>>,
 }
 
+#[derive(Clone)]
+struct RuntimeStartupProgress {
+    started_at_instant: Instant,
+    started_at: String,
+    attempts: Option<u32>,
+    elapsed_ms: Option<u64>,
+}
+
+struct RuntimeStartupFailure {
+    failure_kind: RepoRuntimeStartupFailureKind,
+    failure_reason: String,
+    detail: String,
+}
+
 pub(super) struct SpawnedRuntimeServer {
     runtime_id: String,
     port: u16,
     child: Child,
     opencode_process_guard: super::TrackedOpencodeProcessGuard,
+    startup_started_at_instant: Instant,
+    startup_started_at: String,
+    startup_report: super::OpencodeStartupWaitReport,
 }
 
 #[derive(Clone)]
@@ -183,6 +206,182 @@ impl AppService {
         format!("{}::{repo_key}", runtime_kind.as_str())
     }
 
+    fn update_runtime_startup_status(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+        update: impl FnOnce(&mut super::service_core::RuntimeStartupStatusEntry),
+    ) -> Result<()> {
+        let key = Self::runtime_ensure_flight_key(runtime_kind, repo_key);
+        let mut statuses = self
+            .runtime_startup_status
+            .lock()
+            .map_err(|_| anyhow!("Runtime startup status lock poisoned"))?;
+        let entry = statuses.entry(key).or_insert_with(|| {
+            super::service_core::RuntimeStartupStatusEntry::new(
+                runtime_kind,
+                repo_key.to_string(),
+                RepoRuntimeStartupStage::Idle,
+            )
+        });
+        update(entry);
+        entry.updated_at = now_rfc3339();
+        Ok(())
+    }
+
+    fn mark_runtime_startup_requested(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+        progress: &RuntimeStartupProgress,
+    ) -> Result<()> {
+        self.update_runtime_startup_status(runtime_kind, repo_key, |entry| {
+            entry.stage = RepoRuntimeStartupStage::StartupRequested;
+            entry.runtime = None;
+            entry.started_at = Some(progress.started_at.clone());
+            entry.started_at_instant = Some(progress.started_at_instant);
+            entry.elapsed_ms = None;
+            entry.attempts = Some(0);
+            entry.failure_kind = None;
+            entry.failure_reason = None;
+            entry.detail = None;
+        })
+    }
+
+    fn mark_runtime_startup_waiting(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+        progress: &RuntimeStartupProgress,
+    ) -> Result<()> {
+        self.update_runtime_startup_status(runtime_kind, repo_key, |entry| {
+            entry.stage = RepoRuntimeStartupStage::WaitingForRuntime;
+            entry.started_at = Some(progress.started_at.clone());
+            entry.started_at_instant = Some(progress.started_at_instant);
+            entry.elapsed_ms = None;
+            entry.attempts = progress.attempts;
+        })
+    }
+
+    fn mark_runtime_startup_ready(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+        runtime: &RuntimeInstanceSummary,
+        progress: &RuntimeStartupProgress,
+    ) -> Result<()> {
+        self.update_runtime_startup_status(runtime_kind, repo_key, |entry| {
+            entry.stage = RepoRuntimeStartupStage::RuntimeReady;
+            entry.runtime = Some(runtime.clone());
+            entry.started_at = Some(progress.started_at.clone());
+            entry.started_at_instant = Some(progress.started_at_instant);
+            entry.elapsed_ms = progress.elapsed_ms;
+            entry.attempts = progress.attempts;
+            entry.failure_kind = None;
+            entry.failure_reason = None;
+            entry.detail = None;
+        })
+    }
+
+    fn mark_runtime_startup_failed(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+        progress: &RuntimeStartupProgress,
+        failure: RuntimeStartupFailure,
+    ) -> Result<()> {
+        self.update_runtime_startup_status(runtime_kind, repo_key, |entry| {
+            entry.stage = RepoRuntimeStartupStage::StartupFailed;
+            entry.runtime = None;
+            entry.started_at = Some(progress.started_at.clone());
+            entry.started_at_instant = Some(progress.started_at_instant);
+            entry.elapsed_ms = progress.elapsed_ms;
+            entry.attempts = progress.attempts;
+            entry.failure_kind = Some(failure.failure_kind);
+            entry.failure_reason = Some(failure.failure_reason.clone());
+            entry.detail = Some(failure.detail.clone());
+        })
+    }
+
+    fn clear_runtime_startup_status(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+    ) -> Result<()> {
+        let key = Self::runtime_ensure_flight_key(runtime_kind, repo_key);
+        let mut statuses = self
+            .runtime_startup_status
+            .lock()
+            .map_err(|_| anyhow!("Runtime startup status lock poisoned"))?;
+        statuses.remove(key.as_str());
+        Ok(())
+    }
+
+    fn clear_runtime_startup_status_for_runtime(
+        &self,
+        runtime: &RuntimeInstanceSummary,
+    ) -> Result<()> {
+        self.clear_runtime_startup_status(runtime.kind, runtime.repo_path.as_str())
+    }
+
+    pub fn runtime_startup_status(
+        &self,
+        runtime_kind: &str,
+        repo_path: &str,
+    ) -> Result<RepoRuntimeStartupStatus> {
+        let runtime_kind = Self::resolve_supported_runtime_kind(runtime_kind)?;
+        let repo_key = self.resolve_authorized_repo_path(repo_path)?;
+        let status_key = Self::runtime_ensure_flight_key(runtime_kind, repo_key.as_str());
+
+        if let Some(snapshot) = self
+            .runtime_startup_status
+            .lock()
+            .map_err(|_| anyhow!("Runtime startup status lock poisoned"))?
+            .get(status_key.as_str())
+            .cloned()
+        {
+            if snapshot.stage != RepoRuntimeStartupStage::RuntimeReady
+                || self
+                    .find_existing_workspace_runtime(runtime_kind, repo_key.as_str())?
+                    .is_some()
+            {
+                return Ok(snapshot.to_public_status());
+            }
+        }
+
+        if let Some(runtime) =
+            self.find_existing_workspace_runtime(runtime_kind, repo_key.as_str())?
+        {
+            return Ok(RepoRuntimeStartupStatus {
+                runtime_kind,
+                repo_path: repo_key,
+                stage: RepoRuntimeStartupStage::RuntimeReady,
+                runtime: Some(runtime.clone()),
+                started_at: Some(runtime.started_at.clone()),
+                updated_at: runtime.started_at,
+                elapsed_ms: None,
+                attempts: None,
+                failure_kind: None,
+                failure_reason: None,
+                detail: None,
+            });
+        }
+
+        Ok(RepoRuntimeStartupStatus {
+            runtime_kind,
+            repo_path: repo_key,
+            stage: RepoRuntimeStartupStage::Idle,
+            runtime: None,
+            started_at: None,
+            updated_at: now_rfc3339(),
+            elapsed_ms: None,
+            attempts: None,
+            failure_kind: None,
+            failure_reason: None,
+            detail: None,
+        })
+    }
+
     fn acquire_runtime_ensure_flight(
         &self,
         runtime_kind: AgentRuntimeKind,
@@ -278,7 +477,7 @@ impl AppService {
             .agent_runtimes
             .lock()
             .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-        Self::prune_stale_runtimes(&mut runtimes)?;
+        self.prune_stale_runtimes(&mut runtimes)?;
         Ok(Self::find_existing_runtime(
             &runtimes,
             RuntimeExistingLookup {
@@ -489,6 +688,8 @@ impl AppService {
         }
         let mut flight_guard =
             RuntimeEnsureFlightGuard::new(self, runtime_kind, repo_key.as_str(), flight);
+        let startup_started_at_instant = Instant::now();
+        let startup_started_at = now_rfc3339();
 
         let startup_result = (|| -> Result<RuntimeInstanceSummary> {
             if let Some(existing) =
@@ -514,6 +715,8 @@ impl AppService {
                 startup_scope: "workspace_runtime",
                 repo_path,
                 repo_key: repo_key.clone(),
+                startup_started_at_instant,
+                startup_started_at: startup_started_at.clone(),
                 task_id: Self::WORKSPACE_RUNTIME_TASK_ID,
                 role: Self::WORKSPACE_RUNTIME_ROLE,
                 startup_policy,
@@ -533,6 +736,39 @@ impl AppService {
                 }),
             })
         })();
+        if let Err(error) = startup_result.as_ref() {
+            let startup_failure = error
+                .chain()
+                .find_map(|cause| cause.downcast_ref::<super::OpencodeStartupWaitFailure>());
+            let (failure_kind, failure_reason, attempts, elapsed_ms) = match startup_failure {
+                Some(failure) => (
+                    if failure.reason == "timeout" {
+                        RepoRuntimeStartupFailureKind::Timeout
+                    } else {
+                        RepoRuntimeStartupFailureKind::Error
+                    },
+                    failure.reason,
+                    Some(failure.report().attempts()),
+                    Some(failure.report().startup_ms()),
+                ),
+                None => (RepoRuntimeStartupFailureKind::Error, "error", None, None),
+            };
+            self.mark_runtime_startup_failed(
+                runtime_kind,
+                repo_key.as_str(),
+                &RuntimeStartupProgress {
+                    started_at_instant: startup_started_at_instant,
+                    started_at: startup_started_at.clone(),
+                    attempts,
+                    elapsed_ms,
+                },
+                RuntimeStartupFailure {
+                    failure_kind,
+                    failure_reason: failure_reason.to_string(),
+                    detail: format!("{error:#}"),
+                },
+            )?;
+        }
         flight_guard.complete(&startup_result)?;
         startup_result
     }
@@ -542,7 +778,24 @@ impl AppService {
         input: RuntimeStartInput<'_>,
     ) -> Result<RuntimeInstanceSummary> {
         let spawned_server = self.spawn_runtime_server(&input)?;
-        self.attach_runtime_session(input, spawned_server)
+        let startup_started_at_instant = spawned_server.startup_started_at_instant;
+        let startup_started_at = spawned_server.startup_started_at.clone();
+        let startup_report = spawned_server.startup_report;
+        let runtime_kind = input.runtime_kind;
+        let repo_key = input.repo_key.clone();
+        let summary = self.attach_runtime_session(input, spawned_server)?;
+        self.mark_runtime_startup_ready(
+            runtime_kind,
+            repo_key.as_str(),
+            &summary,
+            &RuntimeStartupProgress {
+                started_at_instant: startup_started_at_instant,
+                started_at: startup_started_at,
+                attempts: Some(startup_report.attempts()),
+                elapsed_ms: Some(startup_report.startup_ms()),
+            },
+        )?;
+        Ok(summary)
     }
 
     pub(super) fn resolve_supported_runtime_kind(runtime_kind: &str) -> Result<AgentRuntimeKind> {
@@ -578,14 +831,21 @@ fn collect_build_external_session_ids_for_run(
 
 #[cfg(test)]
 mod tests {
-    use super::{AppService, RuntimeEnsureFlightGuard};
-    use crate::app_service::RunProcess;
+    use super::{
+        AppService, RuntimeEnsureFlightGuard, RuntimeStartupFailure, RuntimeStartupProgress,
+    };
     use crate::app_service::test_support::{build_service_with_state, make_task};
-    use anyhow::{Result, anyhow};
-    use host_domain::{AgentRuntimeKind, AgentSessionDocument, RunSummary, TaskStatus};
+    use crate::app_service::{AgentRuntimeProcess, RunProcess};
+    use anyhow::{anyhow, Result};
+    use host_domain::{
+        AgentRuntimeKind, AgentSessionDocument, RepoRuntimeHealthObservation,
+        RepoRuntimeHealthStage, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RunSummary,
+        TaskStatus,
+    };
     use host_infra_system::RepoConfig;
     use std::io::{Read, Write};
     use std::net::TcpListener;
+    use std::process::Command;
     use std::thread;
     use std::time::{Duration, Instant};
 
@@ -635,6 +895,60 @@ mod tests {
         Ok((port, handle))
     }
 
+    fn spawn_runtime_http_server(
+        responses: Vec<String>,
+    ) -> Result<(u16, std::thread::JoinHandle<Vec<String>>)> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let port = listener.local_addr()?.port();
+        let handle = std::thread::spawn(move || {
+            let mut requests = Vec::new();
+            for response in responses {
+                if let Ok((mut stream, _)) = listener.accept() {
+                    let mut request_buffer = [0_u8; 4096];
+                    let size = stream.read(&mut request_buffer).unwrap_or(0);
+                    requests.push(String::from_utf8_lossy(&request_buffer[..size]).to_string());
+                    let _ = stream.write_all(response.as_bytes());
+                    let _ = stream.flush();
+                }
+            }
+            requests
+        });
+        Ok((port, handle))
+    }
+
+    fn runtime_http_response(status_line: &str, body: &str) -> String {
+        format!(
+            "HTTP/1.1 {status_line}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    }
+
+    fn insert_workspace_runtime(
+        service: &AppService,
+        runtime: host_domain::RuntimeInstanceSummary,
+    ) -> Result<()> {
+        let child = Command::new("/bin/sh")
+            .arg("-lc")
+            .arg("sleep 30")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()?;
+        service
+            .agent_runtimes
+            .lock()
+            .expect("agent runtimes lock poisoned")
+            .insert(
+                runtime.runtime_id.clone(),
+                AgentRuntimeProcess {
+                    summary: runtime,
+                    child,
+                    _opencode_process_guard: None,
+                    cleanup_target: None,
+                },
+            );
+        Ok(())
+    }
+
     #[test]
     fn runtime_ensure_flight_guard_finishes_waiters_when_dropped_uncompleted() -> Result<()> {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
@@ -654,11 +968,9 @@ mod tests {
 
         let error = AppService::wait_for_runtime_ensure_flight(&flight)
             .expect_err("dropped leader should finish waiters with an error");
-        assert!(
-            error
-                .to_string()
-                .contains("Runtime ensure aborted unexpectedly")
-        );
+        assert!(error
+            .to_string()
+            .contains("Runtime ensure aborted unexpectedly"));
 
         Ok(())
     }
@@ -691,17 +1003,421 @@ mod tests {
                 &Err(anyhow!("simulated startup failure")),
             )
             .expect_err("poisoned completion should surface an error");
-        assert!(
-            error
-                .to_string()
-                .contains("Runtime ensure coordination state lock poisoned")
-        );
+        assert!(error
+            .to_string()
+            .contains("Runtime ensure coordination state lock poisoned"));
 
         let flights = service
             .runtime_ensure_flights
             .lock()
             .expect("runtime ensure flights lock should remain available");
         assert!(flights.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_startup_status_tracks_waiting_and_failure_stages() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let repo_path = "/tmp/runtime-startup-status";
+        let started_at_instant = Instant::now();
+        let started_at = "2026-04-04T16:00:00Z";
+
+        service.mark_runtime_startup_requested(
+            AgentRuntimeKind::Opencode,
+            repo_path,
+            &RuntimeStartupProgress {
+                started_at_instant,
+                started_at: started_at.to_string(),
+                attempts: Some(0),
+                elapsed_ms: None,
+            },
+        )?;
+        service.mark_runtime_startup_waiting(
+            AgentRuntimeKind::Opencode,
+            repo_path,
+            &RuntimeStartupProgress {
+                started_at_instant,
+                started_at: started_at.to_string(),
+                attempts: Some(3),
+                elapsed_ms: None,
+            },
+        )?;
+
+        let waiting_status = service.runtime_startup_status("opencode", repo_path)?;
+        assert_eq!(
+            waiting_status.stage,
+            RepoRuntimeStartupStage::WaitingForRuntime
+        );
+        assert_eq!(waiting_status.attempts, Some(3));
+        assert_eq!(waiting_status.started_at.as_deref(), Some(started_at));
+
+        service.mark_runtime_startup_failed(
+            AgentRuntimeKind::Opencode,
+            repo_path,
+            &RuntimeStartupProgress {
+                started_at_instant,
+                started_at: started_at.to_string(),
+                attempts: Some(4),
+                elapsed_ms: Some(4200),
+            },
+            RuntimeStartupFailure {
+                failure_kind: RepoRuntimeStartupFailureKind::Timeout,
+                failure_reason: "timeout".to_string(),
+                detail: "OpenCode startup probe failed reason=timeout".to_string(),
+            },
+        )?;
+
+        let failed_status = service.runtime_startup_status("opencode", repo_path)?;
+        assert_eq!(failed_status.stage, RepoRuntimeStartupStage::StartupFailed);
+        assert_eq!(
+            failed_status.failure_kind,
+            Some(RepoRuntimeStartupFailureKind::Timeout)
+        );
+        assert_eq!(failed_status.failure_reason.as_deref(), Some("timeout"));
+        assert_eq!(failed_status.attempts, Some(4));
+        assert_eq!(failed_status.elapsed_ms, Some(4200));
+
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_startup_status_ignores_stale_ready_snapshot_without_live_runtime() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let repo_path = "/tmp/runtime-stale-ready";
+        let started_at_instant = Instant::now();
+        let started_at = "2026-04-04T16:00:00Z";
+
+        service.mark_runtime_startup_waiting(
+            AgentRuntimeKind::Opencode,
+            repo_path,
+            &RuntimeStartupProgress {
+                started_at_instant,
+                started_at: started_at.to_string(),
+                attempts: Some(1),
+                elapsed_ms: None,
+            },
+        )?;
+        service.mark_runtime_startup_ready(
+            AgentRuntimeKind::Opencode,
+            repo_path,
+            &host_domain::RuntimeInstanceSummary {
+                kind: AgentRuntimeKind::Opencode,
+                runtime_id: "runtime-stale".to_string(),
+                repo_path: repo_path.to_string(),
+                task_id: None,
+                role: host_domain::RuntimeRole::Workspace,
+                working_directory: repo_path.to_string(),
+                runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                    endpoint: "http://127.0.0.1:9999".to_string(),
+                },
+                started_at: started_at.to_string(),
+                descriptor: AgentRuntimeKind::Opencode.descriptor(),
+            },
+            &RuntimeStartupProgress {
+                started_at_instant,
+                started_at: started_at.to_string(),
+                attempts: Some(2),
+                elapsed_ms: Some(1000),
+            },
+        )?;
+
+        let status = service.runtime_startup_status("opencode", repo_path)?;
+
+        assert_eq!(status.stage, RepoRuntimeStartupStage::Idle);
+        assert!(status.runtime.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn repo_runtime_health_reports_ready_connected_runtime() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let (port, server_handle) = spawn_runtime_http_server(vec![
+            runtime_http_response(
+                "200 OK",
+                r#"{"data":{"openducktor":{"status":"connected"}}}"#,
+            ),
+            runtime_http_response("200 OK", r#"{"data":["odt_read_task"]}"#),
+        ])?;
+        let runtime = host_domain::RuntimeInstanceSummary {
+            kind: AgentRuntimeKind::Opencode,
+            runtime_id: "runtime-ready".to_string(),
+            repo_path: "/tmp/repo-health-ready".to_string(),
+            task_id: None,
+            role: host_domain::RuntimeRole::Workspace,
+            working_directory: "/tmp/repo-health-ready".to_string(),
+            runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                endpoint: format!("http://127.0.0.1:{port}"),
+            },
+            started_at: "2026-04-04T16:00:00Z".to_string(),
+            descriptor: AgentRuntimeKind::Opencode.descriptor(),
+        };
+        insert_workspace_runtime(&service, runtime.clone())?;
+
+        let health = service.repo_runtime_health("opencode", "/tmp/repo-health-ready")?;
+        let requests = server_handle.join().expect("server thread should finish");
+
+        assert!(requests[0].starts_with("GET /mcp?directory=%2Ftmp%2Frepo-health-ready "));
+        assert!(requests[1]
+            .starts_with("GET /experimental/tool/ids?directory=%2Ftmp%2Frepo-health-ready "));
+        assert!(health.runtime_ok);
+        assert!(health.mcp_ok);
+        assert_eq!(health.available_tool_ids, vec!["odt_read_task"]);
+        assert_eq!(
+            health.progress.as_ref().map(|value| value.stage),
+            Some(RepoRuntimeHealthStage::Ready)
+        );
+        assert_eq!(
+            health.progress.as_ref().and_then(|value| value.observation),
+            Some(RepoRuntimeHealthObservation::ObservedExistingRuntime)
+        );
+        service.runtime_stop(runtime.runtime_id.as_str())?;
+        Ok(())
+    }
+
+    #[test]
+    fn repo_runtime_health_reconnects_disconnected_mcp() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let (port, server_handle) = spawn_runtime_http_server(vec![
+            runtime_http_response(
+                "200 OK",
+                r#"{"data":{"openducktor":{"status":"disconnected","error":"not connected"}}}"#,
+            ),
+            runtime_http_response("200 OK", r#"{"data":true}"#),
+            runtime_http_response(
+                "200 OK",
+                r#"{"data":{"openducktor":{"status":"connected"}}}"#,
+            ),
+            runtime_http_response("200 OK", r#"{"data":["odt_read_task"]}"#),
+        ])?;
+        let runtime = host_domain::RuntimeInstanceSummary {
+            kind: AgentRuntimeKind::Opencode,
+            runtime_id: "runtime-reconnect".to_string(),
+            repo_path: "/tmp/repo-health-reconnect".to_string(),
+            task_id: None,
+            role: host_domain::RuntimeRole::Workspace,
+            working_directory: "/tmp/repo-health-reconnect".to_string(),
+            runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                endpoint: format!("http://127.0.0.1:{port}"),
+            },
+            started_at: "2026-04-04T16:00:00Z".to_string(),
+            descriptor: AgentRuntimeKind::Opencode.descriptor(),
+        };
+        insert_workspace_runtime(&service, runtime.clone())?;
+
+        let health = service.repo_runtime_health("opencode", "/tmp/repo-health-reconnect")?;
+        let requests = server_handle.join().expect("server thread should finish");
+
+        assert!(requests[1].starts_with(
+            "POST /mcp/openducktor/connect?directory=%2Ftmp%2Frepo-health-reconnect "
+        ));
+        assert!(health.runtime_ok);
+        assert!(health.mcp_ok);
+        assert_eq!(health.available_tool_ids, vec!["odt_read_task"]);
+        service.runtime_stop(runtime.runtime_id.as_str())?;
+        Ok(())
+    }
+
+    #[test]
+    fn repo_runtime_health_returns_structured_failure_when_refresh_after_reconnect_fails(
+    ) -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let (port, server_handle) = spawn_runtime_http_server(vec![
+            runtime_http_response(
+                "200 OK",
+                r#"{"data":{"openducktor":{"status":"disconnected","error":"not connected"}}}"#,
+            ),
+            runtime_http_response("200 OK", r#"{"data":true}"#),
+            runtime_http_response(
+                "504 Gateway Timeout",
+                r#"{"error":{"message":"status probe timed out"}}"#,
+            ),
+        ])?;
+        let runtime = host_domain::RuntimeInstanceSummary {
+            kind: AgentRuntimeKind::Opencode,
+            runtime_id: "runtime-refresh-failure".to_string(),
+            repo_path: "/tmp/repo-health-refresh-failure".to_string(),
+            task_id: None,
+            role: host_domain::RuntimeRole::Workspace,
+            working_directory: "/tmp/repo-health-refresh-failure".to_string(),
+            runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                endpoint: format!("http://127.0.0.1:{port}"),
+            },
+            started_at: "2026-04-04T16:00:00Z".to_string(),
+            descriptor: AgentRuntimeKind::Opencode.descriptor(),
+        };
+        insert_workspace_runtime(&service, runtime.clone())?;
+
+        let health = service.repo_runtime_health("opencode", "/tmp/repo-health-refresh-failure")?;
+        let requests = server_handle.join().expect("server thread should finish");
+
+        assert!(requests[1].starts_with(
+            "POST /mcp/openducktor/connect?directory=%2Ftmp%2Frepo-health-refresh-failure "
+        ));
+        assert!(health.runtime_ok);
+        assert!(!health.mcp_ok);
+        assert!(health.mcp_error.as_deref().is_some_and(
+            |value| value.contains("Failed to refresh runtime MCP status after reconnect")
+        ));
+        assert_eq!(
+            health.progress.as_ref().map(|value| value.stage),
+            Some(RepoRuntimeHealthStage::ReconnectingMcp)
+        );
+        service.runtime_stop(runtime.runtime_id.as_str())?;
+        Ok(())
+    }
+
+    #[test]
+    fn stop_registered_runtime_preserving_repo_health_keeps_restart_snapshot() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let runtime = host_domain::RuntimeInstanceSummary {
+            kind: AgentRuntimeKind::Opencode,
+            runtime_id: "runtime-preserve-health".to_string(),
+            repo_path: "/tmp/repo-health-preserve".to_string(),
+            task_id: None,
+            role: host_domain::RuntimeRole::Workspace,
+            working_directory: "/tmp/repo-health-preserve".to_string(),
+            runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                endpoint: "http://127.0.0.1:9998".to_string(),
+            },
+            started_at: "2026-04-04T16:00:00Z".to_string(),
+            descriptor: AgentRuntimeKind::Opencode.descriptor(),
+        };
+        insert_workspace_runtime(&service, runtime.clone())?;
+        service
+            .repo_runtime_health_snapshots
+            .lock()
+            .expect("repo runtime health snapshots lock poisoned")
+            .insert(
+                AppService::runtime_ensure_flight_key(
+                    AgentRuntimeKind::Opencode,
+                    "/tmp/repo-health-preserve",
+                ),
+                host_domain::RepoRuntimeHealthCheck {
+                    runtime_ok: true,
+                    runtime_error: None,
+                    runtime_failure_kind: None,
+                    runtime: Some(runtime.clone()),
+                    mcp_ok: false,
+                    mcp_error: Some("Restarting runtime".to_string()),
+                    mcp_failure_kind: Some(RepoRuntimeStartupFailureKind::Error),
+                    mcp_server_name: "openducktor".to_string(),
+                    mcp_server_status: None,
+                    mcp_server_error: Some("Restarting runtime".to_string()),
+                    available_tool_ids: Vec::new(),
+                    checked_at: "2026-04-04T16:00:01Z".to_string(),
+                    errors: vec!["Restarting runtime".to_string()],
+                    progress: Some(host_domain::RepoRuntimeHealthProgress {
+                        stage: RepoRuntimeHealthStage::RestartingRuntime,
+                        observation: Some(RepoRuntimeHealthObservation::RestartedForMcp),
+                        started_at: Some("2026-04-04T16:00:00Z".to_string()),
+                        updated_at: "2026-04-04T16:00:01Z".to_string(),
+                        elapsed_ms: None,
+                        attempts: None,
+                        detail: Some("Restarting runtime".to_string()),
+                        failure_kind: Some(RepoRuntimeStartupFailureKind::Error),
+                        failure_reason: None,
+                        failure_origin: Some(
+                            host_domain::RepoRuntimeHealthFailureOrigin::RuntimeRestart,
+                        ),
+                        host: None,
+                    }),
+                },
+            );
+
+        service.stop_registered_runtime_preserving_repo_health(runtime.runtime_id.as_str())?;
+
+        let health = service.repo_runtime_health_status("opencode", "/tmp/repo-health-preserve")?;
+        assert_eq!(
+            health.progress.as_ref().map(|value| value.stage),
+            Some(RepoRuntimeHealthStage::RestartingRuntime)
+        );
+        assert!(health.runtime.is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn repo_runtime_health_skips_restart_when_active_run_uses_runtime() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let (port, server_handle) = spawn_runtime_http_server(vec![runtime_http_response(
+            "500 Internal Server Error",
+            r#"{"error":{"message":"ConfigInvalidError: invalid option loglevel"}}"#,
+        )])?;
+        let runtime = host_domain::RuntimeInstanceSummary {
+            kind: AgentRuntimeKind::Opencode,
+            runtime_id: "runtime-active-run".to_string(),
+            repo_path: "/tmp/repo-health-active-run".to_string(),
+            task_id: None,
+            role: host_domain::RuntimeRole::Workspace,
+            working_directory: "/tmp/repo-health-active-run".to_string(),
+            runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                endpoint: format!("http://127.0.0.1:{port}"),
+            },
+            started_at: "2026-04-04T16:00:00Z".to_string(),
+            descriptor: AgentRuntimeKind::Opencode.descriptor(),
+        };
+        insert_workspace_runtime(&service, runtime.clone())?;
+        service.runs.lock().expect("runs lock poisoned").insert(
+            "run-1".to_string(),
+            RunProcess {
+                summary: RunSummary {
+                    run_id: "run-1".to_string(),
+                    runtime_kind: AgentRuntimeKind::Opencode,
+                    runtime_route: runtime.runtime_route.clone(),
+                    repo_path: runtime.repo_path.clone(),
+                    task_id: "task-1".to_string(),
+                    branch: "odt/task-1".to_string(),
+                    worktree_path: runtime.working_directory.clone(),
+                    port,
+                    state: host_domain::RunState::Running,
+                    last_message: None,
+                    started_at: "2026-04-04T16:00:10Z".to_string(),
+                },
+                child: None,
+                _opencode_process_guard: None,
+                repo_path: runtime.repo_path.clone(),
+                task_id: "task-1".to_string(),
+                worktree_path: runtime.working_directory.clone(),
+                repo_config: RepoConfig::default(),
+            },
+        );
+
+        let health = service.repo_runtime_health("opencode", "/tmp/repo-health-active-run")?;
+        let _requests = server_handle.join().expect("server thread should finish");
+
+        assert!(health.runtime_ok);
+        assert!(!health.mcp_ok);
+        assert!(health
+            .mcp_error
+            .as_deref()
+            .is_some_and(|value| value.contains("restart was skipped")));
+        assert_eq!(
+            health.progress.as_ref().map(|value| value.stage),
+            Some(RepoRuntimeHealthStage::RestartSkippedActiveRun)
+        );
+        assert_eq!(
+            health.progress.as_ref().and_then(|value| value.observation),
+            Some(RepoRuntimeHealthObservation::RestartSkippedActiveRun)
+        );
+        service.runtime_stop(runtime.runtime_id.as_str())?;
+        Ok(())
+    }
+
+    #[test]
+    fn repo_runtime_health_status_describes_idle_runtime() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+
+        let health = service.repo_runtime_health_status("opencode", "/tmp/repo-health-idle")?;
+
+        assert!(!health.runtime_ok);
+        assert_eq!(
+            health.runtime_error.as_deref(),
+            Some("Runtime has not been started yet.")
+        );
+        assert_eq!(
+            health.progress.as_ref().map(|value| value.stage),
+            Some(RepoRuntimeHealthStage::Idle)
+        );
 
         Ok(())
     }
@@ -932,11 +1648,9 @@ mod tests {
             .runtime_stop("missing-runtime")
             .expect_err("stopping unknown runtime should fail");
 
-        assert!(
-            error
-                .to_string()
-                .contains("Runtime not found: missing-runtime")
-        );
+        assert!(error
+            .to_string()
+            .contains("Runtime not found: missing-runtime"));
     }
 
     #[test]

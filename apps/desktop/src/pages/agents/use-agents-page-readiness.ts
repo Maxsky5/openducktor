@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { describeRepoRuntimeProgress } from "@/lib/repo-runtime-health";
 import type { useChecksState } from "@/state";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { buildTimeoutToastDescription } from "@/state/operations/workspace/check-diagnostics";
@@ -14,6 +15,11 @@ const getBlockedRuntimeReason = (
 ): string | null => {
   if (!runtimeHealth) {
     return null;
+  }
+
+  const progressMessage = describeRepoRuntimeProgress(runtimeLabel, runtimeHealth);
+  if (progressMessage) {
+    return progressMessage;
   }
 
   if (runtimeHealth.runtimeOk === false) {
@@ -148,10 +154,18 @@ export function useAgentStudioReadiness({
       return "Loading runtime definitions...";
     }
     if (isLoadingChecks) {
-      return "Checking runtime and OpenDucktor MCP health...";
+      return blockedRuntimeDefinition
+        ? (getBlockedRuntimeReason(blockedRuntimeDefinition.label, blockedRuntimeHealth) ??
+            "Checking runtime health...")
+        : "Checking runtime health...";
     }
     if (isRuntimeHealthPending) {
-      return "Checking runtime and OpenDucktor MCP health...";
+      return blockedRuntimeDefinition
+        ? (describeRepoRuntimeProgress(
+            blockedRuntimeDefinition.label,
+            runtimeHealthByRuntime[blockedRuntimeDefinition.kind] ?? null,
+          ) ?? "Checking runtime health...")
+        : "Checking runtime health...";
     }
 
     return (

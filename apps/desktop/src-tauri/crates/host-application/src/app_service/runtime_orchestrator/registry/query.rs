@@ -1,6 +1,6 @@
 use super::super::super::{AgentRuntimeProcess, AppService};
 use super::super::RuntimeExistingLookup;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use host_domain::RuntimeInstanceSummary;
 use std::collections::{HashMap, HashSet};
 
@@ -27,7 +27,7 @@ impl AppService {
             .agent_runtimes
             .lock()
             .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-        Self::prune_stale_runtimes(&mut runtimes)?;
+        self.prune_stale_runtimes(&mut runtimes)?;
 
         let mut list = runtimes
             .values()

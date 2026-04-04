@@ -1,7 +1,7 @@
 use super::command_registry::CommandRegistry;
 use super::command_support::{
-    deserialize_args, handle_repo_task_operation, run_headless_blocking,
-    serialize_value, service_error, CommandResult, HeadlessState, RepoTaskArgs,
+    deserialize_args, handle_repo_task_operation, run_headless_blocking, serialize_value,
+    service_error, CommandResult, HeadlessState, RepoTaskArgs,
 };
 use super::events::{make_dev_server_emitter, make_emitter};
 use crate::runtime_ensure_failure_kind;
@@ -81,7 +81,9 @@ struct AgentSessionsListBulkArgs {
 }
 
 pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), String> {
-    registry.register("build_start", |state, args| Box::pin(handle_build_start(state, args)))?;
+    registry.register("build_start", |state, args| {
+        Box::pin(handle_build_start(state, args))
+    })?;
     registry.register("dev_server_get_state", |state, args| {
         Box::pin(handle_dev_server_get_state(state, args))
     })?;
@@ -97,21 +99,38 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     registry.register("build_respond", |state, args| {
         Box::pin(async move { handle_build_respond(state, args) })
     })?;
-    registry.register("build_stop", |state, args| Box::pin(handle_build_stop(state, args)))?;
+    registry.register("build_stop", |state, args| {
+        Box::pin(handle_build_stop(state, args))
+    })?;
     registry.register("build_cleanup", |state, args| {
         Box::pin(handle_build_cleanup(state, args))
     })?;
-    registry.register("runs_list", |state, args| Box::pin(handle_runs_list(state, args)))?;
+    registry.register("runs_list", |state, args| {
+        Box::pin(handle_runs_list(state, args))
+    })?;
     registry.register("runtime_definitions_list", |state, _| {
         Box::pin(handle_runtime_definitions_list(state))
     })?;
-    registry.register("runtime_list", |state, args| Box::pin(handle_runtime_list(state, args)))?;
+    registry.register("runtime_list", |state, args| {
+        Box::pin(handle_runtime_list(state, args))
+    })?;
     registry.register("build_continuation_target_get", |state, args| {
         Box::pin(handle_build_continuation_target_get(state, args))
     })?;
-    registry.register("runtime_stop", |state, args| Box::pin(handle_runtime_stop(state, args)))?;
+    registry.register("runtime_stop", |state, args| {
+        Box::pin(handle_runtime_stop(state, args))
+    })?;
     registry.register("runtime_ensure", |state, args| {
         Box::pin(handle_runtime_ensure(state, args))
+    })?;
+    registry.register("runtime_startup_status", |state, args| {
+        Box::pin(handle_runtime_startup_status(state, args))
+    })?;
+    registry.register("repo_runtime_health", |state, args| {
+        Box::pin(handle_repo_runtime_health(state, args))
+    })?;
+    registry.register("repo_runtime_health_status", |state, args| {
+        Box::pin(handle_repo_runtime_health_status(state, args))
     })?;
     registry.register("agent_sessions_list", |state, args| {
         Box::pin(async move { handle_agent_sessions_list(state, args) })
@@ -245,7 +264,7 @@ async fn handle_runs_list(state: &HeadlessState, args: Value) -> CommandResult {
             service.runs_list(repo_path.as_deref())
         })
         .await
-            .map_err(service_error)?,
+        .map_err(service_error)?,
     )
 }
 
@@ -312,6 +331,51 @@ async fn handle_runtime_ensure(state: &HeadlessState, args: Value) -> CommandRes
     )
 }
 
+async fn handle_runtime_startup_status(state: &HeadlessState, args: Value) -> CommandResult {
+    let RuntimeEnsureArgs {
+        runtime_kind,
+        repo_path,
+    } = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        crate::run_service_blocking_tokio("runtime_startup_status", move || {
+            service.runtime_startup_status(runtime_kind.as_str(), &repo_path)
+        })
+        .await
+        .map_err(service_error)?,
+    )
+}
+
+async fn handle_repo_runtime_health(state: &HeadlessState, args: Value) -> CommandResult {
+    let RuntimeEnsureArgs {
+        runtime_kind,
+        repo_path,
+    } = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        crate::run_service_blocking_tokio("repo_runtime_health", move || {
+            service.repo_runtime_health(runtime_kind.as_str(), &repo_path)
+        })
+        .await
+        .map_err(service_error)?,
+    )
+}
+
+async fn handle_repo_runtime_health_status(state: &HeadlessState, args: Value) -> CommandResult {
+    let RuntimeEnsureArgs {
+        runtime_kind,
+        repo_path,
+    } = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        crate::run_service_blocking_tokio("repo_runtime_health_status", move || {
+            service.repo_runtime_health_status(runtime_kind.as_str(), &repo_path)
+        })
+        .await
+        .map_err(service_error)?,
+    )
+}
+
 fn handle_agent_sessions_list(state: &HeadlessState, args: Value) -> CommandResult {
     handle_repo_task_operation(args, |repo_path, task_id| {
         state.service.agent_sessions_list(&repo_path, &task_id)
@@ -319,7 +383,10 @@ fn handle_agent_sessions_list(state: &HeadlessState, args: Value) -> CommandResu
 }
 
 fn handle_agent_sessions_list_bulk(state: &HeadlessState, args: Value) -> CommandResult {
-    let AgentSessionsListBulkArgs { repo_path, task_ids } = deserialize_args(args)?;
+    let AgentSessionsListBulkArgs {
+        repo_path,
+        task_ids,
+    } = deserialize_args(args)?;
     serialize_value(
         state
             .service
