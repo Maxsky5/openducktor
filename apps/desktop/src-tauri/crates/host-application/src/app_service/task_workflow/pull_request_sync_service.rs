@@ -46,16 +46,15 @@ impl<'a> PullRequestSyncService<'a> {
                 continue;
             };
             if updated.record.state == "merged" && task.status != TaskStatus::Closed {
-                let _ = LinkedPullRequestMergeService::new(self.service)
-                    .persist_merge_and_close_task(
-                        repo_path.as_str(),
-                        task.id.as_str(),
-                        updated.record,
-                        LinkedPullRequestMergeCleanup::BuilderBranches {
-                            source_branch: updated.source_branch,
-                            target_branch: updated.target_branch,
-                        },
-                    )?;
+                LinkedPullRequestMergeService::new(self.service).persist_merge_and_close_task(
+                    repo_path.as_str(),
+                    task.id.as_str(),
+                    updated.record,
+                    LinkedPullRequestMergeCleanup::BuilderBranches {
+                        source_branch: updated.source_branch,
+                        target_branch: updated.target_branch,
+                    },
+                )?;
             } else {
                 self.service.task_store.set_pull_request(
                     Path::new(&repo_path),

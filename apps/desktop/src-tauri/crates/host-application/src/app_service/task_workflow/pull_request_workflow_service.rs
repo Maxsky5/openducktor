@@ -7,7 +7,6 @@ use super::linked_pull_request_merge_service::{
     LinkedPullRequestMergeCleanup, LinkedPullRequestMergeService,
 };
 use super::pull_request_provider_service::PullRequestProviderService;
-use crate::app_service::git_provider::ResolvedPullRequest;
 use crate::app_service::service_core::AppService;
 use anyhow::{anyhow, Result};
 use host_domain::{PullRequestRecord, TaskCard, TaskPullRequestDetectResult, TaskStatus};
@@ -164,9 +163,7 @@ impl<'a> PullRequestWorkflowService<'a> {
         if context.task.status == TaskStatus::Closed && same_existing_pull_request {
             return Ok(context.task);
         }
-        if context.task.status != TaskStatus::Closed || !same_existing_pull_request {
-            ensure_pull_request_management_status(&context.task.status)?;
-        }
+        ensure_pull_request_management_status(&context.task.status)?;
         if metadata.direct_merge.is_some() {
             return Err(anyhow!(
                 "A local direct merge is already recorded for task {task_id}. Finish the direct merge workflow before linking a merged pull request."
@@ -183,21 +180,9 @@ impl<'a> PullRequestWorkflowService<'a> {
 
         let repo_path = self.service.resolve_task_repo_path(repo_path)?;
         let cleanup = if metadata.pull_request.is_none() {
-            let builder_context = BuilderBranchService::new(self.service)
-                .load_builder_branch_context(
-                    context.repo.repo_path.as_str(),
-                    task_id,
-                    "Pull request linking",
-                )?;
-            let target_branch = BuilderBranchService::new(self.service)
-                .target_branch_for_repo(context.repo.repo_path.as_str())?
-                .checkout_branch();
-            LinkedPullRequestMergeCleanup::BuilderBranches {
-                source_branch: builder_context.source_branch,
-                target_branch,
-            }
+            self.load_required_cleanup(context.repo.repo_path.as_str(), task_id)?
         } else {
-            LinkedPullRequestMergeCleanup::Skip
+            self.load_retry_cleanup(context.repo.repo_path.as_str(), task_id)?
         };
 
         LinkedPullRequestMergeService::new(self.service).persist_merge_and_close_task(
@@ -207,4 +192,44 @@ impl<'a> PullRequestWorkflowService<'a> {
             cleanup,
         )
     }
+
+    fn load_required_cleanup(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+    ) -> Result<LinkedPullRequestMergeCleanup> {
+        let builder_context = BuilderBranchService::new(self.service).load_builder_branch_context(
+            repo_path,
+            task_id,
+            "Pull request linking",
+        )?;
+        let target_branch = BuilderBranchService::new(self.service)
+            .target_branch_for_repo(repo_path)?
+            .checkout_branch();
+
+        Ok(LinkedPullRequestMergeCleanup::BuilderBranches {
+            source_branch: builder_context.source_branch,
+            target_branch,
+        })
+    }
+
+    fn load_retry_cleanup(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+    ) -> Result<LinkedPullRequestMergeCleanup> {
+        match self.load_required_cleanup(repo_path, task_id) {
+            Ok(cleanup) => Ok(cleanup),
+            Err(error) if can_skip_relinked_pull_request_cleanup(error.to_string().as_str()) => {
+                Ok(LinkedPullRequestMergeCleanup::Skip)
+            }
+            Err(error) => Err(error),
+        }
+    }
+}
+
+fn can_skip_relinked_pull_request_cleanup(message: &str) -> bool {
+    message.contains("requires a builder worktree for task")
+        || message.contains("the latest builder workspace is detached")
+        || message.contains("requires a builder branch name")
 }

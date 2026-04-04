@@ -31,10 +31,11 @@ impl<'a> LinkedPullRequestMergeService<'a> {
         pull_request: PullRequestRecord,
         cleanup: LinkedPullRequestMergeCleanup,
     ) -> Result<TaskCard> {
-        self.service.task_store.set_pull_request(
+        self.service.task_store.set_delivery_metadata(
             Path::new(repo_path),
             task_id,
             Some(pull_request),
+            None,
         )?;
 
         if let LinkedPullRequestMergeCleanup::BuilderBranches {

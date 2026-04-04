@@ -226,6 +226,25 @@ fn insert_task_pull_request(task_state: &TaskStateHandle, pull_request: PullRequ
         .insert(TASK_ID.to_string(), pull_request);
 }
 
+fn insert_task_direct_merge_record(task_state: &TaskStateHandle) {
+    task_state
+        .lock()
+        .expect("task state lock poisoned")
+        .direct_merge_records
+        .insert(
+            TASK_ID.to_string(),
+            host_domain::DirectMergeRecord {
+                method: host_domain::GitMergeMethod::MergeCommit,
+                source_branch: TASK_SOURCE_BRANCH.to_string(),
+                target_branch: host_domain::GitTargetBranch {
+                    remote: None,
+                    branch: "main".to_string(),
+                },
+                merged_at: LINKED_PULL_REQUEST_MERGED_AT.to_string(),
+            },
+        );
+}
+
 fn set_local_task_branch(git_state: &GitStateHandle, branch: &str) {
     git_state.lock().expect("git state lock poisoned").branches = vec![GitBranch {
         name: branch.to_string(),
@@ -2181,6 +2200,7 @@ fn repo_pull_request_sync_closes_tasks_when_linked_pull_request_is_merged() -> R
         setup_pull_request_workflow_fixture("approval-pr-sync", "task", TaskStatus::HumanReview)?;
     let _github = setup_fake_gh_for_merged_pull_request(&fixture.root, TASK_SOURCE_BRANCH, "main")?;
     insert_task_pull_request(&fixture.task_state, open_pull_request_record());
+    insert_task_direct_merge_record(&fixture.task_state);
     set_local_task_branch(&fixture.git_state, TASK_SOURCE_BRANCH);
 
     assert!(fixture
@@ -2201,6 +2221,7 @@ fn repo_pull_request_sync_closes_tasks_when_linked_pull_request_is_merged() -> R
             .map(|entry| entry.state.as_str()),
         Some("merged"),
     );
+    assert!(!state.direct_merge_records.contains_key(TASK_ID));
     drop(state);
 
     let git = fixture.git_state.lock().expect("git state lock poisoned");
@@ -2566,85 +2587,31 @@ fn task_pull_request_link_merged_blocks_when_direct_merge_is_pending() -> Result
 
 #[test]
 fn task_pull_request_link_merged_retries_cleanup_for_same_pull_request() -> Result<()> {
-    let root = unique_temp_path("approval-pr-link-merged-retry-cleanup");
-    let repo = root.join("repo");
-    let worktree_base = root.join("worktrees");
-    let worktree_path = worktree_base.join("task-1");
-    init_git_repo(&repo)?;
-    fs::create_dir_all(&worktree_path)?;
-
-    let config_store = AppConfigStore::from_path(root.join("config.json"));
-    let (service, task_state, git_state) = build_service_with_store(
-        vec![make_task("task-1", "task", TaskStatus::Closed)],
-        vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-        config_store,
-    );
-    let repo_path = repo.to_string_lossy().to_string();
-    service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
-    configure_builder_session(
-        repo_path.as_str(),
-        &worktree_path,
-        "odt/task-1",
-        &service,
-        &task_state,
-        &git_state,
+    let fixture = setup_pull_request_workflow_fixture(
+        "approval-pr-link-merged-retry-cleanup",
+        "task",
+        TaskStatus::HumanReview,
     )?;
-    {
-        let mut state = task_state.lock().expect("task state lock poisoned");
-        state.pull_requests.insert(
-            "task-1".to_string(),
-            host_domain::PullRequestRecord {
-                provider_id: "github".to_string(),
-                number: 17,
-                url: "https://github.com/openai/openducktor/pull/17".to_string(),
-                state: "merged".to_string(),
-                created_at: "2026-03-11T10:00:00Z".to_string(),
-                updated_at: "2026-03-11T10:10:00Z".to_string(),
-                last_synced_at: Some("2026-03-11T10:10:00Z".to_string()),
-                merged_at: Some("2026-03-11T10:10:00Z".to_string()),
-                closed_at: Some("2026-03-11T10:10:00Z".to_string()),
-            },
-        );
-    }
-    {
-        let mut git = git_state.lock().expect("git state lock poisoned");
-        git.branches = vec![GitBranch {
-            name: "odt/task-1".to_string(),
-            is_current: false,
-            is_remote: false,
-        }];
-    }
+    insert_task_pull_request(&fixture.task_state, merged_pull_request_record());
+    set_local_task_branch(&fixture.git_state, TASK_SOURCE_BRANCH);
 
-    let task = service.task_pull_request_link_merged(
-        repo_path.as_str(),
-        "task-1",
-        host_domain::PullRequestRecord {
-            provider_id: "github".to_string(),
-            number: 17,
-            url: "https://github.com/openai/openducktor/pull/17".to_string(),
-            state: "merged".to_string(),
-            created_at: "2026-03-11T10:00:00Z".to_string(),
-            updated_at: "2026-03-11T10:10:00Z".to_string(),
-            last_synced_at: Some("2026-03-11T10:10:00Z".to_string()),
-            merged_at: Some("2026-03-11T10:10:00Z".to_string()),
-            closed_at: Some("2026-03-11T10:10:00Z".to_string()),
-        },
+    let task = fixture.service.task_pull_request_link_merged(
+        fixture.repo_path.as_str(),
+        TASK_ID,
+        merged_pull_request_record(),
     )?;
 
     assert_eq!(task.status, TaskStatus::Closed);
-    let git = git_state.lock().expect("git state lock poisoned");
-    assert!(!git
+    let git = fixture.git_state.lock().expect("git state lock poisoned");
+    assert!(git
         .calls
         .iter()
         .any(|call| matches!(call, GitCall::RemoveWorktree { .. })));
+    assert!(git.calls.iter().any(
+        |call| matches!(call, GitCall::DeleteLocalBranch { branch, .. } if branch == TASK_SOURCE_BRANCH)
+    ));
 
-    let _ = fs::remove_dir_all(root);
+    let _ = fs::remove_dir_all(&fixture.root);
     Ok(())
 }
 
