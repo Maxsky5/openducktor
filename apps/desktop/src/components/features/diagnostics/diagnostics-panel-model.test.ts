@@ -491,6 +491,7 @@ describe("buildDiagnosticsPanelModel", () => {
             detail: null,
             failureKind: "timeout",
             failureReason: null,
+            failureOrigin: "frontend_observation",
             host: {
               runtimeKind: "opencode",
               repoPath: "/repo",

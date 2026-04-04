@@ -75,8 +75,7 @@ export const describeRepoRuntimeProgress = (
   }
 
   const stageDescription = describeStage(runtimeLabel, progress);
-  const timeoutKind = runtimeHealth?.runtimeFailureKind ?? runtimeHealth?.mcpFailureKind ?? null;
-  if (timeoutKind === "timeout" && stageDescription) {
+  if (progress.failureOrigin === "frontend_observation" && stageDescription) {
     return `Frontend diagnostics timed out while this stage was still in progress. ${stageDescription}`;
   }
 

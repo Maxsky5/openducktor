@@ -1,60 +1,34 @@
 import type {
   FailureKind,
+  RepoRuntimeHealthFailureOrigin,
+  RepoRuntimeHealthObservation,
+  RepoRuntimeHealthStage,
   RepoRuntimeStartupStatus,
   RuntimeInstanceSummary,
+  RepoRuntimeHealthCheck as SharedRepoRuntimeHealthCheck,
+  RepoRuntimeHealthProgress as SharedRepoRuntimeHealthProgress,
 } from "@openducktor/contracts";
 
 export type RepoRuntimeFailureKind = FailureKind | null;
 
-export type RepoRuntimeHealthStage =
-  | "idle"
-  | "startup_requested"
-  | "waiting_for_runtime"
-  | "runtime_ready"
-  | "checking_mcp_status"
-  | "reconnecting_mcp"
-  | "restarting_runtime"
-  | "restart_skipped_active_run"
-  | "ready"
-  | "startup_failed"
-  | "frontend_observation_timeout";
+export type {
+  RepoRuntimeHealthFailureOrigin,
+  RepoRuntimeHealthObservation,
+  RepoRuntimeHealthStage,
+};
 
-export type RepoRuntimeHealthObservation =
-  | "observed_existing_runtime"
-  | "observing_existing_startup"
-  | "started_by_diagnostics"
-  | "restarted_for_mcp"
-  | "restart_skipped_active_run"
-  | null;
-
-export type RepoRuntimeHealthProgress = {
+export type RepoRuntimeHealthProgress = SharedRepoRuntimeHealthProgress & {
   stage: RepoRuntimeHealthStage;
-  observation: RepoRuntimeHealthObservation;
-  startedAt: string | null;
-  updatedAt: string;
-  elapsedMs: number | null;
-  attempts: number | null;
-  detail: string | null;
-  failureKind: RepoRuntimeFailureKind;
-  failureReason: string | null;
+  observation: RepoRuntimeHealthObservation | null;
+  failureOrigin: RepoRuntimeHealthFailureOrigin | null;
   host: RepoRuntimeStartupStatus | null;
 };
 
-export type RepoRuntimeHealthCheck = {
-  runtimeOk: boolean;
-  runtimeError: string | null;
+export type RepoRuntimeHealthCheck = SharedRepoRuntimeHealthCheck & {
   runtimeFailureKind: RepoRuntimeFailureKind;
   runtime: RuntimeInstanceSummary | null;
-  mcpOk: boolean;
-  mcpError: string | null;
   mcpFailureKind: RepoRuntimeFailureKind;
-  mcpServerName: string;
-  mcpServerStatus: string | null;
-  mcpServerError: string | null;
-  availableToolIds: string[];
-  checkedAt: string;
-  errors: string[];
-  progress?: RepoRuntimeHealthProgress | null;
+  progress?: RepoRuntimeHealthProgress | null | undefined;
 };
 
 export type RepoRuntimeHealthMap = Record<string, RepoRuntimeHealthCheck | null>;

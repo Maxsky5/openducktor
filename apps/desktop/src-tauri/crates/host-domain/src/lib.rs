@@ -25,10 +25,11 @@ pub use git::{
 pub use runtime::{
     AgentRuntimeKind, BuildContinuationTarget, BuildContinuationTargetSource, DevServerEvent,
     DevServerGroupState, DevServerLogLine, DevServerLogStream, DevServerScriptState,
-    DevServerScriptStatus, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage,
-    RepoRuntimeStartupStatus, RunEvent, RunState, RunSummary, RuntimeCapabilities,
-    RuntimeDescriptor, RuntimeInstanceSummary, RuntimeProvisioningMode, RuntimeRole, RuntimeRoute,
-    RuntimeSupportedScope,
+    DevServerScriptStatus, RepoRuntimeHealthCheck, RepoRuntimeHealthFailureOrigin,
+    RepoRuntimeHealthObservation, RepoRuntimeHealthProgress, RepoRuntimeHealthStage,
+    RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RepoRuntimeStartupStatus, RunEvent,
+    RunState, RunSummary, RuntimeCapabilities, RuntimeDescriptor, RuntimeInstanceSummary,
+    RuntimeProvisioningMode, RuntimeRole, RuntimeRoute, RuntimeSupportedScope,
 };
 pub use store::TaskStore;
 pub use system::{BeadsCheck, RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord};
@@ -119,7 +120,9 @@ mod tests {
             GitResetWorktreeSelectionResult, GitUpstreamAheadBehind, GitWorktreeStatus,
             GitWorktreeStatusData, GitWorktreeStatusSnapshot, GitWorktreeStatusSummary,
             GitWorktreeStatusSummaryData, GitWorktreeSummary, IssueType, PlanSubtaskInput,
-            QaReportDocument, QaVerdict, QaWorkflowVerdict, RepoRuntimeStartupFailureKind,
+            QaReportDocument, QaVerdict, QaWorkflowVerdict, RepoRuntimeHealthCheck,
+            RepoRuntimeHealthFailureOrigin, RepoRuntimeHealthObservation,
+            RepoRuntimeHealthProgress, RepoRuntimeHealthStage, RepoRuntimeStartupFailureKind,
             RepoRuntimeStartupStage, RepoRuntimeStartupStatus, RunEvent, RunState, RunSummary,
             RuntimeCheck, RuntimeInstanceSummary, RuntimeRole, SpecDocument, SystemCheck,
             TaskAction, TaskCard, TaskDirectMergeResult, TaskDocumentPresence, TaskDocumentSummary,
@@ -171,6 +174,11 @@ mod tests {
             GitWorktreeStatusSummary,
             GitWorktreeStatusSummaryData,
             GitWorktreeSummary,
+            RepoRuntimeHealthCheck,
+            RepoRuntimeHealthFailureOrigin,
+            RepoRuntimeHealthObservation,
+            RepoRuntimeHealthProgress,
+            RepoRuntimeHealthStage,
             RepoRuntimeStartupFailureKind,
             RepoRuntimeStartupStage,
             RepoRuntimeStartupStatus,

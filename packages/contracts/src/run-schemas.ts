@@ -129,6 +129,74 @@ export const repoRuntimeStartupStatusSchema = z.object({
 });
 export type RepoRuntimeStartupStatus = z.infer<typeof repoRuntimeStartupStatusSchema>;
 
+export const repoRuntimeHealthStageSchema = z.enum([
+  "idle",
+  "startup_requested",
+  "waiting_for_runtime",
+  "runtime_ready",
+  "checking_mcp_status",
+  "reconnecting_mcp",
+  "restarting_runtime",
+  "restart_skipped_active_run",
+  "ready",
+  "startup_failed",
+  "frontend_observation_timeout",
+]);
+export type RepoRuntimeHealthStage = z.infer<typeof repoRuntimeHealthStageSchema>;
+
+export const repoRuntimeHealthObservationSchema = z.enum([
+  "observed_existing_runtime",
+  "observing_existing_startup",
+  "started_by_diagnostics",
+  "restarted_for_mcp",
+  "restart_skipped_active_run",
+]);
+export type RepoRuntimeHealthObservation = z.infer<typeof repoRuntimeHealthObservationSchema>;
+
+export const repoRuntimeHealthFailureOriginSchema = z.enum([
+  "runtime_startup",
+  "mcp_status",
+  "mcp_connect",
+  "runtime_stop",
+  "runtime_restart",
+  "frontend_observation",
+  "startup_status",
+]);
+export type RepoRuntimeHealthFailureOrigin = z.infer<typeof repoRuntimeHealthFailureOriginSchema>;
+
+export const repoRuntimeHealthProgressSchema = z.object({
+  stage: repoRuntimeHealthStageSchema,
+  observation: repoRuntimeHealthObservationSchema.nullable(),
+  startedAt: z.string().nullable(),
+  updatedAt: z.string(),
+  elapsedMs: z.number().int().nonnegative().nullable(),
+  attempts: z.number().int().nonnegative().nullable(),
+  detail: z.string().nullable(),
+  failureKind: failureKindSchema.nullable(),
+  failureReason: z.string().nullable(),
+  failureOrigin: repoRuntimeHealthFailureOriginSchema.nullable(),
+  host: repoRuntimeStartupStatusSchema.nullable(),
+});
+export type RepoRuntimeHealthProgress = z.infer<typeof repoRuntimeHealthProgressSchema>;
+
+export const repoRuntimeHealthCheckSchema = z.object({
+  runtimeOk: z.boolean(),
+  runtimeError: z.string().nullable(),
+  runtimeFailureKind: failureKindSchema.nullable(),
+  runtime: runtimeInstanceSummarySchema.nullable(),
+  mcpOk: z.boolean(),
+  mcpError: z.string().nullable(),
+  mcpFailureKind: failureKindSchema.nullable(),
+  mcpServerName: z.string(),
+  mcpServerStatus: z.string().nullable(),
+  mcpServerError: z.string().nullable(),
+  availableToolIds: z.array(z.string()),
+  checkedAt: z.string(),
+  errors: z.array(z.string()),
+  progress: repoRuntimeHealthProgressSchema.nullable().optional(),
+});
+export type RepoRuntimeHealthCheck = z.infer<typeof repoRuntimeHealthCheckSchema>;
+
 export const runEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("run_started"),

@@ -1,7 +1,7 @@
 use crate::{as_error, run_service_blocking, runtime_ensure_failure_kind, AppState};
 use host_domain::{
-    BeadsCheck, BuildContinuationTarget, RepoRuntimeStartupStatus, RuntimeCheck, RuntimeDescriptor,
-    RuntimeInstanceSummary, SystemCheck,
+    BeadsCheck, BuildContinuationTarget, RepoRuntimeHealthCheck, RepoRuntimeStartupStatus,
+    RuntimeCheck, RuntimeDescriptor, RuntimeInstanceSummary, SystemCheck,
 };
 use tauri::State;
 
@@ -129,6 +129,20 @@ pub async fn runtime_startup_status(
     let service = state.service.clone();
     let result = run_service_blocking("runtime_startup_status", move || {
         service.runtime_startup_status(&runtime_kind, &repo_path)
+    })
+    .await;
+    as_error(result)
+}
+
+#[tauri::command]
+pub async fn repo_runtime_health(
+    state: State<'_, AppState>,
+    runtime_kind: String,
+    repo_path: String,
+) -> Result<RepoRuntimeHealthCheck, String> {
+    let service = state.service.clone();
+    let result = run_service_blocking("repo_runtime_health", move || {
+        service.repo_runtime_health(&runtime_kind, &repo_path)
     })
     .await;
     as_error(result)

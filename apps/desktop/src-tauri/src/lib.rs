@@ -528,6 +528,7 @@ fn startup_phase_command_registration<R: tauri::Runtime>(
         runtime_stop,
         runtime_ensure,
         runtime_startup_status,
+        repo_runtime_health,
         agent_sessions_list,
         agent_sessions_list_bulk,
         agent_session_upsert,
