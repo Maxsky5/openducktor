@@ -487,6 +487,64 @@ describe("useAppLifecycle", () => {
     }
   });
 
+  test("keeps periodic PR sync active across parent rerenders such as route changes", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const refreshTasksWithOptions = mock(async () => {});
+    const baseArgs: HookArgs = {
+      activeRepo: "/repo",
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => {}),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo: mock(async () => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      })),
+      refreshTaskData: mock(async () => {}),
+      refreshTasksWithOptions,
+      clearBranchData: mock(() => {}),
+      pullRequestSyncIntervalMs: 20,
+    };
+
+    const Harness = ({ args, route }: { args: HookArgs; route: string }) => {
+      useAppLifecycle(args);
+      return <div data-route={route} />;
+    };
+
+    const intervalController = createIntervalController();
+    const harness = createSharedHookHarness(Harness, {
+      args: baseArgs,
+      route: "/kanban",
+    });
+
+    try {
+      await harness.mount();
+
+      intervalController.tick();
+      await harness.waitFor(() => refreshTasksWithOptions.mock.calls.length === 1, 1000);
+
+      await harness.update({
+        args: baseArgs,
+        route: "/agents",
+      });
+
+      expect(refreshTasksWithOptions).toHaveBeenCalledTimes(1);
+
+      intervalController.tick();
+      await harness.waitFor(() => refreshTasksWithOptions.mock.calls.length === 2, 1000);
+
+      expect(refreshTasksWithOptions).toHaveBeenNthCalledWith(1, { trigger: "scheduled" });
+      expect(refreshTasksWithOptions).toHaveBeenNthCalledWith(2, { trigger: "scheduled" });
+    } finally {
+      await harness.unmount();
+      intervalController.restore();
+    }
+  });
+
   test("does not block repo diagnostics load on branch refresh completion", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
