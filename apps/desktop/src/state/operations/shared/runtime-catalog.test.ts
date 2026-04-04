@@ -233,6 +233,7 @@ describe("runtime-catalog", () => {
     const operations = createRuntimeCatalogOperations(
       createDeps({
         runtimeHealthTimeoutMs: 5,
+        runtimeHealthStatusTimeoutMs: 5,
         repoRuntimeHealth: async () => await new Promise<RepoRuntimeHealthCheck>(() => {}),
         repoRuntimeHealthStatus: async () => ({
           ...healthyRepoRuntimeHealthFixture,
@@ -320,6 +321,7 @@ describe("runtime-catalog", () => {
     const operations = createRuntimeCatalogOperations(
       createDeps({
         runtimeHealthTimeoutMs: 5,
+        runtimeHealthStatusTimeoutMs: 5,
         repoRuntimeHealth: async () => await new Promise<RepoRuntimeHealthCheck>(() => {}),
         repoRuntimeHealthStatus: async () => {
           throw new Error("health status unavailable");
@@ -331,6 +333,29 @@ describe("runtime-catalog", () => {
 
     expect(result.runtimeFailureKind).toBe("timeout");
     expect(result.runtimeError).toContain("health status unavailable");
+    expect(result.progress).toEqual(
+      expect.objectContaining({
+        stage: "frontend_observation_timeout",
+        failureOrigin: "health_status",
+      }),
+    );
+  });
+
+  test("times out the fallback host status read too", async () => {
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        runtimeHealthTimeoutMs: 5,
+        runtimeHealthStatusTimeoutMs: 5,
+        repoRuntimeHealth: async () => await new Promise<RepoRuntimeHealthCheck>(() => {}),
+        repoRuntimeHealthStatus: async () => await new Promise<RepoRuntimeHealthCheck>(() => {}),
+      }),
+    );
+
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
+
+    expect(result.runtimeFailureKind).toBe("timeout");
+    expect(result.runtimeError).toContain("Failed to load latest host runtime health status");
+    expect(result.runtimeError).toContain("Timed out after 5ms");
     expect(result.progress).toEqual(
       expect.objectContaining({
         stage: "frontend_observation_timeout",

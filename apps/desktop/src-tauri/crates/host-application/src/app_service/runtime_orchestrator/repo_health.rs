@@ -352,6 +352,9 @@ impl AppService {
                 RepoRuntimeHealthStage::RuntimeReady | RepoRuntimeHealthStage::Ready
             ),
             match progress.stage {
+                RepoRuntimeHealthStage::Idle => {
+                    Some("Runtime has not been started yet.".to_string())
+                }
                 RepoRuntimeHealthStage::StartupFailed
                 | RepoRuntimeHealthStage::StartupRequested
                 | RepoRuntimeHealthStage::WaitingForRuntime => startup_status.detail,
@@ -539,6 +542,200 @@ impl AppService {
         )
     }
 
+    fn repo_runtime_has_active_run(
+        &self,
+        repo_key: &str,
+        runtime_route: &RuntimeRoute,
+    ) -> Result<bool> {
+        let runtime_endpoint = match runtime_route {
+            RuntimeRoute::LocalHttp { endpoint } => endpoint.as_str(),
+        };
+        Ok(self.runs_list(Some(repo_key))?.iter().any(|run| {
+            matches!(
+                run.state,
+                RunState::Starting
+                    | RunState::Running
+                    | RunState::Blocked
+                    | RunState::AwaitingDoneConfirmation
+            ) && matches!(&run.runtime_route, RuntimeRoute::LocalHttp { endpoint } if endpoint == runtime_endpoint)
+        }))
+    }
+
+    fn recover_repo_runtime_mcp_status_failure(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+        checked_at: &str,
+        runtime: &RuntimeInstanceSummary,
+        host_status: Option<RepoRuntimeStartupStatus>,
+        error: RuntimeHealthHttpFailure,
+    ) -> Result<RepoRuntimeHealthCheck> {
+        if self.repo_runtime_has_active_run(repo_key, &runtime.runtime_route)? {
+            let skipped_message = format!(
+                "Failed to query runtime MCP status: {}. Automatic runtime restart was skipped because an active run is using this runtime.",
+                error.message
+            );
+            return self.store_repo_runtime_health(
+                runtime_kind,
+                repo_key,
+                Self::build_repo_runtime_health_check(
+                    checked_at.to_string(),
+                    Some(runtime.clone()),
+                    true,
+                    None,
+                    None,
+                    false,
+                    Some(skipped_message.clone()),
+                    Some(error.failure_kind),
+                    None,
+                    Vec::new(),
+                    Some(self.repo_runtime_progress(
+                        RepoRuntimeHealthStage::RestartSkippedActiveRun,
+                        Some(RepoRuntimeHealthObservation::RestartSkippedActiveRun),
+                        host_status,
+                        checked_at,
+                        Some(skipped_message),
+                        Some(error.failure_kind),
+                        None,
+                        Some(RepoRuntimeHealthFailureOrigin::RuntimeRestart),
+                        Some(runtime.started_at.clone()),
+                        Some(checked_at.to_string()),
+                        None,
+                        None,
+                    )),
+                ),
+            );
+        }
+
+        self.update_repo_runtime_health_status(
+            runtime_kind,
+            repo_key,
+            Self::build_repo_runtime_health_check(
+                checked_at.to_string(),
+                Some(runtime.clone()),
+                true,
+                None,
+                None,
+                false,
+                Some(error.message.clone()),
+                Some(error.failure_kind),
+                None,
+                Vec::new(),
+                Some(self.repo_runtime_progress(
+                    RepoRuntimeHealthStage::RestartingRuntime,
+                    Some(RepoRuntimeHealthObservation::RestartedForMcp),
+                    host_status.clone(),
+                    checked_at,
+                    Some(error.message.clone()),
+                    Some(error.failure_kind),
+                    None,
+                    Some(RepoRuntimeHealthFailureOrigin::RuntimeRestart),
+                    Some(runtime.started_at.clone()),
+                    Some(checked_at.to_string()),
+                    None,
+                    None,
+                )),
+            ),
+        )?;
+
+        if let Err(stop_error) = self.runtime_stop(runtime.runtime_id.as_str()) {
+            let stop_message =
+                format!("Failed to stop runtime before MCP recovery: {stop_error:#}");
+            return self.store_repo_runtime_health(
+                runtime_kind,
+                repo_key,
+                Self::build_repo_runtime_health_check(
+                    checked_at.to_string(),
+                    Some(runtime.clone()),
+                    true,
+                    None,
+                    None,
+                    false,
+                    Some(stop_message.clone()),
+                    Some(RepoRuntimeStartupFailureKind::Error),
+                    None,
+                    Vec::new(),
+                    Some(self.repo_runtime_progress(
+                        RepoRuntimeHealthStage::RestartingRuntime,
+                        Some(RepoRuntimeHealthObservation::RestartedForMcp),
+                        host_status,
+                        checked_at,
+                        Some(stop_message),
+                        Some(RepoRuntimeStartupFailureKind::Error),
+                        None,
+                        Some(RepoRuntimeHealthFailureOrigin::RuntimeStop),
+                        Some(runtime.started_at.clone()),
+                        Some(checked_at.to_string()),
+                        None,
+                        None,
+                    )),
+                ),
+            );
+        }
+
+        match self.ensure_workspace_runtime(runtime_kind, repo_key) {
+            Ok(restarted_runtime) => self.complete_repo_runtime_health(
+                repo_key,
+                checked_at,
+                runtime_kind,
+                restarted_runtime,
+                Some(self.runtime_startup_status(runtime_kind.as_str(), repo_key)?),
+                Some(RepoRuntimeHealthObservation::RestartedForMcp),
+                false,
+            ),
+            Err(restart_error) => {
+                let latest_host_status =
+                    self.runtime_startup_status(runtime_kind.as_str(), repo_key)?;
+                self.store_repo_runtime_health(
+                    runtime_kind,
+                    repo_key,
+                    Self::build_repo_runtime_health_check(
+                        checked_at.to_string(),
+                        None,
+                        false,
+                        Some(format!("{restart_error:#}")),
+                        Some(Self::repo_runtime_timeout_kind(&restart_error)),
+                        false,
+                        Some("Runtime is unavailable, so MCP cannot be verified.".to_string()),
+                        Some(Self::repo_runtime_timeout_kind(&restart_error)),
+                        None,
+                        Vec::new(),
+                        Some(self.repo_runtime_progress(
+                            match latest_host_status.stage {
+                                RepoRuntimeStartupStage::WaitingForRuntime => {
+                                    RepoRuntimeHealthStage::WaitingForRuntime
+                                }
+                                RepoRuntimeStartupStage::StartupRequested => {
+                                    RepoRuntimeHealthStage::StartupRequested
+                                }
+                                RepoRuntimeStartupStage::RuntimeReady => {
+                                    RepoRuntimeHealthStage::RuntimeReady
+                                }
+                                RepoRuntimeStartupStage::Idle => {
+                                    RepoRuntimeHealthStage::RestartingRuntime
+                                }
+                                RepoRuntimeStartupStage::StartupFailed => {
+                                    RepoRuntimeHealthStage::StartupFailed
+                                }
+                            },
+                            Some(RepoRuntimeHealthObservation::RestartedForMcp),
+                            Some(latest_host_status),
+                            checked_at,
+                            Some(format!("{restart_error:#}")),
+                            Some(Self::repo_runtime_timeout_kind(&restart_error)),
+                            Self::repo_runtime_failure_reason(&restart_error),
+                            Some(RepoRuntimeHealthFailureOrigin::RuntimeRestart),
+                            None,
+                            Some(checked_at.to_string()),
+                            None,
+                            None,
+                        )),
+                    ),
+                )
+            }
+        }
+    }
+
     pub fn repo_runtime_health(
         &self,
         runtime_kind: &str,
@@ -692,185 +889,14 @@ impl AppService {
                         error.message.as_str(),
                     )
                 {
-                    let runtime_endpoint = match &runtime.runtime_route {
-                        RuntimeRoute::LocalHttp { endpoint } => endpoint.as_str(),
-                    };
-                    let has_active_run = self.runs_list(Some(repo_key))?.iter().any(|run| {
-                        matches!(
-                            run.state,
-                            RunState::Starting
-                                | RunState::Running
-                                | RunState::Blocked
-                                | RunState::AwaitingDoneConfirmation
-                        ) && matches!(&run.runtime_route, RuntimeRoute::LocalHttp { endpoint } if endpoint == runtime_endpoint)
-                    });
-                    if has_active_run {
-                        let skipped_message = format!(
-                            "Failed to query runtime MCP status: {}. Automatic runtime restart was skipped because an active run is using this runtime.",
-                            error.message
-                        );
-                        return self.store_repo_runtime_health(
-                            runtime_kind,
-                            repo_key,
-                            Self::build_repo_runtime_health_check(
-                                checked_at.to_string(),
-                                Some(runtime.clone()),
-                                true,
-                                None,
-                                None,
-                                false,
-                                Some(skipped_message.clone()),
-                                Some(error.failure_kind),
-                                None,
-                                Vec::new(),
-                                Some(self.repo_runtime_progress(
-                                    RepoRuntimeHealthStage::RestartSkippedActiveRun,
-                                    Some(RepoRuntimeHealthObservation::RestartSkippedActiveRun),
-                                    host_status,
-                                    checked_at,
-                                    Some(skipped_message),
-                                    Some(error.failure_kind),
-                                    None,
-                                    Some(RepoRuntimeHealthFailureOrigin::RuntimeRestart),
-                                    Some(runtime.started_at.clone()),
-                                    Some(checked_at.to_string()),
-                                    None,
-                                    None,
-                                )),
-                            ),
-                        );
-                    }
-
-                    self.update_repo_runtime_health_status(
+                    return self.recover_repo_runtime_mcp_status_failure(
                         runtime_kind,
                         repo_key,
-                        Self::build_repo_runtime_health_check(
-                            checked_at.to_string(),
-                            Some(runtime.clone()),
-                            true,
-                            None,
-                            None,
-                            false,
-                            Some(error.message.clone()),
-                            Some(error.failure_kind),
-                            None,
-                            Vec::new(),
-                            Some(self.repo_runtime_progress(
-                                RepoRuntimeHealthStage::RestartingRuntime,
-                                Some(RepoRuntimeHealthObservation::RestartedForMcp),
-                                host_status.clone(),
-                                checked_at,
-                                Some(error.message.clone()),
-                                Some(error.failure_kind),
-                                None,
-                                Some(RepoRuntimeHealthFailureOrigin::RuntimeRestart),
-                                Some(runtime.started_at.clone()),
-                                Some(checked_at.to_string()),
-                                None,
-                                None,
-                            )),
-                        ),
-                    )?;
-
-                    if let Err(stop_error) = self.runtime_stop(runtime.runtime_id.as_str()) {
-                        let stop_message =
-                            format!("Failed to stop runtime before MCP recovery: {stop_error:#}");
-                        return self.store_repo_runtime_health(
-                            runtime_kind,
-                            repo_key,
-                            Self::build_repo_runtime_health_check(
-                                checked_at.to_string(),
-                                Some(runtime.clone()),
-                                true,
-                                None,
-                                None,
-                                false,
-                                Some(stop_message.clone()),
-                                Some(RepoRuntimeStartupFailureKind::Error),
-                                None,
-                                Vec::new(),
-                                Some(self.repo_runtime_progress(
-                                    RepoRuntimeHealthStage::RestartingRuntime,
-                                    Some(RepoRuntimeHealthObservation::RestartedForMcp),
-                                    host_status,
-                                    checked_at,
-                                    Some(stop_message),
-                                    Some(RepoRuntimeStartupFailureKind::Error),
-                                    None,
-                                    Some(RepoRuntimeHealthFailureOrigin::RuntimeStop),
-                                    Some(runtime.started_at.clone()),
-                                    Some(checked_at.to_string()),
-                                    None,
-                                    None,
-                                )),
-                            ),
-                        );
-                    }
-
-                    return match self.ensure_workspace_runtime(runtime_kind, repo_key) {
-                        Ok(restarted_runtime) => self.complete_repo_runtime_health(
-                            repo_key,
-                            checked_at,
-                            runtime_kind,
-                            restarted_runtime,
-                            Some(self.runtime_startup_status(runtime_kind.as_str(), repo_key)?),
-                            Some(RepoRuntimeHealthObservation::RestartedForMcp),
-                            false,
-                        ),
-                        Err(restart_error) => {
-                            let latest_host_status =
-                                self.runtime_startup_status(runtime_kind.as_str(), repo_key)?;
-                            self.store_repo_runtime_health(
-                                runtime_kind,
-                                repo_key,
-                                Self::build_repo_runtime_health_check(
-                                    checked_at.to_string(),
-                                    None,
-                                    false,
-                                    Some(format!("{restart_error:#}")),
-                                    Some(Self::repo_runtime_timeout_kind(&restart_error)),
-                                    false,
-                                    Some(
-                                        "Runtime is unavailable, so MCP cannot be verified."
-                                            .to_string(),
-                                    ),
-                                    Some(Self::repo_runtime_timeout_kind(&restart_error)),
-                                    None,
-                                    Vec::new(),
-                                    Some(self.repo_runtime_progress(
-                                        match latest_host_status.stage {
-                                            RepoRuntimeStartupStage::WaitingForRuntime => {
-                                                RepoRuntimeHealthStage::WaitingForRuntime
-                                            }
-                                            RepoRuntimeStartupStage::StartupRequested => {
-                                                RepoRuntimeHealthStage::StartupRequested
-                                            }
-                                            RepoRuntimeStartupStage::RuntimeReady => {
-                                                RepoRuntimeHealthStage::RuntimeReady
-                                            }
-                                            RepoRuntimeStartupStage::Idle => {
-                                                RepoRuntimeHealthStage::RestartingRuntime
-                                            }
-                                            RepoRuntimeStartupStage::StartupFailed => {
-                                                RepoRuntimeHealthStage::StartupFailed
-                                            }
-                                        },
-                                        Some(RepoRuntimeHealthObservation::RestartedForMcp),
-                                        Some(latest_host_status),
-                                        checked_at,
-                                        Some(format!("{restart_error:#}")),
-                                        Some(Self::repo_runtime_timeout_kind(&restart_error)),
-                                        Self::repo_runtime_failure_reason(&restart_error),
-                                        Some(RepoRuntimeHealthFailureOrigin::RuntimeRestart),
-                                        None,
-                                        Some(checked_at.to_string()),
-                                        None,
-                                        None,
-                                    )),
-                                ),
-                            )
-                        }
-                    };
+                        checked_at,
+                        &runtime,
+                        host_status,
+                        error,
+                    );
                 }
 
                 let mcp_message = format!("Failed to query runtime MCP status: {}", error.message);
@@ -944,9 +970,45 @@ impl AppService {
 
             match self.repo_runtime_connect_mcp_server(&runtime, ODT_MCP_SERVER_NAME) {
                 Ok(()) => {
-                    let refreshed = self
-                        .repo_runtime_load_mcp_status(&runtime)
-                        .map_err(anyhow::Error::new)?;
+                    let refreshed = match self.repo_runtime_load_mcp_status(&runtime) {
+                        Ok(refreshed) => refreshed,
+                        Err(error) => {
+                            let refresh_message = format!(
+                                "Failed to refresh runtime MCP status after reconnect: {}",
+                                error.message
+                            );
+                            return self.store_repo_runtime_health(
+                                runtime_kind,
+                                repo_key,
+                                Self::build_repo_runtime_health_check(
+                                    checked_at.to_string(),
+                                    Some(runtime.clone()),
+                                    true,
+                                    None,
+                                    None,
+                                    false,
+                                    Some(refresh_message.clone()),
+                                    Some(error.failure_kind),
+                                    mcp_server_status.clone(),
+                                    Vec::new(),
+                                    Some(self.repo_runtime_progress(
+                                        reconnect_progress.stage,
+                                        reconnect_progress.observation,
+                                        reconnect_progress.host.clone(),
+                                        checked_at,
+                                        Some(refresh_message),
+                                        Some(error.failure_kind),
+                                        None,
+                                        Some(RepoRuntimeHealthFailureOrigin::McpStatus),
+                                        reconnect_progress.started_at.clone(),
+                                        Some(checked_at.to_string()),
+                                        reconnect_progress.elapsed_ms,
+                                        reconnect_progress.attempts,
+                                    )),
+                                ),
+                            );
+                        }
+                    };
                     let resolved = Self::repo_runtime_resolve_mcp_status(&refreshed);
                     mcp_server_status = resolved.0;
                     mcp_server_error = resolved.1;

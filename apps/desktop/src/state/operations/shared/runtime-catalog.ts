@@ -38,6 +38,7 @@ export type RuntimeCatalogAdapter = Pick<
 
 type RuntimeCatalogDependencies = {
   runtimeHealthTimeoutMs?: number;
+  runtimeHealthStatusTimeoutMs?: number;
   repoRuntimeHealth: (
     runtimeKind: RuntimeKind,
     repoPath: string,
@@ -56,20 +57,10 @@ type RuntimeCatalogDependencies = {
   searchFiles: (input: ListCatalogInput & { query: string }) => Promise<AgentFileSearchResult[]>;
 };
 
-type NonNullRepoRuntimeFailureKind = Exclude<RepoRuntimeFailureKind, null>;
-
 const RUNTIME_HEALTH_TIMEOUT_MS = 15_000;
+const RUNTIME_HEALTH_STATUS_TIMEOUT_MS = 3_000;
 
 const toNowIso = (): string => new Date().toISOString();
-
-const readFailureKind = (error: unknown): NonNullRepoRuntimeFailureKind | null => {
-  if (!error || typeof error !== "object") {
-    return null;
-  }
-
-  const candidate = (error as { failureKind?: unknown }).failureKind;
-  return candidate === "timeout" || candidate === "error" ? candidate : null;
-};
 
 const toRuntimeInput = (
   runtime: RuntimeInstanceSummary,
@@ -151,7 +142,10 @@ const buildFrontendObservationTimeoutHealthCheck = async (
   timeoutError: DiagnosticsQueryTimeoutError,
 ): Promise<RepoRuntimeHealthCheck> => {
   try {
-    const hostHealth = await deps.repoRuntimeHealthStatus(runtimeKind, repoPath);
+    const hostHealth = await withRuntimeHealthTimeout(
+      deps.repoRuntimeHealthStatus(runtimeKind, repoPath),
+      deps.runtimeHealthStatusTimeoutMs ?? RUNTIME_HEALTH_STATUS_TIMEOUT_MS,
+    );
     const hostProgress = hostHealth.progress ?? null;
     if (!hostProgress) {
       throw new Error("host repo runtime health snapshot is unavailable");

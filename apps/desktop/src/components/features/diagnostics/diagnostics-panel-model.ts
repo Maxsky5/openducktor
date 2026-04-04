@@ -339,6 +339,10 @@ export const buildDiagnosticsPanelModel = (
   };
 
   const runtimeSections = runtimeEntries.flatMap(({ definition, runtimeHealth }) => {
+    const progressDescription = describeRepoRuntimeProgress(
+      definition.label,
+      runtimeHealth ?? null,
+    );
     const runtimeSection: DiagnosticsSectionModel = {
       key: `runtime:${definition.kind}`,
       title: `${definition.label} Runtime`,
@@ -378,9 +382,8 @@ export const buildDiagnosticsPanelModel = (
           ]
         : buildProgressRows(runtimeHealth),
       errors:
-        runtimeHealth?.runtimeOk === false &&
-        describeRepoRuntimeProgress(definition.label, runtimeHealth ?? null) != null
-          ? [describeRepoRuntimeProgress(definition.label, runtimeHealth ?? null) as string]
+        runtimeHealth?.runtimeOk === false && progressDescription != null
+          ? [progressDescription]
           : buildFailureMessages({
               label: `${definition.label} runtime`,
               detail: runtimeHealth?.runtimeError ?? null,
@@ -432,9 +435,8 @@ export const buildDiagnosticsPanelModel = (
           ]
         : [],
       errors:
-        describeRepoRuntimeProgress(definition.label, runtimeHealth ?? null) != null &&
-        !runtimeHealth?.mcpOk
-          ? [describeRepoRuntimeProgress(definition.label, runtimeHealth ?? null) as string]
+        progressDescription != null && !runtimeHealth?.mcpOk
+          ? [progressDescription]
           : buildFailureMessages({
               label: `${definition.label} OpenDucktor MCP`,
               detail: runtimeHealth?.mcpServerError ?? runtimeHealth?.mcpError ?? null,
