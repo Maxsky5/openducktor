@@ -163,6 +163,7 @@ export function useAgentStudioModelSelection({
     sessionId: string;
     messages: AgentSessionState["messages"];
     sourceIndex: number;
+    metadataKey: string;
     key: string;
     value: NonNullable<AgentStudioContextUsage>;
   } | null>(null);
@@ -611,6 +612,13 @@ export function useAgentStudioModelSelection({
       typeof selectedModelEntry?.contextWindow === "number"
         ? selectedModelEntry.contextWindow
         : null;
+    const metadataKey = [
+      activeSessionIdForContextUsage ?? "",
+      selectedModelSelection?.providerId ?? "",
+      selectedModelSelection?.modelId ?? "",
+      selectedModelEntry?.contextWindow ?? "",
+      selectedModelEntry?.outputLimit ?? "",
+    ].join(":");
     const commitCachedUsage = (
       usage: NonNullable<AgentStudioContextUsage>,
       sourceIndex: number,
@@ -618,11 +626,12 @@ export function useAgentStudioModelSelection({
     ): NonNullable<AgentStudioContextUsage> => {
       const nextKey = [usage.totalTokens, usage.contextWindow, usage.outputLimit ?? ""].join(":");
       const cached = activeSessionContextUsageCacheRef.current;
-      if (cached?.key === nextKey) {
+      if (cached?.key === nextKey && cached.metadataKey === metadataKey) {
         activeSessionContextUsageCacheRef.current = {
           sessionId: activeSessionIdForContextUsage ?? cached.sessionId,
           messages,
           sourceIndex,
+          metadataKey,
           key: cached.key,
           value: cached.value,
         };
@@ -633,6 +642,7 @@ export function useAgentStudioModelSelection({
         sessionId: activeSessionIdForContextUsage ?? "",
         messages,
         sourceIndex,
+        metadataKey,
         key: nextKey,
         value: usage,
       };
@@ -664,7 +674,8 @@ export function useAgentStudioModelSelection({
       if (
         cached &&
         activeSessionIdForContextUsage !== null &&
-        cached.sessionId === activeSessionIdForContextUsage
+        cached.sessionId === activeSessionIdForContextUsage &&
+        cached.metadataKey === metadataKey
       ) {
         const firstChangedMessageIndex = findFirstChangedSessionMessageIndex(
           cached.messages,
@@ -685,6 +696,7 @@ export function useAgentStudioModelSelection({
           activeSessionContextUsageCacheRef.current = {
             ...cached,
             messages: activeSessionMessageOwnerForContextUsage.messages,
+            metadataKey,
           };
           return cached.value;
         }
@@ -722,7 +734,10 @@ export function useAgentStudioModelSelection({
     activeSessionMessages,
     activeSessionMessageOwnerForContextUsage,
     activeSessionModelDescriptorByKey,
+    selectedModelSelection?.modelId,
+    selectedModelSelection?.providerId,
     selectedModelEntry?.contextWindow,
+    selectedModelEntry?.outputLimit,
   ]);
 
   const handleSelectAgent = useCallback(

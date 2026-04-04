@@ -8,7 +8,6 @@ import {
 } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { DraftChannelValueMap, DraftSource } from "../events/session-event-types";
-import { clearSessionMessageCache } from "../support/messages";
 
 type SessionStateUpdater = AgentSessionsById | ((current: AgentSessionsById) => AgentSessionsById);
 
@@ -151,11 +150,6 @@ export const useOrchestratorSessionState = ({
     mutableStateRef.current.repoEpoch += 1;
     mutableStateRef.current.previousRepo = activeRepo;
 
-    const sessionIds = Object.keys(mutableStateRef.current.sessionsById);
-    for (const sessionId of sessionIds) {
-      clearSessionMessageCache(sessionId);
-    }
-
     clearUnsubscribers(mutableStateRef.current.unsubscribersBySession);
     for (const timeoutId of Object.values(mutableStateRef.current.draftFlushTimeoutBySession)) {
       if (timeoutId !== undefined) {
@@ -174,10 +168,6 @@ export const useOrchestratorSessionState = ({
 
   useEffect(() => {
     return () => {
-      const sessionIds = Object.keys(mutableStateRef.current.sessionsById);
-      for (const sessionId of sessionIds) {
-        clearSessionMessageCache(sessionId);
-      }
       clearUnsubscribers(mutableStateRef.current.unsubscribersBySession);
       for (const timeoutId of Object.values(mutableStateRef.current.draftFlushTimeoutBySession)) {
         if (timeoutId !== undefined) {

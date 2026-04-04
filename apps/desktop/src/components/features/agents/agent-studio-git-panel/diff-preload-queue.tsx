@@ -31,9 +31,6 @@ export const buildDiffPreloadEntries = (
     if (next.length >= limit) {
       break;
     }
-    if (expandedFiles.has(fileDiff.file)) {
-      continue;
-    }
     if (fileDiff.diff.trim().length === 0) {
       continue;
     }

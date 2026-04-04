@@ -5,40 +5,10 @@ import {
   buildAgentStudioSelectionQueryUpdate,
   buildCreateSessionStartKey,
   buildPreviousSelectionQueryUpdate,
-  resolveReusableSessionForStart,
   shouldTriggerContextSwitchIntent,
 } from "./use-agent-studio-session-action-helpers";
 
 describe("use-agent-studio-session-action-helpers", () => {
-  test("resolveReusableSessionForStart returns active session when present", () => {
-    const activeSession = createAgentSessionFixture({
-      runtimeKind: "opencode",
-      sessionId: "session-active",
-      role: "spec",
-      scenario: "spec_initial",
-    });
-
-    const decision = resolveReusableSessionForStart({
-      activeSession,
-      sessionsForTask: [],
-      role: "spec",
-    });
-
-    expect(decision).toEqual({
-      session: activeSession,
-    });
-  });
-
-  test("resolveReusableSessionForStart returns null when no active session", () => {
-    const decision = resolveReusableSessionForStart({
-      activeSession: null,
-      sessionsForTask: [],
-      role: "planner",
-    });
-
-    expect(decision).toBeNull();
-  });
-
   test("buildAgentStudioSelectionQueryUpdate clears autostart and start", () => {
     expect(
       buildAgentStudioSelectionQueryUpdate({

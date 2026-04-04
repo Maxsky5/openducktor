@@ -87,7 +87,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 
 describe("useAgentStudioSelectionController", () => {
   beforeAll(async () => {
-    mock.module("@/state", () => ({
+    mock.module("@/state/app-state-provider", () => ({
       useAgentSession: (sessionId: string | null) =>
         sessionId ? (sessionByIdRef.current[sessionId] ?? null) : null,
     }));

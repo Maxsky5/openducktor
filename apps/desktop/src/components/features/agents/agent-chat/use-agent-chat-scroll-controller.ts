@@ -66,8 +66,14 @@ export function useAgentChatScrollController({
     const nearBottom =
       !canScroll(container) || distanceFromBottom(container) < CHAT_SCROLL_EDGE_THRESHOLD_PX;
     const nearTop = container.scrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
+
+    if (nearBottom && userScrolledRef.current) {
+      setUserScrolledState(false);
+      container.style.overflowAnchor = "none";
+    }
+
     updateNearEdges(nearBottom, nearTop);
-  }, [canScroll, distanceFromBottom, messagesContainerRef, updateNearEdges]);
+  }, [canScroll, distanceFromBottom, messagesContainerRef, setUserScrolledState, updateNearEdges]);
 
   const markAutoScroll = useCallback((element: HTMLDivElement) => {
     autoScrollRef.current = {

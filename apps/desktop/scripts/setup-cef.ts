@@ -15,13 +15,20 @@ const exportCefDirPath = resolve(toolBinRoot, `export-cef-dir${binaryExtension}`
 function cefVersion(): string {
   const lockFilePath = resolve(tauriRoot, "Cargo.lock");
   const lockFile = readFileSync(lockFilePath, "utf8");
-  const match = lockFile.match(/\[\[package\]\]\nname = "cef"\nversion = "([^"]+)"/m);
+  const packageBlocks = lockFile.split(/\[\[package\]\]\r?\n/);
+  for (const packageBlock of packageBlocks) {
+    const nameMatch = packageBlock.match(/^name = "([^"]+)"/m);
+    if (nameMatch?.[1] !== "cef") {
+      continue;
+    }
 
-  if (!match) {
-    throw new Error(`Could not resolve the cef crate version from ${lockFilePath}`);
+    const versionMatch = packageBlock.match(/^version = "([^"]+)"/m);
+    if (versionMatch?.[1]) {
+      return versionMatch[1];
+    }
   }
 
-  return match[1];
+  throw new Error(`Could not resolve the cef crate version from ${lockFilePath}`);
 }
 
 function cargoHomeBinPath(): string {
@@ -80,6 +87,7 @@ await (async () => {
     "stable",
     "cargo",
     "install",
+    "--locked",
     "--root",
     toolRoot,
     "tauri-cli",
@@ -95,6 +103,7 @@ await (async () => {
     "stable",
     "cargo",
     "install",
+    "--locked",
     "--root",
     toolRoot,
     "export-cef-dir",

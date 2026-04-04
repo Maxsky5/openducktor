@@ -5,6 +5,7 @@ import {
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "./agent-tool-messages";
+import { createSessionMessagesState } from "./support/messages";
 
 const createSession = (messages: AgentSessionState["messages"]) => ({
   sessionId: "session-1",
@@ -29,19 +30,22 @@ const baseTodoToolMessage = (overrides = {}) => ({
 
 describe("settleDanglingTodoToolMessages", () => {
   test("returns same reference when there are no dangling todo tools", () => {
-    const messages = [
+    const messages = createSessionMessagesState("session-1", [
       {
         id: "assistant-1",
         role: "assistant" as const,
         content: "done",
         timestamp: "2026-02-19T00:00:01.000Z",
       },
-    ];
+    ]);
     const next = settleDanglingTodoToolMessages(
       createSession(messages),
       "2026-02-19T00:00:02.000Z",
     );
-    expect(sessionMessagesToArray(createSession(next))).toEqual(messages);
+    expect(next).toBe(messages);
+    expect(sessionMessagesToArray(createSession(next))).toEqual(
+      sessionMessagesToArray(createSession(messages)),
+    );
   });
 
   test("marks dangling todowrite rows as completed and sets endedAt", () => {
@@ -82,7 +86,7 @@ describe("settleDanglingTodoToolMessages", () => {
   });
 
   test("does not modify non-todo running tool rows", () => {
-    const messages = [
+    const messages = createSessionMessagesState("session-1", [
       {
         id: "tool:2",
         role: "tool" as const,
@@ -96,11 +100,14 @@ describe("settleDanglingTodoToolMessages", () => {
           status: "running" as const,
         },
       },
-    ];
+    ]);
     const next = settleDanglingTodoToolMessages(
       createSession(messages),
       "2026-02-19T00:00:04.000Z",
     );
-    expect(sessionMessagesToArray(createSession(next))).toEqual(messages);
+    expect(next).toBe(messages);
+    expect(sessionMessagesToArray(createSession(next))).toEqual(
+      sessionMessagesToArray(createSession(messages)),
+    );
   });
 });

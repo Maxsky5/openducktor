@@ -324,7 +324,6 @@ export function useAgentStudioSessionStartFlow({
     taskId,
     role,
     activeSession,
-    sessionsForTask,
     selectedTask,
     agentStudioReady,
     isActiveTaskHydrated,

@@ -1,7 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { isRoleAvailableForTask } from "@/lib/task-agent-workflows";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   AGENT_STUDIO_QUERY_KEYS,
@@ -9,10 +8,6 @@ import {
 } from "./agent-studio-navigation";
 
 export type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
-
-type ReusableSessionDecision = {
-  session: AgentSessionState;
-};
 
 type AgentStudioSessionSelectionQueryParams = {
   taskId: string;
@@ -30,20 +25,6 @@ type AgentStudioAsyncActivityContextKeyParams = {
 
 export const canStartSessionForRole = (task: TaskCard | null, role: AgentRole): boolean => {
   return !task || isRoleAvailableForTask(task, role);
-};
-
-export const resolveReusableSessionForStart = (params: {
-  activeSession: AgentSessionState | null;
-  sessionsForTask: AgentSessionSummary[];
-  role: AgentRole;
-}): ReusableSessionDecision | null => {
-  if (params.activeSession) {
-    return {
-      session: params.activeSession,
-    };
-  }
-
-  return null;
 };
 
 const buildSessionSelectionQueryUpdate = (params: {

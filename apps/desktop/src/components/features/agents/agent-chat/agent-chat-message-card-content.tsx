@@ -229,7 +229,8 @@ const REASONING_MARKDOWN_CLASS_NAME = cn(
 );
 
 const ReasoningMessage = ({ content, streaming }: ReasoningMessageProps): ReactElement => {
-  const pacedContent = usePacedStreamingText(content || "Thinking...", streaming);
+  const sourceText = streaming ? content || "Thinking..." : content;
+  const pacedContent = usePacedStreamingText(sourceText, streaming);
   const renderedContent = useDeferredValue(pacedContent);
   return (
     <div className="px-1 py-0.5 text-muted-foreground">
@@ -257,7 +258,7 @@ const AssistantMessage = ({
   assistantAccentColor,
 }: AssistantMessageProps): ReactElement => {
   const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
-  const streaming = assistantMeta?.isFinal !== true;
+  const streaming = assistantMeta?.isFinal === false;
   const pacedContent = usePacedStreamingText(message.content, streaming);
   const renderedContent = useDeferredValue(pacedContent);
   const footer = getAssistantFooterData(message);

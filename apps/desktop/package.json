@@ -16,7 +16,7 @@
     "preview": "vite preview",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
     "test": "bun test --pass-with-no-tests",
-    "lint": "biome check src"
+    "lint": "biome check src scripts"
   },
   "dependencies": {
     "@openducktor/adapters-opencode-sdk": "workspace:*",

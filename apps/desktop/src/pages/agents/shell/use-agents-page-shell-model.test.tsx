@@ -14,13 +14,15 @@ import {
 enableReactActEnvironment();
 
 const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
-const session = createAgentSessionFixture({
-  sessionId: "session-1",
-  taskId: "task-1",
-  role: "planner",
-  scenario: "planner_initial",
-  runtimeKind: "opencode",
-});
+const createSession = () =>
+  createAgentSessionFixture({
+    sessionId: "session-1",
+    taskId: "task-1",
+    role: "planner",
+    scenario: "planner_initial",
+    runtimeKind: "opencode",
+  });
+type SessionFixture = ReturnType<typeof createSession>;
 
 const retryNavigationPersistence = mock(() => {});
 const updateQuery = mock((_updates?: unknown) => {});
@@ -45,19 +47,19 @@ type SelectionState = {
   viewRole: "planner";
   viewScenario: "planner_initial";
   viewSelectedTask: typeof task | null;
-  viewSessionsForTask: (typeof session)[];
-  viewActiveSession: typeof session | null;
+  viewSessionsForTask: SessionFixture[];
+  viewActiveSession: SessionFixture | null;
   activeTaskTabId: string;
   taskTabs: [];
   availableTabTasks: (typeof task)[];
-  selectedSessionById: Record<string, typeof session>;
+  selectedSessionById: Record<string, SessionFixture>;
   taskId: string;
-  activeSession: typeof session | null;
+  activeSession: SessionFixture | null;
   isActiveTaskHydrated: boolean;
   isActiveTaskHydrationFailed: boolean;
   isViewSessionHistoryHydrationFailed: boolean;
   isViewSessionHistoryHydrating: boolean;
-  sessionsForTask: (typeof session)[];
+  sessionsForTask: SessionFixture[];
   handleCreateTab: (taskId: string) => void;
   handleCloseTab: (taskId: string) => void;
   handleSelectTab: typeof handleSelectTab;
@@ -144,7 +146,7 @@ let tasksState: TasksStateContextValue = {
   unlinkingPullRequestTaskId: null,
   pendingMergedPullRequest: null,
 };
-let agentSessions = [session];
+let agentSessions = [createSession()];
 let agentOperations = {
   bootstrapTaskSessions: mock(async () => undefined),
   hydrateRequestedTaskSessionHistory: mock(async () => undefined),
@@ -176,24 +178,25 @@ let querySyncState: QuerySyncState = {
   retryNavigationPersistence,
   updateQuery,
 };
+const initialSelectionSession = createSession();
 let selectionState: SelectionState = {
   viewTaskId: "task-1",
   viewRole: "planner" as const,
   viewScenario: "planner_initial" as const,
   viewSelectedTask: task,
-  viewSessionsForTask: [session],
-  viewActiveSession: session,
+  viewSessionsForTask: [initialSelectionSession],
+  viewActiveSession: initialSelectionSession,
   activeTaskTabId: "task-1",
   taskTabs: [],
   availableTabTasks: [task],
-  selectedSessionById: { "session-1": session },
+  selectedSessionById: { "session-1": initialSelectionSession },
   taskId: "task-1",
-  activeSession: session,
+  activeSession: initialSelectionSession,
   isActiveTaskHydrated: true,
   isActiveTaskHydrationFailed: false,
   isViewSessionHistoryHydrationFailed: false,
   isViewSessionHistoryHydrating: false,
-  sessionsForTask: [session],
+  sessionsForTask: [initialSelectionSession],
   handleCreateTab: mock((_taskId: string) => {}),
   handleCloseTab: mock((_taskId: string) => {}),
   handleSelectTab,
@@ -262,12 +265,7 @@ let rightPanelState: RightPanelState = {
 let useAgentsPageShellModel: () => AgentsPageShellModelState;
 
 const registerModuleMocks = (): void => {
-  mock.module("react-router-dom", () => ({
-    useNavigationType: () => "PUSH",
-    useSearchParams: () => [new URLSearchParams(), mock(() => {})],
-  }));
-
-  mock.module("@/state/app-state-provider", () => ({
+  const stateModule = {
     AppStateProvider: ({ children }: { children: ReactElement }) => children,
     useWorkspaceState: () => workspaceState,
     useChecksState: () => checksState,
@@ -294,7 +292,15 @@ const registerModuleMocks = (): void => {
     useSpecState: () => {
       throw new Error("useSpecState is not used in this test");
     },
+  };
+
+  mock.module("react-router-dom", () => ({
+    useNavigationType: () => "PUSH",
+    useSearchParams: () => [new URLSearchParams(), mock(() => {})],
   }));
+
+  mock.module("@/state/app-state-provider", () => stateModule);
+  mock.module("@/state", () => stateModule);
 
   mock.module("@/state/app-state-contexts", () => ({
     ...appStateContexts,
@@ -394,6 +400,7 @@ beforeEach(async () => {
     unlinkingPullRequestTaskId: null,
     pendingMergedPullRequest: null,
   };
+  const session = createSession();
   agentSessions = [session];
   agentOperations = {
     bootstrapTaskSessions: mock(async () => undefined),

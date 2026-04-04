@@ -68,6 +68,10 @@ function FileDiffEntry({
       return;
     }
 
+    if (isDiffBodyMounted) {
+      return;
+    }
+
     setIsDiffBodyMounted(false);
     const rafId = globalThis.requestAnimationFrame(() => {
       setIsDiffBodyMounted(true);
@@ -76,7 +80,7 @@ function FileDiffEntry({
     return () => {
       globalThis.cancelAnimationFrame(rafId);
     };
-  }, [hasDiffContent, isExpanded, shouldPersistMountedDiffBody]);
+  }, [hasDiffContent, isDiffBodyMounted, isExpanded, shouldPersistMountedDiffBody]);
 
   return (
     <div className="min-w-0 max-w-full">

@@ -195,7 +195,7 @@ export function useAgentChatWindow({
       refreshScrollState();
     },
     scrollToBottomOnSend: () => {
-      if (userScrolledRef.current) {
+      if (userScrolledRef.current || turnStart !== latestTurnStart) {
         resetLatestTurnsAndPinBottom();
         return;
       }

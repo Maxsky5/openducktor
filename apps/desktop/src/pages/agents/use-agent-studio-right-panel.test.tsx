@@ -84,8 +84,8 @@ const diffModel: AgentStudioGitPanelModel = {
   targetBranch: "origin/main",
   diffScope: "target",
   scopeStatesByScope: {
-    target: emptyDiffScopeState,
-    uncommitted: emptyDiffScopeState,
+    target: { ...emptyDiffScopeState },
+    uncommitted: { ...emptyDiffScopeState },
   },
   loadedScopesByScope: {
     target: true,

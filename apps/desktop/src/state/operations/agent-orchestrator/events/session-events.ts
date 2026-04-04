@@ -144,16 +144,18 @@ export const attachAgentSessionListener = (
       handleSessionEvent(batchedHandlerContext, queuedEvent);
     }
 
-    if (queuedEvents.length > 0) {
-      scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
-    }
-
     if (!hasBufferedSessionUpdate) {
+      if (queuedEvents.length > 0) {
+        scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
+      }
       return;
     }
 
     const nextSession = batchedSessionsRef.current[context.sessionId];
     if (!nextSession) {
+      if (queuedEvents.length > 0) {
+        scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
+      }
       return;
     }
 
@@ -162,6 +164,10 @@ export const attachAgentSessionListener = (
       () => nextSession,
       shouldPersistBufferedSession ? { persist: true } : undefined,
     );
+
+    if (queuedEvents.length > 0) {
+      scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
+    }
   };
 
   const scheduleQueuedFlush = (delayMs = batchWindowMs): void => {

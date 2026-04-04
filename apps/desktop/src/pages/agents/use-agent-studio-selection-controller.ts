@@ -7,8 +7,8 @@ import type {
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { useMemo, useRef } from "react";
-import { useAgentSession } from "@/state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import { useAgentSession } from "@/state/app-state-provider";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";

@@ -10,7 +10,6 @@ import {
   startSessionWorkflow,
 } from "@/features/session-start";
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
@@ -32,7 +31,6 @@ type UseAgentStudioFreshSessionCreationArgs = {
   taskId: string;
   role: AgentRole;
   activeSession: AgentSessionState | null;
-  sessionsForTask?: AgentSessionSummary[];
   selectedTask: TaskCard | null;
   agentStudioReady: boolean;
   isActiveTaskHydrated: boolean;

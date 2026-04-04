@@ -3,6 +3,7 @@ import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   appendSessionMessage,
+  everySessionMessage,
   findLastToolSessionMessage,
   findLastUserSessionMessage,
   getSessionMessageCount,
@@ -114,5 +115,9 @@ describe("agent-orchestrator/support/messages", () => {
 
     expect(getSessionMessageCount(createSession(appended))).toBe(1);
     expect(findLastToolSessionMessage(createSession(appended))).toBeUndefined();
+  });
+
+  test("matches Array.every semantics for empty collections", () => {
+    expect(everySessionMessage(createSession([]), () => false)).toBe(true);
   });
 });

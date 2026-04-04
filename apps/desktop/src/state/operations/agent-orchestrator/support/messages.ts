@@ -383,7 +383,7 @@ export const everySessionMessage = (
       return false;
     }
   }
-  return messages.length > 0;
+  return true;
 };
 
 export const findSessionMessageById = (
@@ -591,8 +591,6 @@ export const findFirstChangedSessionMessageIndex = (
 
   return nextData.length > previousData.length ? previousData.length : -1;
 };
-
-export const clearSessionMessageCache = (_sessionId: string): void => {};
 
 function mergeAtIndex(
   previous: InternalSessionMessagesState,

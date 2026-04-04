@@ -79,6 +79,21 @@ const seedProcessedToolMessageKeys = (session: AgentSessionState): Set<string> =
   return keys;
 };
 
+const collectCompletedWorktreeAffectingToolKeys = (session: AgentSessionState): Set<string> => {
+  const keys = new Set<string>();
+  forEachSessionMessage(session, (message) => {
+    const meta = message.meta;
+    if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
+      return;
+    }
+
+    if (canToolAffectWorktree(meta)) {
+      keys.add(`${session.sessionId}:${message.id}`);
+    }
+  });
+  return keys;
+};
+
 export function useAgentStudioBuildWorktreeRefresh({
   viewRole,
   activeSession,
@@ -89,6 +104,7 @@ export function useAgentStudioBuildWorktreeRefresh({
   const previousSessionIdRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<AgentSessionState["messages"] | null>(null);
   const wasSessionHistoryHydratingRef = useRef(false);
+  const completedToolKeysBeforeHydrationRef = useRef<Set<string> | null>(null);
 
   useEffect(() => {
     if (viewRole !== "build" || activeSession?.role !== "build") {
@@ -96,6 +112,10 @@ export function useAgentStudioBuildWorktreeRefresh({
     }
 
     if (isSessionHistoryHydrating) {
+      if (!wasSessionHistoryHydratingRef.current) {
+        completedToolKeysBeforeHydrationRef.current =
+          collectCompletedWorktreeAffectingToolKeys(activeSession);
+      }
       wasSessionHistoryHydratingRef.current = true;
       return;
     }
@@ -110,7 +130,11 @@ export function useAgentStudioBuildWorktreeRefresh({
     if (wasSessionHistoryHydratingRef.current) {
       wasSessionHistoryHydratingRef.current = false;
       previousMessagesRef.current = activeSession.messages;
-      processedToolMessageKeysRef.current = seedProcessedToolMessageKeys(activeSession);
+      const completedToolKeysBeforeHydration = completedToolKeysBeforeHydrationRef.current;
+      processedToolMessageKeysRef.current = completedToolKeysBeforeHydration
+        ? new Set(completedToolKeysBeforeHydration)
+        : seedProcessedToolMessageKeys(activeSession);
+      completedToolKeysBeforeHydrationRef.current = null;
       return;
     }
 

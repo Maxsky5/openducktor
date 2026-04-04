@@ -53,8 +53,9 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
   );
   const displayedFileStatuses = displayedScopeState.fileStatuses;
   const displayedUncommittedFileCount = displayedScopeState.uncommittedFileCount;
-  const displayedError = displayedScopeState.error ?? model.error;
-  const displayedIsLoading = model.isLoading || !displayedScopeLoaded;
+  const displayedError = displayedScopeState.error;
+  const displayedIsLoading =
+    (uiDiffScope === model.diffScope && model.isLoading) || !displayedScopeLoaded;
   const hasUncommittedFiles = displayedUncommittedFileCount > 0;
   const hasFiles = displayedFileDiffs.length > 0;
   const pendingReset = model.pendingReset ?? null;

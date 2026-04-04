@@ -28,7 +28,7 @@ import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-st
 import { LiveAgentSessionStore } from "./lifecycle/live-agent-session-store";
 import { createRepoSessionHydrationService } from "./lifecycle/repo-session-hydration-service";
 import { createSessionHydrationOperations } from "./lifecycle/session-hydration-operations";
-import { clearSessionMessageCache, findLastUserSessionMessage } from "./support/messages";
+import { findLastUserSessionMessage } from "./support/messages";
 
 type UseAgentOrchestratorOperationsArgs = {
   activeRepo: string | null;
@@ -213,7 +213,6 @@ export function useAgentOrchestratorOperations({
       }
 
       for (const sessionId of sessionIds) {
-        clearSessionMessageCache(sessionId);
         const unsubscribe = unsubscribersRef.current.get(sessionId);
         unsubscribe?.();
         unsubscribersRef.current.delete(sessionId);

@@ -165,15 +165,6 @@ describe("useAgentStudioFreshSessionCreation", () => {
             qa: { required: true, canSkip: false, available: true, completed: false },
           },
         }),
-        sessionsForTask: [
-          createAgentSessionFixture({
-            sessionId: "builder-1",
-            role: "build",
-            scenario: "build_implementation_start",
-            workingDirectory: "/repo/worktrees/stale-task",
-            startedAt: "2026-02-22T09:00:00.000Z",
-          }),
-        ],
         startAgentSession,
       }),
     );
