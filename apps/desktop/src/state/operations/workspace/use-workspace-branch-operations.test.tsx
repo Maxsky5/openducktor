@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { useRef } from "react";
 import { toast } from "sonner";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
@@ -15,10 +15,6 @@ let workspaceHost = createWorkspaceHostClient();
 
 beforeEach(() => {
   workspaceHost = createWorkspaceHostClient();
-});
-
-afterAll(() => {
-  mock.restore();
 });
 
 type BranchHarnessArgs = {

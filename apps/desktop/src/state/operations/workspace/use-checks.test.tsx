@@ -7,6 +7,7 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
+import * as actualSonner from "sonner";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
@@ -214,7 +215,7 @@ beforeEach(async () => {
 
 afterAll(() => {
   Object.assign(host, originalHostMethods);
-  mock.restore();
+  mock.module("sonner", () => actualSonner);
 });
 
 describe("use-checks", () => {
