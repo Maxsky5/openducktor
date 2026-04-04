@@ -68,6 +68,7 @@ const AGENT_METHODS = [
   "buildContinuationTargetGet",
   "runtimeStop",
   "runtimeEnsure",
+  "runtimeStartupStatus",
   "buildStart",
   "devServerGetState",
   "devServerStart",

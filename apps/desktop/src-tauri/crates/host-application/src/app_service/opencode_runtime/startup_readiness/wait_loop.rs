@@ -23,6 +23,11 @@ fn read_child_pipe(pipe: &mut Option<impl Read>) -> String {
     output.trim().to_string()
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct StartupWaitProgress {
+    pub(crate) report: OpencodeStartupWaitReport,
+}
+
 #[cfg(test)]
 pub(crate) fn wait_for_local_server(port: u16, timeout: Duration) -> Result<()> {
     let policy = OpencodeStartupReadinessPolicy {
@@ -75,6 +80,7 @@ pub(crate) fn wait_for_local_server_with_process(
     policy: OpencodeStartupReadinessPolicy,
     cancel_epoch: &StartupCancelEpoch,
     cancel_snapshot: u64,
+    mut on_progress: impl FnMut(StartupWaitProgress),
 ) -> std::result::Result<OpencodeStartupWaitReport, OpencodeStartupWaitFailure> {
     let started_at = Instant::now();
     let address: SocketAddr = format!("127.0.0.1:{port}").parse().map_err(|error| {
@@ -86,6 +92,9 @@ pub(crate) fn wait_for_local_server_with_process(
         )
     })?;
     let probe = LocalServerProbe::spawn(address, policy, Arc::clone(cancel_epoch), cancel_snapshot);
+    on_progress(StartupWaitProgress {
+        report: startup_wait_report(started_at, 0),
+    });
 
     loop {
         if let Some(status) = child.try_wait().map_err(|error| {
@@ -140,7 +149,11 @@ pub(crate) fn wait_for_local_server_with_process(
                     report,
                 ))
             }
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                on_progress(StartupWaitProgress {
+                    report: startup_wait_report(started_at, probe.attempts()),
+                });
+            }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 return Err(startup_wait_failure(
                     "probe_disconnected",

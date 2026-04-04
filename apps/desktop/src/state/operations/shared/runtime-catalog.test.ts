@@ -74,6 +74,19 @@ const fileSearchResultsFixture: AgentFileSearchResult[] = [
 const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDependencies => ({
   getRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
   ensureRuntime: async () => runtimeFixture,
+  runtimeStartupStatus: async () => ({
+    runtimeKind: "opencode",
+    repoPath: "/tmp/repo",
+    stage: "idle",
+    runtime: null,
+    startedAt: null,
+    updatedAt: "2026-02-22T08:00:00.000Z",
+    elapsedMs: null,
+    attempts: null,
+    failureKind: null,
+    failureReason: null,
+    detail: null,
+  }),
   listRuntimesForRepo: async () => [],
   stopRuntime: async () => ({ ok: true }),
   listRuns: async () => [],
@@ -355,6 +368,59 @@ describe("opencode-catalog", () => {
 
     expect(mcpTimeoutResult.runtimeFailureKind).toBeNull();
     expect(mcpTimeoutResult.mcpFailureKind).toBe("timeout");
+  });
+
+  test("preserves host startup stage when frontend observation times out during runtime startup", async () => {
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        runtimeHealthTimeoutMs: 5,
+        ensureRuntime: async () => await new Promise<RuntimeSummary>(() => {}),
+        runtimeStartupStatus: async () => ({
+          runtimeKind: "opencode",
+          repoPath: "/tmp/repo",
+          stage: "waiting_for_runtime",
+          runtime: null,
+          startedAt: "2026-02-22T08:00:00.000Z",
+          updatedAt: "2026-02-22T08:00:05.000Z",
+          elapsedMs: 5000,
+          attempts: 4,
+          failureKind: null,
+          failureReason: null,
+          detail: null,
+        }),
+      }),
+    );
+
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
+
+    expect(result.runtimeFailureKind).toBe("timeout");
+    expect(result.progress).toEqual(
+      expect.objectContaining({
+        stage: "waiting_for_runtime",
+        observation: "observing_existing_startup",
+        attempts: 4,
+        elapsedMs: 5000,
+      }),
+    );
+  });
+
+  test("reports MCP-stage timeout separately from runtime startup", async () => {
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        runtimeHealthTimeoutMs: 5,
+        getMcpStatus: async () => await new Promise<Record<string, { status: string }>>(() => {}),
+      }),
+    );
+
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
+
+    expect(result.runtimeOk).toBe(true);
+    expect(result.mcpFailureKind).toBe("timeout");
+    expect(result.progress).toEqual(
+      expect.objectContaining({
+        stage: "checking_mcp_status",
+      }),
+    );
   });
 
   test("treats MCP status as optional when the runtime does not support it", async () => {

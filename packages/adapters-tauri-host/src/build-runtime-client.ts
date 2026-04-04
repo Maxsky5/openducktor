@@ -9,11 +9,13 @@ import {
   failureKindSchema,
   type PullRequest,
   pullRequestSchema,
+  type RepoRuntimeStartupStatus,
   type RunSummary,
   type RuntimeCheck,
   type RuntimeDescriptor,
   type RuntimeInstanceSummary,
   type RuntimeKind,
+  repoRuntimeStartupStatusSchema,
   runSummarySchema,
   runtimeCheckSchema,
   runtimeDescriptorSchema,
@@ -192,6 +194,18 @@ const runtimeEnsure = async (
   } catch (error) {
     throw toRuntimeEnsureError(error) ?? error;
   }
+};
+
+const runtimeStartupStatus = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  runtimeKind: RuntimeKind,
+): Promise<RepoRuntimeStartupStatus> => {
+  const payload = await invokeFn("runtime_startup_status", {
+    repoPath,
+    runtimeKind,
+  });
+  return repoRuntimeStartupStatusSchema.parse(payload);
 };
 
 const buildStart = async (
@@ -465,6 +479,13 @@ export class TauriAgentClient {
 
   async runtimeEnsure(repoPath: string, runtimeKind: RuntimeKind): Promise<RuntimeInstanceSummary> {
     return runtimeEnsure(this.invokeFn, repoPath, runtimeKind);
+  }
+
+  async runtimeStartupStatus(
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+  ): Promise<RepoRuntimeStartupStatus> {
+    return runtimeStartupStatus(this.invokeFn, repoPath, runtimeKind);
   }
 
   async buildStart(

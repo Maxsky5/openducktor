@@ -2,13 +2,16 @@ mod registry;
 mod startup;
 
 use super::AppService;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use host_domain::{
-    AgentRuntimeKind, RunState, RunSummary, RuntimeDescriptor, RuntimeInstanceSummary, RuntimeRole,
+    now_rfc3339, AgentRuntimeKind, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage,
+    RepoRuntimeStartupStatus, RunState, RunSummary, RuntimeDescriptor, RuntimeInstanceSummary,
+    RuntimeRole,
 };
 use std::collections::{HashMap, HashSet};
 use std::process::Child;
 use std::sync::Arc;
+use std::time::Instant;
 
 #[derive(Clone, Copy)]
 pub(super) struct RuntimeExistingLookup<'a> {
@@ -27,6 +30,8 @@ pub(super) struct RuntimeStartInput<'a> {
     startup_scope: &'a str,
     repo_path: &'a str,
     repo_key: String,
+    startup_started_at_instant: Instant,
+    startup_started_at: String,
     task_id: &'a str,
     role: RuntimeRole,
     startup_policy: super::OpencodeStartupReadinessPolicy,
@@ -42,6 +47,9 @@ pub(super) struct SpawnedRuntimeServer {
     port: u16,
     child: Child,
     opencode_process_guard: super::TrackedOpencodeProcessGuard,
+    startup_started_at_instant: Instant,
+    startup_started_at: String,
+    startup_report: super::OpencodeStartupWaitReport,
 }
 
 #[derive(Clone)]
@@ -183,6 +191,187 @@ impl AppService {
         format!("{}::{repo_key}", runtime_kind.as_str())
     }
 
+    fn update_runtime_startup_status(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+        update: impl FnOnce(&mut super::service_core::RuntimeStartupStatusEntry),
+    ) -> Result<()> {
+        let key = Self::runtime_ensure_flight_key(runtime_kind, repo_key);
+        let mut statuses = self
+            .runtime_startup_status
+            .lock()
+            .map_err(|_| anyhow!("Runtime startup status lock poisoned"))?;
+        let entry = statuses.entry(key).or_insert_with(|| {
+            super::service_core::RuntimeStartupStatusEntry::new(
+                runtime_kind,
+                repo_key.to_string(),
+                RepoRuntimeStartupStage::Idle,
+            )
+        });
+        update(entry);
+        entry.updated_at = now_rfc3339();
+        Ok(())
+    }
+
+    fn mark_runtime_startup_requested(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+        started_at_instant: Instant,
+        started_at: &str,
+    ) -> Result<()> {
+        self.update_runtime_startup_status(runtime_kind, repo_key, |entry| {
+            entry.stage = RepoRuntimeStartupStage::StartupRequested;
+            entry.runtime = None;
+            entry.started_at = Some(started_at.to_string());
+            entry.started_at_instant = Some(started_at_instant);
+            entry.elapsed_ms = None;
+            entry.attempts = Some(0);
+            entry.failure_kind = None;
+            entry.failure_reason = None;
+            entry.detail = None;
+        })
+    }
+
+    fn mark_runtime_startup_waiting(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+        started_at_instant: Instant,
+        started_at: &str,
+        attempts: u32,
+    ) -> Result<()> {
+        self.update_runtime_startup_status(runtime_kind, repo_key, |entry| {
+            entry.stage = RepoRuntimeStartupStage::WaitingForRuntime;
+            entry.started_at = Some(started_at.to_string());
+            entry.started_at_instant = Some(started_at_instant);
+            entry.elapsed_ms = None;
+            entry.attempts = Some(attempts);
+        })
+    }
+
+    fn mark_runtime_startup_ready(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+        runtime: &RuntimeInstanceSummary,
+        started_at_instant: Instant,
+        started_at: &str,
+        attempts: u32,
+        elapsed_ms: u64,
+    ) -> Result<()> {
+        self.update_runtime_startup_status(runtime_kind, repo_key, |entry| {
+            entry.stage = RepoRuntimeStartupStage::RuntimeReady;
+            entry.runtime = Some(runtime.clone());
+            entry.started_at = Some(started_at.to_string());
+            entry.started_at_instant = Some(started_at_instant);
+            entry.elapsed_ms = Some(elapsed_ms);
+            entry.attempts = Some(attempts);
+            entry.failure_kind = None;
+            entry.failure_reason = None;
+            entry.detail = None;
+        })
+    }
+
+    fn mark_runtime_startup_failed(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+        failure_kind: RepoRuntimeStartupFailureKind,
+        failure_reason: &str,
+        detail: String,
+        started_at_instant: Instant,
+        started_at: &str,
+        attempts: Option<u32>,
+        elapsed_ms: Option<u64>,
+    ) -> Result<()> {
+        self.update_runtime_startup_status(runtime_kind, repo_key, |entry| {
+            entry.stage = RepoRuntimeStartupStage::StartupFailed;
+            entry.runtime = None;
+            entry.started_at = Some(started_at.to_string());
+            entry.started_at_instant = Some(started_at_instant);
+            entry.elapsed_ms = elapsed_ms;
+            entry.attempts = attempts;
+            entry.failure_kind = Some(failure_kind);
+            entry.failure_reason = Some(failure_reason.to_string());
+            entry.detail = Some(detail);
+        })
+    }
+
+    fn clear_runtime_startup_status(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+    ) -> Result<()> {
+        let key = Self::runtime_ensure_flight_key(runtime_kind, repo_key);
+        let mut statuses = self
+            .runtime_startup_status
+            .lock()
+            .map_err(|_| anyhow!("Runtime startup status lock poisoned"))?;
+        statuses.remove(key.as_str());
+        Ok(())
+    }
+
+    fn clear_runtime_startup_status_for_runtime(
+        &self,
+        runtime: &RuntimeInstanceSummary,
+    ) -> Result<()> {
+        self.clear_runtime_startup_status(runtime.kind, runtime.repo_path.as_str())
+    }
+
+    pub fn runtime_startup_status(
+        &self,
+        runtime_kind: &str,
+        repo_path: &str,
+    ) -> Result<RepoRuntimeStartupStatus> {
+        let runtime_kind = Self::resolve_supported_runtime_kind(runtime_kind)?;
+        let repo_key = self.resolve_authorized_repo_path(repo_path)?;
+        let status_key = Self::runtime_ensure_flight_key(runtime_kind, repo_key.as_str());
+
+        if let Some(snapshot) = self
+            .runtime_startup_status
+            .lock()
+            .map_err(|_| anyhow!("Runtime startup status lock poisoned"))?
+            .get(status_key.as_str())
+            .cloned()
+        {
+            return Ok(snapshot.to_public_status());
+        }
+
+        if let Some(runtime) =
+            self.find_existing_workspace_runtime(runtime_kind, repo_key.as_str())?
+        {
+            return Ok(RepoRuntimeStartupStatus {
+                runtime_kind,
+                repo_path: repo_key,
+                stage: RepoRuntimeStartupStage::RuntimeReady,
+                runtime: Some(runtime.clone()),
+                started_at: Some(runtime.started_at.clone()),
+                updated_at: runtime.started_at,
+                elapsed_ms: None,
+                attempts: None,
+                failure_kind: None,
+                failure_reason: None,
+                detail: None,
+            });
+        }
+
+        Ok(RepoRuntimeStartupStatus {
+            runtime_kind,
+            repo_path: repo_key,
+            stage: RepoRuntimeStartupStage::Idle,
+            runtime: None,
+            started_at: None,
+            updated_at: now_rfc3339(),
+            elapsed_ms: None,
+            attempts: None,
+            failure_kind: None,
+            failure_reason: None,
+            detail: None,
+        })
+    }
+
     fn acquire_runtime_ensure_flight(
         &self,
         runtime_kind: AgentRuntimeKind,
@@ -278,7 +467,7 @@ impl AppService {
             .agent_runtimes
             .lock()
             .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-        Self::prune_stale_runtimes(&mut runtimes)?;
+        self.prune_stale_runtimes(&mut runtimes)?;
         Ok(Self::find_existing_runtime(
             &runtimes,
             RuntimeExistingLookup {
@@ -489,6 +678,8 @@ impl AppService {
         }
         let mut flight_guard =
             RuntimeEnsureFlightGuard::new(self, runtime_kind, repo_key.as_str(), flight);
+        let startup_started_at_instant = Instant::now();
+        let startup_started_at = now_rfc3339();
 
         let startup_result = (|| -> Result<RuntimeInstanceSummary> {
             if let Some(existing) =
@@ -514,6 +705,8 @@ impl AppService {
                 startup_scope: "workspace_runtime",
                 repo_path,
                 repo_key: repo_key.clone(),
+                startup_started_at_instant,
+                startup_started_at: startup_started_at.clone(),
                 task_id: Self::WORKSPACE_RUNTIME_TASK_ID,
                 role: Self::WORKSPACE_RUNTIME_ROLE,
                 startup_policy,
@@ -533,6 +726,35 @@ impl AppService {
                 }),
             })
         })();
+        if let Err(error) = startup_result.as_ref() {
+            let startup_failure = error
+                .chain()
+                .find_map(|cause| cause.downcast_ref::<super::OpencodeStartupWaitFailure>());
+            let (failure_kind, failure_reason, attempts, elapsed_ms) = match startup_failure {
+                Some(failure) => (
+                    if failure.reason == "timeout" {
+                        RepoRuntimeStartupFailureKind::Timeout
+                    } else {
+                        RepoRuntimeStartupFailureKind::Error
+                    },
+                    failure.reason,
+                    Some(failure.report().attempts()),
+                    Some(failure.report().startup_ms()),
+                ),
+                None => (RepoRuntimeStartupFailureKind::Error, "error", None, None),
+            };
+            self.mark_runtime_startup_failed(
+                runtime_kind,
+                repo_key.as_str(),
+                failure_kind,
+                failure_reason,
+                format!("{error:#}"),
+                startup_started_at_instant,
+                startup_started_at.as_str(),
+                attempts,
+                elapsed_ms,
+            )?;
+        }
         flight_guard.complete(&startup_result)?;
         startup_result
     }
@@ -542,7 +764,22 @@ impl AppService {
         input: RuntimeStartInput<'_>,
     ) -> Result<RuntimeInstanceSummary> {
         let spawned_server = self.spawn_runtime_server(&input)?;
-        self.attach_runtime_session(input, spawned_server)
+        let startup_started_at_instant = spawned_server.startup_started_at_instant;
+        let startup_started_at = spawned_server.startup_started_at.clone();
+        let startup_report = spawned_server.startup_report;
+        let runtime_kind = input.runtime_kind;
+        let repo_key = input.repo_key.clone();
+        let summary = self.attach_runtime_session(input, spawned_server)?;
+        self.mark_runtime_startup_ready(
+            runtime_kind,
+            repo_key.as_str(),
+            &summary,
+            startup_started_at_instant,
+            startup_started_at.as_str(),
+            startup_report.attempts(),
+            startup_report.startup_ms(),
+        )?;
+        Ok(summary)
     }
 
     pub(super) fn resolve_supported_runtime_kind(runtime_kind: &str) -> Result<AgentRuntimeKind> {
@@ -579,10 +816,13 @@ fn collect_build_external_session_ids_for_run(
 #[cfg(test)]
 mod tests {
     use super::{AppService, RuntimeEnsureFlightGuard};
-    use crate::app_service::RunProcess;
     use crate::app_service::test_support::{build_service_with_state, make_task};
-    use anyhow::{Result, anyhow};
-    use host_domain::{AgentRuntimeKind, AgentSessionDocument, RunSummary, TaskStatus};
+    use crate::app_service::RunProcess;
+    use anyhow::{anyhow, Result};
+    use host_domain::{
+        AgentRuntimeKind, AgentSessionDocument, RepoRuntimeStartupFailureKind,
+        RepoRuntimeStartupStage, RunSummary, TaskStatus,
+    };
     use host_infra_system::RepoConfig;
     use std::io::{Read, Write};
     use std::net::TcpListener;
@@ -654,11 +894,9 @@ mod tests {
 
         let error = AppService::wait_for_runtime_ensure_flight(&flight)
             .expect_err("dropped leader should finish waiters with an error");
-        assert!(
-            error
-                .to_string()
-                .contains("Runtime ensure aborted unexpectedly")
-        );
+        assert!(error
+            .to_string()
+            .contains("Runtime ensure aborted unexpectedly"));
 
         Ok(())
     }
@@ -691,17 +929,69 @@ mod tests {
                 &Err(anyhow!("simulated startup failure")),
             )
             .expect_err("poisoned completion should surface an error");
-        assert!(
-            error
-                .to_string()
-                .contains("Runtime ensure coordination state lock poisoned")
-        );
+        assert!(error
+            .to_string()
+            .contains("Runtime ensure coordination state lock poisoned"));
 
         let flights = service
             .runtime_ensure_flights
             .lock()
             .expect("runtime ensure flights lock should remain available");
         assert!(flights.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_startup_status_tracks_waiting_and_failure_stages() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let repo_path = "/tmp/runtime-startup-status";
+        let started_at_instant = Instant::now();
+        let started_at = "2026-04-04T16:00:00Z";
+
+        service.mark_runtime_startup_requested(
+            AgentRuntimeKind::Opencode,
+            repo_path,
+            started_at_instant,
+            started_at,
+        )?;
+        service.mark_runtime_startup_waiting(
+            AgentRuntimeKind::Opencode,
+            repo_path,
+            started_at_instant,
+            started_at,
+            3,
+        )?;
+
+        let waiting_status = service.runtime_startup_status("opencode", repo_path)?;
+        assert_eq!(
+            waiting_status.stage,
+            RepoRuntimeStartupStage::WaitingForRuntime
+        );
+        assert_eq!(waiting_status.attempts, Some(3));
+        assert_eq!(waiting_status.started_at.as_deref(), Some(started_at));
+
+        service.mark_runtime_startup_failed(
+            AgentRuntimeKind::Opencode,
+            repo_path,
+            RepoRuntimeStartupFailureKind::Timeout,
+            "timeout",
+            "OpenCode startup probe failed reason=timeout".to_string(),
+            started_at_instant,
+            started_at,
+            Some(4),
+            Some(4200),
+        )?;
+
+        let failed_status = service.runtime_startup_status("opencode", repo_path)?;
+        assert_eq!(failed_status.stage, RepoRuntimeStartupStage::StartupFailed);
+        assert_eq!(
+            failed_status.failure_kind,
+            Some(RepoRuntimeStartupFailureKind::Timeout)
+        );
+        assert_eq!(failed_status.failure_reason.as_deref(), Some("timeout"));
+        assert_eq!(failed_status.attempts, Some(4));
+        assert_eq!(failed_status.elapsed_ms, Some(4200));
 
         Ok(())
     }
@@ -932,11 +1222,9 @@ mod tests {
             .runtime_stop("missing-runtime")
             .expect_err("stopping unknown runtime should fail");
 
-        assert!(
-            error
-                .to_string()
-                .contains("Runtime not found: missing-runtime")
-        );
+        assert!(error
+            .to_string()
+            .contains("Runtime not found: missing-runtime"));
     }
 
     #[test]

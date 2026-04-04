@@ -292,6 +292,39 @@ pub struct RuntimeInstanceSummary {
     pub descriptor: RuntimeDescriptor,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RepoRuntimeStartupStage {
+    Idle,
+    StartupRequested,
+    WaitingForRuntime,
+    RuntimeReady,
+    StartupFailed,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RepoRuntimeStartupFailureKind {
+    Timeout,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoRuntimeStartupStatus {
+    pub runtime_kind: AgentRuntimeKind,
+    pub repo_path: String,
+    pub stage: RepoRuntimeStartupStage,
+    pub runtime: Option<RuntimeInstanceSummary>,
+    pub started_at: Option<String>,
+    pub updated_at: String,
+    pub elapsed_ms: Option<u64>,
+    pub attempts: Option<u32>,
+    pub failure_kind: Option<RepoRuntimeStartupFailureKind>,
+    pub failure_reason: Option<String>,
+    pub detail: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DevServerScriptStatus {

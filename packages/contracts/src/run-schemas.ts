@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runtimeDescriptorSchema, runtimeKindSchema } from "./agent-runtime-schemas";
+import { failureKindSchema } from "./failure-schemas";
 
 export const runtimeHealthSchema = z.object({
   kind: runtimeKindSchema,
@@ -103,6 +104,30 @@ export const runtimeInstanceSummarySchema = z.object({
   descriptor: runtimeDescriptorSchema,
 });
 export type RuntimeInstanceSummary = z.infer<typeof runtimeInstanceSummarySchema>;
+
+export const repoRuntimeStartupStageSchema = z.enum([
+  "idle",
+  "startup_requested",
+  "waiting_for_runtime",
+  "runtime_ready",
+  "startup_failed",
+]);
+export type RepoRuntimeStartupStage = z.infer<typeof repoRuntimeStartupStageSchema>;
+
+export const repoRuntimeStartupStatusSchema = z.object({
+  runtimeKind: runtimeKindSchema,
+  repoPath: z.string(),
+  stage: repoRuntimeStartupStageSchema,
+  runtime: runtimeInstanceSummarySchema.nullable(),
+  startedAt: z.string().nullable(),
+  updatedAt: z.string(),
+  elapsedMs: z.number().int().nonnegative().nullable(),
+  attempts: z.number().int().nonnegative().nullable(),
+  failureKind: failureKindSchema.nullable(),
+  failureReason: z.string().nullable(),
+  detail: z.string().nullable(),
+});
+export type RepoRuntimeStartupStatus = z.infer<typeof repoRuntimeStartupStatusSchema>;
 
 export const runEventSchema = z.discriminatedUnion("type", [
   z.object({

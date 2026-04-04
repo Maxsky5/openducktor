@@ -2,6 +2,10 @@ use super::process_registry::TrackedOpencodeProcessGuard;
 use super::startup_metrics::OpencodeStartupMetrics;
 use super::workspace_policy::HookTrustChallenge;
 use super::*;
+use host_domain::{
+    now_rfc3339, AgentRuntimeKind, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage,
+    RepoRuntimeStartupStatus,
+};
 
 pub type RunEmitter = Arc<dyn Fn(RunEvent) + Send + Sync + 'static>;
 pub type DevServerEmitter = Arc<dyn Fn(DevServerEvent) + Send + Sync + 'static>;
@@ -14,6 +18,66 @@ pub(super) struct RuntimeEnsureFlight {
 pub(super) enum RuntimeEnsureFlightState {
     Starting,
     Finished(Box<Result<RuntimeInstanceSummary, String>>),
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct RuntimeStartupStatusEntry {
+    pub(super) runtime_kind: AgentRuntimeKind,
+    pub(super) repo_path: String,
+    pub(super) stage: RepoRuntimeStartupStage,
+    pub(super) runtime: Option<RuntimeInstanceSummary>,
+    pub(super) started_at: Option<String>,
+    pub(super) started_at_instant: Option<Instant>,
+    pub(super) updated_at: String,
+    pub(super) elapsed_ms: Option<u64>,
+    pub(super) attempts: Option<u32>,
+    pub(super) failure_kind: Option<RepoRuntimeStartupFailureKind>,
+    pub(super) failure_reason: Option<String>,
+    pub(super) detail: Option<String>,
+}
+
+impl RuntimeStartupStatusEntry {
+    pub(super) fn new(
+        runtime_kind: AgentRuntimeKind,
+        repo_path: String,
+        stage: RepoRuntimeStartupStage,
+    ) -> Self {
+        let now = now_rfc3339();
+        Self {
+            runtime_kind,
+            repo_path,
+            stage,
+            runtime: None,
+            started_at: None,
+            started_at_instant: None,
+            updated_at: now,
+            elapsed_ms: None,
+            attempts: None,
+            failure_kind: None,
+            failure_reason: None,
+            detail: None,
+        }
+    }
+
+    pub(super) fn to_public_status(&self) -> RepoRuntimeStartupStatus {
+        let elapsed_ms = self.elapsed_ms.or_else(|| {
+            self.started_at_instant
+                .map(|started_at| started_at.elapsed().as_millis().min(u64::MAX as u128) as u64)
+        });
+        RepoRuntimeStartupStatus {
+            runtime_kind: self.runtime_kind,
+            repo_path: self.repo_path.clone(),
+            stage: self.stage,
+            runtime: self.runtime.clone(),
+            started_at: self.started_at.clone(),
+            updated_at: self.updated_at.clone(),
+            elapsed_ms,
+            attempts: self.attempts,
+            failure_kind: self.failure_kind,
+            failure_reason: self.failure_reason.clone(),
+            detail: self.detail.clone(),
+        }
+    }
 }
 
 impl RuntimeEnsureFlight {
@@ -70,6 +134,7 @@ pub struct AppService {
     pub(super) agent_runtimes: Arc<Mutex<HashMap<String, AgentRuntimeProcess>>>,
     pub(super) tracked_opencode_processes: Arc<Mutex<HashMap<u32, usize>>>,
     pub(super) runtime_ensure_flights: Arc<Mutex<HashMap<String, Arc<RuntimeEnsureFlight>>>>,
+    pub(super) runtime_startup_status: Arc<Mutex<HashMap<String, RuntimeStartupStatusEntry>>>,
     pub(super) opencode_session_status_cache:
         Arc<Mutex<HashMap<OpencodeSessionStatusProbeTarget, CachedOpencodeSessionStatusProbe>>>,
     pub(super) opencode_session_status_flights:
@@ -176,6 +241,7 @@ impl AppService {
             agent_runtimes: Arc::new(Mutex::new(HashMap::new())),
             tracked_opencode_processes: Arc::new(Mutex::new(HashMap::new())),
             runtime_ensure_flights: Arc::new(Mutex::new(HashMap::new())),
+            runtime_startup_status: Arc::new(Mutex::new(HashMap::new())),
             opencode_session_status_cache: Arc::new(Mutex::new(HashMap::new())),
             opencode_session_status_flights: Arc::new(Mutex::new(HashMap::new())),
             opencode_session_status_probe_limiter: Arc::new(

@@ -33,6 +33,30 @@ describe("useAgentStudioReadiness", () => {
             availableToolIds: [],
             checkedAt: "2026-02-20T12:01:00.000Z",
             errors: ["Timed out waiting for OpenCode runtime startup readiness"],
+            progress: {
+              stage: "waiting_for_runtime",
+              observation: "started_by_diagnostics",
+              startedAt: "2026-02-20T12:00:55.000Z",
+              updatedAt: "2026-02-20T12:01:00.000Z",
+              elapsedMs: 5000,
+              attempts: 4,
+              detail: null,
+              failureKind: "timeout",
+              failureReason: null,
+              host: {
+                runtimeKind: "opencode",
+                repoPath: "/repo",
+                stage: "waiting_for_runtime",
+                runtime: null,
+                startedAt: "2026-02-20T12:00:55.000Z",
+                updatedAt: "2026-02-20T12:01:00.000Z",
+                elapsedMs: 5000,
+                attempts: 4,
+                failureKind: null,
+                failureReason: null,
+                detail: null,
+              },
+            },
           },
         },
         isLoadingChecks: false,
@@ -48,8 +72,8 @@ describe("useAgentStudioReadiness", () => {
 
       const readiness = latest as ReturnType<typeof useAgentStudioReadiness>;
       expect(readiness.agentStudioReadinessState).toBe("blocked");
-      expect(readiness.agentStudioBlockedReason).toContain("Retrying automatically");
-      expect(readiness.agentStudioBlockedReason).toContain("OpenCode runtime");
+      expect(readiness.agentStudioBlockedReason).toContain("Frontend diagnostics timed out");
+      expect(readiness.agentStudioBlockedReason).toContain("local reachability");
     } finally {
       await harness.unmount();
     }

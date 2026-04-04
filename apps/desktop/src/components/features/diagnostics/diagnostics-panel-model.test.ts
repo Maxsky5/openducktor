@@ -481,6 +481,30 @@ describe("buildDiagnosticsPanelModel", () => {
           availableToolIds: [],
           checkedAt: "2026-02-20T12:01:00.000Z",
           errors: ["Timed out waiting for OpenCode runtime startup readiness"],
+          progress: {
+            stage: "waiting_for_runtime",
+            observation: "started_by_diagnostics",
+            startedAt: "2026-02-20T12:00:55.000Z",
+            updatedAt: "2026-02-20T12:01:00.000Z",
+            elapsedMs: 5000,
+            attempts: 4,
+            detail: null,
+            failureKind: "timeout",
+            failureReason: null,
+            host: {
+              runtimeKind: "opencode",
+              repoPath: "/repo",
+              stage: "waiting_for_runtime",
+              runtime: null,
+              startedAt: "2026-02-20T12:00:55.000Z",
+              updatedAt: "2026-02-20T12:01:00.000Z",
+              elapsedMs: 5000,
+              attempts: 4,
+              failureKind: null,
+              failureReason: null,
+              detail: null,
+            },
+          },
         },
       },
       isLoadingChecks: false,
@@ -490,7 +514,13 @@ describe("buildDiagnosticsPanelModel", () => {
     const mcpSection = model.sections.find((section) => section.key === "mcp:opencode");
 
     expect(runtimeSection?.badge).toEqual({ label: "Starting", variant: "warning" });
-    expect(runtimeSection?.errors[0]).toContain("Retrying automatically");
+    expect(runtimeSection?.errors[0]).toContain("Frontend diagnostics timed out");
+    expect(runtimeSection?.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Stage", value: "waiting for runtime" }),
+        expect.objectContaining({ label: "Attempts", value: "4" }),
+      ]),
+    );
     expect(mcpSection?.badge).toEqual({ label: "Retrying", variant: "warning" });
   });
 

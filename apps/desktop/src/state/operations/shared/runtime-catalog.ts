@@ -1,4 +1,5 @@
 import type {
+  RepoRuntimeStartupStatus,
   RunSummary,
   RuntimeDescriptor,
   RuntimeInstanceSummary,
@@ -14,8 +15,15 @@ import type {
 import { errorMessage } from "@/lib/errors";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import { appQueryClient } from "@/lib/query-client";
+import { DiagnosticsQueryTimeoutError } from "@/state/queries/checks";
 import { ensureRuntimeListFromQuery } from "@/state/queries/runtime";
-import type { RepoRuntimeFailureKind, RepoRuntimeHealthCheck } from "@/types/diagnostics";
+import type {
+  RepoRuntimeFailureKind,
+  RepoRuntimeHealthCheck,
+  RepoRuntimeHealthObservation,
+  RepoRuntimeHealthProgress,
+  RepoRuntimeHealthStage,
+} from "@/types/diagnostics";
 import { host } from "./host";
 
 type RuntimeMcpServerStatus = {
@@ -41,7 +49,12 @@ export type RuntimeCatalogAdapter = Pick<
 
 type RuntimeCatalogDependencies = {
   getRuntimeDefinition: (runtimeKind: RuntimeKind) => RuntimeDescriptor;
+  runtimeHealthTimeoutMs?: number;
   ensureRuntime: (runtimeKind: RuntimeKind, repoPath: string) => Promise<RuntimeInstanceSummary>;
+  runtimeStartupStatus: (
+    runtimeKind: RuntimeKind,
+    repoPath: string,
+  ) => Promise<RepoRuntimeStartupStatus>;
   listRuntimesForRepo: (
     runtimeKind: RuntimeKind,
     repoPath: string,
@@ -57,29 +70,6 @@ type RuntimeCatalogDependencies = {
   shouldRestartRuntimeForMcpStatusError: (runtimeKind: RuntimeKind, message: string) => boolean;
 };
 
-type RuntimeProbeResult =
-  | {
-      ok: true;
-      runtime: RuntimeInstanceSummary;
-      runtimeInput: ListCatalogInput;
-    }
-  | {
-      ok: false;
-      result: RepoRuntimeHealthCheck;
-    };
-
-type McpProbeResult =
-  | {
-      ok: true;
-      runtime: RuntimeInstanceSummary;
-      runtimeInput: ListCatalogInput;
-      statusByServer: Record<string, RuntimeMcpServerStatus>;
-    }
-  | {
-      ok: false;
-      result: RepoRuntimeHealthCheck;
-    };
-
 type NormalizedMcpStatus = {
   mcpServerStatus: string | null;
   mcpServerError: string | null;
@@ -94,6 +84,7 @@ const ACTIVE_RUN_STATES = new Set<RunSummary["state"]>([
   "blocked",
   "awaiting_done_confirmation",
 ]);
+const RUNTIME_HEALTH_TIMEOUT_MS = 15_000;
 const toNowIso = (): string => new Date().toISOString();
 const toRuntimeInput = (
   runtime: RuntimeInstanceSummary,
@@ -123,10 +114,109 @@ const toErrorFailure = (
   failureKind: readFailureKind(error) ?? "error",
 });
 
+const withRuntimeHealthTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeoutId = globalThis.setTimeout(() => {
+      reject(new DiagnosticsQueryTimeoutError(timeoutMs));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId !== null) {
+      globalThis.clearTimeout(timeoutId);
+    }
+  }
+};
+
+const tryReadRuntimeStartupStatus = async (
+  deps: RuntimeCatalogDependencies,
+  repoPath: string,
+  runtimeKind: RuntimeKind,
+): Promise<RepoRuntimeStartupStatus | null> => {
+  try {
+    return await deps.runtimeStartupStatus(runtimeKind, repoPath);
+  } catch {
+    return null;
+  }
+};
+
+const mapHostStage = (stage: RepoRuntimeStartupStatus["stage"]): RepoRuntimeHealthStage => {
+  switch (stage) {
+    case "idle":
+      return "idle";
+    case "startup_requested":
+      return "startup_requested";
+    case "waiting_for_runtime":
+      return "waiting_for_runtime";
+    case "runtime_ready":
+      return "runtime_ready";
+    case "startup_failed":
+      return "startup_failed";
+  }
+};
+
+const toProgress = ({
+  stage,
+  observation,
+  host,
+  checkedAt,
+  detail,
+  failureKind,
+  failureReason,
+  startedAt,
+  updatedAt,
+  elapsedMs,
+  attempts,
+}: {
+  stage: RepoRuntimeHealthStage;
+  observation: RepoRuntimeHealthObservation;
+  host: RepoRuntimeStartupStatus | null;
+  checkedAt: string;
+  detail?: string | null;
+  failureKind?: RepoRuntimeFailureKind;
+  failureReason?: string | null;
+  startedAt?: string | null;
+  updatedAt?: string | null;
+  elapsedMs?: number | null;
+  attempts?: number | null;
+}): RepoRuntimeHealthProgress => ({
+  stage,
+  observation,
+  host,
+  startedAt: startedAt ?? host?.startedAt ?? null,
+  updatedAt: updatedAt ?? host?.updatedAt ?? checkedAt,
+  elapsedMs: elapsedMs ?? host?.elapsedMs ?? null,
+  attempts: attempts ?? host?.attempts ?? null,
+  detail: detail ?? host?.detail ?? null,
+  failureKind: failureKind ?? host?.failureKind ?? null,
+  failureReason: failureReason ?? host?.failureReason ?? null,
+});
+
+const toHostProgress = (
+  host: RepoRuntimeStartupStatus | null,
+  observation: RepoRuntimeHealthObservation,
+  checkedAt: string,
+): RepoRuntimeHealthProgress | null => {
+  if (!host) {
+    return null;
+  }
+
+  return toProgress({
+    stage: mapHostStage(host.stage),
+    observation,
+    host,
+    checkedAt,
+  });
+};
+
 const toRuntimeUnavailableHealthCheck = (
   runtimeError: string,
   runtimeFailureKind: NonNullRepoRuntimeFailureKind,
   checkedAt: string,
+  progress: RepoRuntimeHealthProgress | null,
 ): RepoRuntimeHealthCheck => {
   const unavailableMessage = "Runtime is unavailable, so MCP cannot be verified.";
   return {
@@ -143,6 +233,7 @@ const toRuntimeUnavailableHealthCheck = (
     availableToolIds: [],
     checkedAt,
     errors: [runtimeError, unavailableMessage],
+    progress,
   };
 };
 
@@ -151,6 +242,7 @@ const toMcpStatusFailedHealthCheck = (
   mcpError: string,
   mcpFailureKind: NonNullRepoRuntimeFailureKind,
   checkedAt: string,
+  progress: RepoRuntimeHealthProgress | null,
 ): RepoRuntimeHealthCheck => {
   return {
     runtimeOk: true,
@@ -166,12 +258,14 @@ const toMcpStatusFailedHealthCheck = (
     availableToolIds: [],
     checkedAt,
     errors: [mcpError],
+    progress,
   };
 };
 
 const toRepoRuntimeHealthCheckWithoutMcpStatus = (
   runtime: RuntimeInstanceSummary,
   checkedAt: string,
+  progress: RepoRuntimeHealthProgress | null,
 ): RepoRuntimeHealthCheck => {
   return {
     runtimeOk: true,
@@ -187,6 +281,7 @@ const toRepoRuntimeHealthCheckWithoutMcpStatus = (
     availableToolIds: [],
     checkedAt,
     errors: [],
+    progress,
   };
 };
 
@@ -195,11 +290,14 @@ const toRepoRuntimeHealthCheck = ({
   availableToolIds,
   mcpServerStatus,
   mcpServerError,
+  mcpFailureKind,
   checkedAt,
+  progress,
 }: {
   runtime: RuntimeInstanceSummary;
   availableToolIds: string[];
   checkedAt: string;
+  progress: RepoRuntimeHealthProgress | null;
 } & NormalizedMcpStatus): RepoRuntimeHealthCheck => {
   const mcpOk = mcpServerStatus === "connected";
   const mcpError = mcpOk ? null : (mcpServerError ?? "OpenDucktor MCP is unavailable.");
@@ -211,13 +309,14 @@ const toRepoRuntimeHealthCheck = ({
     runtime,
     mcpOk,
     mcpError,
-    mcpFailureKind: mcpOk ? null : "error",
+    mcpFailureKind: mcpOk ? null : mcpFailureKind,
     mcpServerName: ODT_MCP_SERVER_NAME,
     mcpServerStatus,
     mcpServerError: mcpServerError ?? null,
     availableToolIds,
     checkedAt,
     errors: mcpError ? [mcpError] : [],
+    progress,
   };
 };
 
@@ -257,138 +356,7 @@ const selectCatalogRuntime = (
   runtimes.find((runtime) => runtime.workingDirectory === repoPath) ?? runtimes[0] ?? null;
 
 export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies) => {
-  const probeRuntime = async (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    checkedAt: string,
-  ): Promise<RuntimeProbeResult> => {
-    try {
-      const existingRuntime =
-        selectCatalogRuntime(await deps.listRuntimesForRepo(runtimeKind, repoPath), repoPath) ??
-        null;
-      const runtime = existingRuntime ?? (await deps.ensureRuntime(runtimeKind, repoPath));
-      return {
-        ok: true,
-        runtime,
-        runtimeInput: toRuntimeInput(runtime, runtimeKind),
-      };
-    } catch (error) {
-      const runtimeError = toErrorFailure(error);
-      return {
-        ok: false,
-        result: toRuntimeUnavailableHealthCheck(
-          runtimeError.message,
-          runtimeError.failureKind,
-          checkedAt,
-        ),
-      };
-    }
-  };
-
-  const probeMcpStatusWithRetryStrategy = async (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    runtimeProbe: Extract<RuntimeProbeResult, { ok: true }>,
-    checkedAt: string,
-  ): Promise<McpProbeResult> => {
-    try {
-      const statusByServer = await deps.getMcpStatus(runtimeProbe.runtimeInput);
-      return {
-        ok: true,
-        runtime: runtimeProbe.runtime,
-        runtimeInput: runtimeProbe.runtimeInput,
-        statusByServer,
-      };
-    } catch (error) {
-      const mcpStatusError = toErrorFailure(error);
-      const rawMessage = mcpStatusError.message;
-      if (!deps.shouldRestartRuntimeForMcpStatusError(runtimeKind, rawMessage)) {
-        return {
-          ok: false,
-          result: toMcpStatusFailedHealthCheck(
-            runtimeProbe.runtime,
-            `Failed to query runtime MCP status: ${rawMessage}`,
-            mcpStatusError.failureKind,
-            checkedAt,
-          ),
-        };
-      }
-
-      let restartedRuntime: RuntimeInstanceSummary | null = null;
-      try {
-        const runs = await deps.listRuns(repoPath);
-        if (hasActiveRunUsingRuntime(runs, runtimeProbe.runtimeInput.runtimeEndpoint)) {
-          return {
-            ok: false,
-            result: toMcpStatusFailedHealthCheck(
-              runtimeProbe.runtime,
-              `Failed to query runtime MCP status: ${rawMessage}. Automatic runtime restart was skipped because an active run is using this runtime.`,
-              mcpStatusError.failureKind,
-              checkedAt,
-            ),
-          };
-        }
-        await deps.stopRuntime(runtimeProbe.runtime.runtimeId);
-        restartedRuntime = await deps.ensureRuntime(runtimeKind, repoPath);
-        const restartedRuntimeInput = toRuntimeInput(restartedRuntime, runtimeKind);
-        const statusByServer = await deps.getMcpStatus(restartedRuntimeInput);
-        return {
-          ok: true,
-          runtime: restartedRuntime,
-          runtimeInput: restartedRuntimeInput,
-          statusByServer,
-        };
-      } catch (retryError) {
-        const retriedMcpStatusError = toErrorFailure(retryError);
-        return {
-          ok: false,
-          result: toMcpStatusFailedHealthCheck(
-            restartedRuntime ?? runtimeProbe.runtime,
-            `Failed to query runtime MCP status: ${retriedMcpStatusError.message}`,
-            retriedMcpStatusError.failureKind,
-            checkedAt,
-          ),
-        };
-      }
-    }
-  };
-
-  const normalizeMcpStatus = async (
-    runtimeInput: ListCatalogInput,
-    statusByServer: Record<string, RuntimeMcpServerStatus>,
-  ): Promise<NormalizedMcpStatus> => {
-    let {
-      status: mcpServerStatus,
-      error: mcpServerError,
-      failureKind: mcpFailureKind,
-    } = resolveMcpStatusError(statusByServer);
-
-    if (shouldReconnectMcp(mcpServerStatus)) {
-      try {
-        await deps.connectMcpServer({
-          ...runtimeInput,
-          name: ODT_MCP_SERVER_NAME,
-        });
-        const refreshedStatusByServer = await deps.getMcpStatus(runtimeInput);
-        const refreshedStatus = resolveMcpStatusError(refreshedStatusByServer);
-        mcpServerStatus = refreshedStatus.status;
-        mcpServerError = refreshedStatus.error;
-        mcpFailureKind = refreshedStatus.failureKind;
-      } catch (error) {
-        const reconnectError = errorMessage(error);
-        mcpServerError = mcpServerError
-          ? `${mcpServerError} (reconnect failed: ${reconnectError})`
-          : `Failed to reconnect MCP server '${ODT_MCP_SERVER_NAME}': ${reconnectError}`;
-        mcpFailureKind = "error";
-      }
-    }
-
-    return {
-      mcpServerStatus,
-      mcpServerError,
-      mcpFailureKind,
-    };
-  };
+  const runtimeHealthTimeoutMs = deps.runtimeHealthTimeoutMs ?? RUNTIME_HEALTH_TIMEOUT_MS;
 
   const fetchCatalog = async (
     repoPath: string,
@@ -437,47 +405,306 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
     });
   };
 
+  const finalizeMcpStatus = async ({
+    runtime,
+    runtimeInput,
+    statusByServer,
+    checkedAt,
+    observation,
+    hostStatus,
+    progress,
+  }: {
+    runtime: RuntimeInstanceSummary;
+    runtimeInput: ListCatalogInput;
+    statusByServer: Record<string, RuntimeMcpServerStatus>;
+    checkedAt: string;
+    observation: RepoRuntimeHealthObservation;
+    hostStatus: RepoRuntimeStartupStatus | null;
+    progress: RepoRuntimeHealthProgress | null;
+  }): Promise<RepoRuntimeHealthCheck> => {
+    let {
+      status: mcpServerStatus,
+      error: mcpServerError,
+      failureKind: mcpFailureKind,
+    } = resolveMcpStatusError(statusByServer);
+
+    if (shouldReconnectMcp(mcpServerStatus)) {
+      const reconnectProgress = toProgress({
+        stage: "reconnecting_mcp",
+        observation,
+        host: hostStatus,
+        checkedAt,
+        startedAt: progress?.startedAt ?? runtime.startedAt,
+        updatedAt: checkedAt,
+        elapsedMs: progress?.elapsedMs ?? null,
+        attempts: progress?.attempts ?? null,
+        detail: mcpServerError,
+        failureKind: mcpFailureKind,
+      });
+      try {
+        await withRuntimeHealthTimeout(
+          deps.connectMcpServer({
+            ...runtimeInput,
+            name: ODT_MCP_SERVER_NAME,
+          }),
+          runtimeHealthTimeoutMs,
+        );
+        const refreshedStatusByServer = await withRuntimeHealthTimeout(
+          deps.getMcpStatus(runtimeInput),
+          runtimeHealthTimeoutMs,
+        );
+        const refreshedStatus = resolveMcpStatusError(refreshedStatusByServer);
+        mcpServerStatus = refreshedStatus.status;
+        mcpServerError = refreshedStatus.error;
+        mcpFailureKind = refreshedStatus.failureKind;
+      } catch (error) {
+        if (error instanceof DiagnosticsQueryTimeoutError) {
+          return toMcpStatusFailedHealthCheck(
+            runtime,
+            error.message,
+            error.failureKind,
+            checkedAt,
+            reconnectProgress,
+          );
+        }
+        const reconnectError = errorMessage(error);
+        mcpServerError = mcpServerError
+          ? `${mcpServerError} (reconnect failed: ${reconnectError})`
+          : `Failed to reconnect MCP server '${ODT_MCP_SERVER_NAME}': ${reconnectError}`;
+        mcpFailureKind = "error";
+      }
+    }
+
+    const availableToolIds = await deps
+      .listAvailableToolIds(runtimeInput)
+      .catch(() => [] as string[]);
+    const finalProgress = toProgress({
+      stage: mcpServerStatus === "connected" ? "ready" : "checking_mcp_status",
+      observation,
+      host: hostStatus,
+      checkedAt,
+      startedAt: progress?.startedAt ?? runtime.startedAt,
+      updatedAt: checkedAt,
+      elapsedMs: progress?.elapsedMs ?? null,
+      attempts: progress?.attempts ?? null,
+      detail: mcpServerError,
+      failureKind: mcpFailureKind,
+    });
+
+    return toRepoRuntimeHealthCheck({
+      runtime,
+      availableToolIds,
+      checkedAt,
+      progress: finalProgress,
+      mcpServerStatus,
+      mcpServerError,
+      mcpFailureKind,
+    });
+  };
+
   const checkRepoRuntimeHealth = async (
     repoPath: string,
     runtimeKind: RuntimeKind,
   ): Promise<RepoRuntimeHealthCheck> => {
     const checkedAt = toNowIso();
     const runtimeDefinition = deps.getRuntimeDefinition(runtimeKind);
-    const runtimeProbe = await probeRuntime(repoPath, runtimeKind, checkedAt);
-    if (!runtimeProbe.ok) {
-      return runtimeProbe.result;
+    let hostStatus = await tryReadRuntimeStartupStatus(deps, repoPath, runtimeKind);
+    const existingRuntime =
+      selectCatalogRuntime(await deps.listRuntimesForRepo(runtimeKind, repoPath), repoPath) ?? null;
+    const observation: RepoRuntimeHealthObservation = existingRuntime
+      ? "observed_existing_runtime"
+      : hostStatus && hostStatus.stage !== "idle"
+        ? "observing_existing_startup"
+        : "started_by_diagnostics";
+    let runtime = existingRuntime;
+    let progress = existingRuntime
+      ? toProgress({
+          stage: "runtime_ready",
+          observation,
+          host: hostStatus,
+          checkedAt,
+          startedAt: existingRuntime.startedAt,
+          updatedAt: existingRuntime.startedAt,
+        })
+      : toHostProgress(hostStatus, observation, checkedAt);
+
+    if (!runtime) {
+      try {
+        runtime = await withRuntimeHealthTimeout(
+          deps.ensureRuntime(runtimeKind, repoPath),
+          runtimeHealthTimeoutMs,
+        );
+        const latestHostStatus = await tryReadRuntimeStartupStatus(deps, repoPath, runtimeKind);
+        hostStatus = latestHostStatus;
+        progress = toProgress({
+          stage: "runtime_ready",
+          observation,
+          host: latestHostStatus,
+          checkedAt,
+          startedAt: latestHostStatus?.startedAt ?? runtime.startedAt,
+          updatedAt: latestHostStatus?.updatedAt ?? runtime.startedAt,
+          elapsedMs: latestHostStatus?.elapsedMs ?? null,
+          attempts: latestHostStatus?.attempts ?? null,
+        });
+      } catch (error) {
+        if (error instanceof DiagnosticsQueryTimeoutError) {
+          const latestHostStatus = await tryReadRuntimeStartupStatus(deps, repoPath, runtimeKind);
+          return toRuntimeUnavailableHealthCheck(
+            error.message,
+            error.failureKind,
+            checkedAt,
+            toHostProgress(latestHostStatus, observation, checkedAt) ??
+              toProgress({
+                stage: "startup_requested",
+                observation,
+                host: latestHostStatus,
+                checkedAt,
+                detail: error.message,
+                failureKind: error.failureKind,
+              }),
+          );
+        }
+        const runtimeError = toErrorFailure(error);
+        const latestHostStatus = await tryReadRuntimeStartupStatus(deps, repoPath, runtimeKind);
+        return toRuntimeUnavailableHealthCheck(
+          runtimeError.message,
+          runtimeError.failureKind,
+          checkedAt,
+          toHostProgress(latestHostStatus, observation, checkedAt),
+        );
+      }
     }
+
+    const runtimeInput = toRuntimeInput(runtime, runtimeKind);
 
     if (!runtimeDefinition.capabilities.supportsMcpStatus) {
-      return toRepoRuntimeHealthCheckWithoutMcpStatus(runtimeProbe.runtime, checkedAt);
+      return toRepoRuntimeHealthCheckWithoutMcpStatus(runtime, checkedAt, progress);
     }
 
-    const mcpProbe = await probeMcpStatusWithRetryStrategy(
-      repoPath,
-      runtimeKind,
-      runtimeProbe,
+    const checkingProgress = toProgress({
+      stage: "checking_mcp_status",
+      observation,
+      host: hostStatus,
       checkedAt,
-    );
-    if (!mcpProbe.ok) {
-      return mcpProbe.result;
-    }
-
-    const availableToolIdsPromise = deps
-      .listAvailableToolIds(mcpProbe.runtimeInput)
-      .catch(() => [] as string[]);
-
-    const normalizedMcpStatus = await normalizeMcpStatus(
-      mcpProbe.runtimeInput,
-      mcpProbe.statusByServer,
-    );
-    const availableToolIds = await availableToolIdsPromise;
-
-    return toRepoRuntimeHealthCheck({
-      runtime: mcpProbe.runtime,
-      availableToolIds,
-      checkedAt,
-      ...normalizedMcpStatus,
+      startedAt: progress?.startedAt ?? runtime.startedAt,
+      updatedAt: checkedAt,
+      elapsedMs: progress?.elapsedMs ?? null,
+      attempts: progress?.attempts ?? null,
     });
+
+    try {
+      const statusByServer = await withRuntimeHealthTimeout(
+        deps.getMcpStatus(runtimeInput),
+        runtimeHealthTimeoutMs,
+      );
+      return finalizeMcpStatus({
+        runtime,
+        runtimeInput,
+        statusByServer,
+        checkedAt,
+        observation,
+        hostStatus,
+        progress: checkingProgress,
+      });
+    } catch (error) {
+      if (error instanceof DiagnosticsQueryTimeoutError) {
+        return toMcpStatusFailedHealthCheck(
+          runtime,
+          error.message,
+          error.failureKind,
+          checkedAt,
+          checkingProgress,
+        );
+      }
+
+      const mcpStatusError = toErrorFailure(error);
+      const rawMessage = mcpStatusError.message;
+      if (!deps.shouldRestartRuntimeForMcpStatusError(runtimeKind, rawMessage)) {
+        return toMcpStatusFailedHealthCheck(
+          runtime,
+          `Failed to query runtime MCP status: ${rawMessage}`,
+          mcpStatusError.failureKind,
+          checkedAt,
+          checkingProgress,
+        );
+      }
+
+      const restartingProgress = toProgress({
+        stage: "restarting_runtime",
+        observation: "restarted_for_mcp",
+        host: hostStatus,
+        checkedAt,
+        startedAt: progress?.startedAt ?? runtime.startedAt,
+        updatedAt: checkedAt,
+        elapsedMs: progress?.elapsedMs ?? null,
+        attempts: progress?.attempts ?? null,
+        detail: rawMessage,
+        failureKind: mcpStatusError.failureKind,
+      });
+
+      let restartedRuntime: RuntimeInstanceSummary | null = null;
+      try {
+        const runs = await deps.listRuns(repoPath);
+        if (hasActiveRunUsingRuntime(runs, runtimeInput.runtimeEndpoint)) {
+          const skippedMessage = `Failed to query runtime MCP status: ${rawMessage}. Automatic runtime restart was skipped because an active run is using this runtime.`;
+          return toMcpStatusFailedHealthCheck(
+            runtime,
+            skippedMessage,
+            mcpStatusError.failureKind,
+            checkedAt,
+            toProgress({
+              stage: "restart_skipped_active_run",
+              observation: "restart_skipped_active_run",
+              host: hostStatus,
+              checkedAt,
+              startedAt: restartingProgress.startedAt,
+              updatedAt: checkedAt,
+              elapsedMs: restartingProgress.elapsedMs,
+              attempts: restartingProgress.attempts,
+              detail: skippedMessage,
+              failureKind: mcpStatusError.failureKind,
+            }),
+          );
+        }
+        await withRuntimeHealthTimeout(deps.stopRuntime(runtime.runtimeId), runtimeHealthTimeoutMs);
+        restartedRuntime = await withRuntimeHealthTimeout(
+          deps.ensureRuntime(runtimeKind, repoPath),
+          runtimeHealthTimeoutMs,
+        );
+        const restartedRuntimeInput = toRuntimeInput(restartedRuntime, runtimeKind);
+        const restartedStatusByServer = await withRuntimeHealthTimeout(
+          deps.getMcpStatus(restartedRuntimeInput),
+          runtimeHealthTimeoutMs,
+        );
+        return finalizeMcpStatus({
+          runtime: restartedRuntime,
+          runtimeInput: restartedRuntimeInput,
+          statusByServer: restartedStatusByServer,
+          checkedAt,
+          observation: "restarted_for_mcp",
+          hostStatus: await tryReadRuntimeStartupStatus(deps, repoPath, runtimeKind),
+          progress: restartingProgress,
+        });
+      } catch (retryError) {
+        if (retryError instanceof DiagnosticsQueryTimeoutError) {
+          return toMcpStatusFailedHealthCheck(
+            restartedRuntime ?? runtime,
+            retryError.message,
+            retryError.failureKind,
+            checkedAt,
+            restartingProgress,
+          );
+        }
+        const retriedMcpStatusError = toErrorFailure(retryError);
+        return toMcpStatusFailedHealthCheck(
+          restartedRuntime ?? runtime,
+          `Failed to query runtime MCP status: ${retriedMcpStatusError.message}`,
+          retriedMcpStatusError.failureKind,
+          checkedAt,
+          restartingProgress,
+        );
+      }
+    }
   };
 
   return {
@@ -497,6 +724,8 @@ export const createHostRuntimeCatalogOperations = (
   createRuntimeCatalogOperations({
     getRuntimeDefinition,
     ensureRuntime: (runtimeKind, repoPath) => host.runtimeEnsure(repoPath, runtimeKind),
+    runtimeStartupStatus: (runtimeKind, repoPath) =>
+      host.runtimeStartupStatus(repoPath, runtimeKind),
     listRuntimesForRepo: (runtimeKind, repoPath) =>
       ensureRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath),
     stopRuntime: (runtimeId) => host.runtimeStop(runtimeId),

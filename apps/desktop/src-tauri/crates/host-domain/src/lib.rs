@@ -25,8 +25,9 @@ pub use git::{
 pub use runtime::{
     AgentRuntimeKind, BuildContinuationTarget, BuildContinuationTargetSource, DevServerEvent,
     DevServerGroupState, DevServerLogLine, DevServerLogStream, DevServerScriptState,
-    DevServerScriptStatus, RunEvent, RunState, RunSummary, RuntimeCapabilities, RuntimeDescriptor,
-    RuntimeInstanceSummary, RuntimeProvisioningMode, RuntimeRole, RuntimeRoute,
+    DevServerScriptStatus, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage,
+    RepoRuntimeStartupStatus, RunEvent, RunState, RunSummary, RuntimeCapabilities,
+    RuntimeDescriptor, RuntimeInstanceSummary, RuntimeProvisioningMode, RuntimeRole, RuntimeRoute,
     RuntimeSupportedScope,
 };
 pub use store::TaskStore;
@@ -118,7 +119,8 @@ mod tests {
             GitResetWorktreeSelectionResult, GitUpstreamAheadBehind, GitWorktreeStatus,
             GitWorktreeStatusData, GitWorktreeStatusSnapshot, GitWorktreeStatusSummary,
             GitWorktreeStatusSummaryData, GitWorktreeSummary, IssueType, PlanSubtaskInput,
-            QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState, RunSummary,
+            QaReportDocument, QaVerdict, QaWorkflowVerdict, RepoRuntimeStartupFailureKind,
+            RepoRuntimeStartupStage, RepoRuntimeStartupStatus, RunEvent, RunState, RunSummary,
             RuntimeCheck, RuntimeInstanceSummary, RuntimeRole, SpecDocument, SystemCheck,
             TaskAction, TaskCard, TaskDirectMergeResult, TaskDocumentPresence, TaskDocumentSummary,
             TaskMetadata, TaskQaDocumentPresence, TaskStatus, TaskStore, UpdateTaskPatch,
@@ -169,6 +171,9 @@ mod tests {
             GitWorktreeStatusSummary,
             GitWorktreeStatusSummaryData,
             GitWorktreeSummary,
+            RepoRuntimeStartupFailureKind,
+            RepoRuntimeStartupStage,
+            RepoRuntimeStartupStatus,
             IssueType,
             PlanSubtaskInput,
             QaReportDocument,

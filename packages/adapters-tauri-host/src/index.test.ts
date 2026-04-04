@@ -1161,6 +1161,21 @@ describe("TauriHostClient", () => {
           descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         };
       }
+      if (command === "runtime_startup_status") {
+        return {
+          runtimeKind: "opencode",
+          repoPath: "/repo",
+          stage: "waiting_for_runtime",
+          runtime: null,
+          startedAt: "2026-02-17T12:00:00Z",
+          updatedAt: "2026-02-17T12:00:05Z",
+          elapsedMs: 5000,
+          attempts: 4,
+          failureKind: null,
+          failureReason: null,
+          detail: null,
+        };
+      }
       if (command === "runtime_stop") {
         return { ok: true };
       }
@@ -1171,6 +1186,7 @@ describe("TauriHostClient", () => {
     const qaTarget = await client.buildContinuationTargetGet("/repo", "task-1");
     const runtimes = await client.runtimeList("/repo", "opencode");
     const ensured = await client.runtimeEnsure("/repo", "opencode");
+    const startupStatus = await client.runtimeStartupStatus("/repo", "opencode");
     const stopped = await client.runtimeStop("runtime-1");
 
     expect(definitions[0]?.kind).toBe("opencode");
@@ -1180,12 +1196,14 @@ describe("TauriHostClient", () => {
     });
     expect(runtimes).toHaveLength(1);
     expect(ensured.runtimeId).toBe("runtime-main");
+    expect(startupStatus.stage).toBe("waiting_for_runtime");
     expect(stopped.ok).toBe(true);
     expect(calls.map((entry) => entry.command)).toEqual([
       "runtime_definitions_list",
       "build_continuation_target_get",
       "runtime_list",
       "runtime_ensure",
+      "runtime_startup_status",
       "runtime_stop",
     ]);
     expect(calls[2]?.args).toEqual({
