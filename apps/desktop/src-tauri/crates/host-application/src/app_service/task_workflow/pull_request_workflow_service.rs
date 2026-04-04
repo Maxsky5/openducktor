@@ -3,8 +3,8 @@ use super::approval_support::{
     ensure_clean_builder_worktree, ensure_pull_request_management_status,
 };
 use super::builder_branch_service::BuilderBranchService;
-use super::merged_pull_request_completion_service::{
-    MergedPullRequestCleanupContext, MergedPullRequestCompletionService,
+use super::linked_pull_request_merge_service::{
+    LinkedPullRequestMergeCleanup, LinkedPullRequestMergeService,
 };
 use super::pull_request_provider_service::PullRequestProviderService;
 use crate::app_service::git_provider::ResolvedPullRequest;
@@ -182,7 +182,7 @@ impl<'a> PullRequestWorkflowService<'a> {
         }
 
         let repo_path = self.service.resolve_task_repo_path(repo_path)?;
-        let cleanup_context = if metadata.pull_request.is_none() {
+        let cleanup = if metadata.pull_request.is_none() {
             let builder_context = BuilderBranchService::new(self.service)
                 .load_builder_branch_context(
                     context.repo.repo_path.as_str(),
@@ -192,19 +192,19 @@ impl<'a> PullRequestWorkflowService<'a> {
             let target_branch = BuilderBranchService::new(self.service)
                 .target_branch_for_repo(context.repo.repo_path.as_str())?
                 .checkout_branch();
-            Some(MergedPullRequestCleanupContext {
+            LinkedPullRequestMergeCleanup::BuilderBranches {
                 source_branch: builder_context.source_branch,
                 target_branch,
-            })
+            }
         } else {
-            None
+            LinkedPullRequestMergeCleanup::Skip
         };
 
-        MergedPullRequestCompletionService::new(self.service).complete_linked_pull_request_merge(
+        LinkedPullRequestMergeService::new(self.service).persist_merge_and_close_task(
             repo_path.as_str(),
             task_id,
             pull_request,
-            cleanup_context,
+            cleanup,
         )
     }
 }

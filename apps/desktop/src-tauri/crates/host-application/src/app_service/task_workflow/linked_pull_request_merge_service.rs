@@ -4,27 +4,32 @@ use anyhow::Result;
 use host_domain::{PullRequestRecord, TaskCard, TaskStatus};
 use std::path::Path;
 
+const LINKED_PULL_REQUEST_MERGED_REASON: &str = "Linked pull request merged";
+
 #[derive(Clone, Debug)]
-pub(super) struct MergedPullRequestCleanupContext {
-    pub(super) source_branch: String,
-    pub(super) target_branch: String,
+pub(super) enum LinkedPullRequestMergeCleanup {
+    Skip,
+    BuilderBranches {
+        source_branch: String,
+        target_branch: String,
+    },
 }
 
-pub(super) struct MergedPullRequestCompletionService<'a> {
+pub(super) struct LinkedPullRequestMergeService<'a> {
     service: &'a AppService,
 }
 
-impl<'a> MergedPullRequestCompletionService<'a> {
+impl<'a> LinkedPullRequestMergeService<'a> {
     pub(super) fn new(service: &'a AppService) -> Self {
         Self { service }
     }
 
-    pub(super) fn complete_linked_pull_request_merge(
+    pub(super) fn persist_merge_and_close_task(
         &self,
         repo_path: &str,
         task_id: &str,
         pull_request: PullRequestRecord,
-        cleanup_context: Option<MergedPullRequestCleanupContext>,
+        cleanup: LinkedPullRequestMergeCleanup,
     ) -> Result<TaskCard> {
         self.service.task_store.set_pull_request(
             Path::new(repo_path),
@@ -32,12 +37,16 @@ impl<'a> MergedPullRequestCompletionService<'a> {
             Some(pull_request),
         )?;
 
-        if let Some(cleanup_context) = cleanup_context {
+        if let LinkedPullRequestMergeCleanup::BuilderBranches {
+            source_branch,
+            target_branch,
+        } = cleanup
+        {
             BuilderCleanupService::new(self.service).finalize_direct_merge_cleanup(
                 repo_path,
                 task_id,
-                cleanup_context.source_branch.as_str(),
-                cleanup_context.target_branch.as_str(),
+                source_branch.as_str(),
+                target_branch.as_str(),
             )?;
         }
 
@@ -45,7 +54,7 @@ impl<'a> MergedPullRequestCompletionService<'a> {
             repo_path,
             task_id,
             TaskStatus::Closed,
-            Some("Linked pull request merged"),
+            Some(LINKED_PULL_REQUEST_MERGED_REASON),
         )
     }
 }

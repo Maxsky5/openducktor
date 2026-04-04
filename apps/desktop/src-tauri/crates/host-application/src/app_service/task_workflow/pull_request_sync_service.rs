@@ -1,6 +1,6 @@
 use super::approval_support::{is_syncable_pull_request_state, is_terminal_task_status};
-use super::merged_pull_request_completion_service::{
-    MergedPullRequestCleanupContext, MergedPullRequestCompletionService,
+use super::linked_pull_request_merge_service::{
+    LinkedPullRequestMergeCleanup, LinkedPullRequestMergeService,
 };
 use super::pull_request_provider_service::PullRequestProviderService;
 use crate::app_service::service_core::AppService;
@@ -46,15 +46,15 @@ impl<'a> PullRequestSyncService<'a> {
                 continue;
             };
             if updated.record.state == "merged" && task.status != TaskStatus::Closed {
-                let _ = MergedPullRequestCompletionService::new(self.service)
-                    .complete_linked_pull_request_merge(
+                let _ = LinkedPullRequestMergeService::new(self.service)
+                    .persist_merge_and_close_task(
                         repo_path.as_str(),
                         task.id.as_str(),
                         updated.record,
-                        Some(MergedPullRequestCleanupContext {
+                        LinkedPullRequestMergeCleanup::BuilderBranches {
                             source_branch: updated.source_branch,
                             target_branch: updated.target_branch,
-                        }),
+                        },
                     )?;
             } else {
                 self.service.task_store.set_pull_request(
