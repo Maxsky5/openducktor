@@ -45,8 +45,12 @@ impl AppService {
         self.mark_runtime_startup_requested(
             input.runtime_kind,
             input.repo_key.as_str(),
-            input.startup_started_at_instant,
-            input.startup_started_at.as_str(),
+            &super::RuntimeStartupProgress {
+                started_at_instant: input.startup_started_at_instant,
+                started_at: input.startup_started_at.clone(),
+                attempts: Some(0),
+                elapsed_ms: None,
+            },
         )?;
         let port = pick_free_port()?;
         let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
@@ -95,9 +99,12 @@ impl AppService {
                 let _ = self.mark_runtime_startup_waiting(
                     input.runtime_kind,
                     input.repo_key.as_str(),
-                    input.startup_started_at_instant,
-                    input.startup_started_at.as_str(),
-                    progress.report.attempts(),
+                    &super::RuntimeStartupProgress {
+                        started_at_instant: input.startup_started_at_instant,
+                        started_at: input.startup_started_at.clone(),
+                        attempts: Some(progress.report.attempts()),
+                        elapsed_ms: None,
+                    },
                 );
             },
         ) {

@@ -1,4 +1,5 @@
 use super::AppService;
+use crate::app_service::service_core::{RepoRuntimeHealthFlight, RepoRuntimeHealthFlightState};
 use crate::app_service::OpencodeStartupWaitFailure;
 use anyhow::{anyhow, Result};
 use host_domain::{
@@ -10,7 +11,8 @@ use host_domain::{
 use serde::{de::DeserializeOwned, Deserialize};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
-use std::net::TcpStream;
+use std::net::{TcpStream, ToSocketAddrs};
+use std::sync::Arc;
 use std::time::Duration;
 use url::{form_urlencoded, Url};
 
@@ -50,6 +52,45 @@ struct RuntimeHealthMcpServerStatus {
 
 struct RepoRuntimeHealthHttpClient<'a> {
     endpoint: &'a str,
+}
+
+struct RepoRuntimeProgressInput {
+    stage: RepoRuntimeHealthStage,
+    observation: Option<RepoRuntimeHealthObservation>,
+    host: Option<RepoRuntimeStartupStatus>,
+    checked_at: String,
+    detail: Option<String>,
+    failure_kind: Option<RepoRuntimeStartupFailureKind>,
+    failure_reason: Option<String>,
+    failure_origin: Option<RepoRuntimeHealthFailureOrigin>,
+    started_at: Option<String>,
+    updated_at: Option<String>,
+    elapsed_ms: Option<u64>,
+    attempts: Option<u32>,
+}
+
+struct RepoRuntimeHealthCheckInput {
+    checked_at: String,
+    runtime: Option<RuntimeInstanceSummary>,
+    runtime_ok: bool,
+    runtime_error: Option<String>,
+    runtime_failure_kind: Option<RepoRuntimeStartupFailureKind>,
+    mcp_ok: bool,
+    mcp_error: Option<String>,
+    mcp_failure_kind: Option<RepoRuntimeStartupFailureKind>,
+    mcp_server_status: Option<String>,
+    available_tool_ids: Vec<String>,
+    progress: Option<RepoRuntimeHealthProgress>,
+}
+
+struct CompleteRepoRuntimeHealthInput {
+    repo_key: String,
+    checked_at: String,
+    runtime_kind: AgentRuntimeKind,
+    runtime: RuntimeInstanceSummary,
+    host_status: Option<RepoRuntimeStartupStatus>,
+    observation: Option<RepoRuntimeHealthObservation>,
+    allow_restart: bool,
 }
 
 impl<'a> RepoRuntimeHealthHttpClient<'a> {
@@ -126,14 +167,41 @@ impl<'a> RepoRuntimeHealthHttpClient<'a> {
                 ),
             })?;
 
-        let mut stream =
-            TcpStream::connect((host, port)).map_err(|error| RuntimeHealthHttpFailure {
+        let socket_addresses =
+            (host, port)
+                .to_socket_addrs()
+                .map_err(|error| RuntimeHealthHttpFailure {
+                    failure_kind: RepoRuntimeStartupFailureKind::Error,
+                    message: format!(
+                        "Failed to resolve OpenCode runtime endpoint {} to {action}: {error}",
+                        self.endpoint
+                    ),
+                })?;
+        let mut last_error = None;
+        let mut stream = None;
+        for socket_address in socket_addresses {
+            match TcpStream::connect_timeout(&socket_address, RUNTIME_HEALTH_HTTP_TIMEOUT) {
+                Ok(candidate) => {
+                    stream = Some(candidate);
+                    break;
+                }
+                Err(error) => {
+                    last_error = Some(error);
+                }
+            }
+        }
+        let mut stream = stream.ok_or_else(|| {
+            let error = last_error.unwrap_or_else(|| {
+                std::io::Error::new(ErrorKind::AddrNotAvailable, "no socket addresses resolved")
+            });
+            RuntimeHealthHttpFailure {
                 failure_kind: classify_runtime_health_io_failure(&error),
                 message: format!(
                     "Failed to connect to OpenCode runtime at {} to {action}: {error}",
                     self.endpoint
                 ),
-            })?;
+            }
+        })?;
         stream
             .set_read_timeout(Some(RUNTIME_HEALTH_HTTP_TIMEOUT))
             .map_err(|error| RuntimeHealthHttpFailure {
@@ -326,91 +394,86 @@ impl AppService {
         let startup_status =
             self.runtime_startup_status(runtime_kind.as_str(), repo_key.as_str())?;
         let checked_at = now_rfc3339();
-        let progress = self.repo_runtime_progress(
-            map_startup_stage_to_health(startup_status.stage),
-            Self::repo_runtime_health_observation(
+        let progress = self.repo_runtime_progress(RepoRuntimeProgressInput {
+            stage: map_startup_stage_to_health(startup_status.stage),
+            observation: Self::repo_runtime_health_observation(
                 startup_status.runtime.is_some(),
                 Some(&startup_status),
             ),
-            Some(startup_status.clone()),
-            checked_at.as_str(),
-            startup_status.detail.clone(),
-            startup_status.failure_kind,
-            startup_status.failure_reason.clone(),
-            None,
-            startup_status.started_at.clone(),
-            Some(startup_status.updated_at.clone()),
-            startup_status.elapsed_ms,
-            startup_status.attempts,
-        );
+            host: Some(startup_status.clone()),
+            checked_at: checked_at.clone(),
+            detail: startup_status.detail.clone(),
+            failure_kind: startup_status.failure_kind,
+            failure_reason: startup_status.failure_reason.clone(),
+            failure_origin: None,
+            started_at: startup_status.started_at.clone(),
+            updated_at: Some(startup_status.updated_at.clone()),
+            elapsed_ms: startup_status.elapsed_ms,
+            attempts: startup_status.attempts,
+        });
 
         Ok(Self::build_repo_runtime_health_check(
-            checked_at,
-            startup_status.runtime.clone(),
-            matches!(
-                progress.stage,
-                RepoRuntimeHealthStage::RuntimeReady | RepoRuntimeHealthStage::Ready
-            ),
-            match progress.stage {
-                RepoRuntimeHealthStage::Idle => {
-                    Some("Runtime has not been started yet.".to_string())
-                }
-                RepoRuntimeHealthStage::StartupFailed
-                | RepoRuntimeHealthStage::StartupRequested
-                | RepoRuntimeHealthStage::WaitingForRuntime => startup_status.detail,
-                _ => None,
+            RepoRuntimeHealthCheckInput {
+                checked_at,
+                runtime: startup_status.runtime.clone(),
+                runtime_ok: matches!(
+                    progress.stage,
+                    RepoRuntimeHealthStage::RuntimeReady | RepoRuntimeHealthStage::Ready
+                ),
+                runtime_error: match progress.stage {
+                    RepoRuntimeHealthStage::Idle => {
+                        Some("Runtime has not been started yet.".to_string())
+                    }
+                    RepoRuntimeHealthStage::StartupFailed
+                    | RepoRuntimeHealthStage::StartupRequested
+                    | RepoRuntimeHealthStage::WaitingForRuntime => startup_status.detail,
+                    _ => None,
+                },
+                runtime_failure_kind: startup_status.failure_kind,
+                mcp_ok: false,
+                mcp_error: (!matches!(
+                    progress.stage,
+                    RepoRuntimeHealthStage::RuntimeReady | RepoRuntimeHealthStage::Ready
+                ))
+                .then(|| "Runtime is unavailable, so MCP cannot be verified.".to_string()),
+                mcp_failure_kind: startup_status.failure_kind,
+                mcp_server_status: None,
+                available_tool_ids: Vec::new(),
+                progress: Some(progress),
             },
-            startup_status.failure_kind,
-            false,
-            (!matches!(
-                progress.stage,
-                RepoRuntimeHealthStage::RuntimeReady | RepoRuntimeHealthStage::Ready
-            ))
-            .then(|| "Runtime is unavailable, so MCP cannot be verified.".to_string()),
-            startup_status.failure_kind,
-            None,
-            Vec::new(),
-            Some(progress),
         ))
     }
 
-    fn repo_runtime_progress(
-        &self,
-        stage: RepoRuntimeHealthStage,
-        observation: Option<RepoRuntimeHealthObservation>,
-        host: Option<RepoRuntimeStartupStatus>,
-        checked_at: &str,
-        detail: Option<String>,
-        failure_kind: Option<RepoRuntimeStartupFailureKind>,
-        failure_reason: Option<String>,
-        failure_origin: Option<RepoRuntimeHealthFailureOrigin>,
-        started_at: Option<String>,
-        updated_at: Option<String>,
-        elapsed_ms: Option<u64>,
-        attempts: Option<u32>,
-    ) -> RepoRuntimeHealthProgress {
-        let host_started_at = host.as_ref().and_then(|value| value.started_at.clone());
-        let host_updated_at = host.as_ref().map(|value| value.updated_at.clone());
-        let host_elapsed_ms = host.as_ref().and_then(|value| value.elapsed_ms);
-        let host_attempts = host.as_ref().and_then(|value| value.attempts);
-        let host_detail = host.as_ref().and_then(|value| value.detail.clone());
-        let host_failure_kind = host.as_ref().and_then(|value| value.failure_kind);
-        let host_failure_reason = host.as_ref().and_then(|value| value.failure_reason.clone());
+    fn repo_runtime_progress(&self, input: RepoRuntimeProgressInput) -> RepoRuntimeHealthProgress {
+        let host_started_at = input
+            .host
+            .as_ref()
+            .and_then(|value| value.started_at.clone());
+        let host_updated_at = input.host.as_ref().map(|value| value.updated_at.clone());
+        let host_elapsed_ms = input.host.as_ref().and_then(|value| value.elapsed_ms);
+        let host_attempts = input.host.as_ref().and_then(|value| value.attempts);
+        let host_detail = input.host.as_ref().and_then(|value| value.detail.clone());
+        let host_failure_kind = input.host.as_ref().and_then(|value| value.failure_kind);
+        let host_failure_reason = input
+            .host
+            .as_ref()
+            .and_then(|value| value.failure_reason.clone());
 
         RepoRuntimeHealthProgress {
-            stage,
-            observation,
-            started_at: started_at.or(host_started_at),
-            updated_at: updated_at
+            stage: input.stage,
+            observation: input.observation,
+            started_at: input.started_at.or(host_started_at),
+            updated_at: input
+                .updated_at
                 .or(host_updated_at)
-                .unwrap_or_else(|| checked_at.to_string()),
-            elapsed_ms: elapsed_ms.or(host_elapsed_ms),
-            attempts: attempts.or(host_attempts),
-            detail: detail.or(host_detail),
-            failure_kind: failure_kind.or(host_failure_kind),
-            failure_reason: failure_reason.or(host_failure_reason),
-            failure_origin,
-            host,
+                .unwrap_or(input.checked_at),
+            elapsed_ms: input.elapsed_ms.or(host_elapsed_ms),
+            attempts: input.attempts.or(host_attempts),
+            detail: input.detail.or(host_detail),
+            failure_kind: input.failure_kind.or(host_failure_kind),
+            failure_reason: input.failure_reason.or(host_failure_reason),
+            failure_origin: input.failure_origin,
+            host: input.host,
         }
     }
 
@@ -435,6 +498,95 @@ impl AppService {
     ) -> Result<RepoRuntimeHealthCheck> {
         self.update_repo_runtime_health_status(runtime_kind, repo_key, health.clone())?;
         Ok(health)
+    }
+
+    fn acquire_repo_runtime_health_flight(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+    ) -> Result<(Arc<RepoRuntimeHealthFlight>, bool)> {
+        let key = Self::runtime_ensure_flight_key(runtime_kind, repo_key);
+        let mut flights = self
+            .repo_runtime_health_flights
+            .lock()
+            .map_err(|_| anyhow!("Repo runtime health coordination state lock poisoned"))?;
+        if let Some(existing) = flights.get(key.as_str()) {
+            return Ok((existing.clone(), false));
+        }
+
+        let flight = Arc::new(RepoRuntimeHealthFlight::new());
+        flights.insert(key, flight.clone());
+        Ok((flight, true))
+    }
+
+    fn complete_repo_runtime_health_flight(
+        &self,
+        runtime_kind: AgentRuntimeKind,
+        repo_key: &str,
+        flight: &Arc<RepoRuntimeHealthFlight>,
+        result: &Result<RepoRuntimeHealthCheck>,
+    ) -> Result<()> {
+        let stored_result = match result {
+            Ok(summary) => Ok(summary.clone()),
+            Err(error) => Err(format!("{error:#}")),
+        };
+        let mut poisoned = false;
+
+        {
+            let mut state = match flight.state.lock() {
+                Ok(state) => state,
+                Err(poisoned_state) => {
+                    poisoned = true;
+                    poisoned_state.into_inner()
+                }
+            };
+            *state = RepoRuntimeHealthFlightState::Finished(Box::new(stored_result));
+            flight.condvar.notify_all();
+        }
+
+        {
+            let mut flights = match self.repo_runtime_health_flights.lock() {
+                Ok(flights) => flights,
+                Err(poisoned_flights) => {
+                    poisoned = true;
+                    poisoned_flights.into_inner()
+                }
+            };
+            let key = Self::runtime_ensure_flight_key(runtime_kind, repo_key);
+            flights.remove(key.as_str());
+        }
+
+        if poisoned {
+            return Err(anyhow!(
+                "Repo runtime health coordination state lock poisoned"
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn wait_for_repo_runtime_health_flight(
+        flight: &Arc<RepoRuntimeHealthFlight>,
+    ) -> Result<RepoRuntimeHealthCheck> {
+        let mut state = flight
+            .state
+            .lock()
+            .map_err(|_| anyhow!("Repo runtime health coordination state lock poisoned"))?;
+        loop {
+            match &*state {
+                RepoRuntimeHealthFlightState::Starting => {
+                    state = flight.condvar.wait(state).map_err(|_| {
+                        anyhow!("Repo runtime health coordination state lock poisoned")
+                    })?;
+                }
+                RepoRuntimeHealthFlightState::Finished(result) => {
+                    return result
+                        .as_ref()
+                        .clone()
+                        .map_err(|message: String| anyhow!(message));
+                }
+            }
+        }
     }
 
     fn repo_runtime_timeout_kind(error: &anyhow::Error) -> RepoRuntimeStartupFailureKind {
@@ -578,64 +730,64 @@ impl AppService {
             return self.store_repo_runtime_health(
                 runtime_kind,
                 repo_key,
-                Self::build_repo_runtime_health_check(
-                    checked_at.to_string(),
-                    Some(runtime.clone()),
-                    true,
-                    None,
-                    None,
-                    false,
-                    Some(skipped_message.clone()),
-                    Some(error.failure_kind),
-                    None,
-                    Vec::new(),
-                    Some(self.repo_runtime_progress(
-                        RepoRuntimeHealthStage::RestartSkippedActiveRun,
-                        Some(RepoRuntimeHealthObservation::RestartSkippedActiveRun),
-                        host_status,
-                        checked_at,
-                        Some(skipped_message),
-                        Some(error.failure_kind),
-                        None,
-                        Some(RepoRuntimeHealthFailureOrigin::RuntimeRestart),
-                        Some(runtime.started_at.clone()),
-                        Some(checked_at.to_string()),
-                        None,
-                        None,
-                    )),
-                ),
+                Self::build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+                    checked_at: checked_at.to_string(),
+                    runtime: Some(runtime.clone()),
+                    runtime_ok: true,
+                    runtime_error: None,
+                    runtime_failure_kind: None,
+                    mcp_ok: false,
+                    mcp_error: Some(skipped_message.clone()),
+                    mcp_failure_kind: Some(error.failure_kind),
+                    mcp_server_status: None,
+                    available_tool_ids: Vec::new(),
+                    progress: Some(self.repo_runtime_progress(RepoRuntimeProgressInput {
+                        stage: RepoRuntimeHealthStage::RestartSkippedActiveRun,
+                        observation: Some(RepoRuntimeHealthObservation::RestartSkippedActiveRun),
+                        host: host_status,
+                        checked_at: checked_at.to_string(),
+                        detail: Some(skipped_message),
+                        failure_kind: Some(error.failure_kind),
+                        failure_reason: None,
+                        failure_origin: Some(RepoRuntimeHealthFailureOrigin::RuntimeRestart),
+                        started_at: Some(runtime.started_at.clone()),
+                        updated_at: Some(checked_at.to_string()),
+                        elapsed_ms: None,
+                        attempts: None,
+                    })),
+                }),
             );
         }
 
         self.update_repo_runtime_health_status(
             runtime_kind,
             repo_key,
-            Self::build_repo_runtime_health_check(
-                checked_at.to_string(),
-                Some(runtime.clone()),
-                true,
-                None,
-                None,
-                false,
-                Some(error.message.clone()),
-                Some(error.failure_kind),
-                None,
-                Vec::new(),
-                Some(self.repo_runtime_progress(
-                    RepoRuntimeHealthStage::RestartingRuntime,
-                    Some(RepoRuntimeHealthObservation::RestartedForMcp),
-                    host_status.clone(),
-                    checked_at,
-                    Some(error.message.clone()),
-                    Some(error.failure_kind),
-                    None,
-                    Some(RepoRuntimeHealthFailureOrigin::RuntimeRestart),
-                    Some(runtime.started_at.clone()),
-                    Some(checked_at.to_string()),
-                    None,
-                    None,
-                )),
-            ),
+            Self::build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+                checked_at: checked_at.to_string(),
+                runtime: Some(runtime.clone()),
+                runtime_ok: true,
+                runtime_error: None,
+                runtime_failure_kind: None,
+                mcp_ok: false,
+                mcp_error: Some(error.message.clone()),
+                mcp_failure_kind: Some(error.failure_kind),
+                mcp_server_status: None,
+                available_tool_ids: Vec::new(),
+                progress: Some(self.repo_runtime_progress(RepoRuntimeProgressInput {
+                    stage: RepoRuntimeHealthStage::RestartingRuntime,
+                    observation: Some(RepoRuntimeHealthObservation::RestartedForMcp),
+                    host: host_status.clone(),
+                    checked_at: checked_at.to_string(),
+                    detail: Some(error.message.clone()),
+                    failure_kind: Some(error.failure_kind),
+                    failure_reason: None,
+                    failure_origin: Some(RepoRuntimeHealthFailureOrigin::RuntimeRestart),
+                    started_at: Some(runtime.started_at.clone()),
+                    updated_at: Some(checked_at.to_string()),
+                    elapsed_ms: None,
+                    attempts: None,
+                })),
+            }),
         )?;
 
         if let Err(stop_error) = self.runtime_stop(runtime.runtime_id.as_str()) {
@@ -644,64 +796,70 @@ impl AppService {
             return self.store_repo_runtime_health(
                 runtime_kind,
                 repo_key,
-                Self::build_repo_runtime_health_check(
-                    checked_at.to_string(),
-                    Some(runtime.clone()),
-                    true,
-                    None,
-                    None,
-                    false,
-                    Some(stop_message.clone()),
-                    Some(RepoRuntimeStartupFailureKind::Error),
-                    None,
-                    Vec::new(),
-                    Some(self.repo_runtime_progress(
-                        RepoRuntimeHealthStage::RestartingRuntime,
-                        Some(RepoRuntimeHealthObservation::RestartedForMcp),
-                        host_status,
-                        checked_at,
-                        Some(stop_message),
-                        Some(RepoRuntimeStartupFailureKind::Error),
-                        None,
-                        Some(RepoRuntimeHealthFailureOrigin::RuntimeStop),
-                        Some(runtime.started_at.clone()),
-                        Some(checked_at.to_string()),
-                        None,
-                        None,
-                    )),
-                ),
+                Self::build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+                    checked_at: checked_at.to_string(),
+                    runtime: Some(runtime.clone()),
+                    runtime_ok: true,
+                    runtime_error: None,
+                    runtime_failure_kind: None,
+                    mcp_ok: false,
+                    mcp_error: Some(stop_message.clone()),
+                    mcp_failure_kind: Some(RepoRuntimeStartupFailureKind::Error),
+                    mcp_server_status: None,
+                    available_tool_ids: Vec::new(),
+                    progress: Some(self.repo_runtime_progress(RepoRuntimeProgressInput {
+                        stage: RepoRuntimeHealthStage::RestartingRuntime,
+                        observation: Some(RepoRuntimeHealthObservation::RestartedForMcp),
+                        host: host_status,
+                        checked_at: checked_at.to_string(),
+                        detail: Some(stop_message),
+                        failure_kind: Some(RepoRuntimeStartupFailureKind::Error),
+                        failure_reason: None,
+                        failure_origin: Some(RepoRuntimeHealthFailureOrigin::RuntimeStop),
+                        started_at: Some(runtime.started_at.clone()),
+                        updated_at: Some(checked_at.to_string()),
+                        elapsed_ms: None,
+                        attempts: None,
+                    })),
+                }),
             );
         }
 
         match self.ensure_workspace_runtime(runtime_kind, repo_key) {
-            Ok(restarted_runtime) => self.complete_repo_runtime_health(
-                repo_key,
-                checked_at,
-                runtime_kind,
-                restarted_runtime,
-                Some(self.runtime_startup_status(runtime_kind.as_str(), repo_key)?),
-                Some(RepoRuntimeHealthObservation::RestartedForMcp),
-                false,
-            ),
+            Ok(restarted_runtime) => {
+                self.complete_repo_runtime_health(CompleteRepoRuntimeHealthInput {
+                    repo_key: repo_key.to_string(),
+                    checked_at: checked_at.to_string(),
+                    runtime_kind,
+                    runtime: restarted_runtime,
+                    host_status: Some(
+                        self.runtime_startup_status(runtime_kind.as_str(), repo_key)?,
+                    ),
+                    observation: Some(RepoRuntimeHealthObservation::RestartedForMcp),
+                    allow_restart: false,
+                })
+            }
             Err(restart_error) => {
                 let latest_host_status =
                     self.runtime_startup_status(runtime_kind.as_str(), repo_key)?;
                 self.store_repo_runtime_health(
                     runtime_kind,
                     repo_key,
-                    Self::build_repo_runtime_health_check(
-                        checked_at.to_string(),
-                        None,
-                        false,
-                        Some(format!("{restart_error:#}")),
-                        Some(Self::repo_runtime_timeout_kind(&restart_error)),
-                        false,
-                        Some("Runtime is unavailable, so MCP cannot be verified.".to_string()),
-                        Some(Self::repo_runtime_timeout_kind(&restart_error)),
-                        None,
-                        Vec::new(),
-                        Some(self.repo_runtime_progress(
-                            match latest_host_status.stage {
+                    Self::build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+                        checked_at: checked_at.to_string(),
+                        runtime: None,
+                        runtime_ok: false,
+                        runtime_error: Some(format!("{restart_error:#}")),
+                        runtime_failure_kind: Some(Self::repo_runtime_timeout_kind(&restart_error)),
+                        mcp_ok: false,
+                        mcp_error: Some(
+                            "Runtime is unavailable, so MCP cannot be verified.".to_string(),
+                        ),
+                        mcp_failure_kind: Some(Self::repo_runtime_timeout_kind(&restart_error)),
+                        mcp_server_status: None,
+                        available_tool_ids: Vec::new(),
+                        progress: Some(self.repo_runtime_progress(RepoRuntimeProgressInput {
+                            stage: match latest_host_status.stage {
                                 RepoRuntimeStartupStage::WaitingForRuntime => {
                                     RepoRuntimeHealthStage::WaitingForRuntime
                                 }
@@ -718,19 +876,19 @@ impl AppService {
                                     RepoRuntimeHealthStage::StartupFailed
                                 }
                             },
-                            Some(RepoRuntimeHealthObservation::RestartedForMcp),
-                            Some(latest_host_status),
-                            checked_at,
-                            Some(format!("{restart_error:#}")),
-                            Some(Self::repo_runtime_timeout_kind(&restart_error)),
-                            Self::repo_runtime_failure_reason(&restart_error),
-                            Some(RepoRuntimeHealthFailureOrigin::RuntimeRestart),
-                            None,
-                            Some(checked_at.to_string()),
-                            None,
-                            None,
-                        )),
-                    ),
+                            observation: Some(RepoRuntimeHealthObservation::RestartedForMcp),
+                            host: Some(latest_host_status),
+                            checked_at: checked_at.to_string(),
+                            detail: Some(format!("{restart_error:#}")),
+                            failure_kind: Some(Self::repo_runtime_timeout_kind(&restart_error)),
+                            failure_reason: Self::repo_runtime_failure_reason(&restart_error),
+                            failure_origin: Some(RepoRuntimeHealthFailureOrigin::RuntimeRestart),
+                            started_at: None,
+                            updated_at: Some(checked_at.to_string()),
+                            elapsed_ms: None,
+                            attempts: None,
+                        })),
+                    }),
                 )
             }
         }
@@ -743,142 +901,165 @@ impl AppService {
     ) -> Result<RepoRuntimeHealthCheck> {
         let runtime_kind = Self::resolve_supported_runtime_kind(runtime_kind)?;
         let repo_key = self.resolve_authorized_repo_path(repo_path)?;
-        let checked_at = now_rfc3339();
-        let mut host_status =
-            Some(self.runtime_startup_status(runtime_kind.as_str(), repo_key.as_str())?);
-        let existing_runtime =
-            self.find_existing_workspace_runtime(runtime_kind, repo_key.as_str())?;
-        let mut observation =
-            Self::repo_runtime_health_observation(existing_runtime.is_some(), host_status.as_ref());
-
-        let runtime = match existing_runtime {
-            Some(runtime) => runtime,
-            None => match self.ensure_workspace_runtime(runtime_kind, repo_key.as_str()) {
-                Ok(runtime) => runtime,
-                Err(error) => {
-                    let latest_host_status =
-                        self.runtime_startup_status(runtime_kind.as_str(), repo_key.as_str())?;
-                    let progress = self.repo_runtime_progress(
-                        map_startup_stage_to_failed_health(latest_host_status.stage),
-                        observation,
-                        Some(latest_host_status),
-                        checked_at.as_str(),
-                        Some(format!("{error:#}")),
-                        Some(Self::repo_runtime_timeout_kind(&error)),
-                        Self::repo_runtime_failure_reason(&error),
-                        Some(RepoRuntimeHealthFailureOrigin::RuntimeStartup),
-                        None,
-                        None,
-                        None,
-                        None,
-                    );
-                    return self.store_repo_runtime_health(
-                        runtime_kind,
-                        repo_key.as_str(),
-                        Self::build_repo_runtime_health_check(
-                            checked_at,
-                            None,
-                            false,
-                            Some(format!("{error:#}")),
-                            Some(Self::repo_runtime_timeout_kind(&error)),
-                            false,
-                            Some("Runtime is unavailable, so MCP cannot be verified.".to_string()),
-                            Some(Self::repo_runtime_timeout_kind(&error)),
-                            None,
-                            Vec::new(),
-                            Some(progress),
-                        ),
-                    );
-                }
-            },
-        };
-
-        host_status = Some(self.runtime_startup_status(runtime_kind.as_str(), repo_key.as_str())?);
-        if !runtime.descriptor.capabilities.supports_mcp_status {
-            let progress = self.repo_runtime_progress(
-                RepoRuntimeHealthStage::Ready,
-                observation,
-                host_status,
-                checked_at.as_str(),
-                None,
-                None,
-                None,
-                None,
-                Some(runtime.started_at.clone()),
-                Some(checked_at.clone()),
-                None,
-                None,
-            );
-            return self.store_repo_runtime_health(
-                runtime_kind,
-                repo_key.as_str(),
-                Self::build_repo_runtime_health_check(
-                    checked_at,
-                    Some(runtime),
-                    true,
-                    None,
-                    None,
-                    true,
-                    None,
-                    None,
-                    None,
-                    Vec::new(),
-                    Some(progress),
-                ),
-            );
+        let (flight, is_leader) =
+            self.acquire_repo_runtime_health_flight(runtime_kind, repo_key.as_str())?;
+        if !is_leader {
+            return Self::wait_for_repo_runtime_health_flight(&flight);
         }
+        let checked_at = now_rfc3339();
+        let result = (|| -> Result<RepoRuntimeHealthCheck> {
+            let mut host_status =
+                Some(self.runtime_startup_status(runtime_kind.as_str(), repo_key.as_str())?);
+            let existing_runtime =
+                self.find_existing_workspace_runtime(runtime_kind, repo_key.as_str())?;
+            let mut observation = Self::repo_runtime_health_observation(
+                existing_runtime.is_some(),
+                host_status.as_ref(),
+            );
 
-        self.complete_repo_runtime_health(
-            repo_key.as_str(),
-            checked_at.as_str(),
+            let runtime = match existing_runtime {
+                Some(runtime) => runtime,
+                None => match self.ensure_workspace_runtime(runtime_kind, repo_key.as_str()) {
+                    Ok(runtime) => runtime,
+                    Err(error) => {
+                        let latest_host_status =
+                            self.runtime_startup_status(runtime_kind.as_str(), repo_key.as_str())?;
+                        let progress = self.repo_runtime_progress(RepoRuntimeProgressInput {
+                            stage: map_startup_stage_to_failed_health(latest_host_status.stage),
+                            observation,
+                            host: Some(latest_host_status),
+                            checked_at: checked_at.clone(),
+                            detail: Some(format!("{error:#}")),
+                            failure_kind: Some(Self::repo_runtime_timeout_kind(&error)),
+                            failure_reason: Self::repo_runtime_failure_reason(&error),
+                            failure_origin: Some(RepoRuntimeHealthFailureOrigin::RuntimeStartup),
+                            started_at: None,
+                            updated_at: None,
+                            elapsed_ms: None,
+                            attempts: None,
+                        });
+                        return self.store_repo_runtime_health(
+                            runtime_kind,
+                            repo_key.as_str(),
+                            Self::build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+                                checked_at: checked_at.clone(),
+                                runtime: None,
+                                runtime_ok: false,
+                                runtime_error: Some(format!("{error:#}")),
+                                runtime_failure_kind: Some(Self::repo_runtime_timeout_kind(&error)),
+                                mcp_ok: false,
+                                mcp_error: Some(
+                                    "Runtime is unavailable, so MCP cannot be verified."
+                                        .to_string(),
+                                ),
+                                mcp_failure_kind: Some(Self::repo_runtime_timeout_kind(&error)),
+                                mcp_server_status: None,
+                                available_tool_ids: Vec::new(),
+                                progress: Some(progress),
+                            }),
+                        );
+                    }
+                },
+            };
+
+            host_status =
+                Some(self.runtime_startup_status(runtime_kind.as_str(), repo_key.as_str())?);
+            if !runtime.descriptor.capabilities.supports_mcp_status {
+                let progress = self.repo_runtime_progress(RepoRuntimeProgressInput {
+                    stage: RepoRuntimeHealthStage::Ready,
+                    observation,
+                    host: host_status,
+                    checked_at: checked_at.clone(),
+                    detail: None,
+                    failure_kind: None,
+                    failure_reason: None,
+                    failure_origin: None,
+                    started_at: Some(runtime.started_at.clone()),
+                    updated_at: Some(checked_at.clone()),
+                    elapsed_ms: None,
+                    attempts: None,
+                });
+                return self.store_repo_runtime_health(
+                    runtime_kind,
+                    repo_key.as_str(),
+                    Self::build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+                        checked_at: checked_at.clone(),
+                        runtime: Some(runtime),
+                        runtime_ok: true,
+                        runtime_error: None,
+                        runtime_failure_kind: None,
+                        mcp_ok: true,
+                        mcp_error: None,
+                        mcp_failure_kind: None,
+                        mcp_server_status: None,
+                        available_tool_ids: Vec::new(),
+                        progress: Some(progress),
+                    }),
+                );
+            }
+
+            self.complete_repo_runtime_health(CompleteRepoRuntimeHealthInput {
+                repo_key: repo_key.clone(),
+                checked_at: checked_at.clone(),
+                runtime_kind,
+                runtime,
+                host_status,
+                observation: observation.take(),
+                allow_restart: true,
+            })
+        })();
+        self.complete_repo_runtime_health_flight(
             runtime_kind,
-            runtime,
-            host_status,
-            observation.take(),
-            true,
-        )
+            repo_key.as_str(),
+            &flight,
+            &result,
+        )?;
+        result
     }
 
     fn complete_repo_runtime_health(
         &self,
-        repo_key: &str,
-        checked_at: &str,
-        runtime_kind: AgentRuntimeKind,
-        runtime: RuntimeInstanceSummary,
-        host_status: Option<RepoRuntimeStartupStatus>,
-        observation: Option<RepoRuntimeHealthObservation>,
-        allow_restart: bool,
+        input: CompleteRepoRuntimeHealthInput,
     ) -> Result<RepoRuntimeHealthCheck> {
-        let checking_progress = self.repo_runtime_progress(
-            RepoRuntimeHealthStage::CheckingMcpStatus,
-            observation,
-            host_status.clone(),
+        let CompleteRepoRuntimeHealthInput {
+            repo_key,
             checked_at,
-            None,
-            None,
-            None,
-            None,
-            Some(runtime.started_at.clone()),
-            Some(checked_at.to_string()),
-            None,
-            None,
-        );
+            runtime_kind,
+            runtime,
+            host_status,
+            observation,
+            allow_restart,
+        } = input;
+        let checking_progress = self.repo_runtime_progress(RepoRuntimeProgressInput {
+            stage: RepoRuntimeHealthStage::CheckingMcpStatus,
+            observation,
+            host: host_status.clone(),
+            checked_at: checked_at.clone(),
+            detail: None,
+            failure_kind: None,
+            failure_reason: None,
+            failure_origin: None,
+            started_at: Some(runtime.started_at.clone()),
+            updated_at: Some(checked_at.clone()),
+            elapsed_ms: None,
+            attempts: None,
+        });
         self.update_repo_runtime_health_status(
             runtime_kind,
-            repo_key,
-            Self::build_repo_runtime_health_check(
-                checked_at.to_string(),
-                Some(runtime.clone()),
-                true,
-                None,
-                None,
-                false,
-                None,
-                None,
-                None,
-                Vec::new(),
-                Some(checking_progress.clone()),
-            ),
+            repo_key.as_str(),
+            Self::build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+                checked_at: checked_at.clone(),
+                runtime: Some(runtime.clone()),
+                runtime_ok: true,
+                runtime_error: None,
+                runtime_failure_kind: None,
+                mcp_ok: false,
+                mcp_error: None,
+                mcp_failure_kind: None,
+                mcp_server_status: None,
+                available_tool_ids: Vec::new(),
+                progress: Some(checking_progress.clone()),
+            }),
         )?;
 
         let status_by_server = match self.repo_runtime_load_mcp_status(&runtime) {
@@ -891,8 +1072,8 @@ impl AppService {
                 {
                     return self.recover_repo_runtime_mcp_status_failure(
                         runtime_kind,
-                        repo_key,
-                        checked_at,
+                        repo_key.as_str(),
+                        checked_at.as_str(),
                         &runtime,
                         host_status,
                         error,
@@ -902,33 +1083,33 @@ impl AppService {
                 let mcp_message = format!("Failed to query runtime MCP status: {}", error.message);
                 return self.store_repo_runtime_health(
                     runtime_kind,
-                    repo_key,
-                    Self::build_repo_runtime_health_check(
-                        checked_at.to_string(),
-                        Some(runtime.clone()),
-                        true,
-                        None,
-                        None,
-                        false,
-                        Some(mcp_message.clone()),
-                        Some(error.failure_kind),
-                        None,
-                        Vec::new(),
-                        Some(self.repo_runtime_progress(
-                            RepoRuntimeHealthStage::CheckingMcpStatus,
+                    repo_key.as_str(),
+                    Self::build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+                        checked_at: checked_at.clone(),
+                        runtime: Some(runtime.clone()),
+                        runtime_ok: true,
+                        runtime_error: None,
+                        runtime_failure_kind: None,
+                        mcp_ok: false,
+                        mcp_error: Some(mcp_message.clone()),
+                        mcp_failure_kind: Some(error.failure_kind),
+                        mcp_server_status: None,
+                        available_tool_ids: Vec::new(),
+                        progress: Some(self.repo_runtime_progress(RepoRuntimeProgressInput {
+                            stage: RepoRuntimeHealthStage::CheckingMcpStatus,
                             observation,
-                            host_status,
-                            checked_at,
-                            Some(mcp_message),
-                            Some(error.failure_kind),
-                            None,
-                            Some(RepoRuntimeHealthFailureOrigin::McpStatus),
-                            Some(runtime.started_at.clone()),
-                            Some(checked_at.to_string()),
-                            checking_progress.elapsed_ms,
-                            checking_progress.attempts,
-                        )),
-                    ),
+                            host: host_status,
+                            checked_at: checked_at.clone(),
+                            detail: Some(mcp_message),
+                            failure_kind: Some(error.failure_kind),
+                            failure_reason: None,
+                            failure_origin: Some(RepoRuntimeHealthFailureOrigin::McpStatus),
+                            started_at: Some(runtime.started_at.clone()),
+                            updated_at: Some(checked_at.clone()),
+                            elapsed_ms: checking_progress.elapsed_ms,
+                            attempts: checking_progress.attempts,
+                        })),
+                    }),
                 );
             }
         };
@@ -936,36 +1117,36 @@ impl AppService {
         let (mut mcp_server_status, mut mcp_server_error, mut mcp_failure_kind) =
             Self::repo_runtime_resolve_mcp_status(&status_by_server);
         if mcp_server_status.as_deref() != Some("connected") {
-            let reconnect_progress = self.repo_runtime_progress(
-                RepoRuntimeHealthStage::ReconnectingMcp,
+            let reconnect_progress = self.repo_runtime_progress(RepoRuntimeProgressInput {
+                stage: RepoRuntimeHealthStage::ReconnectingMcp,
                 observation,
-                host_status.clone(),
-                checked_at,
-                mcp_server_error.clone(),
-                mcp_failure_kind,
-                None,
-                Some(RepoRuntimeHealthFailureOrigin::McpConnect),
-                Some(runtime.started_at.clone()),
-                Some(checked_at.to_string()),
-                checking_progress.elapsed_ms,
-                checking_progress.attempts,
-            );
+                host: host_status.clone(),
+                checked_at: checked_at.clone(),
+                detail: mcp_server_error.clone(),
+                failure_kind: mcp_failure_kind,
+                failure_reason: None,
+                failure_origin: Some(RepoRuntimeHealthFailureOrigin::McpConnect),
+                started_at: Some(runtime.started_at.clone()),
+                updated_at: Some(checked_at.clone()),
+                elapsed_ms: checking_progress.elapsed_ms,
+                attempts: checking_progress.attempts,
+            });
             self.update_repo_runtime_health_status(
                 runtime_kind,
-                repo_key,
-                Self::build_repo_runtime_health_check(
-                    checked_at.to_string(),
-                    Some(runtime.clone()),
-                    true,
-                    None,
-                    None,
-                    false,
-                    mcp_server_error.clone(),
+                repo_key.as_str(),
+                Self::build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+                    checked_at: checked_at.clone(),
+                    runtime: Some(runtime.clone()),
+                    runtime_ok: true,
+                    runtime_error: None,
+                    runtime_failure_kind: None,
+                    mcp_ok: false,
+                    mcp_error: mcp_server_error.clone(),
                     mcp_failure_kind,
-                    mcp_server_status.clone(),
-                    Vec::new(),
-                    Some(reconnect_progress.clone()),
-                ),
+                    mcp_server_status: mcp_server_status.clone(),
+                    available_tool_ids: Vec::new(),
+                    progress: Some(reconnect_progress.clone()),
+                }),
             )?;
 
             match self.repo_runtime_connect_mcp_server(&runtime, ODT_MCP_SERVER_NAME) {
@@ -979,32 +1160,38 @@ impl AppService {
                             );
                             return self.store_repo_runtime_health(
                                 runtime_kind,
-                                repo_key,
+                                repo_key.as_str(),
                                 Self::build_repo_runtime_health_check(
-                                    checked_at.to_string(),
-                                    Some(runtime.clone()),
-                                    true,
-                                    None,
-                                    None,
-                                    false,
-                                    Some(refresh_message.clone()),
-                                    Some(error.failure_kind),
-                                    mcp_server_status.clone(),
-                                    Vec::new(),
-                                    Some(self.repo_runtime_progress(
-                                        reconnect_progress.stage,
-                                        reconnect_progress.observation,
-                                        reconnect_progress.host.clone(),
-                                        checked_at,
-                                        Some(refresh_message),
-                                        Some(error.failure_kind),
-                                        None,
-                                        Some(RepoRuntimeHealthFailureOrigin::McpStatus),
-                                        reconnect_progress.started_at.clone(),
-                                        Some(checked_at.to_string()),
-                                        reconnect_progress.elapsed_ms,
-                                        reconnect_progress.attempts,
-                                    )),
+                                    RepoRuntimeHealthCheckInput {
+                                        checked_at: checked_at.clone(),
+                                        runtime: Some(runtime.clone()),
+                                        runtime_ok: true,
+                                        runtime_error: None,
+                                        runtime_failure_kind: None,
+                                        mcp_ok: false,
+                                        mcp_error: Some(refresh_message.clone()),
+                                        mcp_failure_kind: Some(error.failure_kind),
+                                        mcp_server_status: mcp_server_status.clone(),
+                                        available_tool_ids: Vec::new(),
+                                        progress: Some(self.repo_runtime_progress(
+                                            RepoRuntimeProgressInput {
+                                                stage: reconnect_progress.stage,
+                                                observation: reconnect_progress.observation,
+                                                host: reconnect_progress.host.clone(),
+                                                checked_at: checked_at.clone(),
+                                                detail: Some(refresh_message),
+                                                failure_kind: Some(error.failure_kind),
+                                                failure_reason: None,
+                                                failure_origin: Some(
+                                                    RepoRuntimeHealthFailureOrigin::McpStatus,
+                                                ),
+                                                started_at: reconnect_progress.started_at.clone(),
+                                                updated_at: Some(checked_at.clone()),
+                                                elapsed_ms: reconnect_progress.elapsed_ms,
+                                                attempts: reconnect_progress.attempts,
+                                            },
+                                        )),
+                                    },
                                 ),
                             );
                         }
@@ -1021,33 +1208,33 @@ impl AppService {
                     );
                     return self.store_repo_runtime_health(
                         runtime_kind,
-                        repo_key,
-                        Self::build_repo_runtime_health_check(
-                            checked_at.to_string(),
-                            Some(runtime.clone()),
-                            true,
-                            None,
-                            None,
-                            false,
-                            Some(mcp_message.clone()),
-                            Some(error.failure_kind),
+                        repo_key.as_str(),
+                        Self::build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+                            checked_at: checked_at.clone(),
+                            runtime: Some(runtime.clone()),
+                            runtime_ok: true,
+                            runtime_error: None,
+                            runtime_failure_kind: None,
+                            mcp_ok: false,
+                            mcp_error: Some(mcp_message.clone()),
+                            mcp_failure_kind: Some(error.failure_kind),
                             mcp_server_status,
-                            Vec::new(),
-                            Some(self.repo_runtime_progress(
-                                reconnect_progress.stage,
-                                reconnect_progress.observation,
-                                reconnect_progress.host,
-                                checked_at,
-                                Some(mcp_message),
-                                Some(error.failure_kind),
-                                None,
-                                Some(RepoRuntimeHealthFailureOrigin::McpConnect),
-                                reconnect_progress.started_at,
-                                Some(checked_at.to_string()),
-                                reconnect_progress.elapsed_ms,
-                                reconnect_progress.attempts,
-                            )),
-                        ),
+                            available_tool_ids: Vec::new(),
+                            progress: Some(self.repo_runtime_progress(RepoRuntimeProgressInput {
+                                stage: reconnect_progress.stage,
+                                observation: reconnect_progress.observation,
+                                host: reconnect_progress.host,
+                                checked_at: checked_at.clone(),
+                                detail: Some(mcp_message),
+                                failure_kind: Some(error.failure_kind),
+                                failure_reason: None,
+                                failure_origin: Some(RepoRuntimeHealthFailureOrigin::McpConnect),
+                                started_at: reconnect_progress.started_at,
+                                updated_at: Some(checked_at.clone()),
+                                elapsed_ms: reconnect_progress.elapsed_ms,
+                                attempts: reconnect_progress.attempts,
+                            })),
+                        }),
                     );
                 }
             }
@@ -1063,89 +1250,79 @@ impl AppService {
                     .unwrap_or_else(|| "OpenDucktor MCP is unavailable.".to_string()),
             )
         };
-        let progress = self.repo_runtime_progress(
-            if mcp_ok {
+        let progress = self.repo_runtime_progress(RepoRuntimeProgressInput {
+            stage: if mcp_ok {
                 RepoRuntimeHealthStage::Ready
             } else {
                 RepoRuntimeHealthStage::CheckingMcpStatus
             },
             observation,
-            host_status,
-            checked_at,
-            mcp_error.clone(),
-            mcp_failure_kind,
-            None,
-            if mcp_ok {
+            host: host_status,
+            checked_at: checked_at.clone(),
+            detail: mcp_error.clone(),
+            failure_kind: mcp_failure_kind,
+            failure_reason: None,
+            failure_origin: if mcp_ok {
                 None
             } else {
                 Some(RepoRuntimeHealthFailureOrigin::McpStatus)
             },
-            Some(runtime.started_at.clone()),
-            Some(checked_at.to_string()),
-            checking_progress.elapsed_ms,
-            checking_progress.attempts,
-        );
+            started_at: Some(runtime.started_at.clone()),
+            updated_at: Some(checked_at.clone()),
+            elapsed_ms: checking_progress.elapsed_ms,
+            attempts: checking_progress.attempts,
+        });
 
         self.store_repo_runtime_health(
             runtime_kind,
-            repo_key,
-            Self::build_repo_runtime_health_check(
-                checked_at.to_string(),
-                Some(runtime.clone()),
-                true,
-                None,
-                None,
+            repo_key.as_str(),
+            Self::build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+                checked_at,
+                runtime: Some(runtime.clone()),
+                runtime_ok: true,
+                runtime_error: None,
+                runtime_failure_kind: None,
                 mcp_ok,
                 mcp_error,
                 mcp_failure_kind,
                 mcp_server_status,
-                self.repo_runtime_load_tool_ids(&runtime)
+                available_tool_ids: self
+                    .repo_runtime_load_tool_ids(&runtime)
                     .unwrap_or_default(),
-                Some(progress),
-            ),
+                progress: Some(progress),
+            }),
         )
     }
 
     fn build_repo_runtime_health_check(
-        checked_at: impl Into<String>,
-        runtime: Option<RuntimeInstanceSummary>,
-        runtime_ok: bool,
-        runtime_error: Option<String>,
-        runtime_failure_kind: Option<RepoRuntimeStartupFailureKind>,
-        mcp_ok: bool,
-        mcp_error: Option<String>,
-        mcp_failure_kind: Option<RepoRuntimeStartupFailureKind>,
-        mcp_server_status: Option<String>,
-        available_tool_ids: Vec<String>,
-        progress: Option<RepoRuntimeHealthProgress>,
+        input: RepoRuntimeHealthCheckInput,
     ) -> RepoRuntimeHealthCheck {
-        let checked_at = checked_at.into();
-        let mcp_server_error = mcp_error.clone();
+        let mcp_server_error = input.mcp_error.clone();
         let mut errors = Vec::new();
-        if let Some(error) = runtime_error.clone() {
+        if let Some(error) = input.runtime_error.clone() {
             errors.push(error);
         }
-        if let Some(error) = mcp_error.clone() {
+        if let Some(error) = input.mcp_error.clone() {
             if errors.last() != Some(&error) {
                 errors.push(error);
             }
         }
 
         RepoRuntimeHealthCheck {
-            runtime_ok,
-            runtime_error,
-            runtime_failure_kind,
-            runtime,
-            mcp_ok,
-            mcp_error,
-            mcp_failure_kind,
+            runtime_ok: input.runtime_ok,
+            runtime_error: input.runtime_error,
+            runtime_failure_kind: input.runtime_failure_kind,
+            runtime: input.runtime,
+            mcp_ok: input.mcp_ok,
+            mcp_error: input.mcp_error,
+            mcp_failure_kind: input.mcp_failure_kind,
             mcp_server_name: ODT_MCP_SERVER_NAME.to_string(),
-            mcp_server_status,
+            mcp_server_status: input.mcp_server_status,
             mcp_server_error,
-            available_tool_ids,
-            checked_at,
+            available_tool_ids: input.available_tool_ids,
+            checked_at: input.checked_at,
             errors,
-            progress,
+            progress: input.progress,
         }
     }
 }

@@ -43,6 +43,20 @@ pub(super) struct RuntimeStartInput<'a> {
     post_start_policy: Option<RuntimePostStartPolicy<'a>>,
 }
 
+#[derive(Clone)]
+struct RuntimeStartupProgress {
+    started_at_instant: Instant,
+    started_at: String,
+    attempts: Option<u32>,
+    elapsed_ms: Option<u64>,
+}
+
+struct RuntimeStartupFailure {
+    failure_kind: RepoRuntimeStartupFailureKind,
+    failure_reason: String,
+    detail: String,
+}
+
 pub(super) struct SpawnedRuntimeServer {
     runtime_id: String,
     port: u16,
@@ -219,14 +233,13 @@ impl AppService {
         &self,
         runtime_kind: AgentRuntimeKind,
         repo_key: &str,
-        started_at_instant: Instant,
-        started_at: &str,
+        progress: &RuntimeStartupProgress,
     ) -> Result<()> {
         self.update_runtime_startup_status(runtime_kind, repo_key, |entry| {
             entry.stage = RepoRuntimeStartupStage::StartupRequested;
             entry.runtime = None;
-            entry.started_at = Some(started_at.to_string());
-            entry.started_at_instant = Some(started_at_instant);
+            entry.started_at = Some(progress.started_at.clone());
+            entry.started_at_instant = Some(progress.started_at_instant);
             entry.elapsed_ms = None;
             entry.attempts = Some(0);
             entry.failure_kind = None;
@@ -239,16 +252,14 @@ impl AppService {
         &self,
         runtime_kind: AgentRuntimeKind,
         repo_key: &str,
-        started_at_instant: Instant,
-        started_at: &str,
-        attempts: u32,
+        progress: &RuntimeStartupProgress,
     ) -> Result<()> {
         self.update_runtime_startup_status(runtime_kind, repo_key, |entry| {
             entry.stage = RepoRuntimeStartupStage::WaitingForRuntime;
-            entry.started_at = Some(started_at.to_string());
-            entry.started_at_instant = Some(started_at_instant);
+            entry.started_at = Some(progress.started_at.clone());
+            entry.started_at_instant = Some(progress.started_at_instant);
             entry.elapsed_ms = None;
-            entry.attempts = Some(attempts);
+            entry.attempts = progress.attempts;
         })
     }
 
@@ -257,18 +268,15 @@ impl AppService {
         runtime_kind: AgentRuntimeKind,
         repo_key: &str,
         runtime: &RuntimeInstanceSummary,
-        started_at_instant: Instant,
-        started_at: &str,
-        attempts: u32,
-        elapsed_ms: u64,
+        progress: &RuntimeStartupProgress,
     ) -> Result<()> {
         self.update_runtime_startup_status(runtime_kind, repo_key, |entry| {
             entry.stage = RepoRuntimeStartupStage::RuntimeReady;
             entry.runtime = Some(runtime.clone());
-            entry.started_at = Some(started_at.to_string());
-            entry.started_at_instant = Some(started_at_instant);
-            entry.elapsed_ms = Some(elapsed_ms);
-            entry.attempts = Some(attempts);
+            entry.started_at = Some(progress.started_at.clone());
+            entry.started_at_instant = Some(progress.started_at_instant);
+            entry.elapsed_ms = progress.elapsed_ms;
+            entry.attempts = progress.attempts;
             entry.failure_kind = None;
             entry.failure_reason = None;
             entry.detail = None;
@@ -279,24 +287,19 @@ impl AppService {
         &self,
         runtime_kind: AgentRuntimeKind,
         repo_key: &str,
-        failure_kind: RepoRuntimeStartupFailureKind,
-        failure_reason: &str,
-        detail: String,
-        started_at_instant: Instant,
-        started_at: &str,
-        attempts: Option<u32>,
-        elapsed_ms: Option<u64>,
+        progress: &RuntimeStartupProgress,
+        failure: RuntimeStartupFailure,
     ) -> Result<()> {
         self.update_runtime_startup_status(runtime_kind, repo_key, |entry| {
             entry.stage = RepoRuntimeStartupStage::StartupFailed;
             entry.runtime = None;
-            entry.started_at = Some(started_at.to_string());
-            entry.started_at_instant = Some(started_at_instant);
-            entry.elapsed_ms = elapsed_ms;
-            entry.attempts = attempts;
-            entry.failure_kind = Some(failure_kind);
-            entry.failure_reason = Some(failure_reason.to_string());
-            entry.detail = Some(detail);
+            entry.started_at = Some(progress.started_at.clone());
+            entry.started_at_instant = Some(progress.started_at_instant);
+            entry.elapsed_ms = progress.elapsed_ms;
+            entry.attempts = progress.attempts;
+            entry.failure_kind = Some(failure.failure_kind);
+            entry.failure_reason = Some(failure.failure_reason.clone());
+            entry.detail = Some(failure.detail.clone());
         })
     }
 
@@ -337,7 +340,13 @@ impl AppService {
             .get(status_key.as_str())
             .cloned()
         {
-            return Ok(snapshot.to_public_status());
+            if snapshot.stage != RepoRuntimeStartupStage::RuntimeReady
+                || self
+                    .find_existing_workspace_runtime(runtime_kind, repo_key.as_str())?
+                    .is_some()
+            {
+                return Ok(snapshot.to_public_status());
+            }
         }
 
         if let Some(runtime) =
@@ -747,13 +756,17 @@ impl AppService {
             self.mark_runtime_startup_failed(
                 runtime_kind,
                 repo_key.as_str(),
-                failure_kind,
-                failure_reason,
-                format!("{error:#}"),
-                startup_started_at_instant,
-                startup_started_at.as_str(),
-                attempts,
-                elapsed_ms,
+                &RuntimeStartupProgress {
+                    started_at_instant: startup_started_at_instant,
+                    started_at: startup_started_at.clone(),
+                    attempts,
+                    elapsed_ms,
+                },
+                RuntimeStartupFailure {
+                    failure_kind,
+                    failure_reason: failure_reason.to_string(),
+                    detail: format!("{error:#}"),
+                },
             )?;
         }
         flight_guard.complete(&startup_result)?;
@@ -775,10 +788,12 @@ impl AppService {
             runtime_kind,
             repo_key.as_str(),
             &summary,
-            startup_started_at_instant,
-            startup_started_at.as_str(),
-            startup_report.attempts(),
-            startup_report.startup_ms(),
+            &RuntimeStartupProgress {
+                started_at_instant: startup_started_at_instant,
+                started_at: startup_started_at,
+                attempts: Some(startup_report.attempts()),
+                elapsed_ms: Some(startup_report.startup_ms()),
+            },
         )?;
         Ok(summary)
     }
@@ -816,7 +831,9 @@ fn collect_build_external_session_ids_for_run(
 
 #[cfg(test)]
 mod tests {
-    use super::{AppService, RuntimeEnsureFlightGuard};
+    use super::{
+        AppService, RuntimeEnsureFlightGuard, RuntimeStartupFailure, RuntimeStartupProgress,
+    };
     use crate::app_service::test_support::{build_service_with_state, make_task};
     use crate::app_service::{AgentRuntimeProcess, RunProcess};
     use anyhow::{anyhow, Result};
@@ -1009,15 +1026,22 @@ mod tests {
         service.mark_runtime_startup_requested(
             AgentRuntimeKind::Opencode,
             repo_path,
-            started_at_instant,
-            started_at,
+            &RuntimeStartupProgress {
+                started_at_instant,
+                started_at: started_at.to_string(),
+                attempts: Some(0),
+                elapsed_ms: None,
+            },
         )?;
         service.mark_runtime_startup_waiting(
             AgentRuntimeKind::Opencode,
             repo_path,
-            started_at_instant,
-            started_at,
-            3,
+            &RuntimeStartupProgress {
+                started_at_instant,
+                started_at: started_at.to_string(),
+                attempts: Some(3),
+                elapsed_ms: None,
+            },
         )?;
 
         let waiting_status = service.runtime_startup_status("opencode", repo_path)?;
@@ -1031,13 +1055,17 @@ mod tests {
         service.mark_runtime_startup_failed(
             AgentRuntimeKind::Opencode,
             repo_path,
-            RepoRuntimeStartupFailureKind::Timeout,
-            "timeout",
-            "OpenCode startup probe failed reason=timeout".to_string(),
-            started_at_instant,
-            started_at,
-            Some(4),
-            Some(4200),
+            &RuntimeStartupProgress {
+                started_at_instant,
+                started_at: started_at.to_string(),
+                attempts: Some(4),
+                elapsed_ms: Some(4200),
+            },
+            RuntimeStartupFailure {
+                failure_kind: RepoRuntimeStartupFailureKind::Timeout,
+                failure_reason: "timeout".to_string(),
+                detail: "OpenCode startup probe failed reason=timeout".to_string(),
+            },
         )?;
 
         let failed_status = service.runtime_startup_status("opencode", repo_path)?;
@@ -1050,6 +1078,54 @@ mod tests {
         assert_eq!(failed_status.attempts, Some(4));
         assert_eq!(failed_status.elapsed_ms, Some(4200));
 
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_startup_status_ignores_stale_ready_snapshot_without_live_runtime() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let repo_path = "/tmp/runtime-stale-ready";
+        let started_at_instant = Instant::now();
+        let started_at = "2026-04-04T16:00:00Z";
+
+        service.mark_runtime_startup_waiting(
+            AgentRuntimeKind::Opencode,
+            repo_path,
+            &RuntimeStartupProgress {
+                started_at_instant,
+                started_at: started_at.to_string(),
+                attempts: Some(1),
+                elapsed_ms: None,
+            },
+        )?;
+        service.mark_runtime_startup_ready(
+            AgentRuntimeKind::Opencode,
+            repo_path,
+            &host_domain::RuntimeInstanceSummary {
+                kind: AgentRuntimeKind::Opencode,
+                runtime_id: "runtime-stale".to_string(),
+                repo_path: repo_path.to_string(),
+                task_id: None,
+                role: host_domain::RuntimeRole::Workspace,
+                working_directory: repo_path.to_string(),
+                runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                    endpoint: "http://127.0.0.1:9999".to_string(),
+                },
+                started_at: started_at.to_string(),
+                descriptor: AgentRuntimeKind::Opencode.descriptor(),
+            },
+            &RuntimeStartupProgress {
+                started_at_instant,
+                started_at: started_at.to_string(),
+                attempts: Some(2),
+                elapsed_ms: Some(1000),
+            },
+        )?;
+
+        let status = service.runtime_startup_status("opencode", repo_path)?;
+
+        assert_eq!(status.stage, RepoRuntimeStartupStage::Idle);
+        assert!(status.runtime.is_none());
         Ok(())
     }
 

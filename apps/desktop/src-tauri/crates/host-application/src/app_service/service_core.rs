@@ -89,6 +89,25 @@ impl RuntimeEnsureFlight {
     }
 }
 
+pub(super) struct RepoRuntimeHealthFlight {
+    pub(super) state: Mutex<RepoRuntimeHealthFlightState>,
+    pub(super) condvar: Condvar,
+}
+
+pub(super) enum RepoRuntimeHealthFlightState {
+    Starting,
+    Finished(Box<Result<RepoRuntimeHealthCheck, String>>),
+}
+
+impl RepoRuntimeHealthFlight {
+    pub(super) fn new() -> Self {
+        Self {
+            state: Mutex::new(RepoRuntimeHealthFlightState::Starting),
+            condvar: Condvar::new(),
+        }
+    }
+}
+
 pub(super) struct OpencodeSessionStatusFlight {
     pub(super) state: Mutex<OpencodeSessionStatusFlightState>,
     pub(super) condvar: Condvar,
@@ -134,6 +153,8 @@ pub struct AppService {
     pub(super) agent_runtimes: Arc<Mutex<HashMap<String, AgentRuntimeProcess>>>,
     pub(super) tracked_opencode_processes: Arc<Mutex<HashMap<u32, usize>>>,
     pub(super) runtime_ensure_flights: Arc<Mutex<HashMap<String, Arc<RuntimeEnsureFlight>>>>,
+    pub(super) repo_runtime_health_flights:
+        Arc<Mutex<HashMap<String, Arc<RepoRuntimeHealthFlight>>>>,
     pub(super) runtime_startup_status: Arc<Mutex<HashMap<String, RuntimeStartupStatusEntry>>>,
     pub(super) repo_runtime_health_snapshots: Arc<Mutex<HashMap<String, RepoRuntimeHealthCheck>>>,
     pub(super) opencode_session_status_cache:
@@ -242,6 +263,7 @@ impl AppService {
             agent_runtimes: Arc::new(Mutex::new(HashMap::new())),
             tracked_opencode_processes: Arc::new(Mutex::new(HashMap::new())),
             runtime_ensure_flights: Arc::new(Mutex::new(HashMap::new())),
+            repo_runtime_health_flights: Arc::new(Mutex::new(HashMap::new())),
             runtime_startup_status: Arc::new(Mutex::new(HashMap::new())),
             repo_runtime_health_snapshots: Arc::new(Mutex::new(HashMap::new())),
             opencode_session_status_cache: Arc::new(Mutex::new(HashMap::new())),
