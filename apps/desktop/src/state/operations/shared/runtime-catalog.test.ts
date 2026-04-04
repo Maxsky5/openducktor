@@ -118,7 +118,33 @@ const fileSearchResultsFixture: AgentFileSearchResult[] = [
 
 const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDependencies => ({
   repoRuntimeHealth: async () => healthyRepoRuntimeHealthFixture,
-  runtimeStartupStatus: async () => startupStatusFixture,
+  repoRuntimeHealthStatus: async () => ({
+    ...healthyRepoRuntimeHealthFixture,
+    runtimeOk: false,
+    runtimeError: "OpenCode runtime is starting",
+    runtimeFailureKind: "timeout",
+    runtime: null,
+    mcpOk: false,
+    mcpError: "Runtime is unavailable, so MCP cannot be verified.",
+    mcpFailureKind: "timeout",
+    mcpServerStatus: null,
+    mcpServerError: "Runtime is unavailable, so MCP cannot be verified.",
+    availableToolIds: [],
+    errors: ["OpenCode runtime is starting"],
+    progress: {
+      stage: "waiting_for_runtime",
+      observation: "observing_existing_startup",
+      startedAt: startupStatusFixture.startedAt,
+      updatedAt: startupStatusFixture.updatedAt,
+      elapsedMs: startupStatusFixture.elapsedMs,
+      attempts: startupStatusFixture.attempts,
+      detail: startupStatusFixture.detail,
+      failureKind: null,
+      failureReason: null,
+      failureOrigin: null,
+      host: startupStatusFixture,
+    },
+  }),
   ensureRuntime: async () => runtimeFixture,
   listRuntimesForRepo: async () => [],
   listAvailableModels: async () => catalogFixture,
@@ -208,7 +234,37 @@ describe("runtime-catalog", () => {
       createDeps({
         runtimeHealthTimeoutMs: 5,
         repoRuntimeHealth: async () => await new Promise<RepoRuntimeHealthCheck>(() => {}),
-        runtimeStartupStatus: async () => startupStatusFixture,
+        repoRuntimeHealthStatus: async () => ({
+          ...healthyRepoRuntimeHealthFixture,
+          runtimeOk: false,
+          runtimeError: "OpenCode runtime is starting",
+          runtimeFailureKind: "timeout",
+          runtime: null,
+          mcpOk: false,
+          mcpError: "Runtime is unavailable, so MCP cannot be verified.",
+          mcpFailureKind: "timeout",
+          mcpServerStatus: null,
+          mcpServerError: "Runtime is unavailable, so MCP cannot be verified.",
+          availableToolIds: [],
+          errors: ["OpenCode runtime is starting"],
+          progress: {
+            stage: "checking_mcp_status",
+            observation: "observing_existing_startup",
+            startedAt: startupStatusFixture.startedAt,
+            updatedAt: startupStatusFixture.updatedAt,
+            elapsedMs: startupStatusFixture.elapsedMs,
+            attempts: startupStatusFixture.attempts,
+            detail: "Checking OpenDucktor MCP",
+            failureKind: null,
+            failureReason: null,
+            failureOrigin: null,
+            host: {
+              ...startupStatusFixture,
+              stage: "runtime_ready",
+              runtime: runtimeFixture,
+            },
+          },
+        }),
       }),
     );
 
@@ -217,7 +273,7 @@ describe("runtime-catalog", () => {
     expect(result.runtimeFailureKind).toBe("timeout");
     expect(result.progress).toEqual(
       expect.objectContaining({
-        stage: "waiting_for_runtime",
+        stage: "checking_mcp_status",
         failureOrigin: "frontend_observation",
         attempts: 4,
         elapsedMs: 5000,
@@ -265,8 +321,8 @@ describe("runtime-catalog", () => {
       createDeps({
         runtimeHealthTimeoutMs: 5,
         repoRuntimeHealth: async () => await new Promise<RepoRuntimeHealthCheck>(() => {}),
-        runtimeStartupStatus: async () => {
-          throw new Error("startup status unavailable");
+        repoRuntimeHealthStatus: async () => {
+          throw new Error("health status unavailable");
         },
       }),
     );
@@ -274,11 +330,11 @@ describe("runtime-catalog", () => {
     const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
 
     expect(result.runtimeFailureKind).toBe("timeout");
-    expect(result.runtimeError).toContain("startup status unavailable");
+    expect(result.runtimeError).toContain("health status unavailable");
     expect(result.progress).toEqual(
       expect.objectContaining({
         stage: "frontend_observation_timeout",
-        failureOrigin: "startup_status",
+        failureOrigin: "health_status",
       }),
     );
   });

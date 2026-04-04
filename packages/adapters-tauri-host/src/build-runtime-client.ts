@@ -222,6 +222,18 @@ const repoRuntimeHealth = async (
   return repoRuntimeHealthCheckSchema.parse(payload);
 };
 
+const repoRuntimeHealthStatus = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  runtimeKind: RuntimeKind,
+): Promise<RepoRuntimeHealthCheck> => {
+  const payload = await invokeFn("repo_runtime_health_status", {
+    repoPath,
+    runtimeKind,
+  });
+  return repoRuntimeHealthCheckSchema.parse(payload);
+};
+
 const buildStart = async (
   invokeFn: InvokeFn,
   repoPath: string,
@@ -507,6 +519,13 @@ export class TauriAgentClient {
     runtimeKind: RuntimeKind,
   ): Promise<RepoRuntimeHealthCheck> {
     return repoRuntimeHealth(this.invokeFn, repoPath, runtimeKind);
+  }
+
+  async repoRuntimeHealthStatus(
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+  ): Promise<RepoRuntimeHealthCheck> {
+    return repoRuntimeHealthStatus(this.invokeFn, repoPath, runtimeKind);
   }
 
   async buildStart(

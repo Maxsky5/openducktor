@@ -129,6 +129,9 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     registry.register("repo_runtime_health", |state, args| {
         Box::pin(handle_repo_runtime_health(state, args))
     })?;
+    registry.register("repo_runtime_health_status", |state, args| {
+        Box::pin(handle_repo_runtime_health_status(state, args))
+    })?;
     registry.register("agent_sessions_list", |state, args| {
         Box::pin(async move { handle_agent_sessions_list(state, args) })
     })?;
@@ -352,6 +355,21 @@ async fn handle_repo_runtime_health(state: &HeadlessState, args: Value) -> Comma
     serialize_value(
         crate::run_service_blocking_tokio("repo_runtime_health", move || {
             service.repo_runtime_health(runtime_kind.as_str(), &repo_path)
+        })
+        .await
+        .map_err(service_error)?,
+    )
+}
+
+async fn handle_repo_runtime_health_status(state: &HeadlessState, args: Value) -> CommandResult {
+    let RuntimeEnsureArgs {
+        runtime_kind,
+        repo_path,
+    } = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        crate::run_service_blocking_tokio("repo_runtime_health_status", move || {
+            service.repo_runtime_health_status(runtime_kind.as_str(), &repo_path)
         })
         .await
         .map_err(service_error)?,

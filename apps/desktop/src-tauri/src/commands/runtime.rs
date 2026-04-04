@@ -148,6 +148,20 @@ pub async fn repo_runtime_health(
     as_error(result)
 }
 
+#[tauri::command]
+pub async fn repo_runtime_health_status(
+    state: State<'_, AppState>,
+    runtime_kind: String,
+    repo_path: String,
+) -> Result<RepoRuntimeHealthCheck, String> {
+    let service = state.service.clone();
+    let result = run_service_blocking("repo_runtime_health_status", move || {
+        service.repo_runtime_health_status(&runtime_kind, &repo_path)
+    })
+    .await;
+    as_error(result)
+}
+
 #[cfg(test)]
 mod tests {
     use serde::Deserialize;

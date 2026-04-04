@@ -70,6 +70,7 @@ const AGENT_METHODS = [
   "runtimeEnsure",
   "runtimeStartupStatus",
   "repoRuntimeHealth",
+  "repoRuntimeHealthStatus",
   "buildStart",
   "devServerGetState",
   "devServerStart",

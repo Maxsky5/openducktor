@@ -161,6 +161,7 @@ export const repoRuntimeHealthFailureOriginSchema = z.enum([
   "runtime_restart",
   "frontend_observation",
   "startup_status",
+  "health_status",
 ]);
 export type RepoRuntimeHealthFailureOrigin = z.infer<typeof repoRuntimeHealthFailureOriginSchema>;
 

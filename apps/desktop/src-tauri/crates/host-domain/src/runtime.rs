@@ -361,6 +361,7 @@ pub enum RepoRuntimeHealthFailureOrigin {
     RuntimeRestart,
     FrontendObservation,
     StartupStatus,
+    HealthStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

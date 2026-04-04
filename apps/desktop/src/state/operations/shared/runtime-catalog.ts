@@ -1,5 +1,4 @@
 import type {
-  RepoRuntimeStartupStatus,
   RuntimeDescriptor,
   RuntimeInstanceSummary,
   RuntimeKind,
@@ -43,10 +42,10 @@ type RuntimeCatalogDependencies = {
     runtimeKind: RuntimeKind,
     repoPath: string,
   ) => Promise<RepoRuntimeHealthCheck>;
-  runtimeStartupStatus: (
+  repoRuntimeHealthStatus: (
     runtimeKind: RuntimeKind,
     repoPath: string,
-  ) => Promise<RepoRuntimeStartupStatus>;
+  ) => Promise<RepoRuntimeHealthCheck>;
   ensureRuntime: (runtimeKind: RuntimeKind, repoPath: string) => Promise<RuntimeInstanceSummary>;
   listRuntimesForRepo: (
     runtimeKind: RuntimeKind,
@@ -104,36 +103,6 @@ const withRuntimeHealthTimeout = async <T>(promise: Promise<T>, timeoutMs: numbe
   }
 };
 
-const mapHostStage = (stage: RepoRuntimeStartupStatus["stage"]): RepoRuntimeHealthStage => {
-  switch (stage) {
-    case "idle":
-      return "idle";
-    case "startup_requested":
-      return "startup_requested";
-    case "waiting_for_runtime":
-      return "waiting_for_runtime";
-    case "runtime_ready":
-      return "runtime_ready";
-    case "startup_failed":
-      return "startup_failed";
-  }
-};
-
-const toHostObservation = (
-  hostStatus: RepoRuntimeStartupStatus,
-): RepoRuntimeHealthObservation | null => {
-  switch (hostStatus.stage) {
-    case "idle":
-      return null;
-    case "startup_requested":
-    case "waiting_for_runtime":
-    case "startup_failed":
-      return "observing_existing_startup";
-    case "runtime_ready":
-      return hostStatus.runtime ? "observed_existing_runtime" : "observing_existing_startup";
-  }
-};
-
 const toProgress = ({
   stage,
   observation,
@@ -150,7 +119,7 @@ const toProgress = ({
 }: {
   stage: RepoRuntimeHealthStage;
   observation: RepoRuntimeHealthObservation | null;
-  host: RepoRuntimeStartupStatus | null;
+  host: RepoRuntimeHealthProgress["host"];
   checkedAt: string;
   detail?: string | null;
   failureKind?: RepoRuntimeFailureKind;
@@ -182,58 +151,57 @@ const buildFrontendObservationTimeoutHealthCheck = async (
   timeoutError: DiagnosticsQueryTimeoutError,
 ): Promise<RepoRuntimeHealthCheck> => {
   try {
-    const hostStatus = await deps.runtimeStartupStatus(runtimeKind, repoPath);
-    const stage = mapHostStage(hostStatus.stage);
-    const observation = toHostObservation(hostStatus);
+    const hostHealth = await deps.repoRuntimeHealthStatus(runtimeKind, repoPath);
+    const hostProgress = hostHealth.progress ?? null;
+    if (!hostProgress) {
+      throw new Error("host repo runtime health snapshot is unavailable");
+    }
     const progress = toProgress({
-      stage,
-      observation,
-      host: hostStatus,
+      stage: hostProgress.stage,
+      observation: hostProgress.observation,
+      host: hostProgress.host,
       checkedAt,
       detail: timeoutError.message,
       failureKind: timeoutError.failureKind,
       failureOrigin: "frontend_observation",
+      startedAt: hostProgress.startedAt,
+      updatedAt: hostProgress.updatedAt,
+      elapsedMs: hostProgress.elapsedMs,
+      attempts: hostProgress.attempts,
     });
 
-    if (stage === "runtime_ready") {
+    if (hostHealth.runtimeOk) {
       return {
-        runtimeOk: true,
-        runtimeError: null,
-        runtimeFailureKind: null,
-        runtime: hostStatus.runtime,
+        ...hostHealth,
         mcpOk: false,
-        mcpError: timeoutError.message,
-        mcpFailureKind: timeoutError.failureKind,
-        mcpServerName: ODT_MCP_SERVER_NAME,
-        mcpServerStatus: null,
-        mcpServerError: timeoutError.message,
-        availableToolIds: [],
+        mcpError: hostHealth.mcpError ?? timeoutError.message,
+        mcpFailureKind: hostHealth.mcpFailureKind ?? timeoutError.failureKind,
+        mcpServerStatus: hostHealth.mcpServerStatus ?? null,
+        mcpServerError: hostHealth.mcpServerError ?? timeoutError.message,
         checkedAt,
-        errors: [timeoutError.message],
+        errors: hostHealth.errors.length > 0 ? hostHealth.errors : [timeoutError.message],
         progress,
       };
     }
 
-    const runtimeError = hostStatus.detail ?? timeoutError.message;
-    const unavailableMessage = "Runtime is unavailable, so MCP cannot be verified.";
+    const runtimeError = hostHealth.runtimeError ?? progress.detail ?? timeoutError.message;
+    const unavailableMessage =
+      hostHealth.mcpError ?? "Runtime is unavailable, so MCP cannot be verified.";
     return {
+      ...hostHealth,
       runtimeOk: false,
       runtimeError,
       runtimeFailureKind: timeoutError.failureKind,
-      runtime: hostStatus.runtime,
       mcpOk: false,
       mcpError: unavailableMessage,
       mcpFailureKind: timeoutError.failureKind,
-      mcpServerName: ODT_MCP_SERVER_NAME,
-      mcpServerStatus: null,
       mcpServerError: unavailableMessage,
-      availableToolIds: [],
       checkedAt,
       errors: [runtimeError, unavailableMessage],
       progress,
     };
   } catch (statusError) {
-    const detail = `${timeoutError.message}. Failed to load latest host startup status: ${errorMessage(statusError)}`;
+    const detail = `${timeoutError.message}. Failed to load latest host runtime health status: ${errorMessage(statusError)}`;
     return {
       runtimeOk: false,
       runtimeError: detail,
@@ -255,7 +223,7 @@ const buildFrontendObservationTimeoutHealthCheck = async (
         checkedAt,
         detail,
         failureKind: timeoutError.failureKind,
-        failureOrigin: "startup_status",
+        failureOrigin: "health_status",
       }),
     };
   }
@@ -353,9 +321,9 @@ export const createHostRuntimeCatalogOperations = (
 ): RuntimeCatalogOperations =>
   createRuntimeCatalogOperations({
     repoRuntimeHealth: (runtimeKind, repoPath) => host.repoRuntimeHealth(repoPath, runtimeKind),
+    repoRuntimeHealthStatus: (runtimeKind, repoPath) =>
+      host.repoRuntimeHealthStatus(repoPath, runtimeKind),
     ensureRuntime: (runtimeKind, repoPath) => host.runtimeEnsure(repoPath, runtimeKind),
-    runtimeStartupStatus: (runtimeKind, repoPath) =>
-      host.runtimeStartupStatus(repoPath, runtimeKind),
     listRuntimesForRepo: (runtimeKind, repoPath) =>
       ensureRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath),
     listAvailableModels: (input) =>

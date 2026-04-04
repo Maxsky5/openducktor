@@ -3,8 +3,8 @@ use super::startup_metrics::OpencodeStartupMetrics;
 use super::workspace_policy::HookTrustChallenge;
 use super::*;
 use host_domain::{
-    now_rfc3339, AgentRuntimeKind, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage,
-    RepoRuntimeStartupStatus,
+    now_rfc3339, AgentRuntimeKind, RepoRuntimeHealthCheck, RepoRuntimeStartupFailureKind,
+    RepoRuntimeStartupStage, RepoRuntimeStartupStatus,
 };
 
 pub type RunEmitter = Arc<dyn Fn(RunEvent) + Send + Sync + 'static>;
@@ -135,6 +135,7 @@ pub struct AppService {
     pub(super) tracked_opencode_processes: Arc<Mutex<HashMap<u32, usize>>>,
     pub(super) runtime_ensure_flights: Arc<Mutex<HashMap<String, Arc<RuntimeEnsureFlight>>>>,
     pub(super) runtime_startup_status: Arc<Mutex<HashMap<String, RuntimeStartupStatusEntry>>>,
+    pub(super) repo_runtime_health_snapshots: Arc<Mutex<HashMap<String, RepoRuntimeHealthCheck>>>,
     pub(super) opencode_session_status_cache:
         Arc<Mutex<HashMap<OpencodeSessionStatusProbeTarget, CachedOpencodeSessionStatusProbe>>>,
     pub(super) opencode_session_status_flights:
@@ -242,6 +243,7 @@ impl AppService {
             tracked_opencode_processes: Arc::new(Mutex::new(HashMap::new())),
             runtime_ensure_flights: Arc::new(Mutex::new(HashMap::new())),
             runtime_startup_status: Arc::new(Mutex::new(HashMap::new())),
+            repo_runtime_health_snapshots: Arc::new(Mutex::new(HashMap::new())),
             opencode_session_status_cache: Arc::new(Mutex::new(HashMap::new())),
             opencode_session_status_flights: Arc::new(Mutex::new(HashMap::new())),
             opencode_session_status_probe_limiter: Arc::new(
