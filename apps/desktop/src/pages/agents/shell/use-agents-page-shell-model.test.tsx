@@ -347,6 +347,11 @@ const registerModuleMocks = (): void => {
       createElement("mock-session-start-modal", props),
   }));
 
+  mock.module("@/components/features/agents/agent-studio-right-panel", () => ({
+    MemoizedAgentStudioRightPanel: (props: Record<string, unknown>): ReactElement =>
+      createElement("mock-agent-studio-right-panel", props),
+  }));
+
   mock.module("@/features/human-review-feedback/human-review-feedback-modal", () => ({
     HumanReviewFeedbackModal: (props: Record<string, unknown>): ReactElement =>
       createElement("mock-human-review-feedback-modal", props),

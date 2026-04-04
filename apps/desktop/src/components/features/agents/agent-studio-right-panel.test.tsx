@@ -1,15 +1,29 @@
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, mock, test } from "bun:test";
 import type { DevServerScriptState } from "@openducktor/contracts";
-import { createElement } from "react";
+import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentStudioDevServerLogBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
 import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
-import {
-  AgentStudioRightPanel,
-  AgentStudioRightPanelToggleButton,
-} from "./agent-studio-right-panel";
+
+type AgentStudioRightPanelComponent =
+  typeof import("./agent-studio-right-panel")["AgentStudioRightPanel"];
+type AgentStudioRightPanelToggleButtonComponent =
+  typeof import("./agent-studio-right-panel")["AgentStudioRightPanelToggleButton"];
+
+let AgentStudioRightPanel: AgentStudioRightPanelComponent;
+let AgentStudioRightPanelToggleButton: AgentStudioRightPanelToggleButtonComponent;
+
+beforeAll(async () => {
+  mock.module("@/contexts/DiffWorkerProvider", () => ({
+    DiffWorkerProvider: ({ children }: { children: ReactNode }) => children,
+  }));
+
+  ({ AgentStudioRightPanel, AgentStudioRightPanelToggleButton } = await import(
+    "./agent-studio-right-panel"
+  ));
+});
 
 const emptyDoc = {
   markdown: "",

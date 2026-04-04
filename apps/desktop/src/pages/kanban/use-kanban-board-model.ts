@@ -11,12 +11,12 @@ import {
 } from "@/components/features/kanban/kanban-task-activity";
 import { compareActiveSessionForPrimary } from "@/components/features/kanban/session-target-resolution";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
 
-const ACTIVE_SESSION_STATUS = new Set<AgentSessionState["status"]>(["starting", "running"]);
+const ACTIVE_SESSION_STATUS = new Set<AgentSessionSummary["status"]>(["starting", "running"]);
 
-const shouldDisplayKanbanTaskSession = (session: AgentSessionState): boolean => {
+const shouldDisplayKanbanTaskSession = (session: AgentSessionSummary): boolean => {
   if (isAgentSessionWaitingInput(session)) {
     return true;
   }
@@ -34,7 +34,7 @@ const compareRunRecency = (left: RunSummary, right: RunSummary): number => {
   return left.runId > right.runId ? -1 : 1;
 };
 
-const compareTaskSessionOrder = (left: AgentSessionState, right: AgentSessionState): number => {
+const compareTaskSessionOrder = (left: AgentSessionSummary, right: AgentSessionSummary): number => {
   const leftPresentationState = toKanbanSessionPresentationState(left);
   const rightPresentationState = toKanbanSessionPresentationState(right);
 
@@ -69,7 +69,10 @@ const compareTaskSessionOrder = (left: AgentSessionState, right: AgentSessionSta
   return left.sessionId > right.sessionId ? -1 : 1;
 };
 
-const comparePrimaryTaskSession = (left: AgentSessionState, right: AgentSessionState): number => {
+const comparePrimaryTaskSession = (
+  left: AgentSessionSummary,
+  right: AgentSessionSummary,
+): number => {
   return compareActiveSessionForPrimary(
     {
       sessionId: left.sessionId,
@@ -87,9 +90,9 @@ const comparePrimaryTaskSession = (left: AgentSessionState, right: AgentSessionS
 };
 
 export const buildActiveTaskSessionContextByTaskId = (
-  sessions: AgentSessionState[],
+  sessions: AgentSessionSummary[],
 ): Map<string, ActiveTaskSessionContext> => {
-  const activeTaskSessionContextByTaskId = new Map<string, AgentSessionState>();
+  const activeTaskSessionContextByTaskId = new Map<string, AgentSessionSummary>();
 
   for (const session of sessions) {
     if (!shouldDisplayKanbanTaskSession(session)) {
@@ -179,9 +182,9 @@ export const sortTasksByActivityState = (
 };
 
 export const buildTaskSessionsByTaskId = (
-  sessions: AgentSessionState[],
+  sessions: AgentSessionSummary[],
 ): Map<string, KanbanTaskSession[]> => {
-  const sessionsByTaskId = new Map<string, AgentSessionState[]>();
+  const sessionsByTaskId = new Map<string, AgentSessionSummary[]>();
   for (const session of sessions) {
     if (!shouldDisplayKanbanTaskSession(session)) {
       continue;
@@ -220,7 +223,7 @@ type UseKanbanBoardModelArgs = {
   isSwitchingWorkspace: boolean;
   tasks: TaskCard[];
   runs: RunSummary[];
-  sessions: AgentSessionState[];
+  sessions: AgentSessionSummary[];
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onOpenSession: (

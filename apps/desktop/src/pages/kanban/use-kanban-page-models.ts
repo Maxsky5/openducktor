@@ -5,7 +5,12 @@ import { toast } from "sonner";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { useGitConflictResolution } from "@/features/git-conflict-resolution";
 import { errorMessage } from "@/lib/errors";
-import { useAgentState, useTasksState, useWorkspaceState } from "@/state";
+import {
+  useAgentOperations,
+  useAgentSessionSummaries,
+  useTasksState,
+  useWorkspaceState,
+} from "@/state";
 import { kanbanTaskListQueryOptions } from "@/state/queries/tasks";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { useAgentStudioRepoSettings } from "../agents/use-agent-studio-repo-settings";
@@ -42,14 +47,14 @@ export function useKanbanPageModels({
   const { activeRepo, isSwitchingWorkspace, loadRepoSettings } = useWorkspaceState();
   const { repoSettings } = useAgentStudioRepoSettings({ activeRepo });
   const {
-    sessions,
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
     loadAgentSessions,
     removeAgentSessions,
     startAgentSession,
     sendAgentMessage,
-  } = useAgentState();
+  } = useAgentOperations();
+  const sessions = useAgentSessionSummaries();
   const {
     runs,
     refreshTasks,

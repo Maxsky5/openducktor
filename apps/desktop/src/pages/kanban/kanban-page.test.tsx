@@ -406,23 +406,21 @@ describe("KanbanPage session start modal flow", () => {
       },
     }));
 
-    mock.module("@/state/app-state-provider", () => ({
+    const stateModule = {
       AppStateProvider: ({ children }: { children: ReactElement }): ReactElement => children,
       useWorkspaceState: () => ({
         activeRepo: "/repo",
         isSwitchingWorkspace: false,
         loadRepoSettings: async () => REPO_SETTINGS_FIXTURE,
       }),
-      useAgentState: () => ({
-        sessions: currentSessionsFixture,
+      useAgentSessionSummaries: () => currentSessionsFixture,
+      useAgentOperations: () => ({
         bootstrapTaskSessions: bootstrapTaskSessionsMock,
         hydrateRequestedTaskSessionHistory: hydrateRequestedTaskSessionHistoryMock,
-        reconcileLiveTaskSessions: async () => {},
         loadAgentSessions: loadAgentSessionsMock,
         removeAgentSessions: removeAgentSessionsMock,
         startAgentSession: startAgentSessionMock,
         sendAgentMessage: sendAgentMessageMock,
-        updateAgentSessionModel: updateAgentSessionModelMock,
       }),
       useTasksState: () => ({
         isForegroundLoadingTasks: false,
@@ -458,7 +456,9 @@ describe("KanbanPage session start modal flow", () => {
       }),
       useDelegationState: () => ({}),
       useSpecState: () => ({}),
-    }));
+    };
+    mock.module("@/state/app-state-provider", () => stateModule);
+    mock.module("@/state", () => stateModule);
   });
 
   beforeEach(async () => {
