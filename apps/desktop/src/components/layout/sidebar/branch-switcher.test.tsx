@@ -44,6 +44,9 @@ describe("BranchSwitcher", () => {
       useAgentOperations: () => {
         throw new Error("useAgentOperations is not used in this test");
       },
+      useAgentSessions: () => {
+        throw new Error("useAgentSessions is not used in this test");
+      },
       useAgentSessionSummaries: () => {
         throw new Error("useAgentSessionSummaries is not used in this test");
       },
@@ -81,7 +84,6 @@ describe("BranchSwitcher", () => {
     };
 
     mock.module("@/state/app-state-provider", () => stateModule);
-    mock.module("@/state", () => stateModule);
 
     mock.module("@/components/features/repository/branch-selector", () => ({
       BranchSelector: ({
@@ -112,7 +114,6 @@ describe("BranchSwitcher", () => {
   afterAll(async () => {
     await restoreMockedModules([
       ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
-      ["@/state", () => import("@/state")],
       [
         "@/components/features/repository/branch-selector",
         () => import("@/components/features/repository/branch-selector"),

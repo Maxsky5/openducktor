@@ -23,19 +23,19 @@ import {
 } from "@/components/features/task-details/task-details-sheet-controller";
 import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
-import {
-  useAgentOperations,
-  useAgentSessionSummaries,
-  useChecksState,
-  useTasksState,
-  useWorkspaceState,
-} from "@/state";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   useChecksOperationsContext,
   useDelegationEventsContext,
   useRuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
+import {
+  useAgentOperations,
+  useAgentSessionSummaries,
+  useChecksState,
+  useTasksState,
+  useWorkspaceState,
+} from "@/state/app-state-provider";
 import type { AgentStudioQueryUpdate } from "../agent-studio-navigation";
 import { useAgentStudioBuildWorktreeRefresh } from "../use-agent-studio-build-worktree-refresh";
 import {

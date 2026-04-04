@@ -300,7 +300,6 @@ const registerModuleMocks = (): void => {
   }));
 
   mock.module("@/state/app-state-provider", () => stateModule);
-  mock.module("@/state", () => stateModule);
 
   mock.module("@/state/app-state-contexts", () => ({
     ...appStateContexts,

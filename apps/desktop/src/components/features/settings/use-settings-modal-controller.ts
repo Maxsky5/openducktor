@@ -19,8 +19,8 @@ import {
 } from "@/components/features/settings";
 import { errorMessage } from "@/lib/errors";
 import { pickRepositoryDirectory } from "@/lib/repo-directory";
-import { useChecksState, useWorkspaceState } from "@/state";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { useChecksState, useWorkspaceState } from "@/state/app-state-provider";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
 import {

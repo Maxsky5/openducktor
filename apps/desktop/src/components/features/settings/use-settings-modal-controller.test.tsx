@@ -82,6 +82,9 @@ describe("useSettingsModalController", () => {
       useAgentOperations: () => {
         throw new Error("useAgentOperations is not used in this test");
       },
+      useAgentSessions: () => {
+        throw new Error("useAgentSessions is not used in this test");
+      },
       useAgentSessionSummaries: () => {
         throw new Error("useAgentSessionSummaries is not used in this test");
       },
@@ -118,7 +121,6 @@ describe("useSettingsModalController", () => {
     };
 
     mock.module("@/state/app-state-provider", () => stateModule);
-    mock.module("@/state", () => stateModule);
 
     mock.module("./use-settings-modal-branches-state", () => ({
       useSettingsModalBranchesState: () => ({
@@ -142,7 +144,6 @@ describe("useSettingsModalController", () => {
   afterAll(async () => {
     await restoreMockedModules([
       ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
-      ["@/state", () => import("@/state")],
       ["./use-settings-modal-branches-state", () => import("./use-settings-modal-branches-state")],
       ["./use-settings-modal-catalog-state", () => import("./use-settings-modal-catalog-state")],
     ]);

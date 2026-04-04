@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
@@ -89,6 +90,31 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 describe("useAgentStudioSelectionController", () => {
   beforeAll(async () => {
     mock.module("@/state/app-state-provider", () => ({
+      AppStateProvider: ({ children }: { children: unknown }) => children,
+      useAgentState: () => {
+        throw new Error("useAgentState is not used in this test");
+      },
+      useAgentOperations: () => {
+        throw new Error("useAgentOperations is not used in this test");
+      },
+      useAgentSessions: () => {
+        throw new Error("useAgentSessions is not used in this test");
+      },
+      useAgentSessionSummaries: () => {
+        throw new Error("useAgentSessionSummaries is not used in this test");
+      },
+      useWorkspaceState: () => {
+        throw new Error("useWorkspaceState is not used in this test");
+      },
+      useTasksState: () => {
+        throw new Error("useTasksState is not used in this test");
+      },
+      useChecksState: () => {
+        throw new Error("useChecksState is not used in this test");
+      },
+      useSpecState: () => {
+        throw new Error("useSpecState is not used in this test");
+      },
       useAgentSession: (sessionId: string | null) =>
         sessionId ? (sessionByIdRef.current[sessionId] ?? null) : null,
     }));
@@ -98,8 +124,10 @@ describe("useAgentStudioSelectionController", () => {
     ));
   });
 
-  afterAll(() => {
-    mock.restore();
+  afterAll(async () => {
+    await restoreMockedModules([
+      ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+    ]);
   });
 
   test("reuses cached task ordering metadata for unchanged task signatures", () => {

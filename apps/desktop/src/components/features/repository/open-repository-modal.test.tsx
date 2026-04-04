@@ -42,6 +42,9 @@ describe("OpenRepositoryModal", () => {
       useAgentOperations: () => {
         throw new Error("useAgentOperations is not used in this test");
       },
+      useAgentSessions: () => {
+        throw new Error("useAgentSessions is not used in this test");
+      },
       useAgentSessionSummaries: () => {
         throw new Error("useAgentSessionSummaries is not used in this test");
       },
@@ -67,7 +70,6 @@ describe("OpenRepositoryModal", () => {
     };
 
     mock.module("@/state/app-state-provider", () => stateModule);
-    mock.module("@/state", () => stateModule);
 
     mock.module("@/components/ui/button", () => ({
       Button: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
@@ -103,7 +105,6 @@ describe("OpenRepositoryModal", () => {
     await restoreMockedModules([
       ["@/lib/repo-directory", () => import("@/lib/repo-directory")],
       ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
-      ["@/state", () => import("@/state")],
       ["@/components/ui/button", () => import("@/components/ui/button")],
       ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
     ]);

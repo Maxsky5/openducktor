@@ -408,6 +408,15 @@ describe("KanbanPage session start modal flow", () => {
 
     const stateModule = {
       AppStateProvider: ({ children }: { children: ReactElement }): ReactElement => children,
+      useAgentState: () => {
+        throw new Error("useAgentState is not used in this test");
+      },
+      useAgentSessions: () => {
+        throw new Error("useAgentSessions is not used in this test");
+      },
+      useAgentSession: () => {
+        throw new Error("useAgentSession is not used in this test");
+      },
       useWorkspaceState: () => ({
         activeRepo: "/repo",
         isSwitchingWorkspace: false,
@@ -458,7 +467,6 @@ describe("KanbanPage session start modal flow", () => {
       useSpecState: () => ({}),
     };
     mock.module("@/state/app-state-provider", () => stateModule);
-    mock.module("@/state", () => stateModule);
   });
 
   beforeEach(async () => {

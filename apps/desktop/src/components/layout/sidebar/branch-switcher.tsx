@@ -1,7 +1,7 @@
 import { type ReactElement, useMemo, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
-import { useWorkspaceState } from "@/state";
+import { useWorkspaceState } from "@/state/app-state-provider";
 
 export function BranchSwitcher(): ReactElement | null {
   const {
