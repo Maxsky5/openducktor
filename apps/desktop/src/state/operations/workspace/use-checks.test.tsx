@@ -703,6 +703,8 @@ describe("use-checks", () => {
     };
     const originalSetTimeout = globalThis.setTimeout;
     const originalClearTimeout = globalThis.clearTimeout;
+    const diagnosticsTimeoutHandlers = new Map<number, () => void>();
+    let nextDiagnosticsTimeoutId = 1;
     const setTimeoutMock = mock((handler: TimerHandler, delay?: number) => {
       if (typeof handler !== "function") {
         throw new Error("Expected timeout callback function");
@@ -712,11 +714,21 @@ describe("use-checks", () => {
         return 0 as unknown as ReturnType<typeof globalThis.setTimeout>;
       }
 
+      if (delay === 15_000) {
+        const timeoutId = nextDiagnosticsTimeoutId;
+        nextDiagnosticsTimeoutId += 1;
+        diagnosticsTimeoutHandlers.set(timeoutId, handler as () => void);
+        return timeoutId as unknown as ReturnType<typeof globalThis.setTimeout>;
+      }
+
       return originalSetTimeout(() => {
         handler();
       }, 0);
     });
     const clearTimeoutMock = mock((timeoutId: ReturnType<typeof globalThis.setTimeout>) => {
+      if (typeof timeoutId === "number") {
+        diagnosticsTimeoutHandlers.delete(timeoutId);
+      }
       originalClearTimeout(timeoutId);
     });
 
@@ -734,6 +746,7 @@ describe("use-checks", () => {
 
     try {
       await waitForInitialChecksToSettle(harness);
+      diagnosticsTimeoutHandlers.clear();
       runtimeCheck.mockClear();
       beadsCheck.mockClear();
       checkRepoRuntimeHealthMock.mockClear();
@@ -745,6 +758,13 @@ describe("use-checks", () => {
         (value) => value.isLoadingChecks === true,
         REFRESH_CHECKS_WAIT_TIMEOUT_MS,
       );
+      expect(diagnosticsTimeoutHandlers.size).toBe(1);
+
+      for (const handler of diagnosticsTimeoutHandlers.values()) {
+        handler();
+      }
+      diagnosticsTimeoutHandlers.clear();
+
       await harness.run(async () => {
         await expect(refreshPromise).rejects.toThrow("runtime down");
       });
