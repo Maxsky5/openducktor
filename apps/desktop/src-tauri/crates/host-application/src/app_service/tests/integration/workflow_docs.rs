@@ -1984,6 +1984,131 @@ fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
 }
 
 #[test]
+fn agent_sessions_list_bulk_returns_empty_map_without_store_access() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-sessions-bulk-empty";
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    {
+        let mut state = task_state.lock().expect("task lock poisoned");
+        state.list_error = Some("list_tasks should not be called for empty input".to_string());
+    }
+
+    let sessions = service.agent_sessions_list_bulk(repo_path, &[])?;
+
+    assert!(sessions.is_empty());
+    assert!(task_state
+        .lock()
+        .expect("task lock poisoned")
+        .metadata_get_calls
+        .is_empty());
+    Ok(())
+}
+
+#[test]
+fn agent_sessions_list_bulk_reads_task_card_sessions_without_metadata_lookups() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-sessions-bulk";
+    let mut task_one = make_task("task-1", "task", TaskStatus::Open);
+    let mut task_one_newest = make_session("task-1", "session-1-newest");
+    task_one_newest.started_at = "2026-02-20T13:00:00Z".to_string();
+    let mut task_one_oldest = make_session("task-1", "session-1-oldest");
+    task_one_oldest.started_at = "2026-02-20T11:00:00Z".to_string();
+    task_one.agent_sessions = vec![task_one_newest.clone(), task_one_oldest.clone()];
+
+    let task_two = make_task("task-2", "task", TaskStatus::Open);
+
+    let mut task_three = make_task("task-3", "task", TaskStatus::Open);
+    let mut task_three_session = make_session("task-3", "session-3");
+    task_three_session.started_at = "2026-02-20T12:30:00Z".to_string();
+    task_three.agent_sessions = vec![task_three_session.clone()];
+
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task_one, task_two, task_three],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let sessions = service.agent_sessions_list_bulk(
+        repo_path,
+        &[
+            "task-1".to_string(),
+            "task-2".to_string(),
+            "task-3".to_string(),
+        ],
+    )?;
+
+    assert_eq!(sessions.len(), 3);
+    assert_eq!(
+        sessions
+            .get("task-1")
+            .expect("task-1 sessions should exist")
+            .iter()
+            .map(|session| session.session_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["session-1-newest", "session-1-oldest"]
+    );
+    assert!(sessions
+        .get("task-2")
+        .expect("task-2 sessions should exist")
+        .is_empty());
+    assert_eq!(
+        sessions
+            .get("task-3")
+            .expect("task-3 sessions should exist")
+            .iter()
+            .map(|session| session.session_id.as_str())
+            .collect::<Vec<_>>(),
+        vec![task_three_session.session_id.as_str()]
+    );
+
+    assert!(task_state
+        .lock()
+        .expect("task lock poisoned")
+        .metadata_get_calls
+        .is_empty());
+    Ok(())
+}
+
+#[test]
+fn agent_sessions_list_bulk_fails_for_missing_task_before_metadata_reads() {
+    let repo_path = "/tmp/odt-repo-sessions-bulk-missing";
+    let present = make_task("task-1", "task", TaskStatus::Open);
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![present],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let error = service
+        .agent_sessions_list_bulk(
+            repo_path,
+            &["task-1".to_string(), "missing-task".to_string()],
+        )
+        .expect_err("missing task should fail bulk session lookup");
+
+    assert!(error.to_string().contains("Task not found: missing-task"));
+    assert!(task_state
+        .lock()
+        .expect("task lock poisoned")
+        .metadata_get_calls
+        .is_empty());
+}
+
+#[test]
 fn agent_session_upsert_rejects_working_directory_outside_repo_and_worktree_base() -> Result<()> {
     let repo_root = unique_temp_path("session-upsert-invalid-workdir");
     let repo = repo_root.join("repo");
