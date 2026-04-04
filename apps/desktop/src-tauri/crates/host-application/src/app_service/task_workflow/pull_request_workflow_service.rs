@@ -3,7 +3,9 @@ use super::approval_support::{
     ensure_clean_builder_worktree, ensure_pull_request_management_status,
 };
 use super::builder_branch_service::BuilderBranchService;
-use super::builder_cleanup_service::BuilderCleanupService;
+use super::merged_pull_request_completion_service::{
+    MergedPullRequestCleanupContext, MergedPullRequestCompletionService,
+};
 use super::pull_request_provider_service::PullRequestProviderService;
 use crate::app_service::git_provider::ResolvedPullRequest;
 use crate::app_service::service_core::AppService;
@@ -180,38 +182,29 @@ impl<'a> PullRequestWorkflowService<'a> {
         }
 
         let repo_path = self.service.resolve_task_repo_path(repo_path)?;
-        let builder_context = BuilderBranchService::new(self.service).load_builder_branch_context(
-            context.repo.repo_path.as_str(),
-            task_id,
-            "Pull request linking",
-        )?;
-        let target_branch = BuilderBranchService::new(self.service)
-            .target_branch_for_repo(context.repo.repo_path.as_str())?
-            .checkout_branch();
+        let cleanup_context = if metadata.pull_request.is_none() {
+            let builder_context = BuilderBranchService::new(self.service)
+                .load_builder_branch_context(
+                    context.repo.repo_path.as_str(),
+                    task_id,
+                    "Pull request linking",
+                )?;
+            let target_branch = BuilderBranchService::new(self.service)
+                .target_branch_for_repo(context.repo.repo_path.as_str())?
+                .checkout_branch();
+            Some(MergedPullRequestCleanupContext {
+                source_branch: builder_context.source_branch,
+                target_branch,
+            })
+        } else {
+            None
+        };
 
-        if metadata.pull_request.is_none() {
-            PullRequestProviderService::new(self.service).store_linked_pull_request_metadata(
-                repo_path.as_str(),
-                task_id,
-                ResolvedPullRequest {
-                    record: pull_request,
-                    source_branch: builder_context.source_branch.clone(),
-                    target_branch: target_branch.clone(),
-                },
-            )?;
-        }
-        BuilderCleanupService::new(self.service).finalize_direct_merge_cleanup(
+        MergedPullRequestCompletionService::new(self.service).complete_linked_pull_request_merge(
             repo_path.as_str(),
             task_id,
-            builder_context.source_branch.as_str(),
-            target_branch.as_str(),
-        )?;
-        let task = self.service.task_transition(
-            repo_path.as_str(),
-            task_id,
-            TaskStatus::Closed,
-            Some("Linked pull request merged"),
-        )?;
-        Ok(task)
+            pull_request,
+            cleanup_context,
+        )
     }
 }

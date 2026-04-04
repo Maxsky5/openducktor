@@ -1,5 +1,7 @@
 use super::approval_support::{is_syncable_pull_request_state, is_terminal_task_status};
-use super::builder_cleanup_service::BuilderCleanupService;
+use super::merged_pull_request_completion_service::{
+    MergedPullRequestCleanupContext, MergedPullRequestCompletionService,
+};
 use super::pull_request_provider_service::PullRequestProviderService;
 use crate::app_service::service_core::AppService;
 use anyhow::Result;
@@ -43,24 +45,22 @@ impl<'a> PullRequestSyncService<'a> {
             else {
                 continue;
             };
-            self.service.task_store.set_pull_request(
-                Path::new(&repo_path),
-                task.id.as_str(),
-                Some(updated.record.clone()),
-            )?;
-
             if updated.record.state == "merged" && task.status != TaskStatus::Closed {
-                BuilderCleanupService::new(self.service).finalize_direct_merge_cleanup(
-                    repo_path.as_str(),
+                let _ = MergedPullRequestCompletionService::new(self.service)
+                    .complete_linked_pull_request_merge(
+                        repo_path.as_str(),
+                        task.id.as_str(),
+                        updated.record,
+                        Some(MergedPullRequestCleanupContext {
+                            source_branch: updated.source_branch,
+                            target_branch: updated.target_branch,
+                        }),
+                    )?;
+            } else {
+                self.service.task_store.set_pull_request(
+                    Path::new(&repo_path),
                     task.id.as_str(),
-                    updated.source_branch.as_str(),
-                    updated.target_branch.as_str(),
-                )?;
-                self.service.task_transition(
-                    repo_path.as_str(),
-                    task.id.as_str(),
-                    TaskStatus::Closed,
-                    Some("Linked pull request merged"),
+                    Some(updated.record),
                 )?;
             }
         }

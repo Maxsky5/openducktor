@@ -2127,6 +2127,123 @@ fn repo_pull_request_sync_closes_tasks_when_linked_pull_request_is_merged() -> R
 }
 
 #[test]
+fn repo_pull_request_sync_closes_tasks_when_builder_worktree_is_already_missing() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("approval-pr-sync-missing-worktree");
+    let repo = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    let worktree_path = worktree_base.join("task-1");
+    let create_response = root.join("create.json");
+    let update_response = root.join("update.json");
+    let fetch_response = root.join("fetch.json");
+    init_git_repo(&repo)?;
+    fs::create_dir_all(&worktree_path)?;
+    write_json(&create_response, "{}")?;
+    write_json(&update_response, "{}")?;
+    write_json(
+        &fetch_response,
+        r#"{"number":17,"html_url":"https://github.com/openai/openducktor/pull/17","title":"Merged PR","draft":false,"state":"closed","created_at":"2026-03-11T10:00:00Z","updated_at":"2026-03-11T10:10:00Z","merged_at":"2026-03-11T10:10:00Z","closed_at":"2026-03-11T10:10:00Z","head":{"ref":"odt/task-1"},"base":{"ref":"main"}}"#,
+    )?;
+
+    let bin_dir = write_fake_gh(&root)?;
+    let _path_guard = prepend_path(&bin_dir);
+    let _auth_ok_guard = set_env_var("ODT_GH_AUTH_OK", "1");
+    let _auth_login_guard = set_env_var("ODT_GH_AUTH_LOGIN", "octocat");
+    let _create_guard = set_env_var(
+        "ODT_GH_CREATE_RESPONSE",
+        create_response.to_string_lossy().as_ref(),
+    );
+    let _update_guard = set_env_var(
+        "ODT_GH_UPDATE_RESPONSE",
+        update_response.to_string_lossy().as_ref(),
+    );
+    let _fetch_guard = set_env_var(
+        "ODT_GH_FETCH_RESPONSE",
+        fetch_response.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    configure_builder_session(
+        repo_path.as_str(),
+        &worktree_path,
+        "odt/task-1",
+        &service,
+        &task_state,
+        &git_state,
+    )?;
+    task_state
+        .lock()
+        .expect("task state lock poisoned")
+        .pull_requests
+        .insert(
+            "task-1".to_string(),
+            host_domain::PullRequestRecord {
+                provider_id: "github".to_string(),
+                number: 17,
+                url: "https://github.com/openai/openducktor/pull/17".to_string(),
+                state: "open".to_string(),
+                created_at: "2026-03-11T10:00:00Z".to_string(),
+                updated_at: "2026-03-11T10:00:00Z".to_string(),
+                last_synced_at: None,
+                merged_at: None,
+                closed_at: None,
+            },
+        );
+    {
+        let mut git = git_state.lock().expect("git state lock poisoned");
+        git.branches = vec![GitBranch {
+            name: "odt/task-1".to_string(),
+            is_current: false,
+            is_remote: false,
+        }];
+    }
+    fs::remove_dir_all(&worktree_path)?;
+
+    assert!(service.repo_pull_request_sync(repo_path.as_str())?);
+
+    let state = task_state.lock().expect("task state lock poisoned");
+    let task = state
+        .tasks
+        .iter()
+        .find(|task| task.id == "task-1")
+        .ok_or_else(|| anyhow!("task not found after sync"))?;
+    assert_eq!(task.status, TaskStatus::Closed);
+    assert_eq!(
+        state
+            .pull_requests
+            .get("task-1")
+            .map(|entry| entry.state.as_str()),
+        Some("merged"),
+    );
+    drop(state);
+
+    let git = git_state.lock().expect("git state lock poisoned");
+    assert!(!git
+        .calls
+        .iter()
+        .any(|call| matches!(call, GitCall::RemoveWorktree { .. })));
+    assert!(git.calls.iter().any(
+        |call| matches!(call, GitCall::DeleteLocalBranch { branch, .. } if branch == "odt/task-1")
+    ));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
 fn repo_pull_request_sync_propagates_close_transition_failures() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("approval-pr-sync-close-error");
@@ -2320,6 +2437,96 @@ fn task_pull_request_link_merged_closes_task_and_cleans_up_worktree() -> Result<
         .iter()
         .any(|call| matches!(call, GitCall::RemoveWorktree { .. })));
     assert!(git.calls.iter().any(
+        |call| matches!(call, GitCall::DeleteLocalBranch { branch, .. } if branch == "odt/task-1")
+    ));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn task_pull_request_link_merged_closes_already_linked_task_without_live_builder_worktree(
+) -> Result<()> {
+    let root = unique_temp_path("approval-pr-link-merged-missing-worktree");
+    let repo = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    let worktree_path = worktree_base.join("task-1");
+    init_git_repo(&repo)?;
+    fs::create_dir_all(&worktree_path)?;
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    configure_builder_session(
+        repo_path.as_str(),
+        &worktree_path,
+        "odt/task-1",
+        &service,
+        &task_state,
+        &git_state,
+    )?;
+    task_state
+        .lock()
+        .expect("task state lock poisoned")
+        .pull_requests
+        .insert(
+            "task-1".to_string(),
+            host_domain::PullRequestRecord {
+                provider_id: "github".to_string(),
+                number: 17,
+                url: "https://github.com/openai/openducktor/pull/17".to_string(),
+                state: "merged".to_string(),
+                created_at: "2026-03-11T10:00:00Z".to_string(),
+                updated_at: "2026-03-11T10:10:00Z".to_string(),
+                last_synced_at: Some("2026-03-11T10:10:00Z".to_string()),
+                merged_at: Some("2026-03-11T10:10:00Z".to_string()),
+                closed_at: Some("2026-03-11T10:10:00Z".to_string()),
+            },
+        );
+    {
+        let mut git = git_state.lock().expect("git state lock poisoned");
+        git.branches = vec![GitBranch {
+            name: "odt/task-1".to_string(),
+            is_current: false,
+            is_remote: false,
+        }];
+    }
+    fs::remove_dir_all(&worktree_path)?;
+
+    let task = service.task_pull_request_link_merged(
+        repo_path.as_str(),
+        "task-1",
+        host_domain::PullRequestRecord {
+            provider_id: "github".to_string(),
+            number: 17,
+            url: "https://github.com/openai/openducktor/pull/17".to_string(),
+            state: "merged".to_string(),
+            created_at: "2026-03-11T10:00:00Z".to_string(),
+            updated_at: "2026-03-11T10:10:00Z".to_string(),
+            last_synced_at: Some("2026-03-11T10:10:00Z".to_string()),
+            merged_at: Some("2026-03-11T10:10:00Z".to_string()),
+            closed_at: Some("2026-03-11T10:10:00Z".to_string()),
+        },
+    )?;
+
+    assert_eq!(task.status, TaskStatus::Closed);
+    let git = git_state.lock().expect("git state lock poisoned");
+    assert!(!git
+        .calls
+        .iter()
+        .any(|call| matches!(call, GitCall::RemoveWorktree { .. })));
+    assert!(!git.calls.iter().any(
         |call| matches!(call, GitCall::DeleteLocalBranch { branch, .. } if branch == "odt/task-1")
     ));
 

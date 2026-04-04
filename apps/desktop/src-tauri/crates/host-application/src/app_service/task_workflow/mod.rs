@@ -7,6 +7,7 @@ mod cleanup_plans;
 mod direct_merge_workflow_service;
 mod document_service;
 mod implementation_reset_service;
+mod merged_pull_request_completion_service;
 mod pull_request_provider_service;
 mod pull_request_sync_service;
 mod pull_request_workflow_service;
