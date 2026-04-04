@@ -1,18 +1,18 @@
 use super::super::{
-    emit_event, validate_transition, AppService, OpencodeStartupReadinessPolicy,
-    OpencodeStartupWaitReport, RunEmitter, RunProcess, RuntimeInstanceSummary, StartupEventContext,
-    StartupEventCorrelation, StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
+    emit_event, AppService, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, RunEmitter,
+    RunProcess, RuntimeInstanceSummary, StartupEventContext, StartupEventCorrelation,
+    StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
 };
 use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree};
 use super::BuildResponseAction;
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     now_rfc3339, AgentRuntimeKind, AgentSessionDocument, RunEvent, RunState, RunSummary,
-    RuntimeRoute, TaskStatus, UpdateTaskPatch,
+    RuntimeRoute, TaskStatus,
 };
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, PathBuf};
 use std::time::Duration;
 use url::form_urlencoded;
 use uuid::Uuid;
@@ -380,7 +380,10 @@ impl AppService {
             run_id,
             emitter,
         } = input;
-        self.transition_build_task_to_in_progress(prerequisites.repo_path.as_str(), task_id)?;
+        self.task_transition_to_in_progress_without_related_tasks(
+            prerequisites.repo_path.as_str(),
+            task_id,
+        )?;
 
         let worktree_path = prepared_worktree
             .worktree_dir
@@ -416,40 +419,6 @@ impl AppService {
             worktree_path,
             emitter,
         })
-    }
-
-    fn transition_build_task_to_in_progress(&self, repo_path: &str, task_id: &str) -> Result<()> {
-        let repo_path_ref = Path::new(repo_path);
-        let task = self.task_store.get_task(repo_path_ref, task_id)?;
-        validate_transition(
-            &task,
-            std::slice::from_ref(&task),
-            &task.status,
-            &TaskStatus::InProgress,
-        )?;
-
-        if task.status == TaskStatus::InProgress {
-            return Ok(());
-        }
-
-        self.task_store.update_task(
-            repo_path_ref,
-            task_id,
-            UpdateTaskPatch {
-                title: None,
-                description: None,
-                notes: None,
-                status: Some(TaskStatus::InProgress),
-                priority: None,
-                issue_type: None,
-                ai_review_enabled: None,
-                labels: None,
-                assignee: None,
-                parent_id: None,
-            },
-        )?;
-
-        Ok(())
     }
 }
 
