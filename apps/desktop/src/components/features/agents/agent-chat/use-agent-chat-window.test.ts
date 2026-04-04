@@ -695,6 +695,49 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("scrollToBottomOnSend keeps full history expanded when already at the bottom", async () => {
+    const rows = createTurnRows(12);
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+        isSessionWorking: true,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+    await flushAnimationFrames();
+
+    container.scrollTop = getMaxScrollTop(container);
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    expect(harness.getLatestResult().windowStart).toBe(0);
+
+    await act(async () => {
+      harness.getLatestResult().scrollToBottomOnSend();
+      await flush();
+    });
+    await flushAnimationFrames();
+
+    expect(harness.getLatestResult().windowStart).toBe(0);
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await harness.unmount();
+  });
+
   test("exports the expected turn window constants", () => {
     expect(CHAT_TURN_WINDOW_INIT).toBe(10);
     expect(CHAT_TURN_WINDOW_BATCH).toBe(8);
