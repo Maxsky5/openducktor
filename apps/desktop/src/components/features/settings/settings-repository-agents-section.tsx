@@ -11,6 +11,7 @@ import {
   ensureAgentDefault,
   findCatalogModel,
   ROLE_DEFAULTS,
+  resolveRepoAgentDefaultRuntimeKind,
   selectedModelKeyForRole,
   toRoleVariantOptions,
 } from "@/components/features/settings";
@@ -78,9 +79,10 @@ export function RepositoryAgentsSection({
   });
   const missingRoleLabels = ROLE_DEFAULTS.filter(({ role }) => {
     const value = selectedRepoConfig.agentDefaults[role];
-    const runtimeKind = resolveRuntimeKindSelection({
+    const runtimeKind = resolveRepoAgentDefaultRuntimeKind({
+      selectedRepoConfig,
       runtimeDefinitions,
-      requestedRuntimeKind: value?.runtimeKind ?? selectedRepoConfig.defaultRuntimeKind,
+      role,
     });
     const runtimeDefinition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
     return !(
@@ -144,9 +146,10 @@ export function RepositoryAgentsSection({
         {ROLE_DEFAULTS.map(({ role, label }) => {
           const roleRuntimeOptions = runtimeOptions;
           const value = ensureAgentDefault(selectedRepoConfig.agentDefaults[role] ?? null);
-          const runtimeKind = resolveRuntimeKindSelection({
+          const runtimeKind = resolveRepoAgentDefaultRuntimeKind({
+            selectedRepoConfig,
             runtimeDefinitions,
-            requestedRuntimeKind: value.runtimeKind ?? selectedRepoConfig.defaultRuntimeKind,
+            role,
           });
           const runtimeDescriptor = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
           const catalog = getCatalogForRuntime(runtimeKind);

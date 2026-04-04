@@ -17,6 +17,7 @@ import {
   removePromptOverride,
   resetPromptOverrideToBuiltin,
   resolvePromptOverrideFallbackTemplate,
+  resolveRepoAgentDefaultRuntimeKind,
   selectedModelKeyForRole,
   togglePromptOverrideEnabled,
   toRoleVariantOptions,
@@ -138,6 +139,24 @@ describe("settings-modal-model", () => {
     expect(
       getNeededCatalogRuntimeKinds(createRepoConfig(), [OPENCODE_DESCRIPTOR, CODEX_DESCRIPTOR]),
     ).toEqual(["opencode"]);
+  });
+
+  test("resolves inherited role runtime kinds from the repo default runtime", () => {
+    expect(
+      resolveRepoAgentDefaultRuntimeKind({
+        selectedRepoConfig: createRepoConfig({
+          defaultRuntimeKind: "codex",
+          agentDefaults: {
+            spec: undefined,
+            planner: undefined,
+            build: undefined,
+            qa: undefined,
+          },
+        }),
+        runtimeDefinitions: [OPENCODE_DESCRIPTOR, CODEX_DESCRIPTOR],
+        role: "spec",
+      }),
+    ).toBe("codex");
   });
 
   test("derives unique catalog targets from mixed role overrides", () => {

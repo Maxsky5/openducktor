@@ -7,6 +7,7 @@ export {
   ROLE_DEFAULTS,
   resetPromptOverrideToBuiltin,
   resolvePromptOverrideFallbackTemplate,
+  resolveRepoAgentDefaultRuntimeKind,
   selectedModelKeyForRole,
   togglePromptOverrideEnabled,
   toRoleVariantOptions,

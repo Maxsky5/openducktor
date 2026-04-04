@@ -125,6 +125,25 @@ export const getMissingRequiredRoleLabels = (agentDefaults: RepoAgentDefaultsInp
   }).map(({ label }) => label);
 };
 
+export const resolveRepoAgentDefaultRuntimeKind = ({
+  selectedRepoConfig,
+  runtimeDefinitions,
+  role,
+}: {
+  selectedRepoConfig: RepoConfig;
+  runtimeDefinitions: RuntimeDescriptor[];
+  role: RepoDefaultRole;
+}): RuntimeKind => {
+  const requestedRuntimeKind =
+    selectedRepoConfig.agentDefaults[role]?.runtimeKind ?? selectedRepoConfig.defaultRuntimeKind;
+
+  return resolveRuntimeKindSelection({
+    runtimeDefinitions,
+    requestedRuntimeKind,
+    fallbackRuntimeKind: DEFAULT_RUNTIME_KIND,
+  });
+};
+
 export const getNeededCatalogRuntimeKinds = (
   selectedRepoConfig: RepoConfig | null,
   runtimeDefinitions: RuntimeDescriptor[],
@@ -135,12 +154,10 @@ export const getNeededCatalogRuntimeKinds = (
 
   const runtimeKinds = new Set<RuntimeKind>();
   for (const { role } of ROLE_DEFAULTS) {
-    const requestedRuntimeKind =
-      selectedRepoConfig.agentDefaults[role]?.runtimeKind ?? selectedRepoConfig.defaultRuntimeKind;
-    const resolvedRuntimeKind = resolveRuntimeKindSelection({
+    const resolvedRuntimeKind = resolveRepoAgentDefaultRuntimeKind({
+      selectedRepoConfig,
       runtimeDefinitions,
-      requestedRuntimeKind,
-      fallbackRuntimeKind: DEFAULT_RUNTIME_KIND,
+      role,
     });
     runtimeKinds.add(resolvedRuntimeKind);
   }
