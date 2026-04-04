@@ -1264,6 +1264,66 @@ fn task_transition_updates_status_when_valid() -> Result<()> {
 }
 
 #[test]
+fn build_resumed_uses_targeted_transition_without_listing_tasks() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-build-resume-targeted";
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![make_task("task-blocked", "task", TaskStatus::Blocked)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    {
+        let mut task_state = task_state.lock().expect("task lock poisoned");
+        task_state.list_error = Some("targeted transitions should not list tasks".to_string());
+    }
+
+    let resumed = service.build_resumed(repo_path, "task-blocked")?;
+    assert_eq!(resumed.status, TaskStatus::InProgress);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert_eq!(task_state.get_task_calls, vec!["task-blocked".to_string()]);
+    assert_eq!(task_state.updated_patches.len(), 1);
+    assert_eq!(
+        task_state.updated_patches[0].1.status,
+        Some(TaskStatus::InProgress)
+    );
+    Ok(())
+}
+
+#[test]
+fn human_request_changes_uses_targeted_transition_without_listing_tasks() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-human-request-changes-targeted";
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![make_task("task-review", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    {
+        let mut task_state = task_state.lock().expect("task lock poisoned");
+        task_state.list_error = Some("targeted transitions should not list tasks".to_string());
+    }
+
+    let requested_changes = service.human_request_changes(repo_path, "task-review", None)?;
+    assert_eq!(requested_changes.status, TaskStatus::InProgress);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert_eq!(task_state.get_task_calls, vec!["task-review".to_string()]);
+    assert_eq!(task_state.updated_patches.len(), 1);
+    assert_eq!(
+        task_state.updated_patches[0].1.status,
+        Some(TaskStatus::InProgress)
+    );
+    Ok(())
+}
+
+#[test]
 fn build_completed_routes_to_ai_review_when_enabled_without_approved_qa() -> Result<()> {
     let repo_path = "/tmp/odt-repo-build-ai";
     let mut task = make_task("task-1", "task", TaskStatus::InProgress);

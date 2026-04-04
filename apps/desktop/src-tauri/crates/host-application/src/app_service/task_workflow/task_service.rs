@@ -6,6 +6,7 @@ use crate::app_service::task_workflow::{
 use crate::app_service::workflow_rules::{
     default_qa_required_for_issue_type, is_open_state, validate_parent_relationships_for_create,
     validate_parent_relationships_for_update, validate_transition,
+    validate_transition_without_related_tasks,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
@@ -136,6 +137,41 @@ impl AppService {
         Ok(self.enrich_task(updated, &context.repo.tasks))
     }
 
+    pub(crate) fn task_transition_to_in_progress_without_related_tasks(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+    ) -> Result<TaskCard> {
+        let repo_path = self.resolve_task_repo_path(repo_path)?;
+        let repo_dir = std::path::Path::new(&repo_path);
+        let task = self.task_store.get_task(repo_dir, task_id)?;
+
+        validate_transition_without_related_tasks(&task, &task.status, &TaskStatus::InProgress)?;
+
+        if task.status == TaskStatus::InProgress {
+            return Ok(self.enrich_task(task.clone(), std::slice::from_ref(&task)));
+        }
+
+        let updated = self.task_store.update_task(
+            repo_dir,
+            task_id,
+            UpdateTaskPatch {
+                title: None,
+                description: None,
+                notes: None,
+                status: Some(TaskStatus::InProgress),
+                priority: None,
+                issue_type: None,
+                ai_review_enabled: None,
+                labels: None,
+                assignee: None,
+                parent_id: None,
+            },
+        )?;
+
+        Ok(self.enrich_task(updated.clone(), std::slice::from_ref(&updated)))
+    }
+
     pub fn build_blocked(
         &self,
         repo_path: &str,
@@ -150,12 +186,7 @@ impl AppService {
     }
 
     pub fn build_resumed(&self, repo_path: &str, task_id: &str) -> Result<TaskCard> {
-        self.task_transition(
-            repo_path,
-            task_id,
-            TaskStatus::InProgress,
-            Some("Builder resumed"),
-        )
+        self.task_transition_to_in_progress_without_related_tasks(repo_path, task_id)
     }
 
     pub fn build_completed(
@@ -185,11 +216,11 @@ impl AppService {
         &self,
         repo_path: &str,
         task_id: &str,
-        note: Option<&str>,
+        _note: Option<&str>,
     ) -> Result<TaskCard> {
-        let context = self.load_task_context(repo_path, task_id)?;
+        let repo_path = self.resolve_task_repo_path(repo_path)?;
         if self
-            .task_metadata_get(context.repo.repo_path.as_str(), task_id)?
+            .task_metadata_get(repo_path.as_str(), task_id)?
             .direct_merge
             .is_some()
         {
@@ -197,11 +228,7 @@ impl AppService {
                 "Cannot request changes after a local direct merge has already been applied for task {task_id}. Push and complete the direct merge workflow first, or manually revert the local merge before reopening the task."
             ));
         }
-        let reason = note
-            .map(str::trim)
-            .filter(|entry| !entry.is_empty())
-            .unwrap_or("Human requested changes");
-        self.task_transition(repo_path, task_id, TaskStatus::InProgress, Some(reason))
+        self.task_transition_to_in_progress_without_related_tasks(repo_path.as_str(), task_id)
     }
 
     pub fn human_approve(&self, repo_path: &str, task_id: &str) -> Result<TaskCard> {

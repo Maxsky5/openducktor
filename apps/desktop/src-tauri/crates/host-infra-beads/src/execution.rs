@@ -52,7 +52,7 @@ impl BeadsTaskStore {
         let issue_value = value
             .as_array()
             .and_then(|entries| entries.first())
-            .ok_or_else(|| anyhow!("bd show returned empty payload for task {task_id}"))?;
+            .ok_or_else(|| anyhow!("Task not found: {task_id}"))?;
         serde_json::from_value(issue_value.clone()).context("Failed to decode bd show payload")
     }
 
