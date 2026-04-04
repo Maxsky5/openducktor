@@ -52,35 +52,25 @@ function FileDiffEntry({
   const fileName = diff.file.split("/").pop() ?? diff.file;
   const dirName = diff.file.includes("/") ? diff.file.slice(0, diff.file.lastIndexOf("/")) : "";
   const hasDiffContent = diff.diff.trim().length > 0;
+  // Keep diff subtrees mounted after first expand in production for cheap reopen,
+  // but reset them in tests so assertions stay deterministic.
   const shouldPersistMountedDiffBody = process.env.NODE_ENV !== "test";
-  const [isDiffBodyMounted, setIsDiffBodyMounted] = useState(process.env.NODE_ENV === "test");
+  const [hasMountedDiffBody, setHasMountedDiffBody] = useState(false);
 
   useEffect(() => {
-    if (!isExpanded || !hasDiffContent) {
-      if (!shouldPersistMountedDiffBody) {
-        setIsDiffBodyMounted(false);
-      }
+    if (isExpanded && hasDiffContent) {
+      setHasMountedDiffBody(true);
       return;
     }
 
-    if (process.env.NODE_ENV === "test") {
-      setIsDiffBodyMounted(true);
-      return;
+    if (!shouldPersistMountedDiffBody) {
+      setHasMountedDiffBody(false);
     }
+  }, [hasDiffContent, isExpanded, shouldPersistMountedDiffBody]);
 
-    if (isDiffBodyMounted) {
-      return;
-    }
-
-    setIsDiffBodyMounted(false);
-    const rafId = globalThis.requestAnimationFrame(() => {
-      setIsDiffBodyMounted(true);
-    });
-
-    return () => {
-      globalThis.cancelAnimationFrame(rafId);
-    };
-  }, [hasDiffContent, isDiffBodyMounted, isExpanded, shouldPersistMountedDiffBody]);
+  const shouldRenderPersistedDiffBody =
+    hasDiffContent && shouldPersistMountedDiffBody && hasMountedDiffBody;
+  const shouldRenderDiffBody = isExpanded || shouldRenderPersistedDiffBody;
 
   return (
     <div className="min-w-0 max-w-full">
@@ -88,6 +78,7 @@ function FileDiffEntry({
         <button
           type="button"
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 overflow-hidden text-left text-xs"
+          aria-label={`Toggle diff for ${diff.file}`}
           data-testid="agent-studio-git-file-toggle-button"
           onClick={() => onToggle(diff.file)}
         >
@@ -165,37 +156,28 @@ function FileDiffEntry({
         ) : null}
       </div>
 
-      {isExpanded || (hasDiffContent && shouldPersistMountedDiffBody && isDiffBodyMounted) ? (
+      {shouldRenderDiffBody ? (
         <div
           className={cn("border-t border-border/50", !isExpanded && "hidden")}
           style={DIFF_BODY_CONTAINER_STYLE}
         >
           {hasDiffContent ? (
-            isDiffBodyMounted ? (
-              <div>
-                <PierreDiffViewer
-                  patch={diff.diff}
-                  filePath={diff.file}
-                  diffStyle={diffStyle}
-                  enableHunkReset={canReset && onRequestHunkReset != null}
-                  isHunkResetDisabled={isResetDisabled}
-                  onResetHunk={
-                    onRequestHunkReset
-                      ? (hunkIndex) => {
-                          onRequestHunkReset(diff.file, hunkIndex);
-                        }
-                      : undefined
-                  }
-                />
-              </div>
-            ) : (
-              <div
-                className="p-3 text-xs text-muted-foreground"
-                data-testid="agent-studio-git-diff-pending"
-              >
-                Loading diff...
-              </div>
-            )
+            <div>
+              <PierreDiffViewer
+                patch={diff.diff}
+                filePath={diff.file}
+                diffStyle={diffStyle}
+                enableHunkReset={canReset && onRequestHunkReset != null}
+                isHunkResetDisabled={isResetDisabled}
+                onResetHunk={
+                  onRequestHunkReset
+                    ? (hunkIndex) => {
+                        onRequestHunkReset(diff.file, hunkIndex);
+                      }
+                    : undefined
+                }
+              />
+            </div>
           ) : (
             <div className="p-3 text-xs italic text-muted-foreground">
               No diff content available for {diff.file}
