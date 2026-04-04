@@ -830,6 +830,45 @@ describe("useAgentStudioModelSelection", () => {
     }
   });
 
+  test("falls back to assistant message context usage when an idle session has incomplete live usage", async () => {
+    const activeSession = createActiveSession({
+      status: "idle",
+      selectedModel: null,
+      modelCatalog: null,
+      contextUsage: {
+        totalTokens: 24,
+      },
+      messages: [
+        createAssistantMessage({
+          totalTokens: 24,
+          contextWindow: 40_000,
+          outputLimit: 1_000,
+        }),
+      ],
+    });
+
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession,
+        loadCatalog: async () => {
+          throw new Error("catalog unavailable");
+        },
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
+      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+        totalTokens: 24,
+        contextWindow: 40_000,
+        outputLimit: 1_000,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("falls back to the selected model context window when message + descriptor metadata are missing", async () => {
     const primaryModel = CATALOG.models[0];
     const secondaryModel = CATALOG.models[1];

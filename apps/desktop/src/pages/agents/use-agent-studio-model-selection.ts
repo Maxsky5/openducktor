@@ -586,13 +586,9 @@ export function useAgentStudioModelSelection({
     return map;
   }, [selectionCatalog]);
 
-  const activeSessionForContextUsage =
-    activeSessionLiveContextUsage && activeSessionLiveContextUsage.totalTokens > 0
-      ? null
-      : activeSession;
-  const activeSessionIdForContextUsage = activeSessionForContextUsage?.sessionId ?? null;
+  const activeSessionIdForContextUsage = activeSession?.sessionId ?? null;
   const activeSessionMessagesForContextUsage =
-    activeSessionForContextUsage?.sessionId === activeSessionId ? activeSessionMessages : null;
+    activeSession?.sessionId === activeSessionId ? activeSessionMessages : null;
   const activeSessionMessageOwnerForContextUsage = useMemo(
     () =>
       activeSessionIdForContextUsage && activeSessionMessagesForContextUsage

@@ -147,8 +147,6 @@ export const extractLatestContextUsage = ({
         ...(typeof resolvedOutputLimit === "number" ? { outputLimit: resolvedOutputLimit } : {}),
       };
     }
-
-    return null;
   }
 
   if (!session) {
