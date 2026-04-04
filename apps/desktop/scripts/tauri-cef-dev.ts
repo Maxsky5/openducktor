@@ -24,6 +24,10 @@ const child = spawn(
     env: {
       ...process.env,
       CEF_PATH: process.env.CEF_PATH ?? resolve(repoRoot, ".cache", "cef"),
+      APPLE_SIGNING_IDENTITY:
+        process.platform === "darwin"
+          ? (process.env.APPLE_SIGNING_IDENTITY ?? "-")
+          : process.env.APPLE_SIGNING_IDENTITY,
     },
     stdio: "inherit",
   },

@@ -37,6 +37,134 @@ pub(crate) struct AppState {
     #[cfg(test)]
     hook_trust_dialog_test_response: Mutex<Option<bool>>,
 }
+
+#[cfg(all(feature = "cef", target_os = "macos"))]
+mod macos_cef_quit_delegate {
+    use super::TauriRuntime;
+    use anyhow::{Context, Result};
+    use objc2::{
+        DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send,
+        rc::Retained,
+        runtime::{NSObject, NSObjectProtocol, ProtocolObject},
+        sel,
+    };
+    use objc2_app_kit::{NSApp, NSApplication, NSApplicationDelegate, NSApplicationTerminateReply};
+    use objc2_foundation::NSArray;
+    use std::cell::RefCell;
+    use tauri::{App, AppHandle, Manager};
+
+    thread_local! {
+        static QUIT_DELEGATE: RefCell<Option<Retained<QuitDelegate>>> = const { RefCell::new(None) };
+    }
+
+    struct QuitDelegateIvars {
+        app_handle: AppHandle<TauriRuntime>,
+        original_delegate: Retained<ProtocolObject<dyn NSApplicationDelegate>>,
+    }
+
+    define_class!(
+        #[unsafe(super(NSObject))]
+        #[name = "OpenDucktorCefQuitDelegate"]
+        #[ivars = QuitDelegateIvars]
+        #[thread_kind = MainThreadOnly]
+        struct QuitDelegate;
+
+        unsafe impl NSObjectProtocol for QuitDelegate {}
+
+        #[allow(non_snake_case)]
+        unsafe impl NSApplicationDelegate for QuitDelegate {
+            #[unsafe(method(application:openURLs:))]
+            unsafe fn application_openURLs(
+                &self,
+                application: &NSApplication,
+                urls: &NSArray<objc2_foundation::NSURL>,
+            ) {
+                self.ivars().original_delegate.application_openURLs(application, urls);
+            }
+
+            #[unsafe(method(applicationShouldTerminate:))]
+            unsafe fn applicationShouldTerminate(
+                &self,
+                sender: &NSApplication,
+            ) -> NSApplicationTerminateReply {
+                if should_intercept_quit(self.ivars().app_handle.webview_windows().len()) {
+                    request_orderly_quit(&self.ivars().app_handle);
+                    return NSApplicationTerminateReply::TerminateCancel;
+                }
+
+                if self
+                    .ivars()
+                    .original_delegate
+                    .respondsToSelector(sel!(applicationShouldTerminate:))
+                {
+                    return self.ivars().original_delegate.applicationShouldTerminate(sender);
+                }
+
+                NSApplicationTerminateReply::TerminateNow
+            }
+        }
+    );
+
+    impl QuitDelegate {
+        fn new(
+            mtm: MainThreadMarker,
+            app_handle: AppHandle<TauriRuntime>,
+            original_delegate: Retained<ProtocolObject<dyn NSApplicationDelegate>>,
+        ) -> Retained<Self> {
+            let delegate = Self::alloc(mtm).set_ivars(QuitDelegateIvars {
+                app_handle,
+                original_delegate,
+            });
+            unsafe { msg_send![super(delegate), init] }
+        }
+    }
+
+    fn should_intercept_quit(open_window_count: usize) -> bool {
+        open_window_count > 0
+    }
+
+    fn request_orderly_quit(app_handle: &AppHandle<TauriRuntime>) {
+        for window in app_handle.webview_windows().into_values() {
+            let _ = window.destroy();
+        }
+    }
+
+    pub(super) fn install(app: &mut App<TauriRuntime>) -> Result<()> {
+        let mtm = MainThreadMarker::new().context("macOS quit delegate requires main thread")?;
+        let ns_app = NSApp(mtm);
+        let original_delegate = ns_app
+            .delegate()
+            .context("missing NSApplication delegate for CEF runtime")?;
+        let delegate = QuitDelegate::new(mtm, app.handle().clone(), original_delegate);
+        ns_app.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
+        QUIT_DELEGATE.with(|slot| {
+            slot.replace(Some(delegate));
+        });
+        Ok(())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn intercepts_first_quit_with_open_windows() {
+            assert!(should_intercept_quit(1));
+        }
+
+        #[test]
+        fn keeps_intercepting_until_windows_are_gone() {
+            assert!(should_intercept_quit(1));
+            assert!(should_intercept_quit(1));
+        }
+
+        #[test]
+        fn does_not_intercept_when_no_windows_remain() {
+            assert!(!should_intercept_quit(0));
+        }
+    }
+}
+
 static TRACING_INITIALIZED: OnceLock<()> = OnceLock::new();
 
 pub(crate) fn init_tracing_subscriber() {
@@ -386,7 +514,7 @@ fn startup_phase_build_tauri_app(
 ) -> anyhow::Result<tauri::App<TauriRuntime>> {
     let builder = tauri::Builder::<TauriRuntime>::default();
 
-    #[cfg(all(feature = "cef", target_os = "macos", debug_assertions))]
+    #[cfg(all(feature = "cef", target_os = "macos"))]
     let builder = builder.command_line_args([
         ("--use-mock-keychain", None::<String>),
         ("--password-store", Some("basic".to_string())),
@@ -394,6 +522,11 @@ fn startup_phase_build_tauri_app(
     ]);
 
     let builder = builder
+        .setup(|_app| {
+            #[cfg(all(feature = "cef", target_os = "macos"))]
+            macos_cef_quit_delegate::install(_app)?;
+            Ok(())
+        })
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             service,

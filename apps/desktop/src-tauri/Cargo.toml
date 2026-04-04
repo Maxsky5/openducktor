@@ -70,6 +70,11 @@ host-application = { path = "crates/host-application" }
 host-infra-beads = { path = "crates/host-infra-beads" }
 host-infra-system = { path = "crates/host-infra-system" }
 
+[target."cfg(target_os = \"macos\")".dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSResponder"] }
+objc2-foundation = "0.3"
+
 [dev-dependencies]
 tauri = { version = "2", default-features = false, features = ["test"] }
 
