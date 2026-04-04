@@ -48,13 +48,7 @@ impl AppService {
             .map(|task| (task.id, task.agent_sessions))
             .collect::<HashMap<_, _>>();
 
-        for task_id in task_ids {
-            if !sessions_by_available_task.contains_key(task_id) {
-                return Err(anyhow!("Task not found: {task_id}"));
-            }
-        }
-
-        let mut sessions_by_task = HashMap::new();
+        let mut sessions_by_task = HashMap::with_capacity(task_ids.len());
         for task_id in task_ids {
             let sessions = sessions_by_available_task
                 .get(task_id)
