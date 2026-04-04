@@ -830,13 +830,13 @@ describe("useAgentStudioModelSelection", () => {
     }
   });
 
-  test("falls back to assistant message context usage when an idle session has incomplete live usage", async () => {
+  test("merges incomplete idle live usage with assistant message metadata", async () => {
     const activeSession = createActiveSession({
       status: "idle",
       selectedModel: null,
       modelCatalog: null,
       contextUsage: {
-        totalTokens: 24,
+        totalTokens: 31,
       },
       messages: [
         createAssistantMessage({
@@ -860,7 +860,7 @@ describe("useAgentStudioModelSelection", () => {
       await harness.mount();
       await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
       expect(harness.getLatest().activeSessionContextUsage).toEqual({
-        totalTokens: 24,
+        totalTokens: 31,
         contextWindow: 40_000,
         outputLimit: 1_000,
       });

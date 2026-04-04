@@ -23,6 +23,11 @@ export type AgentStudioContextUsageEntry = {
   sourceIndex: number;
 } | null;
 
+type ResolvedContextUsageParts = {
+  contextWindow: number;
+  outputLimit?: number;
+};
+
 type CatalogModelDescriptor = AgentModelCatalog["models"][number];
 
 export const toRoleDefaultSelection = (
@@ -132,34 +137,51 @@ export const extractLatestContextUsage = ({
   modelDescriptorByKey: ReadonlyMap<string, CatalogModelDescriptor>;
   fallbackContextWindow?: number;
 }): AgentStudioContextUsage => {
+  const fallbackUsageEntry = session
+    ? extractLatestContextUsageEntry({
+        session,
+        modelDescriptorByKey,
+        ...(typeof fallbackContextWindow === "number" ? { fallbackContextWindow } : {}),
+      })
+    : null;
+
   if (liveContextUsage && liveContextUsage.totalTokens > 0) {
     const modelDescriptor = resolveContextUsageDescriptor({
       liveContextUsage,
       modelDescriptorByKey,
     });
-    const contextWindow =
-      liveContextUsage.contextWindow ?? modelDescriptor?.contextWindow ?? fallbackContextWindow;
-    if (typeof contextWindow === "number" && contextWindow > 0) {
-      const resolvedOutputLimit = liveContextUsage.outputLimit ?? modelDescriptor?.outputLimit;
+    const resolvedParts: ResolvedContextUsageParts | null = (() => {
+      const contextWindow =
+        liveContextUsage.contextWindow ??
+        modelDescriptor?.contextWindow ??
+        fallbackUsageEntry?.usage.contextWindow ??
+        fallbackContextWindow;
+      if (typeof contextWindow !== "number" || contextWindow <= 0) {
+        return null;
+      }
+
+      const outputLimit =
+        liveContextUsage.outputLimit ??
+        modelDescriptor?.outputLimit ??
+        fallbackUsageEntry?.usage.outputLimit;
+
+      return {
+        contextWindow,
+        ...(typeof outputLimit === "number" ? { outputLimit } : {}),
+      };
+    })();
+    if (resolvedParts) {
       return {
         totalTokens: liveContextUsage.totalTokens,
-        contextWindow,
-        ...(typeof resolvedOutputLimit === "number" ? { outputLimit: resolvedOutputLimit } : {}),
+        contextWindow: resolvedParts.contextWindow,
+        ...(typeof resolvedParts.outputLimit === "number"
+          ? { outputLimit: resolvedParts.outputLimit }
+          : {}),
       };
     }
   }
 
-  if (!session) {
-    return null;
-  }
-
-  return (
-    extractLatestContextUsageEntry({
-      session,
-      modelDescriptorByKey,
-      ...(typeof fallbackContextWindow === "number" ? { fallbackContextWindow } : {}),
-    })?.usage ?? null
-  );
+  return fallbackUsageEntry?.usage ?? null;
 };
 
 export const extractLatestContextUsageEntry = ({
