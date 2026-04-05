@@ -278,6 +278,9 @@ export const buildDiagnosticsPanelModel = (
   const isRuntimeHealthPending = runtimeDefinitions.some(
     (definition) => runtimeHealthByRuntime[definition.kind] === undefined,
   );
+  const hasCheckingRuntimeHealth = runtimeEntries.some(
+    ({ runtimeHealth }) => runtimeHealth?.status === "checking",
+  );
 
   const criticalReasons: string[] = [];
   if (activeRepo) {
@@ -319,7 +322,8 @@ export const buildDiagnosticsPanelModel = (
       isLoadingChecks ||
       runtimeCheck === null ||
       beadsCheck === null ||
-      isRuntimeHealthPending);
+      isRuntimeHealthPending ||
+      hasCheckingRuntimeHealth);
 
   const repositorySection: DiagnosticsSectionModel = {
     key: "repository",

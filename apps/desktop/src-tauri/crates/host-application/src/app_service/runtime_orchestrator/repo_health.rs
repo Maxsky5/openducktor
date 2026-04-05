@@ -363,10 +363,7 @@ impl AppService {
                     _ => None,
                 },
                 runtime_failure_kind: startup_status.failure_kind,
-                supports_mcp_status: startup_status
-                    .runtime
-                    .as_ref()
-                    .is_some_and(|runtime| runtime.descriptor.capabilities.supports_mcp_status),
+                supports_mcp_status: runtime_kind.descriptor().capabilities.supports_mcp_status,
                 mcp_ok: false,
                 mcp_error: (!matches!(
                     progress.stage,
@@ -1242,21 +1239,11 @@ fn parse_runtime_health_json<T: DeserializeOwned>(
     body: &str,
     action: &str,
 ) -> std::result::Result<T, RuntimeHealthHttpFailure> {
-    serde_json::from_str::<T>(body)
-        .or_else(|_| {
-            serde_json::from_str::<RuntimeHealthResponseEnvelope<T>>(body)
-                .map(|response| response.data)
-        })
-        .map_err(|error| {
-            RuntimeHealthHttpFailure::error(format!(
-                "Failed to parse OpenCode runtime response for {action}: {error}"
-            ))
-        })
-}
-
-#[derive(Debug, Deserialize)]
-struct RuntimeHealthResponseEnvelope<T> {
-    data: T,
+    serde_json::from_str::<T>(body).map_err(|error| {
+        RuntimeHealthHttpFailure::error(format!(
+            "Failed to parse OpenCode runtime response for {action}: {error}"
+        ))
+    })
 }
 
 fn runtime_health_http_status_failure(
@@ -1343,7 +1330,7 @@ mod tests {
                 .send(String::from_utf8_lossy(&request_buffer[..size]).to_string())
                 .expect("server should publish request");
 
-            let body = r#"{"data":{"openducktor":{"status":"connected"}}}"#;
+            let body = r#"{"openducktor":{"status":"connected"}}"#;
             let response = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n{body}",
                 body.len()

@@ -262,6 +262,25 @@ describe("runtime-catalog", () => {
     expect(result.runtime.elapsedMs).toBe(5000);
   });
 
+  test("does not trust a stale ready host snapshot when the foreground health query times out", async () => {
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        runtimeHealthTimeoutMs: 5,
+        runtimeHealthStatusTimeoutMs: 5,
+        repoRuntimeHealth: async () => await new Promise<RepoRuntimeHealthCheck>(() => {}),
+        repoRuntimeHealthStatus: async () => healthyRepoRuntimeHealthFixture,
+      }),
+    );
+
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
+
+    expect(result.status).toBe("checking");
+    expect(result.runtime.status).toBe("ready");
+    expect(result.mcp?.status).toBe("checking");
+    expect(result.mcp?.detail).toContain("Timed out after 5ms");
+    expect(result.mcp?.failureKind).toBe("timeout");
+  });
+
   test("keeps frontend observation timeout distinct from host timeout-shaped failures", async () => {
     const operations = createRuntimeCatalogOperations(
       createDeps({

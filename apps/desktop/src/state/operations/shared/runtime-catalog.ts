@@ -95,10 +95,38 @@ const buildFrontendObservationTimeoutHealthCheck = async (
   timeoutError: DiagnosticsQueryTimeoutError,
 ): Promise<RepoRuntimeHealthCheck> => {
   try {
-    return await withRuntimeHealthTimeout(
+    const hostHealth = await withRuntimeHealthTimeout(
       deps.repoRuntimeHealthStatus(runtimeKind, repoPath),
       deps.runtimeHealthStatusTimeoutMs ?? RUNTIME_HEALTH_STATUS_TIMEOUT_MS,
     );
+
+    if (hostHealth.status !== "ready") {
+      return hostHealth;
+    }
+
+    return {
+      ...hostHealth,
+      status: "checking",
+      checkedAt,
+      runtime:
+        hostHealth.mcp === null
+          ? {
+              ...hostHealth.runtime,
+              status: "checking",
+              detail: timeoutError.message,
+              failureKind: timeoutError.failureKind,
+            }
+          : hostHealth.runtime,
+      mcp:
+        hostHealth.mcp === null
+          ? null
+          : {
+              ...hostHealth.mcp,
+              status: "checking",
+              detail: timeoutError.message,
+              failureKind: timeoutError.failureKind,
+            },
+    };
   } catch (statusError) {
     const detail = `${timeoutError.message}. Failed to load latest host runtime health status: ${errorMessage(statusError)}`;
     return {

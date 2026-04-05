@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { useAgentStudioReadiness } from "./use-agents-page-readiness";
@@ -33,6 +33,12 @@ const makeRepoHealth = (
   },
   ...overrides,
 });
+
+const SECOND_RUNTIME_DESCRIPTOR: RuntimeDescriptor = {
+  ...OPENCODE_RUNTIME_DESCRIPTOR,
+  kind: "mock-runtime",
+  label: "Mock Runtime",
+};
 
 describe("useAgentStudioReadiness", () => {
   test("returns timeout-specific blocked copy while runtime health is warming up", async () => {
@@ -149,6 +155,83 @@ describe("useAgentStudioReadiness", () => {
 
       const readiness = latest as ReturnType<typeof useAgentStudioReadiness>;
       expect(readiness.agentStudioBlockedReason).toContain("Checking OpenDucktor MCP");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps checking reason aligned with the runtime driving the global checking state", async () => {
+    let latest: ReturnType<typeof useAgentStudioReadiness> | null = null;
+
+    const Harness = ({ args }: { args: Parameters<typeof useAgentStudioReadiness>[0] }) => {
+      latest = useAgentStudioReadiness(args);
+      return null;
+    };
+
+    const harness = createSharedHookHarness(Harness, {
+      args: {
+        activeRepo: "/repo",
+        runtimeDefinitions: [SECOND_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
+        isLoadingRuntimeDefinitions: false,
+        runtimeDefinitionsError: null,
+        runtimeHealthByRuntime: {
+          "mock-runtime": makeRepoHealth({
+            status: "error",
+            runtime: {
+              status: "error",
+              stage: "startup_failed",
+              observation: null,
+              instance: null,
+              startedAt: null,
+              updatedAt: "2026-02-20T12:01:00.000Z",
+              elapsedMs: null,
+              attempts: null,
+              detail: "mock runtime failed",
+              failureKind: "error",
+              failureReason: null,
+            },
+          }),
+          opencode: makeRepoHealth({
+            status: "checking",
+            runtime: {
+              status: "ready",
+              stage: "runtime_ready",
+              observation: null,
+              instance: null,
+              startedAt: null,
+              updatedAt: "2026-02-20T12:01:00.000Z",
+              elapsedMs: null,
+              attempts: null,
+              detail: null,
+              failureKind: null,
+              failureReason: null,
+            },
+            mcp: {
+              supported: true,
+              status: "checking",
+              serverName: "openducktor",
+              serverStatus: null,
+              toolIds: [],
+              detail: "Checking OpenDucktor MCP",
+              failureKind: null,
+            },
+          }),
+        },
+        isLoadingChecks: false,
+        refreshChecks: async () => {},
+      },
+    });
+
+    try {
+      await harness.mount();
+      if (!latest) {
+        throw new Error("Expected readiness hook to mount");
+      }
+
+      const readiness = latest as ReturnType<typeof useAgentStudioReadiness>;
+      expect(readiness.agentStudioReadinessState).toBe("checking");
+      expect(readiness.agentStudioBlockedReason).toContain("Checking OpenDucktor MCP");
+      expect(readiness.agentStudioBlockedReason).not.toContain("mock runtime failed");
     } finally {
       await harness.unmount();
     }

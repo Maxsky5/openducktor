@@ -1279,10 +1279,7 @@ mod tests {
     fn repo_runtime_health_reports_mcp_error_when_tool_ids_fail() -> Result<()> {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
         let (port, server_handle) = spawn_runtime_http_server(vec![
-            runtime_http_response(
-                "200 OK",
-                r#"{"data":{"openducktor":{"status":"connected"}}}"#,
-            ),
+            runtime_http_response("200 OK", r#"{"openducktor":{"status":"connected"}}"#),
             runtime_http_response(
                 "504 Gateway Timeout",
                 r#"{"error":{"message":"tool ids timed out"}}"#,
