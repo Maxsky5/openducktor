@@ -37,14 +37,35 @@ function readCargoLock(tauriRoot: string): string {
   return readFileSync(resolve(tauriRoot, "Cargo.lock"), "utf8");
 }
 
-function findPackageBlock(lockFile: string, packageName: string): string {
-  const packageBlocks = lockFile.split(/\[\[package\]\]\r?\n/);
+type CargoLockPackage = {
+  name?: string;
+  source?: string;
+  version?: string;
+};
 
-  for (const packageBlock of packageBlocks) {
-    const nameMatch = packageBlock.match(/^name = "([^"]+)"/m);
-    if (nameMatch?.[1] === packageName) {
-      return packageBlock;
+function readCargoLockPackages(tauriRoot: string): CargoLockPackage[] {
+  const parsedLock = Bun.TOML.parse(readCargoLock(tauriRoot)) as {
+    package?: CargoLockPackage[];
+  };
+
+  return parsedLock.package ?? [];
+}
+
+function findPackage(
+  packages: CargoLockPackage[],
+  packageName: string,
+  predicate?: (pkg: CargoLockPackage) => boolean,
+): CargoLockPackage {
+  for (const pkg of packages) {
+    if (pkg.name !== packageName) {
+      continue;
     }
+
+    if (predicate && !predicate(pkg)) {
+      continue;
+    }
+
+    return pkg;
   }
 
   throw new Error(`Could not resolve the ${packageName} crate from Cargo.lock`);
@@ -52,11 +73,10 @@ function findPackageBlock(lockFile: string, packageName: string): string {
 
 export function readCefVersion(tauriRoot: string): string {
   const lockFilePath = resolve(tauriRoot, "Cargo.lock");
-  const packageBlock = findPackageBlock(readCargoLock(tauriRoot), "cef");
-  const versionMatch = packageBlock.match(/^version = "([^"]+)"/m);
+  const packageEntry = findPackage(readCargoLockPackages(tauriRoot), "cef");
 
-  if (versionMatch?.[1]) {
-    return versionMatch[1];
+  if (packageEntry.version) {
+    return packageEntry.version;
   }
 
   throw new Error(`Could not resolve the cef crate version from ${lockFilePath}`);
@@ -64,9 +84,13 @@ export function readCefVersion(tauriRoot: string): string {
 
 export function readTauriCefRevision(tauriRoot: string): string {
   const lockFilePath = resolve(tauriRoot, "Cargo.lock");
-  const packageBlock = findPackageBlock(readCargoLock(tauriRoot), "tauri");
-  const sourceMatch = packageBlock.match(
-    /^source = "git\+https:\/\/github\.com\/tauri-apps\/tauri\?[^#]+#([0-9a-f]{40})"/m,
+  const packageEntry = findPackage(
+    readCargoLockPackages(tauriRoot),
+    "tauri",
+    (pkg) => pkg.source?.startsWith("git+https://github.com/tauri-apps/tauri?") ?? false,
+  );
+  const sourceMatch = packageEntry.source?.match(
+    /^git\+https:\/\/github\.com\/tauri-apps\/tauri\?[^#]+#([0-9a-f]{40})$/,
   );
 
   if (sourceMatch?.[1]) {

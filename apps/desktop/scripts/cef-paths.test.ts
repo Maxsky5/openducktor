@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import {
@@ -17,6 +17,8 @@ const ENV_KEYS = [
   "OPENDUCKTOR_CONFIG_DIR",
 ] as const;
 
+const originalEnv = new Map<(typeof ENV_KEYS)[number], string | undefined>();
+
 function withTempTauriRoot(lockContents: string): string {
   const root = mkdtempSync(join(tmpdir(), "odt-cef-paths-"));
   writeFileSync(join(root, "Cargo.lock"), lockContents);
@@ -25,9 +27,23 @@ function withTempTauriRoot(lockContents: string): string {
 
 function restoreEnv(): void {
   for (const key of ENV_KEYS) {
-    delete process.env[key];
+    const previousValue = originalEnv.get(key);
+    if (previousValue === undefined) {
+      delete process.env[key];
+      continue;
+    }
+
+    process.env[key] = previousValue;
   }
+
+  originalEnv.clear();
 }
+
+beforeEach(() => {
+  for (const key of ENV_KEYS) {
+    originalEnv.set(key, process.env[key]);
+  }
+});
 
 afterEach(() => {
   restoreEnv();
@@ -55,7 +71,7 @@ describe("cef-paths", () => {
     try {
       expect(resolveCargoToolsRoot(tauriRoot)).toBe(
         resolve(
-          process.env.HOME ?? "",
+          homedir(),
           ".openducktor-dev",
           "cache",
           "cargo-tools",
@@ -64,7 +80,7 @@ describe("cef-paths", () => {
         ),
       );
       expect(resolveCefPath(tauriRoot)).toBe(
-        resolve(process.env.HOME ?? "", ".openducktor-dev", "cache", "cef", "136.2.1"),
+        resolve(homedir(), ".openducktor-dev", "cache", "cef", "136.2.1"),
       );
     } finally {
       rmSync(tauriRoot, { force: true, recursive: true });
@@ -80,10 +96,8 @@ describe("cef-paths", () => {
     );
 
     try {
-      expect(resolveCargoToolsRoot(tauriRoot)).toBe(
-        resolve(process.env.HOME ?? "", "custom-tools"),
-      );
-      expect(resolveCefPath(tauriRoot)).toBe(resolve(process.env.HOME ?? "", "custom-cef"));
+      expect(resolveCargoToolsRoot(tauriRoot)).toBe(resolve(homedir(), "custom-tools"));
+      expect(resolveCefPath(tauriRoot)).toBe(resolve(homedir(), "custom-cef"));
     } finally {
       rmSync(tauriRoot, { force: true, recursive: true });
     }
@@ -96,6 +110,18 @@ describe("cef-paths", () => {
 
     try {
       expect(readTauriCefRevision(tauriRoot)).toBe("abcdefabcdefabcdefabcdefabcdefabcdefabcd");
+    } finally {
+      rmSync(tauriRoot, { force: true, recursive: true });
+    }
+  });
+
+  test("prefers the git-sourced tauri package when multiple entries exist", () => {
+    const tauriRoot = withTempTauriRoot(
+      '[[package]]\nname = "cef"\nversion = "137.0.0"\n\n[[package]]\nname = "tauri"\nversion = "2.10.3"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n\n[[package]]\nname = "tauri"\nversion = "2.10.3"\nsource = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#fedcbafedcbafedcbafedcbafedcbafedcbafedc"\n',
+    );
+
+    try {
+      expect(readTauriCefRevision(tauriRoot)).toBe("fedcbafedcbafedcbafedcbafedcbafedcbafedc");
     } finally {
       rmSync(tauriRoot, { force: true, recursive: true });
     }
