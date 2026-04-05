@@ -114,19 +114,30 @@ export const buildRuntimeHealthErrorMap = (
 ): RepoRuntimeHealthMap => {
   return runtimeDefinitions.reduce<RepoRuntimeHealthMap>((runtimeHealthMap, definition) => {
     runtimeHealthMap[definition.kind] = {
-      runtimeOk: false,
-      runtimeError: runtimeHealthError,
-      runtimeFailureKind: "error",
-      runtime: null,
-      mcpOk: false,
-      mcpError: runtimeHealthError,
-      mcpFailureKind: "error",
-      mcpServerName: ODT_MCP_SERVER_NAME,
-      mcpServerStatus: null,
-      mcpServerError: runtimeHealthError,
-      availableToolIds: [],
+      status: "error",
       checkedAt,
-      errors: [runtimeHealthError],
+      runtime: {
+        status: "error",
+        stage: "startup_failed",
+        observation: null,
+        instance: null,
+        startedAt: null,
+        updatedAt: checkedAt,
+        elapsedMs: null,
+        attempts: null,
+        detail: runtimeHealthError,
+        failureKind: "error",
+        failureReason: null,
+      },
+      mcp: {
+        supported: true,
+        status: "error",
+        serverName: ODT_MCP_SERVER_NAME,
+        serverStatus: null,
+        toolIds: [],
+        detail: runtimeHealthError,
+        failureKind: "error",
+      },
     } satisfies RepoRuntimeHealthCheck;
     return runtimeHealthMap;
   }, {});
@@ -233,8 +244,8 @@ const getRuntimeHealthIssueCandidates = (
         label: `${definition.label} runtime`,
         availabilityVerb: "is",
       },
-      runtimeHealth.runtimeError,
-      runtimeHealth.runtimeOk ? null : runtimeHealth.runtimeFailureKind,
+      runtimeHealth.runtime.detail,
+      runtimeHealth.runtime.status === "error" ? runtimeHealth.runtime.failureKind : null,
     );
 
     if (runtimeIssue !== null) {
@@ -252,8 +263,8 @@ const getRuntimeHealthIssueCandidates = (
         label: `${definition.label} OpenDucktor MCP`,
         availabilityVerb: "is",
       },
-      runtimeHealth.mcpServerError ?? runtimeHealth.mcpError,
-      runtimeHealth.mcpOk ? null : runtimeHealth.mcpFailureKind,
+      runtimeHealth.mcp?.detail ?? null,
+      runtimeHealth.mcp?.status === "error" ? runtimeHealth.mcp.failureKind : null,
     );
 
     if (mcpIssue !== null) {
@@ -299,8 +310,8 @@ export const hasRuntimeHealthTimeoutIssue = (
     }
 
     return (
-      runtimeHealth.runtimeFailureKind === "timeout" ||
-      (definition.capabilities.supportsMcpStatus && runtimeHealth.mcpFailureKind === "timeout")
+      runtimeHealth.runtime.failureKind === "timeout" ||
+      (definition.capabilities.supportsMcpStatus && runtimeHealth.mcp?.failureKind === "timeout")
     );
   });
 };

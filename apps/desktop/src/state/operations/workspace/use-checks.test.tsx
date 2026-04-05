@@ -46,24 +46,53 @@ const makeBeadsCheck = (overrides: Partial<BeadsCheck> = {}): BeadsCheck => ({
   ...overrides,
 });
 
-const makeRepoHealth = (
-  overrides: Partial<RepoRuntimeHealthCheck> = {},
-): RepoRuntimeHealthCheck => ({
-  runtimeOk: true,
-  runtimeError: null,
-  runtimeFailureKind: null,
-  runtime: null,
-  mcpOk: true,
-  mcpError: null,
-  mcpFailureKind: null,
-  mcpServerName: "openducktor",
-  mcpServerStatus: "connected",
-  mcpServerError: null,
-  availableToolIds: ["odt_read_task"],
-  checkedAt: "2026-02-22T08:00:00.000Z",
-  errors: [],
-  ...overrides,
-});
+type RepoHealthOverrides = Omit<Partial<RepoRuntimeHealthCheck>, "runtime" | "mcp"> & {
+  runtime?: Partial<RepoRuntimeHealthCheck["runtime"]>;
+  mcp?: Partial<NonNullable<RepoRuntimeHealthCheck["mcp"]>>;
+};
+
+const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntimeHealthCheck => {
+  const checkedAt = overrides.checkedAt ?? "2026-02-22T08:00:00.000Z";
+  const runtime: RepoRuntimeHealthCheck["runtime"] = {
+    status: "ready",
+    stage: "runtime_ready",
+    observation: null,
+    instance: null,
+    startedAt: null,
+    updatedAt: checkedAt,
+    elapsedMs: null,
+    attempts: null,
+    detail: null,
+    failureKind: null,
+    failureReason: null,
+    ...overrides.runtime,
+  };
+  const mcp: NonNullable<RepoRuntimeHealthCheck["mcp"]> = {
+    supported: true,
+    status: "connected",
+    serverName: "openducktor",
+    serverStatus: "connected",
+    toolIds: ["odt_read_task"],
+    detail: null,
+    failureKind: null,
+    ...overrides.mcp,
+  };
+
+  return {
+    status:
+      overrides.status ??
+      (runtime.status === "error" || mcp.status === "error"
+        ? "error"
+        : mcp.status === "checking" ||
+            mcp.status === "reconnecting" ||
+            mcp.status === "waiting_for_runtime"
+          ? "checking"
+          : runtime.status),
+    checkedAt,
+    runtime,
+    mcp,
+  };
+};
 
 const MOCK_RUNTIME_DESCRIPTOR: RuntimeDescriptor = {
   kind: "mock-runtime",
@@ -295,7 +324,7 @@ describe("use-checks", () => {
         makeBeadsCheck({ beadsPath: `${repoPath}/.beads` }),
     );
     repoHealthHandler = async (repoPath: string) =>
-      makeRepoHealth({ checkedAt: `${repoPath}-checked`, availableToolIds: [repoPath] });
+      makeRepoHealth({ checkedAt: `${repoPath}-checked`, mcp: { toolIds: [repoPath] } });
 
     const original = {
       beadsCheck: host.beadsCheck,
@@ -320,9 +349,9 @@ describe("use-checks", () => {
       await harness.waitFor((value) => value.hasCachedRepoRuntimeHealth("/repo-b", ["opencode"]));
 
       expect(harness.getLatest().activeBeadsCheck?.beadsPath).toBe("/repo-a/.beads");
-      expect(
-        harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.availableToolIds,
-      ).toEqual(["/repo-a"]);
+      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.mcp?.toolIds).toEqual([
+        "/repo-a",
+      ]);
       expect(harness.getLatest().hasCachedBeadsCheck("/repo-b")).toBe(true);
       expect(harness.getLatest().hasCachedRepoRuntimeHealth("/repo-b", ["opencode"])).toBe(true);
       expect(beadsCheck).toHaveBeenCalledTimes(1);
@@ -330,9 +359,9 @@ describe("use-checks", () => {
 
       await harness.updateArgs({ activeRepo: "/repo-b" });
       expect(harness.getLatest().activeBeadsCheck?.beadsPath).toBe("/repo-b/.beads");
-      expect(
-        harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.availableToolIds,
-      ).toEqual(["/repo-b"]);
+      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.mcp?.toolIds).toEqual([
+        "/repo-b",
+      ]);
 
       beadsCheck.mockClear();
       checkRepoRuntimeHealthMock.mockClear();
@@ -356,11 +385,16 @@ describe("use-checks", () => {
     const beadsCheck = mock(async (): Promise<BeadsCheck> => makeBeadsCheck());
     repoHealthHandler = async () =>
       makeRepoHealth({
-        mcpOk: false,
-        mcpError: "mcp offline",
-        mcpFailureKind: "error",
-        mcpServerError: "mcp offline",
-        errors: ["mcp offline"],
+        status: "error",
+        mcp: {
+          supported: true,
+          status: "error",
+          serverName: "openducktor",
+          serverStatus: null,
+          toolIds: [],
+          detail: "mcp offline",
+          failureKind: "error",
+        },
       });
 
     const original = {
@@ -571,7 +605,7 @@ describe("use-checks", () => {
         await value.refreshRuntimeCheck();
       });
       await harness.run(async (value) => {
-        await expect(value.refreshChecks()).rejects.toThrow("runtime down");
+        return expect(value.refreshChecks()).rejects.toThrow("runtime down");
       });
       await harness.waitFor(() => toastError.mock.calls.length === 1);
 
@@ -645,7 +679,7 @@ describe("use-checks", () => {
       beadsDeferred.reject(new Error("beads down"));
       runtimeHealthDeferred.resolve(makeRepoHealth());
       await harness.run(async () => {
-        await expect(refreshPromise).rejects.toThrow("runtime down");
+        return expect(refreshPromise).rejects.toThrow("runtime down");
       });
       await harness.waitFor((value) => value.isLoadingChecks === false);
 
@@ -748,7 +782,7 @@ describe("use-checks", () => {
       diagnosticsTimeoutHandlers.clear();
 
       await harness.run(async () => {
-        await expect(refreshPromise).rejects.toThrow("runtime down");
+        return expect(refreshPromise).rejects.toThrow("runtime down");
       });
       await harness.waitFor((value) => value.isLoadingChecks === false);
 
@@ -860,19 +894,23 @@ describe("use-checks", () => {
       await harness.mount();
 
       await harness.run(async (value) => {
-        await expect(value.refreshRepoRuntimeHealthForRepo("/repo-a", true)).resolves.toBeDefined();
+        return expect(
+          value.refreshRepoRuntimeHealthForRepo("/repo-a", true),
+        ).resolves.toBeDefined();
       });
 
       await harness.waitFor((value) => {
         const runtimeHealth = value.activeRepoRuntimeHealthByRuntime.opencode;
-        return runtimeHealth != null && runtimeHealth.runtimeOk === false;
+        return runtimeHealth?.status === "error";
       });
 
       expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toEqual(
         expect.objectContaining({
-          runtimeOk: false,
-          mcpOk: false,
-          runtimeError: "runtime health unreachable",
+          status: "error",
+          runtime: expect.objectContaining({
+            detail: "runtime health unreachable",
+            failureKind: "error",
+          }),
         }),
       );
     } finally {
@@ -886,7 +924,7 @@ describe("use-checks", () => {
       if (shouldFailRefresh) {
         throw new Error("runtime health refresh failed");
       }
-      return makeRepoHealth({ availableToolIds: ["healthy"] });
+      return makeRepoHealth({ mcp: { toolIds: ["healthy"] } });
     };
 
     const harness = createHookHarness({
@@ -897,25 +935,29 @@ describe("use-checks", () => {
     try {
       await harness.mount();
       await harness.waitFor((value) => {
-        return value.activeRepoRuntimeHealthByRuntime.opencode?.runtimeOk === true;
+        return value.activeRepoRuntimeHealthByRuntime.opencode?.status === "ready";
       });
 
       shouldFailRefresh = true;
 
       await harness.run(async (value) => {
-        await expect(value.refreshRepoRuntimeHealthForRepo("/repo-a", true)).resolves.toBeDefined();
+        return expect(
+          value.refreshRepoRuntimeHealthForRepo("/repo-a", true),
+        ).resolves.toBeDefined();
       });
 
       await harness.waitFor((value) => {
         const runtimeHealth = value.activeRepoRuntimeHealthByRuntime.opencode;
-        return runtimeHealth != null && runtimeHealth.runtimeOk === false;
+        return runtimeHealth?.status === "error";
       });
 
       expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toEqual(
         expect.objectContaining({
-          runtimeOk: false,
-          mcpOk: false,
-          runtimeError: "runtime health refresh failed",
+          status: "error",
+          runtime: expect.objectContaining({
+            detail: "runtime health refresh failed",
+            failureKind: "error",
+          }),
         }),
       );
     } finally {
@@ -928,7 +970,7 @@ describe("use-checks", () => {
       if (runtimeKind === "mock-runtime") {
         throw new Error("mock runtime probe failed");
       }
-      return makeRepoHealth({ availableToolIds: [runtimeKind] });
+      return makeRepoHealth({ mcp: { toolIds: [runtimeKind] } });
     };
 
     const harness = createHookHarness({
@@ -940,7 +982,9 @@ describe("use-checks", () => {
       await harness.mount();
 
       await harness.run(async (value) => {
-        await expect(value.refreshRepoRuntimeHealthForRepo("/repo-a", true)).resolves.toBeDefined();
+        return expect(
+          value.refreshRepoRuntimeHealthForRepo("/repo-a", true),
+        ).resolves.toBeDefined();
       });
 
       await harness.waitFor((value) => {
@@ -951,15 +995,17 @@ describe("use-checks", () => {
 
       expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toEqual(
         expect.objectContaining({
-          runtimeOk: true,
-          availableToolIds: ["opencode"],
+          status: "ready",
+          mcp: expect.objectContaining({ toolIds: ["opencode"] }),
         }),
       );
       expect(harness.getLatest().activeRepoRuntimeHealthByRuntime["mock-runtime"]).toEqual(
         expect.objectContaining({
-          runtimeOk: false,
-          mcpOk: false,
-          runtimeError: "mock runtime probe failed",
+          status: "error",
+          runtime: expect.objectContaining({
+            detail: "mock runtime probe failed",
+            failureKind: "error",
+          }),
         }),
       );
     } finally {
@@ -995,16 +1041,29 @@ describe("use-checks", () => {
 
       if (callCount < 3) {
         return makeRepoHealth({
-          runtimeOk: false,
-          runtimeError: "Timed out waiting for OpenCode runtime startup readiness",
-          runtimeFailureKind: "timeout",
-          mcpOk: false,
-          mcpError: "Runtime is unavailable, so MCP cannot be verified.",
-          mcpFailureKind: "timeout",
-          errors: [
-            "Timed out waiting for OpenCode runtime startup readiness",
-            "Runtime is unavailable, so MCP cannot be verified.",
-          ],
+          status: "checking",
+          runtime: {
+            status: "checking",
+            stage: "waiting_for_runtime",
+            observation: null,
+            instance: null,
+            startedAt: null,
+            updatedAt: "2026-02-22T08:00:00.000Z",
+            elapsedMs: null,
+            attempts: null,
+            detail: "Timed out waiting for OpenCode runtime startup readiness",
+            failureKind: "timeout",
+            failureReason: null,
+          },
+          mcp: {
+            supported: true,
+            status: "waiting_for_runtime",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "Runtime is unavailable, so MCP cannot be verified.",
+            failureKind: "timeout",
+          },
         });
       }
 
@@ -1020,33 +1079,28 @@ describe("use-checks", () => {
       await harness.mount();
       await harness.waitFor(
         (value) =>
-          value.activeRepoRuntimeHealthByRuntime.opencode?.runtimeFailureKind === "timeout" &&
+          value.activeRepoRuntimeHealthByRuntime.opencode?.runtime.failureKind === "timeout" &&
           value.isLoadingChecks === false,
       );
 
-      expect(toastMessage).toHaveBeenCalledWith(
-        "OpenCode runtime not yet available",
-        expect.objectContaining({
-          id: "diagnostics:runtime:opencode",
-        }),
-      );
+      expect(toastMessage).not.toHaveBeenCalled();
       expect(scheduledRetryCount).toBeGreaterThan(0);
 
       await harness.run(async () => {
         await harness.getLatest().refreshRepoRuntimeHealthForRepo("/repo-a", true);
       });
       await harness.waitFor(() => checkRepoRuntimeHealthMock.mock.calls.length === 2);
-      expect(toastMessage).toHaveBeenCalledTimes(1);
+      expect(toastMessage).not.toHaveBeenCalled();
 
       await harness.run(async () => {
         await harness.getLatest().refreshRepoRuntimeHealthForRepo("/repo-a", true);
       });
       await harness.waitFor(
-        (value) => value.activeRepoRuntimeHealthByRuntime.opencode?.runtimeOk === true,
+        (value) => value.activeRepoRuntimeHealthByRuntime.opencode?.status === "ready",
       );
 
-      expect(toastMessage).toHaveBeenCalledTimes(1);
-      expect(toastDismiss).toHaveBeenCalledWith("diagnostics:runtime:opencode");
+      expect(toastMessage).not.toHaveBeenCalled();
+      expect(toastDismiss).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
       globalThis.setTimeout = originalSetTimeout;

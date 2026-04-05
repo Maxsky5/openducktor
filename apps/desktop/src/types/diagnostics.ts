@@ -1,34 +1,35 @@
 import type {
   FailureKind,
-  RepoRuntimeHealthFailureOrigin,
   RepoRuntimeHealthObservation,
-  RepoRuntimeHealthStage,
+  RepoRuntimeHealthState,
+  RepoRuntimeMcpStatus,
   RepoRuntimeStartupStatus,
-  RuntimeInstanceSummary,
   RepoRuntimeHealthCheck as SharedRepoRuntimeHealthCheck,
-  RepoRuntimeHealthProgress as SharedRepoRuntimeHealthProgress,
+  RepoRuntimeHealthMcp as SharedRepoRuntimeHealthMcp,
+  RepoRuntimeHealthRuntime as SharedRepoRuntimeHealthRuntime,
 } from "@openducktor/contracts";
 
 export type RepoRuntimeFailureKind = FailureKind | null;
 
 export type {
-  RepoRuntimeHealthFailureOrigin,
   RepoRuntimeHealthObservation,
-  RepoRuntimeHealthStage,
+  RepoRuntimeHealthState,
+  RepoRuntimeMcpStatus,
+  RepoRuntimeStartupStatus,
 };
 
-export type RepoRuntimeHealthProgress = SharedRepoRuntimeHealthProgress & {
-  stage: RepoRuntimeHealthStage;
+export type RepoRuntimeHealthRuntime = SharedRepoRuntimeHealthRuntime & {
   observation: RepoRuntimeHealthObservation | null;
-  failureOrigin: RepoRuntimeHealthFailureOrigin | null;
-  host: RepoRuntimeStartupStatus | null;
+};
+
+export type RepoRuntimeHealthMcp = SharedRepoRuntimeHealthMcp & {
+  status: RepoRuntimeMcpStatus;
 };
 
 export type RepoRuntimeHealthCheck = SharedRepoRuntimeHealthCheck & {
-  runtimeFailureKind: RepoRuntimeFailureKind;
-  runtime: RuntimeInstanceSummary | null;
-  mcpFailureKind: RepoRuntimeFailureKind;
-  progress?: RepoRuntimeHealthProgress | null | undefined;
+  status: RepoRuntimeHealthState;
+  runtime: RepoRuntimeHealthRuntime;
+  mcp: RepoRuntimeHealthMcp | null;
 };
 
 export type RepoRuntimeHealthMap = Record<string, RepoRuntimeHealthCheck | null>;

@@ -15,14 +15,7 @@ import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import { appQueryClient } from "@/lib/query-client";
 import { DiagnosticsQueryTimeoutError } from "@/state/queries/checks";
 import { ensureRuntimeListFromQuery } from "@/state/queries/runtime";
-import type {
-  RepoRuntimeFailureKind,
-  RepoRuntimeHealthCheck,
-  RepoRuntimeHealthFailureOrigin,
-  RepoRuntimeHealthObservation,
-  RepoRuntimeHealthProgress,
-  RepoRuntimeHealthStage,
-} from "@/types/diagnostics";
+import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { host } from "./host";
 
 type ListCatalogInput = {
@@ -94,46 +87,6 @@ const withRuntimeHealthTimeout = async <T>(promise: Promise<T>, timeoutMs: numbe
   }
 };
 
-const toProgress = ({
-  stage,
-  observation,
-  host,
-  checkedAt,
-  detail,
-  failureKind,
-  failureReason,
-  failureOrigin,
-  startedAt,
-  updatedAt,
-  elapsedMs,
-  attempts,
-}: {
-  stage: RepoRuntimeHealthStage;
-  observation: RepoRuntimeHealthObservation | null;
-  host: RepoRuntimeHealthProgress["host"];
-  checkedAt: string;
-  detail?: string | null;
-  failureKind?: RepoRuntimeFailureKind;
-  failureReason?: string | null;
-  failureOrigin?: RepoRuntimeHealthFailureOrigin | null;
-  startedAt?: string | null;
-  updatedAt?: string | null;
-  elapsedMs?: number | null;
-  attempts?: number | null;
-}): RepoRuntimeHealthProgress => ({
-  stage,
-  observation,
-  startedAt: startedAt ?? host?.startedAt ?? null,
-  updatedAt: updatedAt ?? host?.updatedAt ?? checkedAt,
-  elapsedMs: elapsedMs ?? host?.elapsedMs ?? null,
-  attempts: attempts ?? host?.attempts ?? null,
-  detail: detail ?? host?.detail ?? null,
-  failureKind: failureKind ?? host?.failureKind ?? null,
-  failureReason: failureReason ?? host?.failureReason ?? null,
-  failureOrigin: failureOrigin ?? null,
-  host,
-});
-
 const buildFrontendObservationTimeoutHealthCheck = async (
   deps: RuntimeCatalogDependencies,
   repoPath: string,
@@ -142,83 +95,37 @@ const buildFrontendObservationTimeoutHealthCheck = async (
   timeoutError: DiagnosticsQueryTimeoutError,
 ): Promise<RepoRuntimeHealthCheck> => {
   try {
-    const hostHealth = await withRuntimeHealthTimeout(
+    return await withRuntimeHealthTimeout(
       deps.repoRuntimeHealthStatus(runtimeKind, repoPath),
       deps.runtimeHealthStatusTimeoutMs ?? RUNTIME_HEALTH_STATUS_TIMEOUT_MS,
     );
-    const hostProgress = hostHealth.progress ?? null;
-    if (!hostProgress) {
-      throw new Error("host repo runtime health snapshot is unavailable");
-    }
-    const progress = toProgress({
-      stage: hostProgress.stage,
-      observation: hostProgress.observation,
-      host: hostProgress.host,
-      checkedAt,
-      detail: timeoutError.message,
-      failureKind: timeoutError.failureKind,
-      failureOrigin: "frontend_observation",
-      startedAt: hostProgress.startedAt,
-      updatedAt: hostProgress.updatedAt,
-      elapsedMs: hostProgress.elapsedMs,
-      attempts: hostProgress.attempts,
-    });
-
-    if (hostHealth.runtimeOk) {
-      return {
-        ...hostHealth,
-        mcpOk: false,
-        mcpError: hostHealth.mcpError ?? timeoutError.message,
-        mcpFailureKind: hostHealth.mcpFailureKind ?? timeoutError.failureKind,
-        mcpServerStatus: hostHealth.mcpServerStatus ?? null,
-        mcpServerError: hostHealth.mcpServerError ?? timeoutError.message,
-        checkedAt,
-        errors: hostHealth.errors.length > 0 ? hostHealth.errors : [timeoutError.message],
-        progress,
-      };
-    }
-
-    const runtimeError = hostHealth.runtimeError ?? progress.detail ?? timeoutError.message;
-    const unavailableMessage =
-      hostHealth.mcpError ?? "Runtime is unavailable, so MCP cannot be verified.";
-    return {
-      ...hostHealth,
-      runtimeOk: false,
-      runtimeError,
-      runtimeFailureKind: timeoutError.failureKind,
-      mcpOk: false,
-      mcpError: unavailableMessage,
-      mcpFailureKind: timeoutError.failureKind,
-      mcpServerError: unavailableMessage,
-      checkedAt,
-      errors: [runtimeError, unavailableMessage],
-      progress,
-    };
   } catch (statusError) {
     const detail = `${timeoutError.message}. Failed to load latest host runtime health status: ${errorMessage(statusError)}`;
     return {
-      runtimeOk: false,
-      runtimeError: detail,
-      runtimeFailureKind: timeoutError.failureKind,
-      runtime: null,
-      mcpOk: false,
-      mcpError: detail,
-      mcpFailureKind: timeoutError.failureKind,
-      mcpServerName: ODT_MCP_SERVER_NAME,
-      mcpServerStatus: null,
-      mcpServerError: detail,
-      availableToolIds: [],
+      status: "error",
       checkedAt,
-      errors: [detail],
-      progress: toProgress({
-        stage: "frontend_observation_timeout",
+      runtime: {
+        status: "error",
+        stage: "startup_failed",
         observation: null,
-        host: null,
-        checkedAt,
+        instance: null,
+        startedAt: null,
+        updatedAt: checkedAt,
+        elapsedMs: null,
+        attempts: null,
         detail,
         failureKind: timeoutError.failureKind,
-        failureOrigin: "health_status",
-      }),
+        failureReason: null,
+      },
+      mcp: {
+        supported: true,
+        status: "error",
+        serverName: ODT_MCP_SERVER_NAME,
+        serverStatus: null,
+        toolIds: [],
+        detail,
+        failureKind: timeoutError.failureKind,
+      },
     };
   }
 };
@@ -279,11 +186,7 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
         deps.repoRuntimeHealth(runtimeKind, repoPath),
         runtimeHealthTimeoutMs,
       );
-      const normalizedHealth: RepoRuntimeHealthCheck = {
-        ...health,
-        progress: health.progress ?? null,
-      };
-      return normalizedHealth;
+      return health;
     } catch (error) {
       if (error instanceof DiagnosticsQueryTimeoutError) {
         return buildFrontendObservationTimeoutHealthCheck(
