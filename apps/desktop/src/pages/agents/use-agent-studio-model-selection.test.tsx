@@ -1002,6 +1002,42 @@ describe("useAgentStudioModelSelection", () => {
     }
   });
 
+  test("keeps live context usage visible when idle appends a final assistant message without token metadata", async () => {
+    const contextUsage = {
+      totalTokens: 44,
+      contextWindow: 150_000,
+      outputLimit: 4_096,
+    };
+    const activeSession = createActiveSession({
+      status: "running",
+      selectedModel: null,
+      modelCatalog: null,
+      contextUsage,
+      messages: [],
+    });
+    const harness = createHookHarness(createBaseProps({ activeSession }));
+
+    try {
+      await harness.mount();
+      const previousUsage = harness.getLatest().activeSessionContextUsage;
+
+      await harness.update(
+        createBaseProps({
+          activeSession: {
+            ...activeSession,
+            status: "idle",
+            contextUsage: null,
+            messages: [createAssistantMessage()],
+          },
+        }),
+      );
+
+      expect(harness.getLatest().activeSessionContextUsage).toBe(previousUsage);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps fallback context usage stable when unrelated tail messages change", async () => {
     const activeSession = createActiveSession({
       contextUsage: null,
