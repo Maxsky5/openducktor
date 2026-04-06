@@ -18,10 +18,7 @@ import {
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import {
-  findFirstChangedSessionMessageIndex,
-  getSessionMessageCount,
-} from "@/state/operations/agent-orchestrator/support/messages";
+import { findFirstChangedSessionMessageIndex } from "@/state/operations/agent-orchestrator/support/messages";
 import {
   sessionFileSearchQueryOptions,
   sessionSlashCommandsQueryOptions,
@@ -698,22 +695,6 @@ export function useAgentStudioModelSelection({
             metadataKey,
           };
           return cached.value;
-        }
-
-        if (!nextUsageEntry && cached.sourceIndex === Number.MAX_SAFE_INTEGER) {
-          const cachedMessageCount = getSessionMessageCount({
-            sessionId: cached.sessionId,
-            messages: cached.messages,
-          });
-          const onlyAppendedMessages = firstChangedMessageIndex >= cachedMessageCount;
-          if (onlyAppendedMessages) {
-            activeSessionContextUsageCacheRef.current = {
-              ...cached,
-              messages: activeSessionMessageOwnerForContextUsage.messages,
-              metadataKey,
-            };
-            return cached.value;
-          }
         }
 
         if (!nextUsageEntry && firstChangedMessageIndex > 0) {

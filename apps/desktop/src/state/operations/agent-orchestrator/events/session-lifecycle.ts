@@ -1,6 +1,7 @@
 import type { AgentRole } from "@openducktor/core";
 import { buildReadOnlyPermissionRejectionMessage } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { isMutatingPermission } from "../../permission-policy";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import {
@@ -37,6 +38,7 @@ const clearTurnModelSnapshot = (
 };
 
 type PermissionRequiredEvent = Extract<SessionEvent, { type: "permission_required" }>;
+type AssistantMessageEvent = Extract<SessionEvent, { type: "assistant_message" }>;
 
 const toPendingPermission = (event: PermissionRequiredEvent) => ({
   requestId: event.requestId,
@@ -139,6 +141,55 @@ const autoRejectMutatingPermission = (
     });
 };
 
+const resolveFinalAssistantSnapshot = ({
+  current,
+  settledMessages,
+  durationMs,
+  event,
+}: {
+  current: AgentSessionState;
+  settledMessages: AgentSessionState["messages"];
+  durationMs: number | undefined;
+  event: AssistantMessageEvent;
+}) => {
+  const nextContextUsage = toSessionContextUsage(current, event.totalTokens, event.model);
+  const currentAssistantMessage = findSessionMessageById(
+    { sessionId: current.sessionId, messages: settledMessages },
+    event.messageId,
+  );
+  const shouldPreserveContextUsage =
+    nextContextUsage === null && currentAssistantMessage?.role === "assistant";
+  const resolvedContextUsage = shouldPreserveContextUsage
+    ? (current.contextUsage ?? null)
+    : nextContextUsage;
+
+  const assistantMeta = {
+    ...toAssistantMessageMeta(
+      current,
+      durationMs,
+      event.totalTokens ?? resolvedContextUsage?.totalTokens,
+      event.model,
+    ),
+  };
+  if (typeof resolvedContextUsage?.contextWindow === "number") {
+    assistantMeta.contextWindow = resolvedContextUsage.contextWindow;
+  }
+  if (typeof resolvedContextUsage?.outputLimit === "number") {
+    assistantMeta.outputLimit = resolvedContextUsage.outputLimit;
+  }
+
+  return {
+    contextUsage: resolvedContextUsage,
+    assistantMessage: {
+      id: event.messageId,
+      role: "assistant" as const,
+      content: event.message,
+      timestamp: event.timestamp,
+      meta: assistantMeta,
+    },
+  };
+};
+
 export const handleSessionStarted = (
   context: Pick<SessionLifecycleEventContext, "store">,
   event: Extract<SessionEvent, { type: "session_started" }>,
@@ -157,7 +208,7 @@ export const handleSessionStarted = (
 
 export const handleAssistantMessage = (
   context: SessionLifecycleEventContext,
-  event: Extract<SessionEvent, { type: "assistant_message" }>,
+  event: AssistantMessageEvent,
 ): void => {
   flushDraftBuffers(context);
   clearDraftBuffers(context);
@@ -168,50 +219,25 @@ export const handleAssistantMessage = (
       event.timestamp,
       settledMessages,
     );
-    const nextContextUsage = toSessionContextUsage(current, event.totalTokens, event.model);
-    const currentAssistantMessage = findSessionMessageById(
-      { sessionId: current.sessionId, messages: settledMessages },
-      event.messageId,
-    );
-    const shouldPreserveContextUsage =
-      nextContextUsage === null && currentAssistantMessage?.role === "assistant";
-    const resolvedContextUsage = shouldPreserveContextUsage
-      ? (current.contextUsage ?? null)
-      : nextContextUsage;
-    const nextAssistantMeta = {
-      ...toAssistantMessageMeta(
-        current,
-        durationMs,
-        event.totalTokens ?? resolvedContextUsage?.totalTokens,
-        event.model,
-      ),
-    };
-    if (typeof resolvedContextUsage?.contextWindow === "number") {
-      nextAssistantMeta.contextWindow = resolvedContextUsage.contextWindow;
-    }
-    if (typeof resolvedContextUsage?.outputLimit === "number") {
-      nextAssistantMeta.outputLimit = resolvedContextUsage.outputLimit;
-    }
-    const nextAssistantMessage = {
-      id: event.messageId,
-      role: "assistant" as const,
-      content: event.message,
-      timestamp: event.timestamp,
-      meta: nextAssistantMeta,
-    };
+    const nextSnapshot = resolveFinalAssistantSnapshot({
+      current,
+      settledMessages,
+      durationMs,
+      event,
+    });
     return {
       ...current,
       draftAssistantText: "",
       draftAssistantMessageId: null,
       draftReasoningText: "",
       draftReasoningMessageId: null,
-      contextUsage: resolvedContextUsage,
+      contextUsage: nextSnapshot.contextUsage,
       messages: upsertSessionMessage(
         {
           sessionId: current.sessionId,
           messages: settledMessages,
         },
-        nextAssistantMessage,
+        nextSnapshot.assistantMessage,
       ),
     };
   });
