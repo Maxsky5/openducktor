@@ -32,6 +32,7 @@ export type RuntimeCatalogAdapter = Pick<
 type RuntimeCatalogDependencies = {
   runtimeHealthTimeoutMs?: number;
   runtimeHealthStatusTimeoutMs?: number;
+  supportsMcpStatus: (runtimeKind: RuntimeKind) => boolean;
   repoRuntimeHealth: (
     runtimeKind: RuntimeKind,
     repoPath: string,
@@ -94,13 +95,14 @@ const buildFrontendObservationTimeoutHealthCheck = async (
   checkedAt: string,
   timeoutError: DiagnosticsQueryTimeoutError,
 ): Promise<RepoRuntimeHealthCheck> => {
+  const supportsMcpStatus = deps.supportsMcpStatus(runtimeKind);
   try {
     const hostHealth = await withRuntimeHealthTimeout(
       deps.repoRuntimeHealthStatus(runtimeKind, repoPath),
       deps.runtimeHealthStatusTimeoutMs ?? RUNTIME_HEALTH_STATUS_TIMEOUT_MS,
     );
 
-    if (hostHealth.status !== "ready") {
+    if (hostHealth.status !== "ready" || !supportsMcpStatus) {
       return hostHealth;
     }
 
@@ -108,15 +110,7 @@ const buildFrontendObservationTimeoutHealthCheck = async (
       ...hostHealth,
       status: "checking",
       checkedAt,
-      runtime:
-        hostHealth.mcp === null
-          ? {
-              ...hostHealth.runtime,
-              status: "checking",
-              detail: timeoutError.message,
-              failureKind: timeoutError.failureKind,
-            }
-          : hostHealth.runtime,
+      runtime: hostHealth.runtime,
       mcp:
         hostHealth.mcp === null
           ? null
@@ -145,15 +139,17 @@ const buildFrontendObservationTimeoutHealthCheck = async (
         failureKind: timeoutError.failureKind,
         failureReason: null,
       },
-      mcp: {
-        supported: true,
-        status: "error",
-        serverName: ODT_MCP_SERVER_NAME,
-        serverStatus: null,
-        toolIds: [],
-        detail,
-        failureKind: timeoutError.failureKind,
-      },
+      mcp: supportsMcpStatus
+        ? {
+            supported: true,
+            status: "error",
+            serverName: ODT_MCP_SERVER_NAME,
+            serverStatus: null,
+            toolIds: [],
+            detail,
+            failureKind: timeoutError.failureKind,
+          }
+        : null,
     };
   }
 };
@@ -242,9 +238,11 @@ type RuntimeCatalogOperations = ReturnType<typeof createRuntimeCatalogOperations
 
 export const createHostRuntimeCatalogOperations = (
   getAdapter: (runtimeKind: RuntimeKind) => RuntimeCatalogAdapter,
-  _getRuntimeDefinition: (runtimeKind: RuntimeKind) => RuntimeDescriptor,
+  getRuntimeDefinition: (runtimeKind: RuntimeKind) => RuntimeDescriptor,
 ): RuntimeCatalogOperations =>
   createRuntimeCatalogOperations({
+    supportsMcpStatus: (runtimeKind) =>
+      getRuntimeDefinition(runtimeKind).capabilities.supportsMcpStatus,
     repoRuntimeHealth: (runtimeKind, repoPath) => host.repoRuntimeHealth(repoPath, runtimeKind),
     repoRuntimeHealthStatus: (runtimeKind, repoPath) =>
       host.repoRuntimeHealthStatus(repoPath, runtimeKind),

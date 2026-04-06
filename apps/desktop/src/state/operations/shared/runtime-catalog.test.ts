@@ -111,6 +111,7 @@ const fileSearchResultsFixture: AgentFileSearchResult[] = [
 ];
 
 const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDependencies => ({
+  supportsMcpStatus: () => true,
   repoRuntimeHealth: async () => healthyRepoRuntimeHealthFixture,
   repoRuntimeHealthStatus: async () => ({
     ...healthyRepoRuntimeHealthFixture,
@@ -279,6 +280,47 @@ describe("runtime-catalog", () => {
     expect(result.mcp?.status).toBe("checking");
     expect(result.mcp?.detail).toContain("Timed out after 5ms");
     expect(result.mcp?.failureKind).toBe("timeout");
+  });
+
+  test("preserves a ready snapshot for runtimes without MCP status support when the foreground health query times out", async () => {
+    const readyWithoutMcp: RepoRuntimeHealthCheck = {
+      ...healthyRepoRuntimeHealthFixture,
+      checkedAt: "2026-02-22T08:00:11.000Z",
+      mcp: null,
+    };
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        supportsMcpStatus: () => false,
+        runtimeHealthTimeoutMs: 5,
+        runtimeHealthStatusTimeoutMs: 5,
+        repoRuntimeHealth: async () => await new Promise<RepoRuntimeHealthCheck>(() => {}),
+        repoRuntimeHealthStatus: async () => readyWithoutMcp,
+      }),
+    );
+
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
+
+    expect(result).toEqual(readyWithoutMcp);
+  });
+
+  test("omits synthetic MCP errors for runtimes without MCP status support when status fallback also times out", async () => {
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        supportsMcpStatus: () => false,
+        runtimeHealthTimeoutMs: 5,
+        runtimeHealthStatusTimeoutMs: 5,
+        repoRuntimeHealth: async () => await new Promise<RepoRuntimeHealthCheck>(() => {}),
+        repoRuntimeHealthStatus: async () => {
+          throw new Error("health status unavailable");
+        },
+      }),
+    );
+
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
+
+    expect(result.status).toBe("error");
+    expect(result.runtime.detail).toContain("health status unavailable");
+    expect(result.mcp).toBeNull();
   });
 
   test("keeps frontend observation timeout distinct from host timeout-shaped failures", async () => {

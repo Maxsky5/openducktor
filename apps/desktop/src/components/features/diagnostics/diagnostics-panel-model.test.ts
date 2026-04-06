@@ -601,28 +601,22 @@ describe("buildDiagnosticsPanelModel", () => {
     const runtimeSection = model.sections.find((section) => section.key === "runtime:opencode");
     const mcpSection = model.sections.find((section) => section.key === "mcp:opencode");
 
-    expect(runtimeSection?.rows).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ label: "Stage" }),
-        expect.objectContaining({ label: "Observation" }),
-        expect.objectContaining({ label: "Elapsed" }),
-        expect.objectContaining({ label: "Attempts" }),
-      ]),
-    );
+    const runtimeLabels = runtimeSection?.rows.map((row) => row.label) ?? [];
+    expect(runtimeLabels).not.toContain("Stage");
+    expect(runtimeLabels).not.toContain("Observation");
+    expect(runtimeLabels).not.toContain("Elapsed");
+    expect(runtimeLabels).not.toContain("Attempts");
     expect(mcpSection?.rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ label: "Status", value: "checking" }),
         expect.objectContaining({ label: "Activity", value: "Checking server status" }),
       ]),
     );
-    expect(mcpSection?.rows).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ label: "Observation" }),
-        expect.objectContaining({ label: "Elapsed" }),
-        expect.objectContaining({ label: "Attempts" }),
-        expect.objectContaining({ label: "Tools detected" }),
-      ]),
-    );
+    const mcpLabels = mcpSection?.rows.map((row) => row.label) ?? [];
+    expect(mcpLabels).not.toContain("Observation");
+    expect(mcpLabels).not.toContain("Elapsed");
+    expect(mcpLabels).not.toContain("Attempts");
+    expect(mcpLabels).not.toContain("Tools detected");
     expect(mcpSection?.errors).toEqual([]);
     expect(model.criticalReasons).not.toContain("OpenCode OpenDucktor MCP unavailable");
   });

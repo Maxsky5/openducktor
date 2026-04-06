@@ -19,19 +19,6 @@ pub(super) enum RuntimeHealthWorkflowStage {
     RestartSkippedActiveRun,
     Ready,
     StartupFailed,
-    FrontendObservationTimeout,
-}
-
-#[derive(Clone, Copy)]
-pub(super) enum RuntimeHealthFailureOrigin {
-    RuntimeStartup,
-    McpStatus,
-    McpConnect,
-    RuntimeStop,
-    RuntimeRestart,
-    FrontendObservation,
-    StartupStatus,
-    HealthStatus,
 }
 
 #[derive(Clone)]
@@ -39,11 +26,7 @@ pub(super) struct RuntimeHealthProgress {
     pub(super) stage: RuntimeHealthWorkflowStage,
     pub(super) observation: Option<RepoRuntimeHealthObservation>,
     pub(super) host: Option<RepoRuntimeStartupStatus>,
-    pub(super) checked_at: String,
-    pub(super) detail: Option<String>,
-    pub(super) failure_kind: Option<RepoRuntimeStartupFailureKind>,
     pub(super) failure_reason: Option<String>,
-    pub(super) failure_origin: Option<RuntimeHealthFailureOrigin>,
     pub(super) started_at: Option<String>,
     pub(super) updated_at: Option<String>,
     pub(super) elapsed_ms: Option<u64>,
@@ -55,10 +38,7 @@ pub(super) struct RepoRuntimeProgressInput {
     pub(super) observation: Option<RepoRuntimeHealthObservation>,
     pub(super) host: Option<RepoRuntimeStartupStatus>,
     pub(super) checked_at: String,
-    pub(super) detail: Option<String>,
-    pub(super) failure_kind: Option<RepoRuntimeStartupFailureKind>,
     pub(super) failure_reason: Option<String>,
-    pub(super) failure_origin: Option<RuntimeHealthFailureOrigin>,
     pub(super) started_at: Option<String>,
     pub(super) updated_at: Option<String>,
     pub(super) elapsed_ms: Option<u64>,
@@ -88,8 +68,6 @@ pub(super) fn repo_runtime_progress(input: RepoRuntimeProgressInput) -> RuntimeH
     let host_updated_at = input.host.as_ref().map(|value| value.updated_at.clone());
     let host_elapsed_ms = input.host.as_ref().and_then(|value| value.elapsed_ms);
     let host_attempts = input.host.as_ref().and_then(|value| value.attempts);
-    let host_detail = input.host.as_ref().and_then(|value| value.detail.clone());
-    let host_failure_kind = input.host.as_ref().and_then(|value| value.failure_kind);
     let host_failure_reason = input
         .host
         .as_ref()
@@ -99,7 +77,6 @@ pub(super) fn repo_runtime_progress(input: RepoRuntimeProgressInput) -> RuntimeH
         stage: input.stage,
         observation: input.observation,
         host: input.host,
-        checked_at: input.checked_at.clone(),
         started_at: input.started_at.or(host_started_at),
         updated_at: Some(
             input
@@ -109,10 +86,7 @@ pub(super) fn repo_runtime_progress(input: RepoRuntimeProgressInput) -> RuntimeH
         ),
         elapsed_ms: input.elapsed_ms.or(host_elapsed_ms),
         attempts: input.attempts.or(host_attempts),
-        detail: input.detail.or(host_detail),
-        failure_kind: input.failure_kind.or(host_failure_kind),
         failure_reason: input.failure_reason.or(host_failure_reason),
-        failure_origin: input.failure_origin,
     }
 }
 
@@ -229,10 +203,7 @@ fn summarize_runtime_status(stage: RuntimeHealthWorkflowStage) -> RepoRuntimeHea
         RuntimeHealthWorkflowStage::Idle => RepoRuntimeHealthState::Idle,
         RuntimeHealthWorkflowStage::StartupRequested
         | RuntimeHealthWorkflowStage::WaitingForRuntime
-        | RuntimeHealthWorkflowStage::RestartingRuntime
-        | RuntimeHealthWorkflowStage::FrontendObservationTimeout => {
-            RepoRuntimeHealthState::Checking
-        }
+        | RuntimeHealthWorkflowStage::RestartingRuntime => RepoRuntimeHealthState::Checking,
         RuntimeHealthWorkflowStage::RuntimeReady
         | RuntimeHealthWorkflowStage::CheckingMcpStatus
         | RuntimeHealthWorkflowStage::ReconnectingMcp
@@ -284,10 +255,7 @@ fn runtime_stage_from_progress(
         | RuntimeHealthWorkflowStage::RestartingRuntime => {
             RepoRuntimeStartupStage::StartupRequested
         }
-        RuntimeHealthWorkflowStage::WaitingForRuntime
-        | RuntimeHealthWorkflowStage::FrontendObservationTimeout => {
-            RepoRuntimeStartupStage::WaitingForRuntime
-        }
+        RuntimeHealthWorkflowStage::WaitingForRuntime => RepoRuntimeStartupStage::WaitingForRuntime,
         RuntimeHealthWorkflowStage::RuntimeReady
         | RuntimeHealthWorkflowStage::CheckingMcpStatus
         | RuntimeHealthWorkflowStage::ReconnectingMcp
