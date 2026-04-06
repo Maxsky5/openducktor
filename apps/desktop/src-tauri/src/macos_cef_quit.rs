@@ -90,7 +90,9 @@ define_class!(
                 QuitAction::StartOrderlyQuit => {
                     ORDERLY_QUIT_REQUESTED.store(true, Ordering::SeqCst);
                     log_orderly_quit_start(self.ivars().app_handle.webview_windows().len());
-                    request_orderly_quit(&self.ivars().app_handle);
+                    if !request_orderly_quit(&self.ivars().app_handle) {
+                        ORDERLY_QUIT_REQUESTED.store(false, Ordering::SeqCst);
+                    }
                     return NSApplicationTerminateReply::TerminateCancel;
                 }
                 QuitAction::WaitForWindowTeardown => {
@@ -159,7 +161,9 @@ unsafe extern "C-unwind" fn intercept_terminate(
         QuitAction::StartOrderlyQuit => {
             ORDERLY_QUIT_REQUESTED.store(true, Ordering::SeqCst);
             log_orderly_quit_start(app_handle.webview_windows().len());
-            request_orderly_quit(app_handle);
+            if !request_orderly_quit(app_handle) {
+                ORDERLY_QUIT_REQUESTED.store(false, Ordering::SeqCst);
+            }
         }
         QuitAction::WaitForWindowTeardown => {
             tracing::debug!(
@@ -246,9 +250,15 @@ fn decide_quit_action(open_window_count: usize, orderly_quit_requested: bool) ->
     }
 }
 
-fn request_orderly_quit(app_handle: &AppHandle<TauriRuntime>) {
+fn request_orderly_quit(app_handle: &AppHandle<TauriRuntime>) -> bool {
+    let mut all_close_requests_sent = true;
+
     for window in app_handle.webview_windows().into_values() {
+        // Keep the normal close lifecycle on the Cmd+Q path so the interposed
+        // native terminate flow can wait for orderly teardown instead of
+        // force-destroying windows mid-shutdown.
         if let Err(error) = window.close() {
+            all_close_requests_sent = false;
             tracing::warn!(
                 target: "openducktor.cef.quit",
                 error = %format!("{error:#}"),
@@ -256,6 +266,8 @@ fn request_orderly_quit(app_handle: &AppHandle<TauriRuntime>) {
             );
         }
     }
+
+    all_close_requests_sent
 }
 
 pub(crate) fn install(app: &mut App<TauriRuntime>) -> Result<()> {

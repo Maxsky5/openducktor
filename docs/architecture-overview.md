@@ -24,6 +24,7 @@ Current scope note:
 | Tauri command bridge (Rust) | `apps/desktop/src-tauri/src/lib.rs`, `apps/desktop/src-tauri/src/commands/*` | Typed command surface (`tauri::command`), argument mapping, command registration | Deep business policy (kept in `AppService`) |
 | Host application/domain (Rust) | `apps/desktop/src-tauri/crates/host-application/src/app_service/*`, `apps/desktop/src-tauri/crates/host-domain/src/*` | Workflow transition rules, task enrichment (`available_actions`, `agent_workflows`), runtime orchestration, `TaskStore` trait | UI concerns, view-level behavior |
 | Infrastructure/persistence (Rust) | `apps/desktop/src-tauri/crates/host-infra-beads/*`, `apps/desktop/src-tauri/crates/host-infra-system/*` | Beads-backed `TaskStore`, config/worktree/process integrations | UI workflow decisions |
+| MCP workflow service (TS) | `packages/openducktor-mcp/src/index.ts`, `packages/openducktor-mcp/src/lib.ts`, `packages/openducktor-mcp/src/odt-task-store.ts` | public MCP task tools (`create_task`, `search_tasks`, `odt_read_task`) plus `odt_*` workflow execution and validation against Beads metadata/status | Frontend rendering/state |
 
 ## Platform-specific native lifecycle seams
 
@@ -32,7 +33,6 @@ Current scope note:
 - For the CEF runtime on macOS, OpenDucktor must start quit by closing windows from `terminate:` and only forward the original native terminate call after all windows are gone.
 - Keep this behavior isolated from generic app shutdown logic in `lib.rs`; the signal handler and `RunEvent::ExitRequested` cleanup path are still generic, while the CEF quit interpose is a platform/runtime-specific seam.
 - If this area regresses, inspect `openducktor.cef.quit` tracing first and compare Cmd+Q against red-window-close behavior before changing broader shutdown code.
-| MCP workflow service (TS) | `packages/openducktor-mcp/src/index.ts`, `packages/openducktor-mcp/src/lib.ts`, `packages/openducktor-mcp/src/odt-task-store.ts` | public MCP task tools (`create_task`, `search_tasks`, `odt_read_task`) plus `odt_*` workflow execution and validation against Beads metadata/status | Frontend rendering/state |
 
 ## Runtime Data Flows
 
