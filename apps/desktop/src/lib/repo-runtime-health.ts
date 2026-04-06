@@ -1,6 +1,6 @@
 import type { RepoRuntimeHealthCheck, RepoRuntimeHealthObservation } from "@/types/diagnostics";
 
-export type RuntimeHealthBadge = {
+type RuntimeHealthBadge = {
   label: string;
   variant: "success" | "warning" | "danger" | "secondary";
 };
@@ -38,10 +38,6 @@ export const formatRepoRuntimeObservation = (
 
 export const isRepoRuntimeReady = (runtimeHealth: RepoRuntimeHealthCheck | null): boolean => {
   return runtimeHealth?.status === "ready";
-};
-
-export const isRepoRuntimeChecking = (runtimeHealth: RepoRuntimeHealthCheck | null): boolean => {
-  return runtimeHealth?.status === "checking";
 };
 
 export const getRepoRuntimeBadge = (
