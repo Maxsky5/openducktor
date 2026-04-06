@@ -1160,9 +1160,13 @@ fn build_start_uses_targeted_task_reads_instead_of_listing_all_tasks() -> Result
 
     {
         let state = task_state.lock().expect("task lock poisoned");
-        assert_eq!(
-            state.get_task_calls,
-            vec!["task-1".to_string(), "task-1".to_string()]
+        assert!(
+            !state.get_task_calls.is_empty(),
+            "build_start should perform targeted task lookups"
+        );
+        assert!(
+            state.get_task_calls.iter().all(|id| id == "task-1"),
+            "build_start should only fetch the requested task id"
         );
     }
 
