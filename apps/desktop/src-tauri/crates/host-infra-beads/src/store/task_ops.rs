@@ -183,6 +183,10 @@ impl BeadsTaskStore {
         Ok(tasks)
     }
 
+    pub(super) fn get_task_impl(&self, repo_path: &Path, task_id: &str) -> Result<TaskCard> {
+        self.show_task(repo_path, task_id)
+    }
+
     pub(super) fn list_tasks_for_kanban_impl(
         &self,
         repo_path: &Path,

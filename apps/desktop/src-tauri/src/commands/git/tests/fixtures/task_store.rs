@@ -23,6 +23,12 @@ impl TaskStore for CommandTaskStore {
         Ok(Vec::new())
     }
 
+    fn get_task(&self, _repo_path: &Path, _task_id: &str) -> anyhow::Result<TaskCard> {
+        Err(anyhow!(
+            "unexpected task store get_task call in git command tests"
+        ))
+    }
+
     fn create_task(&self, _repo_path: &Path, _input: CreateTaskInput) -> anyhow::Result<TaskCard> {
         Err(anyhow!(
             "unexpected task store create_task call in git command tests"

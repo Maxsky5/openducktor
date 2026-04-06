@@ -380,11 +380,9 @@ impl AppService {
             run_id,
             emitter,
         } = input;
-        self.task_transition(
+        self.task_transition_to_in_progress_without_related_tasks(
             prerequisites.repo_path.as_str(),
             task_id,
-            TaskStatus::InProgress,
-            Some("Builder delegated"),
         )?;
 
         let worktree_path = prepared_worktree

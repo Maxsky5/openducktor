@@ -86,6 +86,8 @@ pub(crate) struct TaskStoreState {
     pub(crate) ensure_calls: Vec<String>,
     pub(crate) ensure_error: Option<String>,
     pub(crate) tasks: Vec<TaskCard>,
+    pub(crate) get_task_calls: Vec<String>,
+    pub(crate) get_task_error: Option<String>,
     pub(crate) list_error: Option<String>,
     pub(crate) delete_calls: Vec<(String, bool)>,
     pub(crate) delete_error: Option<String>,
@@ -132,6 +134,20 @@ impl TaskStore for FakeTaskStore {
             return Err(anyhow!(message.clone()));
         }
         Ok(state.tasks.clone())
+    }
+
+    fn get_task(&self, _repo_path: &Path, task_id: &str) -> Result<TaskCard> {
+        let mut state = self.state.lock().expect("task store lock poisoned");
+        state.get_task_calls.push(task_id.to_string());
+        if let Some(message) = state.get_task_error.as_ref() {
+            return Err(anyhow!(message.clone()));
+        }
+        state
+            .tasks
+            .iter()
+            .find(|task| task.id == task_id)
+            .cloned()
+            .ok_or_else(|| anyhow!("Task not found: {task_id}"))
     }
 
     fn create_task(&self, _repo_path: &Path, input: CreateTaskInput) -> Result<TaskCard> {
@@ -1022,6 +1038,8 @@ pub(crate) fn build_service_with_git_state_enforced(
         ensure_calls: Vec::new(),
         ensure_error: None,
         tasks,
+        get_task_calls: Vec::new(),
+        get_task_error: None,
         list_error: None,
         delete_calls: Vec::new(),
         delete_error: None,
@@ -1108,6 +1126,8 @@ pub(crate) fn build_service_with_git_state(
         ensure_calls: Vec::new(),
         ensure_error: None,
         tasks,
+        get_task_calls: Vec::new(),
+        get_task_error: None,
         list_error: None,
         delete_calls: Vec::new(),
         delete_error: None,
@@ -1581,6 +1601,8 @@ pub(crate) fn build_service_with_store(
         ensure_calls: Vec::new(),
         ensure_error: None,
         tasks,
+        get_task_calls: Vec::new(),
+        get_task_error: None,
         list_error: None,
         delete_calls: Vec::new(),
         delete_error: None,

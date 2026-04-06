@@ -1,5 +1,6 @@
 use super::super::{
-    run_parsed_hook_command_allow_failure, validate_hook_trust, validate_transition, AppService,
+    run_parsed_hook_command_allow_failure, validate_hook_trust,
+    validate_transition_without_related_tasks, AppService,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::TaskStatus;
@@ -98,13 +99,10 @@ impl AppService {
 
         validate_hook_trust(repo_path.as_str(), &repo_config)?;
 
-        let tasks = self.task_store.list_tasks(Path::new(repo_path.as_str()))?;
-        let task = tasks
-            .iter()
-            .find(|entry| entry.id == task_id)
-            .cloned()
-            .ok_or_else(|| anyhow!("Task not found: {task_id}"))?;
-        validate_transition(&task, &tasks, &task.status, &TaskStatus::InProgress)?;
+        let task = self
+            .task_store
+            .get_task(Path::new(repo_path.as_str()), task_id)?;
+        validate_transition_without_related_tasks(&task, &task.status, &TaskStatus::InProgress)?;
 
         let branch = build_branch_name(&repo_config.branch_prefix, task_id, &task.title);
 
