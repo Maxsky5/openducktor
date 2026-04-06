@@ -83,7 +83,7 @@ pub use workspace_policy::{
 pub(crate) use workflow_rules::{
     can_set_plan, can_set_spec_from_status, normalize_required_markdown,
     normalize_subtask_plan_inputs, validate_parent_relationships_for_create,
-    validate_parent_relationships_for_update, validate_plan_subtask_rules,
+    validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
 };
 
 #[cfg(test)]
