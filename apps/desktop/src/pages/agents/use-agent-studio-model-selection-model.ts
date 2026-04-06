@@ -126,6 +126,80 @@ export const toModelDescriptorByKey = (
   return map;
 };
 
+const pickPositiveNumber = (...values: Array<number | undefined>): number | undefined => {
+  for (const value of values) {
+    if (typeof value === "number" && value > 0) {
+      return value;
+    }
+  }
+
+  return undefined;
+};
+
+const extractFallbackContextUsageEntry = ({
+  session,
+  modelDescriptorByKey,
+  fallbackContextWindow,
+}: {
+  session: SessionMessageOwner | null | undefined;
+  modelDescriptorByKey: ReadonlyMap<string, CatalogModelDescriptor>;
+  fallbackContextWindow: number | undefined;
+}): AgentStudioContextUsageEntry => {
+  if (!session) {
+    return null;
+  }
+
+  return extractLatestContextUsageEntry(
+    fallbackContextWindow === undefined
+      ? {
+          session,
+          modelDescriptorByKey,
+        }
+      : {
+          session,
+          modelDescriptorByKey,
+          fallbackContextWindow,
+        },
+  );
+};
+
+const resolveLiveContextUsageParts = ({
+  liveContextUsage,
+  modelDescriptor,
+  fallbackUsage,
+  fallbackContextWindow,
+}: {
+  liveContextUsage: AgentSessionContextUsage;
+  modelDescriptor: CatalogModelDescriptor | undefined;
+  fallbackUsage: AgentStudioContextUsage;
+  fallbackContextWindow: number | undefined;
+}): ResolvedContextUsageParts | null => {
+  const contextWindow = pickPositiveNumber(
+    liveContextUsage.contextWindow,
+    modelDescriptor?.contextWindow,
+    fallbackUsage?.contextWindow,
+    fallbackContextWindow,
+  );
+  if (contextWindow === undefined) {
+    return null;
+  }
+
+  const outputLimit = pickPositiveNumber(
+    liveContextUsage.outputLimit,
+    modelDescriptor?.outputLimit,
+    fallbackUsage?.outputLimit,
+  );
+
+  if (outputLimit === undefined) {
+    return { contextWindow };
+  }
+
+  return {
+    contextWindow,
+    outputLimit,
+  };
+};
+
 export const extractLatestContextUsage = ({
   session,
   liveContextUsage,
@@ -137,47 +211,32 @@ export const extractLatestContextUsage = ({
   modelDescriptorByKey: ReadonlyMap<string, CatalogModelDescriptor>;
   fallbackContextWindow?: number;
 }): AgentStudioContextUsage => {
-  const fallbackUsageEntry = session
-    ? extractLatestContextUsageEntry({
-        session,
-        modelDescriptorByKey,
-        ...(typeof fallbackContextWindow === "number" ? { fallbackContextWindow } : {}),
-      })
-    : null;
+  const fallbackUsageEntry = extractFallbackContextUsageEntry({
+    session,
+    modelDescriptorByKey,
+    fallbackContextWindow,
+  });
 
   if (liveContextUsage && liveContextUsage.totalTokens > 0) {
     const modelDescriptor = resolveContextUsageDescriptor({
       liveContextUsage,
       modelDescriptorByKey,
     });
-    const resolvedParts: ResolvedContextUsageParts | null = (() => {
-      const contextWindow =
-        liveContextUsage.contextWindow ??
-        modelDescriptor?.contextWindow ??
-        fallbackUsageEntry?.usage.contextWindow ??
-        fallbackContextWindow;
-      if (typeof contextWindow !== "number" || contextWindow <= 0) {
-        return null;
-      }
-
-      const outputLimit =
-        liveContextUsage.outputLimit ??
-        modelDescriptor?.outputLimit ??
-        fallbackUsageEntry?.usage.outputLimit;
-
-      return {
-        contextWindow,
-        ...(typeof outputLimit === "number" ? { outputLimit } : {}),
-      };
-    })();
+    const resolvedParts = resolveLiveContextUsageParts({
+      liveContextUsage,
+      modelDescriptor,
+      fallbackUsage: fallbackUsageEntry?.usage ?? null,
+      fallbackContextWindow,
+    });
     if (resolvedParts) {
-      return {
+      const usage: NonNullable<AgentStudioContextUsage> = {
         totalTokens: liveContextUsage.totalTokens,
         contextWindow: resolvedParts.contextWindow,
-        ...(typeof resolvedParts.outputLimit === "number"
-          ? { outputLimit: resolvedParts.outputLimit }
-          : {}),
       };
+      if (typeof resolvedParts.outputLimit === "number") {
+        usage.outputLimit = resolvedParts.outputLimit;
+      }
+      return usage;
     }
   }
 
