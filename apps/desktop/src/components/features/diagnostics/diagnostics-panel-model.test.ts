@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { RuntimeDescriptor, RuntimeInstanceSummary } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 
 const runtimeDefinitions: RuntimeDescriptor[] = [OPENCODE_RUNTIME_DESCRIPTOR];
@@ -18,6 +19,54 @@ const runtimeSummary: RuntimeInstanceSummary = {
   },
   startedAt: "2026-02-20T12:00:00.000Z",
   descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+};
+
+type RepoHealthOverrides = Omit<Partial<RepoRuntimeHealthCheck>, "runtime" | "mcp"> & {
+  runtime?: Partial<RepoRuntimeHealthCheck["runtime"]>;
+  mcp?: Partial<NonNullable<RepoRuntimeHealthCheck["mcp"]>>;
+};
+
+const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntimeHealthCheck => {
+  const checkedAt = overrides.checkedAt ?? "2026-02-20T12:01:00.000Z";
+  const runtime: RepoRuntimeHealthCheck["runtime"] = {
+    status: "ready",
+    stage: "runtime_ready",
+    observation: null,
+    instance: null,
+    startedAt: null,
+    updatedAt: checkedAt,
+    elapsedMs: null,
+    attempts: null,
+    detail: null,
+    failureKind: null,
+    failureReason: null,
+    ...overrides.runtime,
+  };
+  const mcp: NonNullable<RepoRuntimeHealthCheck["mcp"]> = {
+    supported: true,
+    status: "connected",
+    serverName: "openducktor",
+    serverStatus: "connected",
+    toolIds: [],
+    detail: null,
+    failureKind: null,
+    ...overrides.mcp,
+  };
+
+  return {
+    status:
+      overrides.status ??
+      (runtime.status === "error" || mcp.status === "error"
+        ? "error"
+        : mcp.status === "checking" ||
+            mcp.status === "reconnecting" ||
+            mcp.status === "waiting_for_runtime"
+          ? "checking"
+          : runtime.status),
+    checkedAt,
+    runtime,
+    mcp,
+  };
 };
 
 describe("buildDiagnosticsPanelModel", () => {
@@ -143,21 +192,10 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
-        opencode: {
-          runtimeOk: true,
-          runtimeError: null,
-          runtimeFailureKind: null,
-          runtime: runtimeSummary,
-          mcpOk: true,
-          mcpError: null,
-          mcpFailureKind: null,
-          mcpServerName: "openducktor",
-          mcpServerStatus: "connected",
-          mcpServerError: null,
-          availableToolIds: [],
-          checkedAt: "2026-02-20T12:01:00.000Z",
-          errors: [],
-        },
+        opencode: makeRepoHealth({
+          runtime: { instance: runtimeSummary },
+          mcp: { toolIds: [] },
+        }),
       },
       isLoadingChecks: false,
     });
@@ -204,21 +242,10 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
-        opencode: {
-          runtimeOk: true,
-          runtimeError: null,
-          runtimeFailureKind: null,
-          runtime: runtimeSummary,
-          mcpOk: true,
-          mcpError: null,
-          mcpFailureKind: null,
-          mcpServerName: "openducktor",
-          mcpServerStatus: "connected",
-          mcpServerError: null,
-          availableToolIds: [],
-          checkedAt: "2026-02-20T12:01:00.000Z",
-          errors: [],
-        },
+        opencode: makeRepoHealth({
+          runtime: { instance: runtimeSummary },
+          mcp: { toolIds: [] },
+        }),
       },
       isLoadingChecks: false,
     });
@@ -270,21 +297,10 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
-        opencode: {
-          runtimeOk: true,
-          runtimeError: null,
-          runtimeFailureKind: null,
-          runtime: runtimeSummary,
-          mcpOk: true,
-          mcpError: null,
-          mcpFailureKind: null,
-          mcpServerName: "openducktor",
-          mcpServerStatus: "connected",
-          mcpServerError: null,
-          availableToolIds: ["openducktor_odt_read_task", "openducktor_odt_set_spec"],
-          checkedAt: "2026-02-20T12:01:00.000Z",
-          errors: [],
-        },
+        opencode: makeRepoHealth({
+          runtime: { instance: runtimeSummary },
+          mcp: { toolIds: ["openducktor_odt_read_task", "openducktor_odt_set_spec"] },
+        }),
       },
       isLoadingChecks: false,
     });
@@ -340,21 +356,25 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheckFailureKind: "error",
       beadsCheckFailureKind: "error",
       runtimeHealthByRuntime: {
-        opencode: {
-          runtimeOk: false,
-          runtimeError: "runtime failed",
-          runtimeFailureKind: "error",
-          runtime: null,
-          mcpOk: false,
-          mcpError: "mcp unavailable",
-          mcpFailureKind: "error",
-          mcpServerName: "openducktor",
-          mcpServerStatus: null,
-          mcpServerError: "server unavailable",
-          availableToolIds: [],
-          checkedAt: "2026-02-20T12:01:00.000Z",
-          errors: ["runtime failed", "mcp unavailable"],
-        },
+        opencode: makeRepoHealth({
+          status: "error",
+          runtime: {
+            status: "error",
+            stage: "startup_failed",
+            instance: null,
+            detail: "runtime failed",
+            failureKind: "error",
+          },
+          mcp: {
+            supported: true,
+            status: "error",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "server unavailable",
+            failureKind: "error",
+          },
+        }),
       },
       isLoadingChecks: false,
     });
@@ -367,14 +387,13 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(model.criticalReasons).toEqual(
       expect.arrayContaining([
         "Runtime CLI checks failing",
-        "OpenCode runtime unavailable",
-        "OpenCode OpenDucktor MCP unavailable",
+        "runtime failed",
         "Beads store unavailable",
       ]),
     );
     expect(model.sections[1]?.errors).toEqual(["opencode not found in PATH"]);
     expect(runtimeSection?.errors).toEqual(["runtime failed"]);
-    expect(mcpSection?.errors).toEqual(["server unavailable"]);
+    expect(mcpSection?.errors).toEqual([]);
     expect(beadsSection?.errors).toEqual(["beads init failed"]);
   });
 
@@ -411,21 +430,19 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
-        opencode: {
-          runtimeOk: true,
-          runtimeError: null,
-          runtimeFailureKind: null,
-          runtime: runtimeSummary,
-          mcpOk: false,
-          mcpError: "mcp unavailable",
-          mcpFailureKind: "error",
-          mcpServerName: "openducktor",
-          mcpServerStatus: null,
-          mcpServerError: null,
-          availableToolIds: [],
-          checkedAt: "2026-02-20T12:01:00.000Z",
-          errors: [],
-        },
+        opencode: makeRepoHealth({
+          status: "error",
+          runtime: { instance: runtimeSummary },
+          mcp: {
+            supported: true,
+            status: "error",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "mcp unavailable",
+            failureKind: "error",
+          },
+        }),
       },
       isLoadingChecks: false,
     });
@@ -467,46 +484,31 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
-        opencode: {
-          runtimeOk: false,
-          runtimeError: "Timed out waiting for OpenCode runtime startup readiness",
-          runtimeFailureKind: "timeout",
-          runtime: null,
-          mcpOk: false,
-          mcpError: "Runtime is unavailable, so MCP cannot be verified.",
-          mcpFailureKind: "timeout",
-          mcpServerName: "openducktor",
-          mcpServerStatus: null,
-          mcpServerError: "Runtime is unavailable, so MCP cannot be verified.",
-          availableToolIds: [],
-          checkedAt: "2026-02-20T12:01:00.000Z",
-          errors: ["Timed out waiting for OpenCode runtime startup readiness"],
-          progress: {
+        opencode: makeRepoHealth({
+          status: "checking",
+          runtime: {
+            status: "checking",
             stage: "waiting_for_runtime",
             observation: "started_by_diagnostics",
+            instance: null,
             startedAt: "2026-02-20T12:00:55.000Z",
             updatedAt: "2026-02-20T12:01:00.000Z",
             elapsedMs: 5000,
             attempts: 4,
-            detail: null,
+            detail: "Timed out waiting for OpenCode runtime startup readiness",
             failureKind: "timeout",
             failureReason: null,
-            failureOrigin: "frontend_observation",
-            host: {
-              runtimeKind: "opencode",
-              repoPath: "/repo",
-              stage: "waiting_for_runtime",
-              runtime: null,
-              startedAt: "2026-02-20T12:00:55.000Z",
-              updatedAt: "2026-02-20T12:01:00.000Z",
-              elapsedMs: 5000,
-              attempts: 4,
-              failureKind: null,
-              failureReason: null,
-              detail: null,
-            },
           },
-        },
+          mcp: {
+            supported: true,
+            status: "waiting_for_runtime",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "Runtime is unavailable, so MCP cannot be verified.",
+            failureKind: "timeout",
+          },
+        }),
       },
       isLoadingChecks: false,
     });
@@ -515,14 +517,166 @@ describe("buildDiagnosticsPanelModel", () => {
     const mcpSection = model.sections.find((section) => section.key === "mcp:opencode");
 
     expect(runtimeSection?.badge).toEqual({ label: "Starting", variant: "warning" });
-    expect(runtimeSection?.errors[0]).toContain("Frontend diagnostics timed out");
+    expect(runtimeSection?.errors).toEqual([]);
     expect(runtimeSection?.rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ label: "Stage", value: "waiting for runtime" }),
         expect.objectContaining({ label: "Attempts", value: "4" }),
       ]),
     );
-    expect(mcpSection?.badge).toEqual({ label: "Retrying", variant: "warning" });
+    expect(mcpSection?.badge).toEqual({ label: "Waiting on runtime", variant: "warning" });
+    expect(mcpSection?.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Status", value: "waiting for runtime" }),
+      ]),
+    );
+    expect(mcpSection?.rows).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ label: "Tools detected" })]),
+    );
+    expect(mcpSection?.errors).toEqual([]);
+  });
+
+  test("keeps runtime and mcp progress details scoped to the relevant section", () => {
+    const model = buildDiagnosticsPanelModel({
+      activeRepo: "/repo",
+      activeWorkspace: {
+        path: "/repo",
+        isActive: true,
+        hasConfig: true,
+        configuredWorktreeBasePath: "/worktrees",
+        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+        effectiveWorktreeBasePath: "/worktrees",
+      },
+      runtimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        ghOk: true,
+        ghVersion: "gh version 2.73.0",
+        ghAuthOk: true,
+        ghAuthLogin: "octocat",
+        ghAuthError: null,
+        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
+        errors: [],
+      },
+      beadsCheck: {
+        beadsOk: true,
+        beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
+        beadsError: null,
+      },
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          status: "checking",
+          runtime: {
+            status: "ready",
+            stage: "runtime_ready",
+            observation: "started_by_diagnostics",
+            instance: runtimeSummary,
+            startedAt: "2026-02-20T12:00:59.000Z",
+            updatedAt: "2026-02-20T12:01:00.000Z",
+            elapsedMs: 886,
+            attempts: 7,
+            detail: null,
+            failureKind: null,
+            failureReason: null,
+          },
+          mcp: {
+            supported: true,
+            status: "checking",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: null,
+            failureKind: null,
+          },
+        }),
+      },
+      isLoadingChecks: false,
+    });
+
+    const runtimeSection = model.sections.find((section) => section.key === "runtime:opencode");
+    const mcpSection = model.sections.find((section) => section.key === "mcp:opencode");
+
+    expect(runtimeSection).toBeDefined();
+    if (!runtimeSection) {
+      throw new Error("Expected runtime:opencode diagnostics section");
+    }
+    const runtimeLabels = runtimeSection.rows.map((row) => row.label);
+    expect(runtimeLabels).not.toContain("Stage");
+    expect(runtimeLabels).not.toContain("Observation");
+    expect(runtimeLabels).not.toContain("Elapsed");
+    expect(runtimeLabels).not.toContain("Attempts");
+    expect(mcpSection?.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Status", value: "checking" }),
+        expect.objectContaining({ label: "Activity", value: "Checking server status" }),
+      ]),
+    );
+    const mcpLabels = mcpSection?.rows.map((row) => row.label) ?? [];
+    expect(mcpLabels).not.toContain("Observation");
+    expect(mcpLabels).not.toContain("Elapsed");
+    expect(mcpLabels).not.toContain("Attempts");
+    expect(mcpLabels).not.toContain("Tools detected");
+    expect(mcpSection?.errors).toEqual([]);
+    expect(model.criticalReasons).not.toContain("OpenCode OpenDucktor MCP unavailable");
+  });
+
+  test("keeps the summary in checking while a settled runtime health entry is still checking", () => {
+    const model = buildDiagnosticsPanelModel({
+      activeRepo: "/repo",
+      activeWorkspace: {
+        path: "/repo",
+        isActive: true,
+        hasConfig: true,
+        configuredWorktreeBasePath: "/worktrees",
+        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+        effectiveWorktreeBasePath: "/worktrees",
+      },
+      runtimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        ghOk: true,
+        ghVersion: "gh version 2.73.0",
+        ghAuthOk: true,
+        ghAuthLogin: "octocat",
+        ghAuthError: null,
+        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
+        errors: [],
+      },
+      beadsCheck: {
+        beadsOk: true,
+        beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
+        beadsError: null,
+      },
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          status: "checking",
+          runtime: { instance: runtimeSummary },
+          mcp: {
+            supported: true,
+            status: "checking",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "Checking OpenDucktor MCP",
+            failureKind: null,
+          },
+        }),
+      },
+      isLoadingChecks: false,
+    });
+
+    expect(model.isSummaryChecking).toBe(true);
+    expect(model.summaryState.label).toBe("Checking...");
   });
 
   test("shows timeout-specific cli tools and beads states instead of leaving them checking", () => {
@@ -558,21 +712,10 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheckFailureKind: "timeout",
       beadsCheckFailureKind: "timeout",
       runtimeHealthByRuntime: {
-        opencode: {
-          runtimeOk: true,
-          runtimeError: null,
-          runtimeFailureKind: null,
-          runtime: runtimeSummary,
-          mcpOk: true,
-          mcpError: null,
-          mcpFailureKind: null,
-          mcpServerName: "openducktor",
-          mcpServerStatus: "connected",
-          mcpServerError: null,
-          availableToolIds: [],
-          checkedAt: "2026-02-20T12:01:00.000Z",
-          errors: [],
-        },
+        opencode: makeRepoHealth({
+          runtime: { instance: runtimeSummary },
+          mcp: { toolIds: [] },
+        }),
       },
       isLoadingChecks: false,
     });
@@ -620,21 +763,10 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
-        opencode: {
-          runtimeOk: true,
-          runtimeError: null,
-          runtimeFailureKind: null,
-          runtime: runtimeSummary,
-          mcpOk: true,
-          mcpError: null,
-          mcpFailureKind: null,
-          mcpServerName: "openducktor",
-          mcpServerStatus: "connected",
-          mcpServerError: null,
-          availableToolIds: [],
-          checkedAt: "2026-02-20T12:01:00.000Z",
-          errors: [],
-        },
+        opencode: makeRepoHealth({
+          runtime: { instance: runtimeSummary },
+          mcp: { toolIds: [] },
+        }),
       },
       isLoadingChecks: false,
     });

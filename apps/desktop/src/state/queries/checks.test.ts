@@ -32,23 +32,34 @@ describe("classifyDiagnosticsQueryError", () => {
     try {
       const result = await queryClient.fetchQuery(
         repoRuntimeHealthQueryOptions("/repo", [OPENCODE_RUNTIME_DESCRIPTOR], async () => ({
-          runtimeOk: false,
-          runtimeError: "Process timed out while reading repository config",
-          runtimeFailureKind: "error",
-          runtime: null,
-          mcpOk: false,
-          mcpError: "Runtime is unavailable, so MCP cannot be verified.",
-          mcpFailureKind: "error",
-          mcpServerName: "openducktor",
-          mcpServerStatus: null,
-          mcpServerError: "Runtime is unavailable, so MCP cannot be verified.",
-          availableToolIds: [],
+          status: "error",
           checkedAt: "2026-02-22T08:00:00.000Z",
-          errors: ["Process timed out while reading repository config"],
+          runtime: {
+            status: "error",
+            stage: "startup_failed",
+            observation: null,
+            instance: null,
+            startedAt: null,
+            updatedAt: "2026-02-22T08:00:00.000Z",
+            elapsedMs: null,
+            attempts: null,
+            detail: "Process timed out while reading repository config",
+            failureKind: "error",
+            failureReason: null,
+          },
+          mcp: {
+            supported: true,
+            status: "error",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "Runtime is unavailable, so MCP cannot be verified.",
+            failureKind: "error",
+          },
         })),
       );
 
-      expect(result.opencode?.runtimeFailureKind).toBe("error");
+      expect(result.opencode?.runtime.failureKind).toBe("error");
     } finally {
       queryClient.clear();
     }
@@ -72,11 +83,14 @@ describe("repoRuntimeHealthQueryOptions", () => {
 
       expect(result.opencode).toEqual(
         expect.objectContaining({
-          runtimeOk: false,
-          runtimeError: "Timed out after 15000ms",
-          runtimeFailureKind: "error",
-          mcpOk: false,
-          mcpFailureKind: "error",
+          status: "error",
+          runtime: expect.objectContaining({
+            detail: "Timed out after 15000ms",
+            failureKind: "error",
+          }),
+          mcp: expect.objectContaining({
+            failureKind: "error",
+          }),
         }),
       );
     } finally {

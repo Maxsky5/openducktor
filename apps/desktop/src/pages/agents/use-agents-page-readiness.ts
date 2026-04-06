@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { describeRepoRuntimeProgress } from "@/lib/repo-runtime-health";
+import { describeRepoRuntimeStatus, isRepoRuntimeReady } from "@/lib/repo-runtime-health";
 import type { useChecksState } from "@/state";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { buildTimeoutToastDescription } from "@/state/operations/workspace/check-diagnostics";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import type {
   AgentStudioOrchestrationReadinessContext,
@@ -16,26 +15,7 @@ const getBlockedRuntimeReason = (
   if (!runtimeHealth) {
     return null;
   }
-
-  const progressMessage = describeRepoRuntimeProgress(runtimeLabel, runtimeHealth);
-  if (progressMessage) {
-    return progressMessage;
-  }
-
-  if (runtimeHealth.runtimeOk === false) {
-    return runtimeHealth.runtimeFailureKind === "timeout"
-      ? buildTimeoutToastDescription(`${runtimeLabel} runtime`, runtimeHealth.runtimeError)
-      : runtimeHealth.runtimeError;
-  }
-
-  if (runtimeHealth.mcpOk === false) {
-    const detail = runtimeHealth.mcpServerError ?? runtimeHealth.mcpError;
-    return runtimeHealth.mcpFailureKind === "timeout"
-      ? buildTimeoutToastDescription(`${runtimeLabel} OpenDucktor MCP`, detail)
-      : detail;
-  }
-
-  return null;
+  return describeRepoRuntimeStatus(runtimeLabel, runtimeHealth);
 };
 
 type UseRunCompletionRecoverySignalArgs = {
@@ -106,11 +86,15 @@ export function useAgentStudioReadiness({
     () =>
       runtimeDefinitions.find((definition) => {
         const runtimeHealth = runtimeHealthByRuntime[definition.kind];
-        return Boolean(
-          runtimeHealth?.runtimeOk &&
-            (!definition.capabilities.supportsMcpStatus || runtimeHealth.mcpOk),
-        );
+        return isRepoRuntimeReady(runtimeHealth ?? null);
       }) ?? null,
+    [runtimeDefinitions, runtimeHealthByRuntime],
+  );
+  const checkingRuntimeDefinition = useMemo(
+    () =>
+      runtimeDefinitions.find(
+        (definition) => runtimeHealthByRuntime[definition.kind]?.status === "checking",
+      ) ?? null,
     [runtimeDefinitions, runtimeHealthByRuntime],
   );
   const blockedRuntimeDefinition = useMemo(
@@ -118,9 +102,7 @@ export function useAgentStudioReadiness({
       runtimeDefinitions.find((definition) => {
         const runtimeHealth = runtimeHealthByRuntime[definition.kind];
         return Boolean(
-          runtimeHealth &&
-            (!runtimeHealth.runtimeOk ||
-              (definition.capabilities.supportsMcpStatus && !runtimeHealth.mcpOk)),
+          runtimeHealth && runtimeHealth.status !== "ready" && runtimeHealth.status !== "checking",
         );
       }) ?? null,
     [runtimeDefinitions, runtimeHealthByRuntime],
@@ -133,6 +115,9 @@ export function useAgentStudioReadiness({
   const agentStudioReadinessState = (() => {
     if (agentStudioReady) {
       return "ready";
+    }
+    if (activeRepo && checkingRuntimeDefinition) {
+      return "checking";
     }
     if (activeRepo && (isLoadingRuntimeDefinitions || isLoadingChecks || isRuntimeHealthPending)) {
       return "checking";
@@ -154,18 +139,43 @@ export function useAgentStudioReadiness({
       return "Loading runtime definitions...";
     }
     if (isLoadingChecks) {
+      if (checkingRuntimeDefinition) {
+        return (
+          getBlockedRuntimeReason(
+            checkingRuntimeDefinition.label,
+            runtimeHealthByRuntime[checkingRuntimeDefinition.kind] ?? null,
+          ) ?? "Checking runtime health..."
+        );
+      }
       return blockedRuntimeDefinition
         ? (getBlockedRuntimeReason(blockedRuntimeDefinition.label, blockedRuntimeHealth) ??
             "Checking runtime health...")
         : "Checking runtime health...";
     }
     if (isRuntimeHealthPending) {
+      if (checkingRuntimeDefinition) {
+        return (
+          getBlockedRuntimeReason(
+            checkingRuntimeDefinition.label,
+            runtimeHealthByRuntime[checkingRuntimeDefinition.kind] ?? null,
+          ) ?? "Checking runtime health..."
+        );
+      }
       return blockedRuntimeDefinition
-        ? (describeRepoRuntimeProgress(
+        ? (describeRepoRuntimeStatus(
             blockedRuntimeDefinition.label,
             runtimeHealthByRuntime[blockedRuntimeDefinition.kind] ?? null,
           ) ?? "Checking runtime health...")
         : "Checking runtime health...";
+    }
+
+    if (checkingRuntimeDefinition) {
+      return (
+        getBlockedRuntimeReason(
+          checkingRuntimeDefinition.label,
+          runtimeHealthByRuntime[checkingRuntimeDefinition.kind] ?? null,
+        ) ?? "Checking runtime health..."
+      );
     }
 
     return (

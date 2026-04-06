@@ -63,10 +63,11 @@ import type {
   RepoHooks,
   RepoPromptOverrides,
   RepoRuntimeHealthCheck,
-  RepoRuntimeHealthFailureOrigin,
+  RepoRuntimeHealthMcp,
   RepoRuntimeHealthObservation,
-  RepoRuntimeHealthProgress,
-  RepoRuntimeHealthStage,
+  RepoRuntimeHealthRuntime,
+  RepoRuntimeHealthState,
+  RepoRuntimeMcpStatus,
   RepoRuntimeStartupStage,
   RepoRuntimeStartupStatus,
   RunEvent,
@@ -236,10 +237,11 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeHealthSchema",
   "runtimeKindSchema",
   "repoRuntimeHealthCheckSchema",
-  "repoRuntimeHealthFailureOriginSchema",
+  "repoRuntimeHealthMcpSchema",
   "repoRuntimeHealthObservationSchema",
-  "repoRuntimeHealthProgressSchema",
-  "repoRuntimeHealthStageSchema",
+  "repoRuntimeHealthRuntimeSchema",
+  "repoRuntimeHealthStateSchema",
+  "repoRuntimeMcpStatusSchema",
   "repoRuntimeStartupStageSchema",
   "repoRuntimeStartupStatusSchema",
   "runtimeRouteSchema",
@@ -362,10 +364,11 @@ type ExportedTypeContract = {
   RuntimeCapabilityClass: RuntimeCapabilityClass;
   RuntimeCapabilityKey: RuntimeCapabilityKey;
   RepoRuntimeHealthCheck: RepoRuntimeHealthCheck;
-  RepoRuntimeHealthFailureOrigin: RepoRuntimeHealthFailureOrigin;
+  RepoRuntimeHealthMcp: RepoRuntimeHealthMcp;
   RepoRuntimeHealthObservation: RepoRuntimeHealthObservation;
-  RepoRuntimeHealthProgress: RepoRuntimeHealthProgress;
-  RepoRuntimeHealthStage: RepoRuntimeHealthStage;
+  RepoRuntimeHealthRuntime: RepoRuntimeHealthRuntime;
+  RepoRuntimeHealthState: RepoRuntimeHealthState;
+  RepoRuntimeMcpStatus: RepoRuntimeMcpStatus;
   RepoRuntimeStartupStage: RepoRuntimeStartupStage;
   RepoRuntimeStartupStatus: RepoRuntimeStartupStatus;
   SoftGuardrails: SoftGuardrails;

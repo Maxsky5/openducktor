@@ -1178,35 +1178,25 @@ describe("TauriHostClient", () => {
       }
       if (command === "repo_runtime_health") {
         return {
-          runtimeOk: true,
-          runtimeError: null,
-          runtimeFailureKind: null,
+          status: "ready",
           runtime: {
-            kind: "opencode",
-            runtimeId: "runtime-main",
-            repoPath: "/repo",
-            taskId: null,
-            role: "workspace",
-            workingDirectory: "/repo",
-            runtimeRoute: {
-              type: "local_http",
-              endpoint: "http://127.0.0.1:4444",
-            },
-            startedAt: "2026-02-17T12:00:00Z",
-            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-          },
-          mcpOk: true,
-          mcpError: null,
-          mcpFailureKind: null,
-          mcpServerName: "openducktor",
-          mcpServerStatus: "connected",
-          mcpServerError: null,
-          availableToolIds: ["odt_read_task"],
-          checkedAt: "2026-02-17T12:00:05Z",
-          errors: [],
-          progress: {
-            stage: "ready",
+            status: "ready",
+            stage: "runtime_ready",
             observation: "observed_existing_runtime",
+            instance: {
+              kind: "opencode",
+              runtimeId: "runtime-main",
+              repoPath: "/repo",
+              taskId: null,
+              role: "workspace",
+              workingDirectory: "/repo",
+              runtimeRoute: {
+                type: "local_http",
+                endpoint: "http://127.0.0.1:4444",
+              },
+              startedAt: "2026-02-17T12:00:00Z",
+              descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+            },
             startedAt: "2026-02-17T12:00:00Z",
             updatedAt: "2026-02-17T12:00:05Z",
             elapsedMs: 5000,
@@ -1214,52 +1204,58 @@ describe("TauriHostClient", () => {
             detail: null,
             failureKind: null,
             failureReason: null,
-            failureOrigin: null,
-            host: null,
           },
+          mcp: {
+            supported: true,
+            status: "connected",
+            serverName: "openducktor",
+            serverStatus: "connected",
+            toolIds: ["odt_read_task"],
+            detail: null,
+            failureKind: null,
+          },
+          checkedAt: "2026-02-17T12:00:05Z",
         };
       }
       if (command === "repo_runtime_health_status") {
         return {
-          runtimeOk: true,
-          runtimeError: null,
-          runtimeFailureKind: null,
+          status: "checking",
           runtime: {
-            kind: "opencode",
-            runtimeId: "runtime-main",
-            repoPath: "/repo",
-            taskId: null,
-            role: "workspace",
-            workingDirectory: "/repo",
-            runtimeRoute: {
-              type: "local_http",
-              endpoint: "http://127.0.0.1:4444",
-            },
-            startedAt: "2026-02-17T12:00:00Z",
-            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-          },
-          mcpOk: false,
-          mcpError: null,
-          mcpFailureKind: null,
-          mcpServerName: "openducktor",
-          mcpServerStatus: null,
-          mcpServerError: null,
-          availableToolIds: [],
-          checkedAt: "2026-02-17T12:00:05Z",
-          errors: [],
-          progress: {
-            stage: "checking_mcp_status",
+            status: "ready",
+            stage: "runtime_ready",
             observation: "observed_existing_runtime",
+            instance: {
+              kind: "opencode",
+              runtimeId: "runtime-main",
+              repoPath: "/repo",
+              taskId: null,
+              role: "workspace",
+              workingDirectory: "/repo",
+              runtimeRoute: {
+                type: "local_http",
+                endpoint: "http://127.0.0.1:4444",
+              },
+              startedAt: "2026-02-17T12:00:00Z",
+              descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+            },
             startedAt: "2026-02-17T12:00:00Z",
             updatedAt: "2026-02-17T12:00:05Z",
             elapsedMs: 5000,
             attempts: 4,
-            detail: "Checking OpenDucktor MCP",
+            detail: null,
             failureKind: null,
             failureReason: null,
-            failureOrigin: null,
-            host: null,
           },
+          mcp: {
+            supported: true,
+            status: "checking",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "Checking OpenDucktor MCP",
+            failureKind: null,
+          },
+          checkedAt: "2026-02-17T12:00:05Z",
         };
       }
       if (command === "runtime_stop") {
@@ -1285,8 +1281,8 @@ describe("TauriHostClient", () => {
     expect(runtimes).toHaveLength(1);
     expect(ensured.runtimeId).toBe("runtime-main");
     expect(startupStatus.stage).toBe("waiting_for_runtime");
-    expect(repoRuntimeHealth.mcpOk).toBe(true);
-    expect(repoRuntimeHealthStatus.progress?.stage).toBe("checking_mcp_status");
+    expect(repoRuntimeHealth.mcp?.status).toBe("connected");
+    expect(repoRuntimeHealthStatus.mcp?.status).toBe("checking");
     expect(stopped.ok).toBe(true);
     expect(calls.map((entry) => entry.command)).toEqual([
       "runtime_definitions_list",

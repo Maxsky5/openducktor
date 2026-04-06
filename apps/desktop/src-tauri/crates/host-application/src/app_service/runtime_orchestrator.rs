@@ -1,5 +1,6 @@
 mod registry;
 mod repo_health;
+mod repo_health_snapshot;
 mod startup;
 
 use super::AppService;
@@ -838,9 +839,9 @@ mod tests {
     use crate::app_service::{AgentRuntimeProcess, RunProcess};
     use anyhow::{anyhow, Result};
     use host_domain::{
-        AgentRuntimeKind, AgentSessionDocument, RepoRuntimeHealthObservation,
-        RepoRuntimeHealthStage, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RunSummary,
-        TaskStatus,
+        AgentRuntimeKind, AgentSessionDocument, RepoRuntimeHealthMcp, RepoRuntimeHealthObservation,
+        RepoRuntimeHealthRuntime, RepoRuntimeHealthState, RepoRuntimeMcpStatus,
+        RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RunSummary, TaskStatus,
     };
     use host_infra_system::RepoConfig;
     use std::io::{Read, Write};
@@ -1133,11 +1134,8 @@ mod tests {
     fn repo_runtime_health_reports_ready_connected_runtime() -> Result<()> {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
         let (port, server_handle) = spawn_runtime_http_server(vec![
-            runtime_http_response(
-                "200 OK",
-                r#"{"data":{"openducktor":{"status":"connected"}}}"#,
-            ),
-            runtime_http_response("200 OK", r#"{"data":["odt_read_task"]}"#),
+            runtime_http_response("200 OK", r#"{"openducktor":{"status":"connected"}}"#),
+            runtime_http_response("200 OK", r#"["odt_read_task"]"#),
         ])?;
         let runtime = host_domain::RuntimeInstanceSummary {
             kind: AgentRuntimeKind::Opencode,
@@ -1160,16 +1158,19 @@ mod tests {
         assert!(requests[0].starts_with("GET /mcp?directory=%2Ftmp%2Frepo-health-ready "));
         assert!(requests[1]
             .starts_with("GET /experimental/tool/ids?directory=%2Ftmp%2Frepo-health-ready "));
-        assert!(health.runtime_ok);
-        assert!(health.mcp_ok);
-        assert_eq!(health.available_tool_ids, vec!["odt_read_task"]);
+        assert_eq!(health.status, RepoRuntimeHealthState::Ready);
+        assert_eq!(health.runtime.status, RepoRuntimeHealthState::Ready);
         assert_eq!(
-            health.progress.as_ref().map(|value| value.stage),
-            Some(RepoRuntimeHealthStage::Ready)
+            health.runtime.observation,
+            Some(RepoRuntimeHealthObservation::ObservedExistingRuntime)
         );
         assert_eq!(
-            health.progress.as_ref().and_then(|value| value.observation),
-            Some(RepoRuntimeHealthObservation::ObservedExistingRuntime)
+            health.mcp.as_ref().map(|value| value.status),
+            Some(RepoRuntimeMcpStatus::Connected)
+        );
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.tool_ids.clone()),
+            Some(vec!["odt_read_task".to_string()])
         );
         service.runtime_stop(runtime.runtime_id.as_str())?;
         Ok(())
@@ -1181,14 +1182,11 @@ mod tests {
         let (port, server_handle) = spawn_runtime_http_server(vec![
             runtime_http_response(
                 "200 OK",
-                r#"{"data":{"openducktor":{"status":"disconnected","error":"not connected"}}}"#,
+                r#"{"openducktor":{"status":"disconnected","error":"not connected"}}"#,
             ),
-            runtime_http_response("200 OK", r#"{"data":true}"#),
-            runtime_http_response(
-                "200 OK",
-                r#"{"data":{"openducktor":{"status":"connected"}}}"#,
-            ),
-            runtime_http_response("200 OK", r#"{"data":["odt_read_task"]}"#),
+            runtime_http_response("200 OK", r#"true"#),
+            runtime_http_response("200 OK", r#"{"openducktor":{"status":"connected"}}"#),
+            runtime_http_response("200 OK", r#"["odt_read_task"]"#),
         ])?;
         let runtime = host_domain::RuntimeInstanceSummary {
             kind: AgentRuntimeKind::Opencode,
@@ -1211,9 +1209,15 @@ mod tests {
         assert!(requests[1].starts_with(
             "POST /mcp/openducktor/connect?directory=%2Ftmp%2Frepo-health-reconnect "
         ));
-        assert!(health.runtime_ok);
-        assert!(health.mcp_ok);
-        assert_eq!(health.available_tool_ids, vec!["odt_read_task"]);
+        assert_eq!(health.status, RepoRuntimeHealthState::Ready);
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.status),
+            Some(RepoRuntimeMcpStatus::Connected)
+        );
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.tool_ids.clone()),
+            Some(vec!["odt_read_task".to_string()])
+        );
         service.runtime_stop(runtime.runtime_id.as_str())?;
         Ok(())
     }
@@ -1225,9 +1229,9 @@ mod tests {
         let (port, server_handle) = spawn_runtime_http_server(vec![
             runtime_http_response(
                 "200 OK",
-                r#"{"data":{"openducktor":{"status":"disconnected","error":"not connected"}}}"#,
+                r#"{"openducktor":{"status":"disconnected","error":"not connected"}}"#,
             ),
-            runtime_http_response("200 OK", r#"{"data":true}"#),
+            runtime_http_response("200 OK", r#"true"#),
             runtime_http_response(
                 "504 Gateway Timeout",
                 r#"{"error":{"message":"status probe timed out"}}"#,
@@ -1254,14 +1258,72 @@ mod tests {
         assert!(requests[1].starts_with(
             "POST /mcp/openducktor/connect?directory=%2Ftmp%2Frepo-health-refresh-failure "
         ));
-        assert!(health.runtime_ok);
-        assert!(!health.mcp_ok);
-        assert!(health.mcp_error.as_deref().is_some_and(
-            |value| value.contains("Failed to refresh runtime MCP status after reconnect")
-        ));
+        assert_eq!(health.runtime.status, RepoRuntimeHealthState::Ready);
+        assert_eq!(health.status, RepoRuntimeHealthState::Error);
         assert_eq!(
-            health.progress.as_ref().map(|value| value.stage),
-            Some(RepoRuntimeHealthStage::ReconnectingMcp)
+            health.mcp.as_ref().map(|value| value.status),
+            Some(RepoRuntimeMcpStatus::Error)
+        );
+        assert!(health
+            .mcp
+            .as_ref()
+            .and_then(|value| value.detail.as_deref())
+            .is_some_and(
+                |value| value.contains("Failed to refresh runtime MCP status after reconnect")
+            ));
+        service.runtime_stop(runtime.runtime_id.as_str())?;
+        Ok(())
+    }
+
+    #[test]
+    fn repo_runtime_health_reports_mcp_error_when_tool_ids_fail() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let (port, server_handle) = spawn_runtime_http_server(vec![
+            runtime_http_response("200 OK", r#"{"openducktor":{"status":"connected"}}"#),
+            runtime_http_response(
+                "504 Gateway Timeout",
+                r#"{"error":{"message":"tool ids timed out"}}"#,
+            ),
+        ])?;
+        let runtime = host_domain::RuntimeInstanceSummary {
+            kind: AgentRuntimeKind::Opencode,
+            runtime_id: "runtime-tool-ids-failure".to_string(),
+            repo_path: "/tmp/repo-health-tool-ids-failure".to_string(),
+            task_id: None,
+            role: host_domain::RuntimeRole::Workspace,
+            working_directory: "/tmp/repo-health-tool-ids-failure".to_string(),
+            runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                endpoint: format!("http://127.0.0.1:{port}"),
+            },
+            started_at: "2026-04-04T16:00:00Z".to_string(),
+            descriptor: AgentRuntimeKind::Opencode.descriptor(),
+        };
+        insert_workspace_runtime(&service, runtime.clone())?;
+
+        let health =
+            service.repo_runtime_health("opencode", "/tmp/repo-health-tool-ids-failure")?;
+        let requests = server_handle.join().expect("server thread should finish");
+
+        assert!(
+            requests[0].starts_with("GET /mcp?directory=%2Ftmp%2Frepo-health-tool-ids-failure ")
+        );
+        assert!(requests[1].starts_with(
+            "GET /experimental/tool/ids?directory=%2Ftmp%2Frepo-health-tool-ids-failure "
+        ));
+        assert_eq!(health.runtime.status, RepoRuntimeHealthState::Ready);
+        assert_eq!(health.status, RepoRuntimeHealthState::Error);
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.status),
+            Some(RepoRuntimeMcpStatus::Error)
+        );
+        assert!(health
+            .mcp
+            .as_ref()
+            .and_then(|value| value.detail.as_deref())
+            .is_some_and(|value| value.contains("Failed to load runtime MCP tool ids")));
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.tool_ids.clone()),
+            Some(Vec::new())
         );
         service.runtime_stop(runtime.runtime_id.as_str())?;
         Ok(())
@@ -1294,22 +1356,13 @@ mod tests {
                     "/tmp/repo-health-preserve",
                 ),
                 host_domain::RepoRuntimeHealthCheck {
-                    runtime_ok: true,
-                    runtime_error: None,
-                    runtime_failure_kind: None,
-                    runtime: Some(runtime.clone()),
-                    mcp_ok: false,
-                    mcp_error: Some("Restarting runtime".to_string()),
-                    mcp_failure_kind: Some(RepoRuntimeStartupFailureKind::Error),
-                    mcp_server_name: "openducktor".to_string(),
-                    mcp_server_status: None,
-                    mcp_server_error: Some("Restarting runtime".to_string()),
-                    available_tool_ids: Vec::new(),
+                    status: host_domain::RepoRuntimeHealthState::Checking,
                     checked_at: "2026-04-04T16:00:01Z".to_string(),
-                    errors: vec!["Restarting runtime".to_string()],
-                    progress: Some(host_domain::RepoRuntimeHealthProgress {
-                        stage: RepoRuntimeHealthStage::RestartingRuntime,
+                    runtime: RepoRuntimeHealthRuntime {
+                        status: host_domain::RepoRuntimeHealthState::Checking,
+                        stage: RepoRuntimeStartupStage::StartupRequested,
                         observation: Some(RepoRuntimeHealthObservation::RestartedForMcp),
+                        instance: Some(runtime.clone()),
                         started_at: Some("2026-04-04T16:00:00Z".to_string()),
                         updated_at: "2026-04-04T16:00:01Z".to_string(),
                         elapsed_ms: None,
@@ -1317,10 +1370,15 @@ mod tests {
                         detail: Some("Restarting runtime".to_string()),
                         failure_kind: Some(RepoRuntimeStartupFailureKind::Error),
                         failure_reason: None,
-                        failure_origin: Some(
-                            host_domain::RepoRuntimeHealthFailureOrigin::RuntimeRestart,
-                        ),
-                        host: None,
+                    },
+                    mcp: Some(RepoRuntimeHealthMcp {
+                        supported: true,
+                        status: RepoRuntimeMcpStatus::WaitingForRuntime,
+                        server_name: "openducktor".to_string(),
+                        server_status: None,
+                        tool_ids: Vec::new(),
+                        detail: Some("Restarting runtime".to_string()),
+                        failure_kind: Some(RepoRuntimeStartupFailureKind::Error),
                     }),
                 },
             );
@@ -1328,11 +1386,8 @@ mod tests {
         service.stop_registered_runtime_preserving_repo_health(runtime.runtime_id.as_str())?;
 
         let health = service.repo_runtime_health_status("opencode", "/tmp/repo-health-preserve")?;
-        assert_eq!(
-            health.progress.as_ref().map(|value| value.stage),
-            Some(RepoRuntimeHealthStage::RestartingRuntime)
-        );
-        assert!(health.runtime.is_some());
+        assert_eq!(health.status, RepoRuntimeHealthState::Checking);
+        assert!(health.runtime.instance.is_some());
         Ok(())
     }
 
@@ -1385,20 +1440,16 @@ mod tests {
         let health = service.repo_runtime_health("opencode", "/tmp/repo-health-active-run")?;
         let _requests = server_handle.join().expect("server thread should finish");
 
-        assert!(health.runtime_ok);
-        assert!(!health.mcp_ok);
+        assert_eq!(health.runtime.status, RepoRuntimeHealthState::Ready);
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.status),
+            Some(RepoRuntimeMcpStatus::Error)
+        );
         assert!(health
-            .mcp_error
-            .as_deref()
+            .mcp
+            .as_ref()
+            .and_then(|value| value.detail.as_deref())
             .is_some_and(|value| value.contains("restart was skipped")));
-        assert_eq!(
-            health.progress.as_ref().map(|value| value.stage),
-            Some(RepoRuntimeHealthStage::RestartSkippedActiveRun)
-        );
-        assert_eq!(
-            health.progress.as_ref().and_then(|value| value.observation),
-            Some(RepoRuntimeHealthObservation::RestartSkippedActiveRun)
-        );
         service.runtime_stop(runtime.runtime_id.as_str())?;
         Ok(())
     }
@@ -1409,14 +1460,11 @@ mod tests {
 
         let health = service.repo_runtime_health_status("opencode", "/tmp/repo-health-idle")?;
 
-        assert!(!health.runtime_ok);
+        assert_eq!(health.status, RepoRuntimeHealthState::Idle);
+        assert_eq!(health.runtime.status, RepoRuntimeHealthState::Idle);
         assert_eq!(
-            health.runtime_error.as_deref(),
+            health.runtime.detail.as_deref(),
             Some("Runtime has not been started yet.")
-        );
-        assert_eq!(
-            health.progress.as_ref().map(|value| value.stage),
-            Some(RepoRuntimeHealthStage::Idle)
         );
 
         Ok(())
