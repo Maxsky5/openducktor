@@ -9,7 +9,11 @@ import {
   toSessionContextUsage,
 } from "../support/assistant-meta";
 import { READ_ONLY_ROLES } from "../support/core";
-import { appendSessionMessage, upsertSessionMessage } from "../support/messages";
+import {
+  appendSessionMessage,
+  findSessionMessageById,
+  upsertSessionMessage,
+} from "../support/messages";
 import { mergeTodoListPreservingOrder } from "../support/todos";
 import {
   isStopAbortSessionErrorMessage,
@@ -164,12 +168,36 @@ export const handleAssistantMessage = (
       event.timestamp,
       settledMessages,
     );
+    const nextContextUsage = toSessionContextUsage(current, event.totalTokens, event.model);
+    const currentAssistantMessage = findSessionMessageById(
+      { sessionId: current.sessionId, messages: settledMessages },
+      event.messageId,
+    );
+    const shouldPreserveContextUsage =
+      nextContextUsage === null && currentAssistantMessage?.role === "assistant";
+    const resolvedContextUsage = shouldPreserveContextUsage
+      ? (current.contextUsage ?? null)
+      : nextContextUsage;
+    const nextAssistantMeta = {
+      ...toAssistantMessageMeta(
+        current,
+        durationMs,
+        event.totalTokens ?? resolvedContextUsage?.totalTokens,
+        event.model,
+      ),
+    };
+    if (typeof resolvedContextUsage?.contextWindow === "number") {
+      nextAssistantMeta.contextWindow = resolvedContextUsage.contextWindow;
+    }
+    if (typeof resolvedContextUsage?.outputLimit === "number") {
+      nextAssistantMeta.outputLimit = resolvedContextUsage.outputLimit;
+    }
     const nextAssistantMessage = {
       id: event.messageId,
       role: "assistant" as const,
       content: event.message,
       timestamp: event.timestamp,
-      meta: toAssistantMessageMeta(current, durationMs, event.totalTokens, event.model),
+      meta: nextAssistantMeta,
     };
     return {
       ...current,
@@ -177,7 +205,7 @@ export const handleAssistantMessage = (
       draftAssistantMessageId: null,
       draftReasoningText: "",
       draftReasoningMessageId: null,
-      contextUsage: toSessionContextUsage(current, event.totalTokens, event.model),
+      contextUsage: resolvedContextUsage,
       messages: upsertSessionMessage(
         {
           sessionId: current.sessionId,
