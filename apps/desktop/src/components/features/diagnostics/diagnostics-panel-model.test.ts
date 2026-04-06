@@ -601,7 +601,11 @@ describe("buildDiagnosticsPanelModel", () => {
     const runtimeSection = model.sections.find((section) => section.key === "runtime:opencode");
     const mcpSection = model.sections.find((section) => section.key === "mcp:opencode");
 
-    const runtimeLabels = runtimeSection?.rows.map((row) => row.label) ?? [];
+    expect(runtimeSection).toBeDefined();
+    if (!runtimeSection) {
+      throw new Error("Expected runtime:opencode diagnostics section");
+    }
+    const runtimeLabels = runtimeSection.rows.map((row) => row.label);
     expect(runtimeLabels).not.toContain("Stage");
     expect(runtimeLabels).not.toContain("Observation");
     expect(runtimeLabels).not.toContain("Elapsed");

@@ -223,7 +223,7 @@ fn summarize_mcp_status(
                 RepoRuntimeMcpStatus::WaitingForRuntime
             }
             RepoRuntimeHealthState::Error => RepoRuntimeMcpStatus::Error,
-            RepoRuntimeHealthState::Ready => RepoRuntimeMcpStatus::Checking,
+            RepoRuntimeHealthState::Ready => unreachable!("ready status excluded by guard"),
         };
     }
     if input.mcp_ok {
