@@ -284,11 +284,14 @@ export const buildWorkflowStateByRole = (params: {
       completion = "in_progress";
     }
 
-    const tone = deriveWorkflowTone({
-      availability,
-      completion,
-      liveSession,
-    });
+    const tone =
+      role === "build" && params.task?.status === "blocked"
+        ? "waiting_input"
+        : deriveWorkflowTone({
+            availability,
+            completion,
+            liveSession,
+          });
 
     stateByRole[role] = {
       tone,
@@ -500,7 +503,7 @@ export const getAvailableTabTasks = (tasks: TaskCard[], tabTaskIds: string[]): T
   return tasks.filter((task) => !tabTaskIds.includes(task.id));
 };
 
-export const getTabStatusFromSession = (
+const getTabStatusFromSession = (
   session: AgentSessionWorkflowSummary | null | undefined,
 ): AgentStudioTaskTab["status"] => {
   if (!session) {
@@ -513,6 +516,19 @@ export const getTabStatusFromSession = (
     return "working";
   }
   return "idle";
+};
+
+export const getTabStatusForTask = (params: {
+  task: TaskCard | null | undefined;
+  session: AgentSessionWorkflowSummary | null | undefined;
+}): AgentStudioTaskTab["status"] => {
+  if (!params.task) {
+    return "idle";
+  }
+  if (params.task.status === "blocked") {
+    return "waiting_input";
+  }
+  return getTabStatusFromSession(params.session);
 };
 
 export const buildTaskTabs = (params: {
@@ -528,7 +544,10 @@ export const buildTaskTabs = (params: {
     return {
       taskId: tabTaskId,
       taskTitle: task?.title ?? tabTaskId,
-      status: getTabStatusFromSession(session),
+      status: getTabStatusForTask({
+        task,
+        session,
+      }),
       isActive: params.activeTaskId === tabTaskId,
     };
   });

@@ -392,6 +392,37 @@ describe("AgentStudioHeader", () => {
 
     expect(html).toContain('title="Session is waiting for input"');
     expect(html).toContain("border-warning-border");
+    expect(html).toContain("lucide-circle-dashed");
+  });
+
+  test("renders blocked builder warning with alert icon and blocked-task copy", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          selectedRole: "build",
+          workflowSteps: [
+            {
+              role: "build" as const,
+              label: "Builder",
+              icon: roleIcon(2),
+              state: {
+                tone: "waiting_input" as const,
+                availability: "available" as const,
+                completion: "in_progress" as const,
+                liveSession: "stopped" as const,
+              },
+              sessionId: "build-session",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).toContain('title="Task is blocked and waiting for user action"');
+    expect(html).toContain("border-warning-border");
+    expect(html).toContain("lucide-triangle-alert");
+    expect(html).not.toContain("lucide-circle-dashed size-3.5");
   });
 
   test("renders optional workflow step as neutral dashed styling", () => {

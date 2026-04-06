@@ -135,9 +135,20 @@ const workflowBorderStyleClassName = (state: AgentWorkflowStepState): string =>
   // Dashed styling is only for steps that are currently merely optional and available.
   state.tone === "optional" ? "border-dashed" : "";
 
+const isBlockedTaskWarningStep = (entry: AgentWorkflowStep): boolean => {
+  return (
+    entry.role === "build" &&
+    entry.state.tone === "waiting_input" &&
+    entry.state.liveSession !== "waiting_input"
+  );
+};
+
 const workflowStepHint = (entry: AgentWorkflowStep): string => {
   if (entry.state.liveSession === "waiting_input") {
     return "Session is waiting for input";
+  }
+  if (isBlockedTaskWarningStep(entry)) {
+    return "Task is blocked and waiting for user action";
   }
   if (entry.state.liveSession === "running") {
     return "Step in progress";
@@ -403,6 +414,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                   ) : null}
                   {entry.state.tone === "available" ? <Circle className="size-3" /> : null}
                   {entry.state.tone === "optional" ? <CircleDashed className="size-3" /> : null}
+                  {isBlockedTaskWarningStep(entry) ? <AlertTriangle className="size-3.5" /> : null}
                   {entry.state.tone === "rejected" || entry.state.tone === "failed" ? (
                     <AlertTriangle className="size-3.5" />
                   ) : null}
