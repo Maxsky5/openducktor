@@ -1,5 +1,6 @@
 import type { AgentFileSearchResult, AgentSlashCommand } from "@openducktor/core";
 import {
+  type ClipboardEvent as ReactClipboardEvent,
   type FocusEvent as ReactFocusEvent,
   type FormEvent as ReactFormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -73,6 +74,7 @@ type UseAgentChatComposerEditorResult = {
   selectFileSearchResult: (result: AgentFileSearchResult) => void;
   handleEditorInput: (root: HTMLDivElement) => void;
   handleEditorBeforeInput: (event: ReactFormEvent<HTMLDivElement>) => void;
+  handleEditorPaste: (event: ReactClipboardEvent<HTMLDivElement>) => void;
   handleEditorFocus: (event: ReactFocusEvent<HTMLDivElement>) => void;
   handleEditorClick: (event: ReactMouseEvent<HTMLDivElement>) => void;
   handleEditorKeyUp: (event: ReactKeyboardEvent<HTMLDivElement>) => void;
@@ -234,6 +236,67 @@ const getComposerContentRoot = (root: HTMLElement): HTMLElement | null => {
     return root;
   }
   return root.querySelector<HTMLElement>("[data-composer-content-root]");
+};
+
+const createCollapsedRangeAtComposerEnd = (root: HTMLElement): Range | null => {
+  const contentRoot = getComposerContentRoot(root);
+  if (!contentRoot) {
+    return null;
+  }
+
+  const range = root.ownerDocument.createRange();
+  range.selectNodeContents(contentRoot);
+  range.collapse(false);
+  return range;
+};
+
+const replaceComposerSelectionWithText = (root: HTMLDivElement, text: string): boolean => {
+  const contentRoot = getComposerContentRoot(root);
+  const selection = root.ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
+  if (!contentRoot || !selection) {
+    return false;
+  }
+
+  let range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+  const rangeInsideComposer =
+    range &&
+    (range.commonAncestorContainer === contentRoot ||
+      contentRoot.contains(range.commonAncestorContainer));
+  if (!rangeInsideComposer) {
+    range = createCollapsedRangeAtComposerEnd(root);
+    if (!range) {
+      return false;
+    }
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  if (!range) {
+    return false;
+  }
+
+  range.deleteContents();
+
+  if (text.length === 0) {
+    const collapsedRange = root.ownerDocument.createRange();
+    collapsedRange.setStart(range.startContainer, range.startOffset);
+    collapsedRange.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(collapsedRange);
+    root.focus();
+    return true;
+  }
+
+  const textNode = root.ownerDocument.createTextNode(text);
+  range.insertNode(textNode);
+
+  const collapsedRange = root.ownerDocument.createRange();
+  collapsedRange.setStart(textNode, text.length);
+  collapsedRange.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(collapsedRange);
+  root.focus();
+  return true;
 };
 
 const selectComposerContents = (root: HTMLElement): boolean => {
@@ -890,6 +953,41 @@ export const useAgentChatComposerEditor = ({
     ],
   );
 
+  const handleEditorPaste = useCallback(
+    (event: ReactClipboardEvent<HTMLDivElement>) => {
+      event.preventDefault();
+
+      const sourceDraft = latestDraftRef.current;
+      const activeSelection = readActiveTextSelection(event.currentTarget, event.target);
+      const selectionTarget = resolveSelectionTargetFromActiveSelection(
+        sourceDraft,
+        activeSelection,
+      );
+      rememberSelectionTarget(sourceDraft, selectionTarget);
+      pendingInputStateRef.current = selectionTarget
+        ? {
+            ...selectionTarget,
+            inputType: "insertFromPaste",
+            data: event.clipboardData.getData("text/plain"),
+          }
+        : null;
+
+      if (
+        !replaceComposerSelectionWithText(
+          event.currentTarget,
+          event.clipboardData.getData("text/plain"),
+        )
+      ) {
+        return;
+      }
+
+      setSlashMenuState(null);
+      closeFileMenu();
+      handleEditorInput(event.currentTarget);
+    },
+    [closeFileMenu, handleEditorInput, rememberSelectionTarget],
+  );
+
   const handleEditorBeforeInput = useCallback(
     (event: ReactFormEvent<HTMLDivElement>) => {
       const sourceDraft = latestDraftRef.current;
@@ -1164,6 +1262,7 @@ export const useAgentChatComposerEditor = ({
     selectFileSearchResult,
     handleEditorInput,
     handleEditorBeforeInput,
+    handleEditorPaste,
     handleEditorFocus,
     handleEditorClick,
     handleEditorKeyUp,

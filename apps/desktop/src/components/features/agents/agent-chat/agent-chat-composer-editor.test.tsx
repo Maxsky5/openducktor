@@ -227,6 +227,20 @@ const selectComposerContentRange = (container: HTMLElement): HTMLElement => {
   return editorRoot;
 };
 
+const createClipboardData = (plainText: string, htmlText: string) => ({
+  getData: (type: string): string => {
+    if (type === "text/plain") {
+      return plainText;
+    }
+
+    if (type === "text/html") {
+      return htmlText;
+    }
+
+    return "";
+  },
+});
+
 describe("AgentChatComposerEditor", () => {
   test("shows the slash-command error state after typing a slash trigger", async () => {
     const rendered = render(
@@ -311,6 +325,42 @@ describe("AgentChatComposerEditor", () => {
       const editable = rendered.container.querySelector("[data-text-segment-id]");
       expect(editable?.textContent).toBe("abc");
     });
+  });
+
+  test("pastes website content as raw text", async () => {
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    typeIntoEditor(rendered.container, "hello ");
+
+    fireEvent.paste(getEditorRoot(rendered.container), {
+      clipboardData: createClipboardData(
+        "bold words",
+        '<strong>bold</strong><span style="color:red"> words</span>',
+      ),
+    });
+
+    await expectComposerText(rendered.container, "hello bold words");
+
+    const contentRoot = rendered.container.querySelector("[data-composer-content-root]");
+    expect(contentRoot?.querySelector("strong")).toBeNull();
+    expect(screen.getByTestId("draft-state").textContent).toContain("hello bold words");
+  });
+
+  test("replaces a full composer selection with pasted plain text", async () => {
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    typeIntoEditor(rendered.container, "existing content");
+    const editorRoot = selectComposerContentRange(rendered.container);
+
+    fireEvent.paste(editorRoot, {
+      clipboardData: createClipboardData(
+        "line one\nline two",
+        "<div>line one</div><div>line two</div>",
+      ),
+    });
+
+    await expectComposerText(rendered.container, "line one\nline two");
+    expect(screen.getByTestId("draft-state").textContent).toContain("line one\\nline two");
   });
 
   test("selects the full composer content with the select-all shortcut", () => {
