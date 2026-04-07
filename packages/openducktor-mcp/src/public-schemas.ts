@@ -1,6 +1,5 @@
 import {
   issueTypeSchema,
-  qaReportVerdictSchema,
   qaWorkflowVerdictSchema,
   taskPrioritySchema,
   taskStatusSchema,

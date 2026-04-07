@@ -113,6 +113,41 @@ Output:
 
 - `{ task }`
 
+## `odt_read_task`
+
+Reads one persisted task summary.
+
+Input:
+
+- `taskId` required
+
+Output:
+
+```json
+{
+  "task": {
+    "id": "repo-123",
+    "title": "Implement MCP docs",
+    "description": "Document the external MCP surface.",
+    "status": "ai_review",
+    "priority": 2,
+    "issueType": "task",
+    "aiReviewEnabled": true,
+    "labels": ["docs", "mcp"],
+    "createdAt": "<ISO 8601 timestamp>",
+    "updatedAt": "<ISO 8601 timestamp>",
+    "qaVerdict": "approved",
+    "documents": {
+      "hasSpec": true,
+      "hasPlan": true,
+      "hasQaReport": true
+    }
+  }
+}
+```
+
+Call `odt_read_task` first to discover task state, `qaVerdict`, and document availability. Use `odt_read_task_documents` only when you need the actual persisted markdown bodies.
+
 ## `search_tasks`
 
 Searches active tasks only.

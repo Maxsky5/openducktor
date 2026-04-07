@@ -1,4 +1,4 @@
-import type { QaReportVerdict, QaWorkflowVerdict } from "@openducktor/contracts";
+import type { QaWorkflowVerdict } from "@openducktor/contracts";
 import type { JsonObject, RawIssue } from "./contracts";
 import {
   ensureObject,
