@@ -23,6 +23,36 @@ const installMockTauriRuntime = (): void => {
   };
 };
 
+const getPreviewButton = (): HTMLElement => {
+  const previewButton = screen
+    .getAllByRole("button")
+    .find((button) => button.getAttribute("aria-label") === null);
+  if (!previewButton) {
+    throw new Error("Expected preview button");
+  }
+  return previewButton;
+};
+
+const getThumbnailImage = (name: string): HTMLImageElement => {
+  const thumbnailImage = screen
+    .getAllByAltText(name)
+    .find((image) => image.className.includes("object-cover"));
+  if (!(thumbnailImage instanceof HTMLImageElement)) {
+    throw new Error(`Expected thumbnail image for ${name}`);
+  }
+  return thumbnailImage;
+};
+
+const getDialogImage = (name: string): HTMLImageElement => {
+  const dialogImage = screen
+    .getAllByAltText(name)
+    .find((image) => image.className.includes("object-contain"));
+  if (!(dialogImage instanceof HTMLImageElement)) {
+    throw new Error(`Expected dialog image for ${name}`);
+  }
+  return dialogImage;
+};
+
 afterEach(() => {
   URL.createObjectURL = originalCreateObjectUrl;
   URL.revokeObjectURL = originalRevokeObjectUrl;
@@ -53,21 +83,10 @@ describe("AgentChatAttachmentChip", () => {
       />,
     );
 
-    const previewButton = screen
-      .getAllByRole("button")
-      .find((button) => button.getAttribute("aria-label") === null);
-    if (!previewButton) {
-      throw new Error("Expected preview button");
-    }
-    fireEvent.click(previewButton);
+    fireEvent.click(getPreviewButton());
     await screen.findByText("Image preview");
 
-    const dialogImage = screen
-      .getAllByAltText("preview.png")
-      .find((image) => image.className.includes("object-contain"));
-    if (!(dialogImage instanceof HTMLElement)) {
-      throw new Error("Expected fullscreen preview image");
-    }
+    const dialogImage = getDialogImage("preview.png");
     fireEvent.error(dialogImage);
 
     await waitFor(() => {
@@ -101,7 +120,10 @@ describe("AgentChatAttachmentChip", () => {
       />,
     );
 
-    const thumbnailImage = await screen.findByAltText("preview-inline.png");
+    await waitFor(() => {
+      expect(screen.getAllByAltText("preview-inline.png").length).toBeGreaterThan(0);
+    });
+    const thumbnailImage = getThumbnailImage("preview-inline.png");
     fireEvent.error(thumbnailImage);
 
     await waitFor(() => {
@@ -112,13 +134,7 @@ describe("AgentChatAttachmentChip", () => {
       ).toBeDefined();
     });
 
-    const previewButton = screen
-      .getAllByRole("button")
-      .find((button) => button.getAttribute("aria-label") === null);
-    if (!previewButton) {
-      throw new Error("Expected preview button");
-    }
-    fireEvent.click(previewButton);
+    fireEvent.click(getPreviewButton());
 
     await waitFor(() => {
       expect(screen.queryByText("Image preview")).toBeNull();
@@ -144,26 +160,18 @@ describe("AgentChatAttachmentChip", () => {
       />,
     );
 
-    const thumbnailImage = await screen.findByAltText("preview-dialog.png");
+    await waitFor(() => {
+      expect(screen.getAllByAltText("preview-dialog.png").length).toBeGreaterThan(0);
+    });
+    const thumbnailImage = getThumbnailImage("preview-dialog.png");
     expect(thumbnailImage.getAttribute("src")).toBe(
       "asset://localhost/%2Ftmp%2Fopenducktor-local-attachments%2Fuuid-preview-dialog.png",
     );
 
-    const previewButton = screen
-      .getAllByRole("button")
-      .find((button) => button.getAttribute("aria-label") === null);
-    if (!previewButton) {
-      throw new Error("Expected preview button");
-    }
-    fireEvent.click(previewButton);
+    fireEvent.click(getPreviewButton());
 
     await screen.findByText("Image preview");
-    const dialogImage = screen
-      .getAllByAltText("preview-dialog.png")
-      .find((image) => image.className.includes("object-contain"));
-    if (!(dialogImage instanceof HTMLElement)) {
-      throw new Error("Expected fullscreen preview image");
-    }
+    const dialogImage = getDialogImage("preview-dialog.png");
     expect(dialogImage.getAttribute("src")).toBe(
       "asset://localhost/%2Ftmp%2Fopenducktor-local-attachments%2Fuuid-preview-dialog.png",
     );

@@ -184,6 +184,106 @@ describe("TaskDocumentStore", () => {
     });
   });
 
+  test("whitespace-only latest document entries are treated as missing content", () => {
+    const harness = createPersistenceHarness({
+      id: "task-1",
+      title: "Task 1",
+      status: "open",
+      issue_type: "feature",
+      metadata: {
+        openducktor: {
+          documents: {
+            spec: [
+              {
+                markdown: "# older spec",
+                updatedAt: "2026-02-20T00:00:00.000Z",
+                updatedBy: "spec-agent",
+                sourceTool: "odt_set_spec",
+                revision: 1,
+              },
+              {
+                markdown: "   \n\t  ",
+                updatedAt: "2026-02-21T00:00:00.000Z",
+                updatedBy: "spec-agent",
+                sourceTool: "odt_set_spec",
+                revision: 2,
+              },
+            ],
+            implementationPlan: [
+              {
+                markdown: "# older plan",
+                updatedAt: "2026-02-22T00:00:00.000Z",
+                updatedBy: "planner-agent",
+                sourceTool: "odt_set_plan",
+                revision: 1,
+              },
+              {
+                markdown: "\n   ",
+                updatedAt: "2026-02-23T00:00:00.000Z",
+                updatedBy: "planner-agent",
+                sourceTool: "odt_set_plan",
+                revision: 2,
+              },
+            ],
+            qaReports: [
+              {
+                markdown: "LGTM",
+                verdict: "approved",
+                updatedAt: "2026-02-24T00:00:00.000Z",
+                updatedBy: "qa-agent",
+                sourceTool: "odt_qa_approved",
+                revision: 1,
+              },
+              {
+                markdown: " \n ",
+                verdict: "rejected",
+                updatedAt: "2026-02-25T00:00:00.000Z",
+                updatedBy: "qa-agent",
+                sourceTool: "odt_qa_rejected",
+                revision: 2,
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const documents = new TaskDocumentStore(harness.persistence, () => FIXED_NOW);
+
+    expect(documents.summarize(harness.getIssue())).toEqual({
+      qaVerdict: "not_reviewed",
+      documents: {
+        hasSpec: false,
+        hasPlan: false,
+        hasQaReport: false,
+      },
+    });
+
+    expect(
+      documents.readDocuments(harness.getIssue(), {
+        includeSpec: true,
+        includePlan: true,
+        includeQaReport: true,
+      }),
+    ).toEqual({
+      documents: {
+        spec: {
+          markdown: "",
+          updatedAt: null,
+        },
+        implementationPlan: {
+          markdown: "",
+          updatedAt: null,
+        },
+        latestQaReport: {
+          markdown: "",
+          updatedAt: null,
+          verdict: "not_reviewed",
+        },
+      },
+    });
+  });
+
   test("persistImplementationPlan stores latest-only entry and uses max revision + 1", async () => {
     const harness = createPersistenceHarness({
       id: "task-1",

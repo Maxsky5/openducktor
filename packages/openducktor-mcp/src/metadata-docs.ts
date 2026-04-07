@@ -62,6 +62,42 @@ const hasMarkdownContent = (value: string | undefined): boolean => {
   return typeof value === "string" && value.trim().length > 0;
 };
 
+const toDocumentSection = (entry?: { markdown: string; updatedAt: string }) => {
+  if (!entry || !hasMarkdownContent(entry.markdown)) {
+    return {
+      markdown: "",
+      updatedAt: null,
+    };
+  }
+
+  const { markdown, updatedAt } = entry;
+  return {
+    markdown,
+    updatedAt,
+  };
+};
+
+const toQaReportSection = (entry?: {
+  markdown: string;
+  updatedAt: string;
+  verdict: QaWorkflowVerdict;
+}): LatestQaReportSection => {
+  if (!entry || !hasMarkdownContent(entry.markdown)) {
+    return {
+      markdown: "",
+      updatedAt: null,
+      verdict: "not_reviewed",
+    };
+  }
+
+  const { markdown, updatedAt, verdict } = entry;
+  return {
+    markdown,
+    updatedAt,
+    verdict,
+  };
+};
+
 const getLatestTaskDocuments = (issue: RawIssue, metadataNamespace: string) => {
   const { documents } = getNamespaceData(issue, metadataNamespace);
   const specEntries = parseMarkdownEntries(documents.spec);
@@ -80,13 +116,15 @@ export function summarizeTaskDocuments(
   metadataNamespace: string,
 ): TaskDocumentsSummary {
   const { specLatest, planLatest, qaLatest } = getLatestTaskDocuments(issue, metadataNamespace);
+  const qaHasContent = hasMarkdownContent(qaLatest?.markdown);
+  const qaVerdict = qaHasContent && qaLatest ? qaLatest.verdict : "not_reviewed";
 
   return {
-    qaVerdict: qaLatest?.verdict ?? "not_reviewed",
+    qaVerdict,
     documents: {
       hasSpec: hasMarkdownContent(specLatest?.markdown),
       hasPlan: hasMarkdownContent(planLatest?.markdown),
-      hasQaReport: hasMarkdownContent(qaLatest?.markdown),
+      hasQaReport: qaHasContent,
     },
   };
 }
@@ -102,27 +140,17 @@ export function readTaskDocuments(
     documents: {
       ...(input.includeSpec
         ? {
-            spec: {
-              markdown: specLatest?.markdown ?? "",
-              updatedAt: specLatest?.updatedAt ?? null,
-            },
+            spec: toDocumentSection(specLatest),
           }
         : {}),
       ...(input.includePlan
         ? {
-            implementationPlan: {
-              markdown: planLatest?.markdown ?? "",
-              updatedAt: planLatest?.updatedAt ?? null,
-            },
+            implementationPlan: toDocumentSection(planLatest),
           }
         : {}),
       ...(input.includeQaReport
         ? {
-            latestQaReport: {
-              markdown: qaLatest?.markdown ?? "",
-              updatedAt: qaLatest?.updatedAt ?? null,
-              verdict: qaLatest?.verdict ?? "not_reviewed",
-            },
+            latestQaReport: toQaReportSection(qaLatest),
           }
         : {}),
     },
