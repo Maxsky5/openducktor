@@ -12,6 +12,7 @@ including trigger tools/actions and guardrails.
 ## Tool Naming (Canonical)
 MCP workflow tools:
 - `odt_read_task(taskId)`
+- `odt_read_task_documents(taskId, includeSpec?, includePlan?, includeQaReport?)`
 - `odt_set_spec(taskId, markdown)`
 - `odt_set_plan(taskId, markdown, subtasks?)` (epic only for `subtasks`, one level max)
 - `odt_build_blocked(taskId, reason)`
@@ -20,6 +21,10 @@ MCP workflow tools:
 - `odt_set_pull_request(taskId, providerId, number)`
 - `odt_qa_approved(taskId, reportMarkdown)`
 - `odt_qa_rejected(taskId, reportMarkdown)`
+
+Read flow:
+- Call `odt_read_task` first for task state, latest `qaVerdict`, and document presence booleans.
+- Call `odt_read_task_documents` only when spec, implementation plan, or latest QA markdown bodies are needed.
 
 `subtasks` payload (optional):
 - `title` (required)

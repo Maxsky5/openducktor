@@ -16,7 +16,7 @@ const loadFixture = (): WorkflowContractFixture => {
 };
 
 describe("workflow docs contract", () => {
-  test("transition matrix references canonical mutation tools and statuses", () => {
+  test("transition matrix references canonical workflow tools and statuses", () => {
     const fixture = loadFixture();
     const transitionDocPath = join(
       import.meta.dir,
@@ -28,11 +28,16 @@ describe("workflow docs contract", () => {
       expect(transitionDoc).toContain(`\`${status}\``);
     }
 
-    const readTools = new Set(["odt_read_task", "odt_read_task_documents"]);
-    const mutationTools = fixture.tools.filter((tool) => !readTools.has(tool));
-    for (const tool of mutationTools) {
+    for (const tool of fixture.tools) {
       expect(transitionDoc).toContain(`\`${tool}\``);
     }
+
+    expect(transitionDoc).toContain(
+      "Call `odt_read_task` first for task state, latest `qaVerdict`, and document presence booleans.",
+    );
+    expect(transitionDoc).toContain(
+      "Call `odt_read_task_documents` only when spec, implementation plan, or latest QA markdown bodies are needed.",
+    );
 
     expect(transitionDoc).toMatch(
       /\| `odt_set_plan` \(feature\/epic\) \| `spec_ready`, `ready_for_dev` \|/,
