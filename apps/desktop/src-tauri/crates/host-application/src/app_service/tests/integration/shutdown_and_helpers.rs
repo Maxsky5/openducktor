@@ -772,17 +772,37 @@ fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
 
     let _mcp_env_guard = remove_env_var("OPENDUCKTOR_MCP_COMMAND_JSON");
 
+    let workspace_direct = root.join("workspace-direct");
+    let direct_entrypoint = workspace_direct
+        .join("packages")
+        .join("openducktor-mcp")
+        .join("src")
+        .join("index.ts");
+    fs::create_dir_all(
+        direct_entrypoint
+            .parent()
+            .expect("entrypoint parent should exist"),
+    )?;
+    fs::write(&direct_entrypoint, "console.log('mcp');\n")?;
+
     {
-        let _workspace_guard = remove_env_var("OPENDUCKTOR_WORKSPACE_ROOT");
-        let path = format!("{}:/usr/bin:/bin", cli_bin.to_string_lossy());
+        let path = format!(
+            "{}:{}:/usr/bin:/bin",
+            cli_bin.to_string_lossy(),
+            bun_bin.to_string_lossy()
+        );
         let _path_guard = set_env_var("PATH", path.as_str());
+        let _workspace_guard = set_env_var(
+            "OPENDUCKTOR_WORKSPACE_ROOT",
+            workspace_direct.to_string_lossy().as_ref(),
+        );
         let command = resolve_mcp_command()?;
         assert_eq!(
             command,
-            vec![cli_bin
-                .join("openducktor-mcp")
-                .to_string_lossy()
-                .to_string()]
+            vec![
+                bun_bin.join("bun").to_string_lossy().to_string(),
+                direct_entrypoint.to_string_lossy().to_string()
+            ]
         );
     }
 
@@ -796,19 +816,6 @@ fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
             .to_string()
             .contains("Configured command override OPENDUCKTOR_BUN_PATH points to a missing file"));
     }
-
-    let workspace_direct = root.join("workspace-direct");
-    let direct_entrypoint = workspace_direct
-        .join("packages")
-        .join("openducktor-mcp")
-        .join("src")
-        .join("index.ts");
-    fs::create_dir_all(
-        direct_entrypoint
-            .parent()
-            .expect("entrypoint parent should exist"),
-    )?;
-    fs::write(&direct_entrypoint, "console.log('mcp');\n")?;
 
     {
         let path = format!("{}:/usr/bin:/bin", bun_bin.to_string_lossy());
@@ -849,6 +856,27 @@ fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
                 "@openducktor/mcp".to_string(),
                 "start".to_string(),
             ]
+        );
+    }
+
+    {
+        let path = format!(
+            "{}:{}:/usr/bin:/bin",
+            cli_bin.to_string_lossy(),
+            bun_bin.to_string_lossy()
+        );
+        let _path_guard = set_env_var("PATH", path.as_str());
+        let _workspace_guard = set_env_var(
+            "OPENDUCKTOR_WORKSPACE_ROOT",
+            workspace_filter.to_string_lossy().as_ref(),
+        );
+        let command = resolve_mcp_command()?;
+        assert_eq!(
+            command,
+            vec![cli_bin
+                .join("openducktor-mcp")
+                .to_string_lossy()
+                .to_string()]
         );
     }
 

@@ -64,13 +64,13 @@ pub(crate) fn resolve_mcp_command() -> Result<Vec<String>> {
         return parse_mcp_command_json(raw.as_str());
     }
 
-    if let Some(mcp_binary) = resolve_command_path("openducktor-mcp")? {
-        return Ok(vec![mcp_binary]);
-    }
-
     let Some(bun_binary) = resolve_command_path("bun")? else {
+        if let Some(mcp_binary) = resolve_command_path("openducktor-mcp")? {
+            return Ok(vec![mcp_binary]);
+        }
+
         return Err(anyhow!(
-            "Missing MCP runner. Package the openducktor-mcp sidecar or install bun for the workspace fallback."
+            "Missing MCP runner. Install bun for workspace MCP execution or package the openducktor-mcp sidecar."
         ));
     };
 
@@ -86,6 +86,10 @@ pub(crate) fn resolve_mcp_command() -> Result<Vec<String>> {
             bun_binary.clone(),
             direct_entrypoint.to_string_lossy().to_string(),
         ]);
+    }
+
+    if let Some(mcp_binary) = resolve_command_path("openducktor-mcp")? {
+        return Ok(vec![mcp_binary]);
     }
 
     Ok(vec![
