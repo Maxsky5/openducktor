@@ -1,16 +1,40 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
+import { hostClient } from "@/lib/host-client";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
   readAttachmentPreviewLoadFailureMessage,
   useAgentChatAttachmentPreview,
 } from "./use-agent-chat-attachment-preview";
 
+type TestWindow = Window &
+  typeof globalThis & {
+    __TAURI_INTERNALS__?: {
+      convertFileSrc: (path: string, protocol?: string) => string;
+    };
+  };
+
+const testWindow = window as TestWindow;
 const originalCreateObjectUrl = URL.createObjectURL;
 const originalRevokeObjectUrl = URL.revokeObjectURL;
+const originalResolveLocalAttachmentPath = hostClient.workspaceResolveLocalAttachmentPath;
+const originalTauriInternals = testWindow.__TAURI_INTERNALS__;
+
+const installMockTauriRuntime = (): void => {
+  testWindow.__TAURI_INTERNALS__ = {
+    convertFileSrc: (path: string, protocol = "asset") =>
+      `${protocol}://localhost/${encodeURIComponent(path)}`,
+  };
+};
 
 afterEach(() => {
   URL.createObjectURL = originalCreateObjectUrl;
   URL.revokeObjectURL = originalRevokeObjectUrl;
+  hostClient.workspaceResolveLocalAttachmentPath = originalResolveLocalAttachmentPath;
+  if (originalTauriInternals) {
+    testWindow.__TAURI_INTERNALS__ = originalTauriInternals;
+    return;
+  }
+  delete testWindow.__TAURI_INTERNALS__;
 });
 
 describe("useAgentChatAttachmentPreview", () => {
@@ -104,6 +128,62 @@ describe("useAgentChatAttachmentPreview", () => {
 
     expect(harness.getLatest().resolvedPreviewSrc).toBe("blob:active-preview");
     expect(harness.getLatest().effectiveError).toBeNull();
+
+    await harness.unmount();
+  });
+
+  test("resolves transcript image previews through the desktop asset protocol", async () => {
+    hostClient.workspaceResolveLocalAttachmentPath = mock(async ({ path }) => ({
+      path: `/tmp/openducktor-local-attachments/${path}`,
+    }));
+    installMockTauriRuntime();
+
+    const harness = createHookHarness(useAgentChatAttachmentPreview, {
+      attachment: {
+        id: "attachment-4",
+        name: "preview.png",
+        kind: "image" as const,
+        mime: "image/png",
+        path: "uuid-preview.png",
+      },
+      externalError: null,
+    });
+
+    await harness.mount();
+    await harness.waitFor((state) => state.showResolvedPreview === true);
+
+    expect(harness.getLatest().resolvedPreviewSrc).toBe(
+      "asset://localhost/%2Ftmp%2Fopenducktor-local-attachments%2Fuuid-preview.png",
+    );
+    expect(harness.getLatest().previewError).toBeNull();
+
+    await harness.unmount();
+  });
+
+  test("surfaces transcript preview resolution failures as explicit errors", async () => {
+    hostClient.workspaceResolveLocalAttachmentPath = mock(async () => {
+      throw new Error("Attachment path is not a staged local attachment.");
+    });
+    installMockTauriRuntime();
+
+    const harness = createHookHarness(useAgentChatAttachmentPreview, {
+      attachment: {
+        id: "attachment-5",
+        name: "preview.png",
+        kind: "image" as const,
+        mime: "image/png",
+        path: "/tmp/preview.png",
+      },
+      externalError: null,
+    });
+
+    await harness.mount();
+    await harness.waitFor((state) => state.isResolvingPreview === false);
+
+    expect(harness.getLatest().resolvedPreviewSrc).toBeNull();
+    expect(harness.getLatest().previewError).toBe(
+      "Attachment path is not a staged local attachment.",
+    );
 
     await harness.unmount();
   });
