@@ -276,6 +276,7 @@ export function AgentChatComposerEditor({
     selectFileSearchResult,
     handleEditorInput,
     handleEditorBeforeInput,
+    handleEditorPaste,
     handleEditorFocus,
     handleEditorClick,
     handleEditorKeyUp,
@@ -377,6 +378,7 @@ export function AgentChatComposerEditor({
         )}
         aria-disabled={disabled}
         onBeforeInput={handleEditorBeforeInput}
+        onPaste={handleEditorPaste}
         onInput={(event) => handleEditorInput(event.currentTarget)}
         onFocus={handleEditorFocus}
         onClick={handleEditorClick}
