@@ -39,6 +39,7 @@ Public external tools:
 - `create_task`
 - `search_tasks`
 - `odt_read_task`
+- `odt_read_task_documents`
 
 Internal workflow tools remain on the same MCP server:
 
@@ -54,7 +55,7 @@ Current OpenDucktor Spec/Planner/Builder/QA agents must not receive `create_task
 
 ## Shared Response Model
 
-`create_task`, `search_tasks`, and `odt_read_task` reuse the same public task snapshot shape:
+`create_task`, `search_tasks`, and `odt_read_task` reuse the same lightweight public task summary shape:
 
 ```json
 {
@@ -70,13 +71,16 @@ Current OpenDucktor Spec/Planner/Builder/QA agents must not receive `create_task
     "createdAt": "<ISO 8601 timestamp>",
     "updatedAt": "<ISO 8601 timestamp>"
   },
+  "qaVerdict": null,
   "documents": {
-    "spec": { "markdown": "", "updatedAt": null },
-    "implementationPlan": { "markdown": "", "updatedAt": null },
-    "latestQaReport": { "markdown": "", "updatedAt": null, "verdict": null }
+    "hasSpec": false,
+    "hasPlan": false,
+    "hasQaReport": false
   }
 }
 ```
+
+This is a discovery-only summary. Call `odt_read_task` first, then call `odt_read_task_documents` only for the document bodies you actually need.
 
 Public MCP task snapshots intentionally do not expose:
 
@@ -105,7 +109,7 @@ Constraints:
 
 Output:
 
-- `{ task, documents }`
+- `{ task, qaVerdict, documents }`
 
 ## `search_tasks`
 
@@ -138,9 +142,41 @@ Output:
 
 ```json
 {
-  "results": [{ "task": {}, "documents": {} }],
+  "results": [{ "task": {}, "qaVerdict": null, "documents": {} }],
   "limit": 50,
   "totalCount": 1,
   "hasMore": false
+}
+```
+
+## `odt_read_task_documents`
+
+Reads only the requested persisted document bodies.
+
+Input:
+
+- `taskId` required
+- `includeSpec` optional boolean
+- `includePlan` optional boolean
+- `includeQaReport` optional boolean
+
+Constraints:
+
+- Unknown input fields are rejected.
+- At least one include flag must be `true`.
+
+Output:
+
+```json
+{
+  "documents": {
+    "spec": { "markdown": "# Spec", "updatedAt": "<ISO 8601 timestamp>" },
+    "implementationPlan": { "markdown": "## Plan", "updatedAt": "<ISO 8601 timestamp>" },
+    "latestQaReport": {
+      "markdown": "## QA",
+      "updatedAt": "<ISO 8601 timestamp>",
+      "verdict": "approved"
+    }
+  }
 }
 ```

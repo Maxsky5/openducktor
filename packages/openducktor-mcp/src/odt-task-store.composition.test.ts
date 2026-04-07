@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskPersistencePort } from "./beads-persistence";
-import type { RawIssue, TaskCard } from "./contracts";
+import type { PublicTask, RawIssue, TaskCard } from "./contracts";
 import { OdtTaskStore } from "./odt-task-store";
 import type { TaskDocumentPort } from "./task-document-store";
 
@@ -11,6 +11,11 @@ const makeTask = (): TaskCard => ({
   status: "open",
   issueType: "feature",
   aiReviewEnabled: true,
+  documentSummary: {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
 });
 
 describe("OdtTaskStore composition", () => {
@@ -56,11 +61,15 @@ describe("OdtTaskStore composition", () => {
     };
 
     const documentStore: TaskDocumentPort = {
-      parseDocs: () => ({
-        spec: { markdown: "spec", updatedAt: null },
-        implementationPlan: { markdown: "plan", updatedAt: null },
-        latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+      summarize: () => ({
+        qaVerdict: null,
+        documents: {
+          hasSpec: true,
+          hasPlan: true,
+          hasQaReport: false,
+        },
       }),
+      readDocuments: () => ({ documents: {} }),
       prepareQaReportWrite: () => ({
         metadataRoot: {},
         namespace: {},
@@ -84,14 +93,15 @@ describe("OdtTaskStore composition", () => {
     );
 
     const result = (await store.readTask({ taskId: "task-1" })) as {
-      task: TaskCard;
-      documents: { spec: { markdown: string } };
+      task: PublicTask;
+      qaVerdict: null;
+      documents: { hasSpec: boolean; hasPlan: boolean; hasQaReport: boolean };
     };
 
     expect(result.task.aiReviewEnabled).toBe(false);
     expect(result.task.description).toBe("Read the task description from Beads.");
-    expect((result.task as unknown as { priority: number }).priority).toBe(2);
-    expect(result.documents.spec.markdown).toBe("spec");
+    expect(result.task.priority).toBe(2);
+    expect(result.documents).toEqual({ hasSpec: true, hasPlan: true, hasQaReport: false });
   });
 
   test("readTask surfaces invalid Beads issue types from showRawIssue", async () => {
@@ -131,11 +141,15 @@ describe("OdtTaskStore composition", () => {
     };
 
     const documentStore: TaskDocumentPort = {
-      parseDocs: () => ({
-        spec: { markdown: "", updatedAt: null },
-        implementationPlan: { markdown: "", updatedAt: null },
-        latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+      summarize: () => ({
+        qaVerdict: null,
+        documents: {
+          hasSpec: false,
+          hasPlan: false,
+          hasQaReport: false,
+        },
       }),
+      readDocuments: () => ({ documents: {} }),
       prepareQaReportWrite: () => ({
         metadataRoot: {},
         namespace: {},
@@ -200,11 +214,15 @@ describe("OdtTaskStore composition", () => {
     };
 
     const documentStore: TaskDocumentPort = {
-      parseDocs: () => ({
-        spec: { markdown: "", updatedAt: null },
-        implementationPlan: { markdown: "", updatedAt: null },
-        latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+      summarize: () => ({
+        qaVerdict: null,
+        documents: {
+          hasSpec: false,
+          hasPlan: false,
+          hasQaReport: false,
+        },
       }),
+      readDocuments: () => ({ documents: {} }),
       prepareQaReportWrite: () => ({
         metadataRoot: {},
         namespace: {},

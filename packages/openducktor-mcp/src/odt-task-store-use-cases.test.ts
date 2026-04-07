@@ -7,6 +7,7 @@ import {
   CreateTaskUseCase,
   QaApprovedUseCase,
   QaRejectedUseCase,
+  ReadTaskDocumentsUseCase,
   ReadTaskUseCase,
   SearchTasksUseCase,
   SetPlanUseCase,
@@ -19,9 +20,15 @@ const FIXED_TIMESTAMP = "2026-03-01T00:00:00.000Z";
 const makeTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
   title: "Task 1",
+  description: "",
   status: "open",
   issueType: "feature",
   aiReviewEnabled: true,
+  documentSummary: {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
   ...overrides,
 });
 
@@ -54,7 +61,7 @@ const makePublicTask = (overrides: Partial<PublicTask> = {}): PublicTask => ({
 });
 
 describe("odt task workflow use cases", () => {
-  test("ReadTaskUseCase returns the latest task snapshot and parsed documents", async () => {
+  test("ReadTaskUseCase returns the latest task summary and document presence", async () => {
     const issue = makeIssue({ status: "spec_ready" });
     const task = makeTask({ status: "spec_ready" });
     const calls: string[] = [];
@@ -71,12 +78,15 @@ describe("odt task workflow use cases", () => {
         },
       },
       documentStore: {
-        parseDocs: (rawIssue) => {
+        summarize: (rawIssue) => {
           calls.push(`docs:${rawIssue.id}`);
           return {
-            spec: { markdown: "# Spec", updatedAt: null },
-            implementationPlan: { markdown: "# Plan", updatedAt: null },
-            latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+            qaVerdict: null,
+            documents: {
+              hasSpec: true,
+              hasPlan: true,
+              hasQaReport: false,
+            },
           };
         },
       },
@@ -84,13 +94,55 @@ describe("odt task workflow use cases", () => {
 
     await expect(useCase.execute({ taskId: "task-1" })).resolves.toEqual({
       task: makePublicTask({ status: "spec_ready" }),
+      qaVerdict: null,
       documents: {
-        spec: { markdown: "# Spec", updatedAt: null },
-        implementationPlan: { markdown: "# Plan", updatedAt: null },
-        latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+        hasSpec: true,
+        hasPlan: true,
+        hasQaReport: false,
       },
     });
     expect(calls).toEqual(["init", "read:task-1", "docs:task-1"]);
+  });
+
+  test("ReadTaskDocumentsUseCase returns only requested persisted sections", async () => {
+    const issue = makeIssue({ status: "spec_ready" });
+    const task = makeTask({ status: "spec_ready" });
+    const calls: string[] = [];
+
+    const useCase = new ReadTaskDocumentsUseCase({
+      workflow: {
+        ensureInitialized: async () => {
+          calls.push("init");
+        },
+        readTaskSnapshot: async (taskId) => {
+          calls.push(`read:${taskId}`);
+          return { issue, task };
+        },
+      },
+      documentStore: {
+        readDocuments: (rawIssue, input) => {
+          calls.push(`docs:${rawIssue.id}:${String(input.includePlan)}`);
+          return {
+            documents: {
+              implementationPlan: {
+                markdown: "# Plan",
+                updatedAt: null,
+              },
+            },
+          };
+        },
+      },
+    });
+
+    await expect(useCase.execute({ taskId: "task-1", includePlan: true })).resolves.toEqual({
+      documents: {
+        implementationPlan: {
+          markdown: "# Plan",
+          updatedAt: null,
+        },
+      },
+    });
+    expect(calls).toEqual(["init", "read:task-1", "docs:task-1:true"]);
   });
 
   test("CreateTaskUseCase returns the public snapshot envelope", async () => {
@@ -112,10 +164,13 @@ describe("odt task workflow use cases", () => {
         calls.push("invalidate");
       },
       documentStore: {
-        parseDocs: () => ({
-          spec: { markdown: "", updatedAt: null },
-          implementationPlan: { markdown: "", updatedAt: null },
-          latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+        summarize: () => ({
+          qaVerdict: null,
+          documents: {
+            hasSpec: false,
+            hasPlan: false,
+            hasQaReport: false,
+          },
         }),
       },
     });
@@ -124,10 +179,11 @@ describe("odt task workflow use cases", () => {
       useCase.execute({ title: "Fix bug", issueType: "bug", priority: 1 }),
     ).resolves.toEqual({
       task: makePublicTask({ issueType: "bug", priority: 2 }),
+      qaVerdict: null,
       documents: {
-        spec: { markdown: "", updatedAt: null },
-        implementationPlan: { markdown: "", updatedAt: null },
-        latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+        hasSpec: false,
+        hasPlan: false,
+        hasQaReport: false,
       },
     });
     expect(calls).toEqual(["init", "create:bug:1", "invalidate"]);
@@ -151,10 +207,13 @@ describe("odt task workflow use cases", () => {
         },
       },
       documentStore: {
-        parseDocs: () => ({
-          spec: { markdown: "", updatedAt: null },
-          implementationPlan: { markdown: "", updatedAt: null },
-          latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+        summarize: () => ({
+          qaVerdict: null,
+          documents: {
+            hasSpec: false,
+            hasPlan: false,
+            hasQaReport: false,
+          },
         }),
       },
     });
@@ -163,10 +222,11 @@ describe("odt task workflow use cases", () => {
       results: [
         {
           task: makePublicTask({ id: "task-1", title: "Task 1" }),
+          qaVerdict: null,
           documents: {
-            spec: { markdown: "", updatedAt: null },
-            implementationPlan: { markdown: "", updatedAt: null },
-            latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+            hasSpec: false,
+            hasPlan: false,
+            hasQaReport: false,
           },
         },
       ],
@@ -192,10 +252,13 @@ describe("odt task workflow use cases", () => {
         },
       },
       documentStore: {
-        parseDocs: () => ({
-          spec: { markdown: "", updatedAt: null },
-          implementationPlan: { markdown: "", updatedAt: null },
-          latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+        summarize: () => ({
+          qaVerdict: null,
+          documents: {
+            hasSpec: false,
+            hasPlan: false,
+            hasQaReport: false,
+          },
         }),
       },
     });
@@ -401,12 +464,15 @@ describe("odt task workflow use cases", () => {
         },
       },
       documentStore: {
-        parseDocs: (rawIssue) => {
+        summarize: (rawIssue) => {
           calls.push(`docs:${rawIssue.id}:not_reviewed`);
           return {
-            spec: { markdown: "", updatedAt: null },
-            implementationPlan: { markdown: "", updatedAt: null },
-            latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+            qaVerdict: null,
+            documents: {
+              hasSpec: false,
+              hasPlan: false,
+              hasQaReport: false,
+            },
           };
         },
       },
@@ -504,6 +570,7 @@ describe("odt task workflow use cases", () => {
           return {
             root: {},
             namespace: {},
+            documents: {},
           };
         },
         writeNamespace: async (_taskId, _root, namespace) => {
@@ -588,6 +655,7 @@ describe("odt task workflow use cases", () => {
           return {
             root: {},
             namespace: {},
+            documents: {},
           };
         },
         writeNamespace: async () => {
@@ -649,7 +717,7 @@ describe("odt task workflow use cases", () => {
         }),
       },
       persistence: {
-        getNamespaceData: () => ({ root: {}, namespace: {} }),
+        getNamespaceData: () => ({ root: {}, namespace: {}, documents: {} }),
         writeNamespace: async () => {
           throw new Error("write should not run");
         },

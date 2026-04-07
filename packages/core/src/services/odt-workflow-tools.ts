@@ -7,8 +7,14 @@ import {
 
 export const ODT_WORKFLOW_TOOL_NAMES = agentToolNameValues satisfies readonly AgentToolName[];
 
+export const ODT_WORKFLOW_READ_TOOL_NAMES = [
+  "odt_read_task",
+  "odt_read_task_documents",
+] as const satisfies readonly AgentToolName[];
+const ODT_WORKFLOW_READ_TOOL_SET = new Set<AgentToolName>(ODT_WORKFLOW_READ_TOOL_NAMES);
+
 export const ODT_WORKFLOW_MUTATION_TOOL_NAMES = ODT_WORKFLOW_TOOL_NAMES.filter(
-  (tool) => tool !== "odt_read_task",
+  (tool) => !ODT_WORKFLOW_READ_TOOL_SET.has(tool),
 );
 const ODT_WORKFLOW_MUTATION_TOOL_SET = new Set<AgentToolName>(ODT_WORKFLOW_MUTATION_TOOL_NAMES);
 const ODT_MCP_TOOL_PREFIXES = ["openducktor_", "functions.openducktor_"] as const;

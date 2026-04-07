@@ -28,7 +28,8 @@ describe("workflow docs contract", () => {
       expect(transitionDoc).toContain(`\`${status}\``);
     }
 
-    const mutationTools = fixture.tools.filter((tool) => tool !== "odt_read_task");
+    const readTools = new Set(["odt_read_task", "odt_read_task_documents"]);
+    const mutationTools = fixture.tools.filter((tool) => !readTools.has(tool));
     for (const tool of mutationTools) {
       expect(transitionDoc).toContain(`\`${tool}\``);
     }

@@ -44,15 +44,17 @@ describe("buildAgentSystemPrompt", () => {
       "OpenDucktor workflow tools are native MCP tools.",
       "Allowed tools for this role:",
       "Use this exact taskId literal in every odt_* call: task-42.",
-      "Start each session by calling odt_read_task with taskId task-42 to load the canonical task documents.",
+      "Start each session by calling odt_read_task with taskId task-42 to load the canonical task summary, latest QA verdict, and document presence booleans.",
+      "Call odt_read_task_documents only when you need specific document bodies, and request only the sections you need.",
       "Task context:",
       "Artifact access:",
       "description: Rebuild agent workflows",
       "Persisted spec, implementation plan, and latest QA report are intentionally not inlined in this system prompt.",
-      "Use odt_read_task with taskId task-42 to load the current canonical task documents.",
+      "Use odt_read_task with taskId task-42 to load the current canonical task summary, latest QA verdict, and document presence booleans.",
+      "Use odt_read_task_documents with taskId task-42 and explicit include flags when you need document markdown bodies.",
       "governing constitution for the current task",
       "higher-trust inputs than conversational summaries",
-      "Treat the odt_read_task response as the latest persisted workflow artifacts",
+      "Treat the odt_read_task response as the latest persisted workflow summary",
     ]);
     expect(prompt).not.toContain("Existing documents:");
     expect(prompt).not.toContain("- spec: # Purpose");
@@ -64,6 +66,7 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).not.toContain("- odt_set_spec(");
     expect(prompt).not.toContain("- odt_build_completed(");
     expect(prompt).not.toContain("- odt_qa_rejected(");
+    expect(prompt).toContain("odt_read_task_documents");
     expect(prompt).toContain("Feature/epic flow");
     expect(prompt).toContain("read-only mode");
   });

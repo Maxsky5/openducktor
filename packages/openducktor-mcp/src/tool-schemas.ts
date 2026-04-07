@@ -13,6 +13,27 @@ export const ReadTaskInputSchema = z
   })
   .strict();
 
+export const ReadTaskDocumentsInputSchema = z
+  .object({
+    taskId: z.string().trim().min(1),
+    includeSpec: z.boolean().optional(),
+    includePlan: z.boolean().optional(),
+    includeQaReport: z.boolean().optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.includeSpec || value.includePlan || value.includeQaReport) {
+      return;
+    }
+
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "At least one document include flag must be true. Set includeSpec, includePlan, or includeQaReport.",
+      path: [],
+    });
+  });
+
 const publicIssueTypeSchema = z.enum(["task", "feature", "bug"]);
 const activeTaskStatusSchema = z.enum([
   "open",
@@ -124,6 +145,7 @@ export const SearchTasksInputSchema = z
   .strict();
 
 export type ReadTaskInput = z.infer<typeof ReadTaskInputSchema>;
+export type ReadTaskDocumentsInput = z.infer<typeof ReadTaskDocumentsInputSchema>;
 export type SetSpecInput = z.infer<typeof SetSpecInputSchema>;
 export type SetPlanInput = z.infer<typeof SetPlanInputSchema>;
 export type BuildBlockedInput = z.infer<typeof BuildBlockedInputSchema>;
@@ -137,6 +159,7 @@ export type SearchTasksInput = z.infer<typeof SearchTasksInputSchema>;
 
 const ODT_WORKFLOW_TOOL_SCHEMAS = {
   odt_read_task: ReadTaskInputSchema,
+  odt_read_task_documents: ReadTaskDocumentsInputSchema,
   odt_set_spec: SetSpecInputSchema,
   odt_set_plan: SetPlanInputSchema,
   odt_build_blocked: BuildBlockedInputSchema,

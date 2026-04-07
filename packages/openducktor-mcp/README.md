@@ -25,6 +25,7 @@ Optional arguments:
 - `create_task`
 - `search_tasks`
 - `odt_read_task`
+- `odt_read_task_documents`
 
 The `odt_*` mutation tools are intended for OpenDucktor workflow automation and remain available on the same server.
 
@@ -59,7 +60,7 @@ Optional filters:
 
 ## Output Model
 
-`create_task` and `odt_read_task` return the same public task snapshot model. `search_tasks` wraps an array of that same snapshot model in `{ results, limit, totalCount, hasMore }`.
+`create_task` and `odt_read_task` return the same lightweight public task summary model. `search_tasks` wraps an array of that same summary model in `{ results, limit, totalCount, hasMore }`.
 
 ```json
 {
@@ -75,10 +76,39 @@ Optional filters:
     "createdAt": "<ISO 8601 timestamp>",
     "updatedAt": "<ISO 8601 timestamp>"
   },
+  "qaVerdict": null,
   "documents": {
-    "spec": { "markdown": "", "updatedAt": null },
-    "implementationPlan": { "markdown": "", "updatedAt": null },
-    "latestQaReport": { "markdown": "", "updatedAt": null, "verdict": null }
+    "hasSpec": false,
+    "hasPlan": false,
+    "hasQaReport": false
+  }
+}
+```
+
+Use `odt_read_task` first to discover task state, latest QA verdict, and which documents exist.
+
+Use `odt_read_task_documents` only when you need document bodies:
+
+```json
+{
+  "taskId": "repo-123",
+  "includeSpec": true,
+  "includePlan": false,
+  "includeQaReport": true
+}
+```
+
+It returns only the requested sections:
+
+```json
+{
+  "documents": {
+    "spec": { "markdown": "# Spec", "updatedAt": "<ISO 8601 timestamp>" },
+    "latestQaReport": {
+      "markdown": "## QA",
+      "updatedAt": "<ISO 8601 timestamp>",
+      "verdict": "approved"
+    }
   }
 }
 ```

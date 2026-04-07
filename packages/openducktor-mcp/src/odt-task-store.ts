@@ -23,6 +23,7 @@ import {
   CreateTaskInputSchema,
   QaApprovedInputSchema,
   QaRejectedInputSchema,
+  ReadTaskDocumentsInputSchema,
   ReadTaskInputSchema,
   SearchTasksInputSchema,
   SetPlanInputSchema,
@@ -115,6 +116,16 @@ export class OdtTaskStore {
     rawInput: unknown,
   ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["readTask"]["execute"]>>> {
     return this.executeUseCase(rawInput, ReadTaskInputSchema, this.useCases.readTask);
+  }
+
+  async readTaskDocuments(
+    rawInput: unknown,
+  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["readTaskDocuments"]["execute"]>>> {
+    return this.executeUseCase(
+      rawInput,
+      ReadTaskDocumentsInputSchema,
+      this.useCases.readTaskDocuments,
+    );
   }
 
   async createTask(

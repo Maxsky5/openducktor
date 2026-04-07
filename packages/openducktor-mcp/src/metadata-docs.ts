@@ -13,13 +13,37 @@ export type NamespaceData = {
   documents: JsonObject;
 };
 
-export type TaskDocumentsSnapshot = {
-  spec: { markdown: string; updatedAt: string | null };
-  implementationPlan: { markdown: string; updatedAt: string | null };
-  latestQaReport: {
-    markdown: string;
-    updatedAt: string | null;
-    verdict: QaReportVerdict | null;
+export type TaskDocumentPresence = {
+  hasSpec: boolean;
+  hasPlan: boolean;
+  hasQaReport: boolean;
+};
+
+export type TaskDocumentsSummary = {
+  qaVerdict: QaReportVerdict | null;
+  documents: TaskDocumentPresence;
+};
+
+export type TaskDocumentSection = {
+  markdown: string;
+  updatedAt: string | null;
+};
+
+export type LatestQaReportSection = TaskDocumentSection & {
+  verdict: QaReportVerdict | null;
+};
+
+export type ReadTaskDocumentsInput = {
+  includeSpec?: boolean | undefined;
+  includePlan?: boolean | undefined;
+  includeQaReport?: boolean | undefined;
+};
+
+export type ReadTaskDocumentsResult = {
+  documents: {
+    spec?: TaskDocumentSection;
+    implementationPlan?: TaskDocumentSection;
+    latestQaReport?: LatestQaReportSection;
   };
 };
 
@@ -34,32 +58,73 @@ export function getNamespaceData(issue: RawIssue, metadataNamespace: string): Na
   };
 }
 
-export function parseTaskDocuments(
-  issue: RawIssue,
-  metadataNamespace: string,
-): TaskDocumentsSnapshot {
+const hasMarkdownContent = (value: string | undefined): boolean => {
+  return typeof value === "string" && value.trim().length > 0;
+};
+
+const getLatestTaskDocuments = (issue: RawIssue, metadataNamespace: string) => {
   const { documents } = getNamespaceData(issue, metadataNamespace);
   const specEntries = parseMarkdownEntries(documents.spec);
   const planEntries = parseMarkdownEntries(documents.implementationPlan);
   const qaEntries = parseQaEntries(documents.qaReports);
 
-  const specLatest = specEntries.at(-1);
-  const planLatest = planEntries.at(-1);
-  const qaLatest = qaEntries.at(-1);
+  return {
+    specLatest: specEntries.at(-1),
+    planLatest: planEntries.at(-1),
+    qaLatest: qaEntries.at(-1),
+  };
+};
+
+export function summarizeTaskDocuments(
+  issue: RawIssue,
+  metadataNamespace: string,
+): TaskDocumentsSummary {
+  const { specLatest, planLatest, qaLatest } = getLatestTaskDocuments(issue, metadataNamespace);
 
   return {
-    spec: {
-      markdown: specLatest?.markdown ?? "",
-      updatedAt: specLatest?.updatedAt ?? null,
+    qaVerdict: qaLatest?.verdict ?? null,
+    documents: {
+      hasSpec: hasMarkdownContent(specLatest?.markdown),
+      hasPlan: hasMarkdownContent(planLatest?.markdown),
+      hasQaReport: hasMarkdownContent(qaLatest?.markdown),
     },
-    implementationPlan: {
-      markdown: planLatest?.markdown ?? "",
-      updatedAt: planLatest?.updatedAt ?? null,
-    },
-    latestQaReport: {
-      markdown: qaLatest?.markdown ?? "",
-      updatedAt: qaLatest?.updatedAt ?? null,
-      verdict: qaLatest?.verdict ?? null,
+  };
+}
+
+export function readTaskDocuments(
+  issue: RawIssue,
+  metadataNamespace: string,
+  input: ReadTaskDocumentsInput,
+): ReadTaskDocumentsResult {
+  const { specLatest, planLatest, qaLatest } = getLatestTaskDocuments(issue, metadataNamespace);
+
+  return {
+    documents: {
+      ...(input.includeSpec
+        ? {
+            spec: {
+              markdown: specLatest?.markdown ?? "",
+              updatedAt: specLatest?.updatedAt ?? null,
+            },
+          }
+        : {}),
+      ...(input.includePlan
+        ? {
+            implementationPlan: {
+              markdown: planLatest?.markdown ?? "",
+              updatedAt: planLatest?.updatedAt ?? null,
+            },
+          }
+        : {}),
+      ...(input.includeQaReport
+        ? {
+            latestQaReport: {
+              markdown: qaLatest?.markdown ?? "",
+              updatedAt: qaLatest?.updatedAt ?? null,
+              verdict: qaLatest?.verdict ?? null,
+            },
+          }
+        : {}),
     },
   };
 }

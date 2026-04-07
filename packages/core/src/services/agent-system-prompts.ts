@@ -111,6 +111,7 @@ export type BuiltAgentPrompt = {
 
 const TOOL_ARG_SPEC: Record<AgentToolName, string> = {
   odt_read_task: `odt_read_task({"taskId": string})`,
+  odt_read_task_documents: `odt_read_task_documents({"taskId": string, "includeSpec"?: boolean, "includePlan"?: boolean, "includeQaReport"?: boolean})`,
   odt_set_spec: `odt_set_spec({"taskId": string, "markdown": string})`,
   odt_set_plan: `odt_set_plan({"taskId": string, "markdown": string, "subtasks"?: [{"title": string, "issueType"?: "task"|"feature"|"bug", "priority"?: 0|1|2|3|4, "description"?: string}]})`,
   odt_build_blocked: `odt_build_blocked({"taskId": string, "reason": string})`,
@@ -182,8 +183,9 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
       bulletSection("Tool and communication protocol", [
         "Always include taskId in every odt_* tool call.",
         "Never invent tool names. Never call tools not listed above.",
-        "Start each session by calling odt_read_task with taskId {{task.id}} to load the canonical task documents.",
+        "Start each session by calling odt_read_task with taskId {{task.id}} to load the canonical task summary, latest QA verdict, and document presence booleans.",
         "If odt_read_task fails, surface the blocker or retry with the exact taskId instead of relying on stale summaries or prompt-copied artifacts.",
+        "Call odt_read_task_documents only when you need specific document bodies, and request only the sections you need.",
         "When asked about which ODT tools are enabled or disabled, answer strictly from the allowed-tools list above and treat every other ODT workflow tool as denied.",
         "Treat persisted workflow artifacts, repo evidence, and project instructions as higher-trust inputs than conversational summaries.",
         "Do repo and artifact research before conclusions; cite concrete evidence when it materially supports the outcome.",
@@ -207,12 +209,14 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
       ]),
       lineSection("Artifact access", [
         "- Persisted spec, implementation plan, and latest QA report are intentionally not inlined in this system prompt.",
-        "- Use odt_read_task with taskId {{task.id}} to load the current canonical task documents.",
-        "- If you need to re-check persisted artifacts later in the session, call odt_read_task again instead of trusting stale summaries.",
+        "- Use odt_read_task with taskId {{task.id}} to load the current canonical task summary, latest QA verdict, and document presence booleans.",
+        "- Use odt_read_task_documents with taskId {{task.id}} and explicit include flags when you need document markdown bodies.",
+        "- If you need to re-check persisted artifacts later in the session, call odt_read_task again first, then odt_read_task_documents only for the sections you still need.",
       ]),
       bulletSection("Task-context handling", [
-        "Treat the odt_read_task response as the latest persisted workflow artifacts unless newer evidence is produced in this session.",
-        "If a document is missing in odt_read_task, say so explicitly and continue within the allowed workflow instead of inventing missing history.",
+        "Treat the odt_read_task response as the latest persisted workflow summary unless newer evidence is produced in this session.",
+        "If odt_read_task shows a document is absent, say so explicitly and continue within the allowed workflow instead of inventing missing history.",
+        "If you need a persisted document body, fetch it with odt_read_task_documents rather than assuming it from summaries.",
         "If conversation history or summaries disagree with odt_read_task or repo evidence, verify before proceeding.",
       ]),
     ),
