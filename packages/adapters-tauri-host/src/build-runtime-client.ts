@@ -24,10 +24,11 @@ import {
   runtimeInstanceSummarySchema,
   type SystemCheck,
   systemCheckSchema,
+  type TaskApprovalContextLoadResult,
   type TaskCard,
   type TaskDirectMergeInput,
   type TaskDirectMergeResult,
-  taskApprovalContextSchema,
+  taskApprovalContextLoadResultSchema,
   taskCardSchema,
   taskDirectMergeInputSchema,
   taskDirectMergeResultSchema,
@@ -346,12 +347,16 @@ const humanApprove = async (
   return taskCardSchema.parse(payload);
 };
 
-const taskApprovalContextGet = async (invokeFn: InvokeFn, repoPath: string, taskId: string) => {
+const taskApprovalContextGet = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  taskId: string,
+): Promise<TaskApprovalContextLoadResult> => {
   const payload = await invokeFn("task_approval_context_get", {
     repoPath,
     taskId,
   });
-  return taskApprovalContextSchema.parse(payload);
+  return taskApprovalContextLoadResultSchema.parse(payload);
 };
 
 const taskDirectMerge = async (
@@ -572,7 +577,10 @@ export class TauriAgentClient {
     return humanApprove(this.invokeFn, repoPath, taskId);
   }
 
-  async taskApprovalContextGet(repoPath: string, taskId: string) {
+  async taskApprovalContextGet(
+    repoPath: string,
+    taskId: string,
+  ): Promise<TaskApprovalContextLoadResult> {
     return taskApprovalContextGet(this.invokeFn, repoPath, taskId);
   }
 

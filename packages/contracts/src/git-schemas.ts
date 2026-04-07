@@ -174,6 +174,19 @@ export const taskApprovalContextSchema = z.object({
 });
 export type TaskApprovalContext = z.infer<typeof taskApprovalContextSchema>;
 
+export const taskApprovalContextLoadResultSchema = z.discriminatedUnion("outcome", [
+  z.object({
+    outcome: z.literal("ready"),
+    approvalContext: taskApprovalContextSchema,
+  }),
+  z.object({
+    outcome: z.literal("missing_builder_worktree"),
+    taskId: z.string(),
+    taskStatus: z.string(),
+  }),
+]);
+export type TaskApprovalContextLoadResult = z.infer<typeof taskApprovalContextLoadResultSchema>;
+
 export const gitPushBranchResultSchema = z.discriminatedUnion("outcome", [
   z.object({
     outcome: z.literal("pushed"),

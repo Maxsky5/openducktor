@@ -44,7 +44,7 @@ export type PullRequestDraftMode = "manual" | "generate_ai";
 
 export type TaskApprovalModalModel = {
   open: boolean;
-  stage: "approval" | "complete_direct_merge";
+  stage: "approval" | "complete_direct_merge" | "missing_builder_worktree";
   taskId: string;
   isLoading: boolean;
   mode: TaskApprovalMode;
@@ -72,6 +72,8 @@ export type TaskApprovalModalModel = {
   onBodyChange: (value: string) => void;
   onSquashCommitMessageChange: (value: string) => void;
   onConfirm: () => void;
+  onCompleteMissingBuilderWorktree: () => void;
+  onResetMissingBuilderWorktree: () => void;
   onSkipDirectMergeCompletion: () => void;
   onCompleteDirectMerge: () => void;
 };

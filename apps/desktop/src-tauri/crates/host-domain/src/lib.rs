@@ -20,7 +20,8 @@ pub use git::{
     GitResetWorktreeSelection, GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
     GitTargetBranch, GitUpstreamAheadBehind, GitWorktreeStatus, GitWorktreeStatusData,
     GitWorktreeStatusSnapshot, GitWorktreeStatusSummary, GitWorktreeStatusSummaryData,
-    GitWorktreeSummary, PullRequestRecord, TaskApprovalContext, TaskPullRequestDetectResult,
+    GitWorktreeSummary, PullRequestRecord, TaskApprovalContext, TaskApprovalContextLoadResult,
+    TaskPullRequestDetectResult,
 };
 pub use runtime::{
     AgentRuntimeKind, BuildContinuationTarget, BuildContinuationTargetSource, DevServerEvent,

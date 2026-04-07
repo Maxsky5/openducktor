@@ -1,4 +1,4 @@
-import type { TaskApprovalContext, TaskCard } from "@openducktor/contracts";
+import type { TaskApprovalContextLoadResult, TaskCard } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -23,6 +23,7 @@ import { submitPullRequestApproval } from "./task-approval-flow-pull-request";
 import {
   CLOSED_TASK_APPROVAL_STATE,
   determineDefaultTaskApprovalMode,
+  isTaskApprovalInteractive,
   isTaskApprovalOpen,
   isTaskApprovalReady,
   taskApprovalFlowReducer,
@@ -33,6 +34,8 @@ type UseTaskApprovalFlowArgs = {
   tasks: TaskCard[];
   requestPullRequestGeneration: (taskId: string) => Promise<string | undefined>;
   refreshTasks: () => Promise<void>;
+  humanApproveTask?: (taskId: string) => Promise<void>;
+  openResetImplementation?: (taskId: string) => boolean;
   onResolveGitConflict?: (conflict: GitConflict, taskId: string) => Promise<boolean>;
 };
 
@@ -55,6 +58,14 @@ export function useTaskApprovalFlow({
   tasks,
   requestPullRequestGeneration,
   refreshTasks,
+  humanApproveTask = async (): Promise<void> => {
+    throw new Error("humanApproveTask handler is required for missing-builder-worktree recovery.");
+  },
+  openResetImplementation = (): boolean => {
+    throw new Error(
+      "openResetImplementation handler is required for missing-builder-worktree recovery.",
+    );
+  },
   onResolveGitConflict = async (): Promise<boolean> => {
     throw new Error(
       "onResolveGitConflict handler is required to use the Ask Builder conflict-resolution path.",
@@ -112,8 +123,11 @@ export function useTaskApprovalFlow({
 
       const cachedContext = queryClient.getQueryData(
         taskApprovalQueryKeys.context(activeRepo, taskId),
-      ) as TaskApprovalContext | undefined;
-      const effectiveMode = options?.mode ?? determineDefaultTaskApprovalMode(cachedContext);
+      ) as TaskApprovalContextLoadResult | undefined;
+      const cachedApprovalContext =
+        cachedContext?.outcome === "ready" ? cachedContext.approvalContext : undefined;
+      const effectiveMode =
+        options?.mode ?? determineDefaultTaskApprovalMode(cachedApprovalContext);
       const title = task?.title ?? "";
       const body = task?.description ?? "";
       const pullRequestDraftMode = options?.pullRequestDraftMode ?? "manual";
@@ -131,7 +145,7 @@ export function useTaskApprovalFlow({
 
       void (async () => {
         try {
-          const approvalContext = await loadTaskApprovalContextFromQuery(
+          const approvalContextResult = await loadTaskApprovalContextFromQuery(
             queryClient,
             activeRepo,
             taskId,
@@ -139,6 +153,20 @@ export function useTaskApprovalFlow({
           if (approvalRequestVersionRef.current !== requestVersion) {
             return;
           }
+          if (approvalContextResult.outcome === "missing_builder_worktree") {
+            dispatch({
+              type: "load_missing_builder_worktree",
+              taskId,
+              mode: effectiveMode,
+              pullRequestDraftMode,
+              title,
+              body,
+              errorMessage: openErrorMessage,
+            });
+            return;
+          }
+
+          const approvalContext = approvalContextResult.approvalContext;
           const updatedEffectiveMode =
             options?.mode ?? determineDefaultTaskApprovalMode(approvalContext);
           dispatch({
@@ -166,10 +194,32 @@ export function useTaskApprovalFlow({
   );
 
   const confirm = useCallback((): void => {
-    if (!activeRepo || !isTaskApprovalReady(state)) {
+    if (!isTaskApprovalInteractive(state)) {
       return;
     }
     const approvalState = state;
+
+    if (approvalState.stage === "missing_builder_worktree") {
+      void (async () => {
+        dispatch({ type: "clear_error" });
+        dispatch({ type: "start_submitting" });
+        try {
+          await humanApproveTask(approvalState.taskId);
+          reset();
+        } catch (error) {
+          const description = errorMessage(error);
+          dispatch({ type: "return_to_editable", errorMessage: description });
+          toast.error("Approval failed", {
+            description,
+          });
+        }
+      })();
+      return;
+    }
+
+    if (!activeRepo || !isTaskApprovalReady(approvalState)) {
+      return;
+    }
 
     void (async () => {
       dispatch({ type: "start_submitting" });
@@ -244,7 +294,25 @@ export function useTaskApprovalFlow({
         });
       }
     })();
-  }, [activeRepo, queryClient, refreshTasks, requestPullRequestGeneration, reset, state]);
+  }, [
+    activeRepo,
+    humanApproveTask,
+    queryClient,
+    refreshTasks,
+    requestPullRequestGeneration,
+    reset,
+    state,
+  ]);
+
+  const resetMissingBuilderWorktree = useCallback((): void => {
+    if (!isTaskApprovalInteractive(state) || state.stage !== "missing_builder_worktree") {
+      return;
+    }
+
+    if (openResetImplementation(state.taskId)) {
+      reset();
+    }
+  }, [openResetImplementation, reset, state]);
 
   const abortGitConflict = useCallback((): void => {
     if (!activeRepo || !gitConflictState.conflict || gitConflictState.isHandlingConflict) {
@@ -422,6 +490,8 @@ export function useTaskApprovalFlow({
       onSquashCommitMessageChange: (squashCommitMessage) =>
         dispatch({ type: "set_squash_commit_message", squashCommitMessage }),
       onConfirm: confirm,
+      onCompleteMissingBuilderWorktree: confirm,
+      onResetMissingBuilderWorktree: resetMissingBuilderWorktree,
       onSkipDirectMergeCompletion: reset,
       onCompleteDirectMerge: completeDirectMerge,
     },

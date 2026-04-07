@@ -88,7 +88,14 @@ export async function submitDirectMergeApproval({
     repoPath,
     approval.taskId,
   );
-  if (!nextApprovalContext.directMerge) {
+  if (nextApprovalContext.outcome !== "ready") {
+    throw new Error(
+      "Local direct merge completed, but the builder worktree disappeared before completion could resume.",
+    );
+  }
+
+  const resumedApprovalContext = nextApprovalContext.approvalContext;
+  if (!resumedApprovalContext.directMerge) {
     throw new Error(
       "Local direct merge completed, but the task did not enter a resumable completion state.",
     );
@@ -96,7 +103,7 @@ export async function submitDirectMergeApproval({
 
   return {
     outcome: "await_completion",
-    approvalContext: nextApprovalContext,
+    approvalContext: resumedApprovalContext,
   };
 }
 

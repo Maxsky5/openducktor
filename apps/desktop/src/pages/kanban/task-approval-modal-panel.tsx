@@ -1,4 +1,4 @@
-import { ArrowRight, Check, LoaderCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogFooter } from "@/components/ui/dialog";
@@ -169,6 +169,14 @@ export function getTaskApprovalModalHeader(model: TaskApprovalModalModel): {
   title: string;
   description: string;
 } {
+  if (model.stage === "missing_builder_worktree") {
+    return {
+      title: "Builder Worktree Missing",
+      description:
+        "The builder worktree for this task is no longer available. You can still complete the task or reset the implementation from here.",
+    };
+  }
+
   const isCompletionStage = model.stage === "complete_direct_merge";
   const hasPublishTarget = model.publishTarget !== null;
 
@@ -226,6 +234,7 @@ export function TaskApprovalModalPanel({
     hasManualPullRequestValidationError ||
     hasSquashCommitMessageSubmitError;
   const isCompletionStage = model.stage === "complete_direct_merge";
+  const isMissingBuilderWorktreeStage = model.stage === "missing_builder_worktree";
   const hasPublishTarget = model.publishTarget !== null;
   const hasCompletionBranchContext = model.targetBranch !== null;
   const completionContextError =
@@ -289,6 +298,10 @@ export function TaskApprovalModalPanel({
           />
         ) : null}
 
+        {isMissingBuilderWorktreeStage ? (
+          <TaskApprovalMissingBuilderWorktreeStage model={model} />
+        ) : null}
+
         {isCompletionStage ? (
           <TaskApprovalCompletionStage
             completionContextError={completionContextError}
@@ -309,6 +322,7 @@ export function TaskApprovalModalPanel({
         confirmLabel={confirmLabel}
         finishLaterDisabled={finishLaterDisabled}
         isCompletionStage={isCompletionStage}
+        isMissingBuilderWorktreeStage={isMissingBuilderWorktreeStage}
       />
     </>
   );
@@ -386,6 +400,50 @@ function TaskApprovalApprovalStage({
       ) : (
         <TaskApprovalPullRequestSection model={model} sectionLabelClass={sectionLabelClass} />
       )}
+    </div>
+  );
+}
+
+function TaskApprovalMissingBuilderWorktreeStage({
+  model,
+}: {
+  model: TaskApprovalModalModel;
+}): ReactElement {
+  return (
+    <div className="space-y-4 px-6 py-6 sm:px-8">
+      <div className="rounded-2xl border border-warning-border bg-warning-surface p-5 text-warning-surface-foreground">
+        <div className="flex items-start gap-4">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-warning-border/60 bg-card/70 text-warning-muted">
+            <AlertTriangle className="size-5" />
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-sm font-semibold text-warning-surface-foreground">
+              Builder worktree not found
+            </p>
+            <p className="text-sm leading-6 text-warning-surface-foreground">
+              OpenDucktor could not load the latest builder worktree for this task. Normal direct
+              merge and pull request approval options are unavailable without that workspace.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {model.errorMessage ? (
+        <div className="grid gap-1 rounded-2xl border border-destructive-border bg-destructive-surface p-4 text-destructive-surface-foreground">
+          <p className="text-sm font-semibold">Recovery action failed</p>
+          <p className="text-sm text-destructive-muted">{model.errorMessage}</p>
+        </div>
+      ) : null}
+
+      <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="space-y-1.5">
+          <p className="text-sm font-semibold text-foreground">Choose the next step</p>
+          <p className="text-sm leading-6 text-muted-foreground">
+            Complete task closes the review and moves this task to Done. Reset implementation opens
+            the existing reset workflow so you can send the task back for more work.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -621,6 +679,7 @@ function TaskApprovalModalFooter({
   confirmLabel,
   finishLaterDisabled,
   isCompletionStage,
+  isMissingBuilderWorktreeStage,
 }: {
   model: TaskApprovalModalModel;
   completionActionDisabled: boolean;
@@ -630,6 +689,7 @@ function TaskApprovalModalFooter({
   confirmLabel: string;
   finishLaterDisabled: boolean;
   isCompletionStage: boolean;
+  isMissingBuilderWorktreeStage: boolean;
 }): ReactElement {
   const footerClassName = cn(
     "mt-0 border-t border-border/80 bg-muted/20 px-6 py-4 sm:px-8",
@@ -659,6 +719,39 @@ function TaskApprovalModalFooter({
           >
             {model.isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}
             {completionButtonLabel}
+          </Button>
+        </div>
+      </DialogFooter>
+    );
+  }
+
+  if (isMissingBuilderWorktreeStage) {
+    return (
+      <DialogFooter className="mt-0 flex-col-reverse gap-3 border-t border-border/80 bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={model.isSubmitting}
+          onClick={() => model.onOpenChange(false)}
+        >
+          Cancel
+        </Button>
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={model.isSubmitting}
+            onClick={model.onResetMissingBuilderWorktree}
+          >
+            Reset Implementation
+          </Button>
+          <Button
+            type="button"
+            disabled={model.isSubmitting}
+            onClick={model.onCompleteMissingBuilderWorktree}
+          >
+            {model.isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}
+            {model.isSubmitting ? "Completing Task" : "Complete Task"}
           </Button>
         </div>
       </DialogFooter>

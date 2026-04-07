@@ -38,6 +38,8 @@ const createModel = (overrides: Partial<TaskApprovalModalModel> = {}): TaskAppro
   onBodyChange: noop,
   onSquashCommitMessageChange: noop,
   onConfirm: noop,
+  onCompleteMissingBuilderWorktree: noop,
+  onResetMissingBuilderWorktree: noop,
   onSkipDirectMergeCompletion: noop,
   onCompleteDirectMerge: noop,
   ...overrides,
@@ -77,6 +79,24 @@ describe("TaskApprovalModal", () => {
 
     expect(html).toContain("Publishing beta");
     expect(html).toContain("animate-spin");
+  });
+
+  test("renders recovery copy when the builder worktree is missing", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskApprovalModalPanel, {
+        model: createModel({
+          stage: "missing_builder_worktree",
+          targetBranch: null,
+          publishTarget: null,
+        }),
+      }),
+    );
+
+    expect(html).toContain("Builder Worktree Missing");
+    expect(html).toContain("Builder worktree not found");
+    expect(html).toContain("Normal direct merge and pull request approval options are unavailable");
+    expect(html).toContain("Reset Implementation");
+    expect(html).toContain("Complete Task");
   });
 
   test("shows a loading indicator for approval submission actions", () => {

@@ -2,6 +2,8 @@ use super::approval_support::normalize_approval_target_branch;
 use crate::app_service::service_core::AppService;
 use anyhow::{anyhow, Result};
 use host_domain::{BuildContinuationTargetSource, GitTargetBranch};
+use std::error::Error;
+use std::fmt::{self, Display, Formatter};
 use std::path::Path;
 
 #[derive(Debug)]
@@ -15,6 +17,33 @@ pub(super) struct BuilderCleanupTarget {
     pub(super) working_directory: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct MissingBuilderWorktreeError {
+    task_id: String,
+    operation_label: String,
+}
+
+impl MissingBuilderWorktreeError {
+    fn new(task_id: &str, operation_label: &str) -> Self {
+        Self {
+            task_id: task_id.to_string(),
+            operation_label: operation_label.to_string(),
+        }
+    }
+}
+
+impl Display for MissingBuilderWorktreeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} requires a builder worktree for task {}. Start Builder first.",
+            self.operation_label, self.task_id
+        )
+    }
+}
+
+impl Error for MissingBuilderWorktreeError {}
+
 pub(super) struct BuilderBranchService<'a> {
     service: &'a AppService,
 }
@@ -22,6 +51,12 @@ pub(super) struct BuilderBranchService<'a> {
 impl<'a> BuilderBranchService<'a> {
     pub(super) fn new(service: &'a AppService) -> Self {
         Self { service }
+    }
+
+    pub(super) fn missing_builder_worktree_error(
+        error: &anyhow::Error,
+    ) -> Option<&MissingBuilderWorktreeError> {
+        error.downcast_ref::<MissingBuilderWorktreeError>()
     }
 
     pub(super) fn load_builder_branch_context(
@@ -33,11 +68,7 @@ impl<'a> BuilderBranchService<'a> {
         let working_directory = self
             .service
             .build_continuation_target_get(repo_path, task_id)?
-            .ok_or_else(|| {
-                anyhow!(
-                    "{operation_label} requires a builder worktree for task {task_id}. Start Builder first."
-                )
-            })?
+            .ok_or_else(|| MissingBuilderWorktreeError::new(task_id, operation_label))?
             .working_directory;
         let current_branch = self
             .service
@@ -233,6 +264,7 @@ mod tests {
         let error = BuilderBranchService::new(&service)
             .load_builder_branch_context(repo_path.as_str(), "task-1", "Pull request detection")
             .expect_err("missing builder worktree should be rejected");
+        assert!(BuilderBranchService::missing_builder_worktree_error(&error).is_some());
         assert_eq!(
             error.to_string(),
             "Pull request detection requires a builder worktree for task task-1. Start Builder first."

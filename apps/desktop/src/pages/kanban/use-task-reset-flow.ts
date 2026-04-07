@@ -44,7 +44,7 @@ export function useTaskResetFlow({
   closeTaskDetails,
 }: UseTaskResetFlowArgs): {
   resetImplementationModal: ResetImplementationModalModel;
-  openResetImplementation: (taskId: string, options?: ResetImplementationOptions) => void;
+  openResetImplementation: (taskId: string, options?: ResetImplementationOptions) => boolean;
 } {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [closeDetailsAfterReset, setCloseDetailsAfterReset] = useState(false);
@@ -69,13 +69,13 @@ export function useTaskResetFlow({
   }, [isSubmitting]);
 
   const openResetImplementation = useCallback(
-    (nextTaskId: string, options?: ResetImplementationOptions): void => {
+    (nextTaskId: string, options?: ResetImplementationOptions): boolean => {
       const nextTask = tasks.find((entry) => entry.id === nextTaskId);
       if (!nextTask) {
         toast.error("Unable to reset implementation", {
           description: `Task ${nextTaskId} was not found. Refresh tasks and try again.`,
         });
-        return;
+        return false;
       }
 
       const hasActiveSession = sessions.some(
@@ -85,12 +85,13 @@ export function useTaskResetFlow({
         toast.error("Stop active work first", {
           description: `Builder or QA is still running for ${nextTaskId}. Stop the active session before resetting the implementation.`,
         });
-        return;
+        return false;
       }
 
       setModalError(null);
       setTaskId(nextTaskId);
       setCloseDetailsAfterReset(options?.closeDetailsAfterReset ?? false);
+      return true;
     },
     [sessions, tasks],
   );

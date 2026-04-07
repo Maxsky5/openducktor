@@ -158,6 +158,21 @@ pub struct TaskApprovalContext {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum TaskApprovalContextLoadResult {
+    Ready {
+        #[serde(rename = "approvalContext")]
+        approval_context: TaskApprovalContext,
+    },
+    MissingBuilderWorktree {
+        #[serde(rename = "taskId")]
+        task_id: String,
+        #[serde(rename = "taskStatus")]
+        task_status: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum GitPushResult {
     Pushed {
         remote: String,

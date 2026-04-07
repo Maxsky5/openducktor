@@ -1,7 +1,10 @@
 import type { TaskApprovalContext } from "@openducktor/contracts";
 import type { PullRequestDraftMode, TaskApprovalMode } from "./kanban-page-model-types";
 
-export type TaskApprovalFlowStage = "approval" | "complete_direct_merge";
+export type TaskApprovalFlowStage =
+  | "approval"
+  | "complete_direct_merge"
+  | "missing_builder_worktree";
 export type TaskApprovalMergeMethod = "merge_commit" | "squash" | "rebase";
 
 export type TaskApprovalFlowOpenState = {
@@ -25,6 +28,10 @@ export type TaskApprovalFlowReadyState = TaskApprovalFlowOpenState & {
   approvalContext: TaskApprovalContext;
 };
 
+export type TaskApprovalFlowInteractiveState = TaskApprovalFlowOpenState & {
+  phase: "ready";
+};
+
 export type TaskApprovalFlowState = { kind: "closed" } | TaskApprovalFlowOpenState;
 
 type TaskApprovalFlowOpenPayload = {
@@ -42,6 +49,7 @@ type TaskApprovalFlowAction =
       type: "load_succeeded";
       approvalContext: TaskApprovalContext;
     } & TaskApprovalFlowOpenPayload)
+  | ({ type: "load_missing_builder_worktree" } & TaskApprovalFlowOpenPayload)
   | { type: "close" }
   | { type: "start_submitting" }
   | { type: "return_to_editable"; errorMessage: string | null }
@@ -81,6 +89,10 @@ export const isTaskApprovalReady = (
 ): state is TaskApprovalFlowReadyState =>
   state.kind === "open" && state.phase === "ready" && state.approvalContext !== null;
 
+export const isTaskApprovalInteractive = (
+  state: TaskApprovalFlowState,
+): state is TaskApprovalFlowInteractiveState => state.kind === "open" && state.phase === "ready";
+
 const buildTaskApprovalLoadingState = (
   payload: TaskApprovalFlowOpenPayload,
 ): TaskApprovalFlowOpenState => ({
@@ -117,6 +129,24 @@ const buildTaskApprovalLoadedState = (
   approvalContext: payload.approvalContext,
 });
 
+const buildMissingBuilderWorktreeState = (
+  payload: TaskApprovalFlowOpenPayload,
+): TaskApprovalFlowOpenState => ({
+  kind: "open",
+  phase: "ready",
+  stage: "missing_builder_worktree",
+  taskId: payload.taskId,
+  mode: payload.mode,
+  mergeMethod: "merge_commit",
+  pullRequestDraftMode: payload.pullRequestDraftMode,
+  title: payload.title,
+  body: payload.body,
+  squashCommitMessage: "",
+  squashCommitMessageTouched: false,
+  errorMessage: payload.errorMessage,
+  approvalContext: null,
+});
+
 export function taskApprovalFlowReducer(
   state: TaskApprovalFlowState,
   action: TaskApprovalFlowAction,
@@ -126,6 +156,8 @@ export function taskApprovalFlowReducer(
       return buildTaskApprovalLoadingState(action);
     case "load_succeeded":
       return buildTaskApprovalLoadedState(action);
+    case "load_missing_builder_worktree":
+      return buildMissingBuilderWorktreeState(action);
     case "close":
       return CLOSED_TASK_APPROVAL_STATE;
     case "start_submitting":

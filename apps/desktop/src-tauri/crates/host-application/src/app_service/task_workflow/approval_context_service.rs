@@ -6,7 +6,7 @@ use super::builder_branch_service::BuilderBranchService;
 use super::pull_request_provider_service::PullRequestProviderService;
 use crate::app_service::service_core::AppService;
 use anyhow::Result;
-use host_domain::{GitDiffScope, TaskApprovalContext};
+use host_domain::{GitDiffScope, TaskApprovalContext, TaskApprovalContextLoadResult};
 use std::path::Path;
 
 pub(super) struct ApprovalContextService<'a> {
@@ -22,7 +22,7 @@ impl<'a> ApprovalContextService<'a> {
         &self,
         repo_path: &str,
         task_id: &str,
-    ) -> Result<TaskApprovalContext> {
+    ) -> Result<TaskApprovalContextLoadResult> {
         let context = self.service.load_task_context(repo_path, task_id)?;
         ensure_human_approval_status(&context.task.status)?;
         let repo_config = self
@@ -52,32 +52,47 @@ impl<'a> ApprovalContextService<'a> {
                         .then_some(target.working_directory)
                 });
 
-            return Ok(TaskApprovalContext {
-                task_id: task_id.to_string(),
-                task_status: context.task.status.as_cli_value().to_string(),
-                working_directory,
-                source_branch: direct_merge.source_branch.clone(),
-                target_branch,
-                publish_target,
-                default_merge_method: to_domain_merge_method(config.git.default_merge_method),
-                has_uncommitted_changes: false,
-                uncommitted_file_count: 0,
-                pull_request: metadata.pull_request,
-                direct_merge: Some(direct_merge),
-                suggested_squash_commit_message: None,
-                providers: PullRequestProviderService::new(self.service)
-                    .provider_statuses(Path::new(&context.repo.repo_path), &repo_config),
+            return Ok(TaskApprovalContextLoadResult::Ready {
+                approval_context: TaskApprovalContext {
+                    task_id: task_id.to_string(),
+                    task_status: context.task.status.as_cli_value().to_string(),
+                    working_directory,
+                    source_branch: direct_merge.source_branch.clone(),
+                    target_branch,
+                    publish_target,
+                    default_merge_method: to_domain_merge_method(config.git.default_merge_method),
+                    has_uncommitted_changes: false,
+                    uncommitted_file_count: 0,
+                    pull_request: metadata.pull_request,
+                    direct_merge: Some(direct_merge),
+                    suggested_squash_commit_message: None,
+                    providers: PullRequestProviderService::new(self.service)
+                        .provider_statuses(Path::new(&context.repo.repo_path), &repo_config),
+                },
             });
         }
 
-        let mut approval = self.load_open_task_approval_context(repo_path, task_id)?;
+        let mut approval = match self.load_open_task_approval_context(repo_path, task_id) {
+            Ok(approval) => approval,
+            Err(error) => {
+                if BuilderBranchService::missing_builder_worktree_error(&error).is_some() {
+                    return Ok(TaskApprovalContextLoadResult::MissingBuilderWorktree {
+                        task_id: task_id.to_string(),
+                        task_status: context.task.status.as_cli_value().to_string(),
+                    });
+                }
+                return Err(error);
+            }
+        };
         approval.suggested_squash_commit_message =
             self.service.git_port.suggested_squash_commit_message(
                 Path::new(&context.repo.repo_path),
                 approval.source_branch.as_str(),
                 approval.target_branch.canonical().as_str(),
             )?;
-        Ok(approval)
+        Ok(TaskApprovalContextLoadResult::Ready {
+            approval_context: approval,
+        })
     }
 
     pub(super) fn load_open_task_approval_context(

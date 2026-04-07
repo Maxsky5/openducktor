@@ -71,6 +71,7 @@ export function useKanbanPageModels({
     resetTaskImplementation,
     deferTask,
     resumeDeferredTask,
+    humanApproveTask,
     humanRequestChangesTask,
   } = useTasksState();
   const reportedSettingsErrorRef = useRef<string | null>(null);
@@ -206,11 +207,22 @@ export function useKanbanPageModels({
     },
     [handleResolveGitConflict, kanbanTasks, navigate, sessions],
   );
+  const { resetImplementationModal, openResetImplementation } = useTaskResetFlow({
+    tasks: kanbanTasks,
+    sessions,
+    loadAgentSessions,
+    removeAgentSessions,
+    resetTaskImplementation,
+    closeTaskDetails: onCloseDetails,
+  });
+
   const { taskApprovalModal, taskGitConflictDialog, openTaskApproval } = useTaskApprovalFlow({
     activeRepo,
     tasks: kanbanTasks,
     requestPullRequestGeneration: onPullRequestGenerate,
     refreshTasks,
+    humanApproveTask,
+    openResetImplementation,
     onResolveGitConflict: handleResolveKanbanGitConflict,
   });
 
@@ -220,15 +232,6 @@ export function useKanbanPageModels({
     },
     [openTaskApproval],
   );
-
-  const { resetImplementationModal, openResetImplementation } = useTaskResetFlow({
-    tasks: kanbanTasks,
-    sessions,
-    loadAgentSessions,
-    removeAgentSessions,
-    resetTaskImplementation,
-    closeTaskDetails: onCloseDetails,
-  });
 
   const taskDialogs = useKanbanTaskDialogs({
     tasks: kanbanTasks,
