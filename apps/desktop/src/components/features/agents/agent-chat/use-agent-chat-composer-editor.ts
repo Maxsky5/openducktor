@@ -889,6 +889,10 @@ export const useAgentChatComposerEditor = ({
 
   const handleEditorPaste = useCallback(
     (event: ReactClipboardEvent<HTMLDivElement>) => {
+      if (disabled) {
+        return;
+      }
+
       event.preventDefault();
 
       const clipboardTypes = Array.from(event.clipboardData.types ?? []);
@@ -901,7 +905,11 @@ export const useAgentChatComposerEditor = ({
       const plainText = event.clipboardData.getData("text/plain");
 
       const sourceDraft = latestDraftRef.current;
-      const activeSelection = readActiveTextSelection(event.currentTarget, event.target);
+      const activeSelection = resolveActiveTextSelection(
+        event.currentTarget,
+        sourceDraft,
+        event.target,
+      );
       const selectionTarget = resolveSelectionTargetFromActiveSelection(
         sourceDraft,
         activeSelection,
@@ -923,7 +931,13 @@ export const useAgentChatComposerEditor = ({
       closeFileMenu();
       handleEditorInput(event.currentTarget);
     },
-    [closeFileMenu, handleEditorInput, rememberSelectionTarget],
+    [
+      closeFileMenu,
+      disabled,
+      handleEditorInput,
+      rememberSelectionTarget,
+      resolveActiveTextSelection,
+    ],
   );
 
   const handleEditorBeforeInput = useCallback(

@@ -150,22 +150,19 @@ export const replaceComposerSelectionWithText = (root: HTMLDivElement, text: str
     return false;
   }
 
-  let range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+  const selectionRange = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
   const rangeInsideComposer =
-    range &&
-    (range.commonAncestorContainer === contentRoot ||
-      contentRoot.contains(range.commonAncestorContainer));
-  if (!rangeInsideComposer) {
-    range = createCollapsedRangeAtComposerEnd(root);
-    if (!range) {
-      return false;
-    }
-    selection.removeAllRanges();
-    selection.addRange(range);
-  }
-
+    selectionRange &&
+    (selectionRange.commonAncestorContainer === contentRoot ||
+      contentRoot.contains(selectionRange.commonAncestorContainer));
+  const range = rangeInsideComposer ? selectionRange : createCollapsedRangeAtComposerEnd(root);
   if (!range) {
     return false;
+  }
+
+  if (!rangeInsideComposer) {
+    selection.removeAllRanges();
+    selection.addRange(range);
   }
 
   range.deleteContents();

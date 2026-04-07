@@ -119,6 +119,7 @@ const EditorHarness = ({
   searchFiles = async () => [],
   onSend,
   initialDraft = createComposerDraft(""),
+  disabled = false,
 }: {
   slashCommandsError: string | null;
   slashCommands: typeof COMMANDS;
@@ -126,6 +127,7 @@ const EditorHarness = ({
   searchFiles?: (query: string) => Promise<ReturnType<typeof buildFileSearchResult>[]>;
   onSend?: () => void;
   initialDraft?: AgentChatComposerDraft;
+  disabled?: boolean;
 }): ReactElement => {
   const [draft, setDraft] = useState<AgentChatComposerDraft>(initialDraft);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -136,7 +138,7 @@ const EditorHarness = ({
         draft={draft}
         onDraftChange={setDraft}
         placeholder="Type a message"
-        disabled={false}
+        disabled={disabled}
         editorRef={editorRef}
         onEditorInput={() => {}}
         onSend={onSend ?? (() => {})}
@@ -423,6 +425,32 @@ describe("AgentChatComposerEditor", () => {
     expect(screen.getByTestId("draft-state").textContent).toContain("keep this");
   });
 
+  test("ignores paste while the composer is disabled", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        initialDraft={createComposerDraft("keep this")}
+        disabled
+      />,
+    );
+
+    const editorRoot = rendered.container.querySelector('[aria-disabled="true"]');
+    if (!(editorRoot instanceof HTMLElement)) {
+      throw new Error("Expected disabled composer root");
+    }
+
+    fireEvent.paste(editorRoot, {
+      clipboardData: createClipboardData({
+        plainText: "should not apply",
+        htmlText: "<strong>should not apply</strong>",
+      }),
+    });
+
+    await expectComposerText(rendered.container, "keep this");
+    expect(screen.getByTestId("draft-state").textContent).toContain("keep this");
+  });
+
   test("replaces selections spanning a file chip with normalized plain text", async () => {
     const rendered = render(
       <EditorHarness
@@ -451,6 +479,26 @@ describe("AgentChatComposerEditor", () => {
     await expectComposerText(rendered.container, "befXter");
     expect(rendered.container.querySelector("[data-chip-segment-id]")).toBeNull();
     expect(screen.getByTestId("draft-state").textContent).toContain("befXter");
+  });
+
+  test("repairs shell-level paste selection so the inserted text stays at the remembered caret", async () => {
+    resetSelectionMocks();
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "hello");
+    fireEvent.keyUp(editable, { key: "o" });
+
+    const editorRoot = collapseSelectionOnEditorRoot(rendered.container);
+    fireEvent.paste(editorRoot, {
+      clipboardData: createClipboardData({
+        plainText: "!",
+        htmlText: "<strong>!</strong>",
+      }),
+    });
+
+    await expectComposerText(rendered.container, "hello!");
+    expect(screen.getByTestId("draft-state").textContent).toContain("hello!");
+    expect(setCaretOffsetWithinElementMock).toHaveBeenCalledWith(editable, 5);
   });
 
   test("selects the full composer content with the select-all shortcut", () => {
