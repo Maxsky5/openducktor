@@ -151,7 +151,7 @@ fn expect_ready_approval_context(
     result: TaskApprovalContextLoadResult,
 ) -> Result<TaskApprovalContext> {
     match result {
-        TaskApprovalContextLoadResult::Ready { approval_context } => Ok(approval_context),
+        TaskApprovalContextLoadResult::Ready { approval_context } => Ok(*approval_context),
         TaskApprovalContextLoadResult::MissingBuilderWorktree { task_id, .. } => Err(anyhow!(
             "expected ready approval context for task {task_id}, got missing builder worktree"
         )),
@@ -874,6 +874,40 @@ fn task_approval_context_reports_missing_builder_worktree_for_review_tasks() -> 
             task_id: "task-1".to_string(),
             task_status: TaskStatus::HumanReview.as_cli_value().to_string(),
         }
+    );
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn task_approval_context_still_errors_when_builder_context_is_missing() -> Result<()> {
+    let root = unique_temp_path("approval-context-missing-builder-context");
+    let repo = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    init_git_repo(&repo)?;
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
+
+    let error = service
+        .task_approval_context_get(repo_path.as_str(), "task-1")
+        .expect_err("missing builder context should fail fast");
+    assert_eq!(
+        error.to_string(),
+        "Human approval requires a builder worktree for task task-1. Start Builder first."
     );
 
     let _ = fs::remove_dir_all(root);

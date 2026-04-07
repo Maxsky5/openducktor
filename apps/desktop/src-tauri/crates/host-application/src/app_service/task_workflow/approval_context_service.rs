@@ -57,7 +57,7 @@ impl<'a> ApprovalContextService<'a> {
                 });
 
             return Ok(TaskApprovalContextLoadResult::Ready {
-                approval_context: TaskApprovalContext {
+                approval_context: Box::new(TaskApprovalContext {
                     task_id: task_id.to_string(),
                     task_status: context.task.status.as_cli_value().to_string(),
                     working_directory,
@@ -72,7 +72,7 @@ impl<'a> ApprovalContextService<'a> {
                     suggested_squash_commit_message: None,
                     providers: PullRequestProviderService::new(self.service)
                         .provider_statuses(Path::new(&context.repo.repo_path), &repo_config),
-                },
+                }),
             });
         }
 
@@ -94,7 +94,7 @@ impl<'a> ApprovalContextService<'a> {
                 approval.target_branch.canonical().as_str(),
             )?;
         Ok(TaskApprovalContextLoadResult::Ready {
-            approval_context: approval,
+            approval_context: Box::new(approval),
         })
     }
 
@@ -133,6 +133,11 @@ impl<'a> ApprovalContextService<'a> {
                 "Human approval",
             )? {
             BuilderBranchContextLoadResult::Ready(context) => context,
+            BuilderBranchContextLoadResult::MissingContext => {
+                return Err(ApprovalContextLoadError::Other(anyhow::anyhow!(
+                    "Human approval requires a builder worktree for task {task_id}. Start Builder first."
+                )));
+            }
             BuilderBranchContextLoadResult::MissingWorktree(missing) => {
                 return Err(ApprovalContextLoadError::MissingBuilderWorktree(missing));
             }

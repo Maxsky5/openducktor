@@ -1,5 +1,6 @@
 use super::approval_support::normalize_approval_target_branch;
 use crate::app_service::service_core::AppService;
+use crate::app_service::task_workflow::session_service::BuildContinuationTargetLookup;
 use anyhow::{anyhow, Result};
 use host_domain::{BuildContinuationTargetSource, GitTargetBranch};
 use std::error::Error;
@@ -47,6 +48,7 @@ impl Error for MissingBuilderWorktree {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum BuilderBranchContextLoadResult {
     Ready(BuilderBranchContext),
+    MissingContext,
     MissingWorktree(MissingBuilderWorktree),
 }
 
@@ -67,6 +69,9 @@ impl<'a> BuilderBranchService<'a> {
     ) -> Result<BuilderBranchContext> {
         match self.load_builder_branch_context_result(repo_path, task_id, operation_label)? {
             BuilderBranchContextLoadResult::Ready(context) => Ok(context),
+            BuilderBranchContextLoadResult::MissingContext => Err(anyhow!(
+                "{operation_label} requires a builder worktree for task {task_id}. Start Builder first."
+            )),
             BuilderBranchContextLoadResult::MissingWorktree(missing) => {
                 Err(anyhow!(missing.to_string()))
             }
@@ -79,13 +84,19 @@ impl<'a> BuilderBranchService<'a> {
         task_id: &str,
         operation_label: &str,
     ) -> Result<BuilderBranchContextLoadResult> {
-        let Some(target) = self
+        let target = match self
             .service
-            .build_continuation_target_get(repo_path, task_id)?
-        else {
-            return Ok(BuilderBranchContextLoadResult::MissingWorktree(
-                MissingBuilderWorktree::new(task_id, operation_label),
-            ));
+            .build_continuation_target_lookup(repo_path, task_id)?
+        {
+            BuildContinuationTargetLookup::Found(target) => target,
+            BuildContinuationTargetLookup::NoBuilderContext => {
+                return Ok(BuilderBranchContextLoadResult::MissingContext);
+            }
+            BuildContinuationTargetLookup::MissingBuilderWorktree => {
+                return Ok(BuilderBranchContextLoadResult::MissingWorktree(
+                    MissingBuilderWorktree::new(task_id, operation_label),
+                ));
+            }
         };
         let working_directory = target.working_directory;
         let current_branch = self
@@ -265,6 +276,63 @@ mod tests {
     fn load_builder_branch_context_uses_operation_label_when_worktree_is_missing() -> Result<()> {
         let root = unique_temp_path("builder-branch-missing");
         let repo = root.join("repo");
+        let missing_worktree = root.join("missing-worktree");
+        init_git_repo(&repo)?;
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+                revision: None,
+            },
+            config_store,
+        );
+        let repo_path = repo.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
+
+        fs::create_dir_all(&missing_worktree)?;
+        let mut session = make_session("task-1", "session-build");
+        session.role = " build ".to_string();
+        session.working_directory = missing_worktree.to_string_lossy().to_string();
+        task_state
+            .lock()
+            .expect("task state lock poisoned")
+            .agent_sessions
+            .push(session);
+        let _ = fs::remove_dir_all(&missing_worktree);
+
+        let result = BuilderBranchService::new(&service).load_builder_branch_context_result(
+            repo_path.as_str(),
+            "task-1",
+            "Pull request detection",
+        )?;
+        assert_eq!(
+            result,
+            super::BuilderBranchContextLoadResult::MissingWorktree(
+                super::MissingBuilderWorktree::new("task-1", "Pull request detection")
+            )
+        );
+
+        let error = BuilderBranchService::new(&service)
+            .load_builder_branch_context(repo_path.as_str(), "task-1", "Pull request detection")
+            .expect_err("missing builder worktree should be rejected");
+        assert_eq!(
+            error.to_string(),
+            "Pull request detection requires a builder worktree for task task-1. Start Builder first."
+        );
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn load_builder_branch_context_reports_missing_context_when_no_builder_session_exists(
+    ) -> Result<()> {
+        let root = unique_temp_path("builder-branch-no-context");
+        let repo = root.join("repo");
         init_git_repo(&repo)?;
 
         let config_store = AppConfigStore::from_path(root.join("config.json"));
@@ -288,14 +356,12 @@ mod tests {
         )?;
         assert_eq!(
             result,
-            super::BuilderBranchContextLoadResult::MissingWorktree(
-                super::MissingBuilderWorktree::new("task-1", "Pull request detection")
-            )
+            super::BuilderBranchContextLoadResult::MissingContext
         );
 
         let error = BuilderBranchService::new(&service)
             .load_builder_branch_context(repo_path.as_str(), "task-1", "Pull request detection")
-            .expect_err("missing builder worktree should be rejected");
+            .expect_err("missing builder context should fail fast");
         assert_eq!(
             error.to_string(),
             "Pull request detection requires a builder worktree for task task-1. Start Builder first."
@@ -335,6 +401,7 @@ mod tests {
         older.working_directory = older_worktree.to_string_lossy().to_string();
         let mut newer = make_session("task-1", "session-2");
         newer.started_at = "2026-03-11T11:00:00Z".to_string();
+        newer.role = " build ".to_string();
         newer.working_directory = newer_worktree.to_string_lossy().to_string();
         task_state
             .lock()

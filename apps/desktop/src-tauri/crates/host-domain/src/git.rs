@@ -161,7 +161,7 @@ pub struct TaskApprovalContext {
 pub enum TaskApprovalContextLoadResult {
     Ready {
         #[serde(rename = "approvalContext")]
-        approval_context: TaskApprovalContext,
+        approval_context: Box<TaskApprovalContext>,
     },
     MissingBuilderWorktree {
         #[serde(rename = "taskId")]
