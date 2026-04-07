@@ -33,7 +33,7 @@ describe("workflow docs contract", () => {
     }
 
     expect(transitionDoc).toContain(
-      "Call `odt_read_task` first for task state, latest `qaVerdict`, and document presence booleans.",
+      "Call `odt_read_task` first for the returned `task` summary object, including task state, `qaVerdict`, and document presence booleans.",
     );
     expect(transitionDoc).toContain(
       "Call `odt_read_task_documents` only when spec, implementation plan, or latest QA markdown bodies are needed.",

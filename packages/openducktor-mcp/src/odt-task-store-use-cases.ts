@@ -40,12 +40,13 @@ type PersistedDocumentResult = {
 };
 
 export type TaskSnapshotResult = {
-  task: PublicTask;
-  qaVerdict: "approved" | "rejected" | null;
-  documents: {
-    hasSpec: boolean;
-    hasPlan: boolean;
-    hasQaReport: boolean;
+  task: PublicTask & {
+    qaVerdict: "approved" | "rejected" | null;
+    documents: {
+      hasSpec: boolean;
+      hasPlan: boolean;
+      hasQaReport: boolean;
+    };
   };
 };
 
@@ -151,9 +152,11 @@ const toTaskSnapshotResult = (
   const summary = documentStore.summarize(issue);
 
   return {
-    task: issueToPublicTask(issue, metadataNamespace),
-    qaVerdict: summary.qaVerdict,
-    documents: summary.documents,
+    task: {
+      ...issueToPublicTask(issue, metadataNamespace),
+      qaVerdict: summary.qaVerdict,
+      documents: summary.documents,
+    },
   };
 };
 
@@ -278,9 +281,11 @@ export class SearchTasksUseCase
     const results = activeIssues.slice(0, input.limit).map(({ issue, task }) => {
       const summary = this.documentStore.summarize(issue);
       return {
-        task,
-        qaVerdict: summary.qaVerdict,
-        documents: summary.documents,
+        task: {
+          ...task,
+          qaVerdict: summary.qaVerdict,
+          documents: summary.documents,
+        },
       };
     });
 

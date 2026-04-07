@@ -74,18 +74,18 @@ Optional filters:
     "aiReviewEnabled": true,
     "labels": ["docs"],
     "createdAt": "<ISO 8601 timestamp>",
-    "updatedAt": "<ISO 8601 timestamp>"
-  },
-  "qaVerdict": null,
-  "documents": {
-    "hasSpec": false,
-    "hasPlan": false,
-    "hasQaReport": false
+    "updatedAt": "<ISO 8601 timestamp>",
+    "qaVerdict": null,
+    "documents": {
+      "hasSpec": false,
+      "hasPlan": false,
+      "hasQaReport": false
+    }
   }
 }
 ```
 
-Use `odt_read_task` first to discover task state, latest QA verdict, and which documents exist.
+Use `odt_read_task` first to discover the task summary object, including task state, `qaVerdict`, and which documents exist.
 
 Use `odt_read_task_documents` only when you need document bodies:
 

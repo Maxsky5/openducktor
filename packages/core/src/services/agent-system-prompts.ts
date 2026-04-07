@@ -183,7 +183,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
       bulletSection("Tool and communication protocol", [
         "Always include taskId in every odt_* tool call.",
         "Never invent tool names. Never call tools not listed above.",
-        "Start each session by calling odt_read_task with taskId {{task.id}} to load the canonical task summary, latest QA verdict, and document presence booleans.",
+        "Start each session by calling odt_read_task with taskId {{task.id}} to load the canonical task summary object, including task fields, qaVerdict, and document presence booleans.",
         "If odt_read_task fails, surface the blocker or retry with the exact taskId instead of relying on stale summaries or prompt-copied artifacts.",
         "Call odt_read_task_documents only when you need specific document bodies, and request only the sections you need.",
         "When asked about which ODT tools are enabled or disabled, answer strictly from the allowed-tools list above and treat every other ODT workflow tool as denied.",
@@ -209,7 +209,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
       ]),
       lineSection("Artifact access", [
         "- Persisted spec, implementation plan, and latest QA report are intentionally not inlined in this system prompt.",
-        "- Use odt_read_task with taskId {{task.id}} to load the current canonical task summary, latest QA verdict, and document presence booleans.",
+        "- Use odt_read_task with taskId {{task.id}} to load the current canonical task summary object, including task fields, qaVerdict, and document presence booleans.",
         "- Use odt_read_task_documents with taskId {{task.id}} and explicit include flags when you need document markdown bodies.",
         "- If you need to re-check persisted artifacts later in the session, call odt_read_task again first, then odt_read_task_documents only for the sections you still need.",
       ]),

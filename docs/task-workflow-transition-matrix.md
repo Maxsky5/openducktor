@@ -23,7 +23,7 @@ MCP workflow tools:
 - `odt_qa_rejected(taskId, reportMarkdown)`
 
 Read flow:
-- Call `odt_read_task` first for task state, latest `qaVerdict`, and document presence booleans.
+- Call `odt_read_task` first for the returned `task` summary object, including task state, `qaVerdict`, and document presence booleans.
 - Call `odt_read_task_documents` only when spec, implementation plan, or latest QA markdown bodies are needed.
 
 `subtasks` payload (optional):

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskPersistencePort } from "./beads-persistence";
-import type { PublicTask, RawIssue, TaskCard } from "./contracts";
+import type { RawIssue, TaskCard } from "./contracts";
 import { OdtTaskStore } from "./odt-task-store";
+import type { TaskSnapshotResult } from "./odt-task-store-use-cases";
 import type { TaskDocumentPort } from "./task-document-store";
 
 const makeTask = (): TaskCard => ({
@@ -92,16 +93,12 @@ describe("OdtTaskStore composition", () => {
       },
     );
 
-    const result = (await store.readTask({ taskId: "task-1" })) as {
-      task: PublicTask;
-      qaVerdict: null;
-      documents: { hasSpec: boolean; hasPlan: boolean; hasQaReport: boolean };
-    };
+    const result = (await store.readTask({ taskId: "task-1" })) as TaskSnapshotResult;
 
     expect(result.task.aiReviewEnabled).toBe(false);
     expect(result.task.description).toBe("Read the task description from Beads.");
     expect(result.task.priority).toBe(2);
-    expect(result.documents).toEqual({ hasSpec: true, hasPlan: true, hasQaReport: false });
+    expect(result.task.documents).toEqual({ hasSpec: true, hasPlan: true, hasQaReport: false });
   });
 
   test("readTask surfaces invalid Beads issue types from showRawIssue", async () => {

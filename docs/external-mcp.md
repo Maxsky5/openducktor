@@ -69,13 +69,13 @@ Current OpenDucktor Spec/Planner/Builder/QA agents must not receive `create_task
     "aiReviewEnabled": true,
     "labels": ["docs"],
     "createdAt": "<ISO 8601 timestamp>",
-    "updatedAt": "<ISO 8601 timestamp>"
-  },
-  "qaVerdict": null,
-  "documents": {
-    "hasSpec": false,
-    "hasPlan": false,
-    "hasQaReport": false
+    "updatedAt": "<ISO 8601 timestamp>",
+    "qaVerdict": null,
+    "documents": {
+      "hasSpec": false,
+      "hasPlan": false,
+      "hasQaReport": false
+    }
   }
 }
 ```
@@ -109,7 +109,7 @@ Constraints:
 
 Output:
 
-- `{ task, qaVerdict, documents }`
+- `{ task }` where `task` includes `qaVerdict` and `documents`
 
 ## `search_tasks`
 
@@ -142,7 +142,7 @@ Output:
 
 ```json
 {
-  "results": [{ "task": {}, "qaVerdict": null, "documents": {} }],
+  "results": [{ "task": { "qaVerdict": null, "documents": {} } }],
   "limit": 50,
   "totalCount": 1,
   "hasMore": false

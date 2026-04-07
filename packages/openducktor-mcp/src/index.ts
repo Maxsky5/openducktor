@@ -167,7 +167,7 @@ export const registerOdtTool = <Name extends RegisteredToolName>(
 export const ODT_REGISTERED_TOOL_SPECS: Readonly<RegisteredToolSpecs> = {
   odt_read_task: {
     description:
-      "Read one OpenDucktor task with its current public fields, latest QA verdict, and document presence booleans for spec/plan/latest QA.",
+      "Read one OpenDucktor task as a single summary object containing current public task fields plus nested qaVerdict and document presence booleans for spec/plan/latest QA.",
     execute: (store, input) => store.readTask(input),
   },
   odt_read_task_documents: {
@@ -182,7 +182,7 @@ export const ODT_REGISTERED_TOOL_SPECS: Readonly<RegisteredToolSpecs> = {
   },
   search_tasks: {
     description:
-      "Search active OpenDucktor tasks using exact filters for priority/issueType/status plus title substring and tag AND matching. The response is paginated as { results, limit, totalCount, hasMore }, and each item in results uses the same lightweight { task, qaVerdict, documents } summary model as odt_read_task.",
+      "Search active OpenDucktor tasks using exact filters for priority/issueType/status plus title substring and tag AND matching. The response is paginated as { results, limit, totalCount, hasMore }, and each item in results uses the same lightweight single-task summary model as odt_read_task, with qaVerdict and documents nested under task.",
     execute: (store, input) => store.searchTasks(input),
   },
   odt_set_spec: {
@@ -255,7 +255,7 @@ export const createOpenducktorMcpServer = async (
     },
     {
       instructions:
-        "OpenDucktor workflow server. Public task access uses create_task, search_tasks, odt_read_task, and odt_read_task_documents. Use odt_read_task first for task state, latest QA verdict, and document presence booleans, then odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools. For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).",
+        "OpenDucktor workflow server. Public task access uses create_task, search_tasks, odt_read_task, and odt_read_task_documents. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans, then odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools. For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).",
     },
   );
 

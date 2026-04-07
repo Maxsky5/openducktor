@@ -35,11 +35,17 @@ export const taskDocumentPresenceSchema = z
   .strict();
 export type TaskDocumentPresence = z.infer<typeof taskDocumentPresenceSchema>;
 
-export const taskSummarySchema = z
-  .object({
-    task: publicTaskSchema,
+export const publicTaskSummaryTaskSchema = publicTaskSchema
+  .extend({
     qaVerdict: qaReportVerdictSchema.nullable(),
     documents: taskDocumentPresenceSchema,
+  })
+  .strict();
+export type PublicTaskSummaryTask = z.infer<typeof publicTaskSummaryTaskSchema>;
+
+export const taskSummarySchema = z
+  .object({
+    task: publicTaskSummaryTaskSchema,
   })
   .strict();
 export type TaskSummary = z.infer<typeof taskSummarySchema>;

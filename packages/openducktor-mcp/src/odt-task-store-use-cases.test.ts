@@ -93,12 +93,14 @@ describe("odt task workflow use cases", () => {
     });
 
     await expect(useCase.execute({ taskId: "task-1" })).resolves.toEqual({
-      task: makePublicTask({ status: "spec_ready" }),
-      qaVerdict: null,
-      documents: {
-        hasSpec: true,
-        hasPlan: true,
-        hasQaReport: false,
+      task: {
+        ...makePublicTask({ status: "spec_ready" }),
+        qaVerdict: null,
+        documents: {
+          hasSpec: true,
+          hasPlan: true,
+          hasQaReport: false,
+        },
       },
     });
     expect(calls).toEqual(["init", "read:task-1", "docs:task-1"]);
@@ -178,12 +180,14 @@ describe("odt task workflow use cases", () => {
     await expect(
       useCase.execute({ title: "Fix bug", issueType: "bug", priority: 1 }),
     ).resolves.toEqual({
-      task: makePublicTask({ issueType: "bug", priority: 2 }),
-      qaVerdict: null,
-      documents: {
-        hasSpec: false,
-        hasPlan: false,
-        hasQaReport: false,
+      task: {
+        ...makePublicTask({ issueType: "bug", priority: 2 }),
+        qaVerdict: null,
+        documents: {
+          hasSpec: false,
+          hasPlan: false,
+          hasQaReport: false,
+        },
       },
     });
     expect(calls).toEqual(["init", "create:bug:1", "invalidate"]);
@@ -221,12 +225,14 @@ describe("odt task workflow use cases", () => {
     await expect(useCase.execute({ limit: 1 })).resolves.toEqual({
       results: [
         {
-          task: makePublicTask({ id: "task-1", title: "Task 1" }),
-          qaVerdict: null,
-          documents: {
-            hasSpec: false,
-            hasPlan: false,
-            hasQaReport: false,
+          task: {
+            ...makePublicTask({ id: "task-1", title: "Task 1" }),
+            qaVerdict: null,
+            documents: {
+              hasSpec: false,
+              hasPlan: false,
+              hasQaReport: false,
+            },
           },
         },
       ],
