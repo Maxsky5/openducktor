@@ -38,6 +38,8 @@ type AgentWorkflowStep = {
   sessionId: string | null;
 };
 
+type WorkflowStepAttentionVariant = "none" | "session_waiting_input" | "blocked_task";
+
 type AgentStudioSessionSelectorModel = {
   value: string;
   groups: ComboboxGroup[];
@@ -135,19 +137,27 @@ const workflowBorderStyleClassName = (state: AgentWorkflowStepState): string =>
   // Dashed styling is only for steps that are currently merely optional and available.
   state.tone === "optional" ? "border-dashed" : "";
 
-const isBlockedTaskWarningStep = (entry: AgentWorkflowStep): boolean => {
-  return (
-    entry.role === "build" &&
-    entry.state.tone === "waiting_input" &&
-    entry.state.liveSession !== "waiting_input"
-  );
+const getWorkflowStepAttentionVariant = (
+  entry: AgentWorkflowStep,
+): WorkflowStepAttentionVariant => {
+  if (entry.state.liveSession === "waiting_input") {
+    return "session_waiting_input";
+  }
+
+  if (entry.role === "build" && entry.state.tone === "waiting_input") {
+    return "blocked_task";
+  }
+
+  return "none";
 };
 
 const workflowStepHint = (entry: AgentWorkflowStep): string => {
-  if (entry.state.liveSession === "waiting_input") {
+  const attentionVariant = getWorkflowStepAttentionVariant(entry);
+
+  if (attentionVariant === "session_waiting_input") {
     return "Session is waiting for input";
   }
-  if (isBlockedTaskWarningStep(entry)) {
+  if (attentionVariant === "blocked_task") {
     return "Task is blocked and waiting for user action";
   }
   if (entry.state.liveSession === "running") {
@@ -378,6 +388,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
             const Icon = entry.icon;
             const isSelected = selectedRole === entry.role;
             const shouldSpinInProgress = entry.state.liveSession === "running";
+            const attentionVariant = getWorkflowStepAttentionVariant(entry);
             const nextStep = workflowSteps[index + 1] ?? null;
             return (
               <div key={entry.role} className="flex min-w-0 items-center gap-2">
@@ -403,7 +414,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                   {entry.state.tone === "done" ? (
                     <Check className="size-3.5 text-success-accent" />
                   ) : null}
-                  {entry.state.liveSession === "waiting_input" ? (
+                  {attentionVariant === "session_waiting_input" ? (
                     <CircleDashed className="size-3.5" />
                   ) : null}
                   {entry.state.tone === "in_progress" && shouldSpinInProgress ? (
@@ -414,7 +425,9 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                   ) : null}
                   {entry.state.tone === "available" ? <Circle className="size-3" /> : null}
                   {entry.state.tone === "optional" ? <CircleDashed className="size-3" /> : null}
-                  {isBlockedTaskWarningStep(entry) ? <AlertTriangle className="size-3.5" /> : null}
+                  {attentionVariant === "blocked_task" ? (
+                    <AlertTriangle className="size-3.5" />
+                  ) : null}
                   {entry.state.tone === "rejected" || entry.state.tone === "failed" ? (
                     <AlertTriangle className="size-3.5" />
                   ) : null}
